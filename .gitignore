@@ -9,7 +9,14 @@
 *.user
 *.userosscache
 *.sln.docstates
-
+.venv/
+__pycache__/
+*.pyc
+staticfiles/
+media/
+.env
+*.log
+.DS_Store
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

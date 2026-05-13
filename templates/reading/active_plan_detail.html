@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>
+    <a href="{% url 'home' %}">← Back to Today</a>
+</p>
+
+<h1>{{ active_plan }}</h1>
+
+<p class="muted">
+    Starts on {{ active_plan.start_date }}
+</p>
+
+<div class="card">
+    <h2>Progress</h2>
+
+    <p>
+        {{ checked_days }} / {{ total_reading_days }} reading days checked
+        — {{ progress_percent }}%
+    </p>
+
+    <p class="muted">
+        Calendar length: {{ total_calendar_days }} days.
+        Rest / catch-up days: {{ rest_days }}.
+    </p>
+
+    <div style="border: 1px solid #ddd; height: 18px; border-radius: 999px; overflow: hidden;">
+        <div style="height: 18px; width: {{ progress_percent }}%; background: #333;"></div>
+    </div>
+</div>
+
+<h2>Reading Schedule</h2>
+
+{% if day_items %}
+    {% for item in day_items %}
+<div class="card">
+    <h3>
+        Day {{ item.day_number }}
+        {% if item.is_today %}
+        <span class="muted">— Today</span>
+        {% endif %}
+    </h3>
+
+    <p class="muted">
+        {{ item.calendar_date }}
+    </p>
+
+    {% if item.is_rest_day %}
+    <h4>Rest / Catch-up Day</h4>
+    <p>
+        No assigned reading for this day. Use it to rest, catch up,
+        or review previous readings.
+    </p>
+
+    {% elif item.is_reading_day %}
+    <h4>Reading</h4>
+    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
+
+    {% if item.passages %}
+    <div class="passage-list">
+        {% for passage in item.passages %}
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' active_plan.id item.plan_day.id forloop.counter0 %}">
+            {{ passage.display }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        No scripture links could be generated for this reading text.
+    </p>
+    {% endif %}
+
+    {% if item.plan_day.memory_verse %}
+    <h4>Memory Verse</h4>
+    <p>{{ item.plan_day.memory_verse }}</p>
+
+    {% if item.memory_passages %}
+    <div class="passage-list">
+        {% for passage in item.memory_passages %}
+        <a class="button button-secondary"
+           href="{% url 'memory_verse_reader' active_plan.id item.plan_day.id forloop.counter0 %}">
+            {{ passage.display }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        No memory verse link could be generated.
+    </p>
+    {% endif %}
+    {% endif %}
+
+    {% if item.is_checked %}
+    <p><strong>Checked in.</strong></p>
+    {% elif item.is_future %}
+    <p class="muted">Not available yet.</p>
+    {% else %}
+    <form method="post" action="{% url 'check_in' active_plan.id item.plan_day.id %}">
+        {% csrf_token %}
+        <button type="submit">Check in for this day</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</div>
+    {% endfor %}
+{% else %}
+<p>No reading days have been added to this plan yet.</p>
+{% endif %}
+{% endblock %}

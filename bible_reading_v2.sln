@@ -1,0 +1,23 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.5.11723.231 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "bible_reading_v2", "bible_reading_v2.pyproj", "{FFF816E2-D39E-4E39-A56F-68EDDC0E13C7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FFF816E2-D39E-4E39-A56F-68EDDC0E13C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFF816E2-D39E-4E39-A56F-68EDDC0E13C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2EE4463D-740D-434A-AB18-BEF41882E2C3}
+	EndGlobalSection
+EndGlobal

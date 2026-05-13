@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>
+    <a href="{% url 'home' %}">← Back to Today</a>
+</p>
+
+<h1>My Reading Plans</h1>
+
+{% if plan_rows %}
+    {% for row in plan_rows %}
+<div class="card">
+    <h2>
+        <a href="{% url 'active_plan_detail' row.active_plan.id %}">
+            {{ row.active_plan }}
+        </a>
+    </h2>
+
+    <p class="muted">
+        Status: <strong>{{ row.status }}</strong>
+    </p>
+
+    <p class="muted">
+        Starts on {{ row.active_plan.start_date }}
+    </p>
+
+    <p>
+        Progress:
+        {{ row.checked_days }} / {{ row.total_reading_days }} reading days
+        — {{ row.progress_percent }}%
+    </p>
+
+    <div style="border: 1px solid #ddd; height: 18px; border-radius: 999px; overflow: hidden; margin-bottom: 12px;">
+        <div style="height: 18px; width: {{ row.progress_percent }}%; background: #333;"></div>
+    </div>
+
+    <p>
+        <a href="{% url 'active_plan_detail' row.active_plan.id %}">
+            View Plan
+        </a>
+    </p>
+
+    <form method="post" action="{% url 'leave_active_plan' row.active_plan.id %}">
+        {% csrf_token %}
+        <button type="submit">
+            Leave Plan
+        </button>
+    </form>
+</div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p>You have not joined any reading plan yet.</p>
+    <p>
+        <a href="{% url 'home' %}">Go to available plans</a>
+    </p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Login | Bible Reading{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Login</h1>
+    <p class="page-subtitle">Continue your reading plan with your group.</p>
+</div>
+
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Login</button>
+    </form>
+</div>
+
+<p>
+    New here?
+    <a href="{% url 'signup' %}">Create an account</a>
+</p>
+{% endblock %}

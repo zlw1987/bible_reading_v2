@@ -1,0 +1,5 @@
+﻿legacy_plan_id,name,name_en,csv_file,legacy_start_date,row_count,min_day,max_day,missing_day_count,first_missing_days
+1,2022-SVCA讀經計劃D,2022-SVCA-plan D,data/import/legacy_svca_plans/plan_1_2022-SVCA-plan_D.csv,2022-01-03,156,1,181,25,7 14 21 28 35 42 49 56 63 70 77 84 91 98 105 112 119 126 133 140 147 154 161 168 175
+2,2022-SVCA讀經計劃A,2022-SVCA-plan A,data/import/legacy_svca_plans/plan_2_2022-SVCA-plan_A.csv,2022-01-03,90,1,90,0,
+3,2022-SVCA讀經計劃B,2022-SVCA-plan B,data/import/legacy_svca_plans/plan_3_2022-SVCA-plan_B.csv,2022-01-03,79,1,79,0,
+4,2022-SVCA讀經計劃C,2022-SVCA-plan C,data/import/legacy_svca_plans/plan_4_2022-SVCA-plan_C.csv,2022-01-03,311,2,364,52,8 15 22 29 36 43 50 57 64 71 78 85 92 99 106 113 120 127 134 141 148 155 162 169 176 183 190 197 204 211

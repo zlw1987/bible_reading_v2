@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Today</h1>
+
+<p>
+    <a href="{% url 'my_plans' %}">View my reading plans</a>
+</p>
+
+{% if today_items %}
+    {% for item in today_items %}
+<div class="card">
+    <h2>
+        <a href="{% url 'active_plan_detail' item.active_plan.id %}">
+            {{ item.active_plan }}
+        </a>
+    </h2>
+
+    {% if item.is_not_started %}
+    <p class="muted">
+        This reading plan has not started yet.
+    </p>
+
+    {% elif item.is_ended %}
+    <p class="muted">
+        This reading plan has ended.
+    </p>
+
+    {% elif item.is_rest_day %}
+    <p class="muted">
+        Day {{ item.current_day_number }}
+    </p>
+    <h3>Rest / Catch-up Day</h3>
+    <p>
+        There is no assigned reading today. You can use today to rest,
+        catch up, or review previous readings.
+    </p>
+
+    {% elif item.is_reading_day %}
+    <p class="muted">Day {{ item.plan_day.day_number }}</p>
+
+    <h3>Reading</h3>
+    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
+
+    {% if item.passages %}
+    <div class="passage-list">
+        {% for passage in item.passages %}
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}">
+            {{ passage.display }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        No scripture links could be generated for this reading text.
+    </p>
+    {% endif %}
+
+    {% if item.plan_day.memory_verse %}
+    <h3>Memory Verse</h3>
+    <p>{{ item.plan_day.memory_verse }}</p>
+
+    {% if item.memory_passages %}
+    <div class="passage-list">
+        {% for passage in item.memory_passages %}
+        <a class="button button-secondary"
+           href="{% url 'memory_verse_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}">
+            {{ passage.display }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        No memory verse link could be generated.
+    </p>
+    {% endif %}
+    {% endif %}
+
+    {% if item.is_checked %}
+    <p><strong>Checked in today.</strong></p>
+    {% else %}
+    <form method="post" action="{% url 'check_in' item.active_plan.id item.plan_day.id %}">
+        {% csrf_token %}
+        <button type="submit">I finished today's reading</button>
+    </form>
+    {% endif %}
+
+    <hr>
+
+    <h3>Reflections</h3>
+
+    <form method="post" action="{% url 'add_comment' item.plan_day.id %}">
+        {% csrf_token %}
+        {{ item.comment_form.as_p }}
+        <button type="submit">Post reflection</button>
+    </form>
+
+    {% if item.comments %}
+    {% for comment in item.comments %}
+    <div class="card">
+        {% if comment.is_deleted %}
+        <p class="muted">This comment has been deleted.</p>
+        {% else %}
+        <p>
+            <strong>{{ comment.user.username }}</strong>
+            <span class="muted">{{ comment.created_at }}</span>
+        </p>
+        <p>{{ comment.body|linebreaksbr }}</p>
+
+        {% if comment.user == user or user.is_staff %}
+        <form method="post" action="{% url 'delete_comment' comment.id %}">
+            {% csrf_token %}
+            <button type="submit">Delete</button>
+        </form>
+        {% endif %}
+
+        <form method="post" action="{% url 'add_reply' comment.id %}">
+            {% csrf_token %}
+            {{ item.reply_form.as_p }}
+            <button type="submit">Reply</button>
+        </form>
+        {% endif %}
+
+        {% for reply in comment.replies.all %}
+        <div style="margin-left: 24px; border-left: 3px solid #ddd; padding-left: 12px;">
+            {% if reply.is_deleted %}
+            <p class="muted">This reply has been deleted.</p>
+            {% else %}
+            <p>
+                <strong>{{ reply.user.username }}</strong>
+                <span class="muted">{{ reply.created_at }}</span>
+            </p>
+            <p>{{ reply.body|linebreaksbr }}</p>
+
+            {% if reply.user == user or user.is_staff %}
+            <form method="post" action="{% url 'delete_comment' reply.id %}">
+                {% csrf_token %}
+                <button type="submit">Delete</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">No reflections yet.</p>
+    {% endif %}
+    {% endif %}
+</div>
+    {% endfor %}
+{% else %}
+<p>You have not joined any reading plan yet.</p>
+{% endif %}
+
+<hr>
+
+<h2>Available Reading Plans</h2>
+
+{% if active_plans %}
+    {% for active_plan in active_plans %}
+<div class="card">
+    <h3>{{ active_plan }}</h3>
+    <p class="muted">Starts on {{ active_plan.start_date }}</p>
+
+    <form method="post" action="{% url 'join_active_plan' active_plan.id %}">
+        {% csrf_token %}
+        <button type="submit">Join this plan</button>
+    </form>
+</div>
+    {% endfor %}
+{% else %}
+<p>No available reading plans right now.</p>
+{% endif %}
+{% endblock %}

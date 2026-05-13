@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}{{ passage.display }} | Bible Reading{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'active_plan_detail' active_plan.id %}">← Back to Plan</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ reader_title|default:"Scripture Reader" }}</h1>
+    <p class="page-subtitle">
+        {{ source_label|default:"Reading" }} · {{ passage.display }}
+        <br>
+        {{ active_plan }} · Day {{ plan_day.day_number }}
+    </p>
+</div>
+
+<div class="card">
+    <div class="actions">
+        {% if previous_index is not None %}
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' active_plan.id plan_day.id previous_index %}">
+            Previous Passage
+        </a>
+        {% endif %}
+
+        <a class="button button-secondary"
+           href="{% url 'active_plan_detail' active_plan.id %}">
+            Back to Plan
+        </a>
+
+        {% if next_index is not None %}
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' active_plan.id plan_day.id next_index %}">
+            Next Passage
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>Chinese</h2>
+
+    <p class="muted">
+        {{ passage.display_zh }}
+        ·
+        <a href="{{ passage.text_url_zh }}" target="_blank" rel="noopener noreferrer">
+            Open Chinese scripture
+        </a>
+    </p>
+
+    <iframe class="scripture-frame"
+            src="{{ passage.text_url_zh }}"
+            title="{{ passage.display_zh }}"
+            loading="lazy">
+    </iframe>
+</div>
+
+<div class="card">
+    <h2>English</h2>
+
+    <p class="muted">
+        {{ passage.display_en }}
+        ·
+        <a href="{{ passage.text_url_en }}" target="_blank" rel="noopener noreferrer">
+            Open English scripture
+        </a>
+    </p>
+
+    <iframe class="scripture-frame"
+            src="{{ passage.text_url_en }}"
+            title="{{ passage.display_en }}"
+            loading="lazy">
+    </iframe>
+</div>
+
+<div class="card">
+    <h2>Audio</h2>
+
+    <p class="muted">
+        Audio is chapter-based. Verse ranges may still play the full chapter.
+        <a href="{{ passage.audio_url }}" target="_blank" rel="noopener noreferrer">
+            Open audio
+        </a>
+    </p>
+
+    <iframe class="audio-frame"
+            src="{{ passage.audio_url }}"
+            title="{{ passage.display }} Audio"
+            loading="lazy">
+    </iframe>
+</div>
+
+{% if is_last_passage %}
+<div class="card">
+    <h2>Reflection</h2>
+
+    <p class="muted">
+        You may share a reflection after reading. This is optional.
+    </p>
+
+    <form method="post" action="{% url 'add_comment' plan_day.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {{ comment_form.as_p }}
+        <button type="submit">Post reflection</button>
+    </form>
+
+    {% if comments %}
+    <hr class="divider">
+
+    {% for comment in comments %}
+    <div class="card card-soft">
+        {% if comment.is_deleted %}
+        <p class="muted">This comment has been deleted.</p>
+        {% else %}
+        <p>
+            <strong>{{ comment.user.username }}</strong>
+            <span class="muted">{{ comment.created_at }}</span>
+        </p>
+
+        <p>{{ comment.body|linebreaksbr }}</p>
+
+        <div class="actions">
+            {% if comment.user == user or user.is_staff %}
+            <form method="post" action="{% url 'delete_comment' comment.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="button-danger">Delete</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <form method="post" action="{% url 'add_reply' comment.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            {{ reply_form.as_p }}
+            <button type="submit" class="button-secondary">Reply</button>
+        </form>
+        {% endif %}
+
+        {% for reply in comment.replies.all %}
+        <div style="margin-left: 24px; border-left: 3px solid var(--border); padding-left: 12px;">
+            {% if reply.is_deleted %}
+            <p class="muted">This reply has been deleted.</p>
+            {% else %}
+            <p>
+                <strong>{{ reply.user.username }}</strong>
+                <span class="muted">{{ reply.created_at }}</span>
+            </p>
+
+            <p>{{ reply.body|linebreaksbr }}</p>
+
+            {% if reply.user == user or user.is_staff %}
+            <form method="post" action="{% url 'delete_comment' reply.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="button-danger">Delete</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">No reflections yet.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Finish Today’s Reading</h2>
+
+    {% if is_future_day %}
+    <p class="muted">
+        This reading day is not available for check-in yet.
+    </p>
+    {% elif is_checked %}
+    <p>
+        <span class="status status-good">Checked in</span>
+    </p>
+    {% else %}
+    <p class="muted">
+        After you finish today’s reading, check in here.
+    </p>
+
+    <form method="post" action="{% url 'check_in' active_plan.id plan_day.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit">I finished today’s reading</button>
+    </form>
+    {% endif %}
+</div>
+{% else %}
+<div class="card">
+    <h2>Continue Reading</h2>
+
+    <p class="muted">
+        This day has more scripture passages.
+    </p>
+
+    <a class="button"
+       href="{% url 'passage_reader' active_plan.id plan_day.id next_index %}">
+        Continue to Next Passage
+    </a>
+</div>
+{% endif %}
+{% endblock %}

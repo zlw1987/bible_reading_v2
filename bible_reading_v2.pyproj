@@ -1,0 +1,125 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{fff816e2-d39e-4e39-a56f-68eddc0e13c7}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>manage.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId>MSBuild|.venv|$(MSBuildProjectFullPath)</InterpreterId>
+    <CommandLineArguments>runserver 127.0.0.1:8000</CommandLineArguments>
+    <EnableNativeCodeDebugging>False</EnableNativeCodeDebugging>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="data\import\john_7_day.csv" />
+    <Content Include="requirements.txt" />
+    <Content Include="static\css\app.css" />
+    <Content Include="templates\base.html" />
+    <Content Include="templates\reading\active_plan_detail.html" />
+    <Content Include="templates\reading\group_progress.html" />
+    <Content Include="templates\reading\home.html" />
+    <Content Include="templates\reading\my_plans.html" />
+    <Content Include="templates\reading\passage_reader.html" />
+    <Content Include="templates\registration\login.html" />
+    <Content Include="templates\registration\signup.html" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="accounts\admin.py" />
+    <Compile Include="accounts\apps.py" />
+    <Compile Include="accounts\forms.py" />
+    <Compile Include="accounts\migrations\0001_initial.py" />
+    <Compile Include="accounts\migrations\__init__.py" />
+    <Compile Include="accounts\models.py" />
+    <Compile Include="accounts\signals.py" />
+    <Compile Include="accounts\tests.py" />
+    <Compile Include="accounts\urls.py" />
+    <Compile Include="accounts\views.py" />
+    <Compile Include="accounts\__init__.py" />
+    <Compile Include="comments\admin.py" />
+    <Compile Include="comments\apps.py" />
+    <Compile Include="comments\forms.py" />
+    <Compile Include="comments\migrations\0001_initial.py" />
+    <Compile Include="comments\migrations\__init__.py" />
+    <Compile Include="comments\models.py" />
+    <Compile Include="comments\tests.py" />
+    <Compile Include="comments\urls.py" />
+    <Compile Include="comments\views.py" />
+    <Compile Include="comments\__init__.py" />
+    <Compile Include="config\asgi.py" />
+    <Compile Include="config\settings.py" />
+    <Compile Include="config\settings_godaddy.py" />
+    <Compile Include="config\urls.py" />
+    <Compile Include="config\wsgi.py" />
+    <Compile Include="config\__init__.py" />
+    <Compile Include="manage.py" />
+    <Compile Include="passenger_wsgi.py" />
+    <Compile Include="reading\admin.py" />
+    <Compile Include="reading\apps.py" />
+    <Compile Include="reading\bible_sources.py" />
+    <Compile Include="reading\management\commands\import_reading_plan.py" />
+    <Compile Include="reading\management\commands\__init__.py" />
+    <Compile Include="reading\management\__init__.py" />
+    <Compile Include="reading\migrations\0001_initial.py" />
+    <Compile Include="reading\migrations\__init__.py" />
+    <Compile Include="reading\models.py" />
+    <Compile Include="reading\tests.py" />
+    <Compile Include="reading\urls.py" />
+    <Compile Include="reading\views.py" />
+    <Compile Include="reading\__init__.py" />
+    <Compile Include="run_collectstatic_godaddy.py" />
+    <Compile Include="run_create_admin_godaddy.py" />
+    <Compile Include="run_migrate_godaddy.py" />
+    <Compile Include="scripts\normalize_legacy_plan.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="accounts" />
+    <Folder Include="accounts\migrations" />
+    <Folder Include="comments" />
+    <Folder Include="comments\migrations" />
+    <Folder Include="config" />
+    <Folder Include="data\" />
+    <Folder Include="data\import\" />
+    <Folder Include="data\legacy\" />
+    <Folder Include="static\" />
+    <Folder Include="scripts\" />
+    <Folder Include="reading\management\" />
+    <Folder Include="reading\management\commands\" />
+    <Folder Include="static\css\" />
+    <Folder Include="templates\" />
+    <Folder Include="reading" />
+    <Folder Include="reading\migrations" />
+    <Folder Include="templates\reading\" />
+    <Folder Include="templates\registration\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Interpreter Include=".venv\">
+      <Id>.venv</Id>
+      <Description>.venv (Python 3.10 (64-bit))</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <Version>3.10</Version>
+      <Architecture>X64</Architecture>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+    </Interpreter>
+    <Interpreter Include="env\">
+      <Id>env</Id>
+      <Description>env (Python 3.10 (64-bit))</Description>
+      <InterpreterPath>Scripts\python.exe</InterpreterPath>
+      <WindowsInterpreterPath>Scripts\pythonw.exe</WindowsInterpreterPath>
+      <Version>3.10</Version>
+      <Architecture>X64</Architecture>
+      <PathEnvironmentVariable>PYTHONPATH</PathEnvironmentVariable>
+    </Interpreter>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

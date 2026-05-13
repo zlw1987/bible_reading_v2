@@ -32,7 +32,7 @@ class BibleChapter(models.Model):
 
 
 class ReadingPlan(models.Model):
-    name = models.CharField(max_length=120)
+    name = models.CharField(max_length=120, unique=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
@@ -88,17 +88,30 @@ class PlanEnrollment(models.Model):
 
 
 class CheckIn(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="checkins")
-    plan_day = models.ForeignKey(ReadingPlanDay, on_delete=models.CASCADE, related_name="checkins")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="checkins",
+    )
+    active_plan = models.ForeignKey(
+        ActivePlan,
+        on_delete=models.CASCADE,
+        related_name="checkins",
+    )
+    plan_day = models.ForeignKey(
+        ReadingPlanDay,
+        on_delete=models.CASCADE,
+        related_name="checkins",
+    )
     checked_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["user", "plan_day"],
-                name="unique_user_plan_day_checkin",
+                fields=["user", "active_plan", "plan_day"],
+                name="unique_user_active_plan_day_checkin",
             )
         ]
 
     def __str__(self):
-        return f"{self.user} checked {self.plan_day}"
+        return f"{self.user} checked {self.active_plan} - {self.plan_day}"

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>
+    <a href="{% url 'home' %}">← Back to Today</a>
+</p>
+
+<h1>Group Progress</h1>
+
+{% if message %}
+<div class="card">
+    <p>{{ message }}</p>
+</div>
+{% endif %}
+
+{% if selected_group %}
+<div class="card">
+    <h2>{{ selected_group.name }}</h2>
+
+    {% if selected_active_plan %}
+    <p class="muted">
+        Reading Plan:
+        <strong>{{ selected_active_plan }}</strong>
+    </p>
+    <p class="muted">
+        Starts on {{ selected_active_plan.start_date }}
+    </p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if user.is_staff and groups %}
+<form method="get" class="card">
+    <label for="group">Group</label>
+    <select name="group" id="group">
+        {% for group in groups %}
+        <option value="{{ group.id }}" {% if group.id == selected_group_id %}selected{% endif %}>
+            {{ group.name }}
+        </option>
+        {% endfor %}
+    </select>
+
+    {% if selected_active_plan %}
+    <input type="hidden" name="active_plan" value="{{ selected_active_plan.id }}">
+    {% endif %}
+
+    <button type="submit">Switch group</button>
+</form>
+{% endif %}
+
+{% if active_plans %}
+<form method="get" class="card">
+    {% if user.is_staff and selected_group %}
+    <input type="hidden" name="group" value="{{ selected_group.id }}">
+    {% endif %}
+
+    <label for="active_plan">Reading Plan</label>
+    <select name="active_plan" id="active_plan">
+        {% for active_plan in active_plans %}
+        <option value="{{ active_plan.id }}" {% if active_plan.id == selected_active_plan_id %}selected{% endif %}>
+            {{ active_plan }}
+        </option>
+        {% endfor %}
+    </select>
+
+    <button type="submit">Switch plan</button>
+</form>
+{% endif %}
+
+{% if member_rows %}
+<div class="card">
+    <h2>Members</h2>
+
+    <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+            <tr>
+                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">Member</th>
+                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">Enrollment</th>
+                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">Today</th>
+                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">Progress</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in member_rows %}
+            <tr>
+                <td style="border-bottom: 1px solid #eee; padding: 8px;">
+                    {{ row.member.username }}
+                </td>
+                <td style="border-bottom: 1px solid #eee; padding: 8px;">
+                    {% if row.is_enrolled %}
+                    Joined
+                    {% else %}
+                    Not joined
+                    {% endif %}
+                </td>
+                <td style="border-bottom: 1px solid #eee; padding: 8px;">
+                    {{ row.today_status }}
+                </td>
+                <td style="border-bottom: 1px solid #eee; padding: 8px;">
+                    {{ row.checked_days }} / {{ row.total_days }}
+                    — {{ row.progress_percent }}%
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

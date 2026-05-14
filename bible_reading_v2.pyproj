@@ -37,12 +37,15 @@
   <ItemGroup>
     <Compile Include="accounts\admin.py" />
     <Compile Include="accounts\apps.py" />
+    <Compile Include="accounts\context_processors.py" />
     <Compile Include="accounts\forms.py" />
+    <Compile Include="accounts\language.py" />
     <Compile Include="accounts\migrations\0001_initial.py" />
     <Compile Include="accounts\migrations\__init__.py" />
     <Compile Include="accounts\models.py" />
     <Compile Include="accounts\signals.py" />
     <Compile Include="accounts\tests.py" />
+    <Compile Include="accounts\ui_text.py" />
     <Compile Include="accounts\urls.py" />
     <Compile Include="accounts\views.py" />
     <Compile Include="accounts\__init__.py" />
@@ -73,6 +76,8 @@
     <Compile Include="reading\migrations\0001_initial.py" />
     <Compile Include="reading\migrations\__init__.py" />
     <Compile Include="reading\models.py" />
+    <Compile Include="reading\templatetags\reading_extras.py" />
+    <Compile Include="reading\templatetags\__init__.py" />
     <Compile Include="reading\tests.py" />
     <Compile Include="reading\urls.py" />
     <Compile Include="reading\views.py" />
@@ -91,6 +96,7 @@
     <Folder Include="data\" />
     <Folder Include="data\import\" />
     <Folder Include="data\legacy\" />
+    <Folder Include="reading\templatetags\" />
     <Folder Include="static\" />
     <Folder Include="scripts\" />
     <Folder Include="reading\management\" />

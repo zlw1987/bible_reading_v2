@@ -33,8 +33,20 @@ class BibleChapter(models.Model):
 
 class ReadingPlan(models.Model):
     name = models.CharField(max_length=120, unique=True)
+    name_en = models.CharField(max_length=120, blank=True)
     description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+
+    def get_name(self, language="zh"):
+        if language == "en" and self.name_en:
+            return self.name_en
+        return self.name
+
+    def get_description(self, language="zh"):
+        if language == "en" and self.description_en:
+            return self.description_en
+        return self.description
 
     def __str__(self):
         return self.name

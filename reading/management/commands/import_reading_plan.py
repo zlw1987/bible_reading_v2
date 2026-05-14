@@ -12,6 +12,8 @@ class Command(BaseCommand):
     help = "Import a reading plan from a CSV file."
 
     def add_arguments(self, parser):
+        parser.add_argument("--name-en", default="", help="English reading plan name.")
+        parser.add_argument("--description-en", default="", help="English reading plan description.")
         parser.add_argument(
             "--name",
             required=True,
@@ -44,7 +46,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         plan_name = options["name"].strip()
+        name_en = options.get("name_en", "").strip()
         description = options["description"].strip()
+        description_en = options.get("description_en", "").strip()
         file_path = Path(options["file"])
         replace = options["replace"]
         start_date_raw = options.get("start_date")
@@ -68,16 +72,22 @@ class Command(BaseCommand):
             plan, created = ReadingPlan.objects.get_or_create(
                 name=plan_name,
                 defaults={
+                    "name_en": name_en,
                     "description": description,
+                    "description_en": description_en,
                     "is_active": True,
                 },
             )
 
             if not created:
+                if name_en:
+                    plan.name_en = name_en
                 if description:
                     plan.description = description
+                if description_en:
+                    plan.description_en = description_en
                 plan.is_active = True
-                plan.save(update_fields=["description", "is_active"])
+                plan.save()
 
             if replace:
                 plan.days.all().delete()

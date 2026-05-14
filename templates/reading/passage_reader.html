@@ -1,38 +1,42 @@
 {% extends "base.html" %}
 
-{% block title %}{{ passage.display }} | Bible Reading{% endblock %}
+{% block title %}{{ selected_display }} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
-<p>
-    <a href="{% url 'active_plan_detail' active_plan.id %}">← Back to Plan</a>
-</p>
+<p><a href="{% url 'active_plan_detail' active_plan.id %}">← {{ ui.back_to_plan }}</a></p>
 
 <div class="page-header">
-    <h1 class="page-title">{{ reader_title|default:"Scripture Reader" }}</h1>
+    <h1 class="page-title">
+        {% if reader_title == "memory_verse" %}
+            {{ ui.memory_verse }}
+        {% else %}
+            {{ ui.scripture_reader }}
+        {% endif %}
+    </h1>
     <p class="page-subtitle">
-        {{ source_label|default:"Reading" }} · {{ active_plan }} · Day {{ plan_day.day_number }}
+        {% if source_label == "memory_verse" %}{{ ui.memory_verse }}{% else %}{{ ui.reading }}{% endif %}
+        · {{ active_plan }} · Day {{ plan_day.day_number }}
     </p>
 </div>
 
 <div class="card">
     <div class="actions">
-        {% if previous_index is not None %}
-        <a class="button button-secondary"
-           href="{% url reader_url_name active_plan.id plan_day.id previous_index %}?lang={{ selected_language }}">
-            Previous Passage
-        </a>
+        {% if has_previous %}
+            <a class="button button-secondary"
+               href="{% url reader_url_name active_plan.id plan_day.id previous_index %}?lang={{ selected_language }}">
+                {{ ui.previous_passage }}
+            </a>
         {% endif %}
 
-        <a class="button button-secondary"
-           href="{% url 'active_plan_detail' active_plan.id %}">
-            Back to Plan
+        <a class="button button-secondary" href="{% url 'active_plan_detail' active_plan.id %}">
+            {{ ui.back_to_plan }}
         </a>
 
-        {% if next_index is not None %}
-        <a class="button button-secondary"
-           href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
-            Next Passage
-        </a>
+        {% if has_next %}
+            <a class="button button-secondary"
+               href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
+                {{ ui.next_passage }}
+            </a>
         {% endif %}
     </div>
 </div>
@@ -41,22 +45,21 @@
     <div class="reader-tabs">
         <a class="reader-tab {% if selected_language == 'zh' %}active{% endif %}"
            href="{{ request.path }}?lang=zh">
-            中文
+            {{ ui.chinese }}
         </a>
-
         <a class="reader-tab {% if selected_language == 'en' %}active{% endif %}"
            href="{{ request.path }}?lang=en">
-            English
+            {{ ui.english }}
         </a>
     </div>
 
     <h2>{{ selected_display }}</h2>
 
     <p class="muted">
-        If the embedded page does not load,
+        {{ ui.open_scripture_directly }}
         <a href="{{ selected_text_url }}" target="_blank" rel="noopener noreferrer">
-            open scripture directly
-        </a>.
+            {% if language == "zh" %}打开{% else %}Open{% endif %}
+        </a>
     </p>
 
     <iframe class="scripture-frame"
@@ -67,134 +70,119 @@
 </div>
 
 <div class="card">
-    <h2>Audio</h2>
-
+    <h2>{{ ui.audio }}</h2>
     <p class="muted">
-        Audio is chapter-based. Verse ranges may still play the full chapter.
+        {{ ui.audio_note }}
         <a href="{{ passage.audio_url }}" target="_blank" rel="noopener noreferrer">
-            Open audio
+            {{ ui.open_audio }}
         </a>
     </p>
-
     <iframe class="audio-frame"
             src="{{ passage.audio_url }}"
-            title="{{ passage.display }} Audio"
+            title="{{ selected_display }} {{ ui.audio }}"
             loading="lazy">
     </iframe>
 </div>
 
-{% if is_last_passage %}
-<div class="card">
-    <h2>Reflection</h2>
+{% if show_completion_section %}
+    {% if is_last_passage %}
+        <div class="card">
+            <h2>{{ ui.reflection }}</h2>
+            <p class="muted">{{ ui.reflection_optional }}</p>
 
-    <p class="muted">
-        You may share a reflection after reading. This is optional.
-    </p>
-
-    <form method="post" action="{% url 'add_comment' plan_day.id %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        {{ comment_form.as_p }}
-        <button type="submit">Post reflection</button>
-    </form>
-
-    {% if comments %}
-    <hr class="divider">
-
-    {% for comment in comments %}
-    <div class="card card-soft">
-        {% if comment.is_deleted %}
-        <p class="muted">This comment has been deleted.</p>
-        {% else %}
-        <p>
-            <strong>{{ comment.user.username }}</strong>
-            <span class="muted">{{ comment.created_at }}</span>
-        </p>
-
-        <p>{{ comment.body|linebreaksbr }}</p>
-
-        <div class="actions">
-            {% if comment.user == user or user.is_staff %}
-            <form method="post" action="{% url 'delete_comment' comment.id %}">
+            <form method="post" action="{% url 'add_comment' plan_day.id %}">
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button type="submit" class="button-danger">Delete</button>
+                {{ comment_form.as_p }}
+                <button type="submit">{{ ui.post_reflection }}</button>
             </form>
-            {% endif %}
-        </div>
 
-        <form method="post" action="{% url 'add_reply' comment.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            {{ reply_form.as_p }}
-            <button type="submit" class="button-secondary">Reply</button>
-        </form>
-        {% endif %}
+            {% if comments %}
+                <hr class="divider">
+                {% for comment in comments %}
+                    <div class="card card-soft">
+                        {% if comment.is_deleted %}
+                            <p class="muted">{% if language == "zh" %}这条分享已删除。{% else %}This comment has been deleted.{% endif %}</p>
+                        {% else %}
+                            <p>
+                                <strong>{{ comment.user.username }}</strong>
+                                <span class="muted">{{ comment.created_at }}</span>
+                            </p>
+                            <p>{{ comment.body|linebreaksbr }}</p>
 
-        {% for reply in comment.replies.all %}
-        <div style="margin-left: 24px; border-left: 3px solid var(--border); padding-left: 12px;">
-            {% if reply.is_deleted %}
-            <p class="muted">This reply has been deleted.</p>
+                            {% if comment.user == user or user.is_staff %}
+                                <form method="post" action="{% url 'delete_comment' comment.id %}">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                    <button type="submit" class="button-danger">{{ ui.delete }}</button>
+                                </form>
+                            {% endif %}
+
+                            <form method="post" action="{% url 'add_reply' comment.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                {{ reply_form.as_p }}
+                                <button type="submit" class="button-secondary">{{ ui.reply }}</button>
+                            </form>
+                        {% endif %}
+
+                        {% for reply in comment.replies.all %}
+                            <div style="margin-left: 24px; border-left: 3px solid var(--border); padding-left: 12px;">
+                                {% if reply.is_deleted %}
+                                    <p class="muted">{% if language == "zh" %}这条回复已删除。{% else %}This reply has been deleted.{% endif %}</p>
+                                {% else %}
+                                    <p>
+                                        <strong>{{ reply.user.username }}</strong>
+                                        <span class="muted">{{ reply.created_at }}</span>
+                                    </p>
+                                    <p>{{ reply.body|linebreaksbr }}</p>
+
+                                    {% if reply.user == user or user.is_staff %}
+                                        <form method="post" action="{% url 'delete_comment' reply.id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                            <button type="submit" class="button-danger">{{ ui.delete }}</button>
+                                        </form>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
             {% else %}
-            <p>
-                <strong>{{ reply.user.username }}</strong>
-                <span class="muted">{{ reply.created_at }}</span>
-            </p>
-
-            <p>{{ reply.body|linebreaksbr }}</p>
-
-            {% if reply.user == user or user.is_staff %}
-            <form method="post" action="{% url 'delete_comment' reply.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button type="submit" class="button-danger">Delete</button>
-            </form>
-            {% endif %}
+                <p class="muted">{{ ui.no_reflections }}</p>
             {% endif %}
         </div>
-        {% endfor %}
-    </div>
-    {% endfor %}
-    {% else %}
-    <p class="muted">No reflections yet.</p>
+
+        <div class="card">
+            <h2>{{ ui.finish_today_reading }}</h2>
+            {% if is_future_day %}
+                <p class="muted">{{ ui.future_checkin_unavailable }}</p>
+            {% elif is_checked %}
+                <p><span class="status status-good">{{ ui.checked_in }}</span></p>
+            {% else %}
+                <form method="post" action="{% url 'check_in' active_plan.id plan_day.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit">{{ ui.finished_reading_button }}</button>
+                </form>
+            {% endif %}
+        </div>
+    {% elif has_next %}
+        <div class="card">
+            <h2>{{ ui.continue_reading }}</h2>
+            <a class="button"
+               href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
+                {{ ui.continue_next_passage }}
+            </a>
+        </div>
     {% endif %}
-</div>
-
-<div class="card">
-    <h2>Finish Today’s Reading</h2>
-
-    {% if is_future_day %}
-    <p class="muted">
-        This reading day is not available for check-in yet.
-    </p>
-    {% elif is_checked %}
-    <p>
-        <span class="status status-good">Checked in</span>
-    </p>
-    {% else %}
-    <p class="muted">
-        After you finish today’s reading, check in here.
-    </p>
-
-    <form method="post" action="{% url 'check_in' active_plan.id plan_day.id %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit">I finished today’s reading</button>
-    </form>
-    {% endif %}
-</div>
 {% else %}
-<div class="card">
-    <h2>Continue Reading</h2>
-
-    <p class="muted">
-        This day has more scripture passages.
-    </p>
-
-    <a class="button"
-       href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
-        Continue to Next Passage
-    </a>
-</div>
+    <div class="card">
+        <h2>{{ ui.memory_verse }}</h2>
+        <a class="button button-secondary" href="{% url 'active_plan_detail' active_plan.id %}">
+            {{ ui.back_to_plan }}
+        </a>
+    </div>
 {% endif %}
 {% endblock %}

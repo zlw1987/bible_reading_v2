@@ -11,6 +11,11 @@ class SmallGroup(models.Model):
 
 
 class Profile(models.Model):
+    LANGUAGE_CHOICES = [
+        ("zh", "中文"),
+        ("en", "English"),
+    ]
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -22,6 +27,11 @@ class Profile(models.Model):
         null=True,
         blank=True,
         related_name="members",
+    )
+    preferred_language = models.CharField(
+        max_length=2,
+        choices=LANGUAGE_CHOICES,
+        default="zh",
     )
 
     def __str__(self):

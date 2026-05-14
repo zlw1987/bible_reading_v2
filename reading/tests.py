@@ -289,7 +289,7 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "May Test Plan")
-        self.assertContains(response, "John 1")
+        self.assertContains(response, "约翰福音 第 1 章")
 
     def test_enrolled_user_can_check_in_today(self):
         PlanEnrollment.objects.create(
@@ -580,8 +580,8 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Rest / Catch-up Day")
-        self.assertContains(response, "There is no assigned reading today")
+        self.assertContains(response, "休息 / 补读日")
+        self.assertContains(response, "今天没有指定读经")
 
 
     def test_home_shows_not_started_plan(self):
@@ -598,7 +598,7 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "This reading plan has not started yet.")
+        self.assertContains(response, "尚未开始")
 
 
     def test_home_shows_ended_plan(self):
@@ -615,7 +615,7 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "This reading plan has ended.")
+        self.assertContains(response, "已结束")
 
     def test_plan_detail_shows_rest_days_for_missing_day_numbers(self):
         PlanEnrollment.objects.create(
@@ -631,8 +631,8 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Day 3")
-        self.assertContains(response, "Rest / Catch-up Day")
-        self.assertContains(response, "No assigned reading for this day")
+        self.assertContains(response, "休息 / 补读日")
+        self.assertContains(response, "这一天没有指定读经")
 
 
     def test_plan_detail_progress_uses_reading_days_not_calendar_days(self):
@@ -654,9 +654,9 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "1 / 3 reading days checked")
-        self.assertContains(response, "Calendar length: 10 days")
-        self.assertContains(response, "Rest / catch-up days: 7")
+        self.assertContains(response, "1 / 3 读经日")
+        self.assertContains(response, "总日历天数：10")
+        self.assertContains(response, "休息 / 补读日：7")
 
     def test_my_plans_requires_login(self):
         response = self.client.get(reverse("my_plans"))
@@ -828,10 +828,12 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "经文阅读")
+        self.assertContains(response, "中文")
+        self.assertContains(response, "English")
         self.assertContains(response, "创世记 第 1 章")
-        self.assertContains(response, "biblegateway.com")
-        self.assertContains(response, "Open scripture")
-        self.assertContains(response, "Open audio")
+        self.assertContains(response, "直接打开经文")
+        self.assertContains(response, "打开音频")
 
 
     def test_passage_reader_rejects_invalid_index(self):
@@ -889,7 +891,7 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "John 1")
+        self.assertContains(response, "约翰福音 第 1 章")
         self.assertNotContains(response, "No scripture links could be generated")
 
     def test_parse_reading_text_extracts_chinese_compact_memory_verse(self):
@@ -919,7 +921,7 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Memory Verse")
+        self.assertContains(response, "背诵经文")
         self.assertContains(response, "马可福音 第 6 章 41 节")
         self.assertContains(
             response,
@@ -943,11 +945,39 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Memory Verse")
+        self.assertContains(response, "背诵经文")
+        self.assertContains(response, "中文")
+        self.assertContains(response, "English")
         self.assertContains(response, "马可福音 第 6 章 41 节")
-        self.assertContains(response, "Mark 6:41")
-        self.assertContains(response, "Open Chinese scripture")
-        self.assertContains(response, "Open English scripture")
+        self.assertContains(response, "直接打开经文")
+        self.assertContains(response, "打开音频")
+        self.assertContains(response, "返回计划")
+        self.assertNotContains(response, "我已完成今日读经")
+
+    def test_enrolled_user_can_open_memory_verse_reader(self):
+        self.day1.memory_verse = "马可福音 6:41"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("memory_verse_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "背诵经文")
+        self.assertContains(response, "中文")
+        self.assertContains(response, "English")
+        self.assertContains(response, "马可福音 第 6 章 41 节")
+        self.assertContains(response, "直接打开经文")
+        self.assertContains(response, "打开音频")
+        self.assertContains(response, "返回计划")
+        self.assertNotContains(response, "我已完成今日读经")
 
 
     def test_memory_verse_reader_requires_enrollment(self):
@@ -979,8 +1009,8 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Continue to Next Passage")
-        self.assertNotContains(response, "I finished today")
+        self.assertContains(response, "继续下一段经文")
+        self.assertNotContains(response, "我已完成今日读经")
 
 
     def test_last_passage_shows_reflection_and_check_in(self):
@@ -999,9 +1029,9 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Reflection")
-        self.assertContains(response, "Finish Today")
-        self.assertContains(response, "I finished today")
+        self.assertContains(response, "默想分享")
+        self.assertContains(response, "完成今日读经")
+        self.assertContains(response, "我已完成今日读经")
 
 
     def test_check_in_from_passage_reader_redirects_back_to_reader(self):
@@ -1090,7 +1120,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "中文")
         self.assertContains(response, "English")
-        self.assertContains(response, "John 1")
+        self.assertContains(response, "约翰福音 第 1 章")
         self.assertContains(response, "version=CUVS")
         self.assertNotContains(response, "version=NIV")
 
@@ -1134,7 +1164,81 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
         # There should be a generated passage button/link.
-        self.assertContains(response, "John 1")
+        self.assertContains(response, "约翰福音 第 1 章")
 
         # But the raw-text failure message should not appear.
         self.assertNotContains(response, "No scripture links could be generated")
+
+    def test_memory_verse_reader_single_passage_does_not_reverse_none_next_index(self):
+        self.day1.memory_verse = "马可福音 6:41"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("memory_verse_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "背诵经文")
+        self.assertContains(response, "返回计划")
+        self.assertNotContains(response, "继续下一段经文")
+        self.assertNotContains(response, "我已完成今日读经")
+
+    def test_scripture_reader_last_passage_still_shows_check_in(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "完成今日读经")
+        self.assertContains(response, "我已完成今日读经")
+
+    def test_home_dashboard_shows_start_reading_button(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "今日经文")
+        self.assertContains(response, "开始今日读经")
+        self.assertContains(response, "约翰福音 第 1 章")
+
+    def test_home_dashboard_does_not_show_reflection_form(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "发表默想")

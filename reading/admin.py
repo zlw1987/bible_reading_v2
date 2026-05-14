@@ -32,9 +32,9 @@ class BibleChapterAdmin(admin.ModelAdmin):
 
 @admin.register(ReadingPlan)
 class ReadingPlanAdmin(admin.ModelAdmin):
-    list_display = ("name", "is_active")
+    list_display = ("name", "name_en", "is_active")
     list_filter = ("is_active",)
-    search_fields = ("name", "description")
+    search_fields = ("name", "name_en", "description", "description_en")
     inlines = [ReadingPlanDayInline]
 
 

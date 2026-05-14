@@ -1,23 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Login | Bible Reading{% endblock %}
+{% block title %}{{ ui.login }} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Login</h1>
-    <p class="page-subtitle">Continue your reading plan with your group.</p>
+    <h1 class="page-title">{{ ui.login }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        继续你的读经计划，与小组一同前行。
+        {% else %}
+        Continue your reading plan with your group.
+        {% endif %}
+    </p>
 </div>
 
 <div class="card">
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit">Login</button>
+        <button type="submit">{{ ui.login }}</button>
     </form>
 </div>
 
 <p>
-    New here?
-    <a href="{% url 'signup' %}">Create an account</a>
+    {{ ui.new_here }}
+    <a href="{% url 'signup' %}">{{ ui.create_account }}</a>
 </p>
 {% endblock %}

@@ -307,3 +307,31 @@ th {
     flex-wrap: wrap;
     margin: 12px 0;
 }
+
+.reader-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.reader-tab {
+    padding: 10px 14px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+    .reader-tab:hover {
+        text-decoration: none;
+        background: var(--surface-soft);
+    }
+
+    .reader-tab.active {
+        color: var(--text);
+        background: var(--surface-soft);
+        border-color: var(--border);
+        font-weight: 700;
+    }

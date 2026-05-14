@@ -22,6 +22,14 @@ from accounts.models import SmallGroup
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingPlanDay
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 
+def get_scripture_language(request):
+    lang = request.GET.get("lang", "zh").lower()
+
+    if lang not in {"zh", "en"}:
+        return "zh"
+
+    return lang
+
 def get_safe_next_url(request):
     next_url = request.POST.get("next") or request.GET.get("next")
 
@@ -258,6 +266,15 @@ def passage_reader(request, active_plan_id, plan_day_id, passage_index):
 
     passage = passages[passage_index]
 
+    selected_language = get_scripture_language(request)
+
+    if selected_language == "en":
+        selected_text_url = passage["text_url_en"]
+        selected_display = passage["display_en"]
+    else:
+        selected_text_url = passage["text_url_zh"]
+        selected_display = passage["display_zh"]
+
     previous_index = passage_index - 1 if passage_index > 0 else None
     next_index = passage_index + 1 if passage_index < len(passages) - 1 else None
     is_last_passage = next_index is None
@@ -299,6 +316,10 @@ def passage_reader(request, active_plan_id, plan_day_id, passage_index):
             "comments": comments,
             "comment_form": ReflectionCommentForm(),
             "reply_form": ReflectionCommentForm(),
+            "selected_language": selected_language,
+            "selected_text_url": selected_text_url,
+            "selected_display": selected_display,
+            "reader_url_name": "passage_reader",
         },
     )
 
@@ -331,6 +352,15 @@ def memory_verse_reader(request, active_plan_id, plan_day_id, passage_index):
         return redirect("active_plan_detail", active_plan_id=active_plan.id)
 
     passage = passages[passage_index]
+    selected_language = get_scripture_language(request)
+
+    if selected_language == "en":
+        selected_text_url = passage["text_url_en"]
+        selected_display = passage["display_en"]
+    else:
+        selected_text_url = passage["text_url_zh"]
+        selected_display = passage["display_zh"]
+
 
     previous_index = passage_index - 1 if passage_index > 0 else None
     next_index = passage_index + 1 if passage_index < len(passages) - 1 else None
@@ -347,6 +377,10 @@ def memory_verse_reader(request, active_plan_id, plan_day_id, passage_index):
             "passage_index": passage_index,
             "previous_index": previous_index,
             "next_index": next_index,
+            "selected_language": selected_language,
+            "selected_text_url": selected_text_url,
+            "selected_display": selected_display,
+            "reader_url_name": "memory_verse_reader",
         },
     )
 

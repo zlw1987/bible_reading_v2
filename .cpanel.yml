@@ -32,6 +32,5 @@ deployment:
     - /bin/cp run_collectstatic_godaddy.py $DEPLOYPATH
     - /bin/cp run_create_admin_godaddy.py $DEPLOYPATH
     - /bin/cp run_import_legacy_godaddy.py $DEPLOYPATH
-    - /bin/cp db.sqlite3 $DEPLOYPATH
 
     - /bin/touch $DEPLOYPATH/tmp/restart.txt

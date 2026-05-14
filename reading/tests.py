@@ -1071,3 +1071,70 @@ class BibleReadingFlowTests(TestCase):
                 body="This is my reflection.",
             ).exists()
         )
+
+    def test_passage_reader_defaults_to_chinese_tab(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "中文")
+        self.assertContains(response, "English")
+        self.assertContains(response, "John 1")
+        self.assertContains(response, "version=CUVS")
+        self.assertNotContains(response, "version=NIV")
+
+    def test_passage_reader_can_switch_to_english_tab(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]) + "?lang=en"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "中文")
+        self.assertContains(response, "English")
+        self.assertContains(response, "John 1")
+        self.assertContains(response, "version=NIV")
+        self.assertNotContains(response, "version=CUVS")
+
+    def test_plan_detail_hides_raw_reading_text_when_passage_links_exist(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        # There should be a generated passage button/link.
+        self.assertContains(response, "John 1")
+
+        # But the raw-text failure message should not appear.
+        self.assertNotContains(response, "No scripture links could be generated")

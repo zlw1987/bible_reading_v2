@@ -40,7 +40,6 @@
     <p class="muted">Day {{ item.plan_day.day_number }}</p>
 
     <h3>Reading</h3>
-    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
 
     {% if item.passages %}
     <div class="passage-list">
@@ -52,6 +51,7 @@
         {% endfor %}
     </div>
     {% else %}
+    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
     <p class="muted">
         No scripture links could be generated for this reading text.
     </p>
@@ -59,7 +59,6 @@
 
     {% if item.plan_day.memory_verse %}
     <h3>Memory Verse</h3>
-    <p>{{ item.plan_day.memory_verse }}</p>
 
     {% if item.memory_passages %}
     <div class="passage-list">
@@ -71,6 +70,7 @@
         {% endfor %}
     </div>
     {% else %}
+    <p>{{ item.plan_day.memory_verse }}</p>
     <p class="muted">
         No memory verse link could be generated.
     </p>

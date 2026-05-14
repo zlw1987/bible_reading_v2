@@ -10,9 +10,7 @@
 <div class="page-header">
     <h1 class="page-title">{{ reader_title|default:"Scripture Reader" }}</h1>
     <p class="page-subtitle">
-        {{ source_label|default:"Reading" }} · {{ passage.display }}
-        <br>
-        {{ active_plan }} · Day {{ plan_day.day_number }}
+        {{ source_label|default:"Reading" }} · {{ active_plan }} · Day {{ plan_day.day_number }}
     </p>
 </div>
 
@@ -20,7 +18,7 @@
     <div class="actions">
         {% if previous_index is not None %}
         <a class="button button-secondary"
-           href="{% url 'passage_reader' active_plan.id plan_day.id previous_index %}">
+           href="{% url reader_url_name active_plan.id plan_day.id previous_index %}?lang={{ selected_language }}">
             Previous Passage
         </a>
         {% endif %}
@@ -32,7 +30,7 @@
 
         {% if next_index is not None %}
         <a class="button button-secondary"
-           href="{% url 'passage_reader' active_plan.id plan_day.id next_index %}">
+           href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
             Next Passage
         </a>
         {% endif %}
@@ -40,37 +38,30 @@
 </div>
 
 <div class="card">
-    <h2>Chinese</h2>
+    <div class="reader-tabs">
+        <a class="reader-tab {% if selected_language == 'zh' %}active{% endif %}"
+           href="{{ request.path }}?lang=zh">
+            中文
+        </a>
+
+        <a class="reader-tab {% if selected_language == 'en' %}active{% endif %}"
+           href="{{ request.path }}?lang=en">
+            English
+        </a>
+    </div>
+
+    <h2>{{ selected_display }}</h2>
 
     <p class="muted">
-        {{ passage.display_zh }}
-        ·
-        <a href="{{ passage.text_url_zh }}" target="_blank" rel="noopener noreferrer">
-            Open Chinese scripture
-        </a>
+        If the embedded page does not load,
+        <a href="{{ selected_text_url }}" target="_blank" rel="noopener noreferrer">
+            open scripture directly
+        </a>.
     </p>
 
     <iframe class="scripture-frame"
-            src="{{ passage.text_url_zh }}"
-            title="{{ passage.display_zh }}"
-            loading="lazy">
-    </iframe>
-</div>
-
-<div class="card">
-    <h2>English</h2>
-
-    <p class="muted">
-        {{ passage.display_en }}
-        ·
-        <a href="{{ passage.text_url_en }}" target="_blank" rel="noopener noreferrer">
-            Open English scripture
-        </a>
-    </p>
-
-    <iframe class="scripture-frame"
-            src="{{ passage.text_url_en }}"
-            title="{{ passage.display_en }}"
+            src="{{ selected_text_url }}"
+            title="{{ selected_display }}"
             loading="lazy">
     </iframe>
 </div>
@@ -201,7 +192,7 @@
     </p>
 
     <a class="button"
-       href="{% url 'passage_reader' active_plan.id plan_day.id next_index %}">
+       href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
         Continue to Next Passage
     </a>
 </div>

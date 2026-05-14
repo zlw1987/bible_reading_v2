@@ -54,7 +54,6 @@
 
     {% elif item.is_reading_day %}
     <h4>Reading</h4>
-    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
 
     {% if item.passages %}
     <div class="passage-list">
@@ -66,6 +65,7 @@
         {% endfor %}
     </div>
     {% else %}
+    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
     <p class="muted">
         No scripture links could be generated for this reading text.
     </p>

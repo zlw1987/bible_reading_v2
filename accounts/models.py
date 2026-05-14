@@ -33,6 +33,6 @@ class Profile(models.Model):
         choices=LANGUAGE_CHOICES,
         default="zh",
     )
-
+    must_change_password = models.BooleanField(default=False)
     def __str__(self):
         return self.user.get_username()

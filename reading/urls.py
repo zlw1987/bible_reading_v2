@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import admin_views
 
 urlpatterns = [
     path("", views.home, name="home"),
@@ -25,4 +26,19 @@ urlpatterns = [
     ),
 
     path("groups/my/progress/", views.my_group_progress, name="my_group_progress"),
+    path(
+        "staff/reading-plans/",
+        admin_views.staff_reading_plan_list,
+        name="staff_reading_plan_list",
+    ),
+    path(
+        "staff/reading-plans/<int:plan_id>/header/",
+        admin_views.staff_reading_plan_header,
+        name="staff_reading_plan_header",
+    ),
+    path(
+        "staff/reading-plans/<int:plan_id>/days/",
+        admin_views.staff_reading_plan_days,
+        name="staff_reading_plan_days",
+    ),
 ]

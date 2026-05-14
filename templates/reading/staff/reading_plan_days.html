@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Days | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'staff_reading_plan_list' %}">← Back to Reading Plan Admin</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">Edit Reading Plan Days</h1>
+    <p class="page-subtitle">
+        {{ plan.name }}
+    </p>
+</div>
+
+<div class="card">
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'staff_reading_plan_header' plan.id %}">
+            Edit Header
+        </a>
+
+    </div>
+</div>
+
+<div class="card">
+    <h2>Add Day</h2>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_day">
+        {{ create_form.as_p }}
+        <button type="submit">Add Day</button>
+    </form>
+</div>
+
+{% if day_rows %}
+    {% for row in day_rows %}
+<div class="card" id="day-{{ row.day.id }}">
+    <h2 class="card-title">Day {{ row.day.day_number }}</h2>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_day">
+        <input type="hidden" name="day_id" value="{{ row.day.id }}">
+
+        {{ row.form.as_p }}
+
+        <div class="actions">
+            <button type="submit">Save Day {{ row.day.day_number }}</button>
+        </div>
+    </form>
+
+    <form method="post" style="margin-top: 12px;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="delete_day">
+        <input type="hidden" name="day_id" value="{{ row.day.id }}">
+
+        <button type="submit" class="button-danger">
+            Delete Day {{ row.day.day_number }}
+        </button>
+    </form>
+</div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p>No reading days found.</p>
+</div>
+{% endif %}
+{% endblock %}

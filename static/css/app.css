@@ -335,3 +335,37 @@ th {
         border-color: var(--border);
         font-weight: 700;
     }
+
+.audio-card {
+    padding: 16px 20px;
+}
+
+.audio-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+    .audio-card-header h2 {
+        margin: 0 0 4px;
+    }
+
+    .audio-card-header p {
+        margin: 0;
+    }
+
+.audio-frame-compact {
+    width: 100%;
+    height: 76px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: white;
+}
+
+@media (max-width: 760px) {
+    .audio-card-header {
+        flex-direction: column;
+    }
+}

@@ -1,4 +1,7 @@
 from django.contrib import admin
+from django.urls import reverse
+from django.utils.html import format_html
+
 from .models import (
     BibleBook,
     BibleChapter,
@@ -32,10 +35,35 @@ class BibleChapterAdmin(admin.ModelAdmin):
 
 @admin.register(ReadingPlan)
 class ReadingPlanAdmin(admin.ModelAdmin):
-    list_display = ("name", "name_en", "is_active")
+    list_display = (
+        "name",
+        "name_en",
+        "is_active",
+        "edit_header_link",
+        "edit_days_link",
+    )
     list_filter = ("is_active",)
     search_fields = ("name", "name_en", "description", "description_en")
-    inlines = [ReadingPlanDayInline]
+
+    fields = (
+        "name",
+        "name_en",
+        "description",
+        "description_en",
+        "is_active",
+    )
+
+    def edit_header_link(self, obj):
+        url = reverse("staff_reading_plan_header", args=[obj.id])
+        return format_html('<a href="{}">Edit header</a>', url)
+
+    edit_header_link.short_description = "Header"
+
+    def edit_days_link(self, obj):
+        url = reverse("staff_reading_plan_days", args=[obj.id])
+        return format_html('<a href="{}">Edit days</a>', url)
+
+    edit_days_link.short_description = "Days"
 
 
 @admin.register(ReadingPlanDay)

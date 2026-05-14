@@ -11,6 +11,6 @@ class SmallGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "small_group")
-    list_filter = ("small_group",)
+    list_display = ("user", "small_group", "preferred_language", "must_change_password")
+    list_filter = ("small_group", "preferred_language", "must_change_password")
     search_fields = ("user__username", "user__email", "small_group__name")

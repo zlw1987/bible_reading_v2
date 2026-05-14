@@ -31,6 +31,9 @@
     <Content Include="templates\reading\home.html" />
     <Content Include="templates\reading\my_plans.html" />
     <Content Include="templates\reading\passage_reader.html" />
+    <Content Include="templates\reading\staff\reading_plan_days.html" />
+    <Content Include="templates\reading\staff\reading_plan_header.html" />
+    <Content Include="templates\reading\staff\reading_plan_list.html" />
     <Content Include="templates\registration\login.html" />
     <Content Include="templates\registration\signup.html" />
   </ItemGroup>
@@ -68,8 +71,10 @@
     <Compile Include="manage.py" />
     <Compile Include="passenger_wsgi.py" />
     <Compile Include="reading\admin.py" />
+    <Compile Include="reading\admin_views.py" />
     <Compile Include="reading\apps.py" />
     <Compile Include="reading\bible_sources.py" />
+    <Compile Include="reading\forms.py" />
     <Compile Include="reading\management\commands\import_reading_plan.py" />
     <Compile Include="reading\management\commands\__init__.py" />
     <Compile Include="reading\management\__init__.py" />
@@ -106,6 +111,7 @@
     <Folder Include="reading" />
     <Folder Include="reading\migrations" />
     <Folder Include="templates\reading\" />
+    <Folder Include="templates\reading\staff\" />
     <Folder Include="templates\registration\" />
   </ItemGroup>
   <ItemGroup>

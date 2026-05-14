@@ -1242,3 +1242,113 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "发表默想")
+
+    def test_passage_reader_uses_compact_audio_iframe(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "audio-frame-compact")
+        self.assertContains(response, 'allow="autoplay"')
+        self.assertContains(response, "interface=amp")
+        self.assertNotContains(response, 'class="audio-frame"')
+
+    def test_staff_can_access_reading_plan_admin_list(self):
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(reverse("staff_reading_plan_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Plan Admin")
+        self.assertContains(response, self.plan.name)
+
+
+    def test_non_staff_cannot_access_reading_plan_admin_list(self):
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("staff_reading_plan_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+
+    def test_staff_can_update_reading_plan_header_without_days_inline(self):
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.post(
+            reverse("staff_reading_plan_header", args=[self.plan.id]),
+            {
+                "name": self.plan.name,
+                "name_en": "English Test Plan",
+                "description": "中文说明",
+                "description_en": "English description",
+                "is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.plan.refresh_from_db()
+
+        self.assertEqual(self.plan.name_en, "English Test Plan")
+        self.assertEqual(self.plan.description_en, "English description")
+        self.assertTrue(self.plan.is_active)
+
+
+    def test_staff_can_update_single_reading_plan_day_line(self):
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.post(
+            reverse("staff_reading_plan_days", args=[self.plan.id]),
+            {
+                "action": "save_day",
+                "day_id": self.day1.id,
+                "day_number": "1",
+                "reading_text": "Updated John 1",
+                "memory_verse": "John 1:1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.day1.refresh_from_db()
+        self.day2.refresh_from_db()
+
+        self.assertEqual(self.day1.reading_text, "Updated John 1")
+        self.assertEqual(self.day2.reading_text, "John 2")
+
+
+    def test_staff_can_add_reading_plan_day_line(self):
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.post(
+            reverse("staff_reading_plan_days", args=[self.plan.id]),
+            {
+                "action": "add_day",
+                "day_number": "11",
+                "reading_text": "John 11",
+                "memory_verse": "John 11:25",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertTrue(
+            ReadingPlanDay.objects.filter(
+                plan=self.plan,
+                day_number=11,
+                reading_text="John 11",
+                memory_verse="John 11:25",
+            ).exists()
+        )

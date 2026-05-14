@@ -41,6 +41,30 @@
     </div>
 </div>
 
+<div class="card audio-card">
+    <div class="audio-card-header">
+        <div>
+            <h2>{{ ui.audio }}</h2>
+            <p class="muted">
+                {{ ui.audio_note }}
+            </p>
+        </div>
+
+        <a class="button button-secondary"
+           href="{{ passage.audio_url }}"
+           target="_blank"
+           rel="noopener noreferrer">
+            {{ ui.open_audio }}
+        </a>
+    </div>
+
+    <iframe class="audio-frame-compact"
+            src="{{ passage.audio_url }}"
+            title="{{ selected_display }} Audio"
+            allow="autoplay">
+    </iframe>
+</div>
+
 <div class="card">
     <div class="reader-tabs">
         <a class="reader-tab {% if selected_language == 'zh' %}active{% endif %}"
@@ -69,20 +93,7 @@
     </iframe>
 </div>
 
-<div class="card">
-    <h2>{{ ui.audio }}</h2>
-    <p class="muted">
-        {{ ui.audio_note }}
-        <a href="{{ passage.audio_url }}" target="_blank" rel="noopener noreferrer">
-            {{ ui.open_audio }}
-        </a>
-    </p>
-    <iframe class="audio-frame"
-            src="{{ passage.audio_url }}"
-            title="{{ selected_display }} {{ ui.audio }}"
-            loading="lazy">
-    </iframe>
-</div>
+
 
 {% if show_completion_section %}
     {% if is_last_passage %}

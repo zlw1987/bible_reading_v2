@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ui.profile }} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ ui.account_profile }}</h1>
+    <p class="page-subtitle">{{ ui.profile_subtitle }}</p>
+</div>
+
+<div class="grid grid-2">
+    <div class="card">
+        <h2 class="card-title">{{ ui.profile }}</h2>
+
+        <p>
+            <strong>{{ ui.username }}:</strong>
+            {{ user.username }}
+        </p>
+
+        <p class="muted">
+            {{ ui.username_readonly }}
+        </p>
+
+        <form method="post">
+            {% csrf_token %}
+            {{ form.as_p }}
+
+            <button type="submit">
+                {{ ui.save_profile }}
+            </button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">{{ ui.change_password }}</h2>
+
+        <p class="muted">
+            {% if language == "zh" %}
+            若你忘记密码，需要联系管理员帮你重置。
+            {% else %}
+            If you forget your password, contact an admin to reset it.
+            {% endif %}
+        </p>
+
+        <a class="button button-secondary" href="{% url 'password_change' %}">
+            {{ ui.change_password }}
+        </a>
+    </div>
+</div>
+{% endblock %}

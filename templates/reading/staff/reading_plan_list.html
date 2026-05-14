@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Reading Plan Admin | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Reading Plan Admin</h1>
+    <p class="page-subtitle">
+        Edit reading plan headers and reading days separately.
+    </p>
+</div>
+
+<div class="card">
+    <p>
+        <a class="button button-secondary" href="{% url 'admin:index' %}">
+            Back to Django Admin
+        </a>
+    </p>
+</div>
+
+{% if plans %}
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Plan</th>
+                    <th>English Name</th>
+                    <th>Status</th>
+                    <th>Header</th>
+                    <th>Days</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for plan in plans %}
+                <tr>
+                    <td>{{ plan.name }}</td>
+                    <td>{{ plan.name_en|default:"-" }}</td>
+                    <td>
+                        {% if plan.is_active %}
+                        Active
+                        {% else %}
+                        Inactive
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="button button-secondary"
+                           href="{% url 'staff_reading_plan_header' plan.id %}">
+                            Edit Header
+                        </a>
+                    </td>
+                    <td>
+                        <a class="button button-secondary"
+                           href="{% url 'staff_reading_plan_days' plan.id %}">
+                            Edit Days
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <p>No reading plans found.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -21,11 +21,17 @@ DATABASES = {
     }
 }
 
-STATIC_URL = "/static/"
+# Django is served under https://4z8.d4d.mytemp.website/app_read/
+FORCE_SCRIPT_NAME = "/app_read"
+
+STATIC_URL = "/app_read/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-MEDIA_URL = "/media/"
+MEDIA_URL = "/app_read/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+SESSION_COOKIE_PATH = "/app_read/"
+CSRF_COOKIE_PATH = "/app_read/"
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

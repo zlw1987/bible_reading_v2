@@ -1,11 +1,12 @@
 import os
 import sys
+from pathlib import Path
 
 
-PROJECT_ROOT = os.path.dirname(__file__)
+BASE_DIR = Path(__file__).resolve().parent
 
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings_godaddy")
 

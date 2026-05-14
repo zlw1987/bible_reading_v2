@@ -21,6 +21,7 @@
     <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Content Include=".cpanel.yml" />
     <Content Include="data\import\john_7_day.csv" />
     <Content Include="requirements.txt" />
     <Content Include="static\css\app.css" />

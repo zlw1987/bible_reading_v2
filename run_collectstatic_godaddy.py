@@ -14,4 +14,4 @@ django.setup()
 from django.core.management import call_command
 
 
-call_command("collectstatic", interactive=False, verbosity=2)
+call_command("collectstatic", interactive=False, verbosity=2, clear=True)

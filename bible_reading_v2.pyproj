@@ -25,6 +25,11 @@
     <Content Include="data\import\john_7_day.csv" />
     <Content Include="requirements.txt" />
     <Content Include="static\css\app.css" />
+    <Content Include="templates\accounts\password_change_done.html" />
+    <Content Include="templates\accounts\password_change_form.html" />
+    <Content Include="templates\accounts\profile.html" />
+    <Content Include="templates\accounts\staff\password_reset.html" />
+    <Content Include="templates\accounts\staff\user_list.html" />
     <Content Include="templates\base.html" />
     <Content Include="templates\reading\active_plan_detail.html" />
     <Content Include="templates\reading\group_progress.html" />
@@ -43,6 +48,7 @@
     <Compile Include="accounts\context_processors.py" />
     <Compile Include="accounts\forms.py" />
     <Compile Include="accounts\language.py" />
+    <Compile Include="accounts\middleware.py" />
     <Compile Include="accounts\migrations\0001_initial.py" />
     <Compile Include="accounts\migrations\__init__.py" />
     <Compile Include="accounts\models.py" />
@@ -110,6 +116,8 @@
     <Folder Include="templates\" />
     <Folder Include="reading" />
     <Folder Include="reading\migrations" />
+    <Folder Include="templates\accounts\" />
+    <Folder Include="templates\accounts\staff\" />
     <Folder Include="templates\reading\" />
     <Folder Include="templates\reading\staff\" />
     <Folder Include="templates\registration\" />

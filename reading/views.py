@@ -3,7 +3,7 @@ from collections import defaultdict
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -15,6 +15,28 @@ from comments.models import ReflectionComment
 
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingPlanDay
+
+def get_user_small_group(user):
+    return getattr(getattr(user, "profile", None), "small_group", None)
+
+
+def get_visible_reflection_filter(user):
+    user_group = get_user_small_group(user)
+
+    visibility_filter = Q(user=user)
+
+    if user.is_staff:
+        return Q()
+
+    visibility_filter |= Q(visibility=ReflectionComment.VISIBILITY_CHURCH)
+
+    if user_group:
+        visibility_filter |= Q(
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=user_group,
+        )
+
+    return visibility_filter
 
 
 def get_safe_next_url(request):
@@ -50,6 +72,9 @@ def build_reader_context(
     reader_title,
     source_label,
     show_completion_section,
+    scripture_ref_key="",
+    comments=None,
+    my_past_reflections=None,
 ):
     selected_language = get_scripture_language(request)
 
@@ -80,10 +105,18 @@ def build_reader_context(
         "selected_language": selected_language,
         "selected_text_url": selected_text_url,
         "selected_display": selected_display,
+
+        # New reflection context
+        "scripture_ref_key": scripture_ref_key,
+        "comments": comments or [],
+        "my_past_reflections": my_past_reflections or [],
+        "comment_form": None,
+        "reply_form": None,
     }
 
     if show_completion_section:
         current_day_number = active_plan.current_day_number()
+
         context.update(
             {
                 "is_future_day": plan_day.day_number > current_day_number,
@@ -92,16 +125,8 @@ def build_reader_context(
                     active_plan=active_plan,
                     plan_day=plan_day,
                 ).exists(),
-                "comments": (
-                    ReflectionComment.objects.filter(
-                        plan_day=plan_day,
-                        parent__isnull=True,
-                    )
-                    .select_related("user")
-                    .prefetch_related("replies", "replies__user")
-                ),
-                "comment_form": ReflectionCommentForm(),
-                "reply_form": ReflectionCommentForm(),
+                "comment_form": ReflectionCommentForm(user=request.user),
+                "reply_form": ReflectionCommentForm(user=request.user),
             }
         )
 
@@ -316,13 +341,19 @@ def passage_reader(request, active_plan_id, plan_day_id, passage_index):
         ActivePlan.objects.select_related("plan"),
         id=active_plan_id,
     )
+
     plan_day = get_object_or_404(
         ReadingPlanDay,
         id=plan_day_id,
         plan=active_plan.plan,
     )
 
-    if not PlanEnrollment.objects.filter(user=request.user, active_plan=active_plan).exists():
+    is_enrolled = PlanEnrollment.objects.filter(
+        user=request.user,
+        active_plan=active_plan,
+    ).exists()
+
+    if not is_enrolled:
         messages.error(request, "You need to join this plan before reading it.")
         return redirect("home")
 
@@ -332,18 +363,56 @@ def passage_reader(request, active_plan_id, plan_day_id, passage_index):
         messages.error(request, "This scripture passage could not be found.")
         return redirect("active_plan_detail", active_plan_id=active_plan.id)
 
+    passage = passages[passage_index]
+    scripture_ref_key = passage["search_text"]
+
+    visible_filter = get_visible_reflection_filter(request.user)
+
+    comments = (
+        ReflectionComment.objects
+        .filter(
+            visible_filter,
+            active_plan=active_plan,
+            plan_day=plan_day,
+            scripture_ref_key=scripture_ref_key,
+            parent__isnull=True,
+        )
+        .select_related("user", "small_group_at_post")
+        .prefetch_related("replies", "replies__user", "replies__small_group_at_post")
+        .order_by("created_at")
+    )
+
+    my_past_reflections = (
+        ReflectionComment.objects
+        .filter(
+            user=request.user,
+            scripture_ref_key=scripture_ref_key,
+            parent__isnull=True,
+        )
+        .exclude(
+            active_plan=active_plan,
+            plan_day=plan_day,
+        )
+        .select_related("active_plan", "plan_day")
+        .order_by("-created_at")[:5]
+    )
+
     context = build_reader_context(
         request,
         active_plan=active_plan,
         plan_day=plan_day,
-        passage=passages[passage_index],
+        passage=passage,
         passage_index=passage_index,
         passages=passages,
         reader_url_name="passage_reader",
         reader_title="scripture_reader",
         source_label="reading",
         show_completion_section=True,
+        scripture_ref_key=scripture_ref_key,
+        comments=comments,
+        my_past_reflections=my_past_reflections,
     )
+
     return render(request, "reading/passage_reader.html", context)
 
 
@@ -353,13 +422,19 @@ def memory_verse_reader(request, active_plan_id, plan_day_id, passage_index):
         ActivePlan.objects.select_related("plan"),
         id=active_plan_id,
     )
+
     plan_day = get_object_or_404(
         ReadingPlanDay,
         id=plan_day_id,
         plan=active_plan.plan,
     )
 
-    if not PlanEnrollment.objects.filter(user=request.user, active_plan=active_plan).exists():
+    is_enrolled = PlanEnrollment.objects.filter(
+        user=request.user,
+        active_plan=active_plan,
+    ).exists()
+
+    if not is_enrolled:
         messages.error(request, "You need to join this plan before reading it.")
         return redirect("home")
 
@@ -369,18 +444,24 @@ def memory_verse_reader(request, active_plan_id, plan_day_id, passage_index):
         messages.error(request, "This memory verse could not be found.")
         return redirect("active_plan_detail", active_plan_id=active_plan.id)
 
+    passage = passages[passage_index]
+
     context = build_reader_context(
         request,
         active_plan=active_plan,
         plan_day=plan_day,
-        passage=passages[passage_index],
+        passage=passage,
         passage_index=passage_index,
         passages=passages,
         reader_url_name="memory_verse_reader",
         reader_title="memory_verse",
         source_label="memory_verse",
         show_completion_section=False,
+        scripture_ref_key=passage["search_text"],
+        comments=[],
+        my_past_reflections=[],
     )
+
     return render(request, "reading/passage_reader.html", context)
 
 
@@ -586,6 +667,79 @@ def my_group_progress(request):
             "selected_active_plan_id": selected_active_plan.id if selected_active_plan else None,
             "member_rows": member_rows,
             "message": "",
+        },
+    )
+
+@login_required
+def passage_wall(request):
+    scripture_ref_key = (request.GET.get("ref") or "").strip()
+    tab = (request.GET.get("tab") or "my").strip()
+
+    if tab not in {"my", "group", "church"}:
+        tab = "my"
+
+    if not scripture_ref_key:
+        messages.error(request, "No scripture reference was provided.")
+        return redirect("home")
+
+    parsed_passages = parse_reading_text(scripture_ref_key)
+
+    if parsed_passages:
+        passage = parsed_passages[0]
+        display_zh = passage.get("display_zh", scripture_ref_key)
+        display_en = passage.get("display_en", scripture_ref_key)
+    else:
+        display_zh = scripture_ref_key
+        display_en = scripture_ref_key
+
+    user_group = get_user_small_group(request.user)
+
+    base_queryset = (
+        ReflectionComment.objects
+        .filter(
+            scripture_ref_key=scripture_ref_key,
+            parent__isnull=True,
+            is_deleted=False,
+        )
+        .select_related(
+            "user",
+            "active_plan",
+            "plan_day",
+            "small_group_at_post",
+        )
+        .order_by("-created_at")
+    )
+
+    if tab == "my":
+        reflections = base_queryset.filter(user=request.user)
+
+    elif tab == "group":
+        if user_group:
+            reflections = base_queryset.filter(
+                Q(user=request.user)
+                | Q(
+                    visibility=ReflectionComment.VISIBILITY_GROUP,
+                    small_group_at_post=user_group,
+                )
+            )
+        else:
+            reflections = base_queryset.filter(user=request.user)
+
+    else:
+        reflections = base_queryset.filter(
+            Q(user=request.user)
+            | Q(visibility=ReflectionComment.VISIBILITY_CHURCH)
+        )
+
+    return render(
+        request,
+        "reading/passage_wall.html",
+        {
+            "scripture_ref_key": scripture_ref_key,
+            "tab": tab,
+            "display_zh": display_zh,
+            "display_en": display_en,
+            "reflections": reflections,
         },
     )
 

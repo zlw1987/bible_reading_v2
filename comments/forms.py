@@ -6,13 +6,48 @@ from .models import ReflectionComment
 class ReflectionCommentForm(forms.ModelForm):
     class Meta:
         model = ReflectionComment
-        fields = ["body"]
+        fields = ["body", "visibility", "is_anonymous"]
         widgets = {
-            "body": forms.Textarea(attrs={
-                "rows": 4,
-                "placeholder": "Share your reflection...",
-            })
+            "body": forms.Textarea(
+                attrs={
+                    "rows": 4,
+                    "placeholder": "Share your reflection...",
+                }
+            )
         }
         labels = {
             "body": "",
+            "visibility": "Visibility",
+            "is_anonymous": "Post anonymously",
         }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.user = user
+        user_group = getattr(getattr(user, "profile", None), "small_group", None)
+
+        if user_group:
+            self.fields["visibility"].initial = ReflectionComment.VISIBILITY_GROUP
+        else:
+            self.fields["visibility"].initial = ReflectionComment.VISIBILITY_PRIVATE
+            self.fields["visibility"].choices = [
+                choice
+                for choice in ReflectionComment.VISIBILITY_CHOICES
+                if choice[0] != ReflectionComment.VISIBILITY_GROUP
+            ]
+
+        self.fields["is_anonymous"].required = False
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        visibility = cleaned_data.get("visibility")
+        user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
+
+        if visibility == ReflectionComment.VISIBILITY_GROUP and not user_group:
+            raise forms.ValidationError(
+                "You need to belong to a small group to share with your group."
+            )
+
+        return cleaned_data

@@ -407,6 +407,12 @@ class BibleReadingFlowTests(TestCase):
             user=self.user,
             plan_day=self.day1,
             body="My reflection",
+            active_plan=self.active_plan,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
         )
 
         self.client.login(username="levin", password="testpass123")
@@ -426,6 +432,12 @@ class BibleReadingFlowTests(TestCase):
             user=self.user,
             plan_day=self.day1,
             body="My reflection",
+            active_plan=self.active_plan,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
         )
 
         self.client.login(username="other", password="testpass123")
@@ -445,6 +457,12 @@ class BibleReadingFlowTests(TestCase):
             user=self.user,
             plan_day=self.day1,
             body="My reflection",
+            active_plan=self.active_plan,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
         )
 
         self.client.login(username="admin", password="testpass123")
@@ -1071,6 +1089,9 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -1084,9 +1105,11 @@ class BibleReadingFlowTests(TestCase):
         )
 
         response = self.client.post(
-            reverse("add_comment", args=[self.day1.id]),
+            reverse("add_comment", args=[self.active_plan.id, self.day1.id, 0]),
             {
                 "body": "This is my reflection.",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
                 "next": next_url,
             },
         )
@@ -1097,7 +1120,10 @@ class BibleReadingFlowTests(TestCase):
         self.assertTrue(
             ReflectionComment.objects.filter(
                 user=self.user,
+                active_plan=self.active_plan,
                 plan_day=self.day1,
+                scripture_ref_key="John 1",
+                visibility=ReflectionComment.VISIBILITY_GROUP,
                 body="This is my reflection.",
             ).exists()
         )
@@ -1352,3 +1378,281 @@ class BibleReadingFlowTests(TestCase):
                 memory_verse="John 11:25",
             ).exists()
         )
+
+    def test_comment_is_saved_with_passage_visibility_and_group_scope(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        next_url = reverse(
+            "passage_reader",
+            args=[self.active_plan.id, self.day1.id, 0],
+        )
+
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day1.id, 0]),
+            {
+                "body": "My group reflection.",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+                "next": next_url,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        comment = ReflectionComment.objects.get(body="My group reflection.")
+
+        self.assertEqual(comment.active_plan, self.active_plan)
+        self.assertEqual(comment.plan_day, self.day1)
+        self.assertEqual(comment.scripture_ref_key, "John 1")
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+        self.assertEqual(comment.small_group_at_post, self.group)
+
+
+    def test_private_reflection_is_not_visible_to_other_user(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Private reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Private reflection.")
+
+
+    def test_group_reflection_is_visible_to_same_group_member(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.other_user.profile.small_group = self.group
+        self.other_user.profile.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Group reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Group reflection.")
+
+
+    def test_group_reflection_is_not_visible_to_different_group_member(self):
+        other_group = SmallGroup.objects.create(name="Other Group")
+
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.other_user.profile.small_group = other_group
+        self.other_user.profile.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Hidden group reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hidden group reflection.")
+
+
+    def test_church_reflection_is_visible_to_other_enrolled_user(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Church-wide reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church-wide reflection.")
+
+
+    def test_anonymous_reflection_hides_author_from_regular_user(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_anonymous=True,
+            body="Anonymous reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Anonymous reflection.")
+        self.assertContains(response, "Anonymous")
+        self.assertNotContains(response, "levin")
+
+
+    def test_staff_can_see_anonymous_author(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(user=self.admin, active_plan=self.active_plan)
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_anonymous=True,
+            body="Anonymous but staff visible.",
+        )
+
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Anonymous (levin)")
+
+
+    def test_passage_wall_shows_my_past_reflections(self):
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="My old reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "my",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My old reflection.")
+
+
+    def test_passage_wall_church_tab_shows_church_reflections(self):
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Wall reflection.",
+        )
+
+        self.client.login(username="other", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Wall reflection.")

@@ -39,3 +39,43 @@ def passage_display(passage, language):
         return passage.get("display_en") or passage.get("display")
 
     return passage.get("display_zh") or passage.get("display")
+
+@register.filter
+def comment_author(comment, viewer):
+    if not comment:
+        return ""
+
+    if comment.is_deleted:
+        return ""
+
+    if comment.is_anonymous:
+        if viewer.is_staff:
+            return f"Anonymous ({comment.user.username})"
+
+        if comment.user_id == viewer.id:
+            return "Anonymous (you)"
+
+        return "Anonymous"
+
+    return comment.user.username
+
+
+@register.filter
+def visibility_label(comment, language):
+    if not comment:
+        return ""
+
+    if language == "zh":
+        labels = {
+            "private": "私人",
+            "group": "小组",
+            "church": "经文墙",
+        }
+    else:
+        labels = {
+            "private": "Private",
+            "group": "My Group",
+            "church": "Passage Wall",
+        }
+
+    return labels.get(comment.visibility, comment.visibility)

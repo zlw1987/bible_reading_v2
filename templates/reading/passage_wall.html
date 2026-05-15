@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}
+    {% if language == "zh" %}
+        经文墙
+    {% else %}
+        Passage Wall
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'home' %}">← {{ ui.today }}</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}
+        经文墙
+        {% else %}
+        Passage Wall
+        {% endif %}
+    </h1>
+
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        {{ display_zh }}
+        {% else %}
+        {{ display_en }}
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <div class="reader-tabs">
+        <a class="reader-tab {% if tab == 'my' %}active{% endif %}"
+           href="{% url 'passage_wall' %}?ref={{ scripture_ref_key|urlencode }}&tab=my">
+            {% if language == "zh" %}我的历史默想{% else %}My Past{% endif %}
+        </a>
+
+        <a class="reader-tab {% if tab == 'group' %}active{% endif %}"
+           href="{% url 'passage_wall' %}?ref={{ scripture_ref_key|urlencode }}&tab=group">
+            {% if language == "zh" %}我的小组{% else %}My Group{% endif %}
+        </a>
+
+        <a class="reader-tab {% if tab == 'church' %}active{% endif %}"
+           href="{% url 'passage_wall' %}?ref={{ scripture_ref_key|urlencode }}&tab=church">
+            {% if language == "zh" %}经文墙{% else %}Church-wide{% endif %}
+        </a>
+    </div>
+
+    {% if reflections %}
+    {% for reflection in reflections %}
+    <div class="card card-soft">
+        <p>
+            <strong>{{ reflection|comment_author:user }}</strong>
+            <span class="status">{{ reflection|visibility_label:language }}</span>
+            {% if reflection.is_anonymous %}
+            <span class="status status-warning">Anonymous</span>
+            {% endif %}
+        </p>
+
+        <p class="muted">
+            {{ reflection.created_at }}
+            {% if reflection.active_plan %}
+            · {{ reflection.active_plan }}
+            {% endif %}
+            {% if reflection.small_group_at_post %}
+            · {{ reflection.small_group_at_post.name }}
+            {% endif %}
+        </p>
+
+        <p>{{ reflection.body|linebreaksbr }}</p>
+
+
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        还没有可见的默想分享。
+        {% else %}
+        No visible reflections yet.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

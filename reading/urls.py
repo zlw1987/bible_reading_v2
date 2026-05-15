@@ -41,4 +41,5 @@ urlpatterns = [
         admin_views.staff_reading_plan_days,
         name="staff_reading_plan_days",
     ),
+    path("reflections/passage/", views.passage_wall, name="passage_wall"),
 ]

@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}
+    {% if language == "zh" %}读经日历{% else %}Reading Calendar{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'active_plan_detail' active_plan.id %}">
+        ← {{ ui.back_to_plan }}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}
+        读经日历
+        {% else %}
+        Reading Calendar
+        {% endif %}
+    </h1>
+
+    <p class="page-subtitle">
+        {{ active_plan|active_plan_name:language }}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}
+        进度：
+        {% else %}
+        Progress:
+        {% endif %}
+        {{ checked_days }} / {{ total_reading_days }}
+        — {{ progress_percent }}%
+    </p>
+
+    <div class="progress-bar">
+        <div class="progress-bar-fill" style="width: {{ progress_percent }}%;"></div>
+    </div>
+</div>
+
+<div class="card calendar-nav-card">
+    <div class="calendar-nav">
+        <a class="button button-secondary"
+           href="{% url 'active_plan_calendar' active_plan.id %}?year={{ previous_year }}&month={{ previous_month }}">
+            ← {% if language == "zh" %}上个月{% else %}Previous{% endif %}
+        </a>
+
+        <h2>
+            {% if language == "zh" %}
+            {{ year }} 年 {{ month }} 月
+            {% else %}
+            {{ month_date|date:"F Y" }}
+            {% endif %}
+        </h2>
+
+        <a class="button button-secondary"
+           href="{% url 'active_plan_calendar' active_plan.id %}?year={{ next_year }}&month={{ next_month }}">
+            {% if language == "zh" %}下个月{% else %}Next{% endif %} →
+        </a>
+    </div>
+
+    {% if today_calendar_url %}
+    <p style="text-align: center;">
+        <a href="{{ today_calendar_url }}" class="button button-secondary">
+            {% if language == "zh" %}回到本月{% else %}Back to current month{% endif %}
+        </a>
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="calendar-legend">
+        <span class="legend-item">
+            <span class="legend-swatch legend-swatch-checked"></span>
+            {% if language == "zh" %}已打卡{% else %}Checked{% endif %}
+        </span>
+
+        <span class="legend-item">
+            <span class="legend-swatch legend-swatch-missing"></span>
+            {% if language == "zh" %}未打卡{% else %}Missing{% endif %}
+        </span>
+
+        <span class="legend-item">
+            <span class="legend-swatch legend-swatch-rest"></span>
+            {% if language == "zh" %}休息 / 补读{% else %}Rest / Catch-up{% endif %}
+        </span>
+
+        <span class="legend-item">
+            <span class="legend-swatch legend-swatch-future"></span>
+            {% if language == "zh" %}未来{% else %}Future{% endif %}
+        </span>
+
+        <span class="legend-item">
+            <span class="legend-swatch legend-swatch-today"></span>
+            {% if language == "zh" %}今天{% else %}Today{% endif %}
+        </span>
+    </div>
+
+    <div class="reading-calendar">
+        <div class="calendar-week calendar-week-header">
+            {% if language == "zh" %}
+            {% for label in week_labels_zh %}
+            <div class="calendar-weekday">{{ label }}</div>
+            {% endfor %}
+            {% else %}
+            {% for label in week_labels_en %}
+            <div class="calendar-weekday">{{ label }}</div>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        {% for week in calendar_weeks %}
+        <div class="calendar-week">
+            {% for cell in week %}
+            <div class="
+                        calendar-day
+                        calendar-day-{{ cell.status }}
+                        {% if not cell.is_current_month %}calendar-day-muted{% endif %}
+                        {% if cell.is_today %}calendar-day-today{% endif %}
+                    ">
+                <div class="calendar-day-number">
+                    {{ cell.date.day }}
+                </div>
+
+                {% if cell.day_number %}
+                <div class="calendar-plan-day">
+                    Day {{ cell.day_number }}
+                </div>
+                {% endif %}
+
+                {% if cell.status == "checked" %}
+                <div class="calendar-status">
+                    {% if language == "zh" %}已打卡{% else %}Checked in{% endif %}
+                </div>
+                {% elif cell.status == "missing" %}
+                <div class="calendar-status">
+                    {% if language == "zh" %}未打卡{% else %}Missing{% endif %}
+                </div>
+                {% elif cell.status == "rest" %}
+                <div class="calendar-status">
+                    {% if language == "zh" %}休息 / 补读{% else %}Rest / Catch-up{% endif %}
+                </div>
+                {% elif cell.status == "future" %}
+                <div class="calendar-status">
+                    {% if language == "zh" %}未来{% else %}Future{% endif %}
+                </div>
+                {% endif %}
+
+                {% if cell.is_reading_day %}
+                {% if cell.passages %}
+                <div class="calendar-day-actions">
+                    <a class="calendar-read-link"
+                       href="{% url 'passage_reader' active_plan.id cell.plan_day.id 0 %}?lang={{ language }}">
+                        {% if language == "zh" %}读{% else %}Read{% endif %}
+                    </a>
+
+                    <a class="calendar-audio-link"
+                       href="{% url 'audio_reader' active_plan.id cell.plan_day.id 0 %}?lang={{ language }}"
+                       aria-label="{% if language == 'zh' %}听 Day {{ cell.day_number }}{% else %}Listen to Day {{ cell.day_number }}{% endif %}">
+                        🔊
+                    </a>
+                </div>
+                {% else %}
+                <div class="calendar-day-actions">
+                    <a class="calendar-read-link"
+                       href="{% url 'active_plan_detail' active_plan.id %}">
+                        {% if language == "zh" %}查看{% else %}View{% endif %}
+                    </a>
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

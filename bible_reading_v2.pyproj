@@ -35,6 +35,7 @@
     <Content Include="templates\comments\edit_comment.html" />
     <Content Include="templates\comments\report_comment.html" />
     <Content Include="templates\comments\staff\reflection_reports.html" />
+    <Content Include="templates\reading\active_plan_calendar.html" />
     <Content Include="templates\reading\active_plan_detail.html" />
     <Content Include="templates\reading\group_progress.html" />
     <Content Include="templates\reading\home.html" />

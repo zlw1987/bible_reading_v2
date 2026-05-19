@@ -8,7 +8,7 @@ from .forms import (
     ReadingPlanHeaderForm,
 )
 from .models import ReadingPlan, ReadingPlanDay
-
+from .passage_services import sync_plan_day_passages
 
 @staff_member_required
 def staff_reading_plan_list(request):
@@ -65,10 +65,11 @@ def staff_reading_plan_days(request, plan_id):
             form = ReadingPlanDayLineForm(request.POST, instance=day)
 
             if form.is_valid():
-                form.save()
+                day = form.save()
+                sync_plan_day_passages(day)
                 messages.success(
                     request,
-                    f"Day {form.instance.day_number} saved.",
+                    f"Day {day.day_number} saved.",
                 )
                 return redirect("staff_reading_plan_days", plan_id=plan.id)
 
@@ -81,6 +82,7 @@ def staff_reading_plan_days(request, plan_id):
                 new_day = form.save(commit=False)
                 new_day.plan = plan
                 new_day.save()
+                sync_plan_day_passages(new_day)
                 messages.success(request, f"Day {new_day.day_number} added.")
                 return redirect("staff_reading_plan_days", plan_id=plan.id)
 

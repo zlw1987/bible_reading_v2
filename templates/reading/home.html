@@ -38,6 +38,10 @@
                 <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
                     {{ ui.view_plan }}
                 </a>
+                <a class="button button-secondary"
+                   href="{% url 'active_plan_calendar' item.active_plan.id %}">
+                    {% if language == "zh" %}日历{% else %}Calendar{% endif %}
+                </a>
             </div>
         </div>
 

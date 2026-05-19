@@ -25,7 +25,14 @@
         <div class="progress-bar-fill" style="width: {{ progress_percent }}%;"></div>
     </div>
 </div>
-
+<div class="card">
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'active_plan_calendar' active_plan.id %}">
+            {% if language == "zh" %}查看读经日历{% else %}View Reading Calendar{% endif %}
+        </a>
+    </div>
+</div>
 <h2>{% if language == "zh" %}读经日程{% else %}Reading Schedule{% endif %}</h2>
 
 {% if day_items %}

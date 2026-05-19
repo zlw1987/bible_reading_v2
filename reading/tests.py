@@ -20,6 +20,253 @@ from reading.models import (
     ReadingPlanDay,
 )
 
+class StructuredPassageModelTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="passage_user",
+            password="TestPass123!",
+        )
+
+        self.plan = ReadingPlan.objects.create(
+            name="Structured Passage Plan",
+            is_active=True,
+        )
+
+        self.day1 = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1, John 2",
+            memory_verse="John 1:1",
+        )
+
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Structured Active Plan",
+        )
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_sync_plan_day_passages_creates_reading_and_memory_passages(self):
+        from reading.models import ReadingPlanDayPassage
+        from reading.passage_services import sync_plan_day_passages
+
+        created_count = sync_plan_day_passages(self.day1)
+
+        self.assertGreaterEqual(created_count, 3)
+
+        reading_count = ReadingPlanDayPassage.objects.filter(
+            plan_day=self.day1,
+            passage_type=ReadingPlanDayPassage.TYPE_READING,
+        ).count()
+
+        memory_count = ReadingPlanDayPassage.objects.filter(
+            plan_day=self.day1,
+            passage_type=ReadingPlanDayPassage.TYPE_MEMORY,
+        ).count()
+
+        self.assertEqual(reading_count, 2)
+        self.assertEqual(memory_count, 1)
+
+    def test_get_reading_passages_uses_structured_passages_when_available(self):
+        from reading.models import ReadingPlanDayPassage
+        from reading.passage_services import get_reading_passages
+
+        ReadingPlanDayPassage.objects.create(
+            plan_day=self.day1,
+            passage_type=ReadingPlanDayPassage.TYPE_READING,
+            sort_order=0,
+            raw_reference="John 9",
+            scripture_ref_key="John 9",
+            display_zh="约翰福音 第 9 章",
+            display_en="John 9",
+            text_url_zh="https://example.com/zh",
+            text_url_en="https://example.com/en",
+            audio_url="https://example.com/audio",
+        )
+
+        passages = get_reading_passages(self.day1)
+
+        self.assertEqual(len(passages), 1)
+        self.assertEqual(passages[0]["search_text"], "John 9")
+        self.assertEqual(passages[0]["display_en"], "John 9")
+        self.assertEqual(passages[0]["audio_url"], "https://example.com/audio")
+
+    def test_passage_reader_can_use_structured_passage(self):
+        from reading.models import ReadingPlanDayPassage
+
+        ReadingPlanDayPassage.objects.create(
+            plan_day=self.day1,
+            passage_type=ReadingPlanDayPassage.TYPE_READING,
+            sort_order=0,
+            raw_reference="John 9",
+            scripture_ref_key="John 9",
+            display_zh="约翰福音 第 9 章",
+            display_en="John 9",
+            text_url_zh="https://example.com/zh",
+            text_url_en="https://example.com/en",
+            audio_url="https://example.com/audio",
+        )
+
+        self.set_language("en")
+        self.client.login(username="passage_user", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "John 9")
+        self.assertContains(response, "https://example.com/en")
+
+    def test_audio_reader_can_use_structured_passage(self):
+        from reading.models import ReadingPlanDayPassage
+
+        ReadingPlanDayPassage.objects.create(
+            plan_day=self.day1,
+            passage_type=ReadingPlanDayPassage.TYPE_READING,
+            sort_order=0,
+            raw_reference="John 9",
+            scripture_ref_key="John 9",
+            display_zh="约翰福音 第 9 章",
+            display_en="John 9",
+            text_url_zh="https://example.com/zh",
+            text_url_en="https://example.com/en",
+            audio_url="https://example.com/audio",
+        )
+
+        self.set_language("en")
+        self.client.login(username="passage_user", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "John 9")
+        self.assertContains(response, "https://example.com/audio")
+        self.assertContains(response, "audio-frame-compact")
+
+class ReadingCalendarViewTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="calendar_user",
+            password="TestPass123!",
+        )
+
+        self.plan = ReadingPlan.objects.create(
+            name="Calendar Test Plan",
+            is_active=True,
+        )
+
+        today = timezone.localdate()
+
+        self.day1 = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+
+        # Day 2 intentionally missing = rest / catch-up day.
+
+        self.day3 = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=3,
+            reading_text="John 3",
+            memory_verse="John 3:16",
+        )
+
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=today - timezone.timedelta(days=1),
+            title="Calendar Active Plan",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_calendar_requires_enrollment(self):
+        self.client.login(username="calendar_user", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("active_plan_calendar", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("home"))
+
+    def test_calendar_shows_checked_rest_and_future_states(self):
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        CheckIn.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+        )
+
+        self.client.login(username="calendar_user", password="TestPass123!")
+        self.set_language("en")
+        today = timezone.localdate()
+
+        response = self.client.get(
+            reverse("active_plan_calendar", args=[self.active_plan.id]),
+            {
+                "year": today.year,
+                "month": today.month,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Calendar")
+        self.assertContains(response, "calendar-day-checked")
+        self.assertContains(response, "calendar-day-rest")
+        self.assertContains(response, "calendar-day-future")
+        self.assertContains(
+            response,
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+        self.assertContains(
+            response,
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+
+    def test_calendar_month_navigation_links_render(self):
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="calendar_user", password="TestPass123!")
+        self.set_language("en")
+        today = timezone.localdate()
+
+        response = self.client.get(
+            reverse("active_plan_calendar", args=[self.active_plan.id]),
+            {
+                "year": today.year,
+                "month": today.month,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Previous")
+        self.assertContains(response, "Next")
+        self.assertContains(response, "month=")
+
 class ReflectionWallVisibilityRegressionTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
@@ -263,7 +510,7 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My hidden reflection.")
-        self.assertContains(response, "Hidden")
+        self.assertContains(response, "已隐藏")
 
     def test_hidden_reflection_is_visible_to_staff_on_wall(self):
         self.make_reflection(
@@ -284,7 +531,7 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Staff-visible hidden reflection.")
-        self.assertContains(response, "Hidden")
+        self.assertContains(response, "已隐藏")
 
     def test_anonymous_reflection_hides_author_from_regular_user(self):
         self.make_reflection(

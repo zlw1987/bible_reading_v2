@@ -10,6 +10,7 @@ from .models import (
     ActivePlan,
     PlanEnrollment,
     CheckIn,
+    ReadingPlanDayPassage,
 )
 
 
@@ -17,6 +18,25 @@ class ReadingPlanDayInline(admin.TabularInline):
     model = ReadingPlanDay
     extra = 1
 
+@admin.register(ReadingPlanDayPassage)
+class ReadingPlanDayPassageAdmin(admin.ModelAdmin):
+    list_display = (
+        "plan_day",
+        "passage_type",
+        "sort_order",
+        "scripture_ref_key",
+        "display_zh",
+        "display_en",
+    )
+    list_filter = ("passage_type",)
+    search_fields = (
+        "scripture_ref_key",
+        "display_zh",
+        "display_en",
+        "plan_day__plan__name",
+        "plan_day__plan__name_en",
+    )
+    ordering = ("plan_day", "passage_type", "sort_order")
 
 @admin.register(BibleBook)
 class BibleBookAdmin(admin.ModelAdmin):

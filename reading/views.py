@@ -1,4 +1,6 @@
 from collections import defaultdict
+import calendar as py_calendar
+from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -13,6 +15,7 @@ from accounts.models import SmallGroup
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
 
+from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingPlanDay
 
@@ -74,6 +77,28 @@ def get_safe_next_url(request):
 
     return None
 
+def get_requested_calendar_month(request):
+    today = timezone.localdate()
+
+    try:
+        year = int(request.GET.get("year", today.year))
+        month = int(request.GET.get("month", today.month))
+
+        if month < 1 or month > 12:
+            raise ValueError
+    except (TypeError, ValueError):
+        year = today.year
+        month = today.month
+
+    return year, month
+
+
+def shift_month(year, month, offset):
+    month_index = month - 1 + offset
+    shifted_year = year + month_index // 12
+    shifted_month = month_index % 12 + 1
+
+    return shifted_year, shifted_month
 
 def get_scripture_language(request):
     lang = request.GET.get("lang") or get_user_language(request)
@@ -180,7 +205,7 @@ def reading_media_reader(request, active_plan_id, plan_day_id, passage_index, me
         messages.error(request, "You need to join this plan before reading it.")
         return redirect("home")
 
-    passages = parse_reading_text(plan_day.reading_text)
+    passages = get_reading_passages(plan_day)
 
     if passage_index < 0 or passage_index >= len(passages):
         messages.error(request, "This scripture passage could not be found.")
@@ -310,12 +335,8 @@ def home(request):
 
             if plan_day:
                 is_reading_day = True
-                passages = parse_reading_text(plan_day.reading_text)
-                memory_passages = (
-                    parse_memory_verse_text(plan_day.memory_verse)
-                    if plan_day.memory_verse
-                    else []
-                )
+                passages = get_reading_passages(plan_day)
+                memory_passages = get_memory_passages(plan_day) if plan_day.memory_verse else []
                 is_checked = CheckIn.objects.filter(
                     user=request.user,
                     active_plan=active_plan,
@@ -394,9 +415,9 @@ def active_plan_detail(request, active_plan_id):
                 "day_number": day_number,
                 "plan_day": plan_day,
                 "calendar_date": calendar_date,
-                "passages": parse_reading_text(plan_day.reading_text) if plan_day else [],
+                "passages": get_reading_passages(plan_day) if plan_day else [],
                 "memory_passages": (
-                    parse_memory_verse_text(plan_day.memory_verse)
+                    get_memory_passages(plan_day)
                     if plan_day and plan_day.memory_verse
                     else []
                 ),
@@ -432,6 +453,142 @@ def active_plan_detail(request, active_plan_id):
         },
     )
 
+@login_required
+def active_plan_calendar(request, active_plan_id):
+    active_plan = get_object_or_404(
+        ActivePlan.objects.select_related("plan"),
+        id=active_plan_id,
+    )
+
+    is_enrolled = PlanEnrollment.objects.filter(
+        user=request.user,
+        active_plan=active_plan,
+    ).exists()
+
+    if not is_enrolled:
+        messages.error(request, "You need to join this plan before viewing it.")
+        return redirect("home")
+
+    year, month = get_requested_calendar_month(request)
+    previous_year, previous_month = shift_month(year, month, -1)
+    next_year, next_month = shift_month(year, month, 1)
+
+    month_date = date(year, month, 1)
+
+    plan_days = list(
+        ReadingPlanDay.objects
+        .filter(plan=active_plan.plan)
+        .order_by("day_number")
+    )
+    plan_day_by_number = {
+        plan_day.day_number: plan_day
+        for plan_day in plan_days
+    }
+
+    max_day_number = max(plan_day_by_number.keys(), default=0)
+    current_day_number = active_plan.current_day_number()
+    today = timezone.localdate()
+
+    checked_plan_day_ids = set(
+        CheckIn.objects
+        .filter(
+            user=request.user,
+            active_plan=active_plan,
+        )
+        .values_list("plan_day_id", flat=True)
+    )
+
+    calendar_builder = py_calendar.Calendar(firstweekday=6)
+    calendar_weeks = []
+
+    for week in calendar_builder.monthdatescalendar(year, month):
+        week_cells = []
+
+        for calendar_date in week:
+            day_number = (calendar_date - active_plan.start_date).days + 1
+            in_plan_range = 1 <= day_number <= max_day_number
+            plan_day = plan_day_by_number.get(day_number)
+
+            passages = get_reading_passages(plan_day) if plan_day else []
+            memory_passages = (
+                get_memory_passages(plan_day)
+                if plan_day and plan_day.memory_verse
+                else []
+            )
+
+            is_checked = bool(plan_day and plan_day.id in checked_plan_day_ids)
+            is_today = calendar_date == today
+            is_future = in_plan_range and day_number > current_day_number
+            is_rest_day = in_plan_range and plan_day is None
+            is_reading_day = plan_day is not None
+            is_current_month = calendar_date.month == month
+
+            if not in_plan_range:
+                status = "outside"
+            elif is_rest_day:
+                status = "rest"
+            elif is_checked:
+                status = "checked"
+            elif is_future:
+                status = "future"
+            elif is_reading_day:
+                status = "missing"
+            else:
+                status = "outside"
+
+            week_cells.append(
+                {
+                    "date": calendar_date,
+                    "day_number": day_number if in_plan_range else None,
+                    "plan_day": plan_day,
+                    "passages": passages,
+                    "memory_passages": memory_passages,
+                    "is_checked": is_checked,
+                    "is_today": is_today,
+                    "is_future": is_future,
+                    "is_rest_day": is_rest_day,
+                    "is_reading_day": is_reading_day,
+                    "is_current_month": is_current_month,
+                    "status": status,
+                }
+            )
+
+        calendar_weeks.append(week_cells)
+
+    total_reading_days = len(plan_days)
+    checked_days = len(checked_plan_day_ids)
+    progress_percent = (
+        round((checked_days / total_reading_days) * 100)
+        if total_reading_days
+        else 0
+    )
+
+    if request.GET.get("year") or request.GET.get("month"):
+        today_calendar_url = f"{request.path}"
+    else:
+        today_calendar_url = None
+
+    return render(
+        request,
+        "reading/active_plan_calendar.html",
+        {
+            "active_plan": active_plan,
+            "calendar_weeks": calendar_weeks,
+            "month_date": month_date,
+            "year": year,
+            "month": month,
+            "previous_year": previous_year,
+            "previous_month": previous_month,
+            "next_year": next_year,
+            "next_month": next_month,
+            "total_reading_days": total_reading_days,
+            "checked_days": checked_days,
+            "progress_percent": progress_percent,
+            "week_labels_zh": ["日", "一", "二", "三", "四", "五", "六"],
+            "week_labels_en": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+            "today_calendar_url": today_calendar_url,
+        },
+    )
 
 @login_required
 def join_active_plan(request, active_plan_id):
@@ -496,7 +653,7 @@ def memory_verse_reader(request, active_plan_id, plan_day_id, passage_index):
         messages.error(request, "You need to join this plan before reading it.")
         return redirect("home")
 
-    passages = parse_memory_verse_text(plan_day.memory_verse)
+    passages = get_memory_passages(plan_day)
 
     if passage_index < 0 or passage_index >= len(passages):
         messages.error(request, "This memory verse could not be found.")
@@ -767,20 +924,17 @@ def passage_wall(request):
         .order_by("-created_at")
     )
 
-    if request.user.is_staff:
-        visible_queryset = base_queryset
-    else:
-        visible_queryset = base_queryset.filter(
-            Q(user=request.user)
-            | Q(is_hidden=False)
-        )
-
     if tab == "my":
-        reflections = visible_queryset.filter(user=request.user)
+        reflections = base_queryset.filter(user=request.user)
 
     elif tab == "group":
-        if user_group:
-            reflections = visible_queryset.filter(
+        if request.user.is_staff:
+            # Staff can review all group-shared reflections, including hidden ones.
+            reflections = base_queryset.filter(
+                visibility=ReflectionComment.VISIBILITY_GROUP,
+            )
+        elif user_group:
+            reflections = base_queryset.filter(
                 Q(user=request.user)
                 | Q(
                     visibility=ReflectionComment.VISIBILITY_GROUP,
@@ -789,16 +943,22 @@ def passage_wall(request):
                 )
             )
         else:
-            reflections = visible_queryset.filter(user=request.user)
+            reflections = base_queryset.filter(user=request.user)
 
     else:
-        reflections = visible_queryset.filter(
-            Q(user=request.user)
-            | Q(
+        if request.user.is_staff:
+            # Staff can review all Reflection Wall posts, including hidden ones.
+            reflections = base_queryset.filter(
                 visibility=ReflectionComment.VISIBILITY_CHURCH,
-                is_hidden=False,
             )
-        )
+        else:
+            reflections = base_queryset.filter(
+                Q(user=request.user)
+                | Q(
+                    visibility=ReflectionComment.VISIBILITY_CHURCH,
+                    is_hidden=False,
+                )
+            )
 
     return render(
         request,
@@ -811,7 +971,6 @@ def passage_wall(request):
             "reflections": reflections,
         },
     )
-
 
 @login_required
 def my_plans(request):

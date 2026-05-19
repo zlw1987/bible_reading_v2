@@ -65,6 +65,63 @@ class ReadingPlanDay(models.Model):
     def __str__(self):
         return f"{self.plan.name} - Day {self.day_number}"
 
+class ReadingPlanDayPassage(models.Model):
+    TYPE_READING = "reading"
+    TYPE_MEMORY = "memory"
+
+    PASSAGE_TYPE_CHOICES = [
+        (TYPE_READING, "Reading"),
+        (TYPE_MEMORY, "Memory Verse"),
+    ]
+
+    plan_day = models.ForeignKey(
+        ReadingPlanDay,
+        on_delete=models.CASCADE,
+        related_name="structured_passages",
+    )
+    passage_type = models.CharField(
+        max_length=20,
+        choices=PASSAGE_TYPE_CHOICES,
+        db_index=True,
+    )
+    sort_order = models.PositiveIntegerField()
+
+    raw_reference = models.CharField(max_length=160)
+    scripture_ref_key = models.CharField(max_length=120, db_index=True)
+
+    display_zh = models.CharField(max_length=160, blank=True, default="")
+    display_en = models.CharField(max_length=160, blank=True, default="")
+
+    text_url_zh = models.URLField(max_length=500, blank=True, default="")
+    text_url_en = models.URLField(max_length=500, blank=True, default="")
+    audio_url = models.URLField(max_length=500, blank=True, default="")
+
+    class Meta:
+        ordering = ["plan_day", "passage_type", "sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["plan_day", "passage_type", "sort_order"],
+                name="unique_plan_day_passage_order",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["plan_day", "passage_type"]),
+            models.Index(fields=["scripture_ref_key"]),
+        ]
+
+    def __str__(self):
+        return f"{self.plan_day} - {self.passage_type} {self.sort_order}: {self.scripture_ref_key}"
+
+    def as_passage_dict(self):
+        return {
+            "search_text": self.scripture_ref_key,
+            "display": self.display_en or self.display_zh or self.raw_reference,
+            "display_zh": self.display_zh or self.raw_reference,
+            "display_en": self.display_en or self.raw_reference,
+            "text_url_zh": self.text_url_zh,
+            "text_url_en": self.text_url_en,
+            "audio_url": self.audio_url,
+        }
 
 class ActivePlan(models.Model):
     plan = models.ForeignKey(ReadingPlan, on_delete=models.PROTECT, related_name="active_runs")

@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from reading.bible_sources import parse_reading_text
+from reading.passage_services import get_reading_passages
 from reading.models import ActivePlan, PlanEnrollment, ReadingPlanDay
 
 from .forms import (
@@ -48,7 +49,7 @@ def user_can_access_active_plan(user, active_plan):
 
 
 def get_passage_or_none(plan_day, passage_index):
-    passages = parse_reading_text(plan_day.reading_text)
+    passages = get_reading_passages(plan_day)
 
     if passage_index < 0 or passage_index >= len(passages):
         return None

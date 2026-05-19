@@ -27,7 +27,9 @@ PUBLIC_APP_DIR = BASE_DIR.parent / "public_html" / "app_read"
 
 STATIC_URL = "/app_read/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 MEDIA_URL = "/app_read/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

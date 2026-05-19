@@ -9,12 +9,20 @@
     <h1 class="page-title">
         {% if reader_title == "memory_verse" %}
         {{ ui.memory_verse }}
+        {% elif reader_title == "audio_reading" %}
+        {% if language == "zh" %}音频读经{% else %}Audio Reading{% endif %}
         {% else %}
         {{ ui.scripture_reader }}
         {% endif %}
     </h1>
     <p class="page-subtitle">
-        {% if source_label == "memory_verse" %}{{ ui.memory_verse }}{% else %}{{ ui.reading }}{% endif %}
+        {% if source_label == "memory_verse" %}
+        {{ ui.memory_verse }}
+        {% elif source_label == "audio" %}
+        {% if language == "zh" %}音频{% else %}Audio{% endif %}
+        {% else %}
+        {{ ui.reading }}
+        {% endif %}
         · {{ active_plan }} · Day {{ plan_day.day_number }}
     </p>
 </div>
@@ -41,17 +49,22 @@
     </div>
 </div>
 
+{% if media_mode == "audio" %}
 <div class="card audio-card">
     <div class="audio-card-header">
         <div>
-            <h2>{{ ui.audio }}</h2>
+            <h2>{{ selected_display }}</h2>
             <p class="muted">
-                {{ ui.audio_note }}
+                {% if language == "zh" %}
+                音频按整章播放。浏览器可能会阻止自动播放；如果没有声音，请点击播放器或直接打开音频。
+                {% else %}
+                Audio is chapter-based. Your browser may block autoplay; click the player or open the audio directly if needed.
+                {% endif %}
             </p>
         </div>
 
         <a class="button button-secondary"
-           href="{{ passage.audio_url }}"
+           href="{{ audio_url }}"
            target="_blank"
            rel="noopener noreferrer">
             {{ ui.open_audio }}
@@ -59,18 +72,19 @@
     </div>
 
     <iframe class="audio-frame-compact"
-            src="{{ passage.audio_url }}"
+            src="{{ audio_url }}"
             title="{{ selected_display }} Audio"
             allow="autoplay">
     </iframe>
 </div>
-
+{% else %}
 <div class="card">
     <div class="reader-tabs">
         <a class="reader-tab {% if selected_language == 'zh' %}active{% endif %}"
            href="{{ request.path }}?lang=zh">
             {{ ui.chinese }}
         </a>
+
         <a class="reader-tab {% if selected_language == 'en' %}active{% endif %}"
            href="{{ request.path }}?lang=en">
             {{ ui.english }}
@@ -92,89 +106,268 @@
             loading="lazy">
     </iframe>
 </div>
-
-
+{% endif %}
 
 {% if show_completion_section %}
-    {% if is_last_passage %}
-<div class="card">
-    <h2>{{ ui.reflection }}</h2>
-    <p>
+<div class="card reflection-section-card">
+    <div class="reflection-header-row">
+        <div>
+            <h2>
+                {% if language == "zh" %}
+                默想 / 评论
+                {% else %}
+                Reflections / Comments
+                {% endif %}
+            </h2>
+
+            <p class="muted">
+                {% if language == "zh" %}
+                写下你对这段经文的回应，也可以回复自己或别人的默想。
+                {% else %}
+                Share your response to this passage, or reply to your own or someone else’s reflection.
+                {% endif %}
+            </p>
+        </div>
+
         <a class="button button-secondary"
            href="{% url 'passage_wall' %}?ref={{ scripture_ref_key|urlencode }}">
-            View Passage Wall
+            {% if language == "zh" %}
+            查看默想墙
+            {% else %}
+            View Reflection Wall
+            {% endif %}
         </a>
-    </p>
-    <p class="muted">{{ ui.reflection_optional }}</p>
+    </div>
 
-    <form method="post" action="{% url 'add_comment' active_plan.id plan_day.id passage_index %}">
+    <form method="post"
+          action="{% url 'add_comment' active_plan.id plan_day.id passage_index %}"
+          class="reflection-form">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        {{ comment_form.as_p }}
-        <button type="submit">{{ ui.post_reflection }}</button>
+
+        <div class="reflection-body-field">
+            {{ comment_form.body }}
+        </div>
+
+        <div class="reflection-options-row">
+            <div class="reflection-option">
+                <label for="{{ comment_form.visibility.id_for_label }}">
+                    {% if language == "zh" %}可见范围{% else %}Visibility{% endif %}
+                </label>
+                {{ comment_form.visibility }}
+            </div>
+
+            <label class="checkbox-option">
+                {{ comment_form.is_anonymous }}
+                <span>
+                    {% if language == "zh" %}
+                    匿名发表
+                    {% else %}
+                    Post anonymously
+                    {% endif %}
+                </span>
+            </label>
+
+            <button type="submit">
+                {% if language == "zh" %}
+                发表默想
+                {% else %}
+                Post Reflection
+                {% endif %}
+            </button>
+        </div>
     </form>
 
-    {% if comments %}
     <hr class="divider">
-    {% for comment in comments %}
-    <div class="card card-soft">
-        {% if comment.is_deleted %}
-        <p class="muted">{% if language == "zh" %}这条分享已删除。{% else %}This comment has been deleted.{% endif %}</p>
+
+    <h3>
+        {% if language == "zh" %}
+        现有默想
         {% else %}
-        <p>
-            <strong>{{ comment|comment_author:user }}</strong>
-            <span class="status">{{ comment|visibility_label:language }}</span>
-            {% if comment.is_anonymous %}
-            <span class="status status-warning">Anonymous</span>
-            {% endif %}
-            <span class="muted">{{ comment.created_at }}</span>
-        </p>
-        <p>{{ comment.body|linebreaksbr }}</p>
-
-        {% if comment.user == user or user.is_staff %}
-        <form method="post" action="{% url 'delete_comment' comment.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <button type="submit" class="button-danger">{{ ui.delete }}</button>
-        </form>
+        Existing Reflections
         {% endif %}
+    </h3>
 
-        <form method="post" action="{% url 'add_reply' comment.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            {{ reply_form.as_p }}
-            <button type="submit" class="button-secondary">{{ ui.reply }}</button>
-        </form>
-        {% endif %}
+    {% if comment_threads %}
+    <div class="comment-thread-list">
+        {% for thread in comment_threads %}
+        {% with comment=thread.comment %}
+        <div class="comment-thread">
+            <div class="comment-main">
+                {% if comment.is_deleted %}
+                <p class="muted">
+                    {% if language == "zh" %}
+                    这条默想已删除。
+                    {% else %}
+                    This reflection has been deleted.
+                    {% endif %}
+                </p>
+                {% else %}
+                <div class="comment-meta">
+                    <strong>{{ comment|comment_author:user }}</strong>
 
-        {% for reply in comment.replies.all %}
-        <div style="margin-left: 24px; border-left: 3px solid var(--border); padding-left: 12px;">
-            {% if reply.is_deleted %}
-            <p class="muted">{% if language == "zh" %}这条回复已删除。{% else %}This reply has been deleted.{% endif %}</p>
-            {% else %}
-            <p>
-                <strong>{{ reply|comment_author:user }}</strong>
-                <span class="muted">{{ reply.created_at }}</span>
-            </p>
-            <p>{{ reply.body|linebreaksbr }}</p>
+                    <span class="status">
+                        {{ comment|visibility_label:language }}
+                    </span>
 
-            {% if reply.user == user or user.is_staff %}
-            <form method="post" action="{% url 'delete_comment' reply.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                <button type="submit" class="button-danger">{{ ui.delete }}</button>
-            </form>
-            {% endif %}
+                    {% if comment.is_anonymous %}
+                    <span class="status status-warning">Anonymous</span>
+                    {% endif %}
+
+                    {% if comment.is_hidden %}
+                    <span class="status status-danger">
+                        {% if language == "zh" %}已隐藏{% else %}Hidden{% endif %}
+                    </span>
+                    {% endif %}
+
+                    <span class="muted">{{ comment.created_at }}</span>
+                </div>
+
+                <div class="comment-body">
+                    {{ comment.body|linebreaksbr }}
+                </div>
+
+                <div class="comment-actions">
+                    {% if comment.user == user %}
+                    <a href="{% url 'edit_comment' comment.id %}?next={{ request.get_full_path|urlencode }}">
+                        {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                    </a>
+                    {% endif %}
+
+                    {% if comment.user == user or user.is_staff %}
+                    <form method="post"
+                          action="{% url 'delete_comment' comment.id %}"
+                          class="inline-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="link-button danger-link">
+                            {{ ui.delete }}
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    {% if comment.user != user %}
+                    <a href="{% url 'report_comment' comment.id %}?next={{ request.get_full_path|urlencode }}">
+                        {% if language == "zh" %}举报{% else %}Report{% endif %}
+                    </a>
+                    {% endif %}
+
+                    <details class="reply-details">
+                        <summary>
+                            {% if language == "zh" %}
+                            回复
+                            {% else %}
+                            Reply
+                            {% endif %}
+                        </summary>
+
+                        <form method="post"
+                              action="{% url 'add_reply' comment.id %}"
+                              class="reply-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+                            {{ reply_form.body }}
+
+                            <label class="checkbox-option compact-checkbox">
+                                {{ reply_form.is_anonymous }}
+                                <span>
+                                    {% if language == "zh" %}
+                                    匿名回复
+                                    {% else %}
+                                    Reply anonymously
+                                    {% endif %}
+                                </span>
+                            </label>
+
+                            <button type="submit" class="button-secondary">
+                                {{ ui.reply }}
+                            </button>
+                        </form>
+                    </details>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if thread.replies %}
+            <div class="reply-list">
+                {% for reply in thread.replies %}
+                <div class="reply-item">
+                    {% if reply.is_deleted %}
+                    <p class="muted">
+                        {% if language == "zh" %}
+                        这条回复已删除。
+                        {% else %}
+                        This reply has been deleted.
+                        {% endif %}
+                    </p>
+                    {% else %}
+                    <div class="comment-meta">
+                        <strong>{{ reply|comment_author:user }}</strong>
+
+                        {% if reply.is_anonymous %}
+                        <span class="status status-warning">Anonymous</span>
+                        {% endif %}
+
+                        {% if reply.is_hidden %}
+                        <span class="status status-danger">
+                            {% if language == "zh" %}已隐藏{% else %}Hidden{% endif %}
+                        </span>
+                        {% endif %}
+
+                        <span class="muted">{{ reply.created_at }}</span>
+                    </div>
+
+                    <div class="comment-body">
+                        {{ reply.body|linebreaksbr }}
+                    </div>
+
+                    <div class="comment-actions">
+                        {% if reply.user == user %}
+                        <a href="{% url 'edit_comment' reply.id %}?next={{ request.get_full_path|urlencode }}">
+                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                        </a>
+                        {% endif %}
+
+                        {% if reply.user == user or user.is_staff %}
+                        <form method="post"
+                              action="{% url 'delete_comment' reply.id %}"
+                              class="inline-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <button type="submit" class="link-button danger-link">
+                                {{ ui.delete }}
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if reply.user != user %}
+                        <a href="{% url 'report_comment' reply.id %}?next={{ request.get_full_path|urlencode }}">
+                            {% if language == "zh" %}举报{% else %}Report{% endif %}
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
             {% endif %}
         </div>
+        {% endwith %}
         {% endfor %}
     </div>
-    {% endfor %}
     {% else %}
-    <p class="muted">{{ ui.no_reflections }}</p>
+    <p class="muted">
+        {% if language == "zh" %}
+        还没有默想。你可以发表第一条。
+        {% else %}
+        No reflections yet. You can post the first one.
+        {% endif %}
+    </p>
     {% endif %}
 </div>
-{% if my_past_reflections %}
+
+    {% if my_past_reflections %}
 <div class="card">
     <h2>
         {% if language == "zh" %}
@@ -207,14 +400,24 @@
         </a>
     </p>
 </div>
-{% endif %}
+    {% endif %}
+    {% if is_last_passage %}
 <div class="card">
     <h2>{{ ui.finish_today_reading }}</h2>
+
     {% if is_future_day %}
     <p class="muted">{{ ui.future_checkin_unavailable }}</p>
     {% elif is_checked %}
     <p><span class="status status-good">{{ ui.checked_in }}</span></p>
     {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        完成今天的读经或听经后，可以在这里打卡。
+        {% else %}
+        After finishing today’s reading or listening, check in here.
+        {% endif %}
+    </p>
+
     <form method="post" action="{% url 'check_in' active_plan.id plan_day.id %}">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -222,9 +425,18 @@
     </form>
     {% endif %}
 </div>
-    {% elif has_next %}
+    {% else %}
 <div class="card">
     <h2>{{ ui.continue_reading }}</h2>
+
+    <p class="muted">
+        {% if language == "zh" %}
+        今天还有下一段经文。
+        {% else %}
+        This day has another passage.
+        {% endif %}
+    </p>
+
     <a class="button"
        href="{% url reader_url_name active_plan.id plan_day.id next_index %}?lang={{ selected_language }}">
         {{ ui.continue_next_passage }}
@@ -240,3 +452,4 @@
 </div>
 {% endif %}
 {% endblock %}
+

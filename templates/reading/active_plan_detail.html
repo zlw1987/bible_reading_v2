@@ -30,70 +30,79 @@
 
 {% if day_items %}
     {% for item in day_items %}
-    <div class="card">
-        <h3>
-            Day {{ item.day_number }}
-            {% if item.is_today %}<span class="muted">— {{ ui.today }}</span>{% endif %}
-        </h3>
+<div class="card">
+    <h3>
+        Day {{ item.day_number }}
+        {% if item.is_today %}<span class="muted">— {{ ui.today }}</span>{% endif %}
+    </h3>
 
-        <p class="muted">{{ item.calendar_date }}</p>
+    <p class="muted">{{ item.calendar_date }}</p>
 
-        {% if item.is_rest_day %}
-            <h4>{{ ui.rest_day }}</h4>
-            <p>
-                {% if language == "zh" %}
-                    这一天没有指定读经。可以休息、补读，或回顾之前的经文。
-                {% else %}
-                    No assigned reading for this day. Use it to rest, catch up, or review previous readings.
-                {% endif %}
-            </p>
-        {% elif item.is_reading_day %}
-            <h4>{{ ui.reading }}</h4>
-
-            {% if item.passages %}
-                <div class="passage-list">
-                    {% for passage in item.passages %}
-                        <a class="button button-secondary"
-                           href="{% url 'passage_reader' active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
-                            {{ passage|passage_display:language }}
-                        </a>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
-                <p class="muted">{{ ui.no_scripture_links }}</p>
-            {% endif %}
-
-            {% if item.plan_day.memory_verse %}
-                <h4>{{ ui.memory_verse }}</h4>
-                {% if item.memory_passages %}
-                    <div class="passage-list">
-                        {% for passage in item.memory_passages %}
-                            <a class="button button-secondary"
-                               href="{% url 'memory_verse_reader' active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
-                                {{ passage|passage_display:language }}
-                            </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p>{{ item.plan_day.memory_verse }}</p>
-                    <p class="muted">{{ ui.no_memory_link }}</p>
-                {% endif %}
-            {% endif %}
-
-            {% if item.is_checked %}
-                <p><span class="status status-good">{{ ui.checked_in }}</span></p>
-            {% elif item.is_future %}
-                <p class="muted">{{ ui.future_checkin_unavailable }}</p>
-            {% else %}
-                <form method="post" action="{% url 'check_in' active_plan.id item.plan_day.id %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button type="submit">{{ ui.finished_reading_button }}</button>
-                </form>
-            {% endif %}
+    {% if item.is_rest_day %}
+    <h4>{{ ui.rest_day }}</h4>
+    <p>
+        {% if language == "zh" %}
+        这一天没有指定读经。可以休息、补读，或回顾之前的经文。
+        {% else %}
+        No assigned reading for this day. Use it to rest, catch up, or review previous readings.
         {% endif %}
+    </p>
+    {% elif item.is_reading_day %}
+    <h4>{{ ui.reading }}</h4>
+
+    {% if item.passages %}
+    <div class="passage-list">
+        {% for passage in item.passages %}
+        <div class="passage-action-row">
+            <a class="button button-secondary"
+               href="{% url 'passage_reader' active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
+                {{ passage|passage_display:language }}
+            </a>
+
+            <a class="audio-icon-button"
+               href="{% url 'audio_reader' active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}"
+               title="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}"
+               aria-label="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}: {{ passage|passage_display:language }}">
+                🔊
+            </a>
+        </div>
+        {% endfor %}
     </div>
+    {% else %}
+    <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
+    <p class="muted">{{ ui.no_scripture_links }}</p>
+    {% endif %}
+
+    {% if item.plan_day.memory_verse %}
+    <h4>{{ ui.memory_verse }}</h4>
+    {% if item.memory_passages %}
+    <div class="passage-list">
+        {% for passage in item.memory_passages %}
+        <a class="button button-secondary"
+           href="{% url 'memory_verse_reader' active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
+            {{ passage|passage_display:language }}
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p>{{ item.plan_day.memory_verse }}</p>
+    <p class="muted">{{ ui.no_memory_link }}</p>
+    {% endif %}
+    {% endif %}
+
+    {% if item.is_checked %}
+    <p><span class="status status-good">{{ ui.checked_in }}</span></p>
+    {% elif item.is_future %}
+    <p class="muted">{{ ui.future_checkin_unavailable }}</p>
+    {% else %}
+    <form method="post" action="{% url 'check_in' active_plan.id item.plan_day.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit">{{ ui.finished_reading_button }}</button>
+    </form>
+    {% endif %}
+    {% endif %}
+</div>
     {% endfor %}
 {% else %}
     <p>{% if language == "zh" %}这个计划还没有读经日。{% else %}No reading days have been added to this plan yet.{% endif %}</p>

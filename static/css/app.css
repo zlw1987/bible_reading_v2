@@ -369,3 +369,253 @@ th {
         flex-direction: column;
     }
 }
+
+.passage-action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.audio-icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    min-width: 42px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--text);
+    font-size: 18px;
+    text-decoration: none;
+}
+
+    .audio-icon-button:hover {
+        background: #e8e3da;
+        text-decoration: none;
+    }
+
+.audio-card {
+    padding: 16px 20px;
+}
+
+.audio-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+    .audio-card-header h2 {
+        margin: 0 0 4px;
+    }
+
+    .audio-card-header p {
+        margin: 0;
+    }
+
+.audio-frame-compact {
+    width: 100%;
+    height: 76px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: white;
+}
+
+@media (max-width: 760px) {
+    .audio-card-header {
+        flex-direction: column;
+    }
+}
+
+.reply-box {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+.reflection-section-card h2 {
+    margin-top: 0;
+}
+
+.reflection-section-card h3 {
+    margin-top: 0;
+}
+
+.reflection-header-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.reflection-form textarea,
+.reply-form textarea {
+    width: 100%;
+    max-width: 100%;
+}
+
+.reflection-body-field textarea {
+    min-height: 88px;
+}
+
+.reflection-options-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.reflection-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+    .reflection-option label {
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .reflection-option select {
+        width: auto;
+        min-width: 180px;
+    }
+
+.checkbox-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    white-space: nowrap;
+}
+
+    .checkbox-option input {
+        width: auto;
+        max-width: none;
+    }
+
+.compact-checkbox {
+    margin: 8px 0;
+}
+
+.comment-thread-list {
+    display: grid;
+    gap: 14px;
+}
+
+.comment-thread {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface-soft);
+    padding: 14px;
+}
+
+.comment-main {
+    background: white;
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.comment-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 14px;
+}
+
+.comment-body {
+    margin: 12px 0;
+    white-space: normal;
+}
+
+.comment-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 14px;
+}
+
+    .comment-actions a {
+        color: var(--primary);
+    }
+
+.link-button {
+    border: 0;
+    background: transparent;
+    color: var(--primary);
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
+    .link-button:hover {
+        text-decoration: underline;
+        background: transparent;
+    }
+
+.danger-link {
+    color: var(--danger);
+}
+
+.reply-details {
+    display: inline-block;
+}
+
+.reply-details summary {
+    color: var(--primary);
+    cursor: pointer;
+    list-style: none;
+}
+
+    .reply-details summary::-webkit-details-marker {
+        display: none;
+    }
+
+.reply-form {
+    margin-top: 10px;
+    padding: 12px;
+    min-width: min(520px, 82vw);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.reply-list {
+    margin-top: 12px;
+    margin-left: 22px;
+    display: grid;
+    gap: 10px;
+}
+
+.reply-item {
+    border-left: 3px solid var(--border);
+    padding: 10px 0 10px 14px;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 0 10px 10px 0;
+}
+
+@media (max-width: 760px) {
+    .reflection-header-row {
+        flex-direction: column;
+    }
+
+    .reflection-options-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .reply-list {
+        margin-left: 8px;
+    }
+
+    .reply-form {
+        min-width: 100%;
+    }
+}

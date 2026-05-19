@@ -42,4 +42,9 @@ urlpatterns = [
         name="staff_reading_plan_days",
     ),
     path("reflections/passage/", views.passage_wall, name="passage_wall"),
+    path(
+        "plans/<int:active_plan_id>/days/<int:plan_day_id>/audio/<int:passage_index>/",
+        views.audio_reader,
+        name="audio_reader",
+    ),
 ]

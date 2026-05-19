@@ -23,6 +23,7 @@
                 {% if user.is_staff %}
                 <a href="{% url 'staff_reading_plan_list' %}">Plan Admin</a>
                 <a href="{% url 'staff_user_list' %}">User Admin</a>
+                <a href="{% url 'staff_reflection_reports' %}">Reports</a>
                 <a href="{% url 'admin:index' %}">{{ ui.admin }}</a>
                 {% endif %}
 

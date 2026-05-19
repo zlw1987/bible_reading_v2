@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}
+        编辑默想
+    {% else %}
+        Edit Reflection
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    {% if return_url %}
+    <a href="{{ return_url }}">
+        ← {% if language == "zh" %}返回{% else %}Back{% endif %}
+    </a>
+    {% else %}
+    <a href="{% url 'home' %}">
+        ← {{ ui.today }}
+    </a>
+    {% endif %}
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_reply %}
+        {% if language == "zh" %}编辑回复{% else %}Edit Reply{% endif %}
+        {% else %}
+        {% if language == "zh" %}编辑默想{% else %}Edit Reflection{% endif %}
+        {% endif %}
+    </h1>
+
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        你可以修改内容、匿名状态，以及顶层默想的可见范围。
+        {% else %}
+        You can update the content, anonymity, and visibility for top-level reflections.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+
+        {% if return_url %}
+        <input type="hidden" name="next" value="{{ return_url }}">
+        {% endif %}
+
+        {{ form.as_p }}
+
+        <button type="submit">
+            {% if language == "zh" %}保存修改{% else %}Save Changes{% endif %}
+        </button>
+    </form>
+</div>
+{% endblock %}

@@ -20,6 +20,315 @@ from reading.models import (
     ReadingPlanDay,
 )
 
+class ReflectionWallVisibilityRegressionTests(TestCase):
+    def setUp(self):
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+
+        self.author = User.objects.create_user(
+            username="author",
+            password="TestPass123!",
+        )
+        self.author.profile.small_group = self.group
+        self.author.profile.save()
+
+        self.same_group_user = User.objects.create_user(
+            username="same_group",
+            password="TestPass123!",
+        )
+        self.same_group_user.profile.small_group = self.group
+        self.same_group_user.profile.save()
+
+        self.other_group_user = User.objects.create_user(
+            username="other_group",
+            password="TestPass123!",
+        )
+        self.other_group_user.profile.small_group = self.other_group
+        self.other_group_user.profile.save()
+
+        self.staff = User.objects.create_user(
+            username="staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+        self.plan = ReadingPlan.objects.create(
+            name="Regression Test Plan",
+            is_active=True,
+        )
+
+        self.day1 = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Regression Active Plan",
+        )
+
+        for user in [
+            self.author,
+            self.same_group_user,
+            self.other_group_user,
+            self.staff,
+        ]:
+            PlanEnrollment.objects.create(
+                user=user,
+                active_plan=self.active_plan,
+            )
+
+    def make_reflection(
+        self,
+        *,
+        user=None,
+        body="Test reflection.",
+        visibility=ReflectionComment.VISIBILITY_GROUP,
+        is_hidden=False,
+        is_anonymous=False,
+        small_group=None,
+        parent=None,
+    ):
+        if user is None:
+            user = self.author
+
+        if small_group is None:
+            small_group = self.group
+
+        return ReflectionComment.objects.create(
+            user=user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            parent=parent,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=visibility,
+            is_hidden=is_hidden,
+            is_anonymous=is_anonymous,
+            small_group_at_post=small_group,
+            body=body,
+        )
+
+    def test_reader_shows_comment_thread_and_visible_reply(self):
+        parent = self.make_reflection(
+            body="Parent reflection.",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+        )
+
+        self.make_reflection(
+            user=self.same_group_user,
+            parent=parent,
+            body="Visible reply.",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.group,
+        )
+
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Parent reflection.")
+        self.assertContains(response, "Visible reply.")
+
+    def test_text_reader_and_audio_reader_share_reflection_flow(self):
+        self.make_reflection(
+            body="Shared reflection.",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+        )
+
+        self.client.login(username="same_group", password="TestPass123!")
+
+        text_response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        audio_response = self.client.get(
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(text_response.status_code, 200)
+        self.assertEqual(audio_response.status_code, 200)
+
+        self.assertContains(text_response, "Shared reflection.")
+        self.assertContains(audio_response, "Shared reflection.")
+
+        self.assertContains(text_response, "scripture-frame")
+        self.assertNotContains(text_response, "audio-frame-compact")
+
+        self.assertContains(audio_response, "audio-frame-compact")
+        self.assertNotContains(audio_response, "scripture-frame")
+
+    def test_group_reflection_is_visible_to_same_group_user(self):
+        self.make_reflection(
+            body="Same group reflection.",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.group,
+        )
+
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "group",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Same group reflection.")
+
+    def test_group_reflection_is_hidden_from_other_group_user(self):
+        self.make_reflection(
+            body="Hidden from other group.",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.group,
+        )
+
+        self.client.login(username="other_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "group",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hidden from other group.")
+
+    def test_church_reflection_is_visible_on_reflection_wall(self):
+        self.make_reflection(
+            body="Church-wide reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        self.client.login(username="other_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church-wide reflection.")
+
+    def test_hidden_reflection_is_not_visible_to_other_regular_user_on_wall(self):
+        self.make_reflection(
+            body="Hidden wall reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.client.login(username="other_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hidden wall reflection.")
+
+    def test_hidden_reflection_is_visible_to_author_on_wall(self):
+        self.make_reflection(
+            body="My hidden reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.client.login(username="author", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My hidden reflection.")
+        self.assertContains(response, "Hidden")
+
+    def test_hidden_reflection_is_visible_to_staff_on_wall(self):
+        self.make_reflection(
+            body="Staff-visible hidden reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff-visible hidden reflection.")
+        self.assertContains(response, "Hidden")
+
+    def test_anonymous_reflection_hides_author_from_regular_user(self):
+        self.make_reflection(
+            body="Anonymous reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_anonymous=True,
+        )
+
+        self.client.login(username="other_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Anonymous reflection.")
+        self.assertContains(response, "Anonymous")
+        self.assertNotContains(response, "author")
+
+    def test_staff_can_see_anonymous_author(self):
+        self.make_reflection(
+            body="Anonymous staff-visible reflection.",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            is_anonymous=True,
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "church",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Anonymous staff-visible reflection.")
+        self.assertContains(response, "Anonymous (author)")
+
 class ImportReadingPlanCommandTests(TestCase):
     def setUp(self):
         self.temp_files = []
@@ -846,12 +1155,24 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "经文阅读")
-        self.assertContains(response, "中文")
-        self.assertContains(response, "English")
         self.assertContains(response, "创世记 第 1 章")
-        self.assertContains(response, "直接打开经文")
-        self.assertContains(response, "打开音频")
+
+        # Text reader should show scripture iframe.
+        self.assertContains(response, "scripture-frame")
+
+        # Text reader should not show audio iframe.
+        self.assertNotContains(response, "audio-frame-compact")
+        self.assertNotContains(response, "interface=amp")
+
+        # Text reader should still have reflection and check-in flow.
+        self.assertContains(
+            response,
+            reverse("add_comment", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+        self.assertContains(
+            response,
+            reverse("check_in", args=[self.active_plan.id, self.day1.id]),
+        )
 
 
     def test_passage_reader_rejects_invalid_index(self):
@@ -963,39 +1284,18 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "背诵经文")
-        self.assertContains(response, "中文")
-        self.assertContains(response, "English")
         self.assertContains(response, "马可福音 第 6 章 41 节")
-        self.assertContains(response, "直接打开经文")
-        self.assertContains(response, "打开音频")
-        self.assertContains(response, "返回计划")
-        self.assertNotContains(response, "我已完成今日读经")
+        self.assertContains(response, "scripture-frame")
 
-    def test_enrolled_user_can_open_memory_verse_reader(self):
-        self.day1.memory_verse = "马可福音 6:41"
-        self.day1.save()
+        # Memory verse reader is text-only.
+        self.assertNotContains(response, "audio-frame-compact")
+        self.assertNotContains(response, "interface=amp")
 
-        PlanEnrollment.objects.create(
-            user=self.user,
-            active_plan=self.active_plan,
+        # Memory verse reader should not show check-in / reflection flow.
+        self.assertNotContains(
+            response,
+            reverse("check_in", args=[self.active_plan.id, self.day1.id]),
         )
-
-        self.client.login(username="levin", password="testpass123")
-
-        response = self.client.get(
-            reverse("memory_verse_reader", args=[self.active_plan.id, self.day1.id, 0])
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "背诵经文")
-        self.assertContains(response, "中文")
-        self.assertContains(response, "English")
-        self.assertContains(response, "马可福音 第 6 章 41 节")
-        self.assertContains(response, "直接打开经文")
-        self.assertContains(response, "打开音频")
-        self.assertContains(response, "返回计划")
-        self.assertNotContains(response, "我已完成今日读经")
 
 
     def test_memory_verse_reader_requires_enrollment(self):
@@ -1047,7 +1347,9 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "默想分享")
+        self.assertContains(response, "默想 / 评论")
+        self.assertContains(response, "发表默想")
+        self.assertContains(response, "现有默想")
         self.assertContains(response, "完成今日读经")
         self.assertContains(response, "我已完成今日读经")
 
@@ -1268,27 +1570,6 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "发表默想")
-
-    def test_passage_reader_uses_compact_audio_iframe(self):
-        self.day1.reading_text = "John 1"
-        self.day1.save()
-
-        PlanEnrollment.objects.create(
-            user=self.user,
-            active_plan=self.active_plan,
-        )
-
-        self.client.login(username="levin", password="testpass123")
-
-        response = self.client.get(
-            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "audio-frame-compact")
-        self.assertContains(response, 'allow="autoplay"')
-        self.assertContains(response, "interface=amp")
-        self.assertNotContains(response, 'class="audio-frame"')
 
     def test_staff_can_access_reading_plan_admin_list(self):
         self.client.login(username="admin", password="testpass123")
@@ -1656,3 +1937,460 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Wall reflection.")
+
+    def test_audio_reader_shows_audio_and_completion_section(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "audio-frame-compact")
+        self.assertContains(response, 'allow="autoplay"')
+        self.assertContains(response, "interface=amp")
+        self.assertContains(response, "audio-frame-compact")
+        self.assertContains(response, 'allow="autoplay"')
+        self.assertContains(response, "interface=amp")
+
+        self.assertContains(
+            response,
+            reverse("add_comment", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+
+        self.assertContains(
+            response,
+            reverse("check_in", args=[self.active_plan.id, self.day1.id]),
+        )
+
+
+    def test_audio_reader_does_not_show_scripture_iframe(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "scripture-frame")
+        self.assertNotContains(response, "open scripture directly")
+
+
+    def test_text_reader_does_not_show_audio_iframe(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "scripture-frame")
+        self.assertNotContains(response, "audio-frame-compact")
+
+
+    def test_check_in_from_audio_reader_redirects_back_to_audio_reader(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        next_url = reverse(
+            "audio_reader",
+            args=[self.active_plan.id, self.day1.id, 0],
+        )
+
+        response = self.client.post(
+            reverse("check_in", args=[self.active_plan.id, self.day1.id]),
+            {"next": next_url},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, next_url)
+
+        self.assertTrue(
+            CheckIn.objects.filter(
+                user=self.user,
+                active_plan=self.active_plan,
+                plan_day=self.day1,
+            ).exists()
+        )
+
+
+    def test_comment_from_audio_reader_redirects_back_to_audio_reader(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        next_url = reverse(
+            "audio_reader",
+            args=[self.active_plan.id, self.day1.id, 0],
+        )
+
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day1.id, 0]),
+            {
+                "body": "Audio reflection.",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+                "next": next_url,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, next_url)
+
+        self.assertTrue(
+            ReflectionComment.objects.filter(
+                user=self.user,
+                active_plan=self.active_plan,
+                plan_day=self.day1,
+                scripture_ref_key="John 1",
+                body="Audio reflection.",
+            ).exists()
+        )
+
+    def test_user_can_edit_own_reflection_body_visibility_and_anonymous(self):
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        comment = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Old reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_comment", args=[comment.id]),
+            {
+                "body": "Updated reflection.",
+                "visibility": ReflectionComment.VISIBILITY_CHURCH,
+                "is_anonymous": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        comment.refresh_from_db()
+
+        self.assertEqual(comment.body, "Updated reflection.")
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_CHURCH)
+        self.assertTrue(comment.is_anonymous)
+
+
+    def test_user_cannot_edit_other_users_reflection(self):
+        comment = ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Other user's reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_comment", args=[comment.id]),
+            {
+                "body": "Hacked.",
+                "visibility": ReflectionComment.VISIBILITY_CHURCH,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        comment.refresh_from_db()
+
+        self.assertEqual(comment.body, "Other user's reflection.")
+
+
+    def test_user_cannot_edit_deleted_reflection(self):
+        comment = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Deleted reflection.",
+            is_deleted=True,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_comment", args=[comment.id]),
+            {
+                "body": "Updated deleted reflection.",
+                "visibility": ReflectionComment.VISIBILITY_PRIVATE,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        comment.refresh_from_db()
+
+        self.assertEqual(comment.body, "Deleted reflection.")
+        self.assertTrue(comment.is_deleted)
+
+
+    def test_reply_edit_does_not_change_parent_visibility(self):
+        parent = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Parent reflection.",
+        )
+
+        reply = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            parent=parent,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Old reply.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_comment", args=[reply.id]),
+            {
+                "body": "Updated reply.",
+                "visibility": ReflectionComment.VISIBILITY_CHURCH,
+                "is_anonymous": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        reply.refresh_from_db()
+
+        self.assertEqual(reply.body, "Updated reply.")
+        self.assertEqual(reply.visibility, ReflectionComment.VISIBILITY_GROUP)
+        self.assertTrue(reply.is_anonymous)
+
+    def test_reader_shows_new_comment_form_and_reply_form(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Existing reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "默想 / 评论")
+        self.assertContains(response, "发表默想")
+        self.assertContains(response, "现有默想")
+        self.assertContains(response, "Existing reflection.")
+        self.assertContains(response, "回复")
+
+
+    def test_user_can_reply_to_own_comment(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        parent = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="My own reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("add_reply", args=[parent.id]),
+            {
+                "body": "Replying to myself.",
+                "is_anonymous": "",
+                "next": reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertTrue(
+            ReflectionComment.objects.filter(
+                parent=parent,
+                user=self.user,
+                body="Replying to myself.",
+            ).exists()
+        )
+
+
+    def test_user_can_reply_to_other_visible_comment(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.other_user.profile.small_group = self.group
+        self.other_user.profile.save()
+
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
+
+        parent = ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            body="Other user's reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("add_reply", args=[parent.id]),
+            {
+                "body": "Replying to another user.",
+                "is_anonymous": "",
+                "next": reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertTrue(
+            ReflectionComment.objects.filter(
+                parent=parent,
+                user=self.user,
+                body="Replying to another user.",
+            ).exists()
+        )
+
+
+    def test_reader_shows_replies_under_parent_comment(self):
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        parent = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Parent reflection.",
+        )
+
+        ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            parent=parent,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Child reply.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Parent reflection.")
+        self.assertContains(response, "Child reply.")

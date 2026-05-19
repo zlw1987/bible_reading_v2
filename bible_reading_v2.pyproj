@@ -23,6 +23,7 @@
   <ItemGroup>
     <Content Include=".cpanel.yml" />
     <Content Include="data\import\john_7_day.csv" />
+    <Content Include="deploy_godaddy.sh" />
     <Content Include="requirements.txt" />
     <Content Include="static\css\app.css" />
     <Content Include="templates\accounts\password_change_done.html" />
@@ -31,11 +32,15 @@
     <Content Include="templates\accounts\staff\password_reset.html" />
     <Content Include="templates\accounts\staff\user_list.html" />
     <Content Include="templates\base.html" />
+    <Content Include="templates\comments\edit_comment.html" />
+    <Content Include="templates\comments\report_comment.html" />
+    <Content Include="templates\comments\staff\reflection_reports.html" />
     <Content Include="templates\reading\active_plan_detail.html" />
     <Content Include="templates\reading\group_progress.html" />
     <Content Include="templates\reading\home.html" />
     <Content Include="templates\reading\my_plans.html" />
     <Content Include="templates\reading\passage_reader.html" />
+    <Content Include="templates\reading\passage_wall.html" />
     <Content Include="templates\reading\staff\reading_plan_days.html" />
     <Content Include="templates\reading\staff\reading_plan_header.html" />
     <Content Include="templates\reading\staff\reading_plan_list.html" />
@@ -118,6 +123,8 @@
     <Folder Include="reading\migrations" />
     <Folder Include="templates\accounts\" />
     <Folder Include="templates\accounts\staff\" />
+    <Folder Include="templates\comments\" />
+    <Folder Include="templates\comments\staff\" />
     <Folder Include="templates\reading\" />
     <Folder Include="templates\reading\staff\" />
     <Folder Include="templates\registration\" />

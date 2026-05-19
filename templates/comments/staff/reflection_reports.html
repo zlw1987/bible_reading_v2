@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}Reflection Reports | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Reflection Reports</h1>
+    <p class="page-subtitle">
+        Review reported reflections and moderate visibility.
+    </p>
+</div>
+
+<div class="card">
+    <form method="get">
+        <label for="q">Search</label>
+        <input type="text"
+               id="q"
+               name="q"
+               value="{{ query }}"
+               placeholder="Author, reporter, scripture, reason, or content">
+
+        <label for="status" style="margin-top: 12px;">Status</label>
+        <select id="status" name="status">
+            <option value="open" {% if status == "open" %}selected{% endif %}>Open</option>
+            <option value="reviewed" {% if status == "reviewed" %}selected{% endif %}>Reviewed</option>
+            <option value="dismissed" {% if status == "dismissed" %}selected{% endif %}>Dismissed</option>
+        </select>
+
+        <button type="submit" style="margin-top: 12px;">Filter</button>
+    </form>
+</div>
+
+{% if reports %}
+    {% for report in reports %}
+<div class="card">
+    <h2 class="card-title">
+        {{ report.comment.scripture_ref_key }}
+    </h2>
+
+    <p>
+        <strong>Author:</strong>
+        {{ report.comment|comment_author:user }}
+        {% if report.comment.is_hidden %}
+        <span class="status status-danger">Hidden</span>
+        {% endif %}
+        <span class="status">{{ report.comment|visibility_label:language }}</span>
+    </p>
+
+    <p class="muted">
+        Reported by {{ report.reporter.username }} · {{ report.created_at }}
+    </p>
+
+    {% if report.reason %}
+    <p>
+        <strong>Reason:</strong>
+        {{ report.reason|linebreaksbr }}
+    </p>
+    {% endif %}
+
+    <hr class="divider">
+
+    <p>{{ report.comment.body|linebreaksbr }}</p>
+
+    {% if report.comment.hidden_reason %}
+    <p class="muted">
+        <strong>Hidden reason:</strong>
+        {{ report.comment.hidden_reason }}
+    </p>
+    {% endif %}
+
+    <div class="grid grid-2">
+        <form method="post" action="{% url 'staff_reflection_action' report.comment.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="hide">
+
+            <label for="reason-{{ report.id }}">Hide reason</label>
+            <input type="text"
+                   id="reason-{{ report.id }}"
+                   name="reason"
+                   placeholder="Reason shown internally">
+
+            <button type="submit" class="button-danger" style="margin-top: 12px;">
+                Hide Reflection
+            </button>
+        </form>
+
+        <div>
+            <form method="post" action="{% url 'staff_reflection_action' report.comment.id %}" style="margin-bottom: 8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unhide">
+                <button type="submit" class="button-secondary">
+                    Unhide Reflection
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'staff_reflection_action' report.comment.id %}" style="margin-bottom: 8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="mark_reviewed">
+                <button type="submit" class="button-secondary">
+                    Mark Reports Reviewed
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'staff_reflection_action' report.comment.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="dismiss_reports">
+                <button type="submit" class="button-secondary">
+                    Dismiss Reports
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p>No reports found.</p>
+</div>
+{% endif %}
+{% endblock %}

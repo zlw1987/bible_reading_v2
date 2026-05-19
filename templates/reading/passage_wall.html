@@ -3,9 +3,9 @@
 
 {% block title %}
     {% if language == "zh" %}
-        经文墙
+        默想墙
     {% else %}
-        Passage Wall
+        Reflection Wall
     {% endif %}
     | {{ ui.site_title }}
 {% endblock %}
@@ -18,9 +18,9 @@
 <div class="page-header">
     <h1 class="page-title">
         {% if language == "zh" %}
-        经文墙
+        默想墙
         {% else %}
-        Passage Wall
+        Reflection Wall
         {% endif %}
     </h1>
 
@@ -47,7 +47,7 @@
 
         <a class="reader-tab {% if tab == 'church' %}active{% endif %}"
            href="{% url 'passage_wall' %}?ref={{ scripture_ref_key|urlencode }}&tab=church">
-            {% if language == "zh" %}经文墙{% else %}Church-wide{% endif %}
+            {% if language == "zh" %}默想墙{% else %}Church-wide{% endif %}
         </a>
     </div>
 
@@ -59,6 +59,11 @@
             <span class="status">{{ reflection|visibility_label:language }}</span>
             {% if reflection.is_anonymous %}
             <span class="status status-warning">Anonymous</span>
+            {% endif %}
+            {% if reflection.is_hidden %}
+            <span class="status status-danger">
+                {% if language == "zh" %}已隐藏{% else %}Hidden{% endif %}
+            </span>
             {% endif %}
         </p>
 
@@ -74,7 +79,14 @@
 
         <p>{{ reflection.body|linebreaksbr }}</p>
 
-
+        {% if reflection.user != user %}
+        <p>
+            <a class="button button-secondary"
+               href="{% url 'report_comment' reflection.id %}?next={{ request.get_full_path|urlencode }}">
+                {% if language == "zh" %}举报{% else %}Report{% endif %}
+            </a>
+        </p>
+        {% endif %}
     </div>
     {% endfor %}
     {% else %}

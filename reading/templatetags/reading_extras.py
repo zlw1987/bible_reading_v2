@@ -69,13 +69,13 @@ def visibility_label(comment, language):
         labels = {
             "private": "私人",
             "group": "小组",
-            "church": "经文墙",
+            "church": "默想墙",
         }
     else:
         labels = {
             "private": "Private",
             "group": "My Group",
-            "church": "Passage Wall",
+            "church": "Reflection Wall",
         }
 
     return labels.get(comment.visibility, comment.visibility)

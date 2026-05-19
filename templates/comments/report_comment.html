@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}
+    {% if language == "zh" %}举报默想{% else %}Report Reflection{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    {% if return_url %}
+    <a href="{{ return_url }}">← {% if language == "zh" %}返回{% else %}Back{% endif %}</a>
+    {% else %}
+    <a href="{% url 'home' %}">← {{ ui.today }}</a>
+    {% endif %}
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}举报默想{% else %}Report Reflection{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        如果这条分享不合适、暴露隐私、攻击他人，或不适合公开显示，请提交给管理员审核。
+        {% else %}
+        Report this reflection if it is inappropriate, exposes private information, attacks others, or should not be visible.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}被举报内容{% else %}Reflection{% endif %}
+    </h2>
+
+    <p>
+        <strong>{{ comment|comment_author:user }}</strong>
+        <span class="status">{{ comment|visibility_label:language }}</span>
+    </p>
+
+    <p>{{ comment.body|linebreaksbr }}</p>
+</div>
+
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+
+        {% if return_url %}
+        <input type="hidden" name="next" value="{{ return_url }}">
+        {% endif %}
+
+        {{ form.as_p }}
+
+        <button type="submit" class="button-danger">
+            {% if language == "zh" %}提交举报{% else %}Submit Report{% endif %}
+        </button>
+    </form>
+</div>
+{% endblock %}

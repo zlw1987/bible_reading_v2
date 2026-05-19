@@ -22,15 +22,15 @@
                 </h2>
 
                 {% if item.is_not_started %}
-                    <span class="status status-warning">{{ ui.not_started }}</span>
+                <span class="status status-warning">{{ ui.not_started }}</span>
                 {% elif item.is_ended %}
-                    <span class="status">{{ ui.ended }}</span>
+                <span class="status">{{ ui.ended }}</span>
                 {% elif item.is_rest_day %}
-                    <span class="status status-warning">{{ ui.rest_day }}</span>
+                <span class="status status-warning">{{ ui.rest_day }}</span>
                 {% elif item.is_checked %}
-                    <span class="status status-good">{{ ui.checked_in }}</span>
+                <span class="status status-good">{{ ui.checked_in }}</span>
                 {% else %}
-                    <span class="status status-danger">{{ ui.not_checked_in }}</span>
+                <span class="status status-danger">{{ ui.not_checked_in }}</span>
                 {% endif %}
             </div>
 
@@ -56,90 +56,107 @@
         <hr class="divider">
 
         {% if item.is_not_started %}
-            <h3>{{ ui.not_started }}</h3>
-            <p class="muted">{{ item.active_plan.start_date }}</p>
+        <h3>{{ ui.not_started }}</h3>
+        <p class="muted">{{ item.active_plan.start_date }}</p>
 
         {% elif item.is_ended %}
-            <h3>{{ ui.ended }}</h3>
-            <p class="muted">
-                {% if language == "zh" %}
-                    你仍然可以查看计划详情和过去的打卡记录。
-                {% else %}
-                    You can still review the plan details and previous check-ins.
-                {% endif %}
-            </p>
+        <h3>{{ ui.ended }}</h3>
+        <p class="muted">
+            {% if language == "zh" %}
+            你仍然可以查看计划详情和过去的打卡记录。
+            {% else %}
+            You can still review the plan details and previous check-ins.
+            {% endif %}
+        </p>
 
         {% elif item.is_rest_day %}
-            <p class="muted">Day {{ item.current_day_number }}</p>
-            <h3>{{ ui.rest_day }}</h3>
-            <p>
-                {% if language == "zh" %}
-                    今天没有指定读经。你可以休息、补读，或回顾之前的经文。
-                {% else %}
-                    There is no assigned reading today. Use today to rest, catch up, or review previous readings.
-                {% endif %}
-            </p>
-            <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
-                {{ ui.view_plan }}
-            </a>
+        <p class="muted">Day {{ item.current_day_number }}</p>
+        <h3>{{ ui.rest_day }}</h3>
+        <p>
+            {% if language == "zh" %}
+            今天没有指定读经。你可以休息、补读，或回顾之前的经文。
+            {% else %}
+            There is no assigned reading today. Use today to rest, catch up, or review previous readings.
+            {% endif %}
+        </p>
+        <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
+            {{ ui.view_plan }}
+        </a>
 
         {% elif item.is_reading_day %}
-            <p class="muted">Day {{ item.plan_day.day_number }}</p>
-            <h3>{{ ui.today_reading }}</h3>
+        <p class="muted">Day {{ item.plan_day.day_number }}</p>
+        <h3>{{ ui.today_reading }}</h3>
 
-            {% if item.passages %}
-                <div class="passage-list">
-                    {% for passage in item.passages %}
-                        <a class="button {% if forloop.first %}{% else %}button-secondary{% endif %}"
-                           href="{% url 'passage_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
-                            {% if forloop.first %}
-                                {{ ui.start_reading }}: {{ passage|passage_display:language }}
-                            {% else %}
-                                {{ passage|passage_display:language }}
-                            {% endif %}
-                        </a>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
-                <p class="muted">{{ ui.no_scripture_links }}</p>
-            {% endif %}
+        {% if item.passages %}
+        <div class="passage-list">
+            {% for passage in item.passages %}
+            <div class="passage-action-row">
+                <a class="button {% if forloop.first %}{% else %}button-secondary{% endif %}"
+                   href="{% url 'passage_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
+                    {% if forloop.first %}
+                    {{ ui.start_reading }}: {{ passage|passage_display:language }}
+                    {% else %}
+                    {{ passage|passage_display:language }}
+                    {% endif %}
+                </a>
 
-            {% if item.plan_day.memory_verse %}
-                <h3>{{ ui.memory_verse }}</h3>
+                <a class="audio-icon-button"
+                   href="{% url 'audio_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}"
+                   title="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}"
+                   aria-label="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}: {{ passage|passage_display:language }}">
+                    🔊
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p>{{ item.plan_day.reading_text|linebreaksbr }}</p>
+        <p class="muted">{{ ui.no_scripture_links }}</p>
+        {% endif %}
 
-                {% if item.memory_passages %}
-                    <div class="passage-list">
-                        {% for passage in item.memory_passages %}
-                            <a class="button button-secondary"
-                               href="{% url 'memory_verse_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
-                                {{ passage|passage_display:language }}
-                            </a>
-                        {% endfor %}
-                    </div>
-                {% else %}
-                    <p>{{ item.plan_day.memory_verse }}</p>
-                    <p class="muted">{{ ui.no_memory_link }}</p>
-                {% endif %}
-            {% endif %}
+        {% if item.plan_day.memory_verse %}
+        <h3>{{ ui.memory_verse }}</h3>
 
-            {% if item.is_checked %}
-                <p><span class="status status-good">{{ ui.checked_in }}</span></p>
-            {% else %}
-                <p class="muted">{{ ui.reflection_checkin_note }}</p>
+        {% if item.memory_passages %}
+        <div class="passage-list">
+            {% for passage in item.memory_passages %}
+            <a class="button button-secondary"
+               href="{% url 'memory_verse_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}">
+                {{ passage|passage_display:language }}
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p>{{ item.plan_day.memory_verse }}</p>
+        <p class="muted">{{ ui.no_memory_link }}</p>
+        {% endif %}
+        {% endif %}
 
-                {% if item.passages %}
-                    <a class="button" href="{% url 'passage_reader' item.active_plan.id item.plan_day.id 0 %}?lang={{ language }}">
-                        {{ ui.start_today_reading }}
-                    </a>
-                {% else %}
-                    <form method="post" action="{% url 'check_in' item.active_plan.id item.plan_day.id %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button type="submit">{{ ui.finished_reading_button }}</button>
-                    </form>
-                {% endif %}
-            {% endif %}
+        {% if item.is_checked %}
+        <p><span class="status status-good">{{ ui.checked_in }}</span></p>
+        {% else %}
+        <p class="muted">{{ ui.reflection_checkin_note }}</p>
+
+        {% if item.passages %}
+        <div class="actions">
+            <a class="button"
+               href="{% url 'passage_reader' item.active_plan.id item.plan_day.id 0 %}?lang={{ language }}">
+                {{ ui.start_today_reading }}
+            </a>
+
+            <a class="button button-secondary"
+               href="{% url 'audio_reader' item.active_plan.id item.plan_day.id 0 %}?lang={{ language }}">
+                🔊 {% if language == "zh" %}听今日读经{% else %}Listen to Today’s Reading{% endif %}
+            </a>
+        </div>
+        {% else %}
+        <form method="post" action="{% url 'check_in' item.active_plan.id item.plan_day.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit">{{ ui.finished_reading_button }}</button>
+        </form>
+        {% endif %}
+        {% endif %}
         {% endif %}
     </div>
     {% endfor %}

@@ -28,14 +28,6 @@ deployment:
     - /bin/cp manage.py $DEPLOYPATH
     - /bin/cp passenger_wsgi.py $DEPLOYPATH
     - /bin/cp requirements.txt $DEPLOYPATH
-    - /bin/cp run_migrate_godaddy.py $DEPLOYPATH
-    - /bin/cp run_collectstatic_godaddy.py $DEPLOYPATH
-    - /bin/cp run_create_admin_godaddy.py $DEPLOYPATH
-
-    - cd $DEPLOYPATH && /home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py migrate --settings=config.settings_godaddy --noinput
-    - cd $DEPLOYPATH && /home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py collectstatic --settings=config.settings_godaddy --noinput
-
-    - /bin/cp run_import_legacy_godaddy.py $DEPLOYPATH
     - /bin/cp deploy_godaddy.sh $DEPLOYPATH
 
     - /bin/chmod +x $DEPLOYPATH/deploy_godaddy.sh

@@ -1,7 +1,6 @@
 from .settings import *
 import os
 
-
 DEBUG = False
 
 ALLOWED_HOSTS = [
@@ -21,15 +20,17 @@ DATABASES = {
     }
 }
 
-# Django is served under https://4z8.d4d.mytemp.website/app_read/
 FORCE_SCRIPT_NAME = "/app_read"
+
 PUBLIC_APP_DIR = BASE_DIR.parent / "public_html" / "app_read"
 
 STATIC_URL = "/app_read/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT = PUBLIC_APP_DIR / "static"
+
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+
 MEDIA_URL = "/app_read/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

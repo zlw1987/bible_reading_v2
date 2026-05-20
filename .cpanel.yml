@@ -7,7 +7,6 @@ deployment:
         --exclude='.git' \
         --exclude='.venv' \
         --exclude='.env' \
-        --exclude='db.sqlite3' \
         --exclude='media/' \
         --exclude='tmp/' \
         --exclude='__pycache__/' \

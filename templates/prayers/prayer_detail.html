@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% load prayer_extras %}
+
+{% block title %}{{ prayer.title }} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'prayer_list' %}">
+        ← {% if language == "zh" %}返回代祷{% else %}Back to Prayer{% endif %}
+    </a>
+</p>
+
+<div class="card">
+    <div class="comment-meta">
+        <strong>{{ prayer|prayer_author:user }}</strong>
+        <span class="status">{{ prayer|prayer_visibility_label:language }}</span>
+        <span class="status">{{ prayer|prayer_status_label:language }}</span>
+        <span class="muted">{{ prayer.created_at }}</span>
+    </div>
+
+    <h1 class="page-title">{{ prayer.title }}</h1>
+
+    <div class="comment-body">
+        {{ prayer.body|linebreaksbr }}
+    </div>
+
+    {% if prayer.answer_note %}
+    <hr class="divider">
+    <h3>
+        {% if language == "zh" %}回应 / 关闭说明{% else %}Answer / Closing Note{% endif %}
+    </h3>
+    <p>{{ prayer.answer_note|linebreaksbr }}</p>
+    {% endif %}
+
+    <p class="muted">
+        {% if language == "zh" %}
+        已有 {{ prayer.pray_count }} 人代祷
+        {% else %}
+        {{ prayer.pray_count }} people prayed
+        {% endif %}
+    </p>
+
+    <div class="actions">
+        <form method="post" action="{% url 'mark_prayed' prayer.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <button type="submit" {% if has_prayed %}disabled{% endif %}>
+                {% if has_prayed %}
+                {% if language == "zh" %}已代祷{% else %}Already prayed{% endif %}
+                {% else %}
+                {% if language == "zh" %}我已代祷{% else %}I prayed{% endif %}
+                {% endif %}
+            </button>
+        </form>
+        {% if prayer.user == user or user.is_staff %}
+        <a class="button button-secondary"
+           href="{% url 'edit_prayer_request' prayer.id %}">
+            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+        </a>
+
+        <form method="post" action="{% url 'delete_prayer_request' prayer.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-danger">
+                {{ ui.delete }}
+            </button>
+        </form>
+        {% endif %}
+
+        {% if prayer.user == user or user.is_staff %}
+        <form method="post" action="{% url 'delete_prayer_request' prayer.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-danger">
+                {{ ui.delete }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if prayer.user == user or user.is_staff %}
+<div class="card">
+    <h2>
+        {% if language == "zh" %}更新状态{% else %}Update Status{% endif %}
+    </h2>
+
+    <form method="post" action="{% url 'update_prayer_status' prayer.id %}">
+        {% csrf_token %}
+        {{ status_form.as_p }}
+        <button type="submit">
+            {% if language == "zh" %}保存状态{% else %}Save Status{% endif %}
+        </button>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>
+        {% if language == "zh" %}回应 / 鼓励{% else %}Comments / Encouragement{% endif %}
+    </h2>
+
+    <form method="post" action="{% url 'add_prayer_comment' prayer.id %}" class="reply-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+        {{ comment_form.body }}
+
+        <label class="checkbox-option compact-checkbox">
+            {{ comment_form.is_anonymous }}
+            <span>
+                {% if language == "zh" %}匿名回应{% else %}Comment anonymously{% endif %}
+            </span>
+        </label>
+
+        <button type="submit" class="button-secondary">
+            {% if language == "zh" %}发表回应{% else %}Post Comment{% endif %}
+        </button>
+    </form>
+
+    <hr class="divider">
+
+    {% if comments %}
+    <div class="reply-list">
+        {% for comment in comments %}
+        <div class="reply-item">
+            <div class="comment-meta">
+                <strong>{{ comment|prayer_comment_author:user }}</strong>
+                <span class="muted">{{ comment.created_at }}</span>
+            </div>
+
+            <div class="comment-body">
+                {{ comment.body|linebreaksbr }}
+            </div>
+
+            <div class="comment-actions">
+                {% if comment.user == user or user.is_staff %}
+                <a href="{% url 'edit_prayer_comment' comment.id %}">
+                    {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                </a>
+
+                <form method="post"
+                      action="{% url 'delete_prayer_comment' comment.id %}"
+                      class="inline-form">
+                    {% csrf_token %}
+                    <button type="submit" class="link-button danger-link">
+                        {{ ui.delete }}
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        还没有回应。
+        {% else %}
+        No comments yet.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

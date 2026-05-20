@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}编辑代祷事项{% else %}Edit Prayer Request{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'prayer_detail' prayer.id %}">
+        ← {% if language == "zh" %}返回代祷事项{% else %}Back to Prayer Request{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}编辑代祷事项{% else %}Edit Prayer Request{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        你可以修改内容、可见范围和匿名状态。
+        {% else %}
+        You can update the content, visibility, and anonymity.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card reflection-section-card">
+    <form method="post" class="reflection-form">
+        {% csrf_token %}
+
+        <div class="reflection-body-field">
+            {{ form.title }}
+        </div>
+
+        <div class="reflection-body-field" style="margin-top: 10px;">
+            {{ form.body }}
+        </div>
+
+        <div class="reflection-options-row">
+            <div class="reflection-option">
+                <label for="{{ form.visibility.id_for_label }}">
+                    {% if language == "zh" %}可见范围{% else %}Visibility{% endif %}
+                </label>
+                {{ form.visibility }}
+            </div>
+
+            <label class="checkbox-option">
+                {{ form.is_anonymous }}
+                <span>
+                    {% if language == "zh" %}匿名发表{% else %}Post anonymously{% endif %}
+                </span>
+            </label>
+
+            <button type="submit">
+                {% if language == "zh" %}保存修改{% else %}Save Changes{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

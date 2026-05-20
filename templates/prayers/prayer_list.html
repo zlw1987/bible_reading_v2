@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% load prayer_extras %}
+
+{% block title %}
+    {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        分享代祷事项，也为弟兄姐妹代祷。
+        {% else %}
+        Share prayer requests and pray for one another.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card reflection-section-card">
+    <h2>
+        {% if language == "zh" %}新的代祷事项{% else %}New Prayer Request{% endif %}
+    </h2>
+
+    <form method="post" class="reflection-form">
+        {% csrf_token %}
+
+        <div class="reflection-body-field">
+            {{ form.title }}
+        </div>
+
+        <div class="reflection-body-field" style="margin-top: 10px;">
+            {{ form.body }}
+        </div>
+
+        <div class="reflection-options-row">
+            <div class="reflection-option">
+                <label for="{{ form.visibility.id_for_label }}">
+                    {% if language == "zh" %}可见范围{% else %}Visibility{% endif %}
+                </label>
+                {{ form.visibility }}
+            </div>
+
+            <label class="checkbox-option">
+                {{ form.is_anonymous }}
+                <span>
+                    {% if language == "zh" %}匿名发表{% else %}Post anonymously{% endif %}
+                </span>
+            </label>
+
+            <button type="submit">
+                {% if language == "zh" %}发表代祷{% else %}Post Prayer Request{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="reader-tabs">
+        <a class="reader-tab {% if tab == 'my' %}active{% endif %}"
+           href="{% url 'prayer_list' %}?tab=my&status={{ status }}">
+            {% if language == "zh" %}我的{% else %}My Requests{% endif %}
+        </a>
+
+        <a class="reader-tab {% if tab == 'group' %}active{% endif %}"
+           href="{% url 'prayer_list' %}?tab=group&status={{ status }}">
+            {% if language == "zh" %}我的小组{% else %}My Group{% endif %}
+        </a>
+
+        <a class="reader-tab {% if tab == 'church' %}active{% endif %}"
+           href="{% url 'prayer_list' %}?tab=church&status={{ status }}">
+            {% if language == "zh" %}代祷墙{% else %}Prayer Wall{% endif %}
+        </a>
+    </div>
+
+    <div class="actions" style="margin-bottom: 16px;">
+        <a class="button button-secondary" href="{% url 'prayer_list' %}?tab={{ tab }}&status=open">
+            {% if language == "zh" %}代祷中{% else %}Open{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'prayer_list' %}?tab={{ tab }}&status=answered">
+            {% if language == "zh" %}已回应{% else %}Answered{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'prayer_list' %}?tab={{ tab }}&status=closed">
+            {% if language == "zh" %}已关闭{% else %}Closed{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'prayer_list' %}?tab={{ tab }}&status=all">
+            {% if language == "zh" %}全部{% else %}All{% endif %}
+        </a>
+    </div>
+
+    {% if prayers %}
+    <div class="comment-thread-list">
+        {% for prayer in prayers %}
+        <div class="comment-thread">
+            <div class="comment-main">
+                <div class="comment-meta">
+                    <strong>{{ prayer|prayer_author:user }}</strong>
+                    <span class="status">{{ prayer|prayer_visibility_label:language }}</span>
+                    <span class="status">{{ prayer|prayer_status_label:language }}</span>
+                    <span class="muted">{{ prayer.created_at }}</span>
+                </div>
+
+                <h3>
+                    <a href="{% url 'prayer_detail' prayer.id %}">
+                        {{ prayer.title }}
+                    </a>
+                </h3>
+
+                <div class="comment-body">
+                    {{ prayer.body|linebreaksbr }}
+                </div>
+
+                <p class="muted">
+                    {% if language == "zh" %}
+                    已有 {{ prayer.pray_count }} 人代祷
+                    {% else %}
+                    {{ prayer.pray_count }} people prayed
+                    {% endif %}
+                </p>
+
+                <a class="button button-secondary" href="{% url 'prayer_detail' prayer.id %}">
+                    {% if language == "zh" %}查看 / 代祷{% else %}View / Pray{% endif %}
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        没有可见的代祷事项。
+        {% else %}
+        No visible prayer requests.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

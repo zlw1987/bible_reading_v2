@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}编辑回应{% else %}Edit Comment{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'prayer_detail' prayer.id %}">
+        ← {% if language == "zh" %}返回代祷事项{% else %}Back to Prayer Request{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}编辑回应{% else %}Edit Comment{% endif %}
+    </h1>
+</div>
+
+<div class="card">
+    <form method="post" class="reply-form">
+        {% csrf_token %}
+
+        {{ form.body }}
+
+        <label class="checkbox-option compact-checkbox">
+            {{ form.is_anonymous }}
+            <span>
+                {% if language == "zh" %}匿名回应{% else %}Comment anonymously{% endif %}
+            </span>
+        </label>
+
+        <button type="submit">
+            {% if language == "zh" %}保存修改{% else %}Save Changes{% endif %}
+        </button>
+    </form>
+</div>
+{% endblock %}

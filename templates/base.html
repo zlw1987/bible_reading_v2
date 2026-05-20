@@ -18,6 +18,9 @@
                 <a href="{% url 'home' %}">{{ ui.today }}</a>
                 <a href="{% url 'my_plans' %}">{{ ui.my_plans }}</a>
                 <a href="{% url 'my_group_progress' %}">{{ ui.group_progress }}</a>
+                <a href="{% url 'prayer_list' %}">
+                    {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
+                </a>
                 <a href="{% url 'profile' %}">{{ ui.profile }}</a>
 
                 {% if user.is_staff %}

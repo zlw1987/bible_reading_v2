@@ -35,6 +35,8 @@
     <Content Include="templates\comments\edit_comment.html" />
     <Content Include="templates\comments\report_comment.html" />
     <Content Include="templates\comments\staff\reflection_reports.html" />
+    <Content Include="templates\prayers\add_prayer_request.html" />
+    <Content Include="templates\prayers\edit_prayer_comment.html" />
     <Content Include="templates\prayers\prayer_detail.html" />
     <Content Include="templates\prayers\prayer_list.html" />
     <Content Include="templates\reading\active_plan_calendar.html" />

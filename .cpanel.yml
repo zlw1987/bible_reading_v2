@@ -3,32 +3,15 @@ deployment:
   tasks:
     - export DEPLOYPATH=/home/rsnwvvl103hc/app_read/
     - /bin/mkdir -p $DEPLOYPATH
-    - /bin/mkdir -p $DEPLOYPATH/tmp
-
-    - /bin/rm -rf $DEPLOYPATH/accounts
-    - /bin/rm -rf $DEPLOYPATH/comments
-    - /bin/rm -rf $DEPLOYPATH/config
-    - /bin/rm -rf $DEPLOYPATH/data
-    - /bin/rm -rf $DEPLOYPATH/docs
-    - /bin/rm -rf $DEPLOYPATH/reading
-    - /bin/rm -rf $DEPLOYPATH/scripts
-    - /bin/rm -rf $DEPLOYPATH/static
-    - /bin/rm -rf $DEPLOYPATH/templates
-
-    - /bin/cp -R accounts $DEPLOYPATH
-    - /bin/cp -R comments $DEPLOYPATH
-    - /bin/cp -R config $DEPLOYPATH
-    - /bin/cp -R data $DEPLOYPATH
-    - /bin/cp -R docs $DEPLOYPATH
-    - /bin/cp -R reading $DEPLOYPATH
-    - /bin/cp -R scripts $DEPLOYPATH
-    - /bin/cp -R static $DEPLOYPATH
-    - /bin/cp -R templates $DEPLOYPATH
-
-    - /bin/cp manage.py $DEPLOYPATH
-    - /bin/cp passenger_wsgi.py $DEPLOYPATH
-    - /bin/cp requirements.txt $DEPLOYPATH
-    - /bin/cp deploy_godaddy.sh $DEPLOYPATH
-
+    - /bin/rsync -av --delete \
+        --exclude='.git' \
+        --exclude='.venv' \
+        --exclude='.env' \
+        --exclude='db.sqlite3' \
+        --exclude='media/' \
+        --exclude='tmp/' \
+        --exclude='__pycache__/' \
+        --exclude='*.pyc' \
+        ./ $DEPLOYPATH
     - /bin/chmod +x $DEPLOYPATH/deploy_godaddy.sh
     - /bin/bash $DEPLOYPATH/deploy_godaddy.sh

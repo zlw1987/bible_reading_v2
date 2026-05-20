@@ -1,17 +1,4 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/rsnwvvl103hc/app_read/
-    - /bin/mkdir -p $DEPLOYPATH
-    - /bin/rsync -av --delete \
-        --exclude='.git' \
-        --exclude='.venv' \
-        --exclude='.env' \
-        --exclude='db.sqlite3' \
-        --exclude='media/' \
-        --exclude='tmp/' \
-        --exclude='__pycache__/' \
-        --exclude='*.pyc' \
-        ./ $DEPLOYPATH
-    - /bin/chmod +x $DEPLOYPATH/deploy_godaddy.sh
-    - /bin/bash $DEPLOYPATH/deploy_godaddy.sh
+    - /bin/bash deploy_godaddy.sh

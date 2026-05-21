@@ -63,13 +63,30 @@ class ReadingPlanAdmin(admin.ModelAdmin):
         "edit_days_link",
     )
     list_filter = ("is_active",)
-    search_fields = ("name", "name_en", "description", "description_en")
+    search_fields = (
+        "name",
+        "name_en",
+        "description",
+        "description_en",
+        "introduction",
+        "introduction_en",
+        "reading_guidance",
+        "reading_guidance_en",
+        "pastoral_note",
+        "pastoral_note_en",
+    )
 
     fields = (
         "name",
         "name_en",
         "description",
         "description_en",
+        "introduction",
+        "introduction_en",
+        "reading_guidance",
+        "reading_guidance_en",
+        "pastoral_note",
+        "pastoral_note_en",
         "is_active",
     )
 

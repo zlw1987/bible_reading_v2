@@ -1,7 +1,9 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -10,11 +12,12 @@ from accounts.language import get_user_language
 from .forms import (
     PrayerCommentEditForm,
     PrayerCommentForm,
+    PrayerReportForm,
     PrayerRequestEditForm,
     PrayerRequestForm,
     PrayerStatusForm,
 )
-from .models import PrayerComment, PrayerMark, PrayerRequest
+from .models import PrayerComment, PrayerMark, PrayerReport, PrayerRequest
 
 
 MESSAGE_TEXT = {
@@ -39,6 +42,10 @@ MESSAGE_TEXT = {
         "status_form_error": "Please correct the status form.",
         "delete_permission": "You do not have permission to delete this prayer request.",
         "prayer_deleted": "Prayer request deleted.",
+        "report_permission": "You do not have permission to report this prayer request.",
+        "report_own": "You cannot report your own prayer request.",
+        "reported": "Prayer request reported. Thank you.",
+        "already_reported": "You have already reported this prayer request.",
     },
     "zh": {
         "prayer_posted": "代祷事项已发表。",
@@ -61,6 +68,10 @@ MESSAGE_TEXT = {
         "status_form_error": "请修正状态表单。",
         "delete_permission": "你没有权限删除这项代祷。",
         "prayer_deleted": "代祷事项已删除。",
+        "report_permission": "你没有权限举报这项代祷。",
+        "report_own": "你不能举报自己的代祷事项。",
+        "reported": "代祷事项已举报。谢谢。",
+        "already_reported": "你已经举报过这项代祷。",
     },
 }
 
@@ -85,6 +96,15 @@ def get_safe_next_url(request):
     return None
 
 
+def redirect_back_or_prayer_list(request):
+    safe_next_url = get_safe_next_url(request)
+
+    if safe_next_url:
+        return redirect(safe_next_url)
+
+    return redirect("prayer_list")
+
+
 def get_visible_prayer_filter(user):
     user_group = get_user_small_group(user)
 
@@ -95,12 +115,14 @@ def get_visible_prayer_filter(user):
 
     visible_filter |= Q(
         is_deleted=False,
+        is_hidden=False,
         visibility=PrayerRequest.VISIBILITY_CHURCH,
     )
 
     if user_group:
         visible_filter |= Q(
             is_deleted=False,
+            is_hidden=False,
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=user_group,
         )
@@ -438,3 +460,169 @@ def delete_prayer_request(request, prayer_id):
 
     messages.success(request, message_text(request, "prayer_deleted"))
     return redirect("prayer_list")
+
+
+@login_required
+def report_prayer_request(request, prayer_id):
+    prayer = get_object_or_404(
+        PrayerRequest.objects.select_related("user", "small_group_at_post"),
+        id=prayer_id,
+    )
+
+    if not prayer.can_be_seen_by(request.user):
+        messages.error(request, message_text(request, "report_permission"))
+        return redirect_back_or_prayer_list(request)
+
+    if prayer.user == request.user:
+        messages.error(request, message_text(request, "report_own"))
+        return redirect_back_or_prayer_list(request)
+
+    if request.method == "POST":
+        form = PrayerReportForm(request.POST, language=get_user_language(request))
+
+        if form.is_valid():
+            report, created = PrayerReport.objects.get_or_create(
+                prayer_request=prayer,
+                reporter=request.user,
+                defaults={
+                    "reason": form.cleaned_data.get("reason", ""),
+                },
+            )
+
+            if created:
+                messages.success(request, message_text(request, "reported"))
+            else:
+                messages.info(request, message_text(request, "already_reported"))
+
+            safe_next_url = get_safe_next_url(request)
+            if safe_next_url:
+                return redirect(safe_next_url)
+
+            return redirect("prayer_detail", prayer_id=prayer.id)
+    else:
+        form = PrayerReportForm(language=get_user_language(request))
+
+    return render(
+        request,
+        "prayers/report_prayer.html",
+        {
+            "prayer": prayer,
+            "form": form,
+            "return_url": get_safe_next_url(request),
+        },
+    )
+
+
+@staff_member_required
+def staff_prayer_reports(request):
+    status = (request.GET.get("status") or PrayerReport.STATUS_OPEN).strip()
+    query = (request.GET.get("q") or "").strip()
+
+    reports = (
+        PrayerReport.objects
+        .select_related(
+            "prayer_request",
+            "prayer_request__user",
+            "prayer_request__small_group_at_post",
+            "reporter",
+            "reviewed_by",
+        )
+        .order_by("-created_at")
+    )
+
+    if status in {
+        PrayerReport.STATUS_OPEN,
+        PrayerReport.STATUS_REVIEWED,
+        PrayerReport.STATUS_DISMISSED,
+    }:
+        reports = reports.filter(status=status)
+
+    if query:
+        reports = reports.filter(
+            Q(prayer_request__title__icontains=query)
+            | Q(prayer_request__body__icontains=query)
+            | Q(prayer_request__user__username__icontains=query)
+            | Q(reporter__username__icontains=query)
+            | Q(reason__icontains=query)
+        ).distinct()
+
+    return render(
+        request,
+        "prayers/staff/prayer_reports.html",
+        {
+            "reports": reports,
+            "status": status,
+            "query": query,
+        },
+    )
+
+
+@staff_member_required
+def staff_prayer_action(request, prayer_id):
+    if request.method != "POST":
+        return redirect("staff_prayer_reports")
+
+    prayer = get_object_or_404(
+        PrayerRequest.objects.select_related("user"),
+        id=prayer_id,
+    )
+
+    action = request.POST.get("action")
+    reason = (request.POST.get("reason") or "").strip()
+
+    if action == "hide":
+        prayer.is_hidden = True
+        prayer.hidden_reason = reason
+        prayer.hidden_by = request.user
+        prayer.hidden_at = timezone.now()
+        prayer.save(
+            update_fields=[
+                "is_hidden",
+                "hidden_reason",
+                "hidden_by",
+                "hidden_at",
+            ]
+        )
+        messages.success(request, "Prayer request hidden.")
+
+    elif action == "unhide":
+        prayer.is_hidden = False
+        prayer.hidden_reason = ""
+        prayer.hidden_by = None
+        prayer.hidden_at = None
+        prayer.save(
+            update_fields=[
+                "is_hidden",
+                "hidden_reason",
+                "hidden_by",
+                "hidden_at",
+            ]
+        )
+        messages.success(request, "Prayer request unhidden.")
+
+    elif action == "mark_reviewed":
+        PrayerReport.objects.filter(
+            prayer_request=prayer,
+            status=PrayerReport.STATUS_OPEN,
+        ).update(
+            status=PrayerReport.STATUS_REVIEWED,
+            reviewed_by=request.user,
+            reviewed_at=timezone.now(),
+        )
+        messages.success(request, "Reports marked reviewed.")
+
+    elif action == "dismiss_reports":
+        PrayerReport.objects.filter(
+            prayer_request=prayer,
+            status=PrayerReport.STATUS_OPEN,
+        ).update(
+            status=PrayerReport.STATUS_DISMISSED,
+            reviewed_by=request.user,
+            reviewed_at=timezone.now(),
+        )
+        messages.success(request, "Reports dismissed.")
+
+    else:
+        messages.error(request, "Unknown moderation action.")
+
+    return redirect("staff_prayer_reports")

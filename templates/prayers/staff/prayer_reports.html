@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load prayer_extras %}
+
+{% block title %}
+    {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        审核被举报的代祷事项，并管理可见状态。
+        {% else %}
+        Review reported prayer requests and moderate visibility.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <form method="get">
+        <label for="q">{% if language == "zh" %}搜索{% else %}Search{% endif %}</label>
+        <input type="text"
+               id="q"
+               name="q"
+               value="{{ query }}"
+               placeholder="{% if language == "zh" %}作者、举报人、原因或内容{% else %}Author, reporter, reason, or content{% endif %}">
+
+        <label for="status" style="margin-top: 12px;">
+            {% if language == "zh" %}状态{% else %}Status{% endif %}
+        </label>
+        <select id="status" name="status">
+            <option value="open" {% if status == "open" %}selected{% endif %}>
+                {% if language == "zh" %}待处理{% else %}Open{% endif %}
+            </option>
+            <option value="reviewed" {% if status == "reviewed" %}selected{% endif %}>
+                {% if language == "zh" %}已处理{% else %}Reviewed{% endif %}
+            </option>
+            <option value="dismissed" {% if status == "dismissed" %}selected{% endif %}>
+                {% if language == "zh" %}已驳回{% else %}Dismissed{% endif %}
+            </option>
+        </select>
+
+        <button type="submit" style="margin-top: 12px;">
+            {% if language == "zh" %}筛选{% else %}Filter{% endif %}
+        </button>
+    </form>
+</div>
+
+{% if reports %}
+    {% for report in reports %}
+<div class="card">
+    <h2 class="card-title">
+        {{ report.prayer_request.title }}
+    </h2>
+
+    <p>
+        <strong>{% if language == "zh" %}作者：{% else %}Author:{% endif %}</strong>
+        {{ report.prayer_request|prayer_author:user }}
+        {% if report.prayer_request.is_hidden %}
+        <span class="status status-danger">
+            {% if language == "zh" %}已隐藏{% else %}Hidden{% endif %}
+        </span>
+        {% endif %}
+        <span class="status">{{ report.prayer_request|prayer_visibility_label:language }}</span>
+        <span class="status">{{ report.prayer_request|prayer_status_label:language }}</span>
+    </p>
+
+    <p class="muted">
+        {% if language == "zh" %}
+        举报人 {{ report.reporter.username }} · {{ report.created_at }}
+        {% else %}
+        Reported by {{ report.reporter.username }} · {{ report.created_at }}
+        {% endif %}
+    </p>
+
+    {% if report.reason %}
+    <p>
+        <strong>{% if language == "zh" %}原因：{% else %}Reason:{% endif %}</strong>
+        {{ report.reason|linebreaksbr }}
+    </p>
+    {% endif %}
+
+    <hr class="divider">
+
+    <p>{{ report.prayer_request.body|linebreaksbr }}</p>
+
+    {% if report.prayer_request.hidden_reason %}
+    <p class="muted">
+        <strong>{% if language == "zh" %}隐藏原因：{% else %}Hidden reason:{% endif %}</strong>
+        {{ report.prayer_request.hidden_reason }}
+    </p>
+    {% endif %}
+
+    <div class="grid grid-2">
+        <form method="post" action="{% url 'staff_prayer_action' report.prayer_request.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="hide">
+
+            <label for="reason-{{ report.id }}">
+                {% if language == "zh" %}隐藏原因{% else %}Hide reason{% endif %}
+            </label>
+            <input type="text"
+                   id="reason-{{ report.id }}"
+                   name="reason"
+                   placeholder="{% if language == "zh" %}内部记录原因{% else %}Reason shown internally{% endif %}">
+
+            <button type="submit" class="button-danger" style="margin-top: 12px;">
+                {% if language == "zh" %}隐藏代祷事项{% else %}Hide Prayer Request{% endif %}
+            </button>
+        </form>
+
+        <div>
+            <form method="post" action="{% url 'staff_prayer_action' report.prayer_request.id %}" style="margin-bottom: 8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unhide">
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}取消隐藏{% else %}Unhide Prayer Request{% endif %}
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'staff_prayer_action' report.prayer_request.id %}" style="margin-bottom: 8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="mark_reviewed">
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}标记已处理{% else %}Mark Reports Reviewed{% endif %}
+                </button>
+            </form>
+
+            <form method="post" action="{% url 'staff_prayer_action' report.prayer_request.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="dismiss_reports">
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}驳回举报{% else %}Dismiss Reports{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p>
+        {% if language == "zh" %}没有找到举报。{% else %}No reports found.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

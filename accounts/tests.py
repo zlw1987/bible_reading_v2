@@ -19,6 +19,18 @@ class AccountProfileTests(TestCase):
         self.user.profile.preferred_language = "zh"
         self.user.profile.save()
 
+        self.staff = User.objects.create_user(
+            username="staff",
+            email="staff@example.com",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
     def test_profile_requires_login(self):
         response = self.client.get(reverse("profile"))
 
@@ -103,6 +115,83 @@ class AccountProfileTests(TestCase):
         )
 
         self.assertTrue(login_success)
+
+    def test_normal_english_user_sees_simple_primary_nav(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Today")
+        self.assertContains(response, "My Plans")
+        self.assertContains(response, "Prayer")
+        self.assertContains(response, "Profile")
+        self.assertNotContains(response, "Plan Admin")
+        self.assertNotContains(response, "User Admin")
+        self.assertNotContains(response, "Reflection Reports")
+        self.assertNotContains(response, "Prayer Reports")
+        self.assertNotContains(response, "Django Admin")
+        self.assertNotContains(response, "Staff")
+
+    def test_normal_english_user_nav_excludes_global_clutter(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Calendar")
+        self.assertNotContains(response, "Reflection Wall")
+        self.assertNotContains(response, "Prayer Wall")
+        self.assertNotContains(response, "Group Progress")
+
+    def test_staff_english_user_sees_staff_menu_links(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff")
+        self.assertContains(response, "Plan Admin")
+        self.assertContains(response, "User Admin")
+        self.assertContains(response, "Reflection Reports")
+        self.assertContains(response, "Prayer Reports")
+        self.assertContains(response, "Django Admin")
+
+    def test_normal_chinese_user_sees_simple_primary_nav(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "今日")
+        self.assertContains(response, "我的计划")
+        self.assertContains(response, "代祷")
+        self.assertContains(response, "个人资料")
+
+    def test_staff_chinese_user_sees_staff_menu_links(self):
+        self.set_language("zh")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "同工管理")
+        self.assertContains(response, "读经计划管理")
+        self.assertContains(response, "用户管理")
+        self.assertContains(response, "默想举报")
+        self.assertContains(response, "代祷举报")
+
+    def test_core_logged_in_pages_still_render(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        for url_name in ["home", "my_plans", "prayer_list", "profile"]:
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200)
 
 class StaffPasswordResetTests(TestCase):
     def setUp(self):
@@ -279,5 +368,4 @@ class AccountSignupLanguageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email (optional)")
         self.assertContains(response, "Small group")
-
 

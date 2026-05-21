@@ -56,6 +56,16 @@ class PrayerRequest(models.Model):
     answer_note = models.TextField(blank=True, default="")
 
     is_deleted = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False)
+    hidden_reason = models.CharField(max_length=255, blank=True, default="")
+    hidden_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="hidden_prayer_requests",
+    )
+    hidden_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,6 +86,9 @@ class PrayerRequest(models.Model):
             return False
 
         if self.is_deleted:
+            return self.user_id == user.id or user.is_staff
+
+        if self.is_hidden:
             return self.user_id == user.id or user.is_staff
 
         if self.user_id == user.id:
@@ -147,3 +160,54 @@ class PrayerComment(models.Model):
 
     def can_be_seen_by(self, user):
         return self.prayer_request.can_be_seen_by(user)
+
+
+class PrayerReport(models.Model):
+    STATUS_OPEN = "open"
+    STATUS_REVIEWED = "reviewed"
+    STATUS_DISMISSED = "dismissed"
+
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_REVIEWED, "Reviewed"),
+        (STATUS_DISMISSED, "Dismissed"),
+    ]
+
+    prayer_request = models.ForeignKey(
+        PrayerRequest,
+        on_delete=models.CASCADE,
+        related_name="reports",
+    )
+    reporter = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="prayer_reports",
+    )
+    reason = models.TextField(max_length=1000, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_OPEN,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_prayer_reports",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["prayer_request", "reporter"],
+                name="unique_report_per_user_per_prayer",
+            )
+        ]
+
+    def __str__(self):
+        return f"Report by {self.reporter} on prayer {self.prayer_request_id}"

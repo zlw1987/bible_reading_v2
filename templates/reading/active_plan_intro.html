@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}
+    {% if language == "zh" %}读经计划介绍{% else %}Reading Plan Introduction{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'home' %}">← {{ ui.today }}</a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}读经计划介绍{% else %}Reading Plan Introduction{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {{ active_plan|active_plan_name:language }} ·
+        {% if language == "zh" %}开始日期{% else %}Start date{% endif %}: {{ active_plan.start_date }}
+    </p>
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}计划简介{% else %}Overview{% endif %}</h2>
+    {% if introduction %}
+    <p>{{ introduction|linebreaksbr }}</p>
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+        这是一个帮助大家按日读经、一起回应神话语的读经计划。
+        {% else %}
+        This reading plan helps participants read Scripture day by day and respond together.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}如何读{% else %}How to Read{% endif %}</h2>
+    {% if reading_guidance %}
+    <p>{{ reading_guidance|linebreaksbr }}</p>
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+        每天按计划读经或听经，留意经文中的提醒、应许和需要顺服的地方。
+        {% else %}
+        Follow the daily readings or audio, noticing what Scripture reveals, promises, and calls you to obey.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}读经指引{% else %}Reading Guidance{% endif %}</h2>
+    {% if pastoral_note %}
+    <p>{{ pastoral_note|linebreaksbr }}</p>
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+        读经时可以祷告、默想，并在合适的时候与小组彼此鼓励。
+        {% else %}
+        As you read, pray, reflect, and encourage one another with your group as appropriate.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}计划流程{% else %}Plan Flow{% endif %}</h2>
+    <p>
+        {% if language == "zh" %}
+        每天可以阅读经文或收听音频；读完后，可以写下默想或回应，也可以回复他人的分享；完成当天内容后再打卡。
+        {% else %}
+        Each day you can read the text or listen to the audio; after reading, you may write a reflection or reply to others, then check in when the day is complete.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}计划统计{% else %}Plan Stats{% endif %}</h2>
+    <p>
+        {% if language == "zh" %}开始日期{% else %}Start date{% endif %}:
+        <strong>{{ active_plan.start_date }}</strong>
+    </p>
+    <p>
+        {% if language == "zh" %}读经日{% else %}Total reading days{% endif %}:
+        <strong>{{ total_reading_days }}</strong>
+    </p>
+    <p>
+        {% if language == "zh" %}日历总天数{% else %}Calendar length{% endif %}:
+        <strong>{{ total_calendar_days }}</strong>
+    </p>
+    <p>
+        {% if language == "zh" %}休息 / 补读日{% else %}Rest / catch-up days{% endif %}:
+        <strong>{{ rest_days }}</strong>
+    </p>
+    <p>
+        {% if language == "zh" %}当前天数{% else %}Current day{% endif %}:
+        <strong>{{ current_day_number }}</strong>
+    </p>
+
+    {% if is_enrolled %}
+    <hr class="divider">
+    <p>
+        {% if language == "zh" %}我的进度{% else %}My progress{% endif %}:
+        {{ checked_days }} / {{ total_reading_days }} · {{ progress_percent }}%
+    </p>
+    <div class="progress-bar">
+        <div class="progress-bar-fill" style="width: {{ progress_percent }}%;"></div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}下一步{% else %}Actions{% endif %}</h2>
+
+    {% if is_enrolled %}
+    <div class="actions">
+        {% if today_plan_day and today_passages %}
+        <a class="button"
+           href="{% url 'passage_reader' active_plan.id today_plan_day.id 0 %}?lang={{ language }}">
+            {% if language == "zh" %}开始今日读经{% else %}Start Today’s Reading{% endif %}
+        </a>
+
+        <a class="button button-secondary"
+           href="{% url 'audio_reader' active_plan.id today_plan_day.id 0 %}?lang={{ language }}">
+            {% if language == "zh" %}收听今日读经{% else %}Listen to Today’s Reading{% endif %}
+        </a>
+        {% endif %}
+
+        <a class="button button-secondary"
+           href="{% url 'active_plan_calendar' active_plan.id %}">
+            {% if language == "zh" %}查看日历{% else %}View Calendar{% endif %}
+        </a>
+
+        <a class="button button-secondary"
+           href="{% url 'active_plan_detail' active_plan.id %}">
+            {% if language == "zh" %}查看读经日程{% else %}View Schedule{% endif %}
+        </a>
+    </div>
+    {% else %}
+    <div class="actions">
+        <form method="post" action="{% url 'join_active_plan' active_plan.id %}">
+            {% csrf_token %}
+            <button type="submit">{{ ui.join_this_plan }}</button>
+        </form>
+
+        <a class="button button-secondary" href="{% url 'home' %}">
+            {% if language == "zh" %}返回今日读经{% else %}Back to Today{% endif %}
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -280,6 +280,82 @@ def reading_media_reader(request, active_plan_id, plan_day_id, passage_index, me
 
     return render(request, "reading/passage_reader.html", context)
 
+
+@login_required
+def active_plan_intro(request, active_plan_id):
+    active_plan = get_object_or_404(
+        ActivePlan.objects.select_related("plan"),
+        id=active_plan_id,
+    )
+
+    is_enrolled = PlanEnrollment.objects.filter(
+        user=request.user,
+        active_plan=active_plan,
+    ).exists()
+
+    if not active_plan.plan.is_active and not (is_enrolled or request.user.is_staff):
+        messages.error(request, "This reading plan is not available.")
+        return redirect("home")
+
+    language = get_user_language(request)
+    plan_days = list(
+        ReadingPlanDay.objects.filter(plan=active_plan.plan).order_by("day_number")
+    )
+    plan_day_by_number = {day.day_number: day for day in plan_days}
+
+    max_day_number = max(plan_day_by_number.keys(), default=0)
+    total_reading_days = len(plan_days)
+    total_calendar_days = max_day_number
+    rest_days = max(total_calendar_days - total_reading_days, 0)
+    current_day_number = active_plan.current_day_number()
+    today_plan_day = plan_day_by_number.get(current_day_number)
+    today_passages = get_reading_passages(today_plan_day) if today_plan_day else []
+    today_memory_passages = (
+        get_memory_passages(today_plan_day)
+        if today_plan_day and today_plan_day.memory_verse
+        else []
+    )
+
+    checked_days = 0
+    progress_percent = 0
+
+    if is_enrolled:
+        checked_days = CheckIn.objects.filter(
+            user=request.user,
+            active_plan=active_plan,
+        ).count()
+        progress_percent = (
+            round((checked_days / total_reading_days) * 100)
+            if total_reading_days
+            else 0
+        )
+
+    introduction = active_plan.plan.get_introduction(language)
+    reading_guidance = active_plan.plan.get_reading_guidance(language)
+    pastoral_note = active_plan.plan.get_pastoral_note(language)
+
+    return render(
+        request,
+        "reading/active_plan_intro.html",
+        {
+            "active_plan": active_plan,
+            "is_enrolled": is_enrolled,
+            "current_day_number": current_day_number,
+            "today_plan_day": today_plan_day,
+            "today_passages": today_passages,
+            "today_memory_passages": today_memory_passages,
+            "total_reading_days": total_reading_days,
+            "total_calendar_days": total_calendar_days,
+            "rest_days": rest_days,
+            "checked_days": checked_days,
+            "progress_percent": progress_percent,
+            "introduction": introduction,
+            "reading_guidance": reading_guidance,
+            "pastoral_note": pastoral_note,
+        },
+    )
+
+
 @login_required
 def home(request):
     enrollments = (

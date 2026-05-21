@@ -15,6 +15,11 @@
         <strong>{{ prayer|prayer_author:user }}</strong>
         <span class="status">{{ prayer|prayer_visibility_label:language }}</span>
         <span class="status">{{ prayer|prayer_status_label:language }}</span>
+        {% if prayer.is_hidden %}
+        <span class="status status-danger">
+            {% if language == "zh" %}已隐藏{% else %}Hidden{% endif %}
+        </span>
+        {% endif %}
         <span class="muted">{{ prayer.created_at }}</span>
     </div>
 
@@ -73,6 +78,13 @@
                 {{ ui.delete }}
             </button>
         </form>
+        {% endif %}
+
+        {% if prayer.user != user %}
+        <a class="button button-secondary"
+           href="{% url 'report_prayer_request' prayer.id %}?next={{ request.get_full_path|urlencode }}">
+            {% if language == "zh" %}举报{% else %}Report{% endif %}
+        </a>
         {% endif %}
     </div>
 </div>

@@ -38,6 +38,10 @@
         <a href="{% url 'active_plan_detail' row.active_plan.id %}">
             View Plan
         </a>
+        ·
+        <a href="{% url 'active_plan_intro' row.active_plan.id %}">
+            {% if language == "zh" %}计划介绍{% else %}Introduction{% endif %}
+        </a>
     </p>
 
     <form method="post" action="{% url 'leave_active_plan' row.active_plan.id %}">

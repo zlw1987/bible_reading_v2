@@ -36,6 +36,12 @@ class ReadingPlan(models.Model):
     name_en = models.CharField(max_length=120, blank=True)
     description = models.TextField(blank=True)
     description_en = models.TextField(blank=True)
+    introduction = models.TextField(blank=True, default="")
+    introduction_en = models.TextField(blank=True, default="")
+    reading_guidance = models.TextField(blank=True, default="")
+    reading_guidance_en = models.TextField(blank=True, default="")
+    pastoral_note = models.TextField(blank=True, default="")
+    pastoral_note_en = models.TextField(blank=True, default="")
     is_active = models.BooleanField(default=True)
 
     def get_name(self, language="zh"):
@@ -47,6 +53,24 @@ class ReadingPlan(models.Model):
         if language == "en" and self.description_en:
             return self.description_en
         return self.description
+
+    def get_introduction(self, language="zh"):
+        if language == "en":
+            return self.introduction_en or self.introduction or self.description_en or self.description
+
+        return self.introduction or self.description
+
+    def get_reading_guidance(self, language="zh"):
+        if language == "en":
+            return self.reading_guidance_en or self.reading_guidance
+
+        return self.reading_guidance
+
+    def get_pastoral_note(self, language="zh"):
+        if language == "en":
+            return self.pastoral_note_en or self.pastoral_note
+
+        return self.pastoral_note
 
     def __str__(self):
         return self.name

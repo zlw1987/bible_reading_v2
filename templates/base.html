@@ -17,17 +17,34 @@
                 {% if user.is_authenticated %}
                 <a href="{% url 'home' %}">{{ ui.today }}</a>
                 <a href="{% url 'my_plans' %}">{{ ui.my_plans }}</a>
-                <a href="{% url 'my_group_progress' %}">{{ ui.group_progress }}</a>
                 <a href="{% url 'prayer_list' %}">
                     {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
                 </a>
                 <a href="{% url 'profile' %}">{{ ui.profile }}</a>
 
                 {% if user.is_staff %}
-                <a href="{% url 'staff_reading_plan_list' %}">Plan Admin</a>
-                <a href="{% url 'staff_user_list' %}">User Admin</a>
-                <a href="{% url 'staff_reflection_reports' %}">Reports</a>
-                <a href="{% url 'admin:index' %}">{{ ui.admin }}</a>
+                <details class="nav-staff-menu">
+                    <summary>
+                        {% if language == "zh" %}同工管理{% else %}Staff{% endif %}
+                    </summary>
+                    <div class="nav-staff-menu-panel">
+                        <a href="{% url 'staff_reading_plan_list' %}">
+                            {% if language == "zh" %}读经计划管理{% else %}Plan Admin{% endif %}
+                        </a>
+                        <a href="{% url 'staff_user_list' %}">
+                            {% if language == "zh" %}用户管理{% else %}User Admin{% endif %}
+                        </a>
+                        <a href="{% url 'staff_reflection_reports' %}">
+                            {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
+                        </a>
+                        <a href="{% url 'staff_prayer_reports' %}">
+                            {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
+                        </a>
+                        <a href="{% url 'admin:index' %}">
+                            {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
+                        </a>
+                    </div>
+                </details>
                 {% endif %}
 
                 <form method="post" action="{% url 'change_language' %}" class="inline-form">

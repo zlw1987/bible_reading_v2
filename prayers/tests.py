@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import SmallGroup
-from prayers.models import PrayerMark, PrayerRequest
+from prayers.models import PrayerMark, PrayerReport, PrayerRequest
 
 
 class PrayerRequestFlowTests(TestCase):
@@ -31,6 +31,12 @@ class PrayerRequestFlowTests(TestCase):
         )
         self.other_group_user.profile.small_group = self.other_group
         self.other_group_user.profile.save()
+
+        self.staff_user = User.objects.create_user(
+            username="staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
 
     def set_language(self, language="en"):
         session = self.client.session
@@ -378,3 +384,332 @@ class PrayerRequestFlowTests(TestCase):
 
         self.assertTrue(comment.is_deleted)
         self.assertEqual(comment.body, "")
+
+    def test_user_can_report_visible_prayer_request(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("report_prayer_request", args=[prayer.id]),
+            {
+                "reason": "This needs review.",
+                "next": reverse("prayer_detail", args=[prayer.id]),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("prayer_detail", args=[prayer.id]))
+        self.assertTrue(
+            PrayerReport.objects.filter(
+                prayer_request=prayer,
+                reporter=self.same_group_user,
+                reason="This needs review.",
+            ).exists()
+        )
+
+    def test_user_cannot_report_own_prayer_request(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Own prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("report_prayer_request", args=[prayer.id]),
+            {"reason": "Reporting myself."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(PrayerReport.objects.filter(prayer_request=prayer).exists())
+
+    def test_duplicate_report_is_not_created(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Duplicate report prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        self.client.post(
+            reverse("report_prayer_request", args=[prayer.id]),
+            {"reason": "First report."},
+        )
+        self.client.post(
+            reverse("report_prayer_request", args=[prayer.id]),
+            {"reason": "Second report."},
+        )
+
+        self.assertEqual(
+            PrayerReport.objects.filter(
+                prayer_request=prayer,
+                reporter=self.same_group_user,
+            ).count(),
+            1,
+        )
+
+    def test_non_staff_cannot_access_staff_prayer_reports(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_prayer_reports"))
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_staff_can_access_staff_prayer_reports(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reported prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Review this.",
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_prayer_reports"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Prayer Reports")
+        self.assertContains(response, "Reported prayer")
+        self.assertContains(response, "Review this.")
+
+    def test_staff_can_hide_prayer_request(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Hide me",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {
+                "action": "hide",
+                "reason": "Needs moderation.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        prayer.refresh_from_db()
+        self.assertTrue(prayer.is_hidden)
+        self.assertEqual(prayer.hidden_reason, "Needs moderation.")
+        self.assertEqual(prayer.hidden_by, self.staff_user)
+
+    def test_hidden_prayer_not_visible_to_other_regular_user_in_list(self):
+        PrayerRequest.objects.create(
+            user=self.user,
+            title="Hidden from list",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("prayer_list"),
+            {
+                "tab": "church",
+                "status": "open",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hidden from list")
+
+    def test_hidden_prayer_not_visible_to_other_regular_user_in_detail(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Hidden detail",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("prayer_list"))
+
+    def test_hidden_prayer_visible_to_author(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Author can see hidden",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Author can see hidden")
+        self.assertContains(response, "Hidden")
+
+    def test_hidden_prayer_visible_to_staff(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Staff can see hidden",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff can see hidden")
+        self.assertContains(response, "Hidden")
+
+    def test_staff_can_unhide_prayer_request(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Unhide me",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+            hidden_reason="Needs moderation.",
+            hidden_by=self.staff_user,
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "unhide"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        prayer.refresh_from_db()
+        self.assertFalse(prayer.is_hidden)
+        self.assertEqual(prayer.hidden_reason, "")
+        self.assertIsNone(prayer.hidden_by)
+
+    def test_staff_can_mark_reports_reviewed(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Review reports",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        report = PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Review this.",
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "mark_reviewed"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        report.refresh_from_db()
+        self.assertEqual(report.status, PrayerReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff_user)
+        self.assertIsNotNone(report.reviewed_at)
+
+    def test_staff_can_dismiss_reports(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Dismiss reports",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        report = PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Dismiss this.",
+        )
+
+        self.set_language("en")
+        self.client.login(username="staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "dismiss_reports"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        report.refresh_from_db()
+        self.assertEqual(report.status, PrayerReport.STATUS_DISMISSED)
+        self.assertEqual(report.reviewed_by, self.staff_user)
+        self.assertIsNotNone(report.reviewed_at)
+
+    def test_chinese_report_page_localizes_text(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Chinese report prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("zh")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(reverse("report_prayer_request", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "举报代祷事项")
+        self.assertContains(response, "被举报内容")
+        self.assertContains(response, "原因")
+        self.assertContains(response, "提交举报")
+        self.assertNotContains(response, "Report Prayer Request")
+        self.assertNotContains(response, "Prayer Request")
+        self.assertNotContains(response, "Reason")
+        self.assertNotContains(response, "Submit Report")
+
+    def test_english_report_page_contains_english_text(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="English report prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(reverse("report_prayer_request", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Report Prayer Request")
+        self.assertContains(response, "Prayer Request")
+        self.assertContains(response, "Reason")
+        self.assertContains(response, "Submit Report")

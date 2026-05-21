@@ -12,6 +12,15 @@
 </div>
 
 <div class="card">
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'active_plan_intro' active_plan.id %}">
+            {% if language == "zh" %}计划介绍{% else %}Plan Introduction{% endif %}
+        </a>
+    </div>
+</div>
+
+<div class="card">
     <h2>{{ ui.progress }}</h2>
     <p>{{ checked_days }} / {{ total_reading_days }} {{ ui.reading_days }} — {{ progress_percent }}%</p>
     <p class="muted">

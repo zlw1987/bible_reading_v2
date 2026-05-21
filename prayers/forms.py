@@ -2,7 +2,7 @@ from django import forms
 
 from accounts.language import normalize_language
 
-from .models import PrayerComment, PrayerRequest
+from .models import PrayerComment, PrayerReport, PrayerRequest
 
 
 PRAYER_FORM_TEXT = {
@@ -17,6 +17,8 @@ PRAYER_FORM_TEXT = {
         "status": "Status",
         "answer_note": "Answer / closing note",
         "answer_note_placeholder": "Optional note about how this prayer was answered or closed.",
+        "report_reason": "Reason",
+        "report_reason_placeholder": "Please briefly explain why you are reporting this prayer request.",
         "group_required": "You need to belong to a small group to share with your group.",
     },
     "zh": {
@@ -30,6 +32,8 @@ PRAYER_FORM_TEXT = {
         "status": "状态",
         "answer_note": "回应 / 关闭说明",
         "answer_note_placeholder": "可选：说明这项代祷如何被回应或关闭。",
+        "report_reason": "原因",
+        "report_reason_placeholder": "请简要说明你举报这项代祷的原因。",
         "group_required": "你需要加入小组，才能分享到小组。",
     },
 }
@@ -289,3 +293,30 @@ class PrayerCommentEditForm(forms.ModelForm):
             "comment_placeholder",
         )
         self.fields["is_anonymous"].label = form_text(self.language, "comment_anonymously")
+
+
+class PrayerReportForm(forms.ModelForm):
+    class Meta:
+        model = PrayerReport
+        fields = ["reason"]
+        widgets = {
+            "reason": forms.Textarea(
+                attrs={
+                    "rows": 4,
+                    "placeholder": "Please briefly explain why you are reporting this prayer request.",
+                }
+            )
+        }
+        labels = {
+            "reason": "Reason",
+        }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.language = normalize_language(language)
+        self.fields["reason"].label = form_text(self.language, "report_reason")
+        self.fields["reason"].widget.attrs["placeholder"] = form_text(
+            self.language,
+            "report_reason_placeholder",
+        )

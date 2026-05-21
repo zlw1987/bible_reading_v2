@@ -11,6 +11,10 @@
     <a href="{% url 'active_plan_detail' active_plan.id %}">
         ← {{ ui.back_to_plan }}
     </a>
+    ·
+    <a href="{% url 'active_plan_intro' active_plan.id %}">
+        {% if language == "zh" %}计划介绍{% else %}Introduction{% endif %}
+    </a>
 </p>
 
 <div class="page-header">

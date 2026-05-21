@@ -836,6 +836,154 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("home"))
 
+    def test_intro_page_requires_login(self):
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_enrolled_user_can_view_intro_page(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Plan Introduction")
+        self.assertContains(response, "May Test Plan")
+
+    def test_non_enrolled_user_can_view_active_plan_intro(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Plan Introduction")
+
+    def test_non_enrolled_user_sees_join_plan_button_on_intro(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("join_active_plan", args=[self.active_plan.id]))
+        self.assertContains(response, "Join this plan")
+
+    def test_enrolled_user_sees_calendar_and_schedule_actions_on_intro(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "View Calendar")
+        self.assertContains(response, "View Schedule")
+        self.assertContains(response, reverse("active_plan_calendar", args=[self.active_plan.id]))
+        self.assertContains(response, reverse("active_plan_detail", args=[self.active_plan.id]))
+
+    def test_intro_shows_today_text_and_audio_actions_for_enrolled_user(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Start Today’s Reading")
+        self.assertContains(response, "Listen to Today’s Reading")
+        self.assertContains(
+            response,
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+        self.assertContains(
+            response,
+            reverse("audio_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+
+    def test_inactive_plan_intro_hidden_from_regular_non_enrolled_user(self):
+        self.plan.is_active = False
+        self.plan.save()
+
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("home"))
+
+    def test_staff_can_view_inactive_plan_intro(self):
+        self.plan.is_active = False
+        self.plan.save()
+
+        self.set_language("en")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Plan Introduction")
+
+    def test_chinese_intro_page_shows_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "读经计划介绍")
+        self.assertContains(response, "计划简介")
+        self.assertContains(response, "如何读")
+        self.assertContains(response, "读经指引")
+
+    def test_english_intro_page_shows_english_labels(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Plan Introduction")
+        self.assertContains(response, "Overview")
+        self.assertContains(response, "How to Read")
+        self.assertContains(response, "Reading Guidance")
+
     def test_enrolled_user_can_view_plan_detail(self):
         PlanEnrollment.objects.create(
             user=self.user,
@@ -1462,8 +1610,8 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotContains(response, "Post anonymously")
         self.assertNotContains(response, "Reply anonymously")
         self.assertNotContains(response, "Visibility")
-        self.assertNotContains(response, "Passage Wall")
-        self.assertNotContains(response, "经文墙")
+        self.assertNotContains(response, "Passage " + "Wall")
+        self.assertNotContains(response, "经文" + "墙")
 
     def test_english_reflection_reader_uses_reflection_wall_names(self):
         self.set_language("en")
@@ -1497,8 +1645,8 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Share your reflection")
         self.assertContains(response, "Post anonymously")
         self.assertContains(response, "Reply anonymously")
-        self.assertNotContains(response, "Passage Wall")
-        self.assertNotContains(response, "经文墙")
+        self.assertNotContains(response, "Passage " + "Wall")
+        self.assertNotContains(response, "经文" + "墙")
 
 
     def test_passage_reader_rejects_invalid_index(self):
@@ -1926,6 +2074,12 @@ class BibleReadingFlowTests(TestCase):
                 "name_en": "English Test Plan",
                 "description": "中文说明",
                 "description_en": "English description",
+                "introduction": "中文计划简介",
+                "introduction_en": "English introduction",
+                "reading_guidance": "中文如何读",
+                "reading_guidance_en": "English reading guidance",
+                "pastoral_note": "中文读经指引",
+                "pastoral_note_en": "English pastoral note",
                 "is_active": "on",
             },
         )
@@ -1936,6 +2090,12 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(self.plan.name_en, "English Test Plan")
         self.assertEqual(self.plan.description_en, "English description")
+        self.assertEqual(self.plan.introduction, "中文计划简介")
+        self.assertEqual(self.plan.introduction_en, "English introduction")
+        self.assertEqual(self.plan.reading_guidance, "中文如何读")
+        self.assertEqual(self.plan.reading_guidance_en, "English reading guidance")
+        self.assertEqual(self.plan.pastoral_note, "中文读经指引")
+        self.assertEqual(self.plan.pastoral_note_en, "English pastoral note")
         self.assertTrue(self.plan.is_active)
 
 

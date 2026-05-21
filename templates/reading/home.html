@@ -38,6 +38,9 @@
                 <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
                     {{ ui.view_plan }}
                 </a>
+                <a class="button button-secondary" href="{% url 'active_plan_intro' item.active_plan.id %}">
+                    {% if language == "zh" %}了解计划{% else %}Learn More{% endif %}
+                </a>
                 <a class="button button-secondary"
                    href="{% url 'active_plan_calendar' item.active_plan.id %}">
                     {% if language == "zh" %}日历{% else %}Calendar{% endif %}
@@ -185,6 +188,12 @@
     <div class="card">
         <h3 class="card-title">{{ active_plan|active_plan_name:language }}</h3>
         <p class="muted">{{ active_plan.start_date }}</p>
+
+        <p>
+            <a class="button button-secondary" href="{% url 'active_plan_intro' active_plan.id %}">
+                {% if language == "zh" %}了解计划{% else %}Learn More{% endif %}
+            </a>
+        </p>
 
         <form method="post" action="{% url 'join_active_plan' active_plan.id %}">
             {% csrf_token %}

@@ -11,6 +11,7 @@ urlpatterns = [
         views.active_plan_calendar,
         name="active_plan_calendar",
     ),
+    path("plans/<int:active_plan_id>/intro/", views.active_plan_intro, name="active_plan_intro"),
     path("plans/<int:active_plan_id>/", views.active_plan_detail, name="active_plan_detail"),
     path("plans/<int:active_plan_id>/join/", views.join_active_plan, name="join_active_plan"),
     path("plans/<int:active_plan_id>/leave/", views.leave_active_plan, name="leave_active_plan"),

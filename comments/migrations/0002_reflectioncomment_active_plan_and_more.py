@@ -48,7 +48,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='reflectioncomment',
             name='visibility',
-            field=models.CharField(choices=[('private', 'Private'), ('group', 'My Small Group'), ('church', 'Passage Wall')], db_index=True, default='group', max_length=20),
+            field=models.CharField(choices=[('private', 'Private'), ('group', 'My Small Group'), ('church', 'Reflection Wall')], db_index=True, default='group', max_length=20),
         ),
         migrations.AddIndex(
             model_name='reflectioncomment',

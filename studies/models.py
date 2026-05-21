@@ -229,3 +229,60 @@ class BibleStudyGuide(models.Model):
         if language == "en":
             return self.prestudy_notes_en or self.prestudy_notes
         return self.prestudy_notes
+
+
+class BibleStudyWorshipSong(models.Model):
+    session = models.ForeignKey(
+        BibleStudySession,
+        on_delete=models.CASCADE,
+        related_name="worship_songs",
+    )
+    sort_order = models.PositiveIntegerField()
+    title = models.CharField(max_length=160)
+    title_en = models.CharField(max_length=160, blank=True, default="")
+    song_key = models.CharField(max_length=40, blank=True, default="")
+    youtube_url = models.URLField(max_length=500, blank=True, default="")
+    chord_url = models.URLField(max_length=500, blank=True, default="")
+    lyrics_url = models.URLField(max_length=500, blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    note_en = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["session", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "sort_order"],
+                name="unique_bible_study_worship_song_order",
+            )
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        errors = {}
+
+        if not self.title:
+            errors["title"] = "Song title is required."
+
+        if self.sort_order is not None and self.sort_order < 1:
+            errors["sort_order"] = "Sort order must be positive."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def get_title(self, language="zh"):
+        if language == "en" and self.title_en:
+            return self.title_en
+        return self.title
+
+    def get_note(self, language="zh"):
+        if language == "en" and self.note_en:
+            return self.note_en
+        return self.note

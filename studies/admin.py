@@ -1,6 +1,11 @@
 from django.contrib import admin
 
-from .models import BibleStudyGuide, BibleStudySeries, BibleStudySession
+from .models import (
+    BibleStudyGuide,
+    BibleStudySeries,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 @admin.register(BibleStudySeries)
@@ -34,5 +39,20 @@ class BibleStudyGuideAdmin(admin.ModelAdmin):
         "guide_body",
         "discussion_questions",
         "prestudy_notes",
+    )
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(BibleStudyWorshipSong)
+class BibleStudyWorshipSongAdmin(admin.ModelAdmin):
+    list_display = ("session", "sort_order", "title", "song_key", "updated_at")
+    list_filter = ("session",)
+    search_fields = (
+        "title",
+        "title_en",
+        "song_key",
+        "note",
+        "note_en",
+        "session__title",
     )
     readonly_fields = ("created_at", "updated_at")

@@ -5,7 +5,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
-from .models import BibleStudyGuide, BibleStudySeries, BibleStudySession
+from .models import (
+    BibleStudyGuide,
+    BibleStudySeries,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 class BibleStudyModuleTests(TestCase):
@@ -118,6 +123,26 @@ class BibleStudyModuleTests(TestCase):
         }
         data.update(overrides)
         return data
+
+    def worship_song_post_data(self, **overrides):
+        data = {
+            "sort_order": 1,
+            "title": "奇异恩典",
+            "title_en": "Amazing Grace",
+            "song_key": "G",
+            "youtube_url": "https://example.com/youtube",
+            "chord_url": "https://example.com/chords",
+            "lyrics_url": "https://example.com/lyrics",
+            "note": "司琴请用慢速。",
+            "note_en": "Pianist, please use a slower tempo.",
+        }
+        data.update(overrides)
+        return data
+
+    def create_worship_song(self, session, **overrides):
+        data = self.worship_song_post_data(**overrides)
+        data["session"] = session
+        return BibleStudyWorshipSong.objects.create(**data)
 
     def test_study_list_requires_login(self):
         response = self.client.get(reverse("study_session_list"))
@@ -369,3 +394,159 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Bible Studies")
         self.assertContains(response, "Home Visible Study")
         self.assertContains(response, reverse("study_session_detail", args=[session.id]))
+
+    def test_regular_user_can_see_worship_songs_on_visible_session(self):
+        self.set_language("en")
+        session = self.create_session()
+        self.create_worship_song(session)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Worship Songs")
+        self.assertContains(response, "Amazing Grace")
+        self.assertContains(response, "Key: G")
+        self.assertContains(response, "Chord Link")
+        self.assertContains(response, "Lyrics Link")
+
+    def test_regular_user_cannot_access_manage_worship_songs(self):
+        self.set_language("en")
+        session = self.create_session()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("manage_worship_songs", args=[session.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_detail", args=[session.id]))
+
+    def test_manager_can_access_manage_worship_songs(self):
+        self.set_language("en")
+        session = self.create_session()
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.get(reverse("manage_worship_songs", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manage Worship Songs")
+        self.assertContains(response, "Add Worship Song")
+
+    def test_manager_can_add_worship_song(self):
+        self.set_language("en")
+        session = self.create_session()
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.post(
+            reverse("manage_worship_songs", args=[session.id]),
+            self.worship_song_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        song = BibleStudyWorshipSong.objects.get(session=session)
+        self.assertEqual(song.title, "奇异恩典")
+        self.assertEqual(song.song_key, "G")
+
+    def test_manager_can_edit_worship_song(self):
+        self.set_language("en")
+        session = self.create_session()
+        song = self.create_worship_song(session)
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.post(
+            reverse("edit_worship_song", args=[song.id]),
+            self.worship_song_post_data(
+                title="新的诗歌",
+                title_en="Updated Song",
+                song_key="D",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        song.refresh_from_db()
+        self.assertEqual(song.title, "新的诗歌")
+        self.assertEqual(song.title_en, "Updated Song")
+        self.assertEqual(song.song_key, "D")
+
+    def test_manager_can_delete_worship_song(self):
+        self.set_language("en")
+        session = self.create_session()
+        song = self.create_worship_song(session)
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.post(reverse("delete_worship_song", args=[song.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(BibleStudyWorshipSong.objects.filter(id=song.id).exists())
+
+    def test_worship_songs_render_in_sort_order(self):
+        self.set_language("en")
+        session = self.create_session()
+        second = self.create_worship_song(
+            session,
+            sort_order=2,
+            title="第二首",
+            title_en="Second Song",
+        )
+        first = self.create_worship_song(
+            session,
+            sort_order=1,
+            title="第一首",
+            title_en="First Song",
+        )
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        songs = list(response.context["worship_songs"])
+        self.assertEqual(songs, [first, second])
+        self.assertContains(response, "1. First Song")
+        self.assertContains(response, "2. Second Song")
+
+    def test_chinese_detail_page_shows_worship_song_labels(self):
+        self.set_language("zh")
+        session = self.create_session()
+        self.create_worship_song(session)
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "查经前敬拜诗歌")
+        self.assertContains(response, "管理敬拜诗歌")
+
+    def test_english_detail_page_shows_worship_song_labels(self):
+        self.set_language("en")
+        session = self.create_session()
+        self.create_worship_song(session)
+
+        self.client.login(username="pastor_study", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Worship Songs")
+        self.assertContains(response, "Manage Worship Songs")
+
+    def test_regular_user_sees_localized_empty_state_when_no_worship_songs(self):
+        self.set_language("zh")
+        session = self.create_session()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "还没有添加敬拜诗歌。")
+
+    def test_worship_songs_hidden_when_session_not_visible(self):
+        self.set_language("en")
+        session = self.create_session(
+            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        self.create_worship_song(session, title_en="Hidden Song")
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(reverse("study_session_detail", args=[session.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))

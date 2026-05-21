@@ -74,6 +74,53 @@
 </div>
 
 <div class="card">
+    <div class="actions" style="justify-content: space-between;">
+        <h2>{% if language == "zh" %}查经前敬拜诗歌{% else %}Worship Songs{% endif %}</h2>
+        {% if can_manage %}
+        <a class="button button-secondary"
+           href="{% url 'manage_worship_songs' session_obj.id %}">
+            {% if language == "zh" %}管理敬拜诗歌{% else %}Manage Worship Songs{% endif %}
+        </a>
+        {% endif %}
+    </div>
+
+    {% if worship_songs %}
+        {% for song in worship_songs %}
+        <div>
+            <h3>{{ song.sort_order }}. {{ song|worship_song_title:language }}</h3>
+            {% if song.song_key %}
+            <p class="muted">
+                {% if language == "zh" %}调{% else %}Key{% endif %}: {{ song.song_key }}
+            </p>
+            {% endif %}
+            <div class="actions">
+                {% if song.youtube_url %}
+                <a class="button button-secondary" href="{{ song.youtube_url }}">YouTube</a>
+                {% endif %}
+                {% if song.chord_url %}
+                <a class="button button-secondary" href="{{ song.chord_url }}">
+                    {% if language == "zh" %}和弦链接{% else %}Chord Link{% endif %}
+                </a>
+                {% endif %}
+                {% if song.lyrics_url %}
+                <a class="button button-secondary" href="{{ song.lyrics_url }}">
+                    {% if language == "zh" %}歌词链接{% else %}Lyrics Link{% endif %}
+                </a>
+                {% endif %}
+            </div>
+            {% if song|worship_song_note:language %}
+            <p>{{ song|worship_song_note:language|linebreaksbr }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有添加敬拜诗歌。{% else %}No worship songs have been added yet.{% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
     <h2>{% if language == "zh" %}查经指引{% else %}Study Guide{% endif %}</h2>
     {% if guide and guide|study_guide_body:language %}
     <p>{{ guide|study_guide_body:language|linebreaksbr }}</p>

@@ -1,6 +1,11 @@
 from django import forms
 
-from .models import BibleStudyGuide, BibleStudySeries, BibleStudySession
+from .models import (
+    BibleStudyGuide,
+    BibleStudySeries,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 FORM_TEXT = {
@@ -83,6 +88,52 @@ FORM_TEXT = {
 
 def form_text(language):
     return FORM_TEXT.get(language, FORM_TEXT["en"])
+
+
+WORSHIP_FORM_TEXT = {
+    "en": {
+        "sort_order": "Order",
+        "title": "Song Title",
+        "title_en": "English Title",
+        "song_key": "Key",
+        "youtube_url": "YouTube Link",
+        "chord_url": "Chord Link",
+        "lyrics_url": "Lyrics Link",
+        "note": "Notes",
+        "note_en": "English Notes",
+        "title_placeholder": "Song title",
+        "title_en_placeholder": "Optional English song title",
+        "key_placeholder": "C, D, E-flat...",
+        "youtube_placeholder": "https://youtube.com/...",
+        "chord_placeholder": "Chord sheet link",
+        "lyrics_placeholder": "Lyrics link",
+        "note_placeholder": "Notes for worship lead or pianist.",
+        "note_en_placeholder": "Optional English notes.",
+    },
+    "zh": {
+        "sort_order": "顺序",
+        "title": "诗歌名",
+        "title_en": "英文诗歌名",
+        "song_key": "调",
+        "youtube_url": "YouTube 链接",
+        "chord_url": "和弦链接",
+        "lyrics_url": "歌词链接",
+        "note": "备注",
+        "note_en": "英文备注",
+        "title_placeholder": "诗歌名",
+        "title_en_placeholder": "可选英文诗歌名",
+        "key_placeholder": "C、D、降E...",
+        "youtube_placeholder": "https://youtube.com/...",
+        "chord_placeholder": "和弦谱链接",
+        "lyrics_placeholder": "歌词链接",
+        "note_placeholder": "给主领或司琴的备注。",
+        "note_en_placeholder": "可选英文备注。",
+    },
+}
+
+
+def worship_form_text(language):
+    return WORSHIP_FORM_TEXT.get(language, WORSHIP_FORM_TEXT["en"])
 
 
 class BibleStudySeriesForm(forms.ModelForm):
@@ -195,4 +246,56 @@ class BibleStudyGuideForm(forms.ModelForm):
         )
         self.fields["prestudy_notes"].widget.attrs.update(
             {"placeholder": text["notes_placeholder"]}
+        )
+
+
+class BibleStudyWorshipSongForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyWorshipSong
+        fields = [
+            "sort_order",
+            "title",
+            "title_en",
+            "song_key",
+            "youtube_url",
+            "chord_url",
+            "lyrics_url",
+            "note",
+            "note_en",
+        ]
+        widgets = {
+            "note": forms.Textarea(attrs={"rows": 3}),
+            "note_en": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = worship_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["title"].widget.attrs.update(
+            {"placeholder": text["title_placeholder"]}
+        )
+        self.fields["title_en"].widget.attrs.update(
+            {"placeholder": text["title_en_placeholder"]}
+        )
+        self.fields["song_key"].widget.attrs.update(
+            {"placeholder": text["key_placeholder"]}
+        )
+        self.fields["youtube_url"].widget.attrs.update(
+            {"placeholder": text["youtube_placeholder"]}
+        )
+        self.fields["chord_url"].widget.attrs.update(
+            {"placeholder": text["chord_placeholder"]}
+        )
+        self.fields["lyrics_url"].widget.attrs.update(
+            {"placeholder": text["lyrics_placeholder"]}
+        )
+        self.fields["note"].widget.attrs.update(
+            {"placeholder": text["note_placeholder"]}
+        )
+        self.fields["note_en"].widget.attrs.update(
+            {"placeholder": text["note_en_placeholder"]}
         )

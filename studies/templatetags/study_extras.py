@@ -39,6 +39,20 @@ def prestudy_notes(guide, language):
 
 
 @register.filter
+def worship_song_title(song, language):
+    if not song:
+        return ""
+    return song.get_title(language)
+
+
+@register.filter
+def worship_song_note(song, language):
+    if not song:
+        return ""
+    return song.get_note(language)
+
+
+@register.filter
 def study_status_label(session, language):
     labels = {
         "zh": {

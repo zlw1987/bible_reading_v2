@@ -10,8 +10,12 @@ from accounts.permissions import (
     has_capability,
 )
 
-from .forms import BibleStudyGuideForm, BibleStudySessionForm
-from .models import BibleStudyGuide, BibleStudySession
+from .forms import (
+    BibleStudyGuideForm,
+    BibleStudySessionForm,
+    BibleStudyWorshipSongForm,
+)
+from .models import BibleStudyGuide, BibleStudySession, BibleStudyWorshipSong
 
 
 def study_ui_text(language, key):
@@ -114,6 +118,7 @@ def study_session_detail(request, session_id):
         return redirect("study_session_list")
 
     guide = getattr(session, "guide", None)
+    worship_songs = session.worship_songs.all()
 
     return render(
         request,
@@ -121,6 +126,7 @@ def study_session_detail(request, session_id):
         {
             "session_obj": session,
             "guide": guide,
+            "worship_songs": worship_songs,
             "can_manage": can_manage_bible_studies(request.user),
         },
     )
@@ -219,3 +225,104 @@ def delete_study_session(request, session_id):
     session.save()
     messages.success(request, study_ui_text(language, "cancelled"))
     return redirect("study_session_list")
+
+
+@login_required
+def manage_worship_songs(request, session_id):
+    language = get_user_language(request)
+    session = get_object_or_404(
+        BibleStudySession.objects.select_related("series"),
+        id=session_id,
+    )
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_detail", session_id=session.id)
+
+    if request.method == "POST":
+        form = BibleStudyWorshipSongForm(request.POST, language=language)
+        if form.is_valid():
+            song = form.save(commit=False)
+            song.session = session
+            song.save()
+            messages.success(
+                request,
+                "敬拜诗歌已保存。" if language == "zh" else "Worship song saved.",
+            )
+            return redirect("manage_worship_songs", session_id=session.id)
+    else:
+        next_order = (session.worship_songs.count() or 0) + 1
+        form = BibleStudyWorshipSongForm(
+            initial={"sort_order": next_order},
+            language=language,
+        )
+
+    return render(
+        request,
+        "studies/manage_worship_songs.html",
+        {
+            "session_obj": session,
+            "worship_songs": session.worship_songs.all(),
+            "form": form,
+        },
+    )
+
+
+@login_required
+def edit_worship_song(request, song_id):
+    language = get_user_language(request)
+    song = get_object_or_404(
+        BibleStudyWorshipSong.objects.select_related("session", "session__series"),
+        id=song_id,
+    )
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_detail", session_id=song.session_id)
+
+    if request.method == "POST":
+        form = BibleStudyWorshipSongForm(
+            request.POST,
+            instance=song,
+            language=language,
+        )
+        if form.is_valid():
+            form.save()
+            messages.success(
+                request,
+                "敬拜诗歌已保存。" if language == "zh" else "Worship song saved.",
+            )
+            return redirect("manage_worship_songs", session_id=song.session_id)
+    else:
+        form = BibleStudyWorshipSongForm(instance=song, language=language)
+
+    return render(
+        request,
+        "studies/worship_song_form.html",
+        {
+            "session_obj": song.session,
+            "song": song,
+            "form": form,
+        },
+    )
+
+
+@login_required
+def delete_worship_song(request, song_id):
+    language = get_user_language(request)
+    song = get_object_or_404(BibleStudyWorshipSong, id=song_id)
+    session_id = song.session_id
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_detail", session_id=session_id)
+
+    if request.method != "POST":
+        return redirect("manage_worship_songs", session_id=session_id)
+
+    song.delete()
+    messages.success(
+        request,
+        "敬拜诗歌已删除。" if language == "zh" else "Worship song deleted.",
+    )
+    return redirect("manage_worship_songs", session_id=session_id)

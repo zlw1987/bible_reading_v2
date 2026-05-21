@@ -788,6 +788,11 @@ class BibleReadingFlowTests(TestCase):
             title="May Test Plan",
         )
 
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
     def test_login_required_for_home(self):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 302)
@@ -1420,6 +1425,80 @@ class BibleReadingFlowTests(TestCase):
             response,
             reverse("check_in", args=[self.active_plan.id, self.day1.id]),
         )
+
+    def test_chinese_reflection_reader_localizes_form_and_wall_names(self):
+        self.set_language("zh")
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+        ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Visible reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertContains(response, "默想墙")
+        self.assertContains(response, "分享你的默想")
+        self.assertContains(response, "匿名发表")
+        self.assertContains(response, "匿名回复")
+        self.assertNotContains(response, "Share your reflection")
+        self.assertNotContains(response, "Post anonymously")
+        self.assertNotContains(response, "Reply anonymously")
+        self.assertNotContains(response, "Visibility")
+        self.assertNotContains(response, "Passage Wall")
+        self.assertNotContains(response, "经文墙")
+
+    def test_english_reflection_reader_uses_reflection_wall_names(self):
+        self.set_language("en")
+        self.day1.reading_text = "John 1"
+        self.day1.save()
+
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+        ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Visible reflection.",
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0])
+        )
+
+        self.assertContains(response, "Reflection Wall")
+        self.assertContains(response, "Share your reflection")
+        self.assertContains(response, "Post anonymously")
+        self.assertContains(response, "Reply anonymously")
+        self.assertNotContains(response, "Passage Wall")
+        self.assertNotContains(response, "经文墙")
 
 
     def test_passage_reader_rejects_invalid_index(self):

@@ -43,6 +43,35 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
+    def test_chinese_prayer_list_localizes_form_and_wall_names(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_list"))
+
+        self.assertContains(response, "代祷墙")
+        self.assertContains(response, "新的代祷事项")
+        self.assertContains(response, "代祷标题")
+        self.assertContains(response, "分享你的代祷事项")
+        self.assertContains(response, "发表代祷")
+        self.assertNotContains(response, "Prayer title")
+        self.assertNotContains(response, "Share your prayer request")
+        self.assertNotContains(response, "Post anonymously")
+        self.assertNotContains(response, "Visibility")
+        self.assertNotContains(response, "Prayer Wall")
+
+    def test_english_prayer_list_uses_prayer_wall_names(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_list"))
+
+        self.assertContains(response, "Prayer Wall")
+        self.assertContains(response, "New Prayer Request")
+        self.assertContains(response, "Prayer title")
+        self.assertContains(response, "Share your prayer request")
+        self.assertContains(response, "Post Prayer Request")
+
     def test_user_can_create_group_prayer_request(self):
         self.set_language("en")
         self.client.login(username="levin", password="TestPass123!")

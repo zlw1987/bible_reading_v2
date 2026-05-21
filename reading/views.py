@@ -168,6 +168,7 @@ def build_reader_context(
 
     if show_completion_section:
         current_day_number = active_plan.current_day_number()
+        ui_language = get_user_language(request)
 
         context.update(
             {
@@ -177,8 +178,11 @@ def build_reader_context(
                     active_plan=active_plan,
                     plan_day=plan_day,
                 ).exists(),
-                "comment_form": ReflectionCommentForm(user=request.user),
-                "reply_form": ReflectionReplyForm(),
+                "comment_form": ReflectionCommentForm(
+                    user=request.user,
+                    language=ui_language,
+                ),
+                "reply_form": ReflectionReplyForm(language=ui_language),
             }
         )
 

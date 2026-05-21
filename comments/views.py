@@ -10,6 +10,7 @@ from django.utils import timezone
 from reading.bible_sources import parse_reading_text
 from reading.passage_services import get_reading_passages
 from reading.models import ActivePlan, PlanEnrollment, ReadingPlanDay
+from accounts.language import get_user_language
 
 from .forms import (
     ReflectionCommentEditForm,
@@ -18,6 +19,52 @@ from .forms import (
     ReflectionReportForm,
 )
 from .models import ReflectionComment, ReflectionReport
+
+
+MESSAGE_TEXT = {
+    "en": {
+        "join_before_commenting": "You need to join this plan before commenting.",
+        "passage_missing": "This scripture passage could not be found.",
+        "reflection_posted": "Your reflection has been posted.",
+        "reflection_form_error": "Please correct the reflection form.",
+        "reply_permission": "You do not have permission to reply to this reflection.",
+        "missing_plan_context": "This reflection is missing plan context.",
+        "reply_posted": "Your reply has been posted.",
+        "reply_form_error": "Please correct the reply form.",
+        "edit_permission": "You do not have permission to edit this reflection.",
+        "deleted_edit": "Deleted reflections cannot be edited.",
+        "reflection_updated": "Reflection updated.",
+        "report_permission": "You do not have permission to report this reflection.",
+        "report_own": "You cannot report your own reflection.",
+        "reported": "Reflection reported. Thank you.",
+        "already_reported": "You have already reported this reflection.",
+        "delete_permission": "You do not have permission to delete this reflection.",
+        "deleted": "Reflection deleted.",
+    },
+    "zh": {
+        "join_before_commenting": "你需要先加入这个计划，才能发表评论。",
+        "passage_missing": "找不到这段经文。",
+        "reflection_posted": "你的默想已发表。",
+        "reflection_form_error": "请修正默想表单。",
+        "reply_permission": "你没有权限回复这条默想。",
+        "missing_plan_context": "这条默想缺少读经计划信息。",
+        "reply_posted": "你的回复已发表。",
+        "reply_form_error": "请修正回复表单。",
+        "edit_permission": "你没有权限编辑这条默想。",
+        "deleted_edit": "已删除的默想不能编辑。",
+        "reflection_updated": "默想已更新。",
+        "report_permission": "你没有权限举报这条默想。",
+        "report_own": "你不能举报自己的默想。",
+        "reported": "默想已举报。谢谢。",
+        "already_reported": "你已经举报过这条默想。",
+        "delete_permission": "你没有权限删除这条默想。",
+        "deleted": "默想已删除。",
+    },
+}
+
+
+def message_text(request, key):
+    return MESSAGE_TEXT[get_user_language(request)][key]
 
 
 def get_safe_next_url(request):
@@ -72,16 +119,20 @@ def add_comment(request, active_plan_id, plan_day_id, passage_index):
     )
 
     if not user_can_access_active_plan(request.user, active_plan):
-        messages.error(request, "You need to join this plan before commenting.")
+        messages.error(request, message_text(request, "join_before_commenting"))
         return redirect_back_or_home(request)
 
     passage = get_passage_or_none(plan_day, passage_index)
 
     if passage is None:
-        messages.error(request, "This scripture passage could not be found.")
+        messages.error(request, message_text(request, "passage_missing"))
         return redirect_back_or_home(request)
 
-    form = ReflectionCommentForm(request.POST, user=request.user)
+    form = ReflectionCommentForm(
+        request.POST,
+        user=request.user,
+        language=get_user_language(request),
+    )
 
     if form.is_valid():
         comment = form.save(commit=False)
@@ -94,9 +145,9 @@ def add_comment(request, active_plan_id, plan_day_id, passage_index):
         comment.small_group_at_post = getattr(request.user.profile, "small_group", None)
         comment.save()
 
-        messages.success(request, "Your reflection has been posted.")
+        messages.success(request, message_text(request, "reflection_posted"))
     else:
-        messages.error(request, "Please correct the reflection form.")
+        messages.error(request, message_text(request, "reflection_form_error"))
 
     return redirect_back_or_home(request)
 
@@ -117,14 +168,14 @@ def add_reply(request, comment_id):
     )
 
     if not parent.can_be_seen_by(request.user):
-        messages.error(request, "You do not have permission to reply to this reflection.")
+        messages.error(request, message_text(request, "reply_permission"))
         return redirect_back_or_home(request)
 
     if parent.active_plan is None:
-        messages.error(request, "This reflection is missing plan context.")
+        messages.error(request, message_text(request, "missing_plan_context"))
         return redirect_back_or_home(request)
 
-    form = ReflectionReplyForm(request.POST)
+    form = ReflectionReplyForm(request.POST, language=get_user_language(request))
 
     if form.is_valid():
         reply = form.save(commit=False)
@@ -139,9 +190,9 @@ def add_reply(request, comment_id):
         reply.small_group_at_post = parent.small_group_at_post
         reply.save()
 
-        messages.success(request, "Your reply has been posted.")
+        messages.success(request, message_text(request, "reply_posted"))
     else:
-        messages.error(request, "Please correct the reply form.")
+        messages.error(request, message_text(request, "reply_form_error"))
 
     return redirect_back_or_home(request)
 
@@ -158,11 +209,11 @@ def edit_comment(request, comment_id):
     )
 
     if comment.user != request.user:
-        messages.error(request, "You do not have permission to edit this reflection.")
+        messages.error(request, message_text(request, "edit_permission"))
         return redirect_back_or_home(request)
 
     if comment.is_deleted:
-        messages.error(request, "Deleted reflections cannot be edited.")
+        messages.error(request, message_text(request, "deleted_edit"))
         return redirect_back_or_home(request)
 
     is_reply = comment.parent_id is not None
@@ -173,6 +224,7 @@ def edit_comment(request, comment_id):
             instance=comment,
             user=request.user,
             is_reply=is_reply,
+            language=get_user_language(request),
         )
 
         if form.is_valid():
@@ -196,7 +248,7 @@ def edit_comment(request, comment_id):
 
             edited_comment.save()
 
-            messages.success(request, "Reflection updated.")
+            messages.success(request, message_text(request, "reflection_updated"))
 
             safe_next_url = get_safe_next_url(request)
 
@@ -209,6 +261,7 @@ def edit_comment(request, comment_id):
             instance=comment,
             user=request.user,
             is_reply=is_reply,
+            language=get_user_language(request),
         )
 
     return render(
@@ -235,15 +288,15 @@ def report_comment(request, comment_id):
     )
 
     if not comment.can_be_seen_by(request.user):
-        messages.error(request, "You do not have permission to report this reflection.")
+        messages.error(request, message_text(request, "report_permission"))
         return redirect_back_or_home(request)
 
     if comment.user == request.user:
-        messages.error(request, "You cannot report your own reflection.")
+        messages.error(request, message_text(request, "report_own"))
         return redirect_back_or_home(request)
 
     if request.method == "POST":
-        form = ReflectionReportForm(request.POST)
+        form = ReflectionReportForm(request.POST, language=get_user_language(request))
 
         if form.is_valid():
             report, created = ReflectionReport.objects.get_or_create(
@@ -255,9 +308,9 @@ def report_comment(request, comment_id):
             )
 
             if created:
-                messages.success(request, "Reflection reported. Thank you.")
+                messages.success(request, message_text(request, "reported"))
             else:
-                messages.info(request, "You have already reported this reflection.")
+                messages.info(request, message_text(request, "already_reported"))
 
             safe_next_url = get_safe_next_url(request)
             if safe_next_url:
@@ -265,7 +318,7 @@ def report_comment(request, comment_id):
 
             return redirect("home")
     else:
-        form = ReflectionReportForm()
+        form = ReflectionReportForm(language=get_user_language(request))
 
     return render(
         request,
@@ -283,14 +336,14 @@ def delete_comment(request, comment_id):
     comment = get_object_or_404(ReflectionComment, id=comment_id)
 
     if comment.user != request.user and not request.user.is_staff:
-        messages.error(request, "You do not have permission to delete this reflection.")
+        messages.error(request, message_text(request, "delete_permission"))
         return redirect_back_or_home(request)
 
     comment.is_deleted = True
     comment.body = ""
     comment.save(update_fields=["is_deleted", "body"])
 
-    messages.success(request, "Reflection deleted.")
+    messages.success(request, message_text(request, "deleted"))
     return redirect_back_or_home(request)
 
 @staff_member_required

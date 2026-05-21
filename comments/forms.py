@@ -1,6 +1,55 @@
 from django import forms
 
+from accounts.language import normalize_language
+
 from .models import ReflectionComment, ReflectionReport
+
+
+COMMENT_FORM_TEXT = {
+    "en": {
+        "share_reflection": "Share your reflection...",
+        "write_reply": "Write a reply...",
+        "visibility": "Visibility",
+        "post_anonymously": "Post anonymously",
+        "reply_anonymously": "Reply anonymously",
+        "reason": "Reason",
+        "report_reason": "Please briefly explain why you are reporting this reflection.",
+        "group_required": "You need to belong to a small group to share with your group.",
+    },
+    "zh": {
+        "share_reflection": "分享你的默想...",
+        "write_reply": "写下回复...",
+        "visibility": "可见范围",
+        "post_anonymously": "匿名发表",
+        "reply_anonymously": "匿名回复",
+        "reason": "原因",
+        "report_reason": "请简要说明你举报这条默想的原因。",
+        "group_required": "你需要加入小组，才能分享到小组。",
+    },
+}
+
+
+VISIBILITY_LABELS = {
+    "en": {
+        ReflectionComment.VISIBILITY_PRIVATE: "Private",
+        ReflectionComment.VISIBILITY_GROUP: "My Group",
+        ReflectionComment.VISIBILITY_CHURCH: "Reflection Wall",
+    },
+    "zh": {
+        ReflectionComment.VISIBILITY_PRIVATE: "私人",
+        ReflectionComment.VISIBILITY_GROUP: "我的小组",
+        ReflectionComment.VISIBILITY_CHURCH: "默想墙",
+    },
+}
+
+
+def form_text(language, key):
+    return COMMENT_FORM_TEXT[normalize_language(language)][key]
+
+
+def localized_visibility_choices(language):
+    labels = VISIBILITY_LABELS[normalize_language(language)]
+    return [(value, labels[value]) for value, _label in ReflectionComment.VISIBILITY_CHOICES]
 
 
 class ReflectionCommentForm(forms.ModelForm):
@@ -21,10 +70,18 @@ class ReflectionCommentForm(forms.ModelForm):
             "is_anonymous": "Post anonymously",
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, language="en", **kwargs):
         super().__init__(*args, **kwargs)
 
         self.user = user
+        self.language = normalize_language(language)
+        self.fields["body"].widget.attrs["placeholder"] = form_text(
+            self.language,
+            "share_reflection",
+        )
+        self.fields["visibility"].label = form_text(self.language, "visibility")
+        self.fields["visibility"].choices = localized_visibility_choices(self.language)
+        self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")
         user_group = getattr(getattr(user, "profile", None), "small_group", None)
 
         if user_group:
@@ -33,7 +90,7 @@ class ReflectionCommentForm(forms.ModelForm):
             self.fields["visibility"].initial = ReflectionComment.VISIBILITY_PRIVATE
             self.fields["visibility"].choices = [
                 choice
-                for choice in ReflectionComment.VISIBILITY_CHOICES
+                for choice in localized_visibility_choices(self.language)
                 if choice[0] != ReflectionComment.VISIBILITY_GROUP
             ]
 
@@ -46,9 +103,7 @@ class ReflectionCommentForm(forms.ModelForm):
         user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
         if visibility == ReflectionComment.VISIBILITY_GROUP and not user_group:
-            raise forms.ValidationError(
-                "You need to belong to a small group to share with your group."
-            )
+            raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data
 
@@ -70,6 +125,16 @@ class ReflectionReplyForm(forms.ModelForm):
             "is_anonymous": "Reply anonymously",
         }
 
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.language = normalize_language(language)
+        self.fields["body"].widget.attrs["placeholder"] = form_text(
+            self.language,
+            "write_reply",
+        )
+        self.fields["is_anonymous"].label = form_text(self.language, "reply_anonymously")
+
 
 class ReflectionCommentEditForm(forms.ModelForm):
     class Meta:
@@ -84,15 +149,19 @@ class ReflectionCommentEditForm(forms.ModelForm):
             "is_anonymous": "Post anonymously",
         }
 
-    def __init__(self, *args, user=None, is_reply=False, **kwargs):
+    def __init__(self, *args, user=None, is_reply=False, language="en", **kwargs):
         super().__init__(*args, **kwargs)
 
         self.user = user
         self.is_reply = is_reply
+        self.language = normalize_language(language)
+        self.fields["visibility"].label = form_text(self.language, "visibility")
+        self.fields["visibility"].choices = localized_visibility_choices(self.language)
+        self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")
 
         if is_reply:
             self.fields.pop("visibility", None)
-            self.fields["is_anonymous"].label = "Reply anonymously"
+            self.fields["is_anonymous"].label = form_text(self.language, "reply_anonymously")
             return
 
         user_group = getattr(getattr(user, "profile", None), "small_group", None)
@@ -100,7 +169,7 @@ class ReflectionCommentEditForm(forms.ModelForm):
         if not user_group:
             self.fields["visibility"].choices = [
                 choice
-                for choice in ReflectionComment.VISIBILITY_CHOICES
+                for choice in localized_visibility_choices(self.language)
                 if choice[0] != ReflectionComment.VISIBILITY_GROUP
             ]
 
@@ -114,9 +183,7 @@ class ReflectionCommentEditForm(forms.ModelForm):
         user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
         if visibility == ReflectionComment.VISIBILITY_GROUP and not user_group:
-            raise forms.ValidationError(
-                "You need to belong to a small group to share with your group."
-            )
+            raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data
 
@@ -135,3 +202,13 @@ class ReflectionReportForm(forms.ModelForm):
         labels = {
             "reason": "Reason",
         }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.language = normalize_language(language)
+        self.fields["reason"].label = form_text(self.language, "reason")
+        self.fields["reason"].widget.attrs["placeholder"] = form_text(
+            self.language,
+            "report_reason",
+        )

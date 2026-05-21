@@ -21,4 +21,5 @@ urlpatterns = [
     path("", include("comments.urls")),
     path("", include("reading.urls")),
     path("", include("prayers.urls")),
+    path("", include("studies.urls")),
 ]

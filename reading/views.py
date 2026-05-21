@@ -24,6 +24,7 @@ from .forms import ReadingGuidePostForm
 from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
+from studies.models import BibleStudySession
 
 def get_user_small_group(user):
     return getattr(getattr(user, "profile", None), "small_group", None)
@@ -645,12 +646,29 @@ def home(request):
             is_published=True,
         ).exists()
 
+    upcoming_study_candidates = (
+        BibleStudySession.objects
+        .select_related("series", "district", "small_group")
+        .filter(study_datetime__gte=timezone.now())
+        .exclude(status__in=[
+            BibleStudySession.STATUS_DRAFT,
+            BibleStudySession.STATUS_CANCELLED,
+        ])
+        .order_by("study_datetime")[:10]
+    )
+    upcoming_study_sessions = [
+        session
+        for session in upcoming_study_candidates
+        if session.can_be_seen_by(request.user)
+    ][:3]
+
     return render(
         request,
         "reading/home.html",
         {
             "active_plans": active_plans,
             "today_items": today_items,
+            "upcoming_study_sessions": upcoming_study_sessions,
         },
     )
 

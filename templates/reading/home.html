@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load reading_extras %}
+{% load study_extras %}
 
 {% block title %}{{ ui.today }} | {{ ui.site_title }}{% endblock %}
 
@@ -177,6 +178,39 @@
 <div class="card">
     <h2>{{ ui.no_reading_plan_yet }}</h2>
     <p class="muted">{{ ui.join_plan_to_start }}</p>
+</div>
+{% endif %}
+
+{% if upcoming_study_sessions %}
+<hr class="divider">
+
+<div class="page-header">
+    <h2 class="page-title" style="font-size: 26px;">
+        {% if language == "zh" %}查经安排{% else %}Bible Studies{% endif %}
+    </h2>
+</div>
+
+<div class="grid grid-2">
+    {% for session in upcoming_study_sessions %}
+    <div class="card">
+        <h3 class="card-title">
+            <a href="{% url 'study_session_detail' session.id %}">
+                {{ session|study_session_title:language }}
+            </a>
+        </h3>
+        {% if session.prestudy_datetime %}
+        <p class="muted">
+            {% if language == "zh" %}周四预查{% else %}Thursday Pre-study{% endif %}: {{ session.prestudy_datetime }}
+        </p>
+        {% endif %}
+        <p class="muted">
+            {% if language == "zh" %}周五查经{% else %}Friday Bible Study{% endif %}: {{ session.study_datetime }}
+        </p>
+        <a class="button button-secondary" href="{% url 'study_session_list' %}">
+            {% if language == "zh" %}查经安排{% else %}Bible Studies{% endif %}
+        </a>
+    </div>
+    {% endfor %}
 </div>
 {% endif %}
 

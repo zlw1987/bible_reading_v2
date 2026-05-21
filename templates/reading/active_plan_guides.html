@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% load reading_extras %}
+
+{% block title %}
+    {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'active_plan_intro' active_plan.id %}">
+        ← {% if language == "zh" %}返回计划介绍{% else %}Back to Plan Introduction{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}</h1>
+    <p class="page-subtitle">{{ active_plan|active_plan_name:language }}</p>
+</div>
+
+<div class="card">
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'active_plan_intro' active_plan.id %}">
+            {% if language == "zh" %}计划介绍{% else %}Plan Introduction{% endif %}
+        </a>
+        <a class="button button-secondary"
+           href="{% url 'active_plan_calendar' active_plan.id %}">
+            {% if language == "zh" %}读经日历{% else %}Calendar{% endif %}
+        </a>
+        <a class="button button-secondary"
+           href="{% url 'active_plan_detail' active_plan.id %}">
+            {% if language == "zh" %}读经日程{% else %}Schedule{% endif %}
+        </a>
+        {% if can_manage_guides %}
+        <a class="button"
+           href="{% url 'create_reading_guide_post' active_plan.id %}">
+            {% if language == "zh" %}新增读经指引{% else %}New Reading Guide{% endif %}
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if guide_posts %}
+    {% for guide_post in guide_posts %}
+    <div class="card">
+        <h2>{{ guide_post|guide_title:language }}</h2>
+        <p class="muted">
+            {{ guide_post|guide_type_label:language }}
+            {% if guide_post.week_number %}
+                · {% if language == "zh" %}周{% else %}Week{% endif %} {{ guide_post.week_number }}
+            {% endif %}
+            {% if guide_post.day_number %}
+                · {% if language == "zh" %}日{% else %}Day{% endif %} {{ guide_post.day_number }}
+            {% endif %}
+            {% if guide_post.is_pinned %}
+                · {% if language == "zh" %}置顶{% else %}Pinned{% endif %}
+            {% endif %}
+            {% if guide_post.is_published %}
+                · {% if language == "zh" %}已发布{% else %}Published{% endif %}
+            {% else %}
+                · {% if language == "zh" %}草稿{% else %}Draft{% endif %}
+            {% endif %}
+        </p>
+        <p>{{ guide_post|guide_body:language|linebreaksbr }}</p>
+
+        {% if can_manage_guides %}
+        <div class="actions">
+            <a class="button button-secondary"
+               href="{% url 'edit_reading_guide_post' guide_post.id %}">
+                {% if language == "zh" %}编辑读经指引{% else %}Edit Reading Guide{% endif %}
+            </a>
+            <form method="post"
+                  action="{% url 'delete_reading_guide_post' guide_post.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}删除{% else %}Delete{% endif %}
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <p>
+        {% if language == "zh" %}
+        目前还没有发布的读经指引。
+        {% else %}
+        No reading guides have been published yet.
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

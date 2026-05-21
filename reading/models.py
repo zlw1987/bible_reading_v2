@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -161,6 +162,89 @@ class ActivePlan(models.Model):
     def current_day_number(self):
         delta = timezone.localdate() - self.start_date
         return delta.days + 1
+
+
+class ReadingGuidePost(models.Model):
+    GUIDE_GENERAL = "general"
+    GUIDE_WEEKLY = "weekly"
+    GUIDE_DAILY = "daily"
+
+    GUIDE_TYPE_CHOICES = [
+        (GUIDE_GENERAL, "General"),
+        (GUIDE_WEEKLY, "Weekly"),
+        (GUIDE_DAILY, "Daily"),
+    ]
+
+    active_plan = models.ForeignKey(
+        ActivePlan,
+        on_delete=models.CASCADE,
+        related_name="guide_posts",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reading_guide_posts",
+    )
+    title = models.CharField(max_length=160)
+    title_en = models.CharField(max_length=160, blank=True, default="")
+    body = models.TextField()
+    body_en = models.TextField(blank=True, default="")
+    guide_type = models.CharField(
+        max_length=20,
+        choices=GUIDE_TYPE_CHOICES,
+        default=GUIDE_GENERAL,
+    )
+    week_number = models.PositiveIntegerField(null=True, blank=True)
+    day_number = models.PositiveIntegerField(null=True, blank=True)
+    is_pinned = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_pinned", "-published_at", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        errors = {}
+
+        if self.guide_type == self.GUIDE_GENERAL:
+            if self.week_number:
+                errors["week_number"] = "General guide posts cannot have a week number."
+            if self.day_number:
+                errors["day_number"] = "General guide posts cannot have a day number."
+        elif self.guide_type == self.GUIDE_WEEKLY:
+            if not self.week_number:
+                errors["week_number"] = "Weekly guide posts require a week number."
+            if self.day_number:
+                errors["day_number"] = "Weekly guide posts cannot have a day number."
+        elif self.guide_type == self.GUIDE_DAILY:
+            if not self.day_number:
+                errors["day_number"] = "Daily guide posts require a day number."
+            if self.week_number:
+                errors["week_number"] = "Daily guide posts cannot have a week number."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def get_title(self, language="zh"):
+        if language == "en" and self.title_en:
+            return self.title_en
+        return self.title
+
+    def get_body(self, language="zh"):
+        if language == "en" and self.body_en:
+            return self.body_en
+        return self.body
 
 
 class PlanEnrollment(models.Model):

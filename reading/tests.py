@@ -3,19 +3,21 @@ import tempfile
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import User
 
-from accounts.models import SmallGroup
+from accounts.models import ChurchRoleAssignment, District, SmallGroup
 from comments.models import ReflectionComment
 from reading.bible_sources import parse_reading_text
 from reading.models import (
     ActivePlan,
     CheckIn,
     PlanEnrollment,
+    ReadingGuidePost,
     ReadingPlan,
     ReadingPlanDay,
 )
@@ -793,6 +795,19 @@ class BibleReadingFlowTests(TestCase):
         session["language"] = language
         session.save()
 
+    def create_guide_publisher(self, username="pastor_user"):
+        publisher = User.objects.create_user(
+            username=username,
+            email=f"{username}@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=publisher,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        return publisher
+
     def test_login_required_for_home(self):
         response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 302)
@@ -983,6 +998,328 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Overview")
         self.assertContains(response, "How to Read")
         self.assertContains(response, "Reading Guidance")
+
+    def test_regular_enrolled_user_can_view_published_guide_posts(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="本周提醒",
+            title_en="This Week's Focus",
+            body="中文内容",
+            body_en="Notice the signs in John.",
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Guides")
+        self.assertContains(response, "This Week&#x27;s Focus")
+
+    def test_regular_enrolled_user_cannot_view_draft_guide_posts(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Draft Guide",
+            body="Draft body",
+            is_published=False,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Draft Guide")
+
+    def test_non_enrolled_user_can_view_published_guides_for_active_plan(self):
+        self.set_language("en")
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Open Guide",
+            body="Visible before joining.",
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Open Guide")
+
+    def test_non_enrolled_regular_user_cannot_view_guides_for_inactive_plan(self):
+        self.plan.is_active = False
+        self.plan.save()
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Inactive Guide",
+            body="Hidden",
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("home"))
+
+    def test_staff_can_view_guides_for_inactive_plan(self):
+        self.plan.is_active = False
+        self.plan.save()
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Staff Guide",
+            body="Visible to staff",
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.set_language("en")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff Guide")
+
+    def test_user_without_publish_capability_cannot_access_create_guide_page(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_reading_guide_post", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+    def test_user_with_pastor_role_can_access_create_guide_page(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        self.client.login(username="pastor_user", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_reading_guide_post", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New Reading Guide")
+
+    def test_user_with_capability_can_create_published_guide_post(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        self.client.login(username="pastor_user", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_reading_guide_post", args=[self.active_plan.id]),
+            {
+                "title": "Published Guide",
+                "title_en": "Published Guide EN",
+                "body": "中文指引",
+                "body_en": "English guide",
+                "guide_type": ReadingGuidePost.GUIDE_GENERAL,
+                "is_published": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        guide_post = ReadingGuidePost.objects.get(title="Published Guide")
+        self.assertTrue(guide_post.is_published)
+        self.assertIsNotNone(guide_post.published_at)
+
+    def test_user_with_capability_can_create_draft_guide_post(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        self.client.login(username="pastor_user", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_reading_guide_post", args=[self.active_plan.id]),
+            {
+                "title": "Draft Guide",
+                "body": "Draft body",
+                "guide_type": ReadingGuidePost.GUIDE_GENERAL,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        guide_post = ReadingGuidePost.objects.get(title="Draft Guide")
+        self.assertFalse(guide_post.is_published)
+        self.assertIsNone(guide_post.published_at)
+
+    def test_draft_guide_visible_to_capability_user_but_not_regular_user(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Internal Draft",
+            body="Only publishers should see this.",
+            is_published=False,
+        )
+
+        self.client.login(username="pastor_user", password="testpass123")
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+        self.assertContains(response, "Internal Draft")
+        self.client.logout()
+
+        self.client.login(username="levin", password="testpass123")
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+        self.assertNotContains(response, "Internal Draft")
+
+    def test_user_with_capability_can_edit_guide_post(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        guide_post = ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Original Guide",
+            body="Original body",
+            is_published=False,
+        )
+
+        self.client.login(username="pastor_user", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_reading_guide_post", args=[guide_post.id]),
+            {
+                "title": "Edited Guide",
+                "body": "Edited body",
+                "guide_type": ReadingGuidePost.GUIDE_GENERAL,
+                "is_published": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        guide_post.refresh_from_db()
+        self.assertEqual(guide_post.title, "Edited Guide")
+        self.assertTrue(guide_post.is_published)
+        self.assertIsNotNone(guide_post.published_at)
+
+    def test_user_with_capability_can_delete_guide_post(self):
+        self.set_language("en")
+        self.create_guide_publisher()
+        guide_post = ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="Delete Me",
+            body="Delete body",
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.client.login(username="pastor_user", password="testpass123")
+
+        response = self.client.post(
+            reverse("delete_reading_guide_post", args=[guide_post.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ReadingGuidePost.objects.filter(id=guide_post.id).exists())
+
+    def test_reading_guide_post_type_validation(self):
+        weekly = ReadingGuidePost(
+            active_plan=self.active_plan,
+            title="Weekly",
+            body="Body",
+            guide_type=ReadingGuidePost.GUIDE_WEEKLY,
+        )
+        daily = ReadingGuidePost(
+            active_plan=self.active_plan,
+            title="Daily",
+            body="Body",
+            guide_type=ReadingGuidePost.GUIDE_DAILY,
+        )
+        general = ReadingGuidePost(
+            active_plan=self.active_plan,
+            title="General",
+            body="Body",
+            guide_type=ReadingGuidePost.GUIDE_GENERAL,
+            week_number=1,
+        )
+
+        with self.assertRaises(ValidationError):
+            weekly.full_clean()
+        with self.assertRaises(ValidationError):
+            daily.full_clean()
+        with self.assertRaises(ValidationError):
+            general.full_clean()
+
+    def test_chinese_guide_page_contains_chinese_labels(self):
+        self.set_language("zh")
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="置顶指引",
+            body="请留意约翰福音中的记号。",
+            is_pinned=True,
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "读经指引")
+        self.assertContains(response, "置顶")
+        self.assertContains(response, "已发布")
+
+    def test_english_guide_page_contains_english_labels(self):
+        self.set_language("en")
+        ReadingGuidePost.objects.create(
+            active_plan=self.active_plan,
+            title="置顶指引",
+            title_en="Pinned Guide",
+            body="中文内容",
+            body_en="English body",
+            is_pinned=True,
+            is_published=True,
+            published_at=timezone.now(),
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_guides", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reading Guides")
+        self.assertContains(response, "Pinned")
+        self.assertContains(response, "Published")
+
+    def test_active_plan_intro_page_links_to_guides(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_intro", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("active_plan_guides", args=[self.active_plan.id]))
 
     def test_enrolled_user_can_view_plan_detail(self):
         PlanEnrollment.objects.create(
@@ -1292,6 +1629,107 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "levin")
         self.assertContains(response, "other")
         self.assertContains(response, "Not joined")
+
+    def test_group_leader_can_view_assigned_group_progress(self):
+        self.set_language("en")
+        leader = User.objects.create_user(
+            username="group_leader",
+            email="leader@example.com",
+            password="testpass123",
+        )
+        assigned_group = SmallGroup.objects.create(name="Assigned Group")
+        other_group = SmallGroup.objects.create(name="Outside Group")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=assigned_group,
+        )
+
+        self.client.login(username="group_leader", password="testpass123")
+
+        response = self.client.get(reverse("my_group_progress"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Assigned Group")
+        self.assertNotContains(response, "Outside Group")
+
+    def test_district_leader_can_select_group_in_assigned_district(self):
+        self.set_language("en")
+        district = District.objects.create(name="North District")
+        group_a = SmallGroup.objects.create(name="North Group A", district=district)
+        group_b = SmallGroup.objects.create(name="North Group B", district=district)
+        leader = User.objects.create_user(
+            username="district_leader",
+            email="district@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+        self.client.login(username="district_leader", password="testpass123")
+
+        response = self.client.get(
+            reverse("my_group_progress"),
+            {"group": group_b.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "North Group A")
+        self.assertContains(response, "North Group B")
+        self.assertContains(response, f'value="{group_b.id}" selected')
+
+    def test_district_leader_cannot_access_group_outside_district(self):
+        self.set_language("en")
+        district = District.objects.create(name="East District")
+        outside_district = District.objects.create(name="West District")
+        inside_group = SmallGroup.objects.create(name="East Group", district=district)
+        outside_group = SmallGroup.objects.create(
+            name="West Group",
+            district=outside_district,
+        )
+        leader = User.objects.create_user(
+            username="limited_leader",
+            email="limited@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+        self.client.login(username="limited_leader", password="testpass123")
+
+        response = self.client.get(
+            reverse("my_group_progress"),
+            {"group": outside_group.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "East Group")
+        self.assertNotContains(response, "West Group")
+        self.assertEqual(response.context["selected_group"], inside_group)
+
+    def test_staff_can_select_any_group_progress(self):
+        self.set_language("en")
+        other_group = SmallGroup.objects.create(name="Staff Visible Group")
+
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("my_group_progress"),
+            {"group": other_group.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff Visible Group")
+        self.assertEqual(response.context["selected_group"], other_group)
 
     def test_home_shows_rest_day_when_today_has_no_plan_day(self):
         PlanEnrollment.objects.create(

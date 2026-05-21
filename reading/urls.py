@@ -12,6 +12,22 @@ urlpatterns = [
         name="active_plan_calendar",
     ),
     path("plans/<int:active_plan_id>/intro/", views.active_plan_intro, name="active_plan_intro"),
+    path("plans/<int:active_plan_id>/guides/", views.active_plan_guides, name="active_plan_guides"),
+    path(
+        "plans/<int:active_plan_id>/guides/new/",
+        views.create_reading_guide_post,
+        name="create_reading_guide_post",
+    ),
+    path(
+        "plans/guides/<int:guide_id>/edit/",
+        views.edit_reading_guide_post,
+        name="edit_reading_guide_post",
+    ),
+    path(
+        "plans/guides/<int:guide_id>/delete/",
+        views.delete_reading_guide_post,
+        name="delete_reading_guide_post",
+    ),
     path("plans/<int:active_plan_id>/", views.active_plan_detail, name="active_plan_detail"),
     path("plans/<int:active_plan_id>/join/", views.join_active_plan, name="join_active_plan"),
     path("plans/<int:active_plan_id>/leave/", views.leave_active_plan, name="leave_active_plan"),

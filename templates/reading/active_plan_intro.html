@@ -67,6 +67,48 @@
 </div>
 
 <div class="card">
+    <h2>{% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}</h2>
+    {% if guide_posts %}
+        {% for guide_post in guide_posts %}
+        <div>
+            <h3>{{ guide_post|guide_title:language }}</h3>
+            <p class="muted">
+                {% if guide_post.is_pinned %}
+                    {% if language == "zh" %}置顶{% else %}Pinned{% endif %} ·
+                {% endif %}
+                {% if guide_post.is_published %}
+                    {% if language == "zh" %}已发布{% else %}Published{% endif %}
+                {% else %}
+                    {% if language == "zh" %}草稿{% else %}Draft{% endif %}
+                {% endif %}
+            </p>
+            <p>{{ guide_post|guide_body:language|truncatewords:40 }}</p>
+        </div>
+        {% endfor %}
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+        目前还没有发布的读经指引。
+        {% else %}
+        No reading guides have been published yet.
+        {% endif %}
+    </p>
+    {% endif %}
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'active_plan_guides' active_plan.id %}">
+            {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+        </a>
+        {% if can_manage_guides %}
+        <a class="button button-secondary"
+           href="{% url 'active_plan_guides' active_plan.id %}">
+            {% if language == "zh" %}管理指引{% else %}Manage Guides{% endif %}
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
     <h2>{% if language == "zh" %}计划流程{% else %}Plan Flow{% endif %}</h2>
     <p>
         {% if language == "zh" %}

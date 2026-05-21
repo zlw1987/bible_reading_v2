@@ -41,6 +41,11 @@
                 <a class="button button-secondary" href="{% url 'active_plan_intro' item.active_plan.id %}">
                     {% if language == "zh" %}了解计划{% else %}Learn More{% endif %}
                 </a>
+                {% if item.has_pinned_guide %}
+                <a class="button button-secondary" href="{% url 'active_plan_guides' item.active_plan.id %}">
+                    {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+                </a>
+                {% endif %}
                 <a class="button button-secondary"
                    href="{% url 'active_plan_calendar' item.active_plan.id %}">
                     {% if language == "zh" %}日历{% else %}Calendar{% endif %}
@@ -193,6 +198,11 @@
             <a class="button button-secondary" href="{% url 'active_plan_intro' active_plan.id %}">
                 {% if language == "zh" %}了解计划{% else %}Learn More{% endif %}
             </a>
+            {% if active_plan.has_pinned_guide %}
+            <a class="button button-secondary" href="{% url 'active_plan_guides' active_plan.id %}">
+                {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+            </a>
+            {% endif %}
         </p>
 
         <form method="post" action="{% url 'join_active_plan' active_plan.id %}">

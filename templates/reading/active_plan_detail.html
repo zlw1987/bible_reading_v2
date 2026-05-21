@@ -17,6 +17,10 @@
            href="{% url 'active_plan_intro' active_plan.id %}">
             {% if language == "zh" %}计划介绍{% else %}Plan Introduction{% endif %}
         </a>
+        <a class="button button-secondary"
+           href="{% url 'active_plan_guides' active_plan.id %}">
+            {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+        </a>
     </div>
 </div>
 

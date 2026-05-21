@@ -29,7 +29,7 @@
 </div>
 {% endif %}
 
-{% if user.is_staff and groups %}
+{% if groups|length > 1 %}
 <form method="get" class="card">
     <label for="group">Group</label>
     <select name="group" id="group">
@@ -50,7 +50,7 @@
 
 {% if active_plans %}
 <form method="get" class="card">
-    {% if user.is_staff and selected_group %}
+    {% if selected_group %}
     <input type="hidden" name="group" value="{{ selected_group.id }}">
     {% endif %}
 

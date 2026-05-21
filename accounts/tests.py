@@ -1,8 +1,17 @@
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import SmallGroup
+from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from accounts.permissions import (
+    CAP_PUBLISH_READING_GUIDES,
+    CAP_VIEW_ALL_GROUP_PROGRESS,
+    CAP_VIEW_DISTRICT_PROGRESS,
+    CAP_VIEW_GROUP_PROGRESS,
+    get_accessible_progress_groups,
+    has_capability,
+)
 
 class AccountProfileTests(TestCase):
     def setUp(self):
@@ -193,6 +202,117 @@ class AccountProfileTests(TestCase):
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200)
 
+
+class ChurchRolePermissionTests(TestCase):
+    def setUp(self):
+        self.district = District.objects.create(name="North")
+        self.other_district = District.objects.create(name="South")
+        self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.district)
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            district=self.other_district,
+        )
+        self.user = User.objects.create_user(
+            username="member",
+            password="TestPass123!",
+        )
+        self.staff = User.objects.create_user(
+            username="staff_roles",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+    def test_district_can_be_created_and_assigned_to_small_group(self):
+        self.assertEqual(str(self.district), "North")
+        self.assertEqual(self.group.district, self.district)
+        self.assertIn(self.group, self.district.small_groups.all())
+
+    def test_global_scope_rejects_district_or_small_group(self):
+        assignment = ChurchRoleAssignment(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+            district=self.district,
+            small_group=self.group,
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    def test_district_scope_requires_district(self):
+        assignment = ChurchRoleAssignment(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    def test_small_group_scope_requires_small_group(self):
+        assignment = ChurchRoleAssignment(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+        )
+
+        with self.assertRaises(ValidationError):
+            assignment.full_clean()
+
+    def test_staff_has_all_capabilities(self):
+        self.assertTrue(has_capability(self.staff, CAP_PUBLISH_READING_GUIDES))
+        self.assertTrue(has_capability(self.staff, CAP_VIEW_ALL_GROUP_PROGRESS))
+        self.assertTrue(has_capability(self.staff, CAP_VIEW_DISTRICT_PROGRESS))
+        self.assertTrue(has_capability(self.staff, CAP_VIEW_GROUP_PROGRESS))
+
+    def test_regular_user_without_role_has_no_capabilities(self):
+        self.assertFalse(has_capability(self.user, CAP_PUBLISH_READING_GUIDES))
+        self.assertFalse(has_capability(self.user, CAP_VIEW_ALL_GROUP_PROGRESS))
+
+    def test_pastor_assignment_grants_expected_capabilities(self):
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.assertTrue(has_capability(self.user, CAP_PUBLISH_READING_GUIDES))
+        self.assertTrue(has_capability(self.user, CAP_VIEW_ALL_GROUP_PROGRESS))
+
+    def test_district_leader_gets_only_assigned_district_groups(self):
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=self.district,
+        )
+
+        groups = list(get_accessible_progress_groups(self.user))
+
+        self.assertIn(self.group, groups)
+        self.assertNotIn(self.other_group, groups)
+
+    def test_group_leader_gets_only_assigned_small_group(self):
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        groups = list(get_accessible_progress_groups(self.user))
+
+        self.assertEqual(groups, [self.group])
+
+    def test_regular_user_gets_own_profile_small_group(self):
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        groups = list(get_accessible_progress_groups(self.user))
+
+        self.assertEqual(groups, [self.group])
+
+
 class StaffPasswordResetTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
@@ -368,4 +488,3 @@ class AccountSignupLanguageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email (optional)")
         self.assertContains(response, "Small group")
-

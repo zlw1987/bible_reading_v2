@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}
+        {% if language == "zh" %}编辑读经指引{% else %}Edit Reading Guide{% endif %}
+    {% else %}
+        {% if language == "zh" %}新增读经指引{% else %}New Reading Guide{% endif %}
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'active_plan_guides' active_plan.id %}">
+        ← {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_edit %}
+            {% if language == "zh" %}编辑读经指引{% else %}Edit Reading Guide{% endif %}
+        {% else %}
+            {% if language == "zh" %}新增读经指引{% else %}New Reading Guide{% endif %}
+        {% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}牧者 / 同工指引{% else %}Pastoral / Coworker Guidance{% endif %}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary"
+           href="{% url 'active_plan_guides' active_plan.id %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

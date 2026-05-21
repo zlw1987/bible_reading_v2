@@ -12,15 +12,57 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 from accounts.models import SmallGroup
+from accounts.permissions import (
+    CAP_PUBLISH_READING_GUIDES,
+    get_accessible_progress_groups,
+    has_capability,
+)
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
 
+from .forms import ReadingGuidePostForm
 from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
-from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingPlanDay
+from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
 
 def get_user_small_group(user):
     return getattr(getattr(user, "profile", None), "small_group", None)
+
+
+def can_publish_reading_guides(user):
+    return has_capability(user, CAP_PUBLISH_READING_GUIDES)
+
+
+def reading_guide_ui_message(language, key):
+    messages_by_language = {
+        "en": {
+            "not_available": "This reading plan is not available.",
+            "no_permission": "You do not have permission to publish reading guides.",
+            "saved": "Reading guide saved.",
+            "deleted": "Reading guide deleted.",
+        },
+        "zh": {
+            "not_available": "这个读经计划目前不可用。",
+            "no_permission": "你没有发布读经指引的权限。",
+            "saved": "读经指引已保存。",
+            "deleted": "读经指引已删除。",
+        },
+    }
+
+    return messages_by_language.get(language, messages_by_language["en"])[key]
+
+
+def user_can_view_active_plan_intro(user, active_plan):
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    if active_plan.plan.is_active:
+        return True
+
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return True
+
+    return PlanEnrollment.objects.filter(user=user, active_plan=active_plan).exists()
 
 
 def get_visible_reflection_filter(user):
@@ -293,8 +335,11 @@ def active_plan_intro(request, active_plan_id):
         active_plan=active_plan,
     ).exists()
 
-    if not active_plan.plan.is_active and not (is_enrolled or request.user.is_staff):
-        messages.error(request, "This reading plan is not available.")
+    if not user_can_view_active_plan_intro(request.user, active_plan):
+        messages.error(
+            request,
+            reading_guide_ui_message(get_user_language(request), "not_available"),
+        )
         return redirect("home")
 
     language = get_user_language(request)
@@ -333,6 +378,11 @@ def active_plan_intro(request, active_plan_id):
     introduction = active_plan.plan.get_introduction(language)
     reading_guidance = active_plan.plan.get_reading_guidance(language)
     pastoral_note = active_plan.plan.get_pastoral_note(language)
+    can_manage_guides = can_publish_reading_guides(request.user)
+    guide_posts = active_plan.guide_posts.all()
+    if not can_manage_guides:
+        guide_posts = guide_posts.filter(is_published=True)
+    guide_posts = guide_posts.select_related("author")[:3]
 
     return render(
         request,
@@ -352,8 +402,149 @@ def active_plan_intro(request, active_plan_id):
             "introduction": introduction,
             "reading_guidance": reading_guidance,
             "pastoral_note": pastoral_note,
+            "guide_posts": guide_posts,
+            "can_manage_guides": can_manage_guides,
         },
     )
+
+
+@login_required
+def active_plan_guides(request, active_plan_id):
+    active_plan = get_object_or_404(
+        ActivePlan.objects.select_related("plan"),
+        id=active_plan_id,
+    )
+
+    can_manage_guides = can_publish_reading_guides(request.user)
+
+    if not (user_can_view_active_plan_intro(request.user, active_plan) or can_manage_guides):
+        messages.error(
+            request,
+            reading_guide_ui_message(get_user_language(request), "not_available"),
+        )
+        return redirect("home")
+
+    guide_posts = active_plan.guide_posts.select_related("author")
+    if not can_manage_guides:
+        guide_posts = guide_posts.filter(is_published=True)
+
+    return render(
+        request,
+        "reading/active_plan_guides.html",
+        {
+            "active_plan": active_plan,
+            "guide_posts": guide_posts,
+            "can_manage_guides": can_manage_guides,
+        },
+    )
+
+
+@login_required
+def create_reading_guide_post(request, active_plan_id):
+    active_plan = get_object_or_404(
+        ActivePlan.objects.select_related("plan"),
+        id=active_plan_id,
+    )
+
+    if not can_publish_reading_guides(request.user):
+        messages.error(
+            request,
+            reading_guide_ui_message(get_user_language(request), "no_permission"),
+        )
+        return redirect("active_plan_guides", active_plan_id=active_plan.id)
+
+    language = get_user_language(request)
+
+    if request.method == "POST":
+        form = ReadingGuidePostForm(request.POST, language=language)
+        if form.is_valid():
+            guide_post = form.save(commit=False)
+            guide_post.active_plan = active_plan
+            guide_post.author = request.user
+            if guide_post.is_published and not guide_post.published_at:
+                guide_post.published_at = timezone.now()
+            guide_post.save()
+            messages.success(request, reading_guide_ui_message(language, "saved"))
+            return redirect("active_plan_guides", active_plan_id=active_plan.id)
+    else:
+        form = ReadingGuidePostForm(language=language)
+
+    return render(
+        request,
+        "reading/guide_post_form.html",
+        {
+            "active_plan": active_plan,
+            "form": form,
+            "is_edit": False,
+        },
+    )
+
+
+@login_required
+def edit_reading_guide_post(request, guide_id):
+    guide_post = get_object_or_404(
+        ReadingGuidePost.objects.select_related("active_plan", "active_plan__plan"),
+        id=guide_id,
+    )
+
+    if not can_publish_reading_guides(request.user):
+        messages.error(
+            request,
+            reading_guide_ui_message(get_user_language(request), "no_permission"),
+        )
+        return redirect("active_plan_guides", active_plan_id=guide_post.active_plan_id)
+
+    language = get_user_language(request)
+
+    if request.method == "POST":
+        form = ReadingGuidePostForm(
+            request.POST,
+            instance=guide_post,
+            language=language,
+        )
+        if form.is_valid():
+            guide_post = form.save(commit=False)
+            if guide_post.is_published and not guide_post.published_at:
+                guide_post.published_at = timezone.now()
+            guide_post.save()
+            messages.success(request, reading_guide_ui_message(language, "saved"))
+            return redirect("active_plan_guides", active_plan_id=guide_post.active_plan_id)
+    else:
+        form = ReadingGuidePostForm(instance=guide_post, language=language)
+
+    return render(
+        request,
+        "reading/guide_post_form.html",
+        {
+            "active_plan": guide_post.active_plan,
+            "guide_post": guide_post,
+            "form": form,
+            "is_edit": True,
+        },
+    )
+
+
+@login_required
+def delete_reading_guide_post(request, guide_id):
+    guide_post = get_object_or_404(ReadingGuidePost, id=guide_id)
+    active_plan_id = guide_post.active_plan_id
+
+    if not can_publish_reading_guides(request.user):
+        messages.error(
+            request,
+            reading_guide_ui_message(get_user_language(request), "no_permission"),
+        )
+        return redirect("active_plan_guides", active_plan_id=active_plan_id)
+
+    if request.method != "POST":
+        return redirect("active_plan_guides", active_plan_id=active_plan_id)
+
+    guide_post.delete()
+    messages.success(
+        request,
+        reading_guide_ui_message(get_user_language(request), "deleted"),
+    )
+    return redirect("active_plan_guides", active_plan_id=active_plan_id)
 
 
 @login_required
@@ -428,6 +619,10 @@ def home(request):
         today_items.append(
             {
                 "active_plan": active_plan,
+                "has_pinned_guide": active_plan.guide_posts.filter(
+                    is_pinned=True,
+                    is_published=True,
+                ).exists(),
                 "current_day_number": current_day_number,
                 "max_day_number": max_day_number,
                 "plan_day": plan_day,
@@ -443,6 +638,12 @@ def home(request):
                 "progress_percent": progress_percent,
             }
         )
+
+    for active_plan in active_plans:
+        active_plan.has_pinned_guide = active_plan.guide_posts.filter(
+            is_pinned=True,
+            is_published=True,
+        ).exists()
 
     return render(
         request,
@@ -809,24 +1010,19 @@ def check_in(request, active_plan_id, plan_day_id):
 def my_group_progress(request):
     User = get_user_model()
     user_profile = getattr(request.user, "profile", None)
-    groups = SmallGroup.objects.filter(is_active=True).order_by("name")
+    groups = get_accessible_progress_groups(request.user)
 
     selected_group = None
+    group_id = request.GET.get("group")
 
-    if request.user.is_staff:
-        group_id = request.GET.get("group")
+    if group_id:
+        selected_group = groups.filter(id=group_id).first()
 
-        if group_id:
-            selected_group = groups.filter(id=group_id).first()
+    if selected_group is None and user_profile and user_profile.small_group:
+        selected_group = groups.filter(id=user_profile.small_group_id).first()
 
-        if selected_group is None:
-            selected_group = (
-                user_profile.small_group
-                if user_profile and user_profile.small_group
-                else groups.first()
-            )
-    else:
-        selected_group = user_profile.small_group if user_profile else None
+    if selected_group is None:
+        selected_group = groups.first()
 
     if selected_group is None:
         return render(

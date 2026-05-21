@@ -8,6 +8,7 @@ from .models import (
     ReadingPlan,
     ReadingPlanDay,
     ActivePlan,
+    ReadingGuidePost,
     PlanEnrollment,
     CheckIn,
     ReadingPlanDayPassage,
@@ -116,6 +117,32 @@ class ActivePlanAdmin(admin.ModelAdmin):
     list_display = ("__str__", "plan", "start_date")
     list_filter = ("plan", "start_date")
     search_fields = ("title", "plan__name")
+
+
+@admin.register(ReadingGuidePost)
+class ReadingGuidePostAdmin(admin.ModelAdmin):
+    list_display = (
+        "active_plan",
+        "guide_type",
+        "title",
+        "author",
+        "is_pinned",
+        "is_published",
+        "published_at",
+        "created_at",
+    )
+    list_filter = ("guide_type", "is_pinned", "is_published", "active_plan")
+    search_fields = (
+        "title",
+        "title_en",
+        "body",
+        "body_en",
+        "author__username",
+        "active_plan__title",
+        "active_plan__plan__name",
+        "active_plan__plan__name_en",
+    )
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(PlanEnrollment)

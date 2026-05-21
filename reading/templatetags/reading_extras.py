@@ -40,6 +40,44 @@ def passage_display(passage, language):
 
     return passage.get("display_zh") or passage.get("display")
 
+
+@register.filter
+def guide_title(guide_post, language):
+    if not guide_post:
+        return ""
+
+    return guide_post.get_title(language)
+
+
+@register.filter
+def guide_body(guide_post, language):
+    if not guide_post:
+        return ""
+
+    return guide_post.get_body(language)
+
+
+@register.filter
+def guide_type_label(guide_post, language):
+    if not guide_post:
+        return ""
+
+    if language == "zh":
+        labels = {
+            "general": "通用",
+            "weekly": "每周",
+            "daily": "每日",
+        }
+    else:
+        labels = {
+            "general": "General",
+            "weekly": "Weekly",
+            "daily": "Daily",
+        }
+
+    return labels.get(guide_post.guide_type, guide_post.guide_type)
+
+
 @register.filter
 def comment_author(comment, viewer):
     if not comment:

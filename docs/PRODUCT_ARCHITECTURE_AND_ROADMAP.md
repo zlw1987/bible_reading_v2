@@ -6,13 +6,17 @@ This project is a lightweight church spiritual life and ministry workflow system
 It started as a Bible reading check-in app. The current core remains Daily Reading, but the roadmap includes Prayer, Bible Study, Worship Set planning, and Ministry Team Operations.
 It is not intended to become a full church ERP.
 
-The app should support spiritual practices and practical ministry coordination: daily Scripture reading, prayer, reflection, group encouragement, and eventually focused ministry workflows. It should stay simple, pastoral, and workflow-oriented rather than becoming a broad administrative system.
+The app should support spiritual practices and practical ministry coordination: daily Scripture reading, prayer, reflection, group encouragement, Bible study preparation, and eventually focused ministry workflows. It should stay simple, pastoral, and workflow-oriented rather than becoming a broad administrative system.
 
 ## 2. Current Status
 
-Daily Reading Core V1 is feature complete and entering closure/stabilization.
+Daily Reading Core V1 is feature complete and in closure/stabilization.
 
-Prayer V1 is core-complete and entering stabilization.
+Prayer V1 is core-complete and in stabilization.
+
+Bible Study Module V1 is implemented and entering QA/stabilization.
+
+Bible Study Worship Set V1 is implemented and entering QA/stabilization.
 
 The role/scoped permission foundation exists.
 
@@ -20,7 +24,11 @@ Navigation cleanup is complete.
 
 Reading Guide Posts are implemented.
 
-The entire project is not complete. The stable center is Daily Reading and Prayer; future modules should be added deliberately and kept within clear boundaries.
+The next major product phase is ServiceEvent Foundation.
+
+Ministry Team Operations and Lighting Team Pilot are still future phases.
+
+The entire project is not complete. The stable center is Daily Reading, Prayer, and Bible Study; future modules should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -66,7 +74,7 @@ Does not include:
 
 ### C. Bible Study
 
-Future module.
+Implemented V1 module.
 
 Includes:
 - Bible study series
@@ -76,12 +84,13 @@ Includes:
 - Scripture reference
 - Study guide
 - Discussion questions
-- Draft/published workflow
+- Draft/published/completed/cancelled workflow
 - Scope: global / district / small_group
+- Permission-controlled editing
 
 ### D. Bible Study Worship Set
 
-Future module. Belongs to Bible Study sessions.
+Implemented V1 module. Belongs to Bible Study sessions.
 
 Includes:
 - Songs before Bible study
@@ -90,7 +99,9 @@ Includes:
 - Key
 - YouTube link
 - Chord link
+- Lyrics link
 - Pianist / worship lead notes
+- Manager-only editing
 
 Does not include in V1:
 - Full song library
@@ -146,6 +157,34 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 - Edit / delete
 - Report / hide / moderation
 
+### Bible Study
+
+- BibleStudySeries
+- BibleStudySession
+- BibleStudyGuide
+- Thursday pre-study date/time
+- Friday study date/time
+- Scripture reference
+- Study guide
+- Discussion questions
+- Draft/published/completed/cancelled workflow
+- Global/district/small_group scope
+- Bilingual UI
+- Permission-controlled editing
+
+### Bible Study Worship Set
+
+- Session-level worship songs
+- Song order
+- Title / title_en
+- Key
+- YouTube link
+- Chord link
+- Lyrics link
+- Notes
+- Bilingual display
+- Manager-only editing
+
 ### Accounts / Permissions
 
 - Profile
@@ -160,17 +199,18 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 Current phase:
 
-Reading and Prayer V1 closure / stabilization.
+Reading, Prayer, Bible Study, and Bible Study Worship Set V1 closure / QA / stabilization.
 
-Next product phase:
+Next major product phase:
 
-Bible Study Module V1.
+ServiceEvent Foundation.
 
 Before new large features:
 - Keep tests passing.
 - Preserve bilingual behavior.
 - Avoid top-nav clutter.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
+- Keep Bible Study from becoming a full event or ministry scheduling system.
 
 ## 6. Roadmap
 
@@ -187,7 +227,7 @@ Tasks:
 
 ### Phase 2: Prayer V1 Stabilization
 
-Status: mostly complete.
+Status: mostly complete / stabilization.
 
 Tasks:
 - UI polish
@@ -196,7 +236,7 @@ Tasks:
 
 ### Phase 3: Bible Study Module V1
 
-Next major feature.
+Status: implemented / QA.
 
 Includes:
 - BibleStudySeries
@@ -206,11 +246,13 @@ Includes:
 - Scripture reference
 - Study guide
 - Discussion questions
-- Draft/published status
+- Draft/published/completed/cancelled status
 - Scope: global / district / small_group
 - Permission-controlled editing
 
 ### Phase 4: Bible Study Worship Set V1
+
+Status: implemented / QA.
 
 Includes:
 - Session-level worship songs
@@ -219,11 +261,14 @@ Includes:
 - Key
 - YouTube link
 - Chord link
+- Lyrics link
 - Worship lead / pianist notes
 
-Do not build a full song library yet.
+Do not build a full song library.
 
 ### Phase 5: ServiceEvent Foundation
+
+Status: next major development phase.
 
 Includes:
 - Generic church event abstraction
@@ -238,6 +283,8 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
+Status: future.
+
 Includes:
 - MinistryTeam
 - TeamMembership
@@ -250,6 +297,8 @@ Includes:
 Lighting Team is the pilot, but models must remain generic.
 
 ### Phase 7: Lighting Team Pilot
+
+Status: future.
 
 Only import or model:
 - Future 2-3 months of assignments
@@ -310,13 +359,13 @@ Capabilities are granted through active ChurchRoleAssignment rows, plus staff/su
 
 Existing examples:
 - CAP_PUBLISH_READING_GUIDES
+- CAP_MANAGE_BIBLE_STUDIES
+- CAP_PUBLISH_BIBLE_STUDY_GUIDES
 - View group/district/all progress capabilities
 - Moderation capabilities
 - Manage reading plans / users where applicable
 
 Future capabilities may include:
-- CAP_MANAGE_BIBLE_STUDIES
-- CAP_PUBLISH_BIBLE_STUDY_GUIDES
 - CAP_MANAGE_SERVICE_EVENTS
 - CAP_MANAGE_MINISTRY_TEAMS
 - CAP_MANAGE_TEAM_ASSIGNMENTS
@@ -352,18 +401,20 @@ For feature tasks:
 
 ## 11. Next Recommended Work
 
-Next recommended development task after this document:
+Next documentation/QA task:
 
-Reading Module Closure Checklist.
+Bible Study V1 QA Checklist.
 
-Then:
+Next major development task after QA:
 
-Bible Study Module V1.
+ServiceEvent Foundation.
 
 Not next:
 - Lighting Team scheduling
-- Full Ministry Operations
-- Full ServiceEvent expansion
+- MinistryTeam Operations
+- Automatic scheduling
+- Full worship song library
 
-Suggested next docs:
+Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`
+- `docs/BIBLE_STUDY_V1_QA_CHECKLIST.md`

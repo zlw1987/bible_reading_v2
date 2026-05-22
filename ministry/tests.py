@@ -1,6 +1,11 @@
+from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
 from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -889,3 +894,218 @@ class TeamAssignmentV1Tests(TestCase):
     def test_no_lighting_team_model_exists(self):
         with self.assertRaises(LookupError):
             apps.get_model("ministry", "LightingTeam")
+
+
+class LightingPilotImportCommandTests(TestCase):
+    def setUp(self):
+        self.future_date = timezone.localdate() + timezone.timedelta(days=30)
+        self.linked_user = User.objects.create_user(
+            username="linked_lighting",
+            email="linked-lighting@example.com",
+            password="testpass123",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def write_csv(self, content):
+        temp_dir = TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        path = Path(temp_dir.name) / "lighting_pilot.csv"
+        path.write_text(content, encoding="utf-8")
+        return str(path)
+
+    def csv_content(self, **overrides):
+        row = {
+            "event_date": self.future_date.isoformat(),
+            "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
+            "event_title": "Pilot Sunday Service",
+            "start_time": "10:00",
+            "end_time": "11:30",
+            "service_detail": "Main sanctuary service.",
+            "special_event_note": "Baptism Sunday.",
+            "worship_team": "Worship Team A",
+            "assigned_member": "Pilot Helper",
+            "member_email": "",
+            "playbook_link": "https://example.com/lighting-playbook",
+        }
+        row.update(overrides)
+        headers = [
+            "event_date",
+            "event_type",
+            "event_title",
+            "start_time",
+            "end_time",
+            "service_detail",
+            "special_event_note",
+            "worship_team",
+            "assigned_member",
+            "member_email",
+            "playbook_link",
+        ]
+        return ",".join(headers) + "\n" + ",".join(row[header] for header in headers) + "\n"
+
+    def run_import(self, csv_path, *extra_args):
+        output = StringIO()
+        call_command(
+            "import_lighting_pilot",
+            "--csv",
+            csv_path,
+            *extra_args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def test_dry_run_does_not_create_records(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path, "--dry-run")
+
+        self.assertIn("Dry run complete", output)
+        self.assertEqual(MinistryTeam.objects.count(), 0)
+        self.assertEqual(TeamMembership.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_import_creates_lighting_team(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path)
+
+        team = MinistryTeam.objects.get(name="Lighting Team")
+        self.assertEqual(team.name_en, "Lighting Team")
+        self.assertEqual(team.playbook_link, "https://example.com/lighting-playbook")
+        self.assertIn("teams_created=1", output)
+
+    def test_import_creates_display_name_only_membership_when_no_matching_user(self):
+        csv_path = self.write_csv(self.csv_content(assigned_member="Guest Helper"))
+
+        self.run_import(csv_path)
+
+        membership = TeamMembership.objects.get(display_name="Guest Helper")
+        self.assertIsNone(membership.user)
+        self.assertEqual(membership.team.name, "Lighting Team")
+
+    def test_import_links_membership_to_existing_user_when_email_matches(self):
+        csv_path = self.write_csv(
+            self.csv_content(
+                assigned_member="Linked Helper",
+                member_email="linked-lighting@example.com",
+            )
+        )
+
+        self.run_import(csv_path)
+
+        membership = TeamMembership.objects.get(user=self.linked_user)
+        self.assertEqual(membership.email, "linked-lighting@example.com")
+        self.assertEqual(membership.team.name, "Lighting Team")
+
+    def test_import_creates_service_event(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+
+        event = ServiceEvent.objects.get(title="Pilot Sunday Service")
+        self.assertEqual(event.event_type, ServiceEvent.EVENT_SUNDAY_SERVICE)
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+        self.assertEqual(event.status, ServiceEvent.STATUS_PUBLISHED)
+        self.assertIn("Main sanctuary service.", event.description)
+
+    def test_import_creates_team_assignment(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+
+        assignment = TeamAssignment.objects.get()
+        self.assertEqual(assignment.ministry_team.name, "Lighting Team")
+        self.assertIn("Special event note: Baptism Sunday.", assignment.notes)
+        self.assertIn("Worship team: Worship Team A", assignment.notes)
+
+    def test_import_creates_team_assignment_member(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+
+        assignment_member = TeamAssignmentMember.objects.get()
+        self.assertEqual(assignment_member.assignment.ministry_team.name, "Lighting Team")
+        self.assertEqual(assignment_member.membership.get_display_name(), "Pilot Helper")
+
+    def test_rerunning_import_does_not_duplicate_assignments_or_memberships(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+        second_output = self.run_import(csv_path)
+
+        self.assertEqual(MinistryTeam.objects.count(), 1)
+        self.assertEqual(TeamMembership.objects.count(), 1)
+        self.assertEqual(ServiceEvent.objects.count(), 1)
+        self.assertEqual(TeamAssignment.objects.count(), 1)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 1)
+        self.assertIn("assignment_members_created=0", second_output)
+
+    def test_forbidden_sensitive_columns_are_rejected(self):
+        for forbidden_column in [
+            "phone_number",
+            "private_notes",
+            "prayer_notes",
+            "zoom_password",
+        ]:
+            csv_path = self.write_csv(
+                "event_date,event_type,event_title,assigned_member,"
+                f"{forbidden_column}\n"
+                f"{self.future_date.isoformat()},sunday_service,Pilot Sunday Service,"
+                "Pilot Helper,secret\n"
+            )
+
+            with self.assertRaises(CommandError):
+                self.run_import(csv_path, "--dry-run")
+
+    def test_past_rows_are_skipped_by_default(self):
+        past_date = timezone.localdate() - timezone.timedelta(days=1)
+        csv_path = self.write_csv(self.csv_content(event_date=past_date.isoformat()))
+
+        output = self.run_import(csv_path)
+
+        self.assertIn("rows_skipped=1", output)
+        self.assertIn("rows_errors=1", output)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+
+    def test_imported_assignment_appears_in_my_serving_for_linked_user(self):
+        self.set_language("en")
+        csv_path = self.write_csv(
+            self.csv_content(
+                assigned_member="Linked Helper",
+                member_email="linked-lighting@example.com",
+            )
+        )
+        self.run_import(csv_path)
+        self.client.login(username="linked_lighting", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pilot Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Confirm Assignment")
+
+    def test_no_lighting_team_model_or_route_exists_after_import_support(self):
+        with self.assertRaises(LookupError):
+            apps.get_model("ministry", "LightingTeam")
+        with self.assertRaises(NoReverseMatch):
+            reverse("lighting_team_list")
+
+    def test_no_future_workflow_routes_are_added_by_import_support(self):
+        missing_routes = [
+            "availability_matrix",
+            "swap_request_list",
+            "team_reminder_list",
+            "assignment_checklist",
+            "import_history",
+        ]
+        for route_name in missing_routes:
+            with self.assertRaises(NoReverseMatch):
+                reverse(route_name)

@@ -1,4 +1,6 @@
 from django import forms
+from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from .models import ServiceEvent
 
@@ -149,3 +151,151 @@ class ServiceEventForm(forms.ModelForm):
         )
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+
+class RecurringServiceEventForm(forms.Form):
+    WEEKDAY_CHOICES = [
+        (0, "Monday"),
+        (1, "Tuesday"),
+        (2, "Wednesday"),
+        (3, "Thursday"),
+        (4, "Friday"),
+        (5, "Saturday"),
+        (6, "Sunday"),
+    ]
+
+    title = forms.CharField(max_length=180)
+    title_en = forms.CharField(max_length=180, required=False)
+    event_type = forms.ChoiceField(choices=ServiceEvent.EVENT_TYPE_CHOICES)
+    start_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    end_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    weekday = forms.ChoiceField(choices=WEEKDAY_CHOICES)
+    start_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={"type": "time"}),
+        input_formats=["%H:%M"],
+    )
+    end_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={"type": "time"}),
+        input_formats=["%H:%M"],
+    )
+    location = forms.CharField(max_length=180, required=False)
+    meeting_link = forms.URLField(max_length=500, required=False)
+    scope_type = forms.ChoiceField(choices=ServiceEvent.SCOPE_CHOICES)
+    district = forms.ModelChoiceField(
+        queryset=ServiceEvent._meta.get_field("district").remote_field.model.objects.all(),
+        required=False,
+    )
+    small_group = forms.ModelChoiceField(
+        queryset=ServiceEvent._meta.get_field("small_group").remote_field.model.objects.all(),
+        required=False,
+    )
+    status = forms.ChoiceField(choices=ServiceEvent.STATUS_CHOICES)
+    description = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
+    description_en = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = form_text(language)
+        recurring_labels = {
+            "en": {
+                "start_date": "Start Date",
+                "end_date": "End Date",
+                "weekday": "Weekday",
+                "start_time": "Start Time",
+                "end_time": "End Time",
+            },
+            "zh": {
+                "start_date": "开始日期",
+                "end_date": "结束日期",
+                "weekday": "星期",
+                "start_time": "开始时间",
+                "end_time": "结束时间",
+            },
+        }.get(language, {})
+
+        for field_name in [
+            "title",
+            "title_en",
+            "description",
+            "description_en",
+            "event_type",
+            "location",
+            "meeting_link",
+            "scope_type",
+            "district",
+            "small_group",
+            "status",
+        ]:
+            self.fields[field_name].label = text[field_name]
+        for field_name, label in recurring_labels.items():
+            self.fields[field_name].label = label
+
+        self.fields["event_type"].choices = ServiceEventForm(language=language).fields[
+            "event_type"
+        ].choices
+        self.fields["scope_type"].choices = ServiceEventForm(language=language).fields[
+            "scope_type"
+        ].choices
+        self.fields["status"].choices = ServiceEventForm(language=language).fields[
+            "status"
+        ].choices
+        self.fields["weekday"].choices = weekday_choices(language)
+
+        if not self.is_bound:
+            self.fields["event_type"].initial = ServiceEvent.EVENT_SUNDAY_SERVICE
+            self.fields["weekday"].initial = 6
+            self.fields["start_time"].initial = "10:00"
+            self.fields["end_time"].initial = "11:30"
+            self.fields["scope_type"].initial = ServiceEvent.SCOPE_GLOBAL
+            self.fields["status"].initial = ServiceEvent.STATUS_PUBLISHED
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_date = cleaned_data.get("start_date")
+        end_date = cleaned_data.get("end_date")
+
+        if start_date and end_date:
+            if start_date > end_date:
+                self.add_error("end_date", "End date must be on or after start date.")
+            if (end_date - start_date).days > 548:
+                self.add_error("end_date", "Date range cannot be longer than 18 months.")
+
+        start_time = cleaned_data.get("start_time")
+        end_time = cleaned_data.get("end_time")
+        if start_time and end_time and end_time < start_time:
+            self.add_error("end_time", "End time cannot be before start time.")
+
+        event = ServiceEvent(
+            title=cleaned_data.get("title") or "",
+            title_en=cleaned_data.get("title_en") or "",
+            description=cleaned_data.get("description") or "",
+            description_en=cleaned_data.get("description_en") or "",
+            event_type=cleaned_data.get("event_type") or ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=cleaned_data.get("scope_type") or ServiceEvent.SCOPE_GLOBAL,
+            district=cleaned_data.get("district"),
+            small_group=cleaned_data.get("small_group"),
+            status=cleaned_data.get("status") or ServiceEvent.STATUS_PUBLISHED,
+        )
+        try:
+            event.clean()
+        except ValidationError as exc:
+            for field, errors in exc.message_dict.items():
+                self.add_error(field if field in self.fields else None, errors)
+
+        return cleaned_data
+
+
+def weekday_choices(language):
+    if language == "zh":
+        return [
+            (0, "星期一"),
+            (1, "星期二"),
+            (2, "星期三"),
+            (3, "星期四"),
+            (4, "星期五"),
+            (5, "星期六"),
+            (6, "星期日"),
+        ]
+    return RecurringServiceEventForm.WEEKDAY_CHOICES

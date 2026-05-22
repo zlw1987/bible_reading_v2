@@ -1,4 +1,5 @@
 from accounts.permissions import (
+    CAP_MANAGE_SERVICE_EVENTS,
     CAP_MANAGE_MINISTRY_TEAMS,
     CAP_MANAGE_TEAM_ASSIGNMENTS,
     has_capability,
@@ -60,6 +61,20 @@ def can_manage_team_assignments(user):
         getattr(user, "is_staff", False)
         or getattr(user, "is_superuser", False)
         or has_capability(user, CAP_MANAGE_TEAM_ASSIGNMENTS)
+    )
+
+
+def can_import_lighting_pilot(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return True
+
+    return (
+        has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
+        and has_capability(user, CAP_MANAGE_MINISTRY_TEAMS)
+        and has_capability(user, CAP_MANAGE_TEAM_ASSIGNMENTS)
     )
 
 

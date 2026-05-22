@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
@@ -904,6 +905,21 @@ class LightingPilotImportCommandTests(TestCase):
             email="linked-lighting@example.com",
             password="testpass123",
         )
+        self.regular_user = User.objects.create_user(
+            username="lighting_regular",
+            email="lighting-regular@example.com",
+            password="testpass123",
+        )
+        self.manager = User.objects.create_user(
+            username="lighting_manager",
+            email="lighting-manager@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.manager,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
 
     def set_language(self, language="en"):
         session = self.client.session
@@ -957,6 +973,13 @@ class LightingPilotImportCommandTests(TestCase):
             stdout=output,
         )
         return output.getvalue()
+
+    def uploaded_csv(self, content=None):
+        return SimpleUploadedFile(
+            "lighting_pilot.csv",
+            (content or self.csv_content()).encode("utf-8"),
+            content_type="text/csv",
+        )
 
     def test_dry_run_does_not_create_records(self):
         csv_path = self.write_csv(self.csv_content())
@@ -1109,3 +1132,120 @@ class LightingPilotImportCommandTests(TestCase):
         for route_name in missing_routes:
             with self.assertRaises(NoReverseMatch):
                 reverse(route_name)
+
+    def test_eligible_manager_can_open_lighting_pilot_import_page(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+
+        response = self.client.get(reverse("lighting_pilot_import"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lighting Pilot Import")
+
+    def test_regular_user_cannot_open_lighting_pilot_import_page(self):
+        self.set_language("en")
+        self.client.login(username="lighting_regular", password="testpass123")
+
+        response = self.client.get(reverse("lighting_pilot_import"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_lighting_pilot_import_ui_dry_run_creates_no_records(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+
+        response = self.client.post(
+            reverse("lighting_pilot_import"),
+            {"dry_run": "1", "csv_file": self.uploaded_csv()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No database records were created during dry run.")
+        self.assertEqual(MinistryTeam.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+
+    def test_lighting_pilot_import_ui_import_creates_records(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+
+        response = self.client.post(
+            reverse("lighting_pilot_import"),
+            {"import": "1", "csv_file": self.uploaded_csv()},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Import Results")
+        self.assertEqual(MinistryTeam.objects.get().name, "Lighting Team")
+        self.assertEqual(ServiceEvent.objects.count(), 1)
+        self.assertEqual(TeamAssignment.objects.count(), 1)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 1)
+
+    def test_lighting_pilot_import_ui_rejects_forbidden_sensitive_columns(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+        csv_content = (
+            "event_date,event_type,event_title,assigned_member,phone_number\n"
+            f"{self.future_date.isoformat()},sunday_service,Pilot Sunday Service,"
+            "Pilot Helper,555-0100\n"
+        )
+
+        response = self.client.post(
+            reverse("lighting_pilot_import"),
+            {"dry_run": "1", "csv_file": self.uploaded_csv(csv_content)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Forbidden column")
+        self.assertContains(response, "phone_number")
+        self.assertEqual(MinistryTeam.objects.count(), 0)
+
+    def test_lighting_pilot_import_ui_displays_row_errors(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+        past_date = timezone.localdate() - timezone.timedelta(days=1)
+
+        response = self.client.post(
+            reverse("lighting_pilot_import"),
+            {
+                "dry_run": "1",
+                "csv_file": self.uploaded_csv(
+                    self.csv_content(event_date=past_date.isoformat())
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Row Errors")
+        self.assertContains(response, "event_date is older than today")
+
+    def test_lighting_pilot_csv_template_uses_iso_dates(self):
+        template_path = Path("docs/examples/lighting_team_pilot_template.csv")
+
+        content = template_path.read_text(encoding="utf-8")
+
+        self.assertIn("2026-07-05", content)
+        self.assertNotIn("7/5/2026", content)
+
+    def test_chinese_lighting_pilot_import_page_shows_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="lighting_manager", password="testpass123")
+
+        response = self.client.get(reverse("lighting_pilot_import"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "灯光组试点导入")
+        self.assertContains(response, "试运行")
+        self.assertContains(response, "正式导入")
+
+    def test_english_lighting_pilot_import_page_shows_english_labels(self):
+        self.set_language("en")
+        self.client.login(username="lighting_manager", password="testpass123")
+
+        response = self.client.get(reverse("lighting_pilot_import"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lighting Pilot Import")
+        self.assertContains(response, "Dry Run")
+        self.assertContains(response, "Import")

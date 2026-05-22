@@ -1,3 +1,5 @@
+from io import StringIO
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
@@ -26,9 +28,15 @@ from .permissions import (
     can_manage_team_assignments,
     can_manage_team_memberships,
     can_confirm_team_assignment,
+    can_import_lighting_pilot,
     can_view_ministry_team,
     can_view_team_assignment,
     user_team_memberships,
+)
+from .services.lighting_pilot_import import (
+    ImportStructureError,
+    import_lighting_pilot,
+    read_csv_file,
 )
 
 
@@ -171,6 +179,46 @@ def ministry_team_list(request):
         {
             "teams": teams,
             "can_manage": can_manage,
+            "can_import_lighting": can_import_lighting_pilot(request.user),
+        },
+    )
+
+
+@login_required
+def lighting_pilot_import(request):
+    language = get_user_language(request)
+    if not can_import_lighting_pilot(request.user):
+        if language == "zh":
+            messages.error(request, "你没有导入灯光组试点数据的权限。")
+        else:
+            messages.error(request, "You do not have permission to import Lighting pilot data.")
+        return redirect("ministry_team_list")
+
+    stats = None
+    structure_error = ""
+    dry_run = False
+    if request.method == "POST":
+        dry_run = "dry_run" in request.POST
+        uploaded_file = request.FILES.get("csv_file")
+        if not uploaded_file:
+            structure_error = "CSV file is required."
+        else:
+            try:
+                decoded_file = StringIO(uploaded_file.read().decode("utf-8-sig"))
+                rows = read_csv_file(decoded_file)
+                stats = import_lighting_pilot(rows, dry_run=dry_run)
+            except UnicodeDecodeError:
+                structure_error = "CSV file must be UTF-8 encoded."
+            except ImportStructureError as exc:
+                structure_error = str(exc)
+
+    return render(
+        request,
+        "ministry/lighting_pilot_import.html",
+        {
+            "stats": stats,
+            "structure_error": structure_error,
+            "dry_run": dry_run,
         },
     )
 

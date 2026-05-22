@@ -6,7 +6,7 @@ from django.utils import timezone
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 
-from .forms import ServiceEventForm
+from .forms import RecurringServiceEventForm, ServiceEventForm
 from .models import ServiceEvent
 
 
@@ -133,6 +133,118 @@ def create_service_event(request):
         {
             "form": form,
             "is_edit": False,
+        },
+    )
+
+
+def build_recurring_event_preview(cleaned_data):
+    dates_to_create = []
+    dates_to_skip = []
+    current_date = cleaned_data["start_date"]
+    end_date = cleaned_data["end_date"]
+    weekday = int(cleaned_data["weekday"])
+
+    while current_date <= end_date:
+        if current_date.weekday() == weekday:
+            start_datetime = timezone.make_aware(
+                timezone.datetime.combine(current_date, cleaned_data["start_time"]),
+                timezone.get_current_timezone(),
+            )
+            duplicate_filter = {
+                "start_datetime": start_datetime,
+                "event_type": cleaned_data["event_type"],
+                "title": cleaned_data["title"],
+                "scope_type": cleaned_data["scope_type"],
+                "district": cleaned_data.get("district"),
+                "small_group": cleaned_data.get("small_group"),
+            }
+            if ServiceEvent.objects.filter(**duplicate_filter).exists():
+                dates_to_skip.append(current_date)
+            else:
+                dates_to_create.append(current_date)
+        current_date += timezone.timedelta(days=1)
+
+    return dates_to_create, dates_to_skip
+
+
+def create_recurring_events(cleaned_data, user):
+    dates_to_create, dates_to_skip = build_recurring_event_preview(cleaned_data)
+    created_count = 0
+
+    for event_date in dates_to_create:
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(event_date, cleaned_data["start_time"]),
+            timezone.get_current_timezone(),
+        )
+        end_datetime = None
+        if cleaned_data.get("end_time"):
+            end_datetime = timezone.make_aware(
+                timezone.datetime.combine(event_date, cleaned_data["end_time"]),
+                timezone.get_current_timezone(),
+            )
+        ServiceEvent.objects.create(
+            title=cleaned_data["title"],
+            title_en=cleaned_data.get("title_en") or "",
+            description=cleaned_data.get("description") or "",
+            description_en=cleaned_data.get("description_en") or "",
+            event_type=cleaned_data["event_type"],
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            location=cleaned_data.get("location") or "",
+            meeting_link=cleaned_data.get("meeting_link") or "",
+            scope_type=cleaned_data["scope_type"],
+            district=cleaned_data.get("district"),
+            small_group=cleaned_data.get("small_group"),
+            status=cleaned_data["status"],
+            created_by=user,
+        )
+        created_count += 1
+
+    return created_count, len(dates_to_skip), dates_to_create, dates_to_skip
+
+
+@login_required
+def create_recurring_service_events(request):
+    language = get_user_language(request)
+    if not can_manage_service_events(request.user):
+        messages.error(request, event_ui_text(language, "no_permission"))
+        return redirect("service_event_list")
+
+    preview = None
+    if request.method == "POST":
+        form = RecurringServiceEventForm(request.POST, language=language)
+        if form.is_valid():
+            if "preview" in request.POST:
+                dates_to_create, dates_to_skip = build_recurring_event_preview(
+                    form.cleaned_data
+                )
+                preview = {
+                    "dates_to_create": dates_to_create,
+                    "dates_to_skip": dates_to_skip,
+                    "total_count": len(dates_to_create),
+                }
+            elif "create" in request.POST:
+                created_count, skipped_count, dates_to_create, dates_to_skip = (
+                    create_recurring_events(form.cleaned_data, request.user)
+                )
+                messages.success(
+                    request,
+                    f"Created: {created_count}; skipped: {skipped_count}.",
+                )
+                preview = {
+                    "dates_to_create": dates_to_create,
+                    "dates_to_skip": dates_to_skip,
+                    "total_count": created_count,
+                }
+    else:
+        form = RecurringServiceEventForm(language=language)
+
+    return render(
+        request,
+        "events/recurring_service_event_form.html",
+        {
+            "form": form,
+            "preview": preview,
         },
     )
 

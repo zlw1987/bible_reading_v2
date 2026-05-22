@@ -4,6 +4,11 @@ from . import views
 
 urlpatterns = [
     path("my-serving/", views.my_serving, name="my_serving"),
+    path(
+        "teams/import/lighting-pilot/",
+        views.lighting_pilot_import,
+        name="lighting_pilot_import",
+    ),
     path("assignments/", views.team_assignment_list, name="team_assignment_list"),
     path("assignments/new/", views.create_team_assignment, name="create_team_assignment"),
     path(

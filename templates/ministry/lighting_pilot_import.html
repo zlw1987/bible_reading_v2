@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'ministry_team_list' %}">
+        ← {% if language == "zh" %}返回事工团队{% else %}Back to Ministry Teams{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}请先试运行再正式导入。{% else %}Please run dry-run before importing.{% endif %}
+    </p>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card">
+    {% csrf_token %}
+    <div class="form-row">
+        <label for="id_csv_file">{% if language == "zh" %}上传 CSV{% else %}Upload CSV{% endif %}</label>
+        <input id="id_csv_file" type="file" name="csv_file" accept=".csv" required>
+    </div>
+    <p class="muted">
+        {% if language == "zh" %}
+        CSV 模板位于 docs/examples/lighting_team_pilot_template.csv。
+        {% else %}
+        CSV template: docs/examples/lighting_team_pilot_template.csv.
+        {% endif %}
+    </p>
+    <p>
+        <a href="/docs/examples/lighting_team_pilot_template.csv">
+            {% if language == "zh" %}下载 CSV 模板{% else %}Download CSV template{% endif %}
+        </a>
+    </p>
+    <div class="actions">
+        <button type="submit" name="dry_run" value="1" class="button-secondary">
+            {% if language == "zh" %}试运行{% else %}Dry Run{% endif %}
+        </button>
+        <button type="submit" name="import" value="1">
+            {% if language == "zh" %}正式导入{% else %}Import{% endif %}
+        </button>
+    </div>
+</form>
+
+{% if structure_error %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}禁止字段{% else %}Forbidden column{% endif %}</h2>
+    <p class="muted">{{ structure_error }}</p>
+</div>
+{% endif %}
+
+{% if stats %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}导入结果{% else %}Import Results{% endif %}</h2>
+    {% if dry_run %}
+    <p class="muted">
+        {% if language == "zh" %}试运行不会写入数据库。{% else %}No database records were created during dry run.{% endif %}
+    </p>
+    {% endif %}
+    <dl>
+        {% for key, count in stats.summary_items %}
+        <dt>{{ key }}</dt>
+        <dd>{{ count }}</dd>
+        {% endfor %}
+    </dl>
+</div>
+
+{% if stats.errors %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}行错误{% else %}Row Errors{% endif %}</h2>
+    <ul>
+        {% for error in stats.errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

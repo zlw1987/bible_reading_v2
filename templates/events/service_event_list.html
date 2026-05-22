@@ -32,6 +32,9 @@
         <a class="button" href="{% url 'create_service_event' %}">
             {% if language == "zh" %}新增聚会事件{% else %}New Service Event{% endif %}
         </a>
+        <a class="button button-secondary" href="{% url 'create_recurring_service_events' %}">
+            {% if language == "zh" %}批量创建固定聚会{% else %}Create Recurring Events{% endif %}
+        </a>
         {% endif %}
     </div>
 </div>

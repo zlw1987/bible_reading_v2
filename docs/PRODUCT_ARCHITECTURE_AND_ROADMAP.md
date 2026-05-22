@@ -32,11 +32,11 @@ TeamAssignment V1 is implemented and entering QA/stabilization.
 
 My Serving Page V1 is implemented and entering QA/stabilization.
 
-Lighting Team Pilot Data import support is implemented and entering QA/stabilization.
+Lighting Team Pilot Data import support and setup UI are implemented and entering QA/stabilization.
 
 Checklist and scheduling enhancements are still future phases.
 
-The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
+The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -160,6 +160,7 @@ Implemented V1 foundation includes:
 - Per-member confirmation
 - My Serving Page
 - Lighting Team Pilot Data import support
+- Lighting Team Pilot setup UI
 - Playbook link
 - Non-sensitive assignment notes
 
@@ -276,7 +277,7 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data support are in closure / QA / stabilization.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support are in closure / QA / stabilization.
 
 Next major product phase:
 
@@ -363,7 +364,7 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
-Status: MinistryTeam + TeamMembership Foundation, TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data support implemented / QA.
+Status: MinistryTeam + TeamMembership Foundation, TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support implemented / QA.
 
 Implemented:
 - MinistryTeam
@@ -373,6 +374,7 @@ Implemented:
 - Assignment confirmation
 - My Serving Page
 - Lighting Team Pilot Data import support
+- Lighting Team Pilot setup UI
 - Playbook link
 - Non-sensitive assignment notes
 
@@ -384,7 +386,7 @@ Lighting Team is the pilot, but models must remain generic.
 
 ### Phase 7: Lighting Team Pilot
 
-Status: limited pilot data import support implemented / QA.
+Status: limited pilot data import and setup UI support implemented / QA.
 
 Only import or model:
 - Future 2-3 months of assignments

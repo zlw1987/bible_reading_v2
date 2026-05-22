@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}批量创建固定聚会{% else %}Create Recurring Events{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'service_event_list' %}">
+        ← {% if language == "zh" %}返回聚会事件{% else %}Back to Service Events{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}批量创建固定聚会{% else %}Create Recurring Events{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}固定主日聚会{% else %}Recurring Sunday Service{% endif %}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+    <div class="actions">
+        <button type="submit" name="preview" value="1" class="button-secondary">
+            {% if language == "zh" %}预览{% else %}Preview{% endif %}
+        </button>
+        <button type="submit" name="create" value="1">
+            {% if language == "zh" %}创建聚会事件{% else %}Create Events{% endif %}
+        </button>
+    </div>
+</form>
+
+{% if preview %}
+<div class="grid grid-2">
+    <div class="card">
+        <h2 class="card-title">
+            {% if language == "zh" %}将要创建的聚会{% else %}Events to Create{% endif %}
+        </h2>
+        {% if preview.dates_to_create %}
+        <ul>
+            {% for event_date in preview.dates_to_create %}
+            <li>{{ event_date }}</li>
+            {% endfor %}
+        </ul>
+        <p class="muted">Total: {{ preview.total_count }}</p>
+        {% else %}
+        <p class="muted">
+            {% if language == "zh" %}没有需要创建的聚会。{% else %}No events will be created.{% endif %}
+        </p>
+        {% endif %}
+    </div>
+    <div class="card">
+        <h2 class="card-title">
+            {% if language == "zh" %}已存在将跳过的聚会{% else %}Existing Events to Skip{% endif %}
+        </h2>
+        {% if preview.dates_to_skip %}
+        <ul>
+            {% for event_date in preview.dates_to_skip %}
+            <li>{{ event_date }}</li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">
+            {% if language == "zh" %}没有已存在的重复聚会。{% else %}No existing events will be skipped.{% endif %}
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

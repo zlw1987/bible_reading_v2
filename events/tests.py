@@ -106,6 +106,37 @@ class ServiceEventFoundationTests(TestCase):
         data.update(overrides)
         return data
 
+    def next_sunday(self):
+        today = timezone.localdate()
+        days_until_sunday = (6 - today.weekday()) % 7
+        if days_until_sunday == 0:
+            days_until_sunday = 7
+        return today + timezone.timedelta(days=days_until_sunday)
+
+    def recurring_post_data(self, **overrides):
+        start_date = self.next_sunday()
+        end_date = start_date + timezone.timedelta(days=14)
+        data = {
+            "title": "主日崇拜",
+            "title_en": "Sunday Service",
+            "description": "主日聚会",
+            "description_en": "Sunday gathering",
+            "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "weekday": "6",
+            "start_time": "10:00",
+            "end_time": "11:30",
+            "location": "Sanctuary",
+            "meeting_link": "",
+            "scope_type": ServiceEvent.SCOPE_GLOBAL,
+            "district": "",
+            "small_group": "",
+            "status": ServiceEvent.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return data
+
     def test_event_list_requires_login(self):
         response = self.client.get(reverse("service_event_list"))
 
@@ -367,3 +398,109 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(list_response, "Event Type")
         self.assertContains(detail_response, "Start Time")
         self.assertContains(detail_response, "Scope")
+
+    def test_manager_can_open_recurring_event_creator(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Create Recurring Events")
+
+    def test_regular_user_cannot_open_recurring_event_creator(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_recurring_preview_creates_no_service_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(preview="1"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Events to Create")
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+
+    def test_recurring_create_creates_weekly_sunday_events_in_range(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(create="1"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
+
+    def test_recurring_create_skips_existing_events(self):
+        self.set_language("en")
+        start_date = self.next_sunday()
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(start_date, timezone.datetime.strptime("10:00", "%H:%M").time()),
+            timezone.get_current_timezone(),
+        )
+        self.create_event(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            start_datetime=start_datetime,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(create="1"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
+        self.assertContains(response, "skipped: 1")
+
+    def test_recurring_range_longer_than_eighteen_months_rejected(self):
+        self.set_language("en")
+        start_date = self.next_sunday()
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                start_date=start_date.isoformat(),
+                end_date=(start_date + timezone.timedelta(days=549)).isoformat(),
+                preview="1",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Date range cannot be longer than 18 months.")
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+
+    def test_chinese_recurring_event_page_shows_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "批量创建固定聚会")
+        self.assertContains(response, "预览")
+        self.assertContains(response, "创建聚会事件")
+
+    def test_english_recurring_event_page_shows_english_labels(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Create Recurring Events")
+        self.assertContains(response, "Preview")
+        self.assertContains(response, "Create Events")

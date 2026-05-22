@@ -22,4 +22,5 @@ urlpatterns = [
     path("", include("reading.urls")),
     path("", include("prayers.urls")),
     path("", include("studies.urls")),
+    path("", include("events.urls")),
 ]

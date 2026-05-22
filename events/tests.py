@@ -1,0 +1,369 @@
+from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from accounts.models import ChurchRoleAssignment, District, SmallGroup
+
+from .models import ServiceEvent
+
+
+class ServiceEventFoundationTests(TestCase):
+    def setUp(self):
+        self.north = District.objects.create(name="North")
+        self.south = District.objects.create(name="South")
+        self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.north)
+        self.same_district_group = SmallGroup.objects.create(
+            name="Rainbow 4B",
+            district=self.north,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            district=self.south,
+        )
+
+        self.user = User.objects.create_user(
+            username="regular",
+            email="regular@example.com",
+            password="testpass123",
+        )
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.same_district_user = User.objects.create_user(
+            username="same_district",
+            email="same@example.com",
+            password="testpass123",
+        )
+        self.same_district_user.profile.small_group = self.same_district_group
+        self.same_district_user.profile.save()
+
+        self.other_user = User.objects.create_user(
+            username="other_group",
+            email="other@example.com",
+            password="testpass123",
+        )
+        self.other_user.profile.small_group = self.other_group
+        self.other_user.profile.save()
+
+        self.staff = User.objects.create_user(
+            username="event_staff",
+            email="staff@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+
+        self.manager = User.objects.create_user(
+            username="pastor_event",
+            email="pastor@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.manager,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.future_time = timezone.now() + timezone.timedelta(days=3)
+        self.end_time = self.future_time + timezone.timedelta(hours=2)
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def create_event(self, **overrides):
+        data = {
+            "title": "主日崇拜",
+            "title_en": "Sunday Service",
+            "description": "一起敬拜。",
+            "description_en": "Worship together.",
+            "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
+            "start_datetime": self.future_time,
+            "end_datetime": self.end_time,
+            "location": "Sanctuary",
+            "scope_type": ServiceEvent.SCOPE_GLOBAL,
+            "status": ServiceEvent.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return ServiceEvent.objects.create(**data)
+
+    def event_post_data(self, **overrides):
+        data = {
+            "title": "特别聚会",
+            "title_en": "Special Meeting",
+            "description": "中文说明",
+            "description_en": "English description",
+            "event_type": ServiceEvent.EVENT_SPECIAL_MEETING,
+            "start_datetime": self.future_time.strftime("%Y-%m-%dT%H:%M"),
+            "end_datetime": self.end_time.strftime("%Y-%m-%dT%H:%M"),
+            "location": "Fellowship Hall",
+            "meeting_link": "https://example.com/event",
+            "scope_type": ServiceEvent.SCOPE_GLOBAL,
+            "status": ServiceEvent.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return data
+
+    def test_event_list_requires_login(self):
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_published_global_event_visible_to_regular_user(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, event.title_en)
+
+    def test_draft_event_hidden_from_regular_user(self):
+        self.set_language("en")
+        self.create_event(title_en="Draft Event", status=ServiceEvent.STATUS_DRAFT)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Draft Event")
+
+    def test_cancelled_event_hidden_from_regular_user(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="Cancelled Event",
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_draft_event_visible_to_staff(self):
+        self.set_language("en")
+        self.create_event(title_en="Draft Event", status=ServiceEvent.STATUS_DRAFT)
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_list"), {"tab": "drafts"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Draft Event")
+
+    def test_district_scoped_event_visible_to_matching_district_user(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="North Event",
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        self.client.login(username="same_district", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "North Event")
+
+    def test_district_scoped_event_hidden_from_outside_district_user(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="North Event",
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_small_group_scoped_event_visible_to_same_group_user(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="Group Event",
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Group Event")
+
+    def test_small_group_scoped_event_hidden_from_different_group_user(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="Group Event",
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_user_without_capability_cannot_access_create_page(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("create_service_event"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_user_with_pastor_role_can_access_create_page(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_service_event"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New Service Event")
+
+    def test_manager_can_create_published_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="特别聚会")
+        self.assertEqual(event.created_by, self.manager)
+        self.assertEqual(event.status, ServiceEvent.STATUS_PUBLISHED)
+        self.assertIsNotNone(event.published_at)
+
+    def test_manager_can_create_draft_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(status=ServiceEvent.STATUS_DRAFT),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="特别聚会")
+        self.assertEqual(event.status, ServiceEvent.STATUS_DRAFT)
+        self.assertIsNone(event.published_at)
+
+    def test_manager_can_edit_event(self):
+        self.set_language("en")
+        event = self.create_event(status=ServiceEvent.STATUS_DRAFT)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                status=ServiceEvent.STATUS_PUBLISHED,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "更新后的聚会")
+        self.assertEqual(event.title_en, "Updated Event")
+        self.assertIsNotNone(event.published_at)
+
+    def test_manager_can_cancel_event(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Me")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.status, ServiceEvent.STATUS_CANCELLED)
+
+    def test_cancelled_event_hidden_from_regular_users_after_cancellation(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Me")
+        self.client.login(username="pastor_event", password="testpass123")
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+        self.client.logout()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+
+    def test_scope_validation(self):
+        global_event = ServiceEvent(
+            title="Invalid Global",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=self.future_time,
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            district=self.north,
+        )
+        district_event = ServiceEvent(
+            title="Invalid District",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=self.future_time,
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+        )
+        group_event = ServiceEvent(
+            title="Invalid Group",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=self.future_time,
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+        )
+
+        with self.assertRaises(ValidationError):
+            global_event.full_clean()
+        with self.assertRaises(ValidationError):
+            district_event.full_clean()
+        with self.assertRaises(ValidationError):
+            group_event.full_clean()
+
+    def test_end_datetime_before_start_datetime_is_invalid(self):
+        event = ServiceEvent(
+            title="Invalid Time",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=self.future_time,
+            end_datetime=self.future_time - timezone.timedelta(hours=1),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+        )
+
+        with self.assertRaises(ValidationError):
+            event.full_clean()
+
+    def test_chinese_list_and_detail_pages_show_chinese_labels(self):
+        self.set_language("zh")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        list_response = self.client.get(reverse("service_event_list"))
+        detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertContains(list_response, "聚会事件")
+        self.assertContains(list_response, "聚会类型")
+        self.assertContains(detail_response, "开始时间")
+        self.assertContains(detail_response, "范围")
+
+    def test_english_list_and_detail_pages_show_english_labels(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        list_response = self.client.get(reverse("service_event_list"))
+        detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertContains(list_response, "Service Events")
+        self.assertContains(list_response, "Event Type")
+        self.assertContains(detail_response, "Start Time")
+        self.assertContains(detail_response, "Scope")

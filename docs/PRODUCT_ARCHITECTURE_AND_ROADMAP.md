@@ -24,11 +24,11 @@ Navigation cleanup is complete.
 
 Reading Guide Posts are implemented.
 
-The next major product phase is ServiceEvent Foundation.
+ServiceEvent Foundation V1 is implemented and entering QA/stabilization.
 
 Ministry Team Operations and Lighting Team Pilot are still future phases.
 
-The entire project is not complete. The stable center is Daily Reading, Prayer, and Bible Study; future modules should be added deliberately and kept within clear boundaries.
+The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, and the new ServiceEvent foundation; future ministry operations should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -109,14 +109,41 @@ Does not include in V1:
 - Copyright management
 - Full worship ministry system
 
-### E. Ministry Operations
+### E. ServiceEvent Foundation
+
+Implemented V1 foundation.
+
+Includes:
+- Generic church event abstraction
+- Sunday service
+- Bible study event
+- Special meeting
+- Conference
+- Gospel music night
+- Baptism
+- Other event type
+- Start/end date and time
+- Location and meeting link
+- Draft/published/completed/cancelled workflow
+- Scope: global / district / small_group
+- Permission-controlled editing
+
+Does not include:
+- Ministry team scheduling
+- Team assignments
+- Availability
+- Swap requests
+- Checklists
+- Service review notes
+- Worship flow management
+
+### F. Ministry Operations
 
 Future module.
 
 Includes:
 - Ministry teams
 - Team membership
-- Service events
 - Team assignments
 - Confirmation
 - Basic checklist
@@ -185,6 +212,18 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 - Bilingual display
 - Manager-only editing
 
+### ServiceEvent Foundation
+
+- ServiceEvent
+- Sunday Service / Bible Study / Special Meeting / Conference / Gospel Music Night / Baptism / Other event types
+- Start and end datetime
+- Location
+- Meeting link
+- Draft/published/completed/cancelled workflow
+- Global/district/small_group scope
+- Bilingual UI
+- Permission-controlled editing
+
 ### Accounts / Permissions
 
 - Profile
@@ -199,11 +238,11 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 Current phase:
 
-Reading, Prayer, Bible Study, and Bible Study Worship Set V1 closure / QA / stabilization.
+Reading, Prayer, Bible Study, Bible Study Worship Set, and ServiceEvent Foundation V1 closure / QA / stabilization.
 
 Next major product phase:
 
-ServiceEvent Foundation.
+Ministry Team Operations V1.
 
 Before new large features:
 - Keep tests passing.
@@ -211,6 +250,7 @@ Before new large features:
 - Avoid top-nav clutter.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
 - Keep Bible Study from becoming a full event or ministry scheduling system.
+- Keep ServiceEvent as a foundation until Ministry Team Operations is separately planned.
 
 ## 6. Roadmap
 
@@ -268,7 +308,7 @@ Do not build a full song library.
 
 ### Phase 5: ServiceEvent Foundation
 
-Status: next major development phase.
+Status: implemented / QA.
 
 Includes:
 - Generic church event abstraction
@@ -366,9 +406,11 @@ Existing examples:
 - Manage reading plans / users where applicable
 
 Future capabilities may include:
-- CAP_MANAGE_SERVICE_EVENTS
 - CAP_MANAGE_MINISTRY_TEAMS
 - CAP_MANAGE_TEAM_ASSIGNMENTS
+
+Implemented service event capability:
+- CAP_MANAGE_SERVICE_EVENTS
 
 ## 9. Codex Task Rules
 
@@ -403,17 +445,17 @@ For feature tasks:
 
 Next documentation/QA task:
 
-Bible Study V1 QA Checklist.
+ServiceEvent Foundation QA / stabilization notes if needed after browser testing.
 
 Next major development task after QA:
 
-ServiceEvent Foundation.
+Ministry Team Operations V1.
 
 Not next:
 - Lighting Team scheduling
-- MinistryTeam Operations
 - Automatic scheduling
 - Full worship song library
+- TeamAssignment scheduling
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`

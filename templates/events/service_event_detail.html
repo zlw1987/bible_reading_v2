@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% load event_extras %}
+
+{% block title %}
+    {{ event|event_title:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'service_event_list' %}">
+        ← {% if language == "zh" %}返回聚会事件{% else %}Back to Events{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ event|event_title:language }}</h1>
+    <p class="page-subtitle">
+        {{ event|event_type_label:language }}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">
+        {{ event|event_status_label:language }} · {{ event|event_scope_label:language }}
+    </p>
+
+    <p>
+        <strong>{% if language == "zh" %}聚会类型{% else %}Event Type{% endif %}:</strong>
+        {{ event|event_type_label:language }}
+    </p>
+
+    <p>
+        <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
+        {{ event.start_datetime }}
+    </p>
+
+    {% if event.end_datetime %}
+    <p>
+        <strong>{% if language == "zh" %}结束时间{% else %}End Time{% endif %}:</strong>
+        {{ event.end_datetime }}
+    </p>
+    {% endif %}
+
+    {% if event.location %}
+    <p>
+        <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
+        {{ event.location }}
+    </p>
+    {% endif %}
+
+    {% if event.meeting_link %}
+    <p>
+        <strong>{% if language == "zh" %}会议链接{% else %}Meeting Link{% endif %}:</strong>
+        <a href="{{ event.meeting_link }}">{{ event.meeting_link }}</a>
+    </p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
+        {{ event|event_scope_label:language }}
+    </p>
+
+    <p>
+        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
+        {{ event|event_status_label:language }}
+    </p>
+
+    {% if event|event_description:language %}
+    <p>{{ event|event_description:language|linebreaksbr }}</p>
+    {% endif %}
+
+    <p class="muted">
+        {% if language == "zh" %}
+        V1 只记录聚会本身；服事团队安排不在本阶段。
+        {% else %}
+        V1 records the event itself; ministry team assignments are not part of this phase.
+        {% endif %}
+    </p>
+
+    {% if can_manage %}
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'edit_service_event' event.id %}">
+            {% if language == "zh" %}编辑聚会事件{% else %}Edit Service Event{% endif %}
+        </a>
+        <form method="post" action="{% url 'cancel_service_event' event.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-secondary">
+                {% if language == "zh" %}取消聚会{% else %}Cancel Event{% endif %}
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

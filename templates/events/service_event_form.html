@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}
+        {% if language == "zh" %}编辑聚会事件{% else %}Edit Service Event{% endif %}
+    {% else %}
+        {% if language == "zh" %}新增聚会事件{% else %}New Service Event{% endif %}
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'service_event_list' %}">
+        ← {% if language == "zh" %}返回聚会事件{% else %}Back to Events{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_edit %}
+            {% if language == "zh" %}编辑聚会事件{% else %}Edit Service Event{% endif %}
+        {% else %}
+            {% if language == "zh" %}新增聚会事件{% else %}New Service Event{% endif %}
+        {% endif %}
+    </h1>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'service_event_list' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

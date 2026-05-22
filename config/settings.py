@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "comments",
     "prayers",
     "studies",
+    "events",
 ]
 
 MIDDLEWARE = [

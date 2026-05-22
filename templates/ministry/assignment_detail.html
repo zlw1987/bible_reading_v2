@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load event_extras ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}服事安排{% else %}Team Assignment{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'team_assignment_list' %}">
+        ← {% if language == "zh" %}返回排班{% else %}Back to Assignments{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}服事安排{% else %}Team Assignment{% endif %}</h1>
+    <p class="page-subtitle">{{ assignment.service_event|event_title:language }}</p>
+</div>
+
+<div class="card">
+    <p class="muted">
+        {{ assignment|assignment_status_label:language }}
+        ·
+        {{ assignment.ministry_team|ministry_team_name:language }}
+    </p>
+
+    <p>
+        <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
+        {{ assignment.service_event|event_title:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
+        {{ assignment.service_event.start_datetime }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}:</strong>
+        {{ assignment.ministry_team|ministry_team_name:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
+        {{ assignment|assignment_status_label:language }}
+    </p>
+
+    {% if assignment.notes %}
+    <p>
+        <strong>{% if language == "zh" %}非敏感排班备注{% else %}Non-sensitive assignment notes{% endif %}:</strong>
+        {{ assignment.notes|linebreaksbr }}
+    </p>
+    {% endif %}
+
+    {% if assignment.ministry_team.playbook_link %}
+    <p>
+        <strong>{% if language == "zh" %}服事手册链接{% else %}Playbook Link{% endif %}:</strong>
+        <a href="{{ assignment.ministry_team.playbook_link }}">{{ assignment.ministry_team.playbook_link }}</a>
+    </p>
+    {% endif %}
+
+    {% if can_manage_assignment %}
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'edit_team_assignment' assignment.id %}">
+            {% if language == "zh" %}编辑排班{% else %}Edit Assignment{% endif %}
+        </a>
+        {% if assignment.status != "cancelled" %}
+        <form method="post" action="{% url 'cancel_team_assignment' assignment.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-secondary">
+                {% if language == "zh" %}取消排班{% else %}Cancel Assignment{% endif %}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}已安排成员{% else %}Assigned Members{% endif %}</h2>
+    {% if assignment_members %}
+        {% for assignment_member in assignment_members %}
+        <div>
+            <h3>{{ assignment_member.membership.get_display_name }}</h3>
+            <p class="muted">
+                {% if assignment_member.confirmed_at %}
+                    {% if language == "zh" %}已确认{% else %}Confirmed{% endif %}
+                    ·
+                    {% if language == "zh" %}确认时间{% else %}Confirmed At{% endif %}: {{ assignment_member.confirmed_at }}
+                {% else %}
+                    {% if language == "zh" %}等待确认{% else %}Awaiting confirmation{% endif %}
+                {% endif %}
+            </p>
+            {% if assignment_member.confirmation_note %}
+            <p>{{ assignment_member.confirmation_note|linebreaksbr }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}暂无成员。{% else %}No members yet.{% endif %}
+    </p>
+    {% endif %}
+</div>
+
+{% if can_confirm_assignment and assignment.status != "cancelled" %}
+<form method="post" class="card" action="{% url 'confirm_team_assignment' assignment.id %}">
+    {% csrf_token %}
+    <h2>{% if language == "zh" %}确认服事{% else %}Confirm Assignment{% endif %}</h2>
+    {% for field in confirm_form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+    <button type="submit">
+        {% if language == "zh" %}确认服事{% else %}Confirm Assignment{% endif %}
+    </button>
+</form>
+{% endif %}
+{% endblock %}

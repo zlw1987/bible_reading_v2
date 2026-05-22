@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}
+        {% if language == "zh" %}编辑排班{% else %}Edit Assignment{% endif %}
+    {% else %}
+        {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'team_assignment_list' %}">
+        ← {% if language == "zh" %}返回排班{% else %}Back to Assignments{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_edit %}
+            {% if language == "zh" %}编辑排班{% else %}Edit Assignment{% endif %}
+        {% else %}
+            {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
+        {% endif %}
+    </h1>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'team_assignment_list' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

@@ -1,6 +1,10 @@
 from django import forms
 
-from .models import MinistryTeam, TeamMembership
+from .models import (
+    MinistryTeam,
+    TeamAssignment,
+    TeamMembership,
+)
 
 
 TEAM_FORM_TEXT = {
@@ -73,12 +77,54 @@ MEMBERSHIP_FORM_TEXT = {
 }
 
 
+ASSIGNMENT_FORM_TEXT = {
+    "en": {
+        "service_event": "Service Event",
+        "ministry_team": "Ministry Team",
+        "assigned_members": "Assigned Members",
+        "status": "Status",
+        "notes": "Non-sensitive assignment notes",
+        "scheduled": "Scheduled",
+        "confirmed": "Confirmed",
+        "prepared": "Prepared",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "notes_placeholder": "Operational notes for this assignment.",
+        "notes_help": "Do not store private counseling, prayer, or sensitive personal information here.",
+        "confirmation_note": "Confirmation",
+        "confirmation_placeholder": "Optional confirmation note.",
+        "confirmation_help": "Do not store private counseling, prayer, or sensitive personal information here.",
+    },
+    "zh": {
+        "service_event": "聚会事件",
+        "ministry_team": "事工团队",
+        "assigned_members": "已安排成员",
+        "status": "状态",
+        "notes": "非敏感排班备注",
+        "scheduled": "已安排",
+        "confirmed": "已确认",
+        "prepared": "已准备",
+        "completed": "已完成",
+        "cancelled": "已取消",
+        "notes_placeholder": "本次服事安排的操作备注。",
+        "notes_help": "不要在这里记录辅导、代祷或敏感私人信息。",
+        "confirmation_note": "确认",
+        "confirmation_placeholder": "可选确认备注。",
+        "confirmation_help": "不要在这里记录辅导、代祷或敏感私人信息。",
+    },
+}
+
+
 def team_form_text(language):
     return TEAM_FORM_TEXT.get(language, TEAM_FORM_TEXT["en"])
 
 
 def membership_form_text(language):
     return MEMBERSHIP_FORM_TEXT.get(language, MEMBERSHIP_FORM_TEXT["en"])
+
+
+def assignment_form_text(language):
+    return ASSIGNMENT_FORM_TEXT.get(language, ASSIGNMENT_FORM_TEXT["en"])
 
 
 class MinistryTeamForm(forms.ModelForm):
@@ -184,3 +230,108 @@ class TeamMembershipForm(forms.ModelForm):
                 )
 
         return cleaned_data
+
+
+class TeamAssignmentForm(forms.ModelForm):
+    assigned_members = forms.ModelMultipleChoiceField(
+        queryset=TeamMembership.objects.none(),
+        required=False,
+    )
+
+    class Meta:
+        model = TeamAssignment
+        fields = [
+            "service_event",
+            "ministry_team",
+            "assigned_members",
+            "status",
+            "notes",
+        ]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, language="en", manageable_teams=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        text = assignment_form_text(language)
+        self.manageable_teams = manageable_teams
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        if manageable_teams is not None:
+            self.fields["ministry_team"].queryset = manageable_teams
+
+        team = None
+        if self.is_bound:
+            team_id = self.data.get(self.add_prefix("ministry_team"))
+            if team_id:
+                try:
+                    team = MinistryTeam.objects.get(id=team_id)
+                except (MinistryTeam.DoesNotExist, ValueError):
+                    team = None
+        elif self.instance and self.instance.pk:
+            team = self.instance.ministry_team
+            self.fields["assigned_members"].initial = self.instance.assigned_members.all()
+
+        member_queryset = TeamMembership.objects.filter(is_active=True).select_related(
+            "team",
+            "user",
+        )
+        if team:
+            member_queryset = member_queryset.filter(team=team)
+        elif manageable_teams is not None:
+            member_queryset = member_queryset.filter(team__in=manageable_teams)
+        self.fields["assigned_members"].queryset = member_queryset.order_by(
+            "team__name",
+            "role",
+            "display_name",
+        )
+
+        self.fields["status"].choices = [
+            (TeamAssignment.STATUS_SCHEDULED, text["scheduled"]),
+            (TeamAssignment.STATUS_CONFIRMED, text["confirmed"]),
+            (TeamAssignment.STATUS_PREPARED, text["prepared"]),
+            (TeamAssignment.STATUS_COMPLETED, text["completed"]),
+            (TeamAssignment.STATUS_CANCELLED, text["cancelled"]),
+        ]
+        self.fields["notes"].widget.attrs.update(
+            {"placeholder": text["notes_placeholder"]}
+        )
+        self.fields["notes"].help_text = text["notes_help"]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        team = cleaned_data.get("ministry_team")
+        assigned_members = cleaned_data.get("assigned_members")
+
+        if team and self.manageable_teams is not None:
+            if not self.manageable_teams.filter(id=team.id).exists():
+                self.add_error("ministry_team", "You cannot manage assignments for this team.")
+
+        if team and assigned_members:
+            invalid_members = [
+                membership
+                for membership in assigned_members
+                if membership.team_id != team.id or not membership.is_active
+            ]
+            if invalid_members:
+                self.add_error(
+                    "assigned_members",
+                    "Assigned members must be active members of the selected team.",
+                )
+
+        return cleaned_data
+
+
+class TeamAssignmentConfirmForm(forms.Form):
+    confirmation_note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3}))
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = assignment_form_text(language)
+        self.fields["confirmation_note"].label = text["confirmation_note"]
+        self.fields["confirmation_note"].widget.attrs.update(
+            {"placeholder": text["confirmation_placeholder"]}
+        )
+        self.fields["confirmation_note"].help_text = text["confirmation_help"]

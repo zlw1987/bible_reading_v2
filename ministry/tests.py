@@ -2,10 +2,17 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment
+from events.models import ServiceEvent
 
-from .models import MinistryTeam, TeamMembership
+from .models import (
+    MinistryTeam,
+    TeamAssignment,
+    TeamAssignmentMember,
+    TeamMembership,
+)
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -318,6 +325,364 @@ class MinistryTeamFoundationTests(TestCase):
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, 'href="/teams/"', html=False)
 
-    def test_no_team_assignment_routes_exist_in_this_task(self):
+    def test_no_lighting_team_routes_exist_in_this_task(self):
         with self.assertRaises(NoReverseMatch):
-            reverse("team_assignment_list")
+            reverse("lighting_team_list")
+
+
+class TeamAssignmentV1Tests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="regular_assign",
+            email="regular-assign@example.com",
+            password="testpass123",
+        )
+        self.other_user = User.objects.create_user(
+            username="other_assign",
+            email="other-assign@example.com",
+            password="testpass123",
+        )
+        self.staff = User.objects.create_user(
+            username="assignment_staff",
+            email="assignment-staff@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.manager = User.objects.create_user(
+            username="assignment_pastor",
+            email="assignment-pastor@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.manager,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        self.lead_user = User.objects.create_user(
+            username="assignment_lead",
+            email="assignment-lead@example.com",
+            password="testpass123",
+        )
+
+        self.team = MinistryTeam.objects.create(
+            name="灯光团队",
+            name_en="Lighting Team",
+            playbook_link="https://example.com/playbook",
+        )
+        self.other_team = MinistryTeam.objects.create(
+            name="音响团队",
+            name_en="Sound Team",
+        )
+        self.membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.second_membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.other_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.lead_membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.other_team_membership = TeamMembership.objects.create(
+            team=self.other_team,
+            display_name="Other Helper",
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=2),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def assignment_post_data(self, **overrides):
+        data = {
+            "service_event": self.event.id,
+            "ministry_team": self.team.id,
+            "assigned_members": [self.membership.id],
+            "status": TeamAssignment.STATUS_SCHEDULED,
+            "notes": "Bring the operational playbook.",
+        }
+        data.update(overrides)
+        return data
+
+    def create_assignment(self, members=None, **overrides):
+        data = {
+            "service_event": self.event,
+            "ministry_team": self.team,
+            "status": TeamAssignment.STATUS_SCHEDULED,
+            "notes": "Operational note.",
+            "created_by": self.manager,
+        }
+        data.update(overrides)
+        assignment = TeamAssignment.objects.create(**data)
+        for membership in members or [self.membership]:
+            TeamAssignmentMember.objects.create(
+                assignment=assignment,
+                membership=membership,
+            )
+        return assignment
+
+    def test_assignment_list_requires_login(self):
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_global_manager_can_access_assignment_list(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_staff", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Team Assignments")
+        self.assertContains(response, assignment.service_event.title_en)
+
+    def test_regular_unrelated_user_cannot_see_unrelated_assignments(self):
+        self.set_language("en")
+        self.create_assignment(members=[self.second_membership])
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_team_lead_can_see_own_team_assignments(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+
+    def test_team_lead_cannot_manage_other_team_assignments(self):
+        self.set_language("en")
+        assignment = self.create_assignment(
+            members=[self.other_team_membership],
+            ministry_team=self.other_team,
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("edit_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("team_assignment_list"))
+
+    def test_manager_can_create_assignment(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_team_assignment"),
+            self.assignment_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment = TeamAssignment.objects.get(notes="Bring the operational playbook.")
+        self.assertEqual(assignment.created_by, self.manager)
+        self.assertEqual(assignment.assigned_members.count(), 1)
+
+    def test_team_lead_can_create_assignment_only_for_own_team(self):
+        self.set_language("en")
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        own_response = self.client.post(
+            reverse("create_team_assignment"),
+            self.assignment_post_data(assigned_members=[self.membership.id]),
+        )
+        other_response = self.client.post(
+            reverse("create_team_assignment"),
+            self.assignment_post_data(
+                ministry_team=self.other_team.id,
+                assigned_members=[self.other_team_membership.id],
+                notes="Unauthorized assignment",
+            ),
+        )
+
+        self.assertEqual(own_response.status_code, 302)
+        self.assertEqual(other_response.status_code, 200)
+        self.assertFalse(
+            TeamAssignment.objects.filter(notes="Unauthorized assignment").exists()
+        )
+
+    def test_manager_can_edit_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            self.assignment_post_data(
+                notes="Updated operational note.",
+                assigned_members=[self.membership.id, self.second_membership.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.notes, "Updated operational note.")
+        self.assertEqual(assignment.assigned_members.count(), 2)
+
+    def test_manager_can_cancel_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(reverse("cancel_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+
+    def test_assigned_member_can_view_assignment_detail(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Team Assignment")
+
+    def test_assigned_member_can_confirm_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {"confirmation_note": "Confirmed."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertIsNotNone(assignment_member.confirmed_at)
+        self.assertEqual(assignment_member.confirmation_note, "Confirmed.")
+
+    def test_unassigned_user_cannot_confirm_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment(members=[self.second_membership])
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(reverse("confirm_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("team_assignment_list"))
+        self.assertFalse(
+            assignment.assignment_members.filter(confirmed_at__isnull=False).exists()
+        )
+
+    def test_duplicate_team_assignment_member_is_rejected(self):
+        assignment = self.create_assignment()
+        duplicate = TeamAssignmentMember(assignment=assignment, membership=self.membership)
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+    def test_assignment_member_must_belong_to_assignment_team(self):
+        assignment = self.create_assignment()
+        invalid = TeamAssignmentMember(
+            assignment=assignment,
+            membership=self.other_team_membership,
+        )
+
+        with self.assertRaises(ValidationError):
+            invalid.full_clean()
+
+    def test_inactive_membership_cannot_be_assigned(self):
+        inactive = TeamMembership.objects.create(
+            team=self.team,
+            display_name="Inactive Helper",
+            is_active=False,
+        )
+        assignment = self.create_assignment()
+        invalid = TeamAssignmentMember(assignment=assignment, membership=inactive)
+
+        with self.assertRaises(ValidationError):
+            invalid.full_clean()
+
+    def test_all_members_confirmed_sets_assignment_confirmed(self):
+        assignment = self.create_assignment(members=[self.membership, self.second_membership])
+
+        for assignment_member in assignment.assignment_members.all():
+            assignment_member.confirm()
+        if assignment.all_members_confirmed():
+            assignment.status = TeamAssignment.STATUS_CONFIRMED
+            assignment.save()
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CONFIRMED)
+
+    def test_chinese_assignment_pages_show_chinese_labels(self):
+        self.set_language("zh")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        list_response = self.client.get(reverse("team_assignment_list"))
+        form_response = self.client.get(reverse("create_team_assignment"))
+        detail_response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertContains(list_response, "服事排班")
+        self.assertContains(form_response, "新增排班")
+        self.assertContains(detail_response, "非敏感排班备注")
+
+    def test_english_assignment_pages_show_english_labels(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        list_response = self.client.get(reverse("team_assignment_list"))
+        form_response = self.client.get(reverse("create_team_assignment"))
+        detail_response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertContains(list_response, "Team Assignments")
+        self.assertContains(form_response, "New Assignment")
+        self.assertContains(detail_response, "Non-sensitive assignment notes")
+
+    def test_normal_top_nav_does_not_show_team_assignments(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'href="/assignments/">Team Assignments', html=False)
+
+    def test_staff_menu_includes_team_assignments(self):
+        self.set_language("en")
+        self.client.login(username="assignment_staff", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/assignments/"', html=False)
+
+    def test_no_lighting_or_future_workflow_routes_exist(self):
+        missing_routes = [
+            "lighting_team_list",
+            "availability_matrix",
+            "swap_request_list",
+            "team_reminder_list",
+            "assignment_checklist",
+            "team_import",
+        ]
+        for route_name in missing_routes:
+            with self.assertRaises(NoReverseMatch):
+                reverse(route_name)

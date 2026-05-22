@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% load event_extras ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}手动安排事工团队成员参与聚会服事{% else %}Manual ministry team assignments for service events{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <div class="actions">
+        <a class="button {% if tab != 'upcoming' %}button-secondary{% endif %}"
+           href="{% url 'team_assignment_list' %}?tab=upcoming">
+            {% if language == "zh" %}即将开始{% else %}Upcoming{% endif %}
+        </a>
+        <a class="button {% if tab != 'past' %}button-secondary{% endif %}"
+           href="{% url 'team_assignment_list' %}?tab=past">
+            {% if language == "zh" %}过去{% else %}Past{% endif %}
+        </a>
+        <a class="button {% if tab != 'active' %}button-secondary{% endif %}"
+           href="{% url 'team_assignment_list' %}?tab=active">
+            {% if language == "zh" %}进行中{% else %}Active{% endif %}
+        </a>
+        <a class="button {% if tab != 'cancelled' %}button-secondary{% endif %}"
+           href="{% url 'team_assignment_list' %}?tab=cancelled">
+            {% if language == "zh" %}已取消{% else %}Cancelled{% endif %}
+        </a>
+        {% if can_create %}
+        <a class="button" href="{% url 'create_team_assignment' %}">
+            {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+{% if assignments %}
+<div class="grid grid-2">
+    {% for assignment in assignments %}
+    <div class="card">
+        <h2 class="card-title">
+            <a href="{% url 'team_assignment_detail' assignment.id %}">
+                {{ assignment.service_event|event_title:language }}
+            </a>
+        </h2>
+        <p class="muted">
+            {{ assignment|assignment_status_label:language }}
+            ·
+            {{ assignment.ministry_team|ministry_team_name:language }}
+        </p>
+        <p>
+            <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
+            {{ assignment.service_event.start_datetime }}
+        </p>
+        <p>
+            <strong>{% if language == "zh" %}已安排成员{% else %}Assigned Members{% endif %}:</strong>
+            {{ assignment.total_assigned_count }}
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}暂无排班。{% else %}No assignments found.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

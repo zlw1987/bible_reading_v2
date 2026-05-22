@@ -28,9 +28,11 @@ ServiceEvent Foundation V1 is implemented and entering QA/stabilization.
 
 MinistryTeam + TeamMembership Foundation is implemented and entering QA/stabilization.
 
-TeamAssignment V1, Lighting Team Pilot, and scheduling enhancements are still future phases.
+TeamAssignment V1 is implemented and entering QA/stabilization.
 
-The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, and the first generic MinistryTeam foundation; future assignment and scheduling operations should be added deliberately and kept within clear boundaries.
+My Serving Page, Lighting Team Pilot, and scheduling enhancements are still future phases.
+
+The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, and manual TeamAssignment V1; future personal serving views and scheduling operations should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -232,13 +234,18 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 - MinistryTeam
 - TeamMembership
+- TeamAssignment
+- TeamAssignmentMember
 - Team leaders/coordinators
 - User-linked and display-name-only memberships
+- Manual ServiceEvent-based team assignments
+- Per-member confirmation
 - Playbook link
 - Non-sensitive notes
 - Bilingual UI
 - Permission-controlled team management
 - Team lead/coordinator scoped member management
+- Team lead/coordinator scoped assignment management
 
 ### Accounts / Permissions
 
@@ -258,7 +265,7 @@ Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, 
 
 Next major product phase:
 
-TeamAssignment V1.
+My Serving Page.
 
 Before new large features:
 - Keep tests passing.
@@ -266,7 +273,7 @@ Before new large features:
 - Avoid top-nav clutter.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
 - Keep Bible Study from becoming a full event or ministry scheduling system.
-- Keep ServiceEvent and MinistryTeam foundations generic until TeamAssignment V1 is separately planned.
+- Keep ServiceEvent, MinistryTeam, and TeamAssignment foundations generic until My Serving and pilot workflows are separately planned.
 
 ## 6. Roadmap
 
@@ -339,18 +346,20 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
-Status: MinistryTeam + TeamMembership Foundation implemented / QA; TeamAssignment V1 remains next.
+Status: MinistryTeam + TeamMembership Foundation and TeamAssignment V1 implemented / QA.
 
 Implemented:
 - MinistryTeam
 - TeamMembership
+- TeamAssignment
+- TeamAssignmentMember
+- Assignment confirmation
+- Playbook link
 
 Future:
-- TeamAssignment
-- Assignment confirmation
+- My Serving Page
 - Basic checklist
 - Review notes
-- Playbook link
 
 Lighting Team is the pilot, but models must remain generic.
 
@@ -423,12 +432,12 @@ Existing examples:
 - Moderation capabilities
 - Manage reading plans / users where applicable
 
-Future capabilities may include:
-- CAP_MANAGE_TEAM_ASSIGNMENTS
+Future capabilities should be added only when a future workflow needs them.
 
 Implemented service and ministry foundation capabilities:
 - CAP_MANAGE_SERVICE_EVENTS
 - CAP_MANAGE_MINISTRY_TEAMS
+- CAP_MANAGE_TEAM_ASSIGNMENTS
 
 ## 9. Codex Task Rules
 
@@ -467,7 +476,7 @@ ServiceEvent Foundation QA / stabilization notes if needed after browser testing
 
 Next major development task after QA:
 
-TeamAssignment V1.
+My Serving Page.
 
 Not next:
 - Lighting Team scheduling

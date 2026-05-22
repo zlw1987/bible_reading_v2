@@ -19,6 +19,7 @@ from accounts.permissions import (
 )
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
+from ministry.models import TeamAssignment, TeamAssignmentMember
 
 from .forms import ReadingGuidePostForm
 from .passage_services import get_memory_passages, get_reading_passages
@@ -662,6 +663,27 @@ def home(request):
         if session.can_be_seen_by(request.user)
     ][:3]
 
+    upcoming_serving_items = (
+        TeamAssignmentMember.objects.select_related(
+            "assignment",
+            "assignment__service_event",
+            "assignment__ministry_team",
+            "membership",
+            "membership__team",
+        )
+        .filter(
+            membership__user=request.user,
+            membership__is_active=True,
+            membership__team__is_active=True,
+            assignment__service_event__start_datetime__gte=timezone.now(),
+        )
+        .exclude(assignment__status=TeamAssignment.STATUS_CANCELLED)
+        .order_by(
+            "assignment__service_event__start_datetime",
+            "assignment__ministry_team__name",
+        )[:3]
+    )
+
     return render(
         request,
         "reading/home.html",
@@ -669,6 +691,7 @@ def home(request):
             "active_plans": active_plans,
             "today_items": today_items,
             "upcoming_study_sessions": upcoming_study_sessions,
+            "upcoming_serving_items": upcoming_serving_items,
         },
     )
 

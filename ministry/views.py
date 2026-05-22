@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 
@@ -109,6 +110,38 @@ def visible_assignments_for_user(user):
             assignment_members__membership__is_active=True,
         )
     ).distinct()
+
+
+def my_serving_assignments(user, tab="upcoming"):
+    now = timezone.now()
+    assignments = (
+        TeamAssignmentMember.objects.select_related(
+            "assignment",
+            "assignment__service_event",
+            "assignment__ministry_team",
+            "membership",
+            "membership__team",
+            "membership__user",
+        )
+        .filter(
+            membership__user=user,
+            membership__is_active=True,
+            membership__team__is_active=True,
+        )
+        .exclude(assignment__status=TeamAssignment.STATUS_CANCELLED)
+    )
+
+    if tab == "past":
+        assignments = assignments.filter(assignment__service_event__start_datetime__lt=now)
+    elif tab == "all":
+        pass
+    else:
+        assignments = assignments.filter(assignment__service_event__start_datetime__gte=now)
+
+    return assignments.order_by(
+        "assignment__service_event__start_datetime",
+        "assignment__ministry_team__name",
+    )
 
 
 def sync_assignment_members(assignment, memberships):
@@ -322,6 +355,23 @@ def deactivate_team_membership(request, membership_id):
 
 
 @login_required
+def my_serving(request):
+    tab = (request.GET.get("tab") or "upcoming").strip()
+    if tab not in {"upcoming", "past", "all"}:
+        tab = "upcoming"
+
+    return render(
+        request,
+        "ministry/my_serving.html",
+        {
+            "serving_items": my_serving_assignments(request.user, tab=tab),
+            "tab": tab,
+            "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),
+        },
+    )
+
+
+@login_required
 def team_assignment_list(request):
     can_create = manageable_assignment_teams(request.user).exists()
     tab = (request.GET.get("tab") or "upcoming").strip()
@@ -505,14 +555,6 @@ def confirm_team_assignment(request, assignment_id):
         membership__user=request.user,
         membership__is_active=True,
     ).first()
-    if assignment_member is None and can_manage_team_assignment_for_team(
-        request.user,
-        assignment.ministry_team,
-    ):
-        assignment_member = assignment.assignment_members.filter(
-            membership__is_active=True,
-            confirmed_at__isnull=True,
-        ).first()
 
     if assignment_member is None:
         messages.error(request, ministry_ui_text(language, "assignment_not_available"))
@@ -524,4 +566,12 @@ def confirm_team_assignment(request, assignment_id):
         assignment.save()
 
     messages.success(request, ministry_ui_text(language, "assignment_confirmed"))
+    next_url = request.POST.get("next")
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+
     return redirect("team_assignment_detail", assignment_id=assignment.id)

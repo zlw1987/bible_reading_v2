@@ -30,9 +30,11 @@ MinistryTeam + TeamMembership Foundation is implemented and entering QA/stabiliz
 
 TeamAssignment V1 is implemented and entering QA/stabilization.
 
-My Serving Page, Lighting Team Pilot, and scheduling enhancements are still future phases.
+My Serving Page V1 is implemented and entering QA/stabilization.
 
-The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, and manual TeamAssignment V1; future personal serving views and scheduling operations should be added deliberately and kept within clear boundaries.
+Lighting Team Pilot, checklist, and scheduling enhancements are still future phases.
+
+The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, and My Serving Page V1; future pilot workflows and scheduling operations should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -143,18 +145,29 @@ Does not include:
 
 ### F. Ministry Operations
 
-Partially implemented foundation.
+Ministry Operations is partially implemented.
 
-Implemented foundation includes:
+Implemented V1 foundation includes:
 - Ministry teams
-- Team membership
+- Team memberships
+- Team leaders/coordinators
+- User-linked and display-name-only memberships
+- ServiceEvent-based manual team assignments
+- TeamAssignment
+- TeamAssignmentMember
+- Per-member confirmation
+- My Serving Page
+- Playbook link
+- Non-sensitive assignment notes
 
 Future pieces include:
-- Team assignments
-- Confirmation
 - Basic checklist
 - Service review notes
-- Playbook links
+- Lighting Team Pilot Data
+- Availability
+- Swap requests
+- Reminder automation
+- Multi-team dashboard
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
 
@@ -261,11 +274,13 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, and MinistryTeam Foundation V1 closure / QA / stabilization.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, and My Serving Page V1 are in closure / QA / stabilization.
 
 Next major product phase:
 
-My Serving Page.
+Lighting Team Pilot Data.
+
+Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
 
 Before new large features:
 - Keep tests passing.
@@ -273,7 +288,7 @@ Before new large features:
 - Avoid top-nav clutter.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
 - Keep Bible Study from becoming a full event or ministry scheduling system.
-- Keep ServiceEvent, MinistryTeam, and TeamAssignment foundations generic until My Serving and pilot workflows are separately planned.
+- Keep ServiceEvent, MinistryTeam, TeamAssignment, and My Serving workflows generic until pilot workflows are separately planned.
 
 ## 6. Roadmap
 
@@ -346,7 +361,7 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
-Status: MinistryTeam + TeamMembership Foundation and TeamAssignment V1 implemented / QA.
+Status: MinistryTeam + TeamMembership Foundation, TeamAssignment V1, and My Serving Page V1 implemented / QA.
 
 Implemented:
 - MinistryTeam
@@ -354,10 +369,11 @@ Implemented:
 - TeamAssignment
 - TeamAssignmentMember
 - Assignment confirmation
+- My Serving Page
 - Playbook link
+- Non-sensitive assignment notes
 
 Future:
-- My Serving Page
 - Basic checklist
 - Review notes
 
@@ -472,21 +488,22 @@ For feature tasks:
 
 Next documentation/QA task:
 
-ServiceEvent Foundation QA / stabilization notes if needed after browser testing.
+Ministry Team Operations V1 QA Checklist, if needed after browser testing.
 
-Next major development task after QA:
+Next major development task:
 
-My Serving Page.
+Lighting Team Pilot Data.
 
 Not next:
-- Lighting Team scheduling
+- Lighting Team-specific model
+- Lighting Team scheduling algorithm
 - Automatic scheduling
-- Full worship song library
 - Availability
 - Swap requests
 - Reminder automation
 - Checklist engine
 - Full historical import
+- Sensitive contact import
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`

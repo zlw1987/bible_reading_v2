@@ -32,6 +32,22 @@
     </div>
 
     <div class="card">
+        <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h2>
+
+        <p class="muted">
+            {% if language == "zh" %}
+            查看你即将参与的事工服事安排。
+            {% else %}
+            Review your upcoming ministry serving assignments.
+            {% endif %}
+        </p>
+
+        <a class="button button-secondary" href="{% url 'my_serving' %}">
+            {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
+        </a>
+    </div>
+
+    <div class="card">
         <h2 class="card-title">{{ ui.change_password }}</h2>
 
         <p class="muted">

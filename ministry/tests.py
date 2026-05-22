@@ -1,3 +1,4 @@
+from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -589,6 +590,19 @@ class TeamAssignmentV1Tests(TestCase):
             assignment.assignment_members.filter(confirmed_at__isnull=False).exists()
         )
 
+    def test_manager_cannot_confirm_for_an_unassigned_member(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(reverse("confirm_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("team_assignment_list"))
+        self.assertFalse(
+            assignment.assignment_members.filter(confirmed_at__isnull=False).exists()
+        )
+
     def test_duplicate_team_assignment_member_is_rejected(self):
         assignment = self.create_assignment()
         duplicate = TeamAssignmentMember(assignment=assignment, membership=self.membership)
@@ -686,3 +700,192 @@ class TeamAssignmentV1Tests(TestCase):
         for route_name in missing_routes:
             with self.assertRaises(NoReverseMatch):
                 reverse(route_name)
+
+    def test_my_serving_requires_login(self):
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_assigned_user_sees_own_upcoming_assignment_on_my_serving(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Serving")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Operational note.")
+        self.assertContains(response, "https://example.com/playbook")
+
+    def test_assigned_user_does_not_see_unrelated_assignment_on_my_serving(self):
+        self.set_language("en")
+        self.create_assignment(members=[self.second_membership])
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Sunday Service")
+        self.assertContains(response, "You do not have any serving assignments yet.")
+
+    def test_inactive_membership_does_not_show_on_my_serving(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.membership.is_active = False
+        self.membership.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Sunday Service")
+        self.assertContains(response, "You do not have any serving assignments yet.")
+
+    def test_cancelled_assignment_does_not_appear_in_my_serving_upcoming(self):
+        self.set_language("en")
+        self.create_assignment(status=TeamAssignment.STATUS_CANCELLED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_past_assignment_appears_in_past_and_all_my_serving_views(self):
+        self.set_language("en")
+        past_event = ServiceEvent.objects.create(
+            title="过去聚会",
+            title_en="Past Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=2),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_COMPLETED,
+        )
+        self.create_assignment(service_event=past_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+        all_response = self.client.get(f"{reverse('my_serving')}?tab=all")
+
+        self.assertNotContains(upcoming_response, "Past Service")
+        self.assertContains(past_response, "Past Service")
+        self.assertContains(all_response, "Past Service")
+
+    def test_user_can_confirm_own_assignment_from_my_serving(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {
+                "confirmation_note": "Confirmed from My Serving.",
+                "next": reverse("my_serving"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("my_serving"))
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertIsNotNone(assignment_member.confirmed_at)
+        self.assertEqual(assignment_member.confirmation_note, "Confirmed from My Serving.")
+
+    def test_confirmed_assignment_shows_confirmed_state_on_my_serving(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm("Ready.")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Confirmed")
+        self.assertContains(response, "Confirmed At")
+        self.assertNotContains(response, "Not Confirmed")
+
+    def test_duplicate_confirmation_does_not_create_duplicate_state(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        for note in ["First confirmation.", "Second confirmation."]:
+            self.client.post(
+                reverse("confirm_team_assignment", args=[assignment.id]),
+                {"confirmation_note": note, "next": reverse("my_serving")},
+            )
+
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertIsNotNone(assignment_member.confirmed_at)
+        self.assertEqual(assignment.assignment_members.filter(membership=self.membership).count(), 1)
+
+    def test_home_shows_upcoming_serving_when_user_has_assignment(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upcoming Serving")
+        self.assertContains(response, "My Serving")
+
+    def test_home_does_not_show_upcoming_serving_without_assignment(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Upcoming Serving")
+
+    def test_profile_links_to_my_serving(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/my-serving/"', html=False)
+
+    def test_chinese_my_serving_page_shows_chinese_labels(self):
+        self.set_language("zh")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的服事")
+        self.assertContains(response, "即将服事")
+        self.assertContains(response, "确认服事")
+
+    def test_english_my_serving_page_shows_english_labels(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Serving")
+        self.assertContains(response, "Upcoming Serving")
+        self.assertContains(response, "Confirm Assignment")
+
+    def test_normal_top_nav_does_not_show_my_serving(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'href="/my-serving/">My Serving', html=False)
+
+    def test_no_lighting_team_model_exists(self):
+        with self.assertRaises(LookupError):
+            apps.get_model("ministry", "LightingTeam")

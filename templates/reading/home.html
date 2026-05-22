@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load reading_extras %}
 {% load study_extras %}
+{% load event_extras ministry_extras %}
 
 {% block title %}{{ ui.today }} | {{ ui.site_title }}{% endblock %}
 
@@ -208,6 +209,37 @@
         </p>
         <a class="button button-secondary" href="{% url 'study_session_list' %}">
             {% if language == "zh" %}查经安排{% else %}Bible Studies{% endif %}
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if upcoming_serving_items %}
+<hr class="divider">
+
+<div class="page-header">
+    <h2 class="page-title" style="font-size: 26px;">
+        {% if language == "zh" %}即将服事{% else %}Upcoming Serving{% endif %}
+    </h2>
+</div>
+
+<div class="grid grid-2">
+    {% for serving_item in upcoming_serving_items %}
+    <div class="card">
+        <h3 class="card-title">
+            <a href="{% url 'team_assignment_detail' serving_item.assignment.id %}">
+                {{ serving_item.assignment.service_event|event_title:language }}
+            </a>
+        </h3>
+        <p class="muted">
+            {{ serving_item.assignment.service_event.start_datetime }}
+        </p>
+        <p class="muted">
+            {{ serving_item.assignment.ministry_team|ministry_team_name:language }}
+        </p>
+        <a class="button button-secondary" href="{% url 'my_serving' %}">
+            {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
         </a>
     </div>
     {% endfor %}

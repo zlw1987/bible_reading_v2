@@ -90,9 +90,6 @@ def can_confirm_team_assignment(user, assignment):
     if assignment is None or not getattr(user, "is_authenticated", False):
         return False
 
-    if can_manage_team_assignment_for_team(user, assignment.ministry_team):
-        return True
-
     return assignment.assignment_members.filter(
         membership__user=user,
         membership__is_active=True,

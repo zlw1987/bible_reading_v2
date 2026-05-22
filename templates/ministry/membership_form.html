@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}编辑成员{% else %}Edit Member{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'manage_team_members' team.id %}">
+        ← {% if language == "zh" %}返回成员管理{% else %}Back to Manage Members{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}编辑成员{% else %}Edit Member{% endif %}</h1>
+    <p class="page-subtitle">{{ team|ministry_team_name:language }}</p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'manage_team_members' team.id %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

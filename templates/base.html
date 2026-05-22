@@ -43,6 +43,9 @@
                         <a href="{% url 'service_event_list' %}">
                             {% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}
                         </a>
+                        <a href="{% url 'ministry_team_list' %}">
+                            {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
+                        </a>
                         <a href="{% url 'admin:index' %}">
                             {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
                         </a>

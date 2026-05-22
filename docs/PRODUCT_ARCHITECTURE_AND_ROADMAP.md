@@ -26,9 +26,11 @@ Reading Guide Posts are implemented.
 
 ServiceEvent Foundation V1 is implemented and entering QA/stabilization.
 
-Ministry Team Operations and Lighting Team Pilot are still future phases.
+MinistryTeam + TeamMembership Foundation is implemented and entering QA/stabilization.
 
-The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, and the new ServiceEvent foundation; future ministry operations should be added deliberately and kept within clear boundaries.
+TeamAssignment V1, Lighting Team Pilot, and scheduling enhancements are still future phases.
+
+The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, and the first generic MinistryTeam foundation; future assignment and scheduling operations should be added deliberately and kept within clear boundaries.
 
 ## 3. Module Boundaries
 
@@ -139,11 +141,13 @@ Does not include:
 
 ### F. Ministry Operations
 
-Future module.
+Partially implemented foundation.
 
-Includes:
+Implemented foundation includes:
 - Ministry teams
 - Team membership
+
+Future pieces include:
 - Team assignments
 - Confirmation
 - Basic checklist
@@ -224,6 +228,18 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 - Bilingual UI
 - Permission-controlled editing
 
+### Ministry Team Operations Foundation
+
+- MinistryTeam
+- TeamMembership
+- Team leaders/coordinators
+- User-linked and display-name-only memberships
+- Playbook link
+- Non-sensitive notes
+- Bilingual UI
+- Permission-controlled team management
+- Team lead/coordinator scoped member management
+
 ### Accounts / Permissions
 
 - Profile
@@ -238,11 +254,11 @@ Lighting Team should be the first pilot, but there should not be a LightingTeam-
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, and ServiceEvent Foundation V1 closure / QA / stabilization.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, and MinistryTeam Foundation V1 closure / QA / stabilization.
 
 Next major product phase:
 
-Ministry Team Operations V1.
+TeamAssignment V1.
 
 Before new large features:
 - Keep tests passing.
@@ -250,7 +266,7 @@ Before new large features:
 - Avoid top-nav clutter.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
 - Keep Bible Study from becoming a full event or ministry scheduling system.
-- Keep ServiceEvent as a foundation until Ministry Team Operations is separately planned.
+- Keep ServiceEvent and MinistryTeam foundations generic until TeamAssignment V1 is separately planned.
 
 ## 6. Roadmap
 
@@ -323,11 +339,13 @@ This should prepare future ministry scheduling, not become a full event-manageme
 
 ### Phase 6: Ministry Team Operations V1
 
-Status: future.
+Status: MinistryTeam + TeamMembership Foundation implemented / QA; TeamAssignment V1 remains next.
 
-Includes:
+Implemented:
 - MinistryTeam
 - TeamMembership
+
+Future:
 - TeamAssignment
 - Assignment confirmation
 - Basic checklist
@@ -406,11 +424,11 @@ Existing examples:
 - Manage reading plans / users where applicable
 
 Future capabilities may include:
-- CAP_MANAGE_MINISTRY_TEAMS
 - CAP_MANAGE_TEAM_ASSIGNMENTS
 
-Implemented service event capability:
+Implemented service and ministry foundation capabilities:
 - CAP_MANAGE_SERVICE_EVENTS
+- CAP_MANAGE_MINISTRY_TEAMS
 
 ## 9. Codex Task Rules
 
@@ -449,13 +467,17 @@ ServiceEvent Foundation QA / stabilization notes if needed after browser testing
 
 Next major development task after QA:
 
-Ministry Team Operations V1.
+TeamAssignment V1.
 
 Not next:
 - Lighting Team scheduling
 - Automatic scheduling
 - Full worship song library
-- TeamAssignment scheduling
+- Availability
+- Swap requests
+- Reminder automation
+- Checklist engine
+- Full historical import
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`

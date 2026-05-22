@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% load ministry_extras %}
+
+{% block title %}
+    {{ team|ministry_team_name:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'ministry_team_list' %}">
+        ← {% if language == "zh" %}返回事工团队{% else %}Back to Ministry Teams{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ team|ministry_team_name:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">
+        {% if team.is_active %}
+            {% if language == "zh" %}启用{% else %}Active{% endif %}
+        {% else %}
+            {% if language == "zh" %}停用{% else %}Inactive{% endif %}
+        {% endif %}
+    </p>
+
+    {% if team|ministry_team_description:language %}
+    <p>{{ team|ministry_team_description:language|linebreaksbr }}</p>
+    {% endif %}
+
+    {% if team.email_alias %}
+    <p>
+        <strong>{% if language == "zh" %}邮件别名{% else %}Email Alias{% endif %}:</strong>
+        {{ team.email_alias }}
+    </p>
+    {% endif %}
+
+    {% if team.playbook_link %}
+    <p>
+        <strong>{% if language == "zh" %}服事手册链接{% else %}Playbook Link{% endif %}:</strong>
+        <a href="{{ team.playbook_link }}">{{ team.playbook_link }}</a>
+    </p>
+    {% endif %}
+
+    {% if can_manage_team or can_manage_members %}
+    <div class="actions">
+        {% if can_manage_team %}
+        <a class="button button-secondary" href="{% url 'edit_ministry_team' team.id %}">
+            {% if language == "zh" %}编辑事工团队{% else %}Edit Ministry Team{% endif %}
+        </a>
+        {% endif %}
+        {% if can_manage_members %}
+        <a class="button button-secondary" href="{% url 'manage_team_members' team.id %}">
+            {% if language == "zh" %}管理成员{% else %}Manage Members{% endif %}
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}成员{% else %}Members{% endif %}</h2>
+    {% if memberships %}
+        {% for membership in memberships %}
+        <div>
+            <h3>{{ membership.get_display_name }}</h3>
+            <p class="muted">
+                {{ membership|membership_role_label:language }}
+                {% if membership.can_lead %}
+                    · {% if language == "zh" %}可带领{% else %}Can Lead{% endif %}
+                {% endif %}
+            </p>
+            {% if membership.skill_level %}
+            <p>
+                <strong>{% if language == "zh" %}技能等级{% else %}Skill Level{% endif %}:</strong>
+                {{ membership.skill_level }}
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}暂无成员。{% else %}No members yet.{% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

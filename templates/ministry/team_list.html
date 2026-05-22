@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}管理教会服事团队和成员{% else %}Manage church ministry teams and members{% endif %}
+    </p>
+</div>
+
+{% if can_manage %}
+<div class="card">
+    <div class="actions">
+        <a class="button" href="{% url 'create_ministry_team' %}">
+            {% if language == "zh" %}新增事工团队{% else %}New Ministry Team{% endif %}
+        </a>
+    </div>
+</div>
+{% endif %}
+
+{% if teams %}
+<div class="grid grid-2">
+    {% for team in teams %}
+    <div class="card">
+        <h2 class="card-title">
+            <a href="{% url 'ministry_team_detail' team.id %}">
+                {{ team|ministry_team_name:language }}
+            </a>
+        </h2>
+        <p class="muted">
+            {% if team.is_active %}
+                {% if language == "zh" %}启用{% else %}Active{% endif %}
+            {% else %}
+                {% if language == "zh" %}停用{% else %}Inactive{% endif %}
+            {% endif %}
+        </p>
+        {% if team|ministry_team_description:language %}
+        <p>{{ team|ministry_team_description:language|linebreaksbr }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if can_manage %}
+            {% if language == "zh" %}暂无事工团队。{% else %}No ministry teams found.{% endif %}
+        {% else %}
+            {% if language == "zh" %}你还没有被分配到任何事工团队。{% else %}You are not assigned to any ministry team.{% endif %}
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

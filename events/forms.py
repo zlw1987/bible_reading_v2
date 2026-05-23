@@ -243,6 +243,8 @@ class RecurringServiceEventForm(forms.Form):
         self.fields["weekday"].choices = weekday_choices(language)
 
         if not self.is_bound:
+            self.fields["title"].initial = "主日崇拜"
+            self.fields["title_en"].initial = "Sunday Service"
             self.fields["event_type"].initial = ServiceEvent.EVENT_SUNDAY_SERVICE
             self.fields["weekday"].initial = 6
             self.fields["start_time"].initial = "10:00"

@@ -34,6 +34,13 @@
         CSV template: docs/examples/lighting_team_pilot_template.csv.
         {% endif %}
     </p>
+    <p class="muted">
+        {% if language == "zh" %}
+        event_title 请填写中文/本地标题，例如 主日崇拜。event_title_en 可填写英文标题，例如 Sunday Service。本试点会将团队保存为 灯光组 / Lighting Team。
+        {% else %}
+        Use event_title for the Chinese/local title. Use event_title_en for the English title. For this pilot, Lighting Team will be stored as 灯光组 / Lighting Team.
+        {% endif %}
+    </p>
     <p>
         <a href="/docs/examples/lighting_team_pilot_template.csv">
             {% if language == "zh" %}下载 CSV 模板{% else %}Download CSV template{% endif %}

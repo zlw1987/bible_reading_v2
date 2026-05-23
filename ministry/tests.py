@@ -1092,7 +1092,8 @@ class LightingPilotImportCommandTests(TestCase):
         row = {
             "event_date": self.future_date.isoformat(),
             "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
-            "event_title": "Pilot Sunday Service",
+            "event_title": "主日崇拜",
+            "event_title_en": "Sunday Service",
             "start_time": "10:00",
             "end_time": "11:30",
             "service_detail": "Main sanctuary service.",
@@ -1107,6 +1108,7 @@ class LightingPilotImportCommandTests(TestCase):
             "event_date",
             "event_type",
             "event_title",
+            "event_title_en",
             "start_time",
             "end_time",
             "service_detail",
@@ -1153,10 +1155,33 @@ class LightingPilotImportCommandTests(TestCase):
 
         output = self.run_import(csv_path)
 
-        team = MinistryTeam.objects.get(name="Lighting Team")
+        team = MinistryTeam.objects.get(name="灯光组")
         self.assertEqual(team.name_en, "Lighting Team")
         self.assertEqual(team.playbook_link, "https://example.com/lighting-playbook")
         self.assertIn("teams_created=1", output)
+
+    def test_import_reuses_legacy_lighting_team_and_normalizes_on_real_import(self):
+        MinistryTeam.objects.create(name="Lighting Team")
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path)
+
+        self.assertEqual(MinistryTeam.objects.count(), 1)
+        team = MinistryTeam.objects.get()
+        self.assertEqual(team.name, "灯光组")
+        self.assertEqual(team.name_en, "Lighting Team")
+        self.assertIn("normalized Lighting Team", output)
+
+    def test_dry_run_does_not_normalize_legacy_lighting_team(self):
+        team = MinistryTeam.objects.create(name="Lighting Team")
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path, "--dry-run")
+
+        team.refresh_from_db()
+        self.assertEqual(team.name, "Lighting Team")
+        self.assertEqual(team.name_en, "")
+        self.assertIn("normalized Lighting Team", output)
 
     def test_import_creates_display_name_only_membership_when_no_matching_user(self):
         csv_path = self.write_csv(self.csv_content(assigned_member="Guest Helper"))
@@ -1165,7 +1190,7 @@ class LightingPilotImportCommandTests(TestCase):
 
         membership = TeamMembership.objects.get(display_name="Guest Helper")
         self.assertIsNone(membership.user)
-        self.assertEqual(membership.team.name, "Lighting Team")
+        self.assertEqual(membership.team.name, "灯光组")
 
     def test_import_links_membership_to_existing_user_when_email_matches(self):
         csv_path = self.write_csv(
@@ -1179,14 +1204,15 @@ class LightingPilotImportCommandTests(TestCase):
 
         membership = TeamMembership.objects.get(user=self.linked_user)
         self.assertEqual(membership.email, "linked-lighting@example.com")
-        self.assertEqual(membership.team.name, "Lighting Team")
+        self.assertEqual(membership.team.name, "灯光组")
 
     def test_import_creates_service_event(self):
         csv_path = self.write_csv(self.csv_content())
 
         self.run_import(csv_path)
 
-        event = ServiceEvent.objects.get(title="Pilot Sunday Service")
+        event = ServiceEvent.objects.get(title="主日崇拜")
+        self.assertEqual(event.title_en, "Sunday Service")
         self.assertEqual(event.event_type, ServiceEvent.EVENT_SUNDAY_SERVICE)
         self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
         self.assertEqual(event.status, ServiceEvent.STATUS_PUBLISHED)
@@ -1198,7 +1224,7 @@ class LightingPilotImportCommandTests(TestCase):
         self.run_import(csv_path)
 
         assignment = TeamAssignment.objects.get()
-        self.assertEqual(assignment.ministry_team.name, "Lighting Team")
+        self.assertEqual(assignment.ministry_team.name, "灯光组")
         self.assertIn("Special event note: Baptism Sunday.", assignment.notes)
         self.assertIn("Worship team: Worship Team A", assignment.notes)
 
@@ -1208,7 +1234,7 @@ class LightingPilotImportCommandTests(TestCase):
         self.run_import(csv_path)
 
         assignment_member = TeamAssignmentMember.objects.get()
-        self.assertEqual(assignment_member.assignment.ministry_team.name, "Lighting Team")
+        self.assertEqual(assignment_member.assignment.ministry_team.name, "灯光组")
         self.assertEqual(assignment_member.membership.get_display_name(), "Pilot Helper")
 
     def test_rerunning_import_does_not_duplicate_assignments_or_memberships(self):
@@ -1223,6 +1249,42 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 1)
         self.assertEqual(TeamAssignmentMember.objects.count(), 1)
         self.assertIn("assignment_members_created=0", second_output)
+
+    def test_rerunning_bilingual_import_does_not_duplicate_service_event(self):
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+        self.run_import(csv_path)
+
+        self.assertEqual(ServiceEvent.objects.count(), 1)
+        event = ServiceEvent.objects.get()
+        self.assertEqual(event.title, "主日崇拜")
+        self.assertEqual(event.title_en, "Sunday Service")
+
+    def test_existing_english_only_sunday_service_event_is_reused_and_normalized(self):
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(
+                self.future_date,
+                timezone.datetime.strptime("10:00", "%H:%M").time(),
+            ),
+            timezone.get_current_timezone(),
+        )
+        ServiceEvent.objects.create(
+            title="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=start_datetime,
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path)
+
+        self.assertEqual(ServiceEvent.objects.count(), 1)
+        event = ServiceEvent.objects.get()
+        self.assertEqual(event.title, "主日崇拜")
+        self.assertEqual(event.title_en, "Sunday Service")
+        self.assertIn("normalized ServiceEvent title", output)
 
     def test_forbidden_sensitive_columns_are_rejected(self):
         for forbidden_column in [
@@ -1266,9 +1328,44 @@ class LightingPilotImportCommandTests(TestCase):
         response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Pilot Sunday Service")
+        self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Lighting Team")
         self.assertContains(response, "Confirm Assignment")
+
+    def test_chinese_pages_display_bilingual_pilot_data(self):
+        self.set_language("zh")
+        csv_path = self.write_csv(
+            self.csv_content(
+                assigned_member="Linked Helper",
+                member_email="linked-lighting@example.com",
+            )
+        )
+        self.run_import(csv_path)
+        self.client.login(username="linked_lighting", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "主日崇拜")
+        self.assertContains(response, "灯光组")
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_english_pages_display_bilingual_pilot_data(self):
+        self.set_language("en")
+        csv_path = self.write_csv(
+            self.csv_content(
+                assigned_member="Linked Helper",
+                member_email="linked-lighting@example.com",
+            )
+        )
+        self.run_import(csv_path)
+        self.client.login(username="linked_lighting", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
 
     def test_no_lighting_team_model_or_route_exists_after_import_support(self):
         with self.assertRaises(LookupError):
@@ -1332,7 +1429,7 @@ class LightingPilotImportCommandTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Import Results")
-        self.assertEqual(MinistryTeam.objects.get().name, "Lighting Team")
+        self.assertEqual(MinistryTeam.objects.get().name, "灯光组")
         self.assertEqual(ServiceEvent.objects.count(), 1)
         self.assertEqual(TeamAssignment.objects.count(), 1)
         self.assertEqual(TeamAssignmentMember.objects.count(), 1)
@@ -1380,7 +1477,9 @@ class LightingPilotImportCommandTests(TestCase):
 
         content = template_path.read_text(encoding="utf-8")
 
+        self.assertIn("event_title_en", content)
         self.assertIn("2026-07-05", content)
+        self.assertIn("主日崇拜", content)
         self.assertNotIn("7/5/2026", content)
 
     def test_chinese_lighting_pilot_import_page_shows_chinese_labels(self):
@@ -1404,3 +1503,4 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertContains(response, "Lighting Pilot Import")
         self.assertContains(response, "Dry Run")
         self.assertContains(response, "Import")
+        self.assertContains(response, "Use event_title for the Chinese/local title.")

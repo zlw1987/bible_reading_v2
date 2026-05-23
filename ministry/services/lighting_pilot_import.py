@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.db import transaction
 from django.utils import timezone
 
@@ -22,6 +23,7 @@ REQUIRED_COLUMNS = {
     "assigned_member",
 }
 OPTIONAL_COLUMNS = {
+    "event_title_en",
     "start_time",
     "end_time",
     "service_detail",
@@ -45,6 +47,9 @@ EVENT_TYPES = {
     ServiceEvent.EVENT_BAPTISM,
     ServiceEvent.EVENT_OTHER,
 }
+LIGHTING_TEAM_NAME = "灯光组"
+LIGHTING_TEAM_NAME_EN = "Lighting Team"
+LEGACY_LIGHTING_TEAM_NAME = "Lighting Team"
 
 
 class ImportStructureError(ValueError):
@@ -144,6 +149,7 @@ def import_row(row, stats, *, row_number, allow_past):
         raise ValueError(f"event_type must be one of: {', '.join(sorted(EVENT_TYPES))}")
 
     event_title = value(row, "event_title")
+    event_title_en = value(row, "event_title_en")
     assigned_member = value(row, "assigned_member")
     start_time = (
         parse_time(value(row, "start_time"), "start_time")
@@ -155,15 +161,10 @@ def import_row(row, stats, *, row_number, allow_past):
     start_datetime = make_datetime(event_date, start_time)
     end_datetime = make_datetime(event_date, end_time) if end_time else None
 
-    team, team_created = MinistryTeam.objects.get_or_create(
-        name="Lighting Team",
-        defaults={"name_en": "Lighting Team"},
+    team, team_created = get_or_create_lighting_team(
+        stats,
+        row_number=row_number,
     )
-    if team_created:
-        stats.teams_created += 1
-    elif not team.name_en:
-        team.name_en = "Lighting Team"
-        team.save(update_fields=["name_en", "updated_at"])
 
     playbook_link = value(row, "playbook_link")
     if playbook_link and team.playbook_link != playbook_link:
@@ -177,18 +178,15 @@ def import_row(row, stats, *, row_number, allow_past):
         stats,
     )
 
-    event, event_created = ServiceEvent.objects.get_or_create(
+    event, event_created = get_or_create_service_event(
         event_type=event_type,
-        title=event_title,
+        event_title=event_title,
+        event_title_en=event_title_en,
         start_datetime=start_datetime,
-        defaults={
-            "title_en": event_title,
-            "description": build_event_description(row),
-            "description_en": build_event_description(row),
-            "end_datetime": end_datetime,
-            "scope_type": ServiceEvent.SCOPE_GLOBAL,
-            "status": ServiceEvent.STATUS_PUBLISHED,
-        },
+        end_datetime=end_datetime,
+        row=row,
+        stats=stats,
+        row_number=row_number,
     )
     if event_created:
         stats.service_events_created += 1
@@ -219,6 +217,97 @@ def import_row(row, stats, *, row_number, allow_past):
     stats.row_messages.append(
         f"Row {row_number}: imported {event_title} for {membership.get_display_name()}."
     )
+
+
+def get_or_create_lighting_team(stats, *, row_number):
+    team = (
+        MinistryTeam.objects.filter(
+            Q(name=LIGHTING_TEAM_NAME)
+            | Q(name_en=LIGHTING_TEAM_NAME_EN)
+            | Q(name=LEGACY_LIGHTING_TEAM_NAME)
+        )
+        .order_by("id")
+        .first()
+    )
+    if not team:
+        team = MinistryTeam.objects.create(
+            name=LIGHTING_TEAM_NAME,
+            name_en=LIGHTING_TEAM_NAME_EN,
+        )
+        stats.teams_created += 1
+        return team, True
+
+    updates = []
+    if team.name != LIGHTING_TEAM_NAME:
+        team.name = LIGHTING_TEAM_NAME
+        updates.append("name")
+    if team.name_en != LIGHTING_TEAM_NAME_EN:
+        team.name_en = LIGHTING_TEAM_NAME_EN
+        updates.append("name_en")
+    if updates:
+        team.save(update_fields=updates + ["updated_at"])
+        stats.row_messages.append(
+            f"Row {row_number}: normalized Lighting Team to {LIGHTING_TEAM_NAME} / {LIGHTING_TEAM_NAME_EN}."
+        )
+    return team, False
+
+
+def get_or_create_service_event(
+    *,
+    event_type,
+    event_title,
+    event_title_en,
+    start_datetime,
+    end_datetime,
+    row,
+    stats,
+    row_number,
+):
+    title_matches = Q(title=event_title)
+    if event_title_en:
+        title_matches |= Q(title=event_title_en) | Q(title_en=event_title_en)
+
+    event = (
+        ServiceEvent.objects.filter(
+            title_matches,
+            event_type=event_type,
+            start_datetime=start_datetime,
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            district__isnull=True,
+            small_group__isnull=True,
+        )
+        .order_by("id")
+        .first()
+    )
+
+    if not event:
+        event = ServiceEvent.objects.create(
+            event_type=event_type,
+            title=event_title,
+            title_en=event_title_en,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+            description=build_event_description(row),
+            description_en=build_event_description(row),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        return event, True
+
+    updates = []
+    if event.title != event_title:
+        event.title = event_title
+        updates.append("title")
+    if event_title_en and event.title_en != event_title_en:
+        event.title_en = event_title_en
+        updates.append("title_en")
+    if updates:
+        event.save(update_fields=updates + ["updated_at"])
+        stats.row_messages.append(
+            f"Row {row_number}: normalized ServiceEvent title to {event_title}"
+            + (f" / {event_title_en}." if event_title_en else ".")
+        )
+    return event, False
 
 
 def get_or_create_membership(team, assigned_member, member_email, stats):

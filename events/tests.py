@@ -408,6 +408,21 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Create Recurring Events")
 
+    def test_recurring_sunday_service_defaults_to_bilingual_titles(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertEqual(form.fields["title"].initial, "主日崇拜")
+        self.assertEqual(form.fields["title_en"].initial, "Sunday Service")
+        self.assertEqual(
+            form.fields["event_type"].initial,
+            ServiceEvent.EVENT_SUNDAY_SERVICE,
+        )
+
     def test_regular_user_cannot_open_recurring_event_creator(self):
         self.set_language("en")
         self.client.login(username="regular", password="testpass123")

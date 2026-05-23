@@ -49,6 +49,7 @@ Required columns:
 - `assigned_member`
 
 Optional columns:
+- `event_title_en`
 - `start_time`
 - `end_time`
 - `service_detail`
@@ -64,6 +65,8 @@ Forbidden columns:
 - `zoom_password`
 
 Use future 2-3 months only. Use `YYYY-MM-DD` date format. Use `member_email` when the person already has an account.
+
+Use `event_title` for the Chinese/local title, such as `主日崇拜`. Use optional `event_title_en` for the English title, such as `Sunday Service`. The Lighting Team should appear as `灯光组` in Chinese UI and `Lighting Team` in English UI.
 
 使用 `docs/examples/lighting_team_pilot_template.csv`。
 
@@ -158,6 +161,11 @@ User cannot see My Serving assignment:
 - Confirm the TeamMembership is linked to the user account and is active.
 - Confirm the TeamAssignmentMember exists.
 - Confirm the assignment is not cancelled.
+
+Chinese pages show `Sunday Service` or `Lighting Team`:
+- Confirm ServiceEvent uses `title=主日崇拜` and `title_en=Sunday Service`.
+- Confirm MinistryTeam uses `name=灯光组` and `name_en=Lighting Team`.
+- Re-run the bilingual pilot import with `event_title=主日崇拜` and `event_title_en=Sunday Service`, or edit the records manually if needed.
 
 成员没有关联到用户：
 - 检查 `member_email` 是否匹配已有用户邮箱。

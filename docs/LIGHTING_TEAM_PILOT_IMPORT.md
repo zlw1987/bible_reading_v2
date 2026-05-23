@@ -43,6 +43,7 @@ Required:
 - `assigned_member`
 
 Optional:
+- `event_title_en`
 - `start_time`
 - `end_time`
 - `service_detail`
@@ -68,15 +69,15 @@ Accepted `event_type` values:
 - `baptism`
 - `other`
 
-Dates use `YYYY-MM-DD`. Times use `HH:MM`.
+Dates use `YYYY-MM-DD`. Times use `HH:MM`. Use `event_title` for the Chinese/local title and optional `event_title_en` for the English title.
 
 ## Example CSV
 
 See `docs/examples/lighting_team_pilot_template.csv`.
 
 ```csv
-event_date,event_type,event_title,start_time,end_time,service_detail,special_event_note,worship_team,assigned_member,member_email,playbook_link
-2026-07-05,sunday_service,Sunday Service,10:00,11:30,Main sanctuary service,,Worship Team A,Example Helper,helper@example.com,https://example.com/lighting-playbook
+event_date,event_type,event_title,event_title_en,start_time,end_time,service_detail,special_event_note,worship_team,assigned_member,member_email,playbook_link
+2026-07-05,sunday_service,主日崇拜,Sunday Service,10:00,11:30,Main sanctuary service,,Worship Team A,Example Helper,helper@example.com,https://example.com/lighting-playbook
 ```
 
 ## Dry Run

@@ -135,11 +135,14 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Today")
         self.assertContains(response, "My Plans")
         self.assertContains(response, "Prayer")
+        self.assertContains(response, "My Serving")
         self.assertContains(response, "Profile")
         self.assertNotContains(response, "Plan Admin")
         self.assertNotContains(response, "User Admin")
         self.assertNotContains(response, "Reflection Reports")
         self.assertNotContains(response, "Prayer Reports")
+        self.assertNotContains(response, "Ministry Teams")
+        self.assertNotContains(response, "Team Assignments")
         self.assertNotContains(response, "Django Admin")
         self.assertNotContains(response, "Staff")
 
@@ -198,9 +201,19 @@ class AccountProfileTests(TestCase):
         self.set_language("en")
         self.client.login(username="levin", password="OldPass123!")
 
-        for url_name in ["home", "my_plans", "prayer_list", "profile"]:
+        for url_name in ["home", "my_plans", "prayer_list", "my_serving", "profile"]:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200)
+
+
+    def test_normal_chinese_user_sees_my_serving_in_top_nav(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的服事")
 
 
 class ChurchRolePermissionTests(TestCase):

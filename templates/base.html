@@ -20,6 +20,9 @@
                 <a href="{% url 'prayer_list' %}">
                     {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
                 </a>
+                <a href="{% url 'my_serving' %}">
+                    {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
+                </a>
                 <a href="{% url 'profile' %}">{{ ui.profile }}</a>
 
                 {% if user.is_staff %}

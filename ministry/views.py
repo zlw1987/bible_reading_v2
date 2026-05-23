@@ -422,24 +422,44 @@ def my_serving(request):
 @login_required
 def team_assignment_list(request):
     can_create = manageable_assignment_teams(request.user).exists()
+    can_show_new_assignment = can_create or can_manage_team_assignments(request.user)
+    show_setup_actions = can_manage_team_assignments(request.user)
     tab = (request.GET.get("tab") or "upcoming").strip()
-    if tab not in {"upcoming", "past", "active", "cancelled"}:
+    if tab == "active":
+        tab = "needs_confirmation"
+    if tab not in {"upcoming", "needs_confirmation", "past", "cancelled"}:
         tab = "upcoming"
 
     now = timezone.now()
     assignments = visible_assignments_for_user(request.user)
 
     if tab == "past":
-        assignments = assignments.filter(service_event__start_datetime__lt=now).exclude(
+        assignments = assignments.filter(
+            Q(service_event__start_datetime__lt=now)
+            | Q(status=TeamAssignment.STATUS_COMPLETED)
+        ).exclude(
             status=TeamAssignment.STATUS_CANCELLED,
         )
-    elif tab == "active":
-        assignments = assignments.exclude(status=TeamAssignment.STATUS_CANCELLED)
+    elif tab == "needs_confirmation":
+        assignments = assignments.exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ]
+        ).filter(
+            assignment_members__membership__is_active=True,
+            assignment_members__confirmed_at__isnull=True,
+        ).distinct()
     elif tab == "cancelled":
         assignments = assignments.filter(status=TeamAssignment.STATUS_CANCELLED)
     else:
-        assignments = assignments.filter(service_event__start_datetime__gte=now).exclude(
-            status=TeamAssignment.STATUS_CANCELLED,
+        assignments = assignments.filter(
+            service_event__start_datetime__gte=now,
+        ).exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ],
         )
 
     return render(
@@ -449,6 +469,9 @@ def team_assignment_list(request):
             "assignments": assignments,
             "tab": tab,
             "can_create": can_create,
+            "can_show_new_assignment": can_show_new_assignment,
+            "show_setup_actions": show_setup_actions,
+            "can_import_lighting": can_import_lighting_pilot(request.user),
         },
     )
 

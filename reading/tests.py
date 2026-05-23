@@ -12,6 +12,13 @@ from django.contrib.auth.models import User
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
 from comments.models import ReflectionComment
+from events.models import ServiceEvent
+from ministry.models import (
+    MinistryTeam,
+    TeamAssignment,
+    TeamAssignmentMember,
+    TeamMembership,
+)
 from reading.bible_sources import parse_reading_text
 from reading.models import (
     ActivePlan,
@@ -2482,6 +2489,34 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "发表默想")
+
+    def test_home_does_not_show_upcoming_serving_card(self):
+        team = MinistryTeam.objects.create(name="Lighting Team", name_en="Lighting Team")
+        membership = TeamMembership.objects.create(team=team, user=self.user)
+        event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=7),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(assignment=assignment, membership=membership)
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Upcoming Serving")
+        self.assertNotContains(response, "Sunday Service")
+        self.assertContains(response, "Today&#x27;s Reading")
 
     def test_staff_can_access_reading_plan_admin_list(self):
         self.client.login(username="admin", password="testpass123")

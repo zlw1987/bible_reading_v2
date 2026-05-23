@@ -6,7 +6,11 @@ This setup is for a limited Lighting Team pilot. It uses the generic Ministry Op
 
 ServiceEvent -> MinistryTeam -> TeamAssignment -> TeamAssignmentMember -> My Serving confirmation.
 
+My Serving is a dedicated top-nav entry for logged-in users. Serving assignments are no longer mixed into the Daily Reading home page.
+
 It is not automatic scheduling.
+
+中文说明：我的服事现在是登录用户的独立顶部导航入口，服事安排不再混在今日读经首页里。
 
 这个设置流程只用于有限范围的灯光组试点。它使用通用的事工团队模型：
 

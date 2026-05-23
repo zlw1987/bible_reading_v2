@@ -288,7 +288,7 @@ Checklist, availability, swap requests, reminder automation, and advanced schedu
 Before new large features:
 - Keep tests passing.
 - Preserve bilingual behavior.
-- Avoid top-nav clutter.
+- Avoid top-nav clutter; the normal logged-in top nav may include My Serving, but not Ministry Teams or Team Assignments.
 - Keep Daily Reading from absorbing unrelated ministry workflows.
 - Keep Bible Study from becoming a full event or ministry scheduling system.
 - Keep ServiceEvent, MinistryTeam, TeamAssignment, and My Serving workflows generic until pilot workflows are separately planned.
@@ -469,7 +469,7 @@ For future Codex prompts:
 - Keep each task narrow.
 - Do not add unrelated features.
 - Do not rename URLs unless explicitly requested.
-- Do not add top-nav clutter.
+- Do not add top-nav clutter beyond the intentional My Serving entry for normal logged-in users.
 - Preserve bilingual UI.
 - Tests with language-specific text must set `session["language"]`.
 - Prefer contextual links over global navigation.

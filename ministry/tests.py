@@ -830,7 +830,7 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertIsNotNone(assignment_member.confirmed_at)
         self.assertEqual(assignment.assignment_members.filter(membership=self.membership).count(), 1)
 
-    def test_home_shows_upcoming_serving_when_user_has_assignment(self):
+    def test_home_no_longer_shows_upcoming_serving_when_user_has_assignment(self):
         self.set_language("en")
         self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
@@ -838,8 +838,7 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Upcoming Serving")
-        self.assertContains(response, "My Serving")
+        self.assertNotContains(response, "Upcoming Serving")
 
     def test_home_does_not_show_upcoming_serving_without_assignment(self):
         self.set_language("en")
@@ -883,18 +882,174 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Upcoming Serving")
         self.assertContains(response, "Confirm Assignment")
 
-    def test_normal_top_nav_does_not_show_my_serving(self):
+    def test_normal_top_nav_shows_my_serving(self):
         self.set_language("en")
         self.client.login(username="regular_assign", password="testpass123")
 
         response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'href="/my-serving/">My Serving', html=False)
+        self.assertContains(response, 'href="/my-serving/">', html=False)
+        self.assertContains(response, "My Serving")
 
     def test_no_lighting_team_model_exists(self):
         with self.assertRaises(LookupError):
             apps.get_model("ministry", "LightingTeam")
+
+    def test_assignment_list_shows_new_filter_tabs(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upcoming")
+        self.assertContains(response, "Needs Confirmation")
+        self.assertContains(response, "Past")
+        self.assertContains(response, "Cancelled")
+        self.assertNotContains(response, ">Active<", html=False)
+
+    def test_chinese_assignment_list_shows_new_filter_tabs(self):
+        self.set_language("zh")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "即将开始")
+        self.assertContains(response, "待确认")
+        self.assertContains(response, "过去")
+        self.assertContains(response, "已取消")
+        self.assertNotContains(response, "进行中")
+
+    def test_future_assignment_appears_in_upcoming_tab(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+
+    def test_unconfirmed_assignment_appears_in_needs_confirmation_tab(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "needs_confirmation"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+
+    def test_confirmed_assignment_does_not_appear_in_needs_confirmation_tab(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "needs_confirmation"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_completed_or_past_assignment_appears_in_past_tab(self):
+        self.set_language("en")
+        completed_assignment = self.create_assignment(status=TeamAssignment.STATUS_COMPLETED)
+        past_event = ServiceEvent.objects.create(
+            title="过去聚会",
+            title_en="Past Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_COMPLETED,
+        )
+        self.create_assignment(service_event=past_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "past"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, completed_assignment.service_event.title_en)
+        self.assertContains(response, "Past Service")
+
+    def test_cancelled_assignment_appears_in_cancelled_tab(self):
+        self.set_language("en")
+        self.create_assignment(status=TeamAssignment.STATUS_CANCELLED)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "cancelled"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+
+    def test_old_active_tab_maps_safely_to_needs_confirmation(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "active"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Needs Confirmation")
+        self.assertContains(response, "Sunday Service")
+        self.assertNotContains(response, ">Active<", html=False)
+
+    def test_manager_sees_new_assignment_when_zero_assignments(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New Assignment")
+        self.assertContains(response, "No assignments found.")
+
+    def test_new_assignment_is_not_part_of_filter_tabs(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+        content = response.content.decode()
+
+        self.assertIn("assignment-page-actions", content)
+        self.assertIn("assignment-filter-tabs", content)
+        self.assertLess(
+            content.index("assignment-page-actions"),
+            content.index("assignment-filter-tabs"),
+        )
+
+    def test_regular_unrelated_user_does_not_see_new_assignment(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "New Assignment")
+        self.assertNotContains(response, "Suggested setup steps")
+
+    def test_manager_empty_state_shows_setup_ctas(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Suggested setup steps")
+        self.assertContains(response, "Create Recurring Events")
+        self.assertContains(response, "Ministry Teams")
+        self.assertContains(response, "Lighting Pilot Import")
+        self.assertContains(response, "New Assignment")
 
 
 class LightingPilotImportCommandTests(TestCase):

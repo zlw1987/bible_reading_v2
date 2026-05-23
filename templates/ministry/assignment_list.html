@@ -12,31 +12,33 @@
     <p class="page-subtitle">
         {% if language == "zh" %}手动安排事工团队成员参与聚会服事{% else %}Manual ministry team assignments for service events{% endif %}
     </p>
+    {% if can_show_new_assignment %}
+    <div class="actions assignment-page-actions">
+        <a class="button" href="{% url 'create_team_assignment' %}">
+            {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
+        </a>
+    </div>
+    {% endif %}
 </div>
 
 <div class="card">
-    <div class="actions">
+    <div class="actions assignment-filter-tabs">
         <a class="button {% if tab != 'upcoming' %}button-secondary{% endif %}"
            href="{% url 'team_assignment_list' %}?tab=upcoming">
             {% if language == "zh" %}即将开始{% else %}Upcoming{% endif %}
+        </a>
+        <a class="button {% if tab != 'needs_confirmation' %}button-secondary{% endif %}"
+           href="{% url 'team_assignment_list' %}?tab=needs_confirmation">
+            {% if language == "zh" %}待确认{% else %}Needs Confirmation{% endif %}
         </a>
         <a class="button {% if tab != 'past' %}button-secondary{% endif %}"
            href="{% url 'team_assignment_list' %}?tab=past">
             {% if language == "zh" %}过去{% else %}Past{% endif %}
         </a>
-        <a class="button {% if tab != 'active' %}button-secondary{% endif %}"
-           href="{% url 'team_assignment_list' %}?tab=active">
-            {% if language == "zh" %}进行中{% else %}Active{% endif %}
-        </a>
         <a class="button {% if tab != 'cancelled' %}button-secondary{% endif %}"
            href="{% url 'team_assignment_list' %}?tab=cancelled">
             {% if language == "zh" %}已取消{% else %}Cancelled{% endif %}
         </a>
-        {% if can_create %}
-        <a class="button" href="{% url 'create_team_assignment' %}">
-            {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
-        </a>
-        {% endif %}
     </div>
 </div>
 
@@ -70,6 +72,28 @@
     <p class="muted">
         {% if language == "zh" %}暂无排班。{% else %}No assignments found.{% endif %}
     </p>
+    {% if show_setup_actions %}
+    <hr class="divider">
+    <h2 class="card-title">{% if language == "zh" %}建议设置步骤{% else %}Suggested setup steps{% endif %}</h2>
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'create_recurring_service_events' %}">
+            {% if language == "zh" %}批量创建固定聚会{% else %}Create Recurring Events{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'ministry_team_list' %}">
+            {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
+        </a>
+        {% if can_import_lighting %}
+        <a class="button button-secondary" href="{% url 'lighting_pilot_import' %}">
+            {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}
+        </a>
+        {% endif %}
+        {% if can_show_new_assignment %}
+        <a class="button" href="{% url 'create_team_assignment' %}">
+            {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 {% endif %}
 {% endblock %}

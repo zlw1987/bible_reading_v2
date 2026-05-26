@@ -133,11 +133,13 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Today")
-        self.assertContains(response, "My Plans")
+        self.assertContains(response, "Reading")
+        self.assertContains(response, "Bible Study")
         self.assertContains(response, "Prayer")
         self.assertContains(response, "My Serving")
         self.assertContains(response, "Profile")
-        self.assertNotContains(response, "Plan Admin")
+        self.assertNotContains(response, "Reading Plan Admin")
+        self.assertNotContains(response, "Bible Study Admin")
         self.assertNotContains(response, "User Admin")
         self.assertNotContains(response, "Reflection Reports")
         self.assertNotContains(response, "Prayer Reports")
@@ -166,7 +168,15 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Staff")
-        self.assertContains(response, "Plan Admin")
+        self.assertContains(response, "Content Management")
+        self.assertContains(response, "Reading Plan Admin")
+        self.assertContains(response, "Bible Study Admin")
+        self.assertContains(response, "Ministry Operations")
+        self.assertContains(response, "Service Events")
+        self.assertContains(response, "Ministry Teams")
+        self.assertContains(response, "Team Assignments")
+        self.assertContains(response, "Lighting Pilot Import")
+        self.assertContains(response, "Users and Review")
         self.assertContains(response, "User Admin")
         self.assertContains(response, "Reflection Reports")
         self.assertContains(response, "Prayer Reports")
@@ -180,8 +190,10 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "今日")
-        self.assertContains(response, "我的计划")
+        self.assertContains(response, "读经")
+        self.assertContains(response, "查经")
         self.assertContains(response, "代祷")
+        self.assertContains(response, "我的服事")
         self.assertContains(response, "个人资料")
 
     def test_staff_chinese_user_sees_staff_menu_links(self):
@@ -192,7 +204,15 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "同工管理")
+        self.assertContains(response, "内容管理")
         self.assertContains(response, "读经计划管理")
+        self.assertContains(response, "查经管理")
+        self.assertContains(response, "事工运作")
+        self.assertContains(response, "聚会事件")
+        self.assertContains(response, "事工团队")
+        self.assertContains(response, "服事排班")
+        self.assertContains(response, "灯光试点导入")
+        self.assertContains(response, "用户与审核")
         self.assertContains(response, "用户管理")
         self.assertContains(response, "默想举报")
         self.assertContains(response, "代祷举报")
@@ -201,7 +221,14 @@ class AccountProfileTests(TestCase):
         self.set_language("en")
         self.client.login(username="levin", password="OldPass123!")
 
-        for url_name in ["home", "my_plans", "prayer_list", "my_serving", "profile"]:
+        for url_name in [
+            "home",
+            "my_plans",
+            "study_session_list",
+            "prayer_list",
+            "my_serving",
+            "profile",
+        ]:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200)
 

@@ -1,8 +1,8 @@
 UI_TEXT = {
     "zh": {
-        "site_title": "读经打卡",
-        "today": "今日读经",
-        "my_plans": "我的计划",
+        "site_title": "教会生活",
+        "today": "今日",
+        "my_plans": "读经",
         "group_progress": "小组进度",
         "admin": "后台",
         "login": "登录",
@@ -87,9 +87,9 @@ UI_TEXT = {
         "view_passage_wall": "查看默想墙",
     },
     "en": {
-        "site_title": "Bible Reading",
+        "site_title": "Church Life",
         "today": "Today",
-        "my_plans": "My Plans",
+        "my_plans": "Reading",
         "group_progress": "Group Progress",
         "admin": "Admin",
         "login": "Login",

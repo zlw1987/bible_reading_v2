@@ -91,7 +91,7 @@ a {
     position: absolute;
     right: 0;
     top: calc(100% + 8px);
-    min-width: 210px;
+    min-width: 240px;
     padding: 8px;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -99,6 +99,15 @@ a {
     box-shadow: var(--shadow);
     display: grid;
     gap: 4px;
+}
+
+.nav-staff-menu-heading {
+    display: block;
+    padding: 8px 10px 4px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
 }
 
 .nav-staff-menu-panel a {

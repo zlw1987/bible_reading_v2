@@ -197,6 +197,336 @@ class BibleStudySession(models.Model):
         return False
 
 
+class BibleStudyLesson(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    series = models.ForeignKey(
+        BibleStudySeries,
+        on_delete=models.CASCADE,
+        related_name="lessons",
+    )
+    title = models.CharField(max_length=180)
+    title_en = models.CharField(max_length=180, blank=True, default="")
+    scripture_reference = models.CharField(max_length=180, blank=True, default="")
+    lesson_date = models.DateField()
+    prestudy_datetime = models.DateTimeField(null=True, blank=True)
+    pastor_guide_body = models.TextField(blank=True, default="")
+    pastor_guide_body_en = models.TextField(blank=True, default="")
+    global_discussion_questions = models.TextField(blank=True, default="")
+    global_discussion_questions_en = models.TextField(blank=True, default="")
+    prestudy_notes = models.TextField(blank=True, default="")
+    prestudy_notes_en = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_bible_study_lessons",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-lesson_date", "-prestudy_datetime"]
+
+    def __str__(self):
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if self.status == self.STATUS_PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @property
+    def is_published(self):
+        return self.status in {self.STATUS_PUBLISHED, self.STATUS_COMPLETED}
+
+    def get_title(self, language="zh"):
+        if language == "en" and self.title_en:
+            return self.title_en
+        return self.title
+
+    def get_pastor_guide_body(self, language="zh"):
+        if language == "en":
+            return self.pastor_guide_body_en or self.pastor_guide_body
+        return self.pastor_guide_body
+
+    def get_global_discussion_questions(self, language="zh"):
+        if language == "en":
+            return (
+                self.global_discussion_questions_en
+                or self.global_discussion_questions
+            )
+        return self.global_discussion_questions
+
+    def get_prestudy_notes(self, language="zh"):
+        if language == "en":
+            return self.prestudy_notes_en or self.prestudy_notes
+        return self.prestudy_notes
+
+
+class BibleStudyMeeting(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    lesson = models.ForeignKey(
+        BibleStudyLesson,
+        on_delete=models.CASCADE,
+        related_name="meetings",
+    )
+    small_group = models.ForeignKey(
+        SmallGroup,
+        on_delete=models.CASCADE,
+        related_name="bible_study_meetings",
+    )
+    meeting_datetime = models.DateTimeField()
+    location = models.CharField(max_length=180, blank=True, default="")
+    location_en = models.CharField(max_length=180, blank=True, default="")
+    meeting_link = models.URLField(max_length=500, blank=True, default="")
+    discussion_leader_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_discussion_meetings",
+    )
+    discussion_leader_name = models.CharField(max_length=160, blank=True, default="")
+    group_direction = models.TextField(blank=True, default="")
+    group_direction_en = models.TextField(blank=True, default="")
+    group_questions = models.TextField(blank=True, default="")
+    group_questions_en = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+    )
+    service_event = models.ForeignKey(
+        "events.ServiceEvent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_meetings",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_bible_study_meetings",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-meeting_datetime"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["lesson", "small_group"],
+                name="unique_bible_study_meeting_lesson_group",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.lesson} - {self.small_group}"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    @property
+    def is_published(self):
+        return self.status in {self.STATUS_PUBLISHED, self.STATUS_COMPLETED}
+
+    def get_location(self, language="zh"):
+        if language == "en" and self.location_en:
+            return self.location_en
+        return self.location
+
+    def get_group_direction(self, language="zh"):
+        if language == "en":
+            return self.group_direction_en or self.group_direction
+        return self.group_direction
+
+    def get_group_questions(self, language="zh"):
+        if language == "en":
+            return self.group_questions_en or self.group_questions
+        return self.group_questions
+
+    def can_be_seen_by(self, user):
+        if not getattr(user, "is_authenticated", False):
+            return False
+
+        if (
+            getattr(user, "is_staff", False)
+            or getattr(user, "is_superuser", False)
+            or has_capability(user, CAP_MANAGE_BIBLE_STUDIES)
+            or has_capability(user, CAP_PUBLISH_BIBLE_STUDY_GUIDES)
+        ):
+            return True
+
+        if not self.is_published or not self.lesson.is_published:
+            return False
+
+        profile = getattr(user, "profile", None)
+        user_group = getattr(profile, "small_group", None)
+        return bool(user_group and user_group.id == self.small_group_id)
+
+
+class BibleStudyMeetingWorshipSong(models.Model):
+    meeting = models.ForeignKey(
+        BibleStudyMeeting,
+        on_delete=models.CASCADE,
+        related_name="worship_songs",
+    )
+    sort_order = models.PositiveIntegerField()
+    title = models.CharField(max_length=160)
+    title_en = models.CharField(max_length=160, blank=True, default="")
+    song_key = models.CharField(max_length=40, blank=True, default="")
+    youtube_url = models.URLField(max_length=500, blank=True, default="")
+    chord_url = models.URLField(max_length=500, blank=True, default="")
+    lyrics_url = models.URLField(max_length=500, blank=True, default="")
+    arrangement_notes = models.TextField(blank=True, default="")
+    arrangement_notes_en = models.TextField(blank=True, default="")
+    worship_lead_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_worship_songs",
+    )
+    worship_lead_name = models.CharField(max_length=160, blank=True, default="")
+    support_notes = models.TextField(blank=True, default="")
+    support_notes_en = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["meeting", "sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["meeting", "sort_order"],
+                name="unique_bible_study_meeting_song_order",
+            )
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def clean(self):
+        errors = {}
+
+        if not self.title:
+            errors["title"] = "Song title is required."
+
+        if self.sort_order is not None and self.sort_order < 1:
+            errors["sort_order"] = "Sort order must be positive."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def get_title(self, language="zh"):
+        if language == "en" and self.title_en:
+            return self.title_en
+        return self.title
+
+    def get_arrangement_notes(self, language="zh"):
+        if language == "en":
+            return self.arrangement_notes_en or self.arrangement_notes
+        return self.arrangement_notes
+
+    def get_support_notes(self, language="zh"):
+        if language == "en":
+            return self.support_notes_en or self.support_notes
+        return self.support_notes
+
+
+class BibleStudyMeetingRole(models.Model):
+    ROLE_DISCUSSION_LEADER = "discussion_leader"
+    ROLE_WORSHIP_LEAD = "worship_lead"
+    ROLE_PIANIST = "pianist"
+    ROLE_SUPPORT = "support"
+    ROLE_HOST = "host"
+
+    ROLE_CHOICES = [
+        (ROLE_DISCUSSION_LEADER, "Discussion Leader"),
+        (ROLE_WORSHIP_LEAD, "Worship Lead"),
+        (ROLE_PIANIST, "Pianist"),
+        (ROLE_SUPPORT, "Support"),
+        (ROLE_HOST, "Host"),
+    ]
+
+    meeting = models.ForeignKey(
+        BibleStudyMeeting,
+        on_delete=models.CASCADE,
+        related_name="roles",
+    )
+    role = models.CharField(max_length=40, choices=ROLE_CHOICES)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_meeting_roles",
+    )
+    display_name = models.CharField(max_length=160, blank=True, default="")
+    notes = models.TextField(blank=True, default="")
+    notes_en = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["meeting", "role", "id"]
+
+    def __str__(self):
+        return f"{self.get_role_display()} - {self.get_display_name()}"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def get_notes(self, language="zh"):
+        if language == "en":
+            return self.notes_en or self.notes
+        return self.notes
+
+    def get_display_name(self):
+        if self.display_name:
+            return self.display_name
+        if self.user_id:
+            return self.user.get_full_name() or self.user.get_username()
+        return ""
+
+
 class BibleStudyGuide(models.Model):
     session = models.OneToOneField(
         BibleStudySession,

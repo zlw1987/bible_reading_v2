@@ -7,6 +7,10 @@ from django.utils import timezone
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
 from .models import (
     BibleStudyGuide,
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudyMeetingRole,
+    BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySession,
     BibleStudyWorshipSong,
@@ -91,6 +95,49 @@ class BibleStudyModuleTests(TestCase):
         data.update(overrides)
         return BibleStudySession.objects.create(**data)
 
+    def create_lesson(self, **overrides):
+        data = {
+            "series": self.series,
+            "title": "约翰十五章",
+            "title_en": "John 15",
+            "scripture_reference": "John 15:1-17",
+            "lesson_date": timezone.localdate() + timezone.timedelta(days=3),
+            "prestudy_datetime": self.prestudy_time,
+            "pastor_guide_body": "牧者查经指引",
+            "pastor_guide_body_en": "Pastor study guide",
+            "global_discussion_questions": "全教会讨论问题",
+            "global_discussion_questions_en": "Church-wide questions",
+            "prestudy_notes": "预查备注",
+            "prestudy_notes_en": "Pre-study notes",
+            "status": BibleStudyLesson.STATUS_DRAFT,
+            "created_by": self.manager,
+        }
+        data.update(overrides)
+        return BibleStudyLesson.objects.create(**data)
+
+    def create_meeting(self, **overrides):
+        lesson = overrides.pop("lesson", None) or self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        data = {
+            "lesson": lesson,
+            "small_group": self.group,
+            "meeting_datetime": self.future_time,
+            "location": "小组家",
+            "location_en": "Small group home",
+            "meeting_link": "https://example.com/group-study",
+            "discussion_leader_user": self.manager,
+            "discussion_leader_name": "Leader fallback",
+            "group_direction": "小组方向",
+            "group_direction_en": "Group direction",
+            "group_questions": "小组问题",
+            "group_questions_en": "Group questions",
+            "status": BibleStudyMeeting.STATUS_PUBLISHED,
+            "created_by": self.manager,
+        }
+        data.update(overrides)
+        return BibleStudyMeeting.objects.create(**data)
+
     def create_guide(self, session):
         return BibleStudyGuide.objects.create(
             session=session,
@@ -143,6 +190,197 @@ class BibleStudyModuleTests(TestCase):
         data = self.worship_song_post_data(**overrides)
         data["session"] = session
         return BibleStudyWorshipSong.objects.create(**data)
+
+    def create_meeting_worship_song(self, meeting, **overrides):
+        data = {
+            "meeting": meeting,
+            "sort_order": 1,
+            "title": "奇异恩典",
+            "title_en": "Amazing Grace",
+            "song_key": "G",
+            "youtube_url": "https://example.com/youtube",
+            "chord_url": "https://example.com/chords",
+            "lyrics_url": "https://example.com/lyrics",
+            "arrangement_notes": "慢速开始",
+            "arrangement_notes_en": "Start slowly",
+            "worship_lead_user": self.manager,
+            "worship_lead_name": "Worship fallback",
+            "support_notes": "支援备注",
+            "support_notes_en": "Support notes",
+        }
+        data.update(overrides)
+        return BibleStudyMeetingWorshipSong.objects.create(**data)
+
+    def test_bible_study_lesson_can_be_created(self):
+        lesson = self.create_lesson()
+
+        self.assertEqual(lesson.series, self.series)
+        self.assertEqual(lesson.created_by, self.manager)
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_DRAFT)
+
+    def test_bible_study_lesson_bilingual_helpers_fall_back(self):
+        lesson = self.create_lesson(
+            title_en="",
+            pastor_guide_body_en="",
+            global_discussion_questions_en="",
+            prestudy_notes_en="",
+        )
+
+        self.assertEqual(lesson.get_title("zh"), "约翰十五章")
+        self.assertEqual(lesson.get_title("en"), "约翰十五章")
+        self.assertEqual(lesson.get_pastor_guide_body("en"), "牧者查经指引")
+        self.assertEqual(
+            lesson.get_global_discussion_questions("en"),
+            "全教会讨论问题",
+        )
+        self.assertEqual(lesson.get_prestudy_notes("en"), "预查备注")
+
+        lesson.title_en = "John 15"
+        lesson.pastor_guide_body_en = "Pastor study guide"
+        lesson.global_discussion_questions_en = "Church-wide questions"
+        lesson.prestudy_notes_en = "Pre-study notes"
+        self.assertEqual(lesson.get_title("en"), "John 15")
+        self.assertEqual(lesson.get_pastor_guide_body("en"), "Pastor study guide")
+        self.assertEqual(
+            lesson.get_global_discussion_questions("en"),
+            "Church-wide questions",
+        )
+        self.assertEqual(lesson.get_prestudy_notes("en"), "Pre-study notes")
+
+    def test_bible_study_lesson_sets_published_at_when_published(self):
+        lesson = self.create_lesson()
+        self.assertIsNone(lesson.published_at)
+
+        lesson.status = BibleStudyLesson.STATUS_PUBLISHED
+        lesson.save()
+
+        self.assertIsNotNone(lesson.published_at)
+
+    def test_bible_study_meeting_can_be_created_for_lesson_and_group(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        meeting = self.create_meeting(lesson=lesson)
+
+        self.assertEqual(meeting.lesson, lesson)
+        self.assertEqual(meeting.small_group, self.group)
+        self.assertIsNone(meeting.service_event)
+
+    def test_bible_study_meeting_enforces_unique_lesson_small_group(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_meeting(lesson=lesson, small_group=self.group)
+        duplicate = BibleStudyMeeting(
+            lesson=lesson,
+            small_group=self.group,
+            meeting_datetime=self.future_time,
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+    def test_bible_study_meeting_service_event_is_optional(self):
+        meeting = self.create_meeting(service_event=None)
+
+        self.assertIsNone(meeting.service_event)
+
+    def test_bible_study_meeting_bilingual_helpers_work(self):
+        meeting = self.create_meeting(
+            location_en="",
+            group_direction_en="",
+            group_questions_en="",
+        )
+
+        self.assertEqual(meeting.get_location("en"), "小组家")
+        self.assertEqual(meeting.get_group_direction("en"), "小组方向")
+        self.assertEqual(meeting.get_group_questions("en"), "小组问题")
+
+        meeting.location_en = "Small group home"
+        meeting.group_direction_en = "Group direction"
+        meeting.group_questions_en = "Group questions"
+        self.assertEqual(meeting.get_location("en"), "Small group home")
+        self.assertEqual(meeting.get_group_direction("en"), "Group direction")
+        self.assertEqual(meeting.get_group_questions("en"), "Group questions")
+
+    def test_bible_study_meeting_visibility_helper_is_group_scoped(self):
+        meeting = self.create_meeting()
+
+        self.assertTrue(meeting.can_be_seen_by(self.user))
+        self.assertFalse(meeting.can_be_seen_by(self.other_user))
+        self.assertTrue(meeting.can_be_seen_by(self.staff))
+
+    def test_bible_study_meeting_worship_song_orders_by_sort_order(self):
+        meeting = self.create_meeting()
+        second = self.create_meeting_worship_song(
+            meeting,
+            sort_order=2,
+            title="第二首",
+        )
+        first = self.create_meeting_worship_song(
+            meeting,
+            sort_order=1,
+            title="第一首",
+        )
+
+        self.assertEqual(
+            list(BibleStudyMeetingWorshipSong.objects.filter(meeting=meeting)),
+            [first, second],
+        )
+
+    def test_bible_study_meeting_worship_song_enforces_unique_order(self):
+        meeting = self.create_meeting()
+        self.create_meeting_worship_song(meeting, sort_order=1)
+        duplicate = BibleStudyMeetingWorshipSong(
+            meeting=meeting,
+            sort_order=1,
+            title="Duplicate Song",
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+    def test_bible_study_meeting_worship_song_bilingual_helpers_work(self):
+        meeting = self.create_meeting()
+        song = self.create_meeting_worship_song(
+            meeting,
+            title_en="",
+            arrangement_notes_en="",
+            support_notes_en="",
+        )
+
+        self.assertEqual(song.get_title("en"), "奇异恩典")
+        self.assertEqual(song.get_arrangement_notes("en"), "慢速开始")
+        self.assertEqual(song.get_support_notes("en"), "支援备注")
+
+        song.title_en = "Amazing Grace"
+        song.arrangement_notes_en = "Start slowly"
+        song.support_notes_en = "Support notes"
+        self.assertEqual(song.get_title("en"), "Amazing Grace")
+        self.assertEqual(song.get_arrangement_notes("en"), "Start slowly")
+        self.assertEqual(song.get_support_notes("en"), "Support notes")
+
+    def test_bible_study_meeting_role_accepts_allowed_role_choice(self):
+        meeting = self.create_meeting()
+        role = BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.manager,
+            display_name="",
+            notes="角色备注",
+            notes_en="Role notes",
+        )
+
+        self.assertEqual(role.role, BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER)
+        self.assertEqual(role.get_display_name(), self.manager.get_username())
+        self.assertEqual(role.get_notes("en"), "Role notes")
+
+    def test_bible_study_meeting_role_rejects_invalid_role_choice(self):
+        meeting = self.create_meeting()
+        role = BibleStudyMeetingRole(
+            meeting=meeting,
+            role="scheduler",
+            display_name="Invalid Role",
+        )
+
+        with self.assertRaises(ValidationError):
+            role.full_clean()
 
     def test_study_list_requires_login(self):
         response = self.client.get(reverse("study_session_list"))

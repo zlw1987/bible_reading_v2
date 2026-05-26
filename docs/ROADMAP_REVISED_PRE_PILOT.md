@@ -90,3 +90,27 @@ Keep it minimal when eventually implemented:
 - no enforcement engine
 - no scheduling system
 
+## Future Deferred Module - Community Activities V1
+
+Plan as a separate future module after Bible Study V2 direction is resolved and after Lighting Pilot preflight validation.
+
+Community Activities is for signup-oriented member/community/fellowship activities, such as small group meals, hiking activities, district fellowship, whole-church picnics, or special community gatherings.
+
+Keep it separate from:
+- Daily Reading
+- Bible Study content
+- Prayer
+- Ministry Team Operations
+- TeamAssignment
+- ServiceEvent scheduling
+- Checklist V1
+
+ServiceEvent remains the official church gathering, operations, and ministry assignment anchor. CommunityActivity should handle the question "who wants to attend/signup?" while ServiceEvent + TeamAssignment should handle "which ministry team is serving?"
+
+Do not add Activities to top navigation yet. A future navigation option may be:
+- English: Today, Reading, Bible Study, Prayer, Activities, My Serving, Profile
+- Chinese: 今日, 读经, 查经, 代祷, 活动, 我的服事, 个人资料
+
+Checklist V1 remains deferred and should not be revived because of this module.
+
+See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.

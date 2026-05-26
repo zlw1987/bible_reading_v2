@@ -48,4 +48,23 @@
         </a>
     </div>
 </form>
+
+<script>
+    (function () {
+        var teamSelect = document.getElementById("id_ministry_team");
+        if (!teamSelect) {
+            return;
+        }
+
+        teamSelect.addEventListener("change", function () {
+            var url = new URL(window.location.href);
+            if (teamSelect.value) {
+                url.searchParams.set("ministry_team", teamSelect.value);
+            } else {
+                url.searchParams.delete("ministry_team");
+            }
+            window.location.href = url.toString();
+        });
+    }());
+</script>
 {% endblock %}

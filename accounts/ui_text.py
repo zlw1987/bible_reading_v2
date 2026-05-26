@@ -33,6 +33,8 @@ UI_TEXT = {
         "no_available_plans": "目前没有可加入的读经计划。",
         "no_reading_plan_yet": "你还没有加入读经计划。",
         "join_plan_to_start": "从下面选择一个读经计划开始。",
+        "no_active_reading_plan": "你目前没有进行中的读经计划。",
+        "browse_reading_plans": "浏览读经计划",
         "no_scripture_links": "无法为这段读经内容生成经文链接。",
         "no_memory_link": "无法为背诵经文生成链接。",
 
@@ -120,6 +122,8 @@ UI_TEXT = {
         "no_available_plans": "No available reading plans right now.",
         "no_reading_plan_yet": "You have not joined any reading plan yet.",
         "join_plan_to_start": "Join an available reading plan below to start.",
+        "no_active_reading_plan": "You do not have an active reading plan right now.",
+        "browse_reading_plans": "Browse reading plans",
         "no_scripture_links": "No scripture links could be generated for this reading text.",
         "no_memory_link": "No memory verse link could be generated.",
 

@@ -597,16 +597,8 @@ def home(request):
         .order_by("-joined_at")
     )
 
-    joined_active_plan_ids = enrollments.values_list("active_plan_id", flat=True)
-
-    active_plans = (
-        ActivePlan.objects.select_related("plan")
-        .filter(plan__is_active=True)
-        .exclude(id__in=joined_active_plan_ids)
-        .order_by("-start_date")
-    )
-
     today_items = []
+    ended_plan_count = 0
 
     for enrollment in enrollments:
         active_plan = enrollment.active_plan
@@ -639,6 +631,12 @@ def home(request):
         is_ended = bool(max_day_number and current_day_number > max_day_number)
         is_rest_day = False
         is_reading_day = False
+
+        if is_ended:
+            ended_plan_count += 1
+            continue
+        if is_not_started:
+            continue
 
         if not is_not_started and not is_ended:
             plan_day = next(
@@ -681,12 +679,6 @@ def home(request):
             }
         )
 
-    for active_plan in active_plans:
-        active_plan.has_pinned_guide = active_plan.guide_posts.filter(
-            is_pinned=True,
-            is_published=True,
-        ).exists()
-
     upcoming_study_candidates = (
         BibleStudySession.objects
         .select_related("series", "district", "small_group")
@@ -707,8 +699,8 @@ def home(request):
         request,
         "reading/home.html",
         {
-            "active_plans": active_plans,
             "today_items": today_items,
+            "ended_plan_count": ended_plan_count,
             "upcoming_study_sessions": upcoming_study_sessions,
             "serving_summary": today_serving_summary(request.user),
         },
@@ -1317,6 +1309,7 @@ def my_plans(request):
     )
 
     plan_rows = []
+    joined_active_plan_ids = enrollments.values_list("active_plan_id", flat=True)
 
     for enrollment in enrollments:
         active_plan = enrollment.active_plan
@@ -1363,7 +1356,27 @@ def my_plans(request):
             }
         )
 
-    return render(request, "reading/my_plans.html", {"plan_rows": plan_rows})
+    available_plans = (
+        ActivePlan.objects.select_related("plan")
+        .filter(plan__is_active=True)
+        .exclude(id__in=joined_active_plan_ids)
+        .order_by("-start_date")
+    )
+
+    for active_plan in available_plans:
+        active_plan.has_pinned_guide = active_plan.guide_posts.filter(
+            is_pinned=True,
+            is_published=True,
+        ).exists()
+
+    return render(
+        request,
+        "reading/my_plans.html",
+        {
+            "plan_rows": plan_rows,
+            "available_plans": available_plans,
+        },
+    )
 
 
 @login_required

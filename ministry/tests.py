@@ -20,6 +20,7 @@ from .models import (
     TeamAssignmentMember,
     TeamMembership,
 )
+from .forms import TeamAssignmentForm
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -505,6 +506,70 @@ class TeamAssignmentV1Tests(TestCase):
         assignment = TeamAssignment.objects.get(notes="Bring the operational playbook.")
         self.assertEqual(assignment.created_by, self.manager)
         self.assertEqual(assignment.assigned_members.count(), 1)
+
+    def test_assignment_form_service_event_choices_include_date_time(self):
+        self.set_language("en")
+        later_event = ServiceEvent.objects.create(
+            title="ä¸»æ—¥å´‡æ‹œ",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("create_team_assignment"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f"Sunday Service - {timezone.localtime(self.event.start_datetime).strftime('%Y-%m-%d %H:%M')}",
+        )
+        self.assertContains(
+            response,
+            f"Sunday Service - {timezone.localtime(later_event.start_datetime).strftime('%Y-%m-%d %H:%M')}",
+        )
+
+    def test_assignment_form_filters_members_to_selected_team(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_team_assignment"),
+            {"ministry_team": self.team.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "regular_assign")
+        self.assertContains(response, "other_assign")
+        self.assertNotContains(response, "Other Helper")
+
+    def test_assignment_form_hides_members_until_team_is_selected(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("create_team_assignment"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "regular_assign")
+        self.assertNotContains(response, "Other Helper")
+
+    def test_assignment_form_rejects_member_from_different_team(self):
+        form = TeamAssignmentForm(
+            data=self.assignment_post_data(
+                assigned_members=[self.other_team_membership.id],
+            ),
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("assigned_members", form.errors)
+        self.assertIn(
+            "Assigned members must be active members of the selected team.",
+            form.errors["assigned_members"],
+        )
 
     def test_team_lead_can_create_assignment_only_for_own_team(self):
         self.set_language("en")
@@ -1027,6 +1092,68 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
+
+    def test_assignment_list_groups_assignments_by_service_event(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.create_assignment(
+            members=[self.other_team_membership],
+            ministry_team=self.other_team,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "View/Edit", count=2)
+        self.assertEqual(content.count("Sunday Service"), 1)
+
+    def test_assignment_list_filters_by_status(self):
+        self.set_language("en")
+        self.create_assignment()
+        confirmed_event = ServiceEvent.objects.create(
+            title="ç‰¹åˆ«èšä¼š",
+            title_en="Confirmed Service",
+            event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
+            start_datetime=timezone.now() + timezone.timedelta(days=5),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.create_assignment(
+            service_event=confirmed_event,
+            status=TeamAssignment.STATUS_CONFIRMED,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "upcoming", "status": TeamAssignment.STATUS_CONFIRMED},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Confirmed Service")
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_assignment_list_filters_by_ministry_team(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.create_assignment(
+            members=[self.other_team_membership],
+            ministry_team=self.other_team,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "upcoming", "team": self.other_team.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sound Team")
+        self.assertNotIn("<strong>Lighting Team</strong>", response.content.decode())
 
     def test_unconfirmed_assignment_appears_in_needs_confirmation_tab(self):
         self.set_language("en")

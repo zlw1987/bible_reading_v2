@@ -316,6 +316,28 @@ th {
     align-items: center;
 }
 
+.assignment-filter-form {
+    margin-top: 16px;
+}
+
+.assignment-event-groups {
+    display: grid;
+    gap: 18px;
+}
+
+.assignment-event-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-top: 1px solid var(--border);
+    padding: 12px 0;
+}
+
+.assignment-event-row:last-child {
+    padding-bottom: 0;
+}
+
 .divider {
     border: none;
     border-top: 1px solid var(--border);
@@ -340,6 +362,11 @@ th {
 
     .grid-2 {
         grid-template-columns: 1fr;
+    }
+
+    .assignment-event-row {
+        align-items: flex-start;
+        flex-direction: column;
     }
 
     .page-title {

@@ -14,6 +14,7 @@ from .forms import (
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
     TeamMembershipForm,
+    assignment_form_text,
 )
 from .models import (
     MinistryTeam,
@@ -432,6 +433,11 @@ def team_assignment_list(request):
 
     now = timezone.now()
     assignments = visible_assignments_for_user(request.user)
+    filter_teams = (
+        MinistryTeam.objects.filter(assignments__in=assignments)
+        .distinct()
+        .order_by("name")
+    )
 
     if tab == "past":
         assignments = assignments.filter(
@@ -462,12 +468,55 @@ def team_assignment_list(request):
             ],
         )
 
+    status_filter = (request.GET.get("status") or "").strip()
+    valid_statuses = {status for status, _label in TeamAssignment.STATUS_CHOICES}
+    if status_filter in valid_statuses:
+        assignments = assignments.filter(status=status_filter)
+    else:
+        status_filter = ""
+
+    team_filter = (request.GET.get("team") or "").strip()
+    if team_filter:
+        try:
+            team_filter_id = int(team_filter)
+        except ValueError:
+            team_filter_id = None
+        if team_filter_id and filter_teams.filter(id=team_filter_id).exists():
+            assignments = assignments.filter(ministry_team_id=team_filter_id)
+        else:
+            team_filter = ""
+
+    event_groups = []
+    for assignment in assignments:
+        if not event_groups or event_groups[-1]["event"].id != assignment.service_event_id:
+            event_groups.append(
+                {
+                    "event": assignment.service_event,
+                    "assignments": [],
+                }
+            )
+        event_groups[-1]["assignments"].append(assignment)
+
+    status_text = assignment_form_text(get_user_language(request))
+    status_filter_options = [
+        {"value": TeamAssignment.STATUS_SCHEDULED, "label": status_text["scheduled"]},
+        {"value": TeamAssignment.STATUS_CONFIRMED, "label": status_text["confirmed"]},
+        {"value": TeamAssignment.STATUS_PREPARED, "label": status_text["prepared"]},
+        {"value": TeamAssignment.STATUS_COMPLETED, "label": status_text["completed"]},
+        {"value": TeamAssignment.STATUS_CANCELLED, "label": status_text["cancelled"]},
+    ]
+
     return render(
         request,
         "ministry/assignment_list.html",
         {
             "assignments": assignments,
+            "event_groups": event_groups,
             "tab": tab,
+            "status_filter": status_filter,
+            "team_filter": team_filter,
+            "filter_teams": filter_teams,
+            "status_filter_options": status_filter_options,
             "can_create": can_create,
             "can_show_new_assignment": can_show_new_assignment,
             "show_setup_actions": show_setup_actions,
@@ -536,7 +585,11 @@ def create_team_assignment(request):
             messages.success(request, ministry_ui_text(language, "assignment_saved"))
             return redirect("team_assignment_detail", assignment_id=assignment.id)
     else:
-        form = TeamAssignmentForm(language=language, manageable_teams=manageable_teams)
+        form = TeamAssignmentForm(
+            language=language,
+            manageable_teams=manageable_teams,
+            selected_team_id=request.GET.get("ministry_team"),
+        )
 
     return render(
         request,
@@ -575,6 +628,7 @@ def edit_team_assignment(request, assignment_id):
             instance=assignment,
             language=language,
             manageable_teams=manageable_teams,
+            selected_team_id=request.GET.get("ministry_team"),
         )
 
     return render(

@@ -1756,7 +1756,8 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "今天没有指定读经")
 
 
-    def test_home_shows_not_started_plan(self):
+    def test_home_hides_not_started_plan_and_links_to_reading(self):
+        self.set_language("en")
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -1770,10 +1771,13 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "尚未开始")
+        self.assertNotContains(response, "Not started")
+        self.assertContains(response, "You do not have an active reading plan right now.")
+        self.assertContains(response, reverse("my_plans"))
 
 
-    def test_home_shows_ended_plan(self):
+    def test_home_does_not_show_ended_plan_as_primary_card(self):
+        self.set_language("en")
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -1787,7 +1791,13 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "已结束")
+        self.assertNotContains(response, "Ended")
+        self.assertNotContains(response, "May Test Plan")
+        self.assertContains(response, "Completed reading plans are available on the Reading page.")
+
+        my_plans_response = self.client.get(reverse("my_plans"))
+        self.assertContains(my_plans_response, "May Test Plan")
+        self.assertContains(my_plans_response, "Ended")
 
     def test_plan_detail_shows_rest_days_for_missing_day_numbers(self):
         PlanEnrollment.objects.create(
@@ -1852,6 +1862,32 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Progress")
 
 
+    def test_home_uses_lightweight_reading_cta_without_available_plan_grid(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You do not have an active reading plan right now.")
+        self.assertContains(response, "Browse reading plans")
+        self.assertContains(response, reverse("my_plans"))
+        self.assertNotContains(response, "Available Reading Plans")
+        self.assertNotContains(response, "Join this plan")
+
+
+    def test_my_plans_shows_available_plan_discovery(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Available Reading Plans")
+        self.assertContains(response, "May Test Plan")
+        self.assertContains(response, "Join this plan")
+
+
     def test_user_can_leave_active_plan(self):
         PlanEnrollment.objects.create(
             user=self.user,
@@ -1902,7 +1938,7 @@ class BibleReadingFlowTests(TestCase):
         )
 
 
-    def test_left_plan_no_longer_appears_in_my_plans(self):
+    def test_left_plan_no_longer_appears_as_joined_in_my_plans(self):
         enrollment = PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -1910,13 +1946,17 @@ class BibleReadingFlowTests(TestCase):
 
         enrollment.delete()
 
+        self.set_language("en")
         self.client.login(username="levin", password="testpass123")
 
         response = self.client.get(reverse("my_plans"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "You have not joined any reading plan yet.")
-        self.assertNotContains(response, "May Test Plan")
+        self.assertContains(response, "Available Reading Plans")
+        self.assertContains(response, "May Test Plan")
+        self.assertNotContains(response, "Progress:")
+        self.assertNotContains(response, "Leave Plan")
 
 
     def test_user_cannot_leave_other_users_enrollment(self):

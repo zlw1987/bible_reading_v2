@@ -55,9 +55,44 @@
 {% else %}
 <div class="card">
     <p>You have not joined any reading plan yet.</p>
-    <p>
-        <a href="{% url 'home' %}">Go to available plans</a>
-    </p>
+</div>
+{% endif %}
+
+<hr class="divider">
+
+<div class="page-header">
+    <h2 class="page-title" style="font-size: 26px;">{{ ui.available_plans }}</h2>
+    <p class="page-subtitle">{{ ui.available_plans_subtitle }}</p>
+</div>
+
+{% if available_plans %}
+<div class="grid grid-2">
+    {% for active_plan in available_plans %}
+    <div class="card">
+        <h3 class="card-title">{{ active_plan }}</h3>
+        <p class="muted">{{ active_plan.start_date }}</p>
+
+        <p>
+            <a class="button button-secondary" href="{% url 'active_plan_intro' active_plan.id %}">
+                {% if language == "zh" %}了解计划{% else %}Learn More{% endif %}
+            </a>
+            {% if active_plan.has_pinned_guide %}
+            <a class="button button-secondary" href="{% url 'active_plan_guides' active_plan.id %}">
+                {% if language == "zh" %}读经指引{% else %}Reading Guides{% endif %}
+            </a>
+            {% endif %}
+        </p>
+
+        <form method="post" action="{% url 'join_active_plan' active_plan.id %}">
+            {% csrf_token %}
+            <button type="submit">{{ ui.join_this_plan }}</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">{{ ui.no_available_plans }}</p>
 </div>
 {% endif %}
 {% endblock %}

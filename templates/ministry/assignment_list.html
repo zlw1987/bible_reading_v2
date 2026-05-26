@@ -40,30 +40,77 @@
             {% if language == "zh" %}已取消{% else %}Cancelled{% endif %}
         </a>
     </div>
+
+    <form method="get" class="assignment-filter-form">
+        <input type="hidden" name="tab" value="{{ tab }}">
+        <div class="grid grid-2">
+            <div class="form-row">
+                <label for="assignment-status-filter">
+                    {% if language == "zh" %}状态{% else %}Status{% endif %}
+                </label>
+                <select id="assignment-status-filter" name="status">
+                    <option value="">{% if language == "zh" %}全部状态{% else %}All statuses{% endif %}</option>
+                    {% for option in status_filter_options %}
+                    <option value="{{ option.value }}" {% if status_filter == option.value %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="assignment-team-filter">
+                    {% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}
+                </label>
+                <select id="assignment-team-filter" name="team">
+                    <option value="">{% if language == "zh" %}全部团队{% else %}All teams{% endif %}</option>
+                    {% for team in filter_teams %}
+                    {% with team_id=team.id|stringformat:"s" %}
+                    <option value="{{ team.id }}" {% if team_filter == team_id %}selected{% endif %}>
+                        {{ team|ministry_team_name:language }}
+                    </option>
+                    {% endwith %}
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit">{% if language == "zh" %}筛选{% else %}Apply Filters{% endif %}</button>
+            <a class="button button-secondary" href="{% url 'team_assignment_list' %}?tab={{ tab }}">
+                {% if language == "zh" %}清除筛选{% else %}Clear Filters{% endif %}
+            </a>
+        </div>
+    </form>
 </div>
 
-{% if assignments %}
-<div class="grid grid-2">
-    {% for assignment in assignments %}
-    <div class="card">
-        <h2 class="card-title">
-            <a href="{% url 'team_assignment_detail' assignment.id %}">
-                {{ assignment.service_event|event_title:language }}
-            </a>
-        </h2>
+{% if event_groups %}
+<div class="assignment-event-groups">
+    {% for group in event_groups %}
+    <div class="card assignment-event-group">
+        <h2 class="card-title">{{ group.event|event_title:language }}</h2>
         <p class="muted">
-            {{ assignment|assignment_status_label:language }}
-            ·
-            {{ assignment.ministry_team|ministry_team_name:language }}
+            {{ group.event.start_datetime|date:"Y-m-d H:i" }}
+            {% if group.event.location %}
+                · {{ group.event.location }}
+            {% endif %}
         </p>
-        <p>
-            <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
-            {{ assignment.service_event.start_datetime }}
-        </p>
-        <p>
-            <strong>{% if language == "zh" %}已安排成员{% else %}Assigned Members{% endif %}:</strong>
-            {{ assignment.total_assigned_count }}
-        </p>
+
+        <div class="assignment-event-rows">
+            {% for assignment in group.assignments %}
+            <div class="assignment-event-row">
+                <div>
+                    <strong>{{ assignment.ministry_team|ministry_team_name:language }}</strong>
+                    <span class="muted">
+                        · {{ assignment|assignment_status_label:language }}
+                        · {{ assignment.total_assigned_count }}
+                        {% if language == "zh" %}人{% else %}member{{ assignment.total_assigned_count|pluralize }}{% endif %}
+                    </span>
+                </div>
+                <a class="button button-secondary" href="{% url 'team_assignment_detail' assignment.id %}">
+                    {% if language == "zh" %}查看/编辑{% else %}View/Edit{% endif %}
+                </a>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% endfor %}
 </div>

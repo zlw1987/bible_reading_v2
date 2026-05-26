@@ -1,10 +1,36 @@
 from django import forms
+from django.utils import timezone
+
+from events.models import ServiceEvent
 
 from .models import (
     MinistryTeam,
     TeamAssignment,
     TeamMembership,
 )
+
+
+class ServiceEventChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, event):
+        title = event.get_title(self.language)
+        start_time = timezone.localtime(event.start_datetime).strftime("%Y-%m-%d %H:%M")
+        parts = [title, start_time]
+        if event.location:
+            parts.append(event.location)
+        return " - ".join(parts)
+
+
+class TeamMembershipChoiceField(forms.ModelMultipleChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, membership):
+        return membership.get_display_name()
 
 
 TEAM_FORM_TEXT = {
@@ -233,10 +259,11 @@ class TeamMembershipForm(forms.ModelForm):
 
 
 class TeamAssignmentForm(forms.ModelForm):
-    assigned_members = forms.ModelMultipleChoiceField(
+    assigned_members = TeamMembershipChoiceField(
         queryset=TeamMembership.objects.none(),
         required=False,
     )
+    service_event = ServiceEventChoiceField(queryset=ServiceEvent.objects.none())
 
     class Meta:
         model = TeamAssignment
@@ -251,10 +278,26 @@ class TeamAssignmentForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
 
-    def __init__(self, *args, language="en", manageable_teams=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        language="en",
+        manageable_teams=None,
+        selected_team_id=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         text = assignment_form_text(language)
         self.manageable_teams = manageable_teams
+        self.fields["service_event"].language = language
+        self.fields["service_event"].queryset = ServiceEvent.objects.select_related(
+            "district",
+            "small_group",
+        ).order_by(
+            "start_datetime",
+            "title",
+        )
+        self.fields["assigned_members"].language = language
 
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
@@ -270,6 +313,12 @@ class TeamAssignmentForm(forms.ModelForm):
                     team = MinistryTeam.objects.get(id=team_id)
                 except (MinistryTeam.DoesNotExist, ValueError):
                     team = None
+        elif selected_team_id:
+            try:
+                team = self.fields["ministry_team"].queryset.get(id=selected_team_id)
+                self.fields["ministry_team"].initial = team
+            except (MinistryTeam.DoesNotExist, ValueError):
+                team = None
         elif self.instance and self.instance.pk:
             team = self.instance.ministry_team
             self.fields["assigned_members"].initial = self.instance.assigned_members.all()
@@ -278,14 +327,17 @@ class TeamAssignmentForm(forms.ModelForm):
             "team",
             "user",
         )
-        if team:
+        if self.is_bound and manageable_teams is not None:
+            member_queryset = member_queryset.filter(team__in=manageable_teams)
+        elif team:
             member_queryset = member_queryset.filter(team=team)
         elif manageable_teams is not None:
-            member_queryset = member_queryset.filter(team__in=manageable_teams)
+            member_queryset = member_queryset.none()
         self.fields["assigned_members"].queryset = member_queryset.order_by(
-            "team__name",
             "role",
             "display_name",
+            "user__first_name",
+            "user__username",
         )
 
         self.fields["status"].choices = [

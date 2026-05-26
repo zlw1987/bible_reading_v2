@@ -1,12 +1,14 @@
 # Daily Reading Core V1 QA Checklist
 
-Reference: `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md` is the source of product boundaries and non-goals.
+Reference: `docs/ROADMAP_REVISED_PRE_PILOT.md` and `docs/IA_NAVIGATION_REDESIGN_PLAN.md` are the current sources for product boundaries and navigation direction.
 
 ## 1. Purpose
 
 This checklist verifies the Daily Reading Core V1 user experience.
 
 It is not a feature roadmap. Use it before deployment and after major changes to confirm the browser flows, bilingual UI, privacy rules, and staff workflows still feel stable.
+
+Daily Reading is one module within a lightweight church spiritual life and ministry workflow system. It owns plans, daily reading, check-in, reading guide, and reflection/comment flow where applicable. It does not own Bible Study, My Serving, Team Assignments, or Ministry Operations.
 
 Automated tests still matter, but manual QA is needed for UI, flow, mobile usability, and bilingual review.
 
@@ -27,8 +29,8 @@ Do not record real passwords in this checklist.
 
 ## 3. Pre-QA Setup
 
-- [ ] Run migrations.
-- [ ] Run all tests.
+- [ ] Run migrations only when QA is being performed for an implementation change.
+- [ ] Run targeted tests only when QA is being performed for an implementation change.
 - [ ] Confirm sample active plan exists.
 - [ ] Confirm active plan has an introduction.
 - [ ] Confirm active plan has reading days.
@@ -63,7 +65,10 @@ python manage.py runserver
 
 ## 5. Navigation
 
-- [ ] Normal user top nav shows only Today, My Plans, Prayer, Profile.
+- [ ] Normal user top nav follows the intended structure: Today, Reading, Bible Study, Prayer, My Serving, Profile.
+- [ ] Intended Chinese normal user top nav is 今日, 读经, 查经, 代祷, 我的服事, 个人资料.
+- [ ] My Serving is independent and not nested under Daily Reading.
+- [ ] Bible Study is independent and not nested under Daily Reading.
 - [ ] Staff user sees grouped Staff menu.
 - [ ] Staff menu includes Plan Admin.
 - [ ] Staff menu includes User Admin.
@@ -85,7 +90,8 @@ python manage.py runserver
 - [ ] Non-enrolled user sees Join Plan button.
 - [ ] User can join active plan.
 - [ ] Joined plan appears in My Plans.
-- [ ] Joined plan appears on Today if relevant.
+- [ ] Joined plan appears in Reading / My Plans.
+- [ ] Today may show a lightweight reading summary if relevant.
 - [ ] User can leave plan if that feature exists.
 
 ## 7. Reading Plan Introduction
@@ -131,6 +137,7 @@ python manage.py runserver
 
 - [ ] Today page loads.
 - [ ] Active enrolled plans are shown.
+- [ ] Today remains a lightweight summary surface, not a management workflow.
 - [ ] Today reading day is shown.
 - [ ] Text reading button works.
 - [ ] Audio reading button works.
@@ -327,6 +334,8 @@ python manage.py runserver
 - [ ] Worship songs are not part of Daily Reading.
 - [ ] Ministry team scheduling is not part of Daily Reading.
 - [ ] Lighting team operations are not part of Daily Reading.
+- [ ] Team Assignments are not part of Daily Reading.
+- [ ] My Serving is not part of Daily Reading.
 - [ ] Automatic reminders are not required for Reading V1.
 - [ ] Native Bible text storage is not required for Reading V1.
 - [ ] Full offline support is not required for Reading V1.
@@ -344,11 +353,11 @@ python manage.py runserver
 
 ## 25. Next Phase
 
-After Reading V1 closure, the next major module is Bible Study Module V1.
+After Reading V1 closure, future planning should follow the revised roadmap: IA/navigation reset, V1 stabilization, then Bible Study V2 planning and implementation.
 
 Do not begin:
 - [ ] Lighting Team scheduling
-- [ ] Full Ministry Operations
+- [ ] My Serving or Ministry Operations inside Daily Reading
 - [ ] Full ServiceEvent expansion
 
-until Bible Study V1 and Worship Set V1 are planned and implemented.
+from the Daily Reading track. Bible Study V1 exists, but future Bible Study planning is superseded by the Bible Study V2 group meeting model direction.

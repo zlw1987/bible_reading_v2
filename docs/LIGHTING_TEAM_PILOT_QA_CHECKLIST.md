@@ -2,11 +2,13 @@
 
 ## 1. Purpose
 
-This checklist validates limited Lighting Team Pilot data through the generic Ministry Operations workflow:
+This checklist is retained as a future QA reference for limited Lighting Team Pilot data through the generic Ministry Operations workflow:
 
 ServiceEvent -> MinistryTeam -> TeamAssignment -> TeamAssignmentMember -> My Serving confirmation.
 
-Use it to verify the import command and browser workflow with future 2-3 months of data only.
+Do not proceed to this checklist yet. Per `docs/LIGHTING_PILOT_PREFLIGHT_REQUIREMENTS.md`, Checklist V1 remains deferred until IA, Bible Study V2 direction, import/setup behavior, bilingual data display, and member/coordinator guides are validated.
+
+When it is reactivated, use it to verify the import command and browser workflow with future 2-3 months of data only.
 
 This checklist does not validate automatic scheduling, availability, swap requests, reminders, or a checklist engine.
 
@@ -22,6 +24,19 @@ This checklist does not validate automatic scheduling, availability, swap reques
 - [ ] Do not import Google Doc body content.
 - [ ] Only store playbook link.
 - [ ] Confirm the CSV has no forbidden sensitive columns.
+
+## 2a. Preconditions Before This Checklist Is Used
+
+- [ ] IA is clear: Today, Reading, Bible Study, Prayer, My Serving, and Profile are distinct user surfaces.
+- [ ] My Serving is the independent serving entry point.
+- [ ] Today, if used, shows only a lightweight serving summary card that links to My Serving.
+- [ ] Daily Reading does not own or manage serving operations.
+- [ ] Bible Study V2 direction is documented and no longer conflicts with Lighting Pilot assumptions.
+- [ ] Lighting import/setup dry-run and re-run behavior is validated.
+- [ ] Bilingual ServiceEvent and MinistryTeam display is validated.
+- [ ] Member-facing My Serving guide is available.
+- [ ] Coordinator-facing ministry assignment guide is available.
+- [ ] Pilot users can complete the serving flow without checklist support.
 
 ## 3. CSV Columns
 
@@ -117,7 +132,8 @@ python manage.py import_lighting_pilot --csv path/to/file.csv
 ## 8. Browser QA: Assigned Member
 
 - [ ] Linked user logs in.
-- [ ] User sees Upcoming Serving card on home page.
+- [ ] User can find serving details through My Serving.
+- [ ] If Today shows serving at all, it is only a lightweight summary card linking to My Serving.
 - [ ] User opens My Serving.
 - [ ] User sees imported assignment.
 - [ ] User sees event date/time.
@@ -142,6 +158,9 @@ python manage.py import_lighting_pilot --csv path/to/file.csv
 - [ ] Chinese assignment detail page is readable.
 - [ ] English My Serving page is readable.
 - [ ] English assignment detail page is readable.
+- [ ] Chinese UI/data shows `主日崇拜` and `灯光组` where bilingual fields exist.
+- [ ] English UI/data shows `Sunday Service` and `Lighting Team` where bilingual fields exist.
+- [ ] Chinese-facing flows do not require English-only event/team labels when bilingual fields exist.
 - [ ] No obvious hardcoded English leaks into Chinese pages for My Serving.
 - [ ] No obvious hardcoded English leaks into Chinese pages for Team Assignment.
 - [ ] No obvious hardcoded English leaks into Chinese pages for Ministry Team.
@@ -166,11 +185,11 @@ python manage.py import_lighting_pilot --csv path/to/file.csv
 ## 12. Decision After Pilot
 
 If pilot passes:
-- Consider Checklist V1 next.
+- Reconsider whether Checklist V1 is still needed.
 
 If pilot fails:
 - Fix import, assignment visibility, My Serving, or confirmation flow first.
-- Do not build Checklist V1 until pilot flow is stable.
+- Do not build Checklist V1 until IA, Bible Study V2 direction, import/setup, bilingual data display, member/coordinator guides, and the pilot flow are stable.
 
 ## 13. Explicit Non-Goals
 

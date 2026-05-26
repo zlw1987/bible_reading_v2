@@ -1,6 +1,6 @@
 # Ministry Team Operations V1 Plan
 
-Source of product boundaries: `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md`.
+Source of product boundaries: `docs/ROADMAP_REVISED_PRE_PILOT.md`, `docs/IA_NAVIGATION_REDESIGN_PLAN.md`, and `docs/LIGHTING_PILOT_PREFLIGHT_REQUIREMENTS.md`.
 
 ## 1. Purpose
 
@@ -12,6 +12,8 @@ Lighting Team is likely the first real pilot, but models must remain generic. Th
 
 This is not a full church ERP. It is not automatic scheduling. It should manage structured workflow and responsibility while continuing to link to existing Google Docs or Google Sheets where long-form playbooks and training details already live.
 
+The broader product is a lightweight church spiritual life and ministry workflow system. Ministry operations should remain separate from Daily Reading, Bible Study content, and Prayer.
+
 ## 2. Product Boundary
 
 In scope for V1:
@@ -19,6 +21,7 @@ In scope for V1:
 - Team memberships
 - Team leaders/coordinators
 - ServiceEvent-based assignments
+- My Serving as the user's independent serving surface
 - Assignment status
 - Basic confirmation
 - Basic notes
@@ -31,6 +34,7 @@ Out of scope for V1:
 - Swap requests
 - Reminder automation
 - Full checklist engine
+- Checklist V1 before preflight validation is complete
 - Service review history
 - Full lighting scene database
 - ShowXpress training database
@@ -40,6 +44,7 @@ Out of scope for V1:
 - Zoom passwords
 - Historical 2021-2026 full schedule import
 - Full multi-team dashboard
+- Sensitive data import
 
 ## 3. Relationship to Existing Modules
 
@@ -52,12 +57,15 @@ Prayer:
 - Do not mix prayer requests with team operations.
 
 Bible Study:
-- Future ServiceEvents may represent Bible Study events.
-- Team assignments may later attach to Bible Study ServiceEvents if needed.
+- Bible Study owns content and spiritual preparation.
+- ServiceEvent may optionally anchor date/time/location/operations for a Bible Study meeting.
+- Team assignments may later attach to Bible Study-related ServiceEvents if needed, but ServiceEvent must not become the source of truth for Bible Study content.
 
 Bible Study Worship Set:
 - Separate from MinistryTeam.
-- Worship Set is song planning for a study session, not worship ministry scheduling.
+- Future actual worship songs and arrangements should belong to small-group BibleStudyMeeting.
+- A church-wide BibleStudyLesson may later have optional suggested songs, but group-level worship set is the real workflow.
+- Worship set planning is not ministry-team scheduling.
 
 ServiceEvent:
 - MinistryTeam Operations depends on ServiceEvent.
@@ -85,7 +93,7 @@ Possible fields:
 - updated_at
 
 Examples:
-- Lighting Team
+- Lighting Team / 灯光组
 - Worship Team
 - Sound Team
 - Projection Team
@@ -174,6 +182,7 @@ Do not add sensitive team contact info without explicit approval.
 ### Team Member
 
 - See "My Serving" or equivalent page.
+- Use My Serving as the independent serving entry point; do not route serving details through Daily Reading.
 - View upcoming assignments.
 - Confirm assignment.
 - View event details.
@@ -189,7 +198,8 @@ Do not add sensitive team contact info without explicit approval.
 Lighting Team pilot should only use generic models.
 
 Allowed pilot data:
-- Lighting Team as a MinistryTeam
+- Lighting Team / 灯光组 as a MinistryTeam
+- Sunday Service / 主日崇拜 as a ServiceEvent where applicable
 - Future 2-3 months of assignments
 - Assigned lighting member
 - ServiceEvent date/type
@@ -224,10 +234,11 @@ Possible pages, not implemented in this planning task:
   - logged-in user's upcoming service assignments
 
 Navigation principle:
-- Do not add top-nav clutter for normal users.
-- Staff menu may include Ministry Teams later.
-- My Serving may become a normal-user nav item only if real users need it frequently.
-- Prefer contextual links first.
+- Intended normal-user top nav is Today, Reading, Bible Study, Prayer, My Serving, Profile.
+- Intended Chinese normal-user top nav is 今日, 读经, 查经, 代祷, 我的服事, 个人资料.
+- My Serving is the normal user's independent serving entry point.
+- Today may show a lightweight serving summary card only, linking to My Serving.
+- Staff menu may include Ministry Teams and Team Assignments under Ministry Operations.
 
 ## 9. V1 Non-Goals
 
@@ -236,6 +247,7 @@ Navigation principle:
 - No swap request workflow.
 - No reminder automation.
 - No full checklist system.
+- No Checklist V1 before IA, Bible Study V2 direction, import/setup, bilingual data display, member/coordinator guides, and pilot flow are validated.
 - No advanced service review history.
 - No multi-team dashboard.
 - No full service flow management.
@@ -279,19 +291,22 @@ Recommended sequence:
 - No sensitive data
 - No full historical import
 
-### Task 5: Checklist V1
+### Task 5: Preflight Docs and Pilot Validation
 
-- Only after assignments are proven useful
-- Basic checklist template / assignment checklist
-- No complex automation
+- Validate IA clarity.
+- Validate Bible Study V2 direction.
+- Validate Lighting import/setup flow.
+- Validate bilingual data display.
+- Write member-facing My Serving guide.
+- Write coordinator-facing ministry assignment guide.
+- Confirm pilot users can complete the flow without checklist support.
 
-### Task 6: Enhancements
+### Task 6: Checklist V1
 
-- Availability
-- Swap request
-- Reminders
-- Dashboard
-- Only after real usage
+- Deferred.
+- Reconsider only after pilot validation.
+- Keep minimal if eventually implemented: generic template, assignment-level checklist items, manual check/uncheck.
+- No reminders, enforcement engine, scheduling system, availability matrix, swap request, or dashboard.
 
 ## 11. Definition of Done for Future Implementation
 
@@ -305,6 +320,11 @@ Recommended sequence:
 - No top-nav clutter.
 - No sensitive data imported.
 - No automatic scheduling.
+- No availability matrix.
+- No swap request.
+- No reminders.
+- No LightingTeam-specific model.
+- Checklist V1 remains deferred until preflight validation passes.
 
 ## Verification for This Planning Task
 

@@ -1,14 +1,16 @@
 # Bible Study V1 QA Checklist
 
-Reference: `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md` is the source of product boundaries and non-goals.
+Reference: `docs/BIBLE_STUDY_V2_GROUP_MEETING_MODEL_PLAN.md`, `docs/IA_NAVIGATION_REDESIGN_PLAN.md`, and `docs/ROADMAP_REVISED_PRE_PILOT.md` are the current sources for future Bible Study direction.
 
 ## 1. Purpose
 
-This checklist verifies Bible Study V1 browser flows, including Bible Study sessions, guides, scope visibility, and session-level worship songs.
+This checklist verifies existing Bible Study V1 browser flows, including Bible Study sessions, guides, scope visibility, and session-level worship songs.
 
 It is not a feature roadmap. Use it before deployment and after major changes.
 
 Automated tests still matter, but manual QA checks UI, bilingual behavior, permissions, and the full session flow in a browser.
+
+Bible Study V1 exists and may remain useful for stabilization, but it is superseded for future planning by Bible Study V2. Do not treat the V1 session model or session-level worship set as final. Do not use this checklist to justify proceeding to Lighting Pilot Checklist V1 before Bible Study V2 planning is resolved.
 
 ## 2. Test Accounts Needed
 
@@ -123,7 +125,9 @@ python manage.py runserver
 - [ ] Notes display if present.
 - [ ] Worship songs are not visible if the parent session is not visible.
 - [ ] No full song library behavior appears.
-- [ ] No top nav item is added.
+- [ ] Existing V1 session-level songs are understood as legacy/stabilization behavior.
+- [ ] Future actual worship songs and arrangements belong to small-group BibleStudyMeeting.
+- [ ] Church-wide BibleStudyLesson may later have optional suggested songs, but group-level worship set is the real workflow.
 
 ## 9. Bilingual Review
 
@@ -156,8 +160,9 @@ python manage.py runserver
 - [ ] Draft sessions do not appear to regular users.
 - [ ] Cancelled sessions do not appear to regular users.
 - [ ] Home page does not become cluttered.
-- [ ] Daily Reading remains primary.
-- [ ] No new top-nav clutter.
+- [ ] Today, if used, remains a lightweight summary surface.
+- [ ] Bible Study is a first-class module, not hidden inside Daily Reading.
+- [ ] Intended normal user top nav includes Bible Study / 查经.
 
 ## 11. Mobile / Usability
 
@@ -170,11 +175,12 @@ python manage.py runserver
 
 ## 12. Known Non-Goals for Bible Study V1
 
-- [ ] Worship songs are session-level only.
+- [ ] V1 worship songs are session-level only, but this is not the final future model.
 - [ ] No full worship song library.
 - [ ] No automatic song transposition.
 - [ ] No copyright management.
-- [ ] No ServiceEvent integration yet.
+- [ ] ServiceEvent is not the Bible Study content source of truth.
+- [ ] In V2, BibleStudyMeeting may optionally link to ServiceEvent for date/time/location/operations anchoring.
 - [ ] No MinistryTeam / Lighting Team integration yet.
 - [ ] No attendance tracking yet.
 - [ ] No automatic reminders yet.
@@ -189,16 +195,22 @@ python manage.py runserver
 - [ ] Manager/staff flows pass.
 - [ ] Mobile basic review passes.
 - [ ] Known issues documented.
-- [ ] Bible Study V1 can be considered stable enough for pilot use.
+- [ ] Bible Study V1 can be considered stable enough as existing V1 functionality.
+- [ ] Future pilot decisions still depend on Bible Study V2 planning, not only this V1 checklist.
 
 ## 14. Next Phase
 
-After Bible Study V1 and Worship Set V1 QA, the next major development phase is ServiceEvent Foundation.
+After Bible Study V1 stabilization, future planning should follow Bible Study V2:
+- church-wide BibleStudyLesson
+- small-group BibleStudyMeeting
+- group-level worship set
+- group-level discussion direction/questions
+- group-level leaders/support roles
+- optional ServiceEvent relationship
 
 Do not begin:
-- [ ] Lighting Team scheduling
-- [ ] MinistryTeam Operations
+- [ ] Lighting Pilot Checklist V1
 - [ ] Automatic scheduling
-- [ ] Full ServiceEvent expansion beyond foundation
+- [ ] Treating ServiceEvent as the Bible Study content model
 
-until ServiceEvent Foundation is separately planned.
+until Bible Study V2 direction is resolved and documented.

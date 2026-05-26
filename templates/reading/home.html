@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load event_extras %}
+{% load ministry_extras %}
 {% load reading_extras %}
 {% load study_extras %}
 
@@ -9,6 +11,53 @@
     <h1 class="page-title">{{ ui.today }}</h1>
     <p class="page-subtitle">{{ ui.today_subtitle }}</p>
 </div>
+
+{% if serving_summary %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h2>
+
+    {% if serving_summary.is_pending %}
+    <p>
+        {% if language == "zh" %}
+            你有 {{ serving_summary.pending_count }} 个服事安排等待确认。
+        {% else %}
+            You have {{ serving_summary.pending_count }} serving assignment{% if serving_summary.pending_count != 1 %}s{% endif %} waiting for confirmation.
+        {% endif %}
+    </p>
+    <p><span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span></p>
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+            你有一个即将到来的服事安排。
+        {% else %}
+            You have an upcoming serving assignment.
+        {% endif %}
+    </p>
+    <p><span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span></p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}聚会{% else %}Event{% endif %}:</strong>
+        {{ serving_summary.serving_item.assignment.service_event|event_title:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}时间{% else %}Date/Time{% endif %}:</strong>
+        {{ serving_summary.serving_item.assignment.service_event.start_datetime }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}:</strong>
+        {{ serving_summary.serving_item.assignment.ministry_team|ministry_team_name:language }}
+    </p>
+
+    <a class="button" href="{% url 'my_serving' %}">
+        {% if serving_summary.is_pending %}
+            {% if language == "zh" %}去确认{% else %}Confirm in My Serving{% endif %}
+        {% else %}
+            {% if language == "zh" %}查看我的服事{% else %}View in My Serving{% endif %}
+        {% endif %}
+    </a>
+</div>
+{% endif %}
 
 {% if today_items %}
 <div class="grid">

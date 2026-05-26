@@ -2490,7 +2490,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "发表默想")
 
-    def test_home_does_not_show_upcoming_serving_card(self):
+    def test_home_shows_pending_serving_summary_for_current_user(self):
         team = MinistryTeam.objects.create(name="Lighting Team", name_en="Lighting Team")
         membership = TeamMembership.objects.create(team=team, user=self.user)
         event = ServiceEvent.objects.create(
@@ -2514,8 +2514,12 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Upcoming Serving")
-        self.assertNotContains(response, "Sunday Service")
+        self.assertContains(response, "My Serving")
+        self.assertContains(response, "You have 1 serving assignment waiting for confirmation.")
+        self.assertContains(response, "Pending confirmation")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, reverse("my_serving"))
         self.assertContains(response, "Today&#x27;s Reading")
 
     def test_staff_can_access_reading_plan_admin_list(self):

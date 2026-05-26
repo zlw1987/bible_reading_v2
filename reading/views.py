@@ -1,6 +1,6 @@
 from collections import defaultdict
 import calendar as py_calendar
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -19,6 +19,8 @@ from accounts.permissions import (
 )
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
+from ministry.models import TeamAssignment
+from ministry.views import my_serving_assignments
 
 from .forms import ReadingGuidePostForm
 from .passage_services import get_memory_passages, get_reading_passages
@@ -548,6 +550,45 @@ def delete_reading_guide_post(request, guide_id):
     return redirect("active_plan_guides", active_plan_id=active_plan_id)
 
 
+def today_serving_summary(user):
+    now = timezone.now()
+    upcoming_assignments = my_serving_assignments(user, tab="upcoming").exclude(
+        assignment__status__in=[
+            TeamAssignment.STATUS_CANCELLED,
+            TeamAssignment.STATUS_COMPLETED,
+        ],
+    )
+
+    pending_assignments = upcoming_assignments.filter(confirmed_at__isnull=True)
+    pending_count = pending_assignments.count()
+    serving_item = pending_assignments.first()
+
+    if serving_item:
+        return {
+            "serving_item": serving_item,
+            "pending_count": pending_count,
+            "is_pending": True,
+        }
+
+    near_term_serving_item = (
+        upcoming_assignments
+        .filter(
+            confirmed_at__isnull=False,
+            assignment__service_event__start_datetime__lte=now + timedelta(days=30),
+        )
+        .first()
+    )
+
+    if near_term_serving_item:
+        return {
+            "serving_item": near_term_serving_item,
+            "pending_count": 0,
+            "is_pending": False,
+        }
+
+    return None
+
+
 @login_required
 def home(request):
     enrollments = (
@@ -669,6 +710,7 @@ def home(request):
             "active_plans": active_plans,
             "today_items": today_items,
             "upcoming_study_sessions": upcoming_study_sessions,
+            "serving_summary": today_serving_summary(request.user),
         },
     )
 

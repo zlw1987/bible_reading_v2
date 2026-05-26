@@ -830,7 +830,7 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertIsNotNone(assignment_member.confirmed_at)
         self.assertEqual(assignment.assignment_members.filter(membership=self.membership).count(), 1)
 
-    def test_home_no_longer_shows_upcoming_serving_when_user_has_assignment(self):
+    def test_home_shows_pending_serving_summary_when_user_has_assignment(self):
         self.set_language("en")
         self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
@@ -838,7 +838,15 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Upcoming Serving")
+        self.assertContains(response, "My Serving")
+        self.assertContains(response, "You have 1 serving assignment waiting for confirmation.")
+        self.assertContains(response, "Pending confirmation")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, reverse("my_serving"))
+        self.assertNotContains(response, "Edit Assignment")
+        self.assertNotContains(response, "Cancel Assignment")
+        self.assertNotContains(response, "Operational note.")
 
     def test_home_does_not_show_upcoming_serving_without_assignment(self):
         self.set_language("en")
@@ -847,7 +855,95 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "serving assignment waiting for confirmation")
         self.assertNotContains(response, "Upcoming Serving")
+
+    def test_home_shows_pending_count_for_multiple_assignments(self):
+        self.set_language("en")
+        self.create_assignment()
+        later_event = ServiceEvent.objects.create(
+            title="Midweek Service",
+            title_en="Midweek Service",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=timezone.now() + timezone.timedelta(days=9),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.create_assignment(service_event=later_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You have 2 serving assignments waiting for confirmation.")
+        self.assertContains(response, "Sunday Service")
+        self.assertNotContains(response, "Midweek Service")
+
+    def test_home_does_not_show_unrelated_user_assignment(self):
+        self.set_language("en")
+        self.create_assignment(members=[self.second_membership])
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "serving assignment waiting for confirmation")
+        self.assertNotContains(response, "Sunday Service")
+
+    def test_home_shows_near_term_confirmed_assignment_when_no_pending(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm("Ready.")
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You have an upcoming serving assignment.")
+        self.assertContains(response, "Confirmed")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, reverse("my_serving"))
+        self.assertNotContains(response, "Ready.")
+
+    def test_home_hides_confirmed_assignment_outside_near_term_window(self):
+        self.set_language("en")
+        far_event = ServiceEvent.objects.create(
+            title="Future Service",
+            title_en="Future Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=45),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=far_event)
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Future Service")
+        self.assertNotContains(response, "You have an upcoming serving assignment.")
+
+    def test_chinese_home_serving_summary_uses_chinese_labels(self):
+        self.set_language("zh")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的服事")
+        self.assertContains(response, "你有 1 个服事安排等待确认。")
+        self.assertContains(response, "等待确认")
+        self.assertContains(response, "主日崇拜")
+        self.assertContains(response, "去确认")
 
     def test_profile_links_to_my_serving(self):
         self.set_language("en")

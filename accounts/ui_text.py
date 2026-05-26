@@ -11,7 +11,7 @@ UI_TEXT = {
         "hi": "你好",
         "language": "语言",
 
-        "today_subtitle": "读经、默想、打卡，与小组一起同行。",
+        "today_subtitle": "今天的读经、查经、代祷和服事提醒。",
         "available_plans": "可加入的读经计划",
         "available_plans_subtitle": "加入一个计划，开始和小组一起读经。",
         "join_this_plan": "加入这个计划",
@@ -98,7 +98,7 @@ UI_TEXT = {
         "hi": "Hi",
         "language": "Language",
 
-        "today_subtitle": "Read, reflect, and check in with your group.",
+        "today_subtitle": "Today's reading, Bible study, prayer, and serving reminders.",
         "available_plans": "Available Reading Plans",
         "available_plans_subtitle": "Join a plan to begin reading with your group.",
         "join_this_plan": "Join this plan",

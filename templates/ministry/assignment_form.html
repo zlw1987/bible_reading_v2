@@ -58,11 +58,31 @@
 
         teamSelect.addEventListener("change", function () {
             var url = new URL(window.location.href);
+            var serviceEventSelect = document.getElementById("id_service_event");
+            var statusSelect = document.getElementById("id_status");
+            var notesField = document.getElementById("id_notes");
+
             if (teamSelect.value) {
                 url.searchParams.set("ministry_team", teamSelect.value);
             } else {
                 url.searchParams.delete("ministry_team");
             }
+            if (serviceEventSelect && serviceEventSelect.value) {
+                url.searchParams.set("service_event", serviceEventSelect.value);
+            } else {
+                url.searchParams.delete("service_event");
+            }
+            if (statusSelect && statusSelect.value) {
+                url.searchParams.set("status", statusSelect.value);
+            } else {
+                url.searchParams.delete("status");
+            }
+            if (notesField && notesField.value) {
+                url.searchParams.set("notes", notesField.value);
+            } else {
+                url.searchParams.delete("notes");
+            }
+            url.searchParams.delete("assigned_members");
             window.location.href = url.toString();
         });
     }());

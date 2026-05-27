@@ -545,6 +545,32 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "other_assign")
         self.assertNotContains(response, "Other Helper")
 
+    def test_assignment_create_form_preserves_safe_fields_when_team_filter_changes(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_team_assignment"),
+            {
+                "ministry_team": self.other_team.id,
+                "service_event": self.event.id,
+                "status": TeamAssignment.STATUS_PREPARED,
+                "notes": "Keep this service event selected.",
+                "assigned_members": self.membership.id,
+            },
+        )
+
+        form = response.context["form"]
+        member_ids = set(form.fields["assigned_members"].queryset.values_list("id", flat=True))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(str(form["service_event"].value()), str(self.event.id))
+        self.assertEqual(form["status"].value(), TeamAssignment.STATUS_PREPARED)
+        self.assertEqual(form["notes"].value(), "Keep this service event selected.")
+        self.assertIn(self.other_team_membership.id, member_ids)
+        self.assertNotIn(self.membership.id, member_ids)
+        self.assertNotEqual(form["assigned_members"].value(), [str(self.membership.id)])
+
     def test_assignment_form_hides_members_until_team_is_selected(self):
         self.set_language("en")
         self.client.login(username="assignment_pastor", password="testpass123")
@@ -554,6 +580,32 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "regular_assign")
         self.assertNotContains(response, "Other Helper")
+
+    def test_assignment_edit_form_preserves_service_event_when_team_filter_changes(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            {
+                "ministry_team": self.other_team.id,
+                "service_event": assignment.service_event_id,
+                "status": TeamAssignment.STATUS_CONFIRMED,
+                "notes": "Edited note should stay visible.",
+                "assigned_members": self.membership.id,
+            },
+        )
+
+        form = response.context["form"]
+        member_ids = set(form.fields["assigned_members"].queryset.values_list("id", flat=True))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(str(form["service_event"].value()), str(assignment.service_event_id))
+        self.assertEqual(form["status"].value(), TeamAssignment.STATUS_CONFIRMED)
+        self.assertEqual(form["notes"].value(), "Edited note should stay visible.")
+        self.assertIn(self.other_team_membership.id, member_ids)
+        self.assertNotIn(self.membership.id, member_ids)
 
     def test_assignment_form_rejects_member_from_different_team(self):
         form = TeamAssignmentForm(

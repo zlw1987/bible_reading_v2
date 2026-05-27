@@ -169,6 +169,15 @@ def sync_assignment_members(assignment, memberships):
             )
 
 
+def assignment_form_initial_from_query(request):
+    initial = {}
+    for field_name in ["service_event", "status", "notes"]:
+        value = request.GET.get(field_name)
+        if value:
+            initial[field_name] = value
+    return initial
+
+
 @login_required
 def ministry_team_list(request):
     can_manage = can_manage_ministry_teams(request.user)
@@ -586,6 +595,7 @@ def create_team_assignment(request):
             return redirect("team_assignment_detail", assignment_id=assignment.id)
     else:
         form = TeamAssignmentForm(
+            initial=assignment_form_initial_from_query(request),
             language=language,
             manageable_teams=manageable_teams,
             selected_team_id=request.GET.get("ministry_team"),
@@ -625,6 +635,7 @@ def edit_team_assignment(request, assignment_id):
             return redirect("team_assignment_detail", assignment_id=assignment.id)
     else:
         form = TeamAssignmentForm(
+            initial=assignment_form_initial_from_query(request),
             instance=assignment,
             language=language,
             manageable_teams=manageable_teams,

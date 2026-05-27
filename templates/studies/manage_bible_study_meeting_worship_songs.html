@@ -23,6 +23,27 @@
     </p>
 </div>
 
+<div class="card">
+    <p>
+        <strong>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}:</strong>
+        {{ meeting.meeting_datetime }}
+    </p>
+</div>
+
+{% if meeting_roles %}
+<div class="card">
+    <h2>{% if language == "zh" %}查经聚会同工分工{% else %}Meeting Roles{% endif %}</h2>
+    {% for meeting_role in meeting_roles %}
+    <p>
+        <strong>{{ meeting_role|meeting_role_label:language }}</strong>
+        {% if meeting_role|meeting_role_display_name:language %}
+        <span class="muted"> · {{ meeting_role|meeting_role_display_name:language }}</span>
+        {% endif %}
+    </p>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if worship_songs %}
 <div class="card">
     <h2>{% if language == "zh" %}敬拜诗歌安排{% else %}Worship Set{% endif %}</h2>

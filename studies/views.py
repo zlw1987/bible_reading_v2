@@ -636,6 +636,7 @@ def manage_bible_study_meeting_worship_songs(request, meeting_id):
             "worship_songs": meeting.worship_songs.select_related(
                 "worship_lead_user",
             ),
+            "meeting_roles": meeting.roles.select_related("user"),
             "form": form,
         },
     )

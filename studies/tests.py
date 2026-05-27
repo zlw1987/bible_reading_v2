@@ -5,7 +5,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
-from .forms import BibleStudyMeetingPreparationForm, BibleStudyMeetingRoleForm
+from .forms import (
+    BibleStudyMeetingPreparationForm,
+    BibleStudyMeetingRoleForm,
+    BibleStudyMeetingWorshipSongForm,
+)
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -246,7 +250,7 @@ class BibleStudyModuleTests(TestCase):
             "lyrics_url": "https://example.com/group-lyrics",
             "arrangement_notes": "小组编排备注",
             "arrangement_notes_en": "Group arrangement notes",
-            "worship_lead_user": self.manager.id,
+            "worship_lead_user": self.user.id,
             "worship_lead_name": "Lead fallback",
             "support_notes": "小组配搭备注",
             "support_notes_en": "Group support notes",
@@ -829,6 +833,12 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_access_meeting_worship_management_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_role(
+            meeting,
+            role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=None,
+            display_name="Worship Context Lead",
+        )
         self.create_meeting_worship_song(meeting, title_en="Visible Worship Song")
         self.client.login(username="study_staff", password="testpass123")
 
@@ -840,6 +850,10 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Manage Worship Set")
         self.assertContains(response, "Add Worship Song")
         self.assertContains(response, "Visible Worship Song")
+        self.assertContains(response, "Meeting Time")
+        self.assertContains(response, "Meeting Roles")
+        self.assertContains(response, "Worship Lead")
+        self.assertContains(response, "Worship Context Lead")
 
     def test_regular_user_cannot_access_meeting_worship_management_page(self):
         self.set_language("en")
@@ -890,7 +904,17 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         song = BibleStudyMeetingWorshipSong.objects.get(meeting=meeting)
         self.assertEqual(song.title_en, "Group Worship Song")
-        self.assertEqual(song.worship_lead_user, self.manager)
+        self.assertEqual(song.worship_lead_user, self.user)
+
+    def test_meeting_worship_song_form_filters_worship_lead_to_meeting_group(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        users = list(form.fields["worship_lead_user"].queryset)
+        self.assertIn(self.user, users)
+        self.assertNotIn(self.other_user, users)
+        self.assertNotIn("meeting", form.fields)
 
     def test_staff_can_edit_meeting_worship_song(self):
         self.set_language("en")

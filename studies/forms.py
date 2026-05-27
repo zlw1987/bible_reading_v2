@@ -666,6 +666,17 @@ class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
 
+        user_model = get_user_model()
+        users = user_model.objects.filter(is_active=True)
+        if meeting:
+            user_filter = Q(profile__small_group=meeting.small_group)
+            if self.instance.worship_lead_user_id:
+                user_filter |= Q(id=self.instance.worship_lead_user_id)
+            users = users.filter(user_filter)
+        self.fields["worship_lead_user"].queryset = users.distinct().order_by(
+            "username"
+        )
+
         self.fields["title"].widget.attrs.update(
             {"placeholder": text["title_placeholder"]}
         )

@@ -236,6 +236,12 @@ Planning clarification:
 - Bilingual UI
 - Permission-controlled editing
 
+V2 correction after browser review:
+- The future primary Bible Study flow should be Bible Study Schedule / 查经安排 -> Weekly Bible Study Guide / 查经指引 -> generated Small Group Bible Study Meetings / 小组查经聚会.
+- Existing `BibleStudySeries` should likely serve as the internal Bible Study Schedule model for now.
+- Generated meetings should reference the weekly guide through `BibleStudyMeeting.lesson` and derive schedule through `meeting.lesson.series`.
+- Guide content should not be copied into generated meetings; meeting detail should display current parent guide content dynamically.
+
 ### Bible Study Worship Set
 
 - Session-level worship songs
@@ -296,7 +302,7 @@ Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, 
 
 Next major product/domain phase:
 
-Church structure and small-group coworker role planning, followed by simple `BibleStudyMeetingRole` UI.
+Bible Study V2 schedule/scope alignment, starting with staff IA cleanup and treating `BibleStudySeries` as Bible Study Schedule / 查经安排.
 
 Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
 Checklist V1 remains deferred until Lighting Pilot validation and should not be revived because of Community Activities.
@@ -432,6 +438,12 @@ Near-term planning and implementation sequence:
 - Small group coworker roles planning.
 - BS-V2.5A Simple `BibleStudyMeetingRole` UI.
 - BS-V2.5B Group-level worship set UI.
+- Bible Study V2 Schedule/Scope Replan.
+- Staff IA cleanup.
+- Treat `BibleStudySeries` as Bible Study Schedule / 查经安排.
+- Manual idempotent generation of small-group meetings from guide/scope.
+- Normal user V2 landing integration.
+- Bible Study V2 Flow QA.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.
 - Later Community Activities V1 with audience segments.
@@ -523,11 +535,11 @@ For feature tasks:
 
 Next documentation/QA task:
 
-Small group coworker roles planning or Ministry Team Operations V1 QA Checklist, depending on the next accepted scope.
+Bible Study V2 Schedule/Scope Replan and staff IA alignment, depending on the next accepted scope.
 
 Next major development task:
 
-BS-V2.5A Simple `BibleStudyMeetingRole` UI.
+BS-V2.6.1 Staff IA cleanup, followed by BS-V2.6.2 treating `BibleStudySeries` as Bible Study Schedule / 查经安排.
 
 Checklist V1 remains deferred until Lighting Pilot validation.
 
@@ -539,9 +551,11 @@ Not next:
 - Swap requests
 - Reminder automation
 - Checklist engine
+- Role-aware Bible Study editing permissions before schedule/scope alignment
 - Full historical import
 - Sensitive contact import
 
 Suggested docs:
 - `docs/READING_V1_QA_CHECKLIST.md`
 - `docs/BIBLE_STUDY_V1_QA_CHECKLIST.md`
+- `docs/BIBLE_STUDY_V2_SCHEDULE_SCOPE_REPLAN.md`

@@ -12,6 +12,8 @@ See also `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` for broader church structure bou
 - `BibleStudyMeetingRole` represents one-meeting Bible Study preparation responsibility
 - `ServiceEvent` remains an optional operations anchor, not the Bible Study content source of truth
 
+See also `docs/BIBLE_STUDY_V2_SCHEDULE_SCOPE_REPLAN.md` for the post-BS-V2.5B correction: the staff/product hierarchy should be Bible Study Schedule / 查经安排 -> Weekly Bible Study Guide / 每周查经指引 -> Small Group Bible Study Meeting / 小组查经聚会. This plan now treats `BibleStudySeries` as the likely internal schedule container until a later task proves a separate `BibleStudySchedule` model is necessary.
+
 ## 2. Current Problem
 
 The current Bible Study V1 model appears too simple for the real church workflow. It risks mixing:
@@ -31,7 +33,19 @@ The real workflow is two-layer:
 ## 3. Recommended Model Direction
 
 Keep or adapt:
-- BibleStudySeries
+- BibleStudySeries, used user-facing as Bible Study Schedule / 查经安排 for now
+
+### BibleStudySchedule
+
+User-facing concept for a quarter/season/series of Bible Study planning.
+
+Near-term implementation recommendation:
+- reuse existing `BibleStudySeries`
+- change user-facing wording to Bible Study Schedule / 查经安排
+- avoid destructive model rename
+
+Future option:
+- add or rename to a true `BibleStudySchedule` model only if `BibleStudySeries` becomes too limiting.
 
 ### BibleStudyLesson
 
@@ -64,8 +78,8 @@ Suggested fields:
 - meeting_datetime
 - location
 - meeting_link
-- discussion_leader_user nullable
-- discussion_leader_name fallback
+- discussion_leader_user nullable, if retained as a legacy/de-emphasized compatibility field
+- discussion_leader_name fallback, if retained as a legacy/de-emphasized compatibility field
 - group_direction
 - group_direction_en
 - group_questions
@@ -73,6 +87,12 @@ Suggested fields:
 - status: draft / published / completed / cancelled
 - service_event nullable
 - created_by
+
+Preferred workflow:
+- Discussion Leader / 查经带领 should be managed through `BibleStudyMeetingRole`.
+- The main meeting setup form should not prominently expose discussion leader fields.
+- Meeting setup should focus on guide, small group, meeting time, location/link, group direction/questions, status, and optional ServiceEvent if needed.
+- Do not plan a migration for these compatibility fields yet.
 
 Recommended constraint:
 - unique(lesson, small_group), unless the church truly needs multiple meetings per group for the same lesson.
@@ -117,6 +137,7 @@ Purpose:
 - Capture per-meeting responsibility, not long-term small-group coworker identity.
 - Example: this week one Rainbow 4 E coworker leads discussion.
 - Example: this week one Rainbow 4 W coworker leads worship.
+- Preferred owner for Discussion Leader / 查经带领 in the future workflow.
 - Manual assignment first.
 
 Not:
@@ -153,6 +174,8 @@ Recommended relationship:
 - BibleStudyMeeting may optionally link to ServiceEvent.
 - ServiceEvent can be used for date/time/location/operations/team assignment anchoring.
 - BibleStudyLesson and BibleStudyMeeting should remain the source of truth for Bible Study content.
+- Generated BibleStudyMeeting records should point to the weekly BibleStudyLesson and derive their schedule through `meeting.lesson.series`.
+- Do not copy church-wide guide content into generated meetings; meeting detail should display current parent guide content dynamically.
 
 ## 6. Worship Songs Placement
 
@@ -224,5 +247,14 @@ Future reference only:
 - Add role-aware editing permissions only if needed later.
 
 ### Phase BS-V2.6
+
+- Replan and align schedule/scope hierarchy.
+- Clean up staff IA so schedules contain weekly guides and weekly guides show generated small-group meetings.
+- Treat existing `BibleStudySeries` as Bible Study Schedule / 查经安排 unless a later task proves a separate model is necessary.
+- Add manual, idempotent meeting generation from guide/scope before role-aware permissions.
+- Generated meetings should reference the weekly guide and must not copy guide content.
+- Keep `ServiceEvent` optional and do not create `TeamAssignment`.
+
+### Phase BS-V2.7
 
 - Add backward compatibility or migration notes for existing BibleStudySession data.

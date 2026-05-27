@@ -10,6 +10,8 @@ The project remains a lightweight church spiritual life and ministry workflow sy
 
 Church structure/domain alignment now lives in `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`. That plan clarifies that fellowship `SmallGroup` is not `MinistryTeam`, `BibleStudyMeetingRole` is not `TeamAssignment`, and Bible Study meeting responsibilities should stay separate from church-level ministry operations.
 
+Schedule/scope replan now lives in `docs/BIBLE_STUDY_V2_SCHEDULE_SCOPE_REPLAN.md`. Browser review after BS-V2.5B showed that the product needs an explicit Bible Study Schedule / 查经安排 layer above weekly guides and small-group meetings. Treat the existing `BibleStudySeries` as the likely internal schedule model for now, with user-facing wording changed to Bible Study Schedule / 查经安排 before more permission work.
+
 ## 2. Current Implementation Inventory
 
 ### App Files
@@ -548,7 +550,11 @@ Bible Study V2 does not include:
 ### Phase BS-V2.3 - Small-Group Meeting Creation and Visibility
 
 - Add `BibleStudyMeeting` list/detail for the current user's group.
-- Decide whether staff manually creates meetings or whether a controlled management action creates one per active small group.
+- Use an explicit staff-triggered Generate Small Group Meetings action for normal creation.
+- The system should generate missing `BibleStudyMeeting` records for eligible small groups based on guide/scope.
+- This is not automatic scheduling and not uncontrolled auto-creation on every save.
+- Skip existing meetings, do not overwrite group-specific data, and do not delete meetings automatically.
+- Do not assign roles, worship songs, `TeamAssignment`, or `ServiceEvent` automatically.
 - Ensure normal users see only their own group meeting.
 - Staff/managers can see all meetings.
 
@@ -582,7 +588,21 @@ Bible Study V2 does not include:
 - Keep this narrow and explicit.
 - Do not add automatic scheduling, availability, swaps, or reminders.
 
-### Phase BS-V2.6 - V1 Compatibility / Migration Cleanup
+### Phase BS-V2.6 - Schedule / Scope Alignment
+
+- Replan the Bible Study hierarchy as:
+  - Bible Study Schedule / 查经安排
+  - Weekly Bible Study Guide / 每周查经指引
+  - Small Group Bible Study Meetings / 小组查经聚会
+- Prefer treating existing `BibleStudySeries` as the internal schedule model at first.
+- Clean up staff IA so V1 sessions, V2 guides, and V2 meetings do not look like unrelated peer systems.
+- Add schedule/scope fields only additively if needed.
+- Add manual, idempotent group-meeting generation from guide/scope.
+- Generated meetings should set `meeting.lesson` to the weekly guide and derive schedule through `meeting.lesson.series`.
+- Do not copy church-wide guide content into each generated meeting; meeting detail should display current guide content from `BibleStudyLesson`.
+- Keep `ServiceEvent` optional and do not create `TeamAssignment`.
+
+### Phase BS-V2.7 - V1 Compatibility / Migration Cleanup
 
 - Preserve old sessions.
 - Optionally show legacy V1 sessions in a fallback section.
@@ -644,14 +664,29 @@ BS-V2.5C:
 - normal members do not gain edit access accidentally
 
 BS-V2.6:
+- staff IA clearly presents schedule -> guide -> meeting hierarchy
+- `BibleStudySeries` schedule wording does not confuse staff
+- meeting generation is idempotent and does not overwrite group-specific data
+- generated meetings display updated parent guide content without copied guide fields
+- generation is staff-triggered and does not run uncontrolled on every save
+- roles and worship songs are not assigned automatically
+- ServiceEvent/TeamAssignment are not created automatically
+
+BS-V2.7:
 - existing V1 session pages still work
 - legacy fallback does not leak hidden/cancelled sessions
 - optional migration command, if later added, is idempotent and preserves data
 
 ## 13. Risks and Open Questions
 
-Open decisions:
-- Should every lesson auto-create meetings for all active small groups, or should staff create meetings manually?
+Decided direction:
+- Use explicit staff-triggered Generate Small Group Meetings action first.
+- The system automatically generates missing `BibleStudyMeeting` records for eligible small groups based on guide/scope.
+- This is controlled generation, not automatic scheduling and not uncontrolled auto-creation on every save.
+- Generation skips existing meetings, does not overwrite group-specific content, and does not delete meetings.
+- Generation does not assign roles, worship songs, `TeamAssignment`, or `ServiceEvent`.
+
+Remaining open decisions:
 - Who exactly can edit group-level worship set: small group leader, assigned worship lead, staff, or all meeting role holders?
 - Should `BibleStudyMeeting` require a `ServiceEvent` link or keep it optional?
 - Should V1 sessions be migrated automatically or preserved as legacy?
@@ -668,10 +703,12 @@ Risks:
 
 ## 14. Recommended Next Step
 
-For future Bible Study implementation, proceed with the smallest next accepted phase.
+For future Bible Study implementation, proceed with schedule/scope alignment before role-aware permissions or broader QA.
 
-Recommended next phase after church structure alignment:
-- BS-V2.5A - Simple `BibleStudyMeetingRole` UI
+Recommended next phase after BS-V2.5B:
+- BS-V2.6.1 - Staff IA Cleanup
+- BS-V2.6.2 - Treat `BibleStudySeries` as Bible Study Schedule / 查经安排
+- BS-V2.6.5 - Manual idempotent group-meeting generation from guide/scope
 
 Keep the next phase narrow:
 - no destructive renames

@@ -110,14 +110,26 @@ Manual assignment should come first. Do not implement automatic rotation/schedul
 
 The real workflow suggests meeting roles should come before deeper worship-set ownership logic.
 
-Recommended next Bible Study sequence:
+BS-V2.5A and BS-V2.5B have now produced the basic meeting roles and group-level worship set surfaces. Browser review showed that the next correction is not role-aware permissions yet; it is schedule/scope and staff IA alignment.
+
+Updated recommended Bible Study sequence:
+- BS-V2.6.0 - Schedule/scope replan documentation
+- BS-V2.6.1 - Staff IA cleanup
+- BS-V2.6.2 - Treat `BibleStudySeries` as Bible Study Schedule / 查经安排
+- BS-V2.6.5 - Manual idempotent meeting generation from guide/scope
+- BS-V2.6.6 - Normal user V2 landing integration
+- BS-V2.6.7 - Bible Study V2 Flow QA
+- BS-V2.7 - Role-aware editing permissions, if needed later
+
+Earlier sequence now completed:
 - BS-V2.5A - Simple `BibleStudyMeetingRole` UI
 - BS-V2.5B - Group-level worship set UI
-- BS-V2.5C - Role-aware editing permissions, if needed later
 
 Reason:
 - Worship set ownership depends on knowing who the worship lead, support, and pianist are.
 - Simple meeting roles clarify preparation responsibility before permission rules become more specific.
+- The schedule/scope layer clarifies how weekly guides produce in-scope small-group meetings before staff or role holders receive more editing powers.
+- Generated small-group meetings should reference the weekly guide, derive schedule through the guide's series/schedule, and display updated parent guide content without copying it into each meeting.
 
 If worship set UI already exists before the role UI, keep it manager-controlled until meeting roles are available and validated. Do not retroactively force worship responsibilities into `TeamAssignment`.
 
@@ -313,6 +325,9 @@ Recommended next sequence:
 - Small group coworker roles planning
 - BS-V2.5A Simple `BibleStudyMeetingRole` UI
 - BS-V2.5B Group-level worship set UI
+- Bible Study V2 Schedule/Scope Replan
+- Staff IA cleanup
+- Schedule/scope alignment and meeting generation
 - Later role-aware editing permissions
 - Later `ServiceEvent` participating_ministries / `MinistryContext` planning
 - Later Community Activities V1 with audience segments

@@ -54,19 +54,21 @@ Work:
 
 ## Phase 4 - Bible Study V2 Implementation
 
-Future only, not now:
-- Add models/migration strategy.
-- Add lesson UI.
-- Add group meeting UI.
-- Add group guide/questions UI.
-- Add simple meeting role UI.
-- Add group worship set UI.
-- Add role-aware editing permissions later only if needed.
+Functional pieces now exist through BS-V2.5B, but browser review showed the schedule/scope layer is missing.
 
-Recommended order around meeting roles and worship:
-- BS-V2.5A - Simple BibleStudyMeetingRole UI.
-- BS-V2.5B - Group-level worship set UI.
-- BS-V2.5C - Role-aware editing permissions, if needed later.
+Corrected next order:
+- BS-V2.6.0 - Schedule/scope replan documentation.
+- BS-V2.6.1 - Staff IA cleanup.
+- BS-V2.6.2 - Treat BibleStudySeries as Bible Study Schedule / 查经安排.
+- BS-V2.6.3 - Add schedule fields if needed, additive only.
+- BS-V2.6.4 - Add short-term scope/audience fields if needed.
+- BS-V2.6.5 - Generate group meetings from guide/scope with a manual, idempotent staff action.
+- BS-V2.6.6 - Normal user V2 landing integration.
+- BS-V2.6.7 - Bible Study V2 Flow QA.
+- BS-V2.7 - Role-aware editing permissions later only if needed.
+
+Do not proceed directly from BS-V2.5B to role-aware permissions or broad QA before the schedule/scope hierarchy is clarified.
+Generated small-group meetings should reference the weekly guide and derive schedule through the guide's series/schedule. Do not copy church-wide guide content into each meeting.
 
 ## Phase 5 - Lighting Pilot Preflight Cleanup
 
@@ -133,6 +135,11 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - Small group coworker roles planning.
 - BS-V2.5A Simple BibleStudyMeetingRole UI.
 - BS-V2.5B Group-level worship set UI.
+- Bible Study V2 Schedule/Scope Replan.
+- Staff IA cleanup.
+- Schedule/scope alignment and manual meeting generation.
+- Normal user V2 landing integration.
+- Bible Study V2 Flow QA.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.
 - Later Community Activities V1 with audience segments.

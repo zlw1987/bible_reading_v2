@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meetings{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meetings{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}为查经指引创建和管理各小组聚会{% else %}Create and manage small group meetings for Bible Study guides{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <form method="get" class="actions">
+        <label>
+            {% if language == "zh" %}状态{% else %}Status{% endif %}
+            <select name="status">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                {% for value, label in status_choices %}
+                <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                    {{ label }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            {% if language == "zh" %}查经指引{% else %}Bible Study Guide{% endif %}
+            <select name="lesson">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                {% for lesson in lesson_options %}
+                <option value="{{ lesson.id }}" {% if lesson_id == lesson.id|stringformat:"s" %}selected{% endif %}>
+                    {{ lesson|study_lesson_title:language }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
+            {% if language == "zh" %}小组{% else %}Small Group{% endif %}
+            <select name="small_group">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                {% for small_group in small_group_options %}
+                <option value="{{ small_group.id }}" {% if small_group_id == small_group.id|stringformat:"s" %}selected{% endif %}>
+                    {{ small_group }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit" class="button-secondary">
+            {% if language == "zh" %}筛选{% else %}Filter{% endif %}
+        </button>
+        <a class="button" href="{% url 'create_bible_study_meeting' %}">
+            {% if language == "zh" %}新增小组查经聚会{% else %}New Small Group Meeting{% endif %}
+        </a>
+    </form>
+</div>
+
+{% if meetings %}
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}查经指引{% else %}Bible Study Guide{% endif %}</th>
+                    <th>{% if language == "zh" %}小组{% else %}Small Group{% endif %}</th>
+                    <th>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}</th>
+                    <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
+                    <th>{% if language == "zh" %}地点{% else %}Location{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for meeting in meetings %}
+                <tr>
+                    <td>{{ meeting.lesson|study_lesson_title:language }}</td>
+                    <td>{{ meeting.small_group }}</td>
+                    <td>{{ meeting.meeting_datetime }}</td>
+                    <td>{{ meeting|study_status_label:language }}</td>
+                    <td>{{ meeting|study_meeting_location:language|default:"-" }}</td>
+                    <td>
+                        <a class="button button-secondary"
+                           href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                            {% if language == "zh" %}查看{% else %}View{% endif %}
+                        </a>
+                        <a class="button button-secondary"
+                           href="{% url 'edit_bible_study_meeting' meeting.id %}">
+                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}还没有小组查经聚会。{% else %}No small group Bible Study meetings have been created yet.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

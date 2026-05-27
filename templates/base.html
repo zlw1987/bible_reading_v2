@@ -43,6 +43,12 @@
                         <a href="{% url 'study_session_list' %}">
                             {% if language == "zh" %}查经管理{% else %}Bible Study Admin{% endif %}
                         </a>
+                        <a href="{% url 'bible_study_lesson_manage_list' %}">
+                            {% if language == "zh" %}查经指引{% else %}Bible Study Guides{% endif %}
+                        </a>
+                        <a href="{% url 'bible_study_meeting_manage_list' %}">
+                            {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
+                        </a>
 
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}

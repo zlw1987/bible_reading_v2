@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {{ lesson|study_lesson_title:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_lesson_manage_list' %}">
+        ← {% if language == "zh" %}返回查经指引{% else %}Back to Bible Study Guides{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ lesson|study_lesson_title:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}全教会查经指引{% else %}Church-wide Study Guide{% endif %}
+        · {{ lesson.series|study_series_title:language }}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">{{ lesson|study_status_label:language }}</p>
+
+    {% if lesson.scripture_reference %}
+    <p>
+        <strong>{% if language == "zh" %}经文{% else %}Scripture{% endif %}:</strong>
+        {{ lesson.scripture_reference }}
+    </p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}指引日期{% else %}Guide Date{% endif %}:</strong>
+        {{ lesson.lesson_date }}
+    </p>
+
+    {% if lesson.prestudy_datetime %}
+    <p>
+        <strong>{% if language == "zh" %}预查指引{% else %}Pre-study Guide{% endif %}:</strong>
+        {{ lesson.prestudy_datetime }}
+    </p>
+    {% endif %}
+
+    {% if lesson.published_at %}
+    <p>
+        <strong>{% if language == "zh" %}发布时间{% else %}Published{% endif %}:</strong>
+        {{ lesson.published_at }}
+    </p>
+    {% endif %}
+
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'edit_bible_study_lesson' lesson.id %}">
+            {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+        </a>
+        <a class="button"
+           href="{% url 'create_bible_study_meeting' %}?lesson={{ lesson.id }}">
+            {% if language == "zh" %}新增小组查经聚会{% else %}Add Small Group Meeting{% endif %}
+        </a>
+        <form method="post" action="{% url 'cancel_bible_study_lesson' lesson.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-secondary">
+                {% if language == "zh" %}取消指引{% else %}Cancel Guide{% endif %}
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meetings{% endif %}</h2>
+    {% if meetings %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}小组{% else %}Small Group{% endif %}</th>
+                    <th>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}</th>
+                    <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
+                    <th>{% if language == "zh" %}地点{% else %}Location{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for meeting in meetings %}
+                <tr>
+                    <td>{{ meeting.small_group }}</td>
+                    <td>{{ meeting.meeting_datetime }}</td>
+                    <td>{{ meeting|study_status_label:language }}</td>
+                    <td>{{ meeting|study_meeting_location:language|default:"-" }}</td>
+                    <td>
+                        <a class="button button-secondary"
+                           href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                            {% if language == "zh" %}查看{% else %}View{% endif %}
+                        </a>
+                        <a class="button button-secondary"
+                           href="{% url 'edit_bible_study_meeting' meeting.id %}">
+                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有小组查经聚会。{% else %}No small group Bible Study meetings have been created yet.{% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}牧者预查指引{% else %}Pastor Guide{% endif %}</h2>
+    {% if lesson|study_lesson_pastor_guide:language %}
+    <p>{{ lesson|study_lesson_pastor_guide:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无牧者预查指引。{% else %}No pastor guide has been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}全教会讨论问题{% else %}Church-wide Discussion Questions{% endif %}</h2>
+    {% if lesson|study_lesson_global_questions:language %}
+    <p>{{ lesson|study_lesson_global_questions:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无全教会讨论问题。{% else %}No church-wide discussion questions have been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}预查备注{% else %}Pre-study Notes{% endif %}</h2>
+    {% if lesson|study_lesson_prestudy_notes:language %}
+    <p>{{ lesson|study_lesson_prestudy_notes:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无预查备注。{% else %}No pre-study notes have been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -4,6 +4,56 @@ from . import views
 
 urlpatterns = [
     path("studies/", views.study_session_list, name="study_session_list"),
+    path(
+        "studies/lessons/manage/",
+        views.bible_study_lesson_manage_list,
+        name="bible_study_lesson_manage_list",
+    ),
+    path(
+        "studies/lessons/new/",
+        views.create_bible_study_lesson,
+        name="create_bible_study_lesson",
+    ),
+    path(
+        "studies/lessons/<int:lesson_id>/",
+        views.bible_study_lesson_detail,
+        name="bible_study_lesson_detail",
+    ),
+    path(
+        "studies/lessons/<int:lesson_id>/edit/",
+        views.edit_bible_study_lesson,
+        name="edit_bible_study_lesson",
+    ),
+    path(
+        "studies/lessons/<int:lesson_id>/cancel/",
+        views.cancel_bible_study_lesson,
+        name="cancel_bible_study_lesson",
+    ),
+    path(
+        "studies/meetings/manage/",
+        views.bible_study_meeting_manage_list,
+        name="bible_study_meeting_manage_list",
+    ),
+    path(
+        "studies/meetings/new/",
+        views.create_bible_study_meeting,
+        name="create_bible_study_meeting",
+    ),
+    path(
+        "studies/meetings/<int:meeting_id>/",
+        views.bible_study_meeting_detail,
+        name="bible_study_meeting_detail",
+    ),
+    path(
+        "studies/meetings/<int:meeting_id>/edit/",
+        views.edit_bible_study_meeting,
+        name="edit_bible_study_meeting",
+    ),
+    path(
+        "studies/meetings/<int:meeting_id>/cancel/",
+        views.cancel_bible_study_meeting,
+        name="cancel_bible_study_meeting",
+    ),
     path("studies/new/", views.create_study_session, name="create_study_session"),
     path(
         "studies/<int:session_id>/",

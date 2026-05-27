@@ -2,6 +2,8 @@ from django import forms
 
 from .models import (
     BibleStudyGuide,
+    BibleStudyLesson,
+    BibleStudyMeeting,
     BibleStudySeries,
     BibleStudySession,
     BibleStudyWorshipSong,
@@ -209,6 +211,246 @@ class BibleStudySessionForm(forms.ModelForm):
         )
         self.fields["prestudy_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["study_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+
+LESSON_FORM_TEXT = {
+    "en": {
+        "series": "Series",
+        "title": "Title",
+        "title_en": "English title",
+        "scripture_reference": "Scripture",
+        "lesson_date": "Guide Date",
+        "prestudy_datetime": "Thursday Pre-study",
+        "pastor_guide_body": "Pastor Guide",
+        "pastor_guide_body_en": "English pastor guide",
+        "global_discussion_questions": "Church-wide Discussion Questions",
+        "global_discussion_questions_en": "English church-wide discussion questions",
+        "prestudy_notes": "Pre-study Notes",
+        "prestudy_notes_en": "English pre-study notes",
+        "status": "Status",
+        "draft": "Draft",
+        "published": "Published",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "title_placeholder": "Bible study guide title",
+        "scripture_placeholder": "John 15:1-17",
+        "pastor_guide_placeholder": "Pastor guidance for church-wide preparation.",
+        "questions_placeholder": "One question per line works well.",
+        "notes_placeholder": "Notes for Thursday pre-study.",
+    },
+    "zh": {
+        "series": "系列",
+        "title": "标题",
+        "title_en": "英文标题",
+        "scripture_reference": "经文",
+        "lesson_date": "指引日期",
+        "prestudy_datetime": "周四预查",
+        "pastor_guide_body": "牧者预查指引",
+        "pastor_guide_body_en": "英文牧者预查指引",
+        "global_discussion_questions": "全教会讨论问题",
+        "global_discussion_questions_en": "英文全教会讨论问题",
+        "prestudy_notes": "预查备注",
+        "prestudy_notes_en": "英文预查备注",
+        "status": "状态",
+        "draft": "草稿",
+        "published": "已发布",
+        "completed": "已完成",
+        "cancelled": "已取消",
+        "title_placeholder": "查经指引标题",
+        "scripture_placeholder": "约翰福音 15:1-17",
+        "pastor_guide_placeholder": "给全教会预查和带领的牧者指引。",
+        "questions_placeholder": "可以每行一个讨论问题。",
+        "notes_placeholder": "周四预查备注。",
+    },
+}
+
+
+def lesson_form_text(language):
+    return LESSON_FORM_TEXT.get(language, LESSON_FORM_TEXT["en"])
+
+
+class BibleStudyLessonForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyLesson
+        fields = [
+            "series",
+            "title",
+            "title_en",
+            "scripture_reference",
+            "lesson_date",
+            "prestudy_datetime",
+            "pastor_guide_body",
+            "pastor_guide_body_en",
+            "global_discussion_questions",
+            "global_discussion_questions_en",
+            "prestudy_notes",
+            "prestudy_notes_en",
+            "status",
+        ]
+        widgets = {
+            "lesson_date": forms.DateInput(
+                attrs={"type": "date"},
+                format="%Y-%m-%d",
+            ),
+            "prestudy_datetime": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "pastor_guide_body": forms.Textarea(attrs={"rows": 6}),
+            "pastor_guide_body_en": forms.Textarea(attrs={"rows": 6}),
+            "global_discussion_questions": forms.Textarea(attrs={"rows": 5}),
+            "global_discussion_questions_en": forms.Textarea(attrs={"rows": 5}),
+            "prestudy_notes": forms.Textarea(attrs={"rows": 4}),
+            "prestudy_notes_en": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = lesson_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["status"].choices = [
+            (BibleStudyLesson.STATUS_DRAFT, text["draft"]),
+            (BibleStudyLesson.STATUS_PUBLISHED, text["published"]),
+            (BibleStudyLesson.STATUS_COMPLETED, text["completed"]),
+            (BibleStudyLesson.STATUS_CANCELLED, text["cancelled"]),
+        ]
+        self.fields["title"].widget.attrs.update(
+            {"placeholder": text["title_placeholder"]}
+        )
+        self.fields["scripture_reference"].widget.attrs.update(
+            {"placeholder": text["scripture_placeholder"]}
+        )
+        self.fields["pastor_guide_body"].widget.attrs.update(
+            {"placeholder": text["pastor_guide_placeholder"]}
+        )
+        self.fields["global_discussion_questions"].widget.attrs.update(
+            {"placeholder": text["questions_placeholder"]}
+        )
+        self.fields["prestudy_notes"].widget.attrs.update(
+            {"placeholder": text["notes_placeholder"]}
+        )
+        self.fields["lesson_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["prestudy_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+
+MEETING_FORM_TEXT = {
+    "en": {
+        "lesson": "Bible Study Guide",
+        "small_group": "Small Group",
+        "meeting_datetime": "Meeting Time",
+        "location": "Location",
+        "location_en": "English location",
+        "meeting_link": "Meeting Link",
+        "discussion_leader_user": "Discussion Leader User",
+        "discussion_leader_name": "Discussion Leader Name",
+        "group_direction": "Group Direction",
+        "group_direction_en": "English group direction",
+        "group_questions": "Group Discussion Questions",
+        "group_questions_en": "English group discussion questions",
+        "status": "Status",
+        "service_event": "Service Event",
+        "draft": "Draft",
+        "published": "Published",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "location_placeholder": "Meeting location",
+        "leader_placeholder": "Fallback leader name",
+        "direction_placeholder": "Direction for this small group meeting.",
+        "questions_placeholder": "Questions for this small group.",
+    },
+    "zh": {
+        "lesson": "查经指引",
+        "small_group": "小组",
+        "meeting_datetime": "聚会时间",
+        "location": "地点",
+        "location_en": "英文地点",
+        "meeting_link": "会议链接",
+        "discussion_leader_user": "带领同工",
+        "discussion_leader_name": "带领人姓名",
+        "group_direction": "小组方向",
+        "group_direction_en": "英文小组方向",
+        "group_questions": "小组讨论问题",
+        "group_questions_en": "英文小组讨论问题",
+        "status": "状态",
+        "service_event": "聚会事件",
+        "draft": "草稿",
+        "published": "已发布",
+        "completed": "已完成",
+        "cancelled": "已取消",
+        "location_placeholder": "小组查经聚会地点",
+        "leader_placeholder": "备用带领人姓名",
+        "direction_placeholder": "这个小组聚会的查经方向。",
+        "questions_placeholder": "这个小组的讨论问题。",
+    },
+}
+
+
+def meeting_form_text(language):
+    return MEETING_FORM_TEXT.get(language, MEETING_FORM_TEXT["en"])
+
+
+class BibleStudyMeetingForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyMeeting
+        fields = [
+            "lesson",
+            "small_group",
+            "meeting_datetime",
+            "location",
+            "location_en",
+            "meeting_link",
+            "discussion_leader_user",
+            "discussion_leader_name",
+            "group_direction",
+            "group_direction_en",
+            "group_questions",
+            "group_questions_en",
+            "status",
+            "service_event",
+        ]
+        widgets = {
+            "meeting_datetime": forms.DateTimeInput(
+                attrs={"type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "group_direction": forms.Textarea(attrs={"rows": 4}),
+            "group_direction_en": forms.Textarea(attrs={"rows": 4}),
+            "group_questions": forms.Textarea(attrs={"rows": 5}),
+            "group_questions_en": forms.Textarea(attrs={"rows": 5}),
+        }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = meeting_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["lesson"].queryset = BibleStudyLesson.objects.select_related(
+            "series",
+        ).order_by("-lesson_date", "title")
+        self.fields["status"].choices = [
+            (BibleStudyMeeting.STATUS_DRAFT, text["draft"]),
+            (BibleStudyMeeting.STATUS_PUBLISHED, text["published"]),
+            (BibleStudyMeeting.STATUS_COMPLETED, text["completed"]),
+            (BibleStudyMeeting.STATUS_CANCELLED, text["cancelled"]),
+        ]
+        self.fields["location"].widget.attrs.update(
+            {"placeholder": text["location_placeholder"]}
+        )
+        self.fields["discussion_leader_name"].widget.attrs.update(
+            {"placeholder": text["leader_placeholder"]}
+        )
+        self.fields["group_direction"].widget.attrs.update(
+            {"placeholder": text["direction_placeholder"]}
+        )
+        self.fields["group_questions"].widget.attrs.update(
+            {"placeholder": text["questions_placeholder"]}
+        )
+        self.fields["meeting_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
 
 class BibleStudyGuideForm(forms.ModelForm):

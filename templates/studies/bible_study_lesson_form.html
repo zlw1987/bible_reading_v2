@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}
+        {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+    {% else %}
+        {% if language == "zh" %}新增查经指引{% else %}New Bible Study Guide{% endif %}
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_lesson_manage_list' %}">
+        ← {% if language == "zh" %}返回查经指引{% else %}Back to Bible Study Guides{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_edit %}
+            {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+        {% else %}
+            {% if language == "zh" %}新增查经指引{% else %}New Bible Study Guide{% endif %}
+        {% endif %}
+    </h1>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'bible_study_lesson_manage_list' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

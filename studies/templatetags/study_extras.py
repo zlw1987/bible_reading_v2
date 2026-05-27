@@ -18,6 +18,55 @@ def study_session_title(session, language):
 
 
 @register.filter
+def study_lesson_title(lesson, language):
+    if not lesson:
+        return ""
+    return lesson.get_title(language)
+
+
+@register.filter
+def study_lesson_pastor_guide(lesson, language):
+    if not lesson:
+        return ""
+    return lesson.get_pastor_guide_body(language)
+
+
+@register.filter
+def study_lesson_global_questions(lesson, language):
+    if not lesson:
+        return ""
+    return lesson.get_global_discussion_questions(language)
+
+
+@register.filter
+def study_lesson_prestudy_notes(lesson, language):
+    if not lesson:
+        return ""
+    return lesson.get_prestudy_notes(language)
+
+
+@register.filter
+def study_meeting_location(meeting, language):
+    if not meeting:
+        return ""
+    return meeting.get_location(language)
+
+
+@register.filter
+def study_meeting_group_direction(meeting, language):
+    if not meeting:
+        return ""
+    return meeting.get_group_direction(language)
+
+
+@register.filter
+def study_meeting_group_questions(meeting, language):
+    if not meeting:
+        return ""
+    return meeting.get_group_questions(language)
+
+
+@register.filter
 def study_guide_body(guide, language):
     if not guide:
         return ""

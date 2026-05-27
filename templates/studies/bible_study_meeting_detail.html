@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {{ meeting.lesson|study_lesson_title:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    {% if can_manage %}
+    <a href="{% url 'bible_study_meeting_manage_list' %}">
+        ← {% if language == "zh" %}返回小组查经聚会{% else %}Back to Small Group Meetings{% endif %}
+    </a>
+    {% else %}
+    <a href="{% url 'study_session_list' %}">
+        ← {% if language == "zh" %}返回查经{% else %}Back to Bible Studies{% endif %}
+    </a>
+    {% endif %}
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ meeting.lesson|study_lesson_title:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meeting{% endif %}
+        · {{ meeting.small_group }}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">{{ meeting|study_status_label:language }}</p>
+
+    {% if meeting.lesson.scripture_reference %}
+    <p>
+        <strong>{% if language == "zh" %}经文{% else %}Scripture{% endif %}:</strong>
+        {{ meeting.lesson.scripture_reference }}
+    </p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}:</strong>
+        {{ meeting.meeting_datetime }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}小组{% else %}Small Group{% endif %}:</strong>
+        {{ meeting.small_group }}
+    </p>
+
+    {% if meeting|study_meeting_location:language %}
+    <p>
+        <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
+        {{ meeting|study_meeting_location:language }}
+    </p>
+    {% endif %}
+
+    {% if meeting.meeting_link %}
+    <p>
+        <strong>{% if language == "zh" %}会议链接{% else %}Meeting Link{% endif %}:</strong>
+        <a href="{{ meeting.meeting_link }}">{{ meeting.meeting_link }}</a>
+    </p>
+    {% endif %}
+
+    {% if can_manage %}
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'edit_bible_study_meeting' meeting.id %}">
+            {% if language == "zh" %}编辑小组查经聚会{% else %}Edit Small Group Meeting{% endif %}
+        </a>
+        <form method="post" action="{% url 'cancel_bible_study_meeting' meeting.id %}">
+            {% csrf_token %}
+            <button type="submit" class="button-secondary">
+                {% if language == "zh" %}取消聚会{% else %}Cancel Meeting{% endif %}
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}牧者预查指引{% else %}Pastor Guide{% endif %}</h2>
+    {% if meeting.lesson|study_lesson_pastor_guide:language %}
+    <p>{{ meeting.lesson|study_lesson_pastor_guide:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无牧者预查指引。{% else %}No pastor guide has been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}全教会讨论问题{% else %}Church-wide Discussion Questions{% endif %}</h2>
+    {% if meeting.lesson|study_lesson_global_questions:language %}
+    <p>{{ meeting.lesson|study_lesson_global_questions:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无全教会讨论问题。{% else %}No church-wide discussion questions have been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}预查备注{% else %}Pre-study Notes{% endif %}</h2>
+    {% if meeting.lesson|study_lesson_prestudy_notes:language %}
+    <p>{{ meeting.lesson|study_lesson_prestudy_notes:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无预查备注。{% else %}No pre-study notes have been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}小组方向{% else %}Group Direction{% endif %}</h2>
+    {% if meeting|study_meeting_group_direction:language %}
+    <p>{{ meeting|study_meeting_group_direction:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无小组方向。{% else %}No group direction has been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}小组讨论问题{% else %}Group Discussion Questions{% endif %}</h2>
+    {% if meeting|study_meeting_group_questions:language %}
+    <p>{{ meeting|study_meeting_group_questions:language|linebreaksbr }}</p>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}暂无小组讨论问题。{% else %}No group discussion questions have been added yet.{% endif %}</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -12,10 +12,19 @@ from accounts.permissions import (
 
 from .forms import (
     BibleStudyGuideForm,
+    BibleStudyLessonForm,
+    BibleStudyMeetingForm,
     BibleStudySessionForm,
     BibleStudyWorshipSongForm,
 )
-from .models import BibleStudyGuide, BibleStudySession, BibleStudyWorshipSong
+from .models import (
+    BibleStudyGuide,
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudySeries,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 def study_ui_text(language, key):
@@ -25,6 +34,10 @@ def study_ui_text(language, key):
             "not_available": "This Bible study is not available.",
             "saved": "Bible study session saved.",
             "cancelled": "Bible study session cancelled.",
+            "lesson_saved": "Bible study guide saved.",
+            "lesson_cancelled": "Bible study guide cancelled.",
+            "meeting_saved": "Small group Bible Study meeting saved.",
+            "meeting_cancelled": "Small group Bible Study meeting cancelled.",
         },
         "zh": {
             "no_permission": "你没有管理查经安排的权限。",
@@ -58,6 +71,318 @@ def get_visible_study_sessions(user):
 
     visible_ids = [session.id for session in sessions if session.can_be_seen_by(user)]
     return sessions.filter(id__in=visible_ids)
+
+
+@login_required
+def bible_study_lesson_manage_list(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    status = (request.GET.get("status") or "").strip()
+    series_id = (request.GET.get("series") or "").strip()
+    lessons = BibleStudyLesson.objects.select_related("series", "created_by")
+
+    if status:
+        lessons = lessons.filter(status=status)
+    if series_id:
+        lessons = lessons.filter(series_id=series_id)
+
+    return render(
+        request,
+        "studies/bible_study_lesson_manage_list.html",
+        {
+            "lessons": lessons,
+            "series_options": BibleStudySeries.objects.filter(
+                is_active=True,
+            ).order_by("title"),
+            "status": status,
+            "series_id": series_id,
+            "status_choices": BibleStudyLesson.STATUS_CHOICES,
+        },
+    )
+
+
+@login_required
+def bible_study_lesson_detail(request, lesson_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    lesson = get_object_or_404(
+        BibleStudyLesson.objects.select_related("series", "created_by"),
+        id=lesson_id,
+    )
+
+    return render(
+        request,
+        "studies/bible_study_lesson_detail.html",
+        {
+            "lesson": lesson,
+            "meetings": lesson.meetings.select_related(
+                "small_group",
+                "discussion_leader_user",
+            ),
+        },
+    )
+
+
+@login_required
+def create_bible_study_lesson(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    if request.method == "POST":
+        form = BibleStudyLessonForm(request.POST, language=language)
+        if form.is_valid():
+            lesson = form.save(commit=False)
+            lesson.created_by = request.user
+            lesson.save()
+            message = (
+                "查经指引已保存。"
+                if language == "zh"
+                else study_ui_text(language, "lesson_saved")
+            )
+            messages.success(request, message)
+            return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
+    else:
+        form = BibleStudyLessonForm(language=language)
+
+    return render(
+        request,
+        "studies/bible_study_lesson_form.html",
+        {"form": form, "is_edit": False},
+    )
+
+
+@login_required
+def edit_bible_study_lesson(request, lesson_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    lesson = get_object_or_404(BibleStudyLesson, id=lesson_id)
+
+    if request.method == "POST":
+        form = BibleStudyLessonForm(
+            request.POST,
+            instance=lesson,
+            language=language,
+        )
+        if form.is_valid():
+            lesson = form.save()
+            message = (
+                "查经指引已保存。"
+                if language == "zh"
+                else study_ui_text(language, "lesson_saved")
+            )
+            messages.success(request, message)
+            return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
+    else:
+        form = BibleStudyLessonForm(instance=lesson, language=language)
+
+    return render(
+        request,
+        "studies/bible_study_lesson_form.html",
+        {"lesson": lesson, "form": form, "is_edit": True},
+    )
+
+
+@login_required
+def cancel_bible_study_lesson(request, lesson_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    lesson = get_object_or_404(BibleStudyLesson, id=lesson_id)
+
+    if request.method != "POST":
+        return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
+
+    lesson.status = BibleStudyLesson.STATUS_CANCELLED
+    lesson.save()
+    message = (
+        "查经指引已取消。"
+        if language == "zh"
+        else study_ui_text(language, "lesson_cancelled")
+    )
+    messages.success(request, message)
+    return redirect("bible_study_lesson_manage_list")
+
+
+@login_required
+def bible_study_meeting_manage_list(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    status = (request.GET.get("status") or "").strip()
+    lesson_id = (request.GET.get("lesson") or "").strip()
+    small_group_id = (request.GET.get("small_group") or "").strip()
+    meetings = BibleStudyMeeting.objects.select_related(
+        "lesson",
+        "small_group",
+        "created_by",
+    )
+
+    if status:
+        meetings = meetings.filter(status=status)
+    if lesson_id:
+        meetings = meetings.filter(lesson_id=lesson_id)
+    if small_group_id:
+        meetings = meetings.filter(small_group_id=small_group_id)
+
+    small_group_model = BibleStudyMeeting._meta.get_field(
+        "small_group"
+    ).remote_field.model
+    return render(
+        request,
+        "studies/bible_study_meeting_manage_list.html",
+        {
+            "meetings": meetings,
+            "lesson_options": BibleStudyLesson.objects.order_by(
+                "-lesson_date",
+                "title",
+            ),
+            "small_group_options": small_group_model.objects.filter(
+                is_active=True,
+            ).order_by("name"),
+            "status": status,
+            "lesson_id": lesson_id,
+            "small_group_id": small_group_id,
+            "status_choices": BibleStudyMeeting.STATUS_CHOICES,
+        },
+    )
+
+
+@login_required
+def bible_study_meeting_detail(request, meeting_id):
+    meeting = get_object_or_404(
+        BibleStudyMeeting.objects.select_related(
+            "lesson",
+            "lesson__series",
+            "small_group",
+            "discussion_leader_user",
+            "service_event",
+            "created_by",
+        ),
+        id=meeting_id,
+    )
+
+    if not meeting.can_be_seen_by(request.user):
+        messages.error(
+            request,
+            study_ui_text(get_user_language(request), "not_available"),
+        )
+        return redirect("study_session_list")
+
+    return render(
+        request,
+        "studies/bible_study_meeting_detail.html",
+        {
+            "meeting": meeting,
+            "can_manage": can_manage_bible_studies(request.user),
+        },
+    )
+
+
+@login_required
+def create_bible_study_meeting(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    initial = {}
+    lesson_id = (request.GET.get("lesson") or "").strip()
+    if lesson_id:
+        initial["lesson"] = lesson_id
+
+    if request.method == "POST":
+        form = BibleStudyMeetingForm(request.POST, language=language)
+        if form.is_valid():
+            meeting = form.save(commit=False)
+            meeting.created_by = request.user
+            meeting.save()
+            message = (
+                "小组查经聚会已保存。"
+                if language == "zh"
+                else study_ui_text(language, "meeting_saved")
+            )
+            messages.success(request, message)
+            return redirect("bible_study_meeting_detail", meeting_id=meeting.id)
+    else:
+        form = BibleStudyMeetingForm(initial=initial, language=language)
+
+    return render(
+        request,
+        "studies/bible_study_meeting_form.html",
+        {"form": form, "is_edit": False},
+    )
+
+
+@login_required
+def edit_bible_study_meeting(request, meeting_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    meeting = get_object_or_404(BibleStudyMeeting, id=meeting_id)
+
+    if request.method == "POST":
+        form = BibleStudyMeetingForm(
+            request.POST,
+            instance=meeting,
+            language=language,
+        )
+        if form.is_valid():
+            meeting = form.save()
+            message = (
+                "小组查经聚会已保存。"
+                if language == "zh"
+                else study_ui_text(language, "meeting_saved")
+            )
+            messages.success(request, message)
+            return redirect("bible_study_meeting_detail", meeting_id=meeting.id)
+    else:
+        form = BibleStudyMeetingForm(instance=meeting, language=language)
+
+    return render(
+        request,
+        "studies/bible_study_meeting_form.html",
+        {"meeting": meeting, "form": form, "is_edit": True},
+    )
+
+
+@login_required
+def cancel_bible_study_meeting(request, meeting_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    meeting = get_object_or_404(BibleStudyMeeting, id=meeting_id)
+
+    if request.method != "POST":
+        return redirect("bible_study_meeting_detail", meeting_id=meeting.id)
+
+    meeting.status = BibleStudyMeeting.STATUS_CANCELLED
+    meeting.save()
+    message = (
+        "小组查经聚会已取消。"
+        if language == "zh"
+        else study_ui_text(language, "meeting_cancelled")
+    )
+    messages.success(request, message)
+    return redirect("bible_study_meeting_manage_list")
 
 
 @login_required

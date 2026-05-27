@@ -211,6 +211,369 @@ class BibleStudyModuleTests(TestCase):
         data.update(overrides)
         return BibleStudyMeetingWorshipSong.objects.create(**data)
 
+    def lesson_post_data(self, **overrides):
+        data = {
+            "series": self.series.id,
+            "title": "新查经指引",
+            "title_en": "New Bible Study Guide",
+            "scripture_reference": "John 16:1-15",
+            "lesson_date": (
+                timezone.localdate() + timezone.timedelta(days=7)
+            ).strftime("%Y-%m-%d"),
+            "prestudy_datetime": self.prestudy_time.strftime("%Y-%m-%dT%H:%M"),
+            "pastor_guide_body": "牧者指引",
+            "pastor_guide_body_en": "Pastor guide",
+            "global_discussion_questions": "全教会问题",
+            "global_discussion_questions_en": "Church-wide questions",
+            "prestudy_notes": "预查备注",
+            "prestudy_notes_en": "Pre-study notes",
+            "status": BibleStudyLesson.STATUS_DRAFT,
+        }
+        data.update(overrides)
+        return data
+
+    def meeting_post_data(self, **overrides):
+        lesson = overrides.pop("lesson", None) or self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        data = {
+            "lesson": lesson.id,
+            "small_group": self.group.id,
+            "meeting_datetime": self.future_time.strftime("%Y-%m-%dT%H:%M"),
+            "location": "小组家",
+            "location_en": "Small group home",
+            "meeting_link": "https://example.com/group-study",
+            "discussion_leader_user": self.manager.id,
+            "discussion_leader_name": "Leader fallback",
+            "group_direction": "小组方向",
+            "group_direction_en": "Group direction",
+            "group_questions": "小组问题",
+            "group_questions_en": "Group questions",
+            "status": BibleStudyMeeting.STATUS_PUBLISHED,
+            "service_event": "",
+        }
+        data.update(overrides)
+        return data
+
+    def test_staff_can_access_lesson_management_list(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Guides")
+        self.assertContains(response, "New Bible Study Guide")
+
+    def test_regular_user_cannot_access_lesson_management_list(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_pastor_can_access_lesson_management_list(self):
+        self.set_language("en")
+        self.client.login(username="pastor_study", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_staff_can_create_bible_study_lesson(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_lesson"),
+            self.lesson_post_data(),
+        )
+
+        lesson = BibleStudyLesson.objects.get(title="新查经指引")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+        self.assertEqual(lesson.created_by, self.staff)
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_DRAFT)
+
+    def test_staff_can_edit_bible_study_lesson(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_DRAFT)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_lesson", args=[lesson.id]),
+            self.lesson_post_data(
+                title="编辑后的查经指引",
+                title_en="Edited Bible Study Guide",
+                status=BibleStudyLesson.STATUS_PUBLISHED,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        lesson.refresh_from_db()
+        self.assertEqual(lesson.title, "编辑后的查经指引")
+        self.assertEqual(lesson.title_en, "Edited Bible Study Guide")
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_PUBLISHED)
+        self.assertIsNotNone(lesson.published_at)
+
+    def test_staff_can_cancel_bible_study_lesson(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("cancel_bible_study_lesson", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("bible_study_lesson_manage_list"))
+        lesson.refresh_from_db()
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_CANCELLED)
+
+    def test_lesson_management_list_displays_created_lessons(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            title_en="Visible Lesson",
+            scripture_reference="John 17",
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visible Lesson")
+        self.assertContains(response, "John 17")
+        self.assertContains(
+            response,
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+    def test_lesson_detail_displays_church_wide_content(self):
+        self.set_language("en")
+        lesson = self.create_lesson()
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pastor Guide")
+        self.assertContains(response, "Pastor study guide")
+        self.assertContains(response, "Church-wide Discussion Questions")
+        self.assertContains(response, "Church-wide questions")
+        self.assertContains(response, "Pre-study Notes")
+
+    def test_staff_can_access_meeting_management_list(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_meeting_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Small Group Bible Study Meetings")
+        self.assertContains(response, "New Small Group Meeting")
+
+    def test_regular_user_cannot_access_meeting_management_list(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_meeting_manage_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_staff_can_create_bible_study_meeting(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson),
+        )
+
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(meeting.created_by, self.staff)
+        self.assertIsNone(meeting.service_event)
+
+    def test_duplicate_meeting_for_same_guide_and_group_is_rejected(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_meeting(lesson=lesson, small_group=self.group)
+        duplicate = BibleStudyMeeting(
+            lesson=lesson,
+            small_group=self.group,
+            meeting_datetime=self.future_time,
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+    def test_staff_can_edit_bible_study_meeting(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_DRAFT)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting.id]),
+            self.meeting_post_data(
+                lesson=meeting.lesson,
+                location="Updated Room",
+                location_en="Updated Room",
+                group_direction="更新后的小组方向",
+                group_direction_en="Updated direction",
+                status=BibleStudyMeeting.STATUS_PUBLISHED,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Updated Room")
+        self.assertEqual(meeting.group_direction_en, "Updated direction")
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
+
+    def test_staff_can_cancel_bible_study_meeting(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("cancel_bible_study_meeting", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("bible_study_meeting_manage_list"))
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_CANCELLED)
+
+    def test_manager_guide_detail_shows_related_meetings(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Guide With Meeting",
+        )
+        meeting = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Small Group Bible Study Meetings")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(
+            response,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_normal_user_can_view_own_published_group_meeting(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Small Group Bible Study Meeting")
+        self.assertContains(response, "Pastor study guide")
+        self.assertContains(response, "Group direction")
+        self.assertContains(response, "Group Discussion Questions")
+
+    def test_normal_user_cannot_view_another_group_meeting(self):
+        self.set_language("en")
+        meeting = self.create_meeting(small_group=self.other_group)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_normal_user_cannot_view_draft_or_cancelled_meeting(self):
+        self.set_language("en")
+        draft = self.create_meeting(status=BibleStudyMeeting.STATUS_DRAFT)
+        cancelled = self.create_meeting(
+            lesson=self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED),
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        draft_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[draft.id]),
+        )
+        cancelled_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[cancelled.id]),
+        )
+
+        self.assertEqual(draft_response.status_code, 302)
+        self.assertEqual(cancelled_response.status_code, 302)
+
+    def test_staff_can_view_draft_and_cancelled_meeting(self):
+        self.set_language("en")
+        draft = self.create_meeting(status=BibleStudyMeeting.STATUS_DRAFT)
+        cancelled = self.create_meeting(
+            lesson=self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED),
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        draft_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[draft.id]),
+        )
+        cancelled_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[cancelled.id]),
+        )
+
+        self.assertEqual(draft_response.status_code, 200)
+        self.assertEqual(cancelled_response.status_code, 200)
+
+    def test_touched_chinese_guide_pages_do_not_use_course_label(self):
+        self.set_language("zh")
+        lesson = self.create_lesson()
+        meeting = self.create_meeting(lesson=lesson)
+        self.client.login(username="study_staff", password="testpass123")
+
+        responses = [
+            self.client.get(reverse("bible_study_lesson_manage_list")),
+            self.client.get(reverse("bible_study_lesson_detail", args=[lesson.id])),
+            self.client.get(reverse("create_bible_study_lesson")),
+            self.client.get(reverse("bible_study_meeting_manage_list")),
+            self.client.get(reverse("bible_study_meeting_detail", args=[meeting.id])),
+            self.client.get(reverse("create_bible_study_meeting")),
+        ]
+
+        for response in responses:
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "查经指引")
+            self.assertNotContains(response, "查经课程")
+
+    def test_v1_studies_list_route_still_uses_session_page(self):
+        self.set_language("en")
+        self.create_session(title_en="V1 Session")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Studies")
+        self.assertContains(response, "V1 Session")
+        self.assertNotContains(response, "Bible Study Guides")
+
     def test_bible_study_lesson_can_be_created(self):
         lesson = self.create_lesson()
 

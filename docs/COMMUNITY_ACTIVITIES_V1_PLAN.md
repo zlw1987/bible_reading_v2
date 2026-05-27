@@ -30,6 +30,7 @@ It is not:
 Rule of thumb:
 - If the main question is "which ministry team is serving?", use ServiceEvent + TeamAssignment.
 - If the main question is "who wants to attend/signup?", use CommunityActivity + ActivitySignup.
+- "Special event" is not one model by itself. Choose ServiceEvent, CommunityActivity, or both later based on the main product question.
 
 ## 3. Relationship to ServiceEvent
 
@@ -38,6 +39,8 @@ ServiceEvent remains the official church gathering, operations, and ministry ass
 CommunityActivity is for signup-oriented community and fellowship activities. Do not merge CommunityActivity into ServiceEvent in V1.
 
 An optional future relationship to ServiceEvent may be considered later for large official events, but that link is not part of Community Activities V1.
+
+Do not create a separate SpecialEvent model in V1.
 
 ## 4. Possible V1 Models
 
@@ -55,13 +58,6 @@ Suggested fields:
 - end_datetime
 - location
 - location_en
-- scope_type:
-  - own_group
-  - selected_groups
-  - selected_districts
-  - churchwide
-- small_groups M2M
-- districts M2M
 - capacity optional
 - signup_deadline optional
 - status:
@@ -74,6 +70,21 @@ Suggested fields:
 - created_by
 - approved_by
 - approved_at
+
+### CommunityActivityAudience
+
+Use audience segments instead of one `scope_type`.
+
+Suggested fields:
+- activity
+- audience_type:
+  - whole_church
+  - ministry_context
+  - district
+  - small_group
+- ministry_context nullable
+- district nullable
+- small_group nullable
 
 ### ActivitySignup
 
@@ -90,15 +101,51 @@ Suggested fields:
 
 ## 5. Scope and Visibility Rules
 
-Expected visibility:
-- own_group: visible to the creator's own small group.
-- selected_groups: visible to selected small groups.
-- selected_districts: visible to members in selected districts.
-- churchwide: visible to all logged-in church users.
+The simple single `scope_type` model is not enough for real scenarios.
 
-Users outside the activity scope should not see the activity or sign up for it.
+Real scenarios:
+- entire EM plus several CM small groups
+- EM plus one CM district
+- several CM small groups
+- whole church
+- selected districts
+- selected groups across ministries
+
+Expected visibility:
+- whole_church: visible to all logged-in church users.
+- ministry_context: visible to members in that ministry context, such as EM or CM.
+- district: visible to members in that district.
+- small_group: visible to members in that small group.
+
+A user can see/signup if any audience segment matches the user:
+- whole church
+- user's ministry context
+- user's district
+- user's small group
+
+Examples:
+
+Entire EM + CM Rainbow 1 + CM Rainbow 4:
+- audience segment: ministry_context = EM
+- audience segment: small_group = Rainbow 1
+- audience segment: small_group = Rainbow 4
+
+EM + CM District 1:
+- audience segment: ministry_context = EM
+- audience segment: district = CM District 1
+
+CM selected small groups:
+- audience segment: small_group = Rainbow 1
+- audience segment: small_group = Rainbow 4
+
+Whole church:
+- audience segment: whole_church
+
+Users outside all matching audience segments should not see the activity or sign up for it.
 
 The UI and queries should avoid exposing private group membership unnecessarily. For example, an activity list should answer "can this user see this activity?" rather than showing internal membership lists.
+
+Future planning may need `MinistryContext` and `District.ministry_context`; see `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
 
 ## 6. Permission Direction
 
@@ -127,9 +174,9 @@ Avoid a complex role hierarchy in V1.
 Broader-scope activities should require approval.
 
 Possible V1 policy:
-- own_group activity by a small group leader can publish directly
+- single-small-group activity by a small group leader can publish directly
 - regular member-created activity goes pending approval
-- selected_groups, selected_districts, and churchwide activities require staff or authorized leader approval
+- selected groups, selected districts, ministry-context, and whole-church activities require staff or authorized leader approval
 
 ## 8. UI Direction
 
@@ -180,6 +227,9 @@ No:
 - automatic scheduling
 - ministry assignment checklist
 - ServiceEvent replacement
+- SpecialEvent model
+- fake Combined Ministry record
+- forcing CommunityActivity into ServiceEvent
 
 ## 10. Roadmap Position
 

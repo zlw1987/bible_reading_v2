@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}编辑小组查经预备{% else %}Edit Group Preparation{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
+        ← {% if language == "zh" %}返回小组查经聚会{% else %}Back to Small Group Meeting{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}编辑小组查经预备{% else %}Edit Group Preparation{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {{ meeting.lesson|study_lesson_title:language }}
+        · {{ meeting.small_group }}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存预备内容{% else %}Save Preparation{% endif %}
+        </button>
+        <a class="button button-secondary"
+           href="{% url 'bible_study_meeting_detail' meeting.id %}">
+            {% if language == "zh" %}返回小组查经聚会{% else %}Back to Small Group Meeting{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

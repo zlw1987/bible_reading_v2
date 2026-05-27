@@ -38,6 +38,8 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
+Church structure domain planning is now needed before deeper Bible Study roles, Community Activities, ServiceEvent CM/EM support, or Ministry Operations expansion. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
+
 ## 3. Module Boundaries
 
 ### A. Daily Reading
@@ -144,6 +146,9 @@ Does not include:
 - Checklists
 - Service review notes
 - Worship flow management
+- Replacement for BibleStudyMeeting or CommunityActivity
+
+Future planning may add CM/EM participating ministry context support, but CM and EM should be modeled as ministry contexts rather than MinistryTeam records.
 
 ### F. Ministry Operations
 
@@ -173,6 +178,16 @@ Future pieces include:
 - Multi-team dashboard
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
+
+### G. Church Structure Boundaries
+
+Planning clarification:
+- Fellowship `SmallGroup` is not `MinistryTeam`.
+- Small-group coworker roles such as C/E/O/W/F should not use TeamAssignment.
+- `BibleStudyMeetingRole` is the per-meeting Bible Study responsibility model.
+- CM and EM are ministry contexts / language ministries, not MinistryTeam records.
+- There is no fake Combined Ministry record; combined events should involve both CM and EM.
+- Community Activities should use future audience segments for signup visibility rather than being forced into ServiceEvent.
 
 ## 4. Completed V1 Features
 
@@ -279,11 +294,12 @@ Current phase:
 
 Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support are in closure / QA / stabilization.
 
-Next major product phase:
+Next major product/domain phase:
 
-Checklist V1, only after pilot data is validated.
+Church structure and small-group coworker role planning, followed by simple `BibleStudyMeetingRole` UI.
 
 Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
+Checklist V1 remains deferred until Lighting Pilot validation and should not be revived because of Community Activities.
 
 Before new large features:
 - Keep tests passing.
@@ -409,6 +425,18 @@ Only after real use:
 - Advanced checklist
 - Service review history
 
+### Phase 9: Church Structure / Bible Study Roles / Community Activities Planning
+
+Near-term planning and implementation sequence:
+- Church structure domain plan.
+- Small group coworker roles planning.
+- BS-V2.5A Simple `BibleStudyMeetingRole` UI.
+- BS-V2.5B Group-level worship set UI.
+- Later role-aware editing permissions.
+- Later ServiceEvent participating_ministries / MinistryContext planning.
+- Later Community Activities V1 with audience segments.
+- Checklist V1 remains deferred.
+
 ## 7. Explicit Non-Goals
 
 This project should not become a full church ERP.
@@ -495,11 +523,13 @@ For feature tasks:
 
 Next documentation/QA task:
 
-Ministry Team Operations V1 QA Checklist, if needed after browser testing.
+Small group coworker roles planning or Ministry Team Operations V1 QA Checklist, depending on the next accepted scope.
 
 Next major development task:
 
-Checklist V1, only after pilot data is validated.
+BS-V2.5A Simple `BibleStudyMeetingRole` UI.
+
+Checklist V1 remains deferred until Lighting Pilot validation.
 
 Not next:
 - Lighting Team-specific model

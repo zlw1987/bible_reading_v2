@@ -40,11 +40,15 @@ Work:
 
 ## Phase 3 - Bible Study V2 Planning
 
+- Document church structure domain boundaries.
+- Clarify fellowship small groups vs MinistryTeam.
+- Clarify small-group coworker roles vs TeamAssignment.
+- Clarify CM/EM ministry contexts.
 - Document two-layer Bible Study model.
 - Define BibleStudyLesson and BibleStudyMeeting.
-- Define group-level worship set.
 - Define group-level guide/questions.
 - Define simple meeting roles.
+- Define group-level worship set.
 - Define ServiceEvent relationship.
 - Define non-goals.
 
@@ -54,9 +58,15 @@ Future only, not now:
 - Add models/migration strategy.
 - Add lesson UI.
 - Add group meeting UI.
-- Add group worship set UI.
 - Add group guide/questions UI.
-- Add simple role display.
+- Add simple meeting role UI.
+- Add group worship set UI.
+- Add role-aware editing permissions later only if needed.
+
+Recommended order around meeting roles and worship:
+- BS-V2.5A - Simple BibleStudyMeetingRole UI.
+- BS-V2.5B - Group-level worship set UI.
+- BS-V2.5C - Role-aware editing permissions, if needed later.
 
 ## Phase 5 - Lighting Pilot Preflight Cleanup
 
@@ -107,6 +117,8 @@ Keep it separate from:
 
 ServiceEvent remains the official church gathering, operations, and ministry assignment anchor. CommunityActivity should handle the question "who wants to attend/signup?" while ServiceEvent + TeamAssignment should handle "which ministry team is serving?"
 
+Future Community Activities planning should use audience segments rather than a single simple scope value. Audience segments may target the whole church, a ministry context such as CM/EM, selected districts, or selected small groups. Do not create a separate SpecialEvent model, and do not force CommunityActivity into ServiceEvent.
+
 Do not add Activities to top navigation yet. A future navigation option may be:
 - English: Today, Reading, Bible Study, Prayer, Activities, My Serving, Profile
 - Chinese: 今日, 读经, 查经, 代祷, 活动, 我的服事, 个人资料
@@ -114,3 +126,14 @@ Do not add Activities to top navigation yet. A future navigation option may be:
 Checklist V1 remains deferred and should not be revived because of this module.
 
 See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
+
+## Current Recommended Next Sequence
+
+- Church structure domain plan.
+- Small group coworker roles planning.
+- BS-V2.5A Simple BibleStudyMeetingRole UI.
+- BS-V2.5B Group-level worship set UI.
+- Later role-aware editing permissions.
+- Later ServiceEvent participating_ministries / MinistryContext planning.
+- Later Community Activities V1 with audience segments.
+- Checklist V1 remains deferred until Lighting Pilot validation.

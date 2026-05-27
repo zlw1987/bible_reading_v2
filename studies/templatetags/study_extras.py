@@ -102,6 +102,29 @@ def worship_song_note(song, language):
 
 
 @register.filter
+def meeting_worship_song_arrangement_notes(song, language):
+    if not song:
+        return ""
+    return song.get_arrangement_notes(language)
+
+
+@register.filter
+def meeting_worship_song_support_notes(song, language):
+    if not song:
+        return ""
+    return song.get_support_notes(language)
+
+
+@register.filter
+def meeting_worship_song_lead(song, language):
+    if not song:
+        return ""
+    if song.worship_lead_user:
+        return song.worship_lead_user.get_username()
+    return song.worship_lead_name
+
+
+@register.filter
 def study_status_label(session, language):
     labels = {
         "zh": {

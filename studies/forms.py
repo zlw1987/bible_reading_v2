@@ -4,6 +4,7 @@ from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySession,
     BibleStudyWorshipSong,
@@ -451,6 +452,170 @@ class BibleStudyMeetingForm(forms.ModelForm):
             {"placeholder": text["questions_placeholder"]}
         )
         self.fields["meeting_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+
+class BibleStudyMeetingPreparationForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyMeeting
+        fields = [
+            "group_direction",
+            "group_direction_en",
+            "group_questions",
+            "group_questions_en",
+        ]
+        widgets = {
+            "group_direction": forms.Textarea(attrs={"rows": 4}),
+            "group_direction_en": forms.Textarea(attrs={"rows": 4}),
+            "group_questions": forms.Textarea(attrs={"rows": 5}),
+            "group_questions_en": forms.Textarea(attrs={"rows": 5}),
+        }
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = meeting_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["group_direction"].widget.attrs.update(
+            {"placeholder": text["direction_placeholder"]}
+        )
+        self.fields["group_questions"].widget.attrs.update(
+            {"placeholder": text["questions_placeholder"]}
+        )
+
+
+MEETING_WORSHIP_FORM_TEXT = {
+    "en": {
+        "sort_order": "Order",
+        "title": "Song Title",
+        "title_en": "English Title",
+        "song_key": "Key",
+        "youtube_url": "YouTube Link",
+        "chord_url": "Chord Link",
+        "lyrics_url": "Lyrics Link",
+        "arrangement_notes": "Arrangement Notes",
+        "arrangement_notes_en": "English arrangement notes",
+        "worship_lead_user": "Worship Lead",
+        "worship_lead_name": "Worship Lead Name",
+        "support_notes": "Support Notes",
+        "support_notes_en": "English support notes",
+        "title_placeholder": "Song title",
+        "title_en_placeholder": "Optional English song title",
+        "key_placeholder": "C, D, E-flat...",
+        "youtube_placeholder": "https://youtube.com/...",
+        "chord_placeholder": "Chord sheet link",
+        "lyrics_placeholder": "Lyrics link",
+        "arrangement_placeholder": "Notes for arrangement or flow.",
+        "support_placeholder": "Notes for support coworkers.",
+        "lead_placeholder": "Fallback worship lead name",
+    },
+    "zh": {
+        "sort_order": "顺序",
+        "title": "诗歌标题",
+        "title_en": "英文诗歌标题",
+        "song_key": "调",
+        "youtube_url": "YouTube 链接",
+        "chord_url": "和弦链接",
+        "lyrics_url": "歌词链接",
+        "arrangement_notes": "编排备注",
+        "arrangement_notes_en": "英文编排备注",
+        "worship_lead_user": "敬拜带领",
+        "worship_lead_name": "敬拜带领姓名",
+        "support_notes": "配搭备注",
+        "support_notes_en": "英文配搭备注",
+        "title_placeholder": "诗歌标题",
+        "title_en_placeholder": "可选英文诗歌标题",
+        "key_placeholder": "C、D、降E...",
+        "youtube_placeholder": "https://youtube.com/...",
+        "chord_placeholder": "和弦谱链接",
+        "lyrics_placeholder": "歌词链接",
+        "arrangement_placeholder": "编排或流程备注。",
+        "support_placeholder": "给配搭同工的备注。",
+        "lead_placeholder": "备用敬拜带领姓名",
+    },
+}
+
+
+def meeting_worship_form_text(language):
+    return MEETING_WORSHIP_FORM_TEXT.get(language, MEETING_WORSHIP_FORM_TEXT["en"])
+
+
+class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyMeetingWorshipSong
+        fields = [
+            "sort_order",
+            "title",
+            "title_en",
+            "song_key",
+            "youtube_url",
+            "chord_url",
+            "lyrics_url",
+            "arrangement_notes",
+            "arrangement_notes_en",
+            "worship_lead_user",
+            "worship_lead_name",
+            "support_notes",
+            "support_notes_en",
+        ]
+        widgets = {
+            "arrangement_notes": forms.Textarea(attrs={"rows": 3}),
+            "arrangement_notes_en": forms.Textarea(attrs={"rows": 3}),
+            "support_notes": forms.Textarea(attrs={"rows": 3}),
+            "support_notes_en": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, language="en", meeting=None, **kwargs):
+        self.meeting = meeting
+        super().__init__(*args, **kwargs)
+        text = meeting_worship_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["title"].widget.attrs.update(
+            {"placeholder": text["title_placeholder"]}
+        )
+        self.fields["title_en"].widget.attrs.update(
+            {"placeholder": text["title_en_placeholder"]}
+        )
+        self.fields["song_key"].widget.attrs.update(
+            {"placeholder": text["key_placeholder"]}
+        )
+        self.fields["youtube_url"].widget.attrs.update(
+            {"placeholder": text["youtube_placeholder"]}
+        )
+        self.fields["chord_url"].widget.attrs.update(
+            {"placeholder": text["chord_placeholder"]}
+        )
+        self.fields["lyrics_url"].widget.attrs.update(
+            {"placeholder": text["lyrics_placeholder"]}
+        )
+        self.fields["arrangement_notes"].widget.attrs.update(
+            {"placeholder": text["arrangement_placeholder"]}
+        )
+        self.fields["support_notes"].widget.attrs.update(
+            {"placeholder": text["support_placeholder"]}
+        )
+        self.fields["worship_lead_name"].widget.attrs.update(
+            {"placeholder": text["lead_placeholder"]}
+        )
+
+    def clean_sort_order(self):
+        sort_order = self.cleaned_data["sort_order"]
+        if self.meeting and sort_order:
+            duplicate = BibleStudyMeetingWorshipSong.objects.filter(
+                meeting=self.meeting,
+                sort_order=sort_order,
+            )
+            if self.instance.pk:
+                duplicate = duplicate.exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                raise forms.ValidationError(
+                    "This meeting already has a worship song with this order."
+                )
+        return sort_order
 
 
 class BibleStudyGuideForm(forms.ModelForm):

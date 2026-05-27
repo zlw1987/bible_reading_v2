@@ -8,6 +8,8 @@ Do not implement these changes as part of this document. This is a planning arti
 
 The project remains a lightweight church spiritual life and ministry workflow system, not a full church ERP.
 
+Church structure/domain alignment now lives in `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`. That plan clarifies that fellowship `SmallGroup` is not `MinistryTeam`, `BibleStudyMeetingRole` is not `TeamAssignment`, and Bible Study meeting responsibilities should stay separate from church-level ministry operations.
+
 ## 2. Current Implementation Inventory
 
 ### App Files
@@ -390,9 +392,10 @@ Do not break the current user-facing Bible Study link.
 2. Initially show V2 lessons/meetings while preserving V1 legacy fallback.
 3. Add church-wide lesson detail.
 4. Add small-group meeting detail.
-5. Add group-level worship set management.
-6. Add group-level guide/questions management.
-7. Add simple role display.
+5. Add group-level guide/questions management.
+6. Add simple meeting role display/editing.
+7. Add group-level worship set management.
+8. Add role-aware editing permissions only after meeting roles are validated.
 
 ### Possible Future URLs
 
@@ -458,13 +461,15 @@ Who can manage church-wide lessons:
 - users with `CAP_MANAGE_BIBLE_STUDIES`
 - users with pastor/global Bible Study management capability mapping
 
-Who can manage small-group meeting content:
+Who can manage small-group meeting content initially:
 - staff/superuser
 - users with `CAP_MANAGE_BIBLE_STUDIES`
-- the small group leader/coordinator for that meeting's small group
+- users with `CAP_PUBLISH_BIBLE_STUDY_GUIDES` if the app continues treating them as Bible Study managers
+
+Small-group leader/coordinator editing should wait until a reliable small-group coworker role model or helper exists. Do not overload generic group-progress permissions as Bible Study preparation permissions.
 
 Who can edit group worship set:
-- same as meeting content initially, or a meeting role with `worship_lead` once `BibleStudyMeetingRole` exists.
+- manager-only initially, or a meeting role with `worship_lead` / `support` once `BibleStudyMeetingRole` exists and role-aware permissions are explicitly planned.
 - Avoid creating a complex new permission system in V2.1-V2.3.
 
 Who can view published content:
@@ -549,25 +554,35 @@ Bible Study V2 does not include:
 
 ### Phase BS-V2.4 - Group-Level Guide / Questions
 
-- Allow small group leader/coordinator to edit group direction/questions for their own group meeting.
+- Allow authorized managers to edit group direction/questions for a small group meeting.
+- Defer small-group leader/coordinator editing until reliable small-group coworker role helpers exist.
 - Normal users can view published group content.
 - Keep pastor/church-wide guide on `BibleStudyLesson`.
 
-### Phase BS-V2.5 - Group-Level Worship Set
-
-- Add management for `BibleStudyMeetingWorshipSong`.
-- Group worship lead or authorized leader can manage songs if role policy is resolved.
-- Support users can view group-level arrangement, key, and links.
-- Do not create a full song library.
-
-### Phase BS-V2.6 - Simple Meeting Roles
+### Phase BS-V2.5A - Simple Meeting Roles
 
 - Add simple display/editing for `BibleStudyMeetingRole`.
 - Supported roles: discussion leader, worship lead, pianist, support, host.
+- Manual assignment first.
 - No scheduling engine.
 - No availability workflow.
+- `BibleStudyMeetingRole` is not `TeamAssignment`.
 
-### Phase BS-V2.7 - V1 Compatibility / Migration Cleanup
+### Phase BS-V2.5B - Group-Level Worship Set
+
+- Add management for `BibleStudyMeetingWorshipSong`.
+- Managers can manage songs initially.
+- Group worship lead/support editing can be considered later after meeting roles are implemented.
+- Support users can view group-level arrangement, key, and links.
+- Do not create a full song library.
+
+### Phase BS-V2.5C - Role-Aware Editing Permissions
+
+- Decide whether meeting role holders can edit preparation/worship fields for their assigned meeting.
+- Keep this narrow and explicit.
+- Do not add automatic scheduling, availability, swaps, or reminders.
+
+### Phase BS-V2.6 - V1 Compatibility / Migration Cleanup
 
 - Preserve old sessions.
 - Optionally show legacy V1 sessions in a fallback section.
@@ -614,17 +629,21 @@ BS-V2.4:
 - group leader cannot edit another group
 - normal users view published group questions
 
-BS-V2.5:
+BS-V2.5A:
+- role UI stays manager-only or explicitly authorized
+- role display renders correctly
+- no scheduling/reminder routes are introduced
+
+BS-V2.5B:
 - authorized user can add/edit/delete meeting worship songs
 - regular user can view own group worship set
 - session-level V1 worship songs remain visible in legacy fallback
 
-BS-V2.6:
-- role display renders correctly
-- role editing stays scoped to authorized users
-- no scheduling/reminder routes are introduced
+BS-V2.5C:
+- role-aware edit permissions, if added, stay scoped to the parent meeting
+- normal members do not gain edit access accidentally
 
-BS-V2.7:
+BS-V2.6:
 - existing V1 session pages still work
 - legacy fallback does not leak hidden/cancelled sessions
 - optional migration command, if later added, is idempotent and preserves data
@@ -649,11 +668,15 @@ Risks:
 
 ## 14. Recommended Next Step
 
-Proceed with Phase BS-V2.1 only after this strategy is accepted.
+For future Bible Study implementation, proceed with the smallest next accepted phase.
 
-BS-V2.1 should be additive:
+Recommended next phase after church structure alignment:
+- BS-V2.5A - Simple `BibleStudyMeetingRole` UI
+
+Keep the next phase narrow:
 - no destructive renames
 - no V1 data deletion
 - no `/studies/` route breakage
-- no ServiceEvent requirement
-- no Checklist V1 or scheduling features
+- no `ServiceEvent` requirement
+- no Checklist V1
+- no automatic scheduling, availability, swaps, or reminders

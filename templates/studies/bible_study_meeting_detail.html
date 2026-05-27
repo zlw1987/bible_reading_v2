@@ -65,6 +65,16 @@
            href="{% url 'edit_bible_study_meeting' meeting.id %}">
             {% if language == "zh" %}编辑小组查经聚会{% else %}Edit Small Group Meeting{% endif %}
         </a>
+        <a class="button button-secondary"
+           href="{% url 'manage_bible_study_meeting_worship_songs' meeting.id %}">
+            {% if language == "zh" %}管理敬拜诗歌安排{% else %}Manage Worship Set{% endif %}
+        </a>
+        {% if can_edit_preparation %}
+        <a class="button button-secondary"
+           href="{% url 'edit_bible_study_meeting_preparation' meeting.id %}">
+            {% if language == "zh" %}编辑小组查经预备{% else %}Edit Group Preparation{% endif %}
+        </a>
+        {% endif %}
         <form method="post" action="{% url 'cancel_bible_study_meeting' meeting.id %}">
             {% csrf_token %}
             <button type="submit" class="button-secondary">
@@ -72,6 +82,60 @@
             </button>
         </form>
     </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}敬拜诗歌安排{% else %}Worship Set{% endif %}</h2>
+
+    {% if worship_songs %}
+        {% for song in worship_songs %}
+        <div>
+            <h3>{{ song.sort_order }}. {{ song|worship_song_title:language }}</h3>
+            {% if song.song_key or song|meeting_worship_song_lead:language %}
+            <p class="muted">
+                {% if song.song_key %}
+                    {% if language == "zh" %}调{% else %}Key{% endif %}: {{ song.song_key }}
+                {% endif %}
+                {% if song.song_key and song|meeting_worship_song_lead:language %} · {% endif %}
+                {% if song|meeting_worship_song_lead:language %}
+                    {% if language == "zh" %}敬拜带领{% else %}Worship Lead{% endif %}: {{ song|meeting_worship_song_lead:language }}
+                {% endif %}
+            </p>
+            {% endif %}
+            <div class="actions">
+                {% if song.youtube_url %}
+                <a class="button button-secondary" href="{{ song.youtube_url }}">YouTube</a>
+                {% endif %}
+                {% if song.chord_url %}
+                <a class="button button-secondary" href="{{ song.chord_url }}">
+                    {% if language == "zh" %}和弦链接{% else %}Chord Link{% endif %}
+                </a>
+                {% endif %}
+                {% if song.lyrics_url %}
+                <a class="button button-secondary" href="{{ song.lyrics_url }}">
+                    {% if language == "zh" %}歌词链接{% else %}Lyrics Link{% endif %}
+                </a>
+                {% endif %}
+            </div>
+            {% if song|meeting_worship_song_arrangement_notes:language %}
+            <p>
+                <strong>{% if language == "zh" %}编排备注{% else %}Arrangement Notes{% endif %}:</strong>
+                {{ song|meeting_worship_song_arrangement_notes:language|linebreaksbr }}
+            </p>
+            {% endif %}
+            {% if song|meeting_worship_song_support_notes:language %}
+            <p>
+                <strong>{% if language == "zh" %}配搭备注{% else %}Support Notes{% endif %}:</strong>
+                {{ song|meeting_worship_song_support_notes:language|linebreaksbr }}
+            </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有添加敬拜诗歌。{% else %}No worship songs have been added yet.{% endif %}
+    </p>
     {% endif %}
 </div>
 

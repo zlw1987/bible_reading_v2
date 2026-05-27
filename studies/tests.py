@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from .forms import BibleStudyMeetingPreparationForm
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -211,6 +212,25 @@ class BibleStudyModuleTests(TestCase):
         data.update(overrides)
         return BibleStudyMeetingWorshipSong.objects.create(**data)
 
+    def meeting_worship_song_post_data(self, **overrides):
+        data = {
+            "sort_order": 1,
+            "title": "小组敬拜诗歌",
+            "title_en": "Group Worship Song",
+            "song_key": "G",
+            "youtube_url": "https://example.com/group-youtube",
+            "chord_url": "https://example.com/group-chords",
+            "lyrics_url": "https://example.com/group-lyrics",
+            "arrangement_notes": "小组编排备注",
+            "arrangement_notes_en": "Group arrangement notes",
+            "worship_lead_user": self.manager.id,
+            "worship_lead_name": "Lead fallback",
+            "support_notes": "小组配搭备注",
+            "support_notes_en": "Group support notes",
+        }
+        data.update(overrides)
+        return data
+
     def lesson_post_data(self, **overrides):
         data = {
             "series": self.series.id,
@@ -251,6 +271,16 @@ class BibleStudyModuleTests(TestCase):
             "group_questions_en": "Group questions",
             "status": BibleStudyMeeting.STATUS_PUBLISHED,
             "service_event": "",
+        }
+        data.update(overrides)
+        return data
+
+    def meeting_preparation_post_data(self, **overrides):
+        data = {
+            "group_direction": "Updated group direction",
+            "group_direction_en": "Updated English group direction",
+            "group_questions": "Updated group questions",
+            "group_questions_en": "Updated English group questions",
         }
         data.update(overrides)
         return data
@@ -456,6 +486,322 @@ class BibleStudyModuleTests(TestCase):
         meeting.refresh_from_db()
         self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_CANCELLED)
 
+    def test_preparation_form_only_exposes_group_content_fields(self):
+        form = BibleStudyMeetingPreparationForm()
+
+        self.assertEqual(
+            list(form.fields),
+            [
+                "group_direction",
+                "group_direction_en",
+                "group_questions",
+                "group_questions_en",
+            ],
+        )
+
+    def test_staff_can_access_meeting_preparation_edit_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Edit Group Preparation")
+        self.assertContains(response, "Group Direction")
+        self.assertContains(response, "Group Discussion Questions")
+        self.assertNotContains(response, "Meeting Time")
+        self.assertNotContains(response, "Status")
+
+    def test_staff_can_update_meeting_preparation_only(self):
+        self.set_language("en")
+        other_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Different Guide",
+        )
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        original_lesson = meeting.lesson
+        original_group = meeting.small_group
+        original_datetime = meeting.meeting_datetime
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+            self.meeting_preparation_post_data(
+                lesson=other_lesson.id,
+                small_group=self.other_group.id,
+                meeting_datetime=(self.future_time + timezone.timedelta(days=2)).strftime(
+                    "%Y-%m-%dT%H:%M"
+                ),
+                status=BibleStudyMeeting.STATUS_CANCELLED,
+                service_event="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.group_direction, "Updated group direction")
+        self.assertEqual(meeting.group_direction_en, "Updated English group direction")
+        self.assertEqual(meeting.group_questions, "Updated group questions")
+        self.assertEqual(meeting.group_questions_en, "Updated English group questions")
+        self.assertEqual(meeting.lesson, original_lesson)
+        self.assertEqual(meeting.small_group, original_group)
+        self.assertEqual(meeting.meeting_datetime, original_datetime)
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
+
+    def test_regular_member_cannot_access_meeting_preparation_edit_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_other_group_user_cannot_access_meeting_preparation_edit_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="other_group", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_meeting_detail_shows_preparation_edit_link_only_to_manager(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        self.client.login(username="study_staff", password="testpass123")
+        manager_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertContains(manager_response, "Edit Group Preparation")
+        self.assertContains(
+            manager_response,
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+        )
+
+        self.client.logout()
+        self.client.login(username="regular", password="testpass123")
+        member_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(member_response.status_code, 200)
+        self.assertNotContains(member_response, "Edit Group Preparation")
+
+    def test_staff_can_access_meeting_worship_management_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_worship_song(meeting, title_en="Visible Worship Song")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manage Worship Set")
+        self.assertContains(response, "Add Worship Song")
+        self.assertContains(response, "Visible Worship Song")
+
+    def test_regular_user_cannot_access_meeting_worship_management_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_regular_user_cannot_edit_or_delete_meeting_worship_song(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        song = self.create_meeting_worship_song(meeting)
+        self.client.login(username="regular", password="testpass123")
+
+        edit_response = self.client.get(
+            reverse("edit_bible_study_meeting_worship_song", args=[song.id]),
+        )
+        delete_response = self.client.post(
+            reverse("delete_bible_study_meeting_worship_song", args=[song.id]),
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        self.assertEqual(
+            edit_response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertTrue(BibleStudyMeetingWorshipSong.objects.filter(id=song.id).exists())
+
+    def test_staff_can_add_meeting_worship_song(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+            self.meeting_worship_song_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        song = BibleStudyMeetingWorshipSong.objects.get(meeting=meeting)
+        self.assertEqual(song.title_en, "Group Worship Song")
+        self.assertEqual(song.worship_lead_user, self.manager)
+
+    def test_staff_can_edit_meeting_worship_song(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        song = self.create_meeting_worship_song(meeting)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting_worship_song", args=[song.id]),
+            self.meeting_worship_song_post_data(
+                title="更新诗歌",
+                title_en="Updated Worship Song",
+                song_key="D",
+                arrangement_notes_en="Updated arrangement",
+                support_notes_en="Updated support",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        song.refresh_from_db()
+        self.assertEqual(song.title_en, "Updated Worship Song")
+        self.assertEqual(song.song_key, "D")
+        self.assertEqual(song.arrangement_notes_en, "Updated arrangement")
+        self.assertEqual(song.support_notes_en, "Updated support")
+
+    def test_staff_can_delete_meeting_worship_song(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        song = self.create_meeting_worship_song(meeting)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("delete_bible_study_meeting_worship_song", args=[song.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(BibleStudyMeetingWorshipSong.objects.filter(id=song.id).exists())
+
+    def test_duplicate_meeting_worship_sort_order_is_rejected(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_worship_song(meeting, sort_order=1)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+            self.meeting_worship_song_post_data(sort_order=1, title_en="Duplicate"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "This meeting already has a worship song with this order.",
+        )
+        self.assertEqual(meeting.worship_songs.count(), 1)
+
+    def test_same_meeting_worship_sort_order_allowed_for_different_meetings(self):
+        first_meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        second_meeting = self.create_meeting(
+            lesson=self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        first = self.create_meeting_worship_song(first_meeting, sort_order=1)
+        second = self.create_meeting_worship_song(second_meeting, sort_order=1)
+
+        self.assertEqual(first.sort_order, second.sort_order)
+        self.assertNotEqual(first.meeting, second.meeting)
+
+    def test_meeting_detail_displays_worship_set_to_own_group_user(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_worship_song(
+            meeting,
+            title_en="Meeting Detail Song",
+            arrangement_notes_en="Arrangement detail",
+            support_notes_en="Support detail",
+            worship_lead_user=None,
+            worship_lead_name="Worship Lead Fallback",
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Worship Set")
+        self.assertContains(response, "Meeting Detail Song")
+        self.assertContains(response, "Key: G")
+        self.assertContains(response, "Chord Link")
+        self.assertContains(response, "Lyrics Link")
+        self.assertContains(response, "Arrangement detail")
+        self.assertContains(response, "Support detail")
+        self.assertContains(response, "Worship Lead Fallback")
+
+    def test_meeting_detail_hides_worship_set_when_parent_meeting_not_visible(self):
+        self.set_language("en")
+        meeting = self.create_meeting(small_group=self.other_group)
+        self.create_meeting_worship_song(meeting, title_en="Hidden Meeting Song")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_meeting_detail_worship_controls_are_manager_only(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        self.client.login(username="study_staff", password="testpass123")
+        manager_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertContains(manager_response, "Manage Worship Set")
+        self.assertContains(
+            manager_response,
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+        )
+
+        self.client.logout()
+        self.client.login(username="regular", password="testpass123")
+        member_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(member_response.status_code, 200)
+        self.assertNotContains(member_response, "Manage Worship Set")
+        self.assertNotContains(member_response, "Edit Worship Song")
+        self.assertNotContains(member_response, "Delete")
+
     def test_manager_guide_detail_shows_related_meetings(self):
         self.set_language("en")
         lesson = self.create_lesson(
@@ -561,6 +907,18 @@ class BibleStudyModuleTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, "查经指引")
             self.assertNotContains(response, "查经课程")
+
+        preparation_response = self.client.get(
+            reverse("edit_bible_study_meeting_preparation", args=[meeting.id]),
+        )
+        self.assertEqual(preparation_response.status_code, 200)
+        self.assertNotContains(preparation_response, "查经课程")
+
+        worship_response = self.client.get(
+            reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),
+        )
+        self.assertEqual(worship_response.status_code, 200)
+        self.assertNotContains(worship_response, "查经课程")
 
     def test_v1_studies_list_route_still_uses_session_page(self):
         self.set_language("en")

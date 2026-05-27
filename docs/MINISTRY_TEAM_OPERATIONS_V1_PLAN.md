@@ -14,6 +14,8 @@ This is not a full church ERP. It is not automatic scheduling. It should manage 
 
 The broader product is a lightweight church spiritual life and ministry workflow system. Ministry operations should remain separate from Daily Reading, Bible Study content, and Prayer.
 
+See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` for church structure boundaries between fellowship small groups, small-group coworker roles, church-level ministry teams, and CM/EM ministry contexts.
+
 ## 2. Product Boundary
 
 In scope for V1:
@@ -66,6 +68,17 @@ Bible Study Worship Set:
 - Future actual worship songs and arrangements should belong to small-group BibleStudyMeeting.
 - A church-wide BibleStudyLesson may later have optional suggested songs, but group-level worship set is the real workflow.
 - Worship set planning is not ministry-team scheduling.
+
+Fellowship Small Groups:
+- Fellowship `SmallGroup` is not `MinistryTeam`.
+- Small-group coworker roles such as C/E/O/W/F are not `TeamMembership`.
+- Friday Bible Study discussion/worship/pianist/host responsibilities should use `BibleStudyMeetingRole`, not `TeamAssignment`.
+- Do not force small-group coworker structure into Ministry Operations.
+
+CM / EM:
+- CM and EM are ministry contexts / language ministries, not MinistryTeam records.
+- There is no fake "Combined Ministry" team or ministry context.
+- Combined services or activities should be represented by participating ministries on the relevant future event/activity model.
 
 ServiceEvent:
 - MinistryTeam Operations depends on ServiceEvent.
@@ -256,6 +269,10 @@ Navigation principle:
 - No Google Doc content migration.
 - No sensitive contact import.
 - No full historical schedule import.
+- No small-group coworker roles as MinistryTeam.
+- No BibleStudyMeetingRole as TeamAssignment.
+- No CM/EM as MinistryTeam.
+- No fake Combined Ministry record.
 
 ## 10. Implementation Phases After This Plan
 

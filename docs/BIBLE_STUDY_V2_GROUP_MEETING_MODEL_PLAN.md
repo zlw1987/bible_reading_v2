@@ -6,6 +6,12 @@ This document records the recommended Bible Study V2 architecture before impleme
 
 Do not implement these changes as part of this planning document. This is a reference plan for future development.
 
+See also `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` for broader church structure boundaries:
+- fellowship `SmallGroup` is not `MinistryTeam`
+- small-group coworker roles are not `TeamAssignment`
+- `BibleStudyMeetingRole` represents one-meeting Bible Study preparation responsibility
+- `ServiceEvent` remains an optional operations anchor, not the Bible Study content source of truth
+
 ## 2. Current Problem
 
 The current Bible Study V1 model appears too simple for the real church workflow. It risks mixing:
@@ -107,7 +113,36 @@ Suggested fields:
 - role
 - notes
 
-## 4. Bible Study and ServiceEvent Relationship
+Purpose:
+- Capture per-meeting responsibility, not long-term small-group coworker identity.
+- Example: this week one Rainbow 4 E coworker leads discussion.
+- Example: this week one Rainbow 4 W coworker leads worship.
+- Manual assignment first.
+
+Not:
+- `TeamAssignment`
+- automatic scheduling
+- availability matrix
+- swap requests
+- reminders
+
+Long-term small-group coworker roles such as C/E/O/W/F should be planned separately as small-group coworker assignments, not as `MinistryTeam`.
+
+## 4. Fellowship Small Group Boundary
+
+Friday Bible Study happens at the fellowship small group level.
+
+Examples:
+- Rainbow 1
+- Rainbow 4
+
+`BibleStudyMeeting` should remain anchored to `SmallGroup`.
+
+Do not model a fellowship small group as `MinistryTeam`.
+Do not use `TeamAssignment` for Friday Bible Study discussion/worship/pianist/host rotation.
+Use `BibleStudyMeetingRole` for those per-meeting responsibilities.
+
+## 5. Bible Study and ServiceEvent Relationship
 
 Principle:
 - Bible Study owns content and spiritual preparation.
@@ -119,7 +154,7 @@ Recommended relationship:
 - ServiceEvent can be used for date/time/location/operations/team assignment anchoring.
 - BibleStudyLesson and BibleStudyMeeting should remain the source of truth for Bible Study content.
 
-## 5. Worship Songs Placement
+## 6. Worship Songs Placement
 
 Recommendation:
 - Actual worship songs should belong to small-group BibleStudyMeeting, not only to a global BibleStudySession/Lesson.
@@ -128,16 +163,18 @@ Recommendation:
 Reason:
 - Worship lead, arrangement, key, support notes, pianist/support roles are usually group-specific.
 - Support coworkers need the actual group-level arrangement, not just a global generic song list.
+- Meeting roles should be added before role-aware worship editing permissions because worship ownership depends on knowing who the worship lead/support/pianist are.
 
-## 6. Permission Direction
+## 7. Permission Direction
 
 Keep simple:
 - Normal users can view published study material relevant to them.
-- Small-group leaders/coordinators can edit their own group meeting guide/questions/worship set.
 - Staff can manage church-wide lessons.
+- Staff/managers can manage group meetings initially.
+- Small-group leader/coordinator editing should wait until a reliable small-group coworker role model or helper exists.
 - Avoid complex permission systems in V2 unless necessary.
 
-## 7. Non-Goals for Bible Study V2
+## 8. Non-Goals for Bible Study V2
 
 - No full worship ministry system.
 - No full song library unless later justified.
@@ -148,8 +185,10 @@ Keep simple:
 - No swap request.
 - No Google Docs full-content migration.
 - No complex response/submission workflow yet.
+- No forcing Bible Study meeting roles into TeamAssignment.
+- No forcing small-group coworkers into MinistryTeam.
 
-## 8. Suggested Implementation Phases
+## 9. Suggested Implementation Phases
 
 Future reference only:
 
@@ -167,17 +206,23 @@ Future reference only:
 
 ### Phase BS-V2.4
 
-- Move or duplicate worship set concept to meeting-level.
-
-### Phase BS-V2.5
-
 - Add group-level direction/questions.
+
+### Phase BS-V2.5A
+
+- Add simple `BibleStudyMeetingRole` UI.
+- Manager/staff manual assignment first.
+- No automatic rotation/scheduling.
+
+### Phase BS-V2.5B
+
+- Add group-level worship set UI.
+- Keep management simple and manager-controlled until role-aware editing permissions are explicitly planned.
+
+### Phase BS-V2.5C
+
+- Add role-aware editing permissions only if needed later.
 
 ### Phase BS-V2.6
 
-- Add simple leader/support role display.
-
-### Phase BS-V2.7
-
 - Add backward compatibility or migration notes for existing BibleStudySession data.
-

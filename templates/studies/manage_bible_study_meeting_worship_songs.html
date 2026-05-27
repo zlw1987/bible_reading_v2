@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}管理敬拜诗歌安排{% else %}Manage Worship Set{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
+        ← {% if language == "zh" %}返回小组查经聚会{% else %}Back to Small Group Meeting{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}管理敬拜诗歌安排{% else %}Manage Worship Set{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {{ meeting.lesson|study_lesson_title:language }}
+        · {{ meeting.small_group }}
+    </p>
+</div>
+
+{% if worship_songs %}
+<div class="card">
+    <h2>{% if language == "zh" %}敬拜诗歌安排{% else %}Worship Set{% endif %}</h2>
+    {% for song in worship_songs %}
+    <div class="actions" style="justify-content: space-between;">
+        <div>
+            <strong>{{ song.sort_order }}. {{ song|worship_song_title:language }}</strong>
+            {% if song.song_key %}
+            <span class="muted"> · {% if language == "zh" %}调{% else %}Key{% endif %}: {{ song.song_key }}</span>
+            {% endif %}
+        </div>
+        <div class="actions">
+            <a class="button button-secondary"
+               href="{% url 'edit_bible_study_meeting_worship_song' song.id %}">
+                {% if language == "zh" %}编辑敬拜诗歌{% else %}Edit Worship Song{% endif %}
+            </a>
+            <form method="post" action="{% url 'delete_bible_study_meeting_worship_song' song.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}删除{% else %}Delete{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <h2>{% if language == "zh" %}新增敬拜诗歌{% else %}Add Worship Song{% endif %}</h2>
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存诗歌{% else %}Save Song{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}

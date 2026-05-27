@@ -24,6 +24,9 @@
             {% if language == "zh" %}新增小组查经聚会{% else %}New Small Group Meeting{% endif %}
         {% endif %}
     </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}小组查经聚会归属于每周查经指引。手动新增主要用于生成流程上线前的个别调整。{% else %}Small-group meetings belong under weekly Bible Study guides. Manual setup is mainly for exceptions until generation is available.{% endif %}
+    </p>
 </div>
 
 <form method="post" class="card">
@@ -34,6 +37,9 @@
     <div class="form-row">
         {{ field.label_tag }}
         {{ field }}
+        {% if field.help_text %}
+        <p class="muted">{{ field.help_text }}</p>
+        {% endif %}
         {{ field.errors }}
     </div>
     {% endfor %}

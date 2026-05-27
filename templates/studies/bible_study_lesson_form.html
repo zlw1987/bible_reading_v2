@@ -2,9 +2,9 @@
 
 {% block title %}
     {% if is_edit %}
-        {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+        {% if language == "zh" %}编辑每周查经指引{% else %}Edit Weekly Bible Study Guide{% endif %}
     {% else %}
-        {% if language == "zh" %}新增查经指引{% else %}New Bible Study Guide{% endif %}
+        {% if language == "zh" %}新增每周查经指引{% else %}New Weekly Bible Study Guide{% endif %}
     {% endif %}
     | {{ ui.site_title }}
 {% endblock %}
@@ -12,16 +12,16 @@
 {% block content %}
 <p>
     <a href="{% url 'bible_study_lesson_manage_list' %}">
-        ← {% if language == "zh" %}返回查经指引{% else %}Back to Bible Study Guides{% endif %}
+        ← {% if language == "zh" %}返回每周查经指引{% else %}Back to Weekly Bible Study Guides{% endif %}
     </a>
 </p>
 
 <div class="page-header">
     <h1 class="page-title">
         {% if is_edit %}
-            {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+            {% if language == "zh" %}编辑每周查经指引{% else %}Edit Weekly Bible Study Guide{% endif %}
         {% else %}
-            {% if language == "zh" %}新增查经指引{% else %}New Bible Study Guide{% endif %}
+            {% if language == "zh" %}新增每周查经指引{% else %}New Weekly Bible Study Guide{% endif %}
         {% endif %}
     </h1>
 </div>

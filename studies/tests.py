@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
 from .forms import (
+    BibleStudyMeetingForm,
     BibleStudyMeetingPreparationForm,
     BibleStudyMeetingRoleForm,
     BibleStudyMeetingWorshipSongForm,
@@ -319,8 +320,9 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("bible_study_lesson_manage_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bible Study Guides")
-        self.assertContains(response, "New Bible Study Guide")
+        self.assertContains(response, "Weekly Bible Study Guides")
+        self.assertContains(response, "New Weekly Bible Study Guide")
+        self.assertContains(response, "Bible Study Schedule")
 
     def test_regular_user_cannot_access_lesson_management_list(self):
         self.set_language("en")
@@ -463,6 +465,29 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertEqual(meeting.created_by, self.staff)
         self.assertIsNone(meeting.service_event)
+
+    def test_meeting_form_deemphasizes_compatibility_leader_fields(self):
+        form = BibleStudyMeetingForm()
+
+        self.assertEqual(form.fields["lesson"].label, "Weekly Bible Study Guide")
+        self.assertNotIn("discussion_leader_user", form.fields)
+        self.assertNotIn("discussion_leader_name", form.fields)
+        self.assertFalse(form.fields["service_event"].required)
+        self.assertEqual(
+            form.fields["service_event"].label,
+            "Optional Service Event Link",
+        )
+        self.assertIn(
+            "Leave blank for normal small-group Bible Study",
+            form.fields["service_event"].help_text,
+        )
+
+    def test_chinese_meeting_form_labels_parent_guide_and_service_event(self):
+        form = BibleStudyMeetingForm(language="zh")
+
+        self.assertEqual(form.fields["lesson"].label, "每周查经指引")
+        self.assertEqual(form.fields["service_event"].label, "关联聚会事件（可选）")
+        self.assertIn("一般小组查经可以留空", form.fields["service_event"].help_text)
 
     def test_duplicate_meeting_for_same_guide_and_group_is_rejected(self):
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
@@ -1062,7 +1087,8 @@ class BibleStudyModuleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Small Group Bible Study Meetings")
+        self.assertContains(response, "Small Group Meetings for This Guide")
+        self.assertContains(response, "Bible Study Schedule")
         self.assertContains(response, "Rainbow 4")
         self.assertContains(
             response,
@@ -1182,7 +1208,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bible Studies")
         self.assertContains(response, "V1 Session")
-        self.assertNotContains(response, "Bible Study Guides")
+        self.assertNotContains(response, "Weekly Bible Study Guides")
 
     def test_bible_study_lesson_can_be_created(self):
         lesson = self.create_lesson()

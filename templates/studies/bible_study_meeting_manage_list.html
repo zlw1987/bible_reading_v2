@@ -10,7 +10,7 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meetings{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}为查经指引创建和管理各小组聚会{% else %}Create and manage small group meetings for Bible Study guides{% endif %}
+        {% if language == "zh" %}查看每周查经指引下的各小组查经聚会。{% else %}Review small-group meetings under weekly Bible Study guides.{% endif %}
     </p>
 </div>
 
@@ -28,7 +28,7 @@
             </select>
         </label>
         <label>
-            {% if language == "zh" %}查经指引{% else %}Bible Study Guide{% endif %}
+            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guide{% endif %}
             <select name="lesson">
                 <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
                 {% for lesson in lesson_options %}
@@ -64,7 +64,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>{% if language == "zh" %}查经指引{% else %}Bible Study Guide{% endif %}</th>
+                    <th>{% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guide{% endif %}</th>
                     <th>{% if language == "zh" %}小组{% else %}Small Group{% endif %}</th>
                     <th>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}</th>
                     <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>

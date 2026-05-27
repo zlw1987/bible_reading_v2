@@ -219,7 +219,7 @@ class BibleStudySessionForm(forms.ModelForm):
 
 LESSON_FORM_TEXT = {
     "en": {
-        "series": "Series",
+        "series": "Bible Study Schedule",
         "title": "Title",
         "title_en": "English title",
         "scripture_reference": "Scripture",
@@ -243,7 +243,7 @@ LESSON_FORM_TEXT = {
         "notes_placeholder": "Notes for Thursday pre-study.",
     },
     "zh": {
-        "series": "系列",
+        "series": "查经安排",
         "title": "标题",
         "title_en": "英文标题",
         "scripture_reference": "经文",
@@ -342,50 +342,51 @@ class BibleStudyLessonForm(forms.ModelForm):
 
 MEETING_FORM_TEXT = {
     "en": {
-        "lesson": "Bible Study Guide",
+        "lesson": "Weekly Bible Study Guide",
         "small_group": "Small Group",
         "meeting_datetime": "Meeting Time",
         "location": "Location",
         "location_en": "English location",
         "meeting_link": "Meeting Link",
-        "discussion_leader_user": "Discussion Leader User",
-        "discussion_leader_name": "Discussion Leader Name",
         "group_direction": "Group Direction",
         "group_direction_en": "English group direction",
         "group_questions": "Group Discussion Questions",
         "group_questions_en": "English group discussion questions",
         "status": "Status",
-        "service_event": "Service Event",
+        "service_event": "Optional Service Event Link",
         "draft": "Draft",
         "published": "Published",
         "completed": "Completed",
         "cancelled": "Cancelled",
         "location_placeholder": "Meeting location",
-        "leader_placeholder": "Fallback leader name",
+        "service_event_help": (
+            "Leave blank for normal small-group Bible Study. Use only if this "
+            "meeting also needs to link to a church operations/calendar event."
+        ),
         "direction_placeholder": "Direction for this small group meeting.",
         "questions_placeholder": "Questions for this small group.",
     },
     "zh": {
-        "lesson": "查经指引",
+        "lesson": "每周查经指引",
         "small_group": "小组",
         "meeting_datetime": "聚会时间",
         "location": "地点",
         "location_en": "英文地点",
         "meeting_link": "会议链接",
-        "discussion_leader_user": "带领同工",
-        "discussion_leader_name": "带领人姓名",
         "group_direction": "小组方向",
         "group_direction_en": "英文小组方向",
         "group_questions": "小组讨论问题",
         "group_questions_en": "英文小组讨论问题",
         "status": "状态",
-        "service_event": "聚会事件",
+        "service_event": "关联聚会事件（可选）",
         "draft": "草稿",
         "published": "已发布",
         "completed": "已完成",
         "cancelled": "已取消",
         "location_placeholder": "小组查经聚会地点",
-        "leader_placeholder": "备用带领人姓名",
+        "service_event_help": (
+            "一般小组查经可以留空。只有当这次小组查经也需要关联教会聚会事件或事工排班时才使用。"
+        ),
         "direction_placeholder": "这个小组聚会的查经方向。",
         "questions_placeholder": "这个小组的讨论问题。",
     },
@@ -406,8 +407,6 @@ class BibleStudyMeetingForm(forms.ModelForm):
             "location",
             "location_en",
             "meeting_link",
-            "discussion_leader_user",
-            "discussion_leader_name",
             "group_direction",
             "group_direction_en",
             "group_questions",
@@ -445,15 +444,14 @@ class BibleStudyMeetingForm(forms.ModelForm):
         self.fields["location"].widget.attrs.update(
             {"placeholder": text["location_placeholder"]}
         )
-        self.fields["discussion_leader_name"].widget.attrs.update(
-            {"placeholder": text["leader_placeholder"]}
-        )
         self.fields["group_direction"].widget.attrs.update(
             {"placeholder": text["direction_placeholder"]}
         )
         self.fields["group_questions"].widget.attrs.update(
             {"placeholder": text["questions_placeholder"]}
         )
+        self.fields["service_event"].required = False
+        self.fields["service_event"].help_text = text["service_event_help"]
         self.fields["meeting_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
 

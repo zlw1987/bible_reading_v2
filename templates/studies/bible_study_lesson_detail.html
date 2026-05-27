@@ -8,15 +8,15 @@
 {% block content %}
 <p>
     <a href="{% url 'bible_study_lesson_manage_list' %}">
-        ← {% if language == "zh" %}返回查经指引{% else %}Back to Bible Study Guides{% endif %}
+        ← {% if language == "zh" %}返回每周查经指引{% else %}Back to Weekly Bible Study Guides{% endif %}
     </a>
 </p>
 
 <div class="page-header">
     <h1 class="page-title">{{ lesson|study_lesson_title:language }}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}全教会查经指引{% else %}Church-wide Study Guide{% endif %}
-        · {{ lesson.series|study_series_title:language }}
+        {% if language == "zh" %}全教会查经指引内容{% else %}Church-wide Guide Content{% endif %}
+        · {% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}: {{ lesson.series|study_series_title:language }}
     </p>
 </div>
 
@@ -52,7 +52,7 @@
     <div class="actions">
         <a class="button button-secondary"
            href="{% url 'edit_bible_study_lesson' lesson.id %}">
-            {% if language == "zh" %}编辑查经指引{% else %}Edit Bible Study Guide{% endif %}
+            {% if language == "zh" %}编辑每周查经指引{% else %}Edit Weekly Bible Study Guide{% endif %}
         </a>
         <a class="button"
            href="{% url 'create_bible_study_meeting' %}?lesson={{ lesson.id }}">
@@ -68,7 +68,7 @@
 </div>
 
 <div class="card">
-    <h2>{% if language == "zh" %}小组查经聚会{% else %}Small Group Bible Study Meetings{% endif %}</h2>
+    <h2>{% if language == "zh" %}本查经指引下的小组查经聚会{% else %}Small Group Meetings for This Guide{% endif %}</h2>
     {% if meetings %}
     <div class="table-wrap">
         <table>

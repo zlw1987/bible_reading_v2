@@ -41,10 +41,10 @@
                             {% if language == "zh" %}读经计划管理{% else %}Reading Plan Admin{% endif %}
                         </a>
                         <a href="{% url 'study_session_list' %}">
-                            {% if language == "zh" %}查经管理{% else %}Bible Study Admin{% endif %}
+                            {% if language == "zh" %}旧版查经安排{% else %}Legacy Bible Study Sessions{% endif %}
                         </a>
                         <a href="{% url 'bible_study_lesson_manage_list' %}">
-                            {% if language == "zh" %}查经指引{% else %}Bible Study Guides{% endif %}
+                            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}
                         </a>
                         <a href="{% url 'bible_study_meeting_manage_list' %}">
                             {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}

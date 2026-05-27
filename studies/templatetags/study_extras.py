@@ -67,6 +67,41 @@ def study_meeting_group_questions(meeting, language):
 
 
 @register.filter
+def meeting_role_label(role, language):
+    labels = {
+        "zh": {
+            "discussion_leader": "查经带领",
+            "worship_lead": "敬拜带领",
+            "pianist": "伴奏",
+            "support": "配搭",
+            "host": "接待",
+        },
+        "en": {
+            "discussion_leader": "Discussion Leader",
+            "worship_lead": "Worship Lead",
+            "pianist": "Pianist",
+            "support": "Support",
+            "host": "Host",
+        },
+    }
+    return labels.get(language, labels["en"]).get(role.role, role.get_role_display())
+
+
+@register.filter
+def meeting_role_display_name(role, language):
+    if not role:
+        return ""
+    return role.get_display_name()
+
+
+@register.filter
+def meeting_role_notes(role, language):
+    if not role:
+        return ""
+    return role.get_notes(language)
+
+
+@register.filter
 def study_guide_body(guide, language):
     if not guide:
         return ""

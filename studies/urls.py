@@ -45,6 +45,11 @@ urlpatterns = [
         name="edit_bible_study_meeting_preparation",
     ),
     path(
+        "studies/meetings/<int:meeting_id>/roles/",
+        views.manage_bible_study_meeting_roles,
+        name="manage_bible_study_meeting_roles",
+    ),
+    path(
         "studies/meetings/<int:meeting_id>/worship/",
         views.manage_bible_study_meeting_worship_songs,
         name="manage_bible_study_meeting_worship_songs",
@@ -63,6 +68,16 @@ urlpatterns = [
         "studies/meetings/<int:meeting_id>/cancel/",
         views.cancel_bible_study_meeting,
         name="cancel_bible_study_meeting",
+    ),
+    path(
+        "studies/meetings/roles/<int:role_id>/edit/",
+        views.edit_bible_study_meeting_role,
+        name="edit_bible_study_meeting_role",
+    ),
+    path(
+        "studies/meetings/roles/<int:role_id>/delete/",
+        views.delete_bible_study_meeting_role,
+        name="delete_bible_study_meeting_role",
     ),
     path(
         "studies/meetings/worship-songs/<int:song_id>/edit/",

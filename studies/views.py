@@ -15,6 +15,7 @@ from .forms import (
     BibleStudyLessonForm,
     BibleStudyMeetingForm,
     BibleStudyMeetingPreparationForm,
+    BibleStudyMeetingRoleForm,
     BibleStudyMeetingWorshipSongForm,
     BibleStudySessionForm,
     BibleStudyWorshipSongForm,
@@ -23,6 +24,7 @@ from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySession,
@@ -42,6 +44,8 @@ def study_ui_text(language, key):
             "meeting_saved": "Small group Bible Study meeting saved.",
             "meeting_cancelled": "Small group Bible Study meeting cancelled.",
             "preparation_saved": "Group preparation saved.",
+            "meeting_role_saved": "Meeting role saved.",
+            "meeting_role_deleted": "Meeting role deleted.",
             "meeting_worship_saved": "Worship song saved.",
             "meeting_worship_deleted": "Worship song deleted.",
         },
@@ -298,6 +302,7 @@ def bible_study_meeting_detail(request, meeting_id):
         "studies/bible_study_meeting_detail.html",
         {
             "meeting": meeting,
+            "meeting_roles": meeting.roles.select_related("user"),
             "worship_songs": meeting.worship_songs.select_related(
                 "worship_lead_user",
             ),
@@ -449,6 +454,134 @@ def edit_bible_study_meeting_preparation(request, meeting_id):
             "form": form,
         },
     )
+
+
+@login_required
+def manage_bible_study_meeting_roles(request, meeting_id):
+    language = get_user_language(request)
+    meeting = get_object_or_404(
+        BibleStudyMeeting.objects.select_related(
+            "lesson",
+            "lesson__series",
+            "small_group",
+        ),
+        id=meeting_id,
+    )
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("bible_study_meeting_detail", meeting_id=meeting.id)
+
+    if request.method == "POST":
+        form = BibleStudyMeetingRoleForm(
+            request.POST,
+            language=language,
+            meeting=meeting,
+        )
+        if form.is_valid():
+            role = form.save(commit=False)
+            role.meeting = meeting
+            role.save()
+            message = (
+                "聚会同工分工已保存。"
+                if language == "zh"
+                else study_ui_text(language, "meeting_role_saved")
+            )
+            messages.success(request, message)
+            return redirect("manage_bible_study_meeting_roles", meeting_id=meeting.id)
+    else:
+        form = BibleStudyMeetingRoleForm(language=language, meeting=meeting)
+
+    return render(
+        request,
+        "studies/manage_bible_study_meeting_roles.html",
+        {
+            "meeting": meeting,
+            "meeting_roles": meeting.roles.select_related("user"),
+            "form": form,
+        },
+    )
+
+
+@login_required
+def edit_bible_study_meeting_role(request, role_id):
+    language = get_user_language(request)
+    meeting_role = get_object_or_404(
+        BibleStudyMeetingRole.objects.select_related(
+            "meeting",
+            "meeting__lesson",
+            "meeting__lesson__series",
+            "meeting__small_group",
+            "user",
+        ),
+        id=role_id,
+    )
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect(
+            "bible_study_meeting_detail",
+            meeting_id=meeting_role.meeting_id,
+        )
+
+    if request.method == "POST":
+        form = BibleStudyMeetingRoleForm(
+            request.POST,
+            instance=meeting_role,
+            language=language,
+            meeting=meeting_role.meeting,
+        )
+        if form.is_valid():
+            form.save()
+            message = (
+                "聚会同工分工已保存。"
+                if language == "zh"
+                else study_ui_text(language, "meeting_role_saved")
+            )
+            messages.success(request, message)
+            return redirect(
+                "manage_bible_study_meeting_roles",
+                meeting_id=meeting_role.meeting_id,
+            )
+    else:
+        form = BibleStudyMeetingRoleForm(
+            instance=meeting_role,
+            language=language,
+            meeting=meeting_role.meeting,
+        )
+
+    return render(
+        request,
+        "studies/bible_study_meeting_role_form.html",
+        {
+            "meeting": meeting_role.meeting,
+            "meeting_role": meeting_role,
+            "form": form,
+        },
+    )
+
+
+@login_required
+def delete_bible_study_meeting_role(request, role_id):
+    language = get_user_language(request)
+    meeting_role = get_object_or_404(BibleStudyMeetingRole, id=role_id)
+    meeting_id = meeting_role.meeting_id
+
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("bible_study_meeting_detail", meeting_id=meeting_id)
+
+    if request.method != "POST":
+        return redirect("manage_bible_study_meeting_roles", meeting_id=meeting_id)
+
+    meeting_role.delete()
+    message = (
+        "聚会同工分工已删除。"
+        if language == "zh"
+        else study_ui_text(language, "meeting_role_deleted")
+    )
+    messages.success(request, message)
+    return redirect("manage_bible_study_meeting_roles", meeting_id=meeting_id)
 
 
 @login_required

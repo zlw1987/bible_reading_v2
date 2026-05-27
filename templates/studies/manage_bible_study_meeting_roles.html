@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}管理聚会同工分工{% else %}Manage Meeting Roles{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
+        ← {% if language == "zh" %}返回小组查经聚会{% else %}Back to Small Group Meeting{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}管理聚会同工分工{% else %}Manage Meeting Roles{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {{ meeting.lesson|study_lesson_title:language }}
+        · {{ meeting.small_group }}
+    </p>
+</div>
+
+{% if meeting_roles %}
+<div class="card">
+    <h2>{% if language == "zh" %}查经聚会同工分工{% else %}Meeting Roles{% endif %}</h2>
+    {% for meeting_role in meeting_roles %}
+    <div class="actions" style="justify-content: space-between;">
+        <div>
+            <strong>{{ meeting_role|meeting_role_label:language }}</strong>
+            {% if meeting_role|meeting_role_display_name:language %}
+            <span class="muted"> · {{ meeting_role|meeting_role_display_name:language }}</span>
+            {% endif %}
+            {% if meeting_role|meeting_role_notes:language %}
+            <p>{{ meeting_role|meeting_role_notes:language|linebreaksbr }}</p>
+            {% endif %}
+        </div>
+        <div class="actions">
+            <a class="button button-secondary"
+               href="{% url 'edit_bible_study_meeting_role' meeting_role.id %}">
+                {% if language == "zh" %}编辑同工分工{% else %}Edit Meeting Role{% endif %}
+            </a>
+            <form method="post" action="{% url 'delete_bible_study_meeting_role' meeting_role.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}删除{% else %}Delete{% endif %}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <h2>{% if language == "zh" %}新增同工分工{% else %}Add Meeting Role{% endif %}</h2>
+
+    {% for field in form %}
+    <div class="form-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存分工{% else %}Save Role{% endif %}
+        </button>
+    </div>
+</form>
+{% endblock %}

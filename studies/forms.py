@@ -1,9 +1,12 @@
 from django import forms
+from django.contrib.auth import get_user_model
+from django.db.models import Q
 
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySession,
@@ -482,6 +485,95 @@ class BibleStudyMeetingPreparationForm(forms.ModelForm):
         )
         self.fields["group_questions"].widget.attrs.update(
             {"placeholder": text["questions_placeholder"]}
+        )
+
+
+MEETING_ROLE_FORM_TEXT = {
+    "en": {
+        "role": "Role",
+        "user": "User",
+        "display_name": "Display Name",
+        "notes": "Notes",
+        "notes_en": "English Notes",
+        "discussion_leader": "Discussion Leader",
+        "worship_lead": "Worship Lead",
+        "pianist": "Pianist",
+        "support": "Support",
+        "host": "Host",
+        "display_name_placeholder": "Fallback name if no user is selected",
+        "notes_placeholder": "Preparation notes for this role.",
+        "notes_en_placeholder": "Optional English notes.",
+    },
+    "zh": {
+        "role": "分工",
+        "user": "用户",
+        "display_name": "显示姓名",
+        "notes": "备注",
+        "notes_en": "英文备注",
+        "discussion_leader": "查经带领",
+        "worship_lead": "敬拜带领",
+        "pianist": "伴奏",
+        "support": "配搭",
+        "host": "接待",
+        "display_name_placeholder": "未选择用户时显示的姓名",
+        "notes_placeholder": "这个分工的预备备注。",
+        "notes_en_placeholder": "可选英文备注。",
+    },
+}
+
+
+def meeting_role_form_text(language):
+    return MEETING_ROLE_FORM_TEXT.get(language, MEETING_ROLE_FORM_TEXT["en"])
+
+
+class BibleStudyMeetingRoleForm(forms.ModelForm):
+    class Meta:
+        model = BibleStudyMeetingRole
+        fields = [
+            "role",
+            "user",
+            "display_name",
+            "notes",
+            "notes_en",
+        ]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 3}),
+            "notes_en": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, language="en", meeting=None, **kwargs):
+        self.meeting = meeting
+        super().__init__(*args, **kwargs)
+        text = meeting_role_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["role"].choices = [
+            (BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER, text["discussion_leader"]),
+            (BibleStudyMeetingRole.ROLE_WORSHIP_LEAD, text["worship_lead"]),
+            (BibleStudyMeetingRole.ROLE_PIANIST, text["pianist"]),
+            (BibleStudyMeetingRole.ROLE_SUPPORT, text["support"]),
+            (BibleStudyMeetingRole.ROLE_HOST, text["host"]),
+        ]
+
+        user_model = get_user_model()
+        users = user_model.objects.filter(is_active=True)
+        if meeting:
+            user_filter = Q(profile__small_group=meeting.small_group)
+            if self.instance.user_id:
+                user_filter |= Q(id=self.instance.user_id)
+            users = users.filter(user_filter)
+        self.fields["user"].queryset = users.distinct().order_by("username")
+
+        self.fields["display_name"].widget.attrs.update(
+            {"placeholder": text["display_name_placeholder"]}
+        )
+        self.fields["notes"].widget.attrs.update(
+            {"placeholder": text["notes_placeholder"]}
+        )
+        self.fields["notes_en"].widget.attrs.update(
+            {"placeholder": text["notes_en_placeholder"]}
         )
 
 

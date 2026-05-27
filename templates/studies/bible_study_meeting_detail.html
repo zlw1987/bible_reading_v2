@@ -66,6 +66,10 @@
             {% if language == "zh" %}编辑小组查经聚会{% else %}Edit Small Group Meeting{% endif %}
         </a>
         <a class="button button-secondary"
+           href="{% url 'manage_bible_study_meeting_roles' meeting.id %}">
+            {% if language == "zh" %}管理聚会同工分工{% else %}Manage Meeting Roles{% endif %}
+        </a>
+        <a class="button button-secondary"
            href="{% url 'manage_bible_study_meeting_worship_songs' meeting.id %}">
             {% if language == "zh" %}管理敬拜诗歌安排{% else %}Manage Worship Set{% endif %}
         </a>
@@ -82,6 +86,28 @@
             </button>
         </form>
     </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>{% if language == "zh" %}查经聚会同工分工{% else %}Meeting Roles{% endif %}</h2>
+
+    {% if meeting_roles %}
+        {% for meeting_role in meeting_roles %}
+        <div>
+            <h3>{{ meeting_role|meeting_role_label:language }}</h3>
+            {% if meeting_role|meeting_role_display_name:language %}
+            <p class="muted">{{ meeting_role|meeting_role_display_name:language }}</p>
+            {% endif %}
+            {% if meeting_role|meeting_role_notes:language %}
+            <p>{{ meeting_role|meeting_role_notes:language|linebreaksbr }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有添加聚会同工分工。{% else %}No meeting roles have been added yet.{% endif %}
+    </p>
     {% endif %}
 </div>
 

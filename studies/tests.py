@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
-from .forms import BibleStudyMeetingPreparationForm
+from .forms import BibleStudyMeetingPreparationForm, BibleStudyMeetingRoleForm
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -211,6 +211,29 @@ class BibleStudyModuleTests(TestCase):
         }
         data.update(overrides)
         return BibleStudyMeetingWorshipSong.objects.create(**data)
+
+    def create_meeting_role(self, meeting, **overrides):
+        data = {
+            "meeting": meeting,
+            "role": BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            "user": self.user,
+            "display_name": "",
+            "notes": "角色备注",
+            "notes_en": "Role notes",
+        }
+        data.update(overrides)
+        return BibleStudyMeetingRole.objects.create(**data)
+
+    def meeting_role_post_data(self, **overrides):
+        data = {
+            "role": BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            "user": self.user.id,
+            "display_name": "",
+            "notes": "查经带领备注",
+            "notes_en": "Discussion leader notes",
+        }
+        data.update(overrides)
+        return data
 
     def meeting_worship_song_post_data(self, **overrides):
         data = {
@@ -604,6 +627,205 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(member_response.status_code, 200)
         self.assertNotContains(member_response, "Edit Group Preparation")
 
+    def test_meeting_role_form_filters_users_to_meeting_small_group(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(self.user, form.fields["user"].queryset)
+        self.assertNotIn(self.other_user, form.fields["user"].queryset)
+        self.assertEqual(
+            list(form.fields),
+            ["role", "user", "display_name", "notes", "notes_en"],
+        )
+
+    def test_staff_can_access_meeting_role_management_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_role(meeting, role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manage Meeting Roles")
+        self.assertContains(response, "Add Meeting Role")
+        self.assertContains(response, "Worship Lead")
+
+    def test_regular_user_cannot_access_meeting_role_management_page(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_staff_can_add_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+            self.meeting_role_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        role = BibleStudyMeetingRole.objects.get(meeting=meeting)
+        self.assertEqual(role.role, BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER)
+        self.assertEqual(role.user, self.user)
+        self.assertEqual(role.notes_en, "Discussion leader notes")
+
+    def test_staff_can_edit_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        role = self.create_meeting_role(meeting)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting_role", args=[role.id]),
+            self.meeting_role_post_data(
+                role=BibleStudyMeetingRole.ROLE_PIANIST,
+                user="",
+                display_name="Guest Pianist",
+                notes_en="Updated pianist notes",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        role.refresh_from_db()
+        self.assertEqual(role.role, BibleStudyMeetingRole.ROLE_PIANIST)
+        self.assertIsNone(role.user)
+        self.assertEqual(role.display_name, "Guest Pianist")
+        self.assertEqual(role.notes_en, "Updated pianist notes")
+
+    def test_staff_can_delete_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        role = self.create_meeting_role(meeting)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("delete_bible_study_meeting_role", args=[role.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(BibleStudyMeetingRole.objects.filter(id=role.id).exists())
+
+    def test_regular_user_cannot_edit_or_delete_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        role = self.create_meeting_role(meeting)
+        self.client.login(username="regular", password="testpass123")
+
+        edit_response = self.client.get(
+            reverse("edit_bible_study_meeting_role", args=[role.id]),
+        )
+        delete_response = self.client.post(
+            reverse("delete_bible_study_meeting_role", args=[role.id]),
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        self.assertEqual(
+            edit_response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(delete_response.status_code, 302)
+        self.assertTrue(BibleStudyMeetingRole.objects.filter(id=role.id).exists())
+
+    def test_meeting_detail_displays_roles_to_own_group_user(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_role(
+            meeting,
+            user=None,
+            display_name="Guest Leader",
+            notes_en="Lead the opening discussion.",
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Meeting Roles")
+        self.assertContains(response, "Discussion Leader")
+        self.assertContains(response, "Guest Leader")
+        self.assertContains(response, "Lead the opening discussion.")
+
+    def test_meeting_detail_hides_roles_when_parent_meeting_not_visible(self):
+        self.set_language("en")
+        meeting = self.create_meeting(small_group=self.other_group)
+        self.create_meeting_role(
+            meeting,
+            user=None,
+            display_name="Hidden Leader",
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_meeting_detail_role_controls_are_manager_only(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        self.client.login(username="study_staff", password="testpass123")
+        manager_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertContains(manager_response, "Manage Meeting Roles")
+        self.assertContains(
+            manager_response,
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+
+        self.client.logout()
+        self.client.login(username="regular", password="testpass123")
+        member_response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertEqual(member_response.status_code, 200)
+        self.assertNotContains(member_response, "Manage Meeting Roles")
+        self.assertNotContains(member_response, "Edit Meeting Role")
+        self.assertNotContains(member_response, "Delete")
+
+    def test_chinese_meeting_role_labels_render(self):
+        self.set_language("zh")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_meeting_role(
+            meeting,
+            role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=None,
+            display_name="敬拜同工",
+            notes="敬拜预备备注",
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "查经聚会同工分工")
+        self.assertContains(response, "敬拜带领")
+        self.assertContains(response, "敬拜同工")
+        self.assertNotContains(response, "查经课程")
+
     def test_staff_can_access_meeting_worship_management_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
@@ -913,6 +1135,12 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertEqual(preparation_response.status_code, 200)
         self.assertNotContains(preparation_response, "查经课程")
+
+        role_response = self.client.get(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+        self.assertEqual(role_response.status_code, 200)
+        self.assertNotContains(role_response, "查经课程")
 
         worship_response = self.client.get(
             reverse("manage_bible_study_meeting_worship_songs", args=[meeting.id]),

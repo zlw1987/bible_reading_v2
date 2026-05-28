@@ -2043,6 +2043,48 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertNotContains(response, "Draft Weekly Guide")
 
+    def test_study_list_hides_v2_meeting_under_unpublished_or_inactive_schedule(self):
+        self.set_language("en")
+        draft_schedule = BibleStudySeries.objects.create(
+            title="Draft Schedule",
+            title_en="Draft Schedule",
+            status=BibleStudySeries.STATUS_DRAFT,
+        )
+        inactive_schedule = BibleStudySeries.objects.create(
+            title="Inactive Schedule",
+            title_en="Inactive Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=False,
+        )
+        draft_schedule_lesson = self.create_lesson(
+            series=draft_schedule,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Draft Schedule Guide",
+        )
+        inactive_schedule_lesson = self.create_lesson(
+            series=inactive_schedule,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Inactive Schedule Guide",
+        )
+        self.create_meeting(
+            lesson=draft_schedule_lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.create_meeting(
+            lesson=inactive_schedule_lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No current Bible Study is available yet.")
+        self.assertNotContains(response, "Draft Schedule")
+        self.assertNotContains(response, "Draft Schedule Guide")
+        self.assertNotContains(response, "Inactive Schedule")
+        self.assertNotContains(response, "Inactive Schedule Guide")
+
     def test_study_list_user_without_small_group_gets_safe_v2_empty_state(self):
         self.set_language("en")
         self.user.profile.small_group = None
@@ -2052,7 +2094,7 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No current Bible Study is available yet.")
+        self.assertContains(response, "Your profile is not linked to a small group yet.")
 
     def test_study_list_staff_sees_v2_management_links(self):
         self.set_language("en")
@@ -2061,12 +2103,17 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Current Bible Study")
+        self.assertContains(response, "Your profile is not linked to a small group yet.")
+        self.assertContains(response, "Staff Links")
         self.assertContains(response, "Bible Study Schedules")
         self.assertContains(response, "Weekly Bible Study Guides")
         self.assertContains(response, "Small Group Meetings")
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
         self.assertContains(response, reverse("bible_study_lesson_manage_list"))
         self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+        content = response.content.decode()
+        self.assertLess(content.index("Current Bible Study"), content.index("Staff Links"))
         self.assertNotContains(response, "Legacy Bible Study Sessions")
         self.assertNotContains(response, reverse("create_study_session"))
 
@@ -2276,7 +2323,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_published_global_session_visible_to_regular_user(self):
+    def test_published_global_session_is_not_promoted_on_v2_landing(self):
         self.set_language("en")
         session = self.create_session()
 
@@ -2284,7 +2331,10 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, session.title_en)
+        self.assertTrue(BibleStudySession.objects.filter(id=session.id).exists())
+        self.assertContains(response, "Current Bible Study")
+        self.assertNotContains(response, session.title_en)
+        self.assertNotContains(response, "Legacy Bible Study Sessions")
 
     def test_draft_session_hidden_from_regular_user(self):
         self.set_language("en")
@@ -2296,7 +2346,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Draft Study")
 
-    def test_draft_session_visible_to_staff(self):
+    def test_draft_session_not_promoted_on_v2_landing_for_staff(self):
         self.set_language("en")
         self.create_session(
             title="Draft Study",
@@ -2308,7 +2358,9 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"), {"tab": "drafts"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Draft Study")
+        self.assertContains(response, "Current Bible Study")
+        self.assertNotContains(response, "Draft Study")
+        self.assertNotContains(response, "Legacy Bible Study Sessions")
 
     def test_district_scoped_session_visible_to_matching_district_user(self):
         self.set_language("en")
@@ -2504,8 +2556,7 @@ class BibleStudyModuleTests(TestCase):
         detail_response = self.client.get(reverse("study_session_detail", args=[session.id]))
 
         self.assertContains(list_response, "Bible Studies")
-        self.assertContains(list_response, "Thursday Pre-study")
-        self.assertContains(list_response, "Friday Bible Study")
+        self.assertContains(list_response, "Thursday pre-study and Friday Bible Study")
         self.assertContains(detail_response, "Study Guide")
         self.assertContains(detail_response, "Discussion Questions")
 

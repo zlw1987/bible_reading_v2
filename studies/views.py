@@ -95,14 +95,7 @@ def get_visible_study_sessions(user):
 
 
 def get_v2_landing_context(user):
-    if can_manage_bible_studies(user):
-        return {
-            "user_small_group": None,
-            "primary_meeting": None,
-            "upcoming_meetings": [],
-            "show_no_small_group": False,
-            "staff_summary": True,
-        }
+    show_staff_links = can_manage_bible_studies(user)
 
     profile = getattr(user, "profile", None)
     user_small_group = getattr(profile, "small_group", None)
@@ -112,7 +105,7 @@ def get_v2_landing_context(user):
             "primary_meeting": None,
             "upcoming_meetings": [],
             "show_no_small_group": True,
-            "staff_summary": False,
+            "show_staff_links": show_staff_links,
         }
 
     visible_statuses = [
@@ -144,7 +137,7 @@ def get_v2_landing_context(user):
         "primary_meeting": upcoming_meetings[0] if upcoming_meetings else None,
         "upcoming_meetings": upcoming_meetings,
         "show_no_small_group": False,
-        "staff_summary": False,
+        "show_staff_links": show_staff_links,
     }
 
 

@@ -69,8 +69,26 @@ a {
     font-size: 14px;
 }
 
+.nav-link {
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--primary);
+}
+
+.nav-link.active {
+    background: var(--surface-soft);
+    box-shadow: inset 0 0 0 1px var(--border);
+    color: var(--text);
+    font-weight: 700;
+    text-decoration: none;
+}
+
 .nav-staff-menu {
     position: relative;
+}
+
+.nav-staff-menu[open] summary {
+    text-decoration: underline;
 }
 
 .nav-staff-menu summary {
@@ -92,6 +110,8 @@ a {
     right: 0;
     top: calc(100% + 8px);
     min-width: 240px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
     padding: 8px;
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -358,6 +378,8 @@ th {
         position: static;
         margin-top: 8px;
         width: min(100vw - 40px, 280px);
+        max-height: calc(100vh - 150px);
+        overflow-y: auto;
     }
 
     .grid-2 {

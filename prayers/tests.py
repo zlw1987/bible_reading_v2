@@ -288,6 +288,44 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(prayer.title, "Protected title")
         self.assertEqual(prayer.body, "Protected body")
 
+    def test_prayer_detail_shows_one_delete_control_for_owner(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Deletable prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("zh")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            content.count(reverse("delete_prayer_request", args=[prayer.id])),
+            1,
+        )
+        self.assertContains(response, "删除", count=1)
+
+    def test_prayer_detail_hides_delete_control_from_non_owner(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Not deletable by viewer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(reverse("delete_prayer_request", args=[prayer.id]), content)
+
     def test_user_can_edit_own_prayer_comment(self):
         from prayers.models import PrayerComment
 

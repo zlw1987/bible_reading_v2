@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -39,6 +41,16 @@ class AccountProfileTests(TestCase):
         session = self.client.session
         session["language"] = language
         session.save()
+
+    def assert_active_nav_href(self, response, url_name):
+        content = response.content.decode()
+        expected_href = reverse(url_name)
+
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertRegex(
+            content,
+            r'class="nav-link active"\s+href="%s"' % re.escape(expected_href),
+        )
 
     def test_profile_requires_login(self):
         response = self.client.get(reverse("profile"))
@@ -169,9 +181,14 @@ class AccountProfileTests(TestCase):
         self.client.login(username="staff", password="StaffPass123!")
 
         response = self.client.get(reverse("profile"))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Staff")
+        self.assertIn('<details class="nav-staff-menu">', content)
+        self.assertIn('<div class="nav-staff-menu-panel">', content)
+        self.assertIn('(hover: hover) and (pointer: fine)', content)
+        self.assertIn('menu.addEventListener("mouseenter"', content)
         self.assertContains(response, "Content Management")
         self.assertContains(response, "Reading Plan Admin")
         self.assertContains(response, "Bible Study Schedules")
@@ -179,7 +196,6 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Weekly Bible Study Guides")
         self.assertContains(response, "Small Group Meetings")
         self.assertNotContains(response, "Bible Study Admin")
-        content = response.content.decode()
         self.assertLess(
             content.index("Bible Study Schedules"),
             content.index("Weekly Bible Study Guides"),
@@ -255,6 +271,71 @@ class AccountProfileTests(TestCase):
         ]:
             response = self.client.get(reverse(url_name))
             self.assertEqual(response.status_code, 200)
+
+    def test_today_page_marks_today_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "home")
+
+    def test_reading_page_marks_reading_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "my_plans")
+
+    def test_bible_study_page_marks_bible_study_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "study_session_list")
+
+    def test_prayer_page_marks_prayer_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("prayer_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "prayer_list")
+
+    def test_my_serving_page_marks_my_serving_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "my_serving")
+
+    def test_profile_page_marks_profile_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_active_nav_href(response, "profile")
+
+    def test_staff_management_page_marks_staff_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_user_list"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
 
 
     def test_normal_chinese_user_sees_my_serving_in_top_nav(self):

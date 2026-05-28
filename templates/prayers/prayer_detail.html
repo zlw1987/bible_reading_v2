@@ -71,15 +71,6 @@
         </form>
         {% endif %}
 
-        {% if prayer.user == user or user.is_staff %}
-        <form method="post" action="{% url 'delete_prayer_request' prayer.id %}">
-            {% csrf_token %}
-            <button type="submit" class="button-danger">
-                {{ ui.delete }}
-            </button>
-        </form>
-        {% endif %}
-
         {% if prayer.user != user %}
         <a class="button button-secondary"
            href="{% url 'report_prayer_request' prayer.id %}?next={{ request.get_full_path|urlencode }}">

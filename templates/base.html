@@ -15,22 +15,28 @@
 
             <nav class="nav">
                 {% if user.is_authenticated %}
-                <a href="{% url 'home' %}">{{ ui.today }}</a>
-                <a href="{% url 'my_plans' %}">{{ ui.my_plans }}</a>
-                <a href="{% url 'study_session_list' %}">
+                <a class="nav-link{% if active_nav == 'today' %} active{% endif %}"
+                   href="{% url 'home' %}">{{ ui.today }}</a>
+                <a class="nav-link{% if active_nav == 'reading' %} active{% endif %}"
+                   href="{% url 'my_plans' %}">{{ ui.my_plans }}</a>
+                <a class="nav-link{% if active_nav == 'bible_study' %} active{% endif %}"
+                   href="{% url 'study_session_list' %}">
                     {% if language == "zh" %}查经{% else %}Bible Study{% endif %}
                 </a>
-                <a href="{% url 'prayer_list' %}">
+                <a class="nav-link{% if active_nav == 'prayer' %} active{% endif %}"
+                   href="{% url 'prayer_list' %}">
                     {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
                 </a>
-                <a href="{% url 'my_serving' %}">
+                <a class="nav-link{% if active_nav == 'my_serving' %} active{% endif %}"
+                   href="{% url 'my_serving' %}">
                     {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
                 </a>
-                <a href="{% url 'profile' %}">{{ ui.profile }}</a>
+                <a class="nav-link{% if active_nav == 'profile' %} active{% endif %}"
+                   href="{% url 'profile' %}">{{ ui.profile }}</a>
 
                 {% if user.is_staff %}
                 <details class="nav-staff-menu">
-                    <summary>
+                    <summary class="nav-link{% if active_nav == 'staff' %} active{% endif %}">
                         {% if language == "zh" %}同工管理{% else %}Staff{% endif %}
                     </summary>
                     <div class="nav-staff-menu-panel">
@@ -131,5 +137,48 @@
 
         {% block content %}{% endblock %}
     </main>
+    <script>
+        (function () {
+            var staffMenus = document.querySelectorAll(".nav-staff-menu");
+            var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+
+            staffMenus.forEach(function (menu) {
+                var summary = menu.querySelector("summary");
+                if (!summary) {
+                    return;
+                }
+
+                menu.addEventListener("mouseenter", function () {
+                    if (finePointer.matches) {
+                        menu.open = true;
+                    }
+                });
+
+                menu.addEventListener("mouseleave", function () {
+                    if (finePointer.matches) {
+                        menu.open = false;
+                    }
+                });
+
+                menu.addEventListener("focusin", function () {
+                    if (finePointer.matches) {
+                        menu.open = true;
+                    }
+                });
+
+                menu.addEventListener("focusout", function () {
+                    if (finePointer.matches && !menu.contains(document.activeElement)) {
+                        menu.open = false;
+                    }
+                });
+
+                summary.addEventListener("click", function (event) {
+                    if (finePointer.matches) {
+                        event.preventDefault();
+                    }
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

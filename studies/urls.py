@@ -5,6 +5,26 @@ from . import views
 urlpatterns = [
     path("studies/", views.study_session_list, name="study_session_list"),
     path(
+        "studies/schedules/manage/",
+        views.bible_study_schedule_manage_list,
+        name="bible_study_schedule_manage_list",
+    ),
+    path(
+        "studies/schedules/new/",
+        views.create_bible_study_schedule,
+        name="create_bible_study_schedule",
+    ),
+    path(
+        "studies/schedules/<int:series_id>/",
+        views.bible_study_schedule_detail,
+        name="bible_study_schedule_detail",
+    ),
+    path(
+        "studies/schedules/<int:series_id>/edit/",
+        views.edit_bible_study_schedule,
+        name="edit_bible_study_schedule",
+    ),
+    path(
         "studies/lessons/manage/",
         views.bible_study_lesson_manage_list,
         name="bible_study_lesson_manage_list",
@@ -23,6 +43,11 @@ urlpatterns = [
         "studies/lessons/<int:lesson_id>/edit/",
         views.edit_bible_study_lesson,
         name="edit_bible_study_lesson",
+    ),
+    path(
+        "studies/lessons/<int:lesson_id>/generate-meetings/",
+        views.generate_bible_study_meetings,
+        name="generate_bible_study_meetings",
     ),
     path(
         "studies/lessons/<int:lesson_id>/cancel/",

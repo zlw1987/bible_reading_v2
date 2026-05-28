@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}管理包含每周查经指引的查经安排。{% else %}Manage Bible Study schedules that contain weekly guides.{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <div class="actions">
+        <a class="button" href="{% url 'create_bible_study_schedule' %}">
+            {% if language == "zh" %}新增查经安排{% else %}New Bible Study Schedule{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'bible_study_lesson_manage_list' %}">
+            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}
+        </a>
+    </div>
+</div>
+
+{% if schedules %}
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}标题{% else %}Title{% endif %}</th>
+                    <th>{% if language == "zh" %}描述{% else %}Description{% endif %}</th>
+                    <th>{% if language == "zh" %}日期范围{% else %}Date Range{% endif %}</th>
+                    <th>{% if language == "zh" %}范围{% else %}Scope{% endif %}</th>
+                    <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
+                    <th>{% if language == "zh" %}启用{% else %}Active{% endif %}</th>
+                    <th>{% if language == "zh" %}每周查经指引{% else %}Weekly Guides{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for schedule in schedules %}
+                <tr>
+                    <td>
+                        <a href="{% url 'bible_study_schedule_detail' schedule.id %}">
+                            {{ schedule|study_series_title:language }}
+                        </a>
+                    </td>
+                    <td>{{ schedule|study_series_description:language|truncatechars:80|default:"-" }}</td>
+                    <td>
+                        {% if schedule.start_date or schedule.end_date %}
+                            {{ schedule.start_date|default:"-" }} - {{ schedule.end_date|default:"-" }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ schedule|study_series_scope_label:language }}</td>
+                    <td>{{ schedule|study_series_status_label:language }}</td>
+                    <td>
+                        {% if schedule.is_active %}
+                            {% if language == "zh" %}启用{% else %}Active{% endif %}
+                        {% else %}
+                            {% if language == "zh" %}停用{% else %}Inactive{% endif %}
+                        {% endif %}
+                    </td>
+                    <td>{{ schedule.guide_count }}</td>
+                    <td>
+                        <a class="button button-secondary"
+                           href="{% url 'bible_study_schedule_detail' schedule.id %}">
+                            {% if language == "zh" %}查看{% else %}View{% endif %}
+                        </a>
+                        <a class="button button-secondary"
+                           href="{% url 'edit_bible_study_schedule' schedule.id %}">
+                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}还没有查经安排。{% else %}No Bible Study schedules have been created yet.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

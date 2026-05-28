@@ -12,10 +12,66 @@ from accounts.permissions import (
 
 
 class BibleStudySeries(models.Model):
+    SCOPE_GLOBAL = "global"
+    SCOPE_DISTRICT = "district"
+    SCOPE_SMALL_GROUP = "small_group"
+
+    SCOPE_CHOICES = [
+        (SCOPE_GLOBAL, "Global"),
+        (SCOPE_DISTRICT, "District"),
+        (SCOPE_SMALL_GROUP, "Small Group"),
+    ]
+
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
     title = models.CharField(max_length=160)
     title_en = models.CharField(max_length=160, blank=True, default="")
     description = models.TextField(blank=True, default="")
     description_en = models.TextField(blank=True, default="")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT,
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_bible_study_schedules",
+    )
+    scope_type = models.CharField(
+        max_length=32,
+        choices=SCOPE_CHOICES,
+        default=SCOPE_GLOBAL,
+    )
+    district = models.ForeignKey(
+        District,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_schedules",
+    )
+    small_group = models.ForeignKey(
+        SmallGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_schedules",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -35,6 +91,69 @@ class BibleStudySeries(models.Model):
         if language == "en" and self.description_en:
             return self.description_en or self.description
         return self.description
+
+    @property
+    def is_published(self):
+        return self.status in {self.STATUS_PUBLISHED, self.STATUS_COMPLETED}
+
+    def clean(self):
+        errors = {}
+
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "End date cannot be before start date."
+
+        if self.status not in {
+            self.STATUS_DRAFT,
+            self.STATUS_PUBLISHED,
+            self.STATUS_COMPLETED,
+            self.STATUS_CANCELLED,
+        }:
+            errors["status"] = "Invalid Bible study schedule status."
+
+        if self.scope_type == self.SCOPE_GLOBAL:
+            if self.district_id:
+                errors["district"] = "Whole-church schedules cannot be scoped to a district."
+            if self.small_group_id:
+                errors["small_group"] = "Whole-church schedules cannot be scoped to a small group."
+        elif self.scope_type == self.SCOPE_DISTRICT:
+            if not self.district_id:
+                errors["district"] = "District-scoped schedules require a district."
+            if self.small_group_id:
+                errors["small_group"] = "District-scoped schedules cannot also use a small group."
+        elif self.scope_type == self.SCOPE_SMALL_GROUP:
+            if not self.small_group_id:
+                errors["small_group"] = "Small-group-scoped schedules require a small group."
+            if self.district_id:
+                errors["district"] = "Small-group-scoped schedules cannot also use a district."
+        else:
+            errors["scope_type"] = "Invalid Bible study schedule scope."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.status == self.STATUS_PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def get_eligible_small_groups(self):
+        groups = SmallGroup.objects.filter(is_active=True)
+
+        if self.scope_type == self.SCOPE_GLOBAL:
+            return groups
+
+        if self.scope_type == self.SCOPE_DISTRICT:
+            if not self.district_id:
+                return groups.none()
+            return groups.filter(district_id=self.district_id)
+
+        if self.scope_type == self.SCOPE_SMALL_GROUP:
+            if not self.small_group_id:
+                return groups.none()
+            return groups.filter(id=self.small_group_id)
+
+        return groups.none()
 
 
 class BibleStudySession(models.Model):

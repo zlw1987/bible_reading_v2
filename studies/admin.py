@@ -14,9 +14,20 @@ from .models import (
 
 @admin.register(BibleStudySeries)
 class BibleStudySeriesAdmin(admin.ModelAdmin):
-    list_display = ("title", "is_active", "created_at")
-    list_filter = ("is_active",)
-    search_fields = ("title", "title_en", "description", "description_en")
+    list_display = (
+        "title",
+        "title_en",
+        "start_date",
+        "end_date",
+        "status",
+        "scope_type",
+        "district",
+        "small_group",
+        "is_active",
+    )
+    list_filter = ("status", "scope_type", "district", "is_active")
+    search_fields = ("title", "title_en")
+    readonly_fields = ("created_at", "updated_at", "published_at")
 
 
 @admin.register(BibleStudySession)

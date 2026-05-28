@@ -5,6 +5,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from events.models import ServiceEvent
+from ministry.models import TeamAssignment
 from .forms import (
     BibleStudyMeetingForm,
     BibleStudyMeetingPreparationForm,
@@ -259,6 +261,25 @@ class BibleStudyModuleTests(TestCase):
         data.update(overrides)
         return data
 
+    def schedule_post_data(self, **overrides):
+        start_date = timezone.localdate() + timezone.timedelta(days=7)
+        end_date = start_date + timezone.timedelta(days=84)
+        data = {
+            "title": "春季查经安排",
+            "title_en": "Spring Bible Study Schedule",
+            "description": "春季每周查经安排",
+            "description_en": "Spring weekly Bible Study schedule",
+            "start_date": start_date.strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
+            "status": BibleStudySeries.STATUS_PUBLISHED,
+            "scope_type": BibleStudySeries.SCOPE_GLOBAL,
+            "district": "",
+            "small_group": "",
+            "is_active": "on",
+        }
+        data.update(overrides)
+        return data
+
     def lesson_post_data(self, **overrides):
         data = {
             "series": self.series.id,
@@ -323,6 +344,465 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Weekly Bible Study Guides")
         self.assertContains(response, "New Weekly Bible Study Guide")
         self.assertContains(response, "Bible Study Schedule")
+
+    def test_staff_can_access_schedule_management_list(self):
+        self.set_language("en")
+        self.create_lesson(series=self.series)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_schedule_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Schedules")
+        self.assertContains(response, "Manage Bible Study schedules")
+        self.assertContains(response, "New Bible Study Schedule")
+        self.assertContains(response, "John Bible Study")
+        self.assertContains(response, "Date Range")
+        self.assertContains(response, "Scope")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "Status")
+        self.assertContains(response, "Weekly Guides")
+        self.assertContains(response, "1")
+        self.assertNotContains(response, "Series")
+
+    def test_regular_user_cannot_access_schedule_management_list(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_schedule_manage_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_staff_can_create_bible_study_schedule(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(),
+        )
+
+        schedule = BibleStudySeries.objects.get(title="春季查经安排")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_schedule_detail", args=[schedule.id]),
+        )
+        self.assertEqual(schedule.title_en, "Spring Bible Study Schedule")
+        self.assertEqual(schedule.status, BibleStudySeries.STATUS_PUBLISHED)
+        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertIsNone(schedule.district)
+        self.assertIsNone(schedule.small_group)
+        self.assertIsNotNone(schedule.published_at)
+        self.assertEqual(schedule.created_by, self.staff)
+        self.assertTrue(schedule.is_active)
+
+    def test_staff_can_create_bible_study_schedule_with_district_scope(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(
+                title="分区查经安排",
+                title_en="District Bible Study Schedule",
+                scope_type=BibleStudySeries.SCOPE_DISTRICT,
+                district=self.north.id,
+            ),
+        )
+
+        schedule = BibleStudySeries.objects.get(title="分区查经安排")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_DISTRICT)
+        self.assertEqual(schedule.district, self.north)
+        self.assertIsNone(schedule.small_group)
+
+    def test_staff_can_create_bible_study_schedule_with_small_group_scope(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(
+                title="小组查经安排",
+                title_en="Small Group Bible Study Schedule",
+                scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+                small_group=self.group.id,
+            ),
+        )
+
+        schedule = BibleStudySeries.objects.get(title="小组查经安排")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
+        self.assertEqual(schedule.small_group, self.group)
+        self.assertIsNone(schedule.district)
+
+    def test_staff_can_edit_bible_study_schedule(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+        original_created_by = self.series.created_by
+        start_date = timezone.localdate() + timezone.timedelta(days=14)
+        end_date = start_date + timezone.timedelta(days=70)
+        post_data = self.schedule_post_data(
+            title="更新后的查经安排",
+            title_en="Updated Bible Study Schedule",
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d"),
+            status=BibleStudySeries.STATUS_COMPLETED,
+        )
+        post_data.pop("is_active")
+
+        response = self.client.post(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+            post_data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "更新后的查经安排")
+        self.assertEqual(self.series.title_en, "Updated Bible Study Schedule")
+        self.assertEqual(self.series.start_date, start_date)
+        self.assertEqual(self.series.end_date, end_date)
+        self.assertEqual(self.series.status, BibleStudySeries.STATUS_COMPLETED)
+        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertEqual(self.series.created_by, original_created_by)
+        self.assertFalse(self.series.is_active)
+
+    def test_staff_can_edit_bible_study_schedule_to_district_scope(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+            self.schedule_post_data(
+                title=self.series.title,
+                title_en=self.series.title_en,
+                scope_type=BibleStudySeries.SCOPE_DISTRICT,
+                district=self.north.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_DISTRICT)
+        self.assertEqual(self.series.district, self.north)
+        self.assertIsNone(self.series.small_group)
+
+    def test_staff_can_edit_bible_study_schedule_to_small_group_scope(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+            self.schedule_post_data(
+                title=self.series.title,
+                title_en=self.series.title_en,
+                scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+                small_group=self.group.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
+        self.assertEqual(self.series.small_group, self.group)
+        self.assertIsNone(self.series.district)
+
+    def test_schedule_detail_shows_related_weekly_guides(self):
+        self.set_language("en")
+        self.series.start_date = timezone.localdate() + timezone.timedelta(days=7)
+        self.series.end_date = self.series.start_date + timezone.timedelta(days=84)
+        self.series.status = BibleStudySeries.STATUS_PUBLISHED
+        self.series.save()
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Schedule Detail Guide",
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Schedule")
+        self.assertContains(response, "Date Range")
+        self.assertContains(response, "Scope")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "Published")
+        self.assertContains(response, "Schedule Detail Guide")
+        self.assertContains(response, "John 15:1-17")
+        self.assertContains(response, "Add Weekly Bible Study Guide")
+        self.assertContains(
+            response,
+            f"{reverse('create_bible_study_lesson')}?series={self.series.id}",
+        )
+        self.assertContains(
+            response,
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+        self.assertContains(
+            response,
+            "Meeting generation from guide/scope is planned for a later phase.",
+        )
+        self.assertNotContains(response, "Series")
+
+    def test_schedule_form_uses_schedule_labels(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New Bible Study Schedule")
+        self.assertContains(response, "Bible Study Schedule Title")
+        self.assertContains(response, "English Schedule Title")
+        self.assertContains(response, "Start Date")
+        self.assertContains(response, "End Date")
+        self.assertContains(response, "Status")
+        self.assertContains(response, "Scope")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "District")
+        self.assertContains(response, "Small Group")
+        self.assertNotContains(response, "Series")
+
+    def test_chinese_schedule_pages_use_schedule_wording(self):
+        self.set_language("zh")
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
+        form_response = self.client.get(reverse("create_bible_study_schedule"))
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        for response in [list_response, form_response, detail_response]:
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "查经安排")
+            self.assertContains(response, "全教会")
+            self.assertNotContains(response, "系列")
+            self.assertNotContains(response, "查经课程")
+
+        self.assertContains(form_response, "区")
+        self.assertContains(form_response, "小组")
+
+    def test_schedule_list_and_detail_display_district_scope_label(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_DISTRICT
+        self.series.district = self.north
+        self.series.save()
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(list_response, "District: North")
+        self.assertContains(detail_response, "District: North")
+
+    def test_schedule_list_and_detail_display_small_group_scope_label(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.group
+        self.series.save()
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(list_response, "Small Group: Rainbow 4")
+        self.assertContains(detail_response, "Small Group: Rainbow 4")
+
+    def test_create_weekly_guide_can_preselect_schedule(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_bible_study_lesson"),
+            {"series": str(self.series.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"]["series"].value(), str(self.series.id))
+
+    def test_create_weekly_guide_ignores_invalid_schedule_initial(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_bible_study_lesson"),
+            {"series": "not-a-schedule"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["form"]["series"].value())
+
+    def test_bible_study_schedule_default_scope_is_global(self):
+        schedule = BibleStudySeries.objects.create(title="默认范围查经安排")
+
+        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertIsNone(schedule.district)
+        self.assertIsNone(schedule.small_group)
+
+    def test_bible_study_schedule_global_scope_rejects_district_or_group(self):
+        schedule = BibleStudySeries(
+            title="错误全教会范围",
+            scope_type=BibleStudySeries.SCOPE_GLOBAL,
+            district=self.north,
+            small_group=self.group,
+        )
+
+        with self.assertRaises(ValidationError):
+            schedule.full_clean()
+
+    def test_bible_study_schedule_district_scope_requires_district(self):
+        missing_district = BibleStudySeries(
+            title="缺少区查经安排",
+            scope_type=BibleStudySeries.SCOPE_DISTRICT,
+        )
+        with_group = BibleStudySeries(
+            title="区和小组同时设置",
+            scope_type=BibleStudySeries.SCOPE_DISTRICT,
+            district=self.north,
+            small_group=self.group,
+        )
+
+        with self.assertRaises(ValidationError):
+            missing_district.full_clean()
+        with self.assertRaises(ValidationError):
+            with_group.full_clean()
+
+    def test_bible_study_schedule_small_group_scope_requires_small_group(self):
+        missing_group = BibleStudySeries(
+            title="缺少小组查经安排",
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+        )
+        with_district = BibleStudySeries(
+            title="小组和区同时设置",
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+            district=self.north,
+            small_group=self.group,
+        )
+
+        with self.assertRaises(ValidationError):
+            missing_group.full_clean()
+        with self.assertRaises(ValidationError):
+            with_district.full_clean()
+
+    def test_bible_study_schedule_get_eligible_small_groups_global_scope(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive Group",
+            district=self.north,
+            is_active=False,
+        )
+        schedule = BibleStudySeries.objects.create(
+            title="全教会范围查经安排",
+            scope_type=BibleStudySeries.SCOPE_GLOBAL,
+        )
+
+        groups = list(schedule.get_eligible_small_groups())
+
+        self.assertIn(self.group, groups)
+        self.assertIn(self.same_group, groups)
+        self.assertIn(self.other_group, groups)
+        self.assertNotIn(inactive_group, groups)
+
+    def test_bible_study_schedule_get_eligible_small_groups_district_scope(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive North Group",
+            district=self.north,
+            is_active=False,
+        )
+        schedule = BibleStudySeries.objects.create(
+            title="北区查经安排",
+            scope_type=BibleStudySeries.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        groups = list(schedule.get_eligible_small_groups())
+
+        self.assertIn(self.group, groups)
+        self.assertIn(self.same_group, groups)
+        self.assertNotIn(self.other_group, groups)
+        self.assertNotIn(inactive_group, groups)
+
+    def test_bible_study_schedule_get_eligible_small_groups_small_group_scope(self):
+        schedule = BibleStudySeries.objects.create(
+            title="单小组查经安排",
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        self.assertEqual(list(schedule.get_eligible_small_groups()), [self.group])
+
+    def test_bible_study_schedule_get_eligible_small_groups_excludes_inactive_group_scope(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive Scoped Group",
+            district=self.north,
+            is_active=False,
+        )
+        schedule = BibleStudySeries.objects.create(
+            title="停用小组查经安排",
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+            small_group=inactive_group,
+        )
+
+        self.assertEqual(list(schedule.get_eligible_small_groups()), [])
+
+    def test_bible_study_schedule_can_store_schedule_fields(self):
+        start_date = timezone.localdate()
+        end_date = start_date + timezone.timedelta(days=90)
+
+        schedule = BibleStudySeries.objects.create(
+            title="夏季查经安排",
+            title_en="Summer Bible Study Schedule",
+            description="夏季查经",
+            description_en="Summer study",
+            start_date=start_date,
+            end_date=end_date,
+            status=BibleStudySeries.STATUS_DRAFT,
+            created_by=self.manager,
+        )
+
+        self.assertEqual(schedule.start_date, start_date)
+        self.assertEqual(schedule.end_date, end_date)
+        self.assertEqual(schedule.status, BibleStudySeries.STATUS_DRAFT)
+        self.assertEqual(schedule.created_by, self.manager)
+        self.assertFalse(schedule.is_published)
+
+    def test_bible_study_schedule_published_status_stamps_published_at(self):
+        schedule = BibleStudySeries.objects.create(
+            title="发布查经安排",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+
+        self.assertIsNotNone(schedule.published_at)
+        self.assertTrue(schedule.is_published)
+
+    def test_bible_study_schedule_completed_status_is_published(self):
+        schedule = BibleStudySeries.objects.create(
+            title="完成查经安排",
+            status=BibleStudySeries.STATUS_COMPLETED,
+        )
+
+        self.assertTrue(schedule.is_published)
+        self.assertIsNone(schedule.published_at)
+
+    def test_bible_study_schedule_rejects_end_date_before_start_date(self):
+        start_date = timezone.localdate()
+        schedule = BibleStudySeries(
+            title="日期错误查经安排",
+            start_date=start_date,
+            end_date=start_date - timezone.timedelta(days=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            schedule.full_clean()
 
     def test_regular_user_cannot_access_lesson_management_list(self):
         self.set_language("en")
@@ -427,6 +907,253 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Church-wide Discussion Questions")
         self.assertContains(response, "Church-wide questions")
         self.assertContains(response, "Pre-study Notes")
+
+    def test_staff_sees_generate_meetings_control_on_guide_detail(self):
+        self.set_language("en")
+        lesson = self.create_lesson()
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Generate Small Group Meetings")
+        self.assertContains(response, "Generate Missing Meetings")
+        self.assertContains(response, "Eligible Small Groups")
+        self.assertContains(
+            response,
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+    def test_regular_user_cannot_access_generate_meetings_route(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        get_response = self.client.get(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+        post_response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(get_response.status_code, 302)
+        self.assertEqual(get_response.url, reverse("study_session_list"))
+        self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(post_response.url, reverse("study_session_list"))
+        self.assertFalse(BibleStudyMeeting.objects.filter(lesson=lesson).exists())
+
+    def test_generate_meetings_preview_shows_counts(self):
+        self.set_language("en")
+        lesson = self.create_lesson()
+        self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Generate Small Group Meetings")
+        self.assertContains(response, "Eligible Small Groups")
+        self.assertContains(response, "Existing Meetings")
+        self.assertContains(response, "Meetings to Create")
+        self.assertEqual(response.context["generation_preview"]["eligible_count"], 3)
+        self.assertEqual(response.context["generation_preview"]["existing_count"], 1)
+        self.assertEqual(response.context["generation_preview"]["missing_count"], 2)
+
+    def test_generate_meetings_creates_draft_meetings_for_global_scope(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            lesson_date=timezone.localdate() + timezone.timedelta(days=9),
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson).order_by(
+            "small_group__name",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Created 3 small group meetings")
+        self.assertEqual(meetings.count(), 3)
+        self.assertEqual(
+            set(meetings.values_list("small_group", flat=True)),
+            {self.group.id, self.same_group.id, self.other_group.id},
+        )
+        for meeting in meetings:
+            self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_DRAFT)
+            self.assertEqual(meeting.created_by, self.staff)
+            self.assertEqual(meeting.lesson, lesson)
+            self.assertEqual(meeting.lesson.series, self.series)
+            self.assertEqual(timezone.localtime(meeting.meeting_datetime).date(), lesson.lesson_date)
+            self.assertEqual(timezone.localtime(meeting.meeting_datetime).hour, 19)
+            self.assertEqual(timezone.localtime(meeting.meeting_datetime).minute, 30)
+            self.assertEqual(meeting.location, "")
+            self.assertEqual(meeting.location_en, "")
+            self.assertEqual(meeting.meeting_link, "")
+            self.assertEqual(meeting.group_direction, "")
+            self.assertEqual(meeting.group_direction_en, "")
+            self.assertEqual(meeting.group_questions, "")
+            self.assertEqual(meeting.group_questions_en, "")
+            self.assertIsNone(meeting.service_event)
+            self.assertIsNone(meeting.discussion_leader_user)
+            self.assertEqual(meeting.discussion_leader_name, "")
+
+    def test_generate_meetings_uses_district_scope(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_DISTRICT
+        self.series.district = self.north
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            set(BibleStudyMeeting.objects.filter(lesson=lesson).values_list(
+                "small_group",
+                flat=True,
+            )),
+            {self.group.id, self.same_group.id},
+        )
+
+    def test_generate_meetings_uses_small_group_scope(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.group
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 1)
+        self.assertEqual(meetings.get().small_group, self.group)
+
+    def test_generate_meetings_excludes_inactive_small_groups(self):
+        self.set_language("en")
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive Generate Group",
+            district=self.north,
+            is_active=False,
+        )
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = inactive_group
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Created 0 small group meetings")
+        self.assertFalse(BibleStudyMeeting.objects.filter(lesson=lesson).exists())
+
+    def test_generate_meetings_skips_existing_without_overwriting(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        existing = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            location="Do not overwrite",
+            group_direction="Existing group preparation",
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        existing.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Skipped 1 existing meetings")
+        self.assertEqual(existing.status, BibleStudyMeeting.STATUS_PUBLISHED)
+        self.assertEqual(existing.location, "Do not overwrite")
+        self.assertEqual(existing.group_direction, "Existing group preparation")
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 3)
+
+    def test_generate_meetings_is_idempotent(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        first_response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+        second_response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        self.assertContains(first_response, "Created 3 small group meetings")
+        self.assertContains(second_response, "Created 0 small group meetings")
+        self.assertContains(second_response, "Skipped 3 existing meetings")
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 3)
+
+    def test_generate_meetings_does_not_create_related_operations_records(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 3)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.filter(meeting__in=meetings).count(), 0)
+        self.assertEqual(
+            BibleStudyMeetingWorshipSong.objects.filter(meeting__in=meetings).count(),
+            0,
+        )
+
+    def test_guide_detail_shows_generated_meetings_after_generation(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+        response = self.client.get(reverse("bible_study_lesson_detail", args=[lesson.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "Rainbow 4B")
+        self.assertContains(response, "Rainbow 5")
+
+    def test_chinese_generate_meetings_page_uses_expected_wording(self):
+        self.set_language("zh")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "生成小组查经聚会")
+        self.assertContains(response, "符合范围的小组")
+        self.assertContains(response, "已存在的聚会")
+        self.assertContains(response, "将要生成的聚会")
+        self.assertNotContains(response, "查经课程")
 
     def test_staff_can_access_meeting_management_list(self):
         self.set_language("en")

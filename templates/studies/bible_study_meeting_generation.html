@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load study_extras %}
+
+{% block title %}
+    {% if language == "zh" %}生成小组查经聚会{% else %}Generate Small Group Meetings{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'bible_study_lesson_detail' lesson.id %}">
+        ← {% if language == "zh" %}返回每周查经指引{% else %}Back to Weekly Bible Study Guide{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}生成小组查经聚会{% else %}Generate Small Group Meetings{% endif %}</h1>
+    <p class="page-subtitle">
+        {{ lesson|study_lesson_title:language }}
+        · {% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}: {{ lesson.series|study_series_title:language }}
+    </p>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr>
+                    <th>{% if language == "zh" %}符合范围的小组{% else %}Eligible Small Groups{% endif %}</th>
+                    <td>{{ generation_preview.eligible_count }}</td>
+                </tr>
+                <tr>
+                    <th>{% if language == "zh" %}已存在的聚会{% else %}Existing Meetings{% endif %}</th>
+                    <td>{{ generation_preview.existing_count }}</td>
+                </tr>
+                <tr>
+                    <th>{% if language == "zh" %}将要生成的聚会{% else %}Meetings to Create{% endif %}</th>
+                    <td>{{ generation_preview.missing_count }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% if generation_preview.missing_groups %}
+    <h2>{% if language == "zh" %}将要生成的聚会{% else %}Meetings to Create{% endif %}</h2>
+    <ul>
+        {% for small_group in generation_preview.missing_groups %}
+        <li>{{ small_group }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}目前没有缺少的小组聚会。{% else %}There are no missing small-group meetings to create.{% endif %}
+    </p>
+    {% endif %}
+
+    <div class="actions">
+        <form method="post" action="{% url 'generate_bible_study_meetings' lesson.id %}">
+            {% csrf_token %}
+            <button type="submit">
+                {% if language == "zh" %}生成缺少的小组聚会{% else %}Generate Missing Meetings{% endif %}
+            </button>
+        </form>
+        <a class="button button-secondary" href="{% url 'bible_study_lesson_detail' lesson.id %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</div>
+{% endblock %}

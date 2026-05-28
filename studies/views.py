@@ -1,5 +1,9 @@
+from datetime import datetime, time
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -17,6 +21,7 @@ from .forms import (
     BibleStudyMeetingPreparationForm,
     BibleStudyMeetingRoleForm,
     BibleStudyMeetingWorshipSongForm,
+    BibleStudySeriesForm,
     BibleStudySessionForm,
     BibleStudyWorshipSongForm,
 )
@@ -39,6 +44,7 @@ def study_ui_text(language, key):
             "not_available": "This Bible study is not available.",
             "saved": "Bible study session saved.",
             "cancelled": "Bible study session cancelled.",
+            "schedule_saved": "Bible Study schedule saved.",
             "lesson_saved": "Bible study guide saved.",
             "lesson_cancelled": "Bible study guide cancelled.",
             "meeting_saved": "Small group Bible Study meeting saved.",
@@ -54,6 +60,7 @@ def study_ui_text(language, key):
             "not_available": "这个查经安排目前不可用。",
             "saved": "查经安排已保存。",
             "cancelled": "查经安排已取消。",
+            "schedule_saved": "查经安排已保存。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -85,6 +92,134 @@ def get_visible_study_sessions(user):
 
     visible_ids = [session.id for session in sessions if session.can_be_seen_by(user)]
     return sessions.filter(id__in=visible_ids)
+
+
+def get_default_meeting_datetime(lesson):
+    meeting_datetime = datetime.combine(lesson.lesson_date, time(hour=19, minute=30))
+    if timezone.is_naive(meeting_datetime):
+        return timezone.make_aware(
+            meeting_datetime,
+            timezone.get_current_timezone(),
+        )
+    return meeting_datetime
+
+
+def get_bible_study_meeting_generation_preview(lesson):
+    eligible_groups = lesson.series.get_eligible_small_groups()
+    existing_group_ids = set(
+        lesson.meetings.filter(small_group__in=eligible_groups).values_list(
+            "small_group_id",
+            flat=True,
+        )
+    )
+    missing_groups = eligible_groups.exclude(id__in=existing_group_ids)
+    eligible_count = eligible_groups.count()
+    existing_count = len(existing_group_ids)
+    missing_count = eligible_count - existing_count
+    return {
+        "eligible_groups": eligible_groups,
+        "missing_groups": missing_groups,
+        "eligible_count": eligible_count,
+        "existing_count": existing_count,
+        "missing_count": missing_count,
+    }
+
+
+@login_required
+def bible_study_schedule_manage_list(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    schedules = BibleStudySeries.objects.annotate(
+        guide_count=Count("lessons"),
+    ).order_by("title")
+
+    return render(
+        request,
+        "studies/bible_study_schedule_manage_list.html",
+        {"schedules": schedules},
+    )
+
+
+@login_required
+def bible_study_schedule_detail(request, series_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    schedule = get_object_or_404(
+        BibleStudySeries.objects.annotate(guide_count=Count("lessons")),
+        id=series_id,
+    )
+
+    return render(
+        request,
+        "studies/bible_study_schedule_detail.html",
+        {
+            "schedule": schedule,
+            "lessons": schedule.lessons.select_related(
+                "series",
+                "created_by",
+            ),
+        },
+    )
+
+
+@login_required
+def create_bible_study_schedule(request):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    if request.method == "POST":
+        form = BibleStudySeriesForm(request.POST, language=language)
+        if form.is_valid():
+            schedule = form.save(commit=False)
+            schedule.created_by = request.user
+            schedule.save()
+            messages.success(request, study_ui_text(language, "schedule_saved"))
+            return redirect("bible_study_schedule_detail", series_id=schedule.id)
+    else:
+        form = BibleStudySeriesForm(language=language)
+
+    return render(
+        request,
+        "studies/bible_study_schedule_form.html",
+        {"form": form, "is_edit": False},
+    )
+
+
+@login_required
+def edit_bible_study_schedule(request, series_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    schedule = get_object_or_404(BibleStudySeries, id=series_id)
+
+    if request.method == "POST":
+        form = BibleStudySeriesForm(
+            request.POST,
+            instance=schedule,
+            language=language,
+        )
+        if form.is_valid():
+            schedule = form.save()
+            messages.success(request, study_ui_text(language, "schedule_saved"))
+            return redirect("bible_study_schedule_detail", series_id=schedule.id)
+    else:
+        form = BibleStudySeriesForm(instance=schedule, language=language)
+
+    return render(
+        request,
+        "studies/bible_study_schedule_form.html",
+        {"schedule": schedule, "form": form, "is_edit": True},
+    )
 
 
 @login_required
@@ -139,6 +274,63 @@ def bible_study_lesson_detail(request, lesson_id):
                 "small_group",
                 "discussion_leader_user",
             ),
+            "generation_preview": get_bible_study_meeting_generation_preview(lesson),
+        },
+    )
+
+
+@login_required
+def generate_bible_study_meetings(request, lesson_id):
+    language = get_user_language(request)
+    if not can_manage_bible_studies(request.user):
+        messages.error(request, study_ui_text(language, "no_permission"))
+        return redirect("study_session_list")
+
+    lesson = get_object_or_404(
+        BibleStudyLesson.objects.select_related("series", "created_by"),
+        id=lesson_id,
+    )
+    preview = get_bible_study_meeting_generation_preview(lesson)
+
+    if request.method == "POST":
+        created_count = 0
+        default_meeting_datetime = get_default_meeting_datetime(lesson)
+
+        for small_group in preview["missing_groups"]:
+            try:
+                meeting, created = BibleStudyMeeting.objects.get_or_create(
+                    lesson=lesson,
+                    small_group=small_group,
+                    defaults={
+                        "meeting_datetime": default_meeting_datetime,
+                        "status": BibleStudyMeeting.STATUS_DRAFT,
+                        "created_by": request.user,
+                    },
+                )
+            except IntegrityError:
+                created = False
+
+            if created:
+                created_count += 1
+
+        skipped_count = preview["eligible_count"] - created_count
+        message = (
+            f"已生成 {created_count} 个小组查经聚会，跳过 {skipped_count} 个已存在的聚会。"
+            if language == "zh"
+            else (
+                f"Created {created_count} small group meetings. "
+                f"Skipped {skipped_count} existing meetings."
+            )
+        )
+        messages.success(request, message)
+        return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
+
+    return render(
+        request,
+        "studies/bible_study_meeting_generation.html",
+        {
+            "lesson": lesson,
+            "generation_preview": preview,
         },
     )
 
@@ -149,6 +341,11 @@ def create_bible_study_lesson(request):
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
         return redirect("study_session_list")
+
+    initial = {}
+    series_id = (request.GET.get("series") or "").strip()
+    if series_id.isdigit() and BibleStudySeries.objects.filter(id=series_id).exists():
+        initial["series"] = series_id
 
     if request.method == "POST":
         form = BibleStudyLessonForm(request.POST, language=language)
@@ -164,7 +361,7 @@ def create_bible_study_lesson(request):
             messages.success(request, message)
             return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
     else:
-        form = BibleStudyLessonForm(language=language)
+        form = BibleStudyLessonForm(initial=initial, language=language)
 
     return render(
         request,

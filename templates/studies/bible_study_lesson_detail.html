@@ -68,6 +68,43 @@
 </div>
 
 <div class="card">
+    <h2>{% if language == "zh" %}生成小组查经聚会{% else %}Generate Small Group Meetings{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}根据本每周查经指引所属查经安排的范围，生成缺少的小组查经聚会。{% else %}Generate missing small-group meetings from this weekly guide's Bible Study schedule scope.{% endif %}
+    </p>
+    <div class="table-wrap">
+        <table>
+            <tbody>
+                <tr>
+                    <th>{% if language == "zh" %}符合范围的小组{% else %}Eligible Small Groups{% endif %}</th>
+                    <td>{{ generation_preview.eligible_count }}</td>
+                </tr>
+                <tr>
+                    <th>{% if language == "zh" %}已存在的聚会{% else %}Existing Meetings{% endif %}</th>
+                    <td>{{ generation_preview.existing_count }}</td>
+                </tr>
+                <tr>
+                    <th>{% if language == "zh" %}将要生成的聚会{% else %}Meetings to Create{% endif %}</th>
+                    <td>{{ generation_preview.missing_count }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="actions">
+        <a class="button button-secondary"
+           href="{% url 'generate_bible_study_meetings' lesson.id %}">
+            {% if language == "zh" %}查看生成预览{% else %}Review Generation Preview{% endif %}
+        </a>
+        <form method="post" action="{% url 'generate_bible_study_meetings' lesson.id %}">
+            {% csrf_token %}
+            <button type="submit">
+                {% if language == "zh" %}生成缺少的小组聚会{% else %}Generate Missing Meetings{% endif %}
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
     <h2>{% if language == "zh" %}本查经指引下的小组查经聚会{% else %}Small Group Meetings for This Guide{% endif %}</h2>
     {% if meetings %}
     <div class="table-wrap">

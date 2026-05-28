@@ -140,6 +140,7 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Profile")
         self.assertNotContains(response, "Reading Plan Admin")
         self.assertNotContains(response, "Bible Study Admin")
+        self.assertNotContains(response, "Bible Study Schedules")
         self.assertNotContains(response, "Legacy Bible Study Sessions")
         self.assertNotContains(response, "Weekly Bible Study Guides")
         self.assertNotContains(response, "Small Group Meetings")
@@ -173,10 +174,20 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Staff")
         self.assertContains(response, "Content Management")
         self.assertContains(response, "Reading Plan Admin")
+        self.assertContains(response, "Bible Study Schedules")
         self.assertContains(response, "Legacy Bible Study Sessions")
         self.assertContains(response, "Weekly Bible Study Guides")
         self.assertContains(response, "Small Group Meetings")
         self.assertNotContains(response, "Bible Study Admin")
+        content = response.content.decode()
+        self.assertLess(
+            content.index("Bible Study Schedules"),
+            content.index("Weekly Bible Study Guides"),
+        )
+        self.assertLess(
+            content.index("Small Group Meetings"),
+            content.index("Legacy Bible Study Sessions"),
+        )
         self.assertContains(response, "Ministry Operations")
         self.assertContains(response, "Service Events")
         self.assertContains(response, "Ministry Teams")
@@ -212,10 +223,14 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "同工管理")
         self.assertContains(response, "内容管理")
         self.assertContains(response, "读经计划管理")
+        self.assertContains(response, "查经安排")
         self.assertContains(response, "旧版查经安排")
         self.assertContains(response, "每周查经指引")
         self.assertContains(response, "小组查经聚会")
         self.assertNotContains(response, "查经管理")
+        content = response.content.decode()
+        self.assertLess(content.index("查经安排"), content.index("每周查经指引"))
+        self.assertLess(content.index("小组查经聚会"), content.index("旧版查经安排"))
         self.assertContains(response, "事工运作")
         self.assertContains(response, "聚会事件")
         self.assertContains(response, "事工团队")

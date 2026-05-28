@@ -2,6 +2,8 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
+from accounts.models import District, SmallGroup
+
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -16,10 +18,17 @@ from .models import (
 
 FORM_TEXT = {
     "en": {
-        "series_title": "Title",
-        "series_title_en": "English title",
+        "series_title": "Bible Study Schedule Title",
+        "series_title_en": "English Schedule Title",
         "description": "Description",
-        "description_en": "English description",
+        "description_en": "English Description",
+        "start_date": "Start Date",
+        "end_date": "End Date",
+        "status": "Status",
+        "schedule_scope_type": "Scope",
+        "schedule_global": "Whole Church",
+        "schedule_district": "District",
+        "schedule_small_group": "Small Group",
         "is_active": "Active",
         "series": "Series",
         "title": "Title",
@@ -53,10 +62,17 @@ FORM_TEXT = {
         "notes_placeholder": "Notes for Thursday pre-study.",
     },
     "zh": {
-        "series_title": "标题",
-        "series_title_en": "英文标题",
+        "series_title": "查经安排标题",
+        "series_title_en": "英文查经安排标题",
         "description": "描述",
         "description_en": "英文描述",
+        "start_date": "开始日期",
+        "end_date": "结束日期",
+        "status": "状态",
+        "schedule_scope_type": "范围",
+        "schedule_global": "全教会",
+        "schedule_district": "区",
+        "schedule_small_group": "小组",
         "is_active": "启用",
         "series": "系列",
         "title": "标题",
@@ -145,10 +161,30 @@ def worship_form_text(language):
 class BibleStudySeriesForm(forms.ModelForm):
     class Meta:
         model = BibleStudySeries
-        fields = ["title", "title_en", "description", "description_en", "is_active"]
+        fields = [
+            "title",
+            "title_en",
+            "description",
+            "description_en",
+            "start_date",
+            "end_date",
+            "status",
+            "scope_type",
+            "district",
+            "small_group",
+            "is_active",
+        ]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 4}),
             "description_en": forms.Textarea(attrs={"rows": 4}),
+            "start_date": forms.DateInput(
+                attrs={"type": "date"},
+                format="%Y-%m-%d",
+            ),
+            "end_date": forms.DateInput(
+                attrs={"type": "date"},
+                format="%Y-%m-%d",
+            ),
         }
 
     def __init__(self, *args, language="en", **kwargs):
@@ -158,7 +194,38 @@ class BibleStudySeriesForm(forms.ModelForm):
         self.fields["title_en"].label = text["series_title_en"]
         self.fields["description"].label = text["description"]
         self.fields["description_en"].label = text["description_en"]
+        self.fields["start_date"].label = text["start_date"]
+        self.fields["end_date"].label = text["end_date"]
+        self.fields["status"].label = text["status"]
+        self.fields["scope_type"].label = text["schedule_scope_type"]
+        self.fields["district"].label = text["schedule_district"]
+        self.fields["small_group"].label = text["schedule_small_group"]
         self.fields["is_active"].label = text["is_active"]
+        self.fields["status"].choices = [
+            (BibleStudySeries.STATUS_DRAFT, text["draft"]),
+            (BibleStudySeries.STATUS_PUBLISHED, text["published"]),
+            (BibleStudySeries.STATUS_COMPLETED, text["completed"]),
+            (BibleStudySeries.STATUS_CANCELLED, text["cancelled"]),
+        ]
+        self.fields["scope_type"].choices = [
+            (BibleStudySeries.SCOPE_GLOBAL, text["schedule_global"]),
+            (BibleStudySeries.SCOPE_DISTRICT, text["schedule_district"]),
+            (BibleStudySeries.SCOPE_SMALL_GROUP, text["schedule_small_group"]),
+        ]
+        district_filter = Q(is_active=True)
+        if self.instance.district_id:
+            district_filter |= Q(id=self.instance.district_id)
+        self.fields["district"].queryset = District.objects.filter(
+            district_filter,
+        ).distinct().order_by("name")
+        small_group_filter = Q(is_active=True)
+        if self.instance.small_group_id:
+            small_group_filter |= Q(id=self.instance.small_group_id)
+        self.fields["small_group"].queryset = SmallGroup.objects.filter(
+            small_group_filter,
+        ).distinct().order_by("name")
+        self.fields["start_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["end_date"].input_formats = ["%Y-%m-%d"]
 
 
 class BibleStudySessionForm(forms.ModelForm):

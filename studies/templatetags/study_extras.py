@@ -11,6 +11,59 @@ def study_series_title(series, language):
 
 
 @register.filter
+def study_series_description(series, language):
+    if not series:
+        return ""
+    return series.get_description(language)
+
+
+@register.filter
+def study_series_status_label(series, language):
+    labels = {
+        "zh": {
+            "draft": "草稿",
+            "published": "已发布",
+            "completed": "已完成",
+            "cancelled": "已取消",
+        },
+        "en": {
+            "draft": "Draft",
+            "published": "Published",
+            "completed": "Completed",
+            "cancelled": "Cancelled",
+        },
+    }
+    return labels.get(language, labels["en"]).get(series.status, series.status)
+
+
+@register.filter
+def study_series_scope_label(series, language):
+    if not series:
+        return ""
+
+    if language == "zh":
+        if series.scope_type == "global":
+            return "全教会"
+        if series.scope_type == "district":
+            name = series.district.name if series.district_id else "-"
+            return f"区：{name}"
+        if series.scope_type == "small_group":
+            name = series.small_group.name if series.small_group_id else "-"
+            return f"小组：{name}"
+        return series.scope_type
+
+    if series.scope_type == "global":
+        return "Whole Church"
+    if series.scope_type == "district":
+        name = series.district.name if series.district_id else "-"
+        return f"District: {name}"
+    if series.scope_type == "small_group":
+        name = series.small_group.name if series.small_group_id else "-"
+        return f"Small Group: {name}"
+    return series.scope_type
+
+
+@register.filter
 def study_session_title(session, language):
     if not session:
         return ""

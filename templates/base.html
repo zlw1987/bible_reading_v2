@@ -166,8 +166,8 @@
                     }
                 });
 
-                menu.addEventListener("focusout", function () {
-                    if (finePointer.matches && !menu.contains(document.activeElement)) {
+                menu.addEventListener("focusout", function (event) {
+                    if (finePointer.matches && !menu.contains(event.relatedTarget)) {
                         menu.open = false;
                     }
                 });

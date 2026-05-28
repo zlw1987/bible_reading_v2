@@ -189,6 +189,7 @@ class AccountProfileTests(TestCase):
         self.assertIn('<div class="nav-staff-menu-panel">', content)
         self.assertIn('(hover: hover) and (pointer: fine)', content)
         self.assertIn('menu.addEventListener("mouseenter"', content)
+        self.assertIn("menu.contains(event.relatedTarget)", content)
         self.assertContains(response, "Content Management")
         self.assertContains(response, "Reading Plan Admin")
         self.assertContains(response, "Bible Study Schedules")

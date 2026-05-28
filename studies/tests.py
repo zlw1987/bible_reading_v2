@@ -1938,7 +1938,7 @@ class BibleStudyModuleTests(TestCase):
             lesson=lesson,
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
-        legacy_session = self.create_session(title_en="Fallback V1 Session")
+        v1_session = self.create_session(title_en="Fallback V1 Session")
         self.client.login(username="regular", password="testpass123")
 
         response = self.client.get(reverse("study_session_list"))
@@ -1959,8 +1959,9 @@ class BibleStudyModuleTests(TestCase):
             reverse("bible_study_meeting_detail", args=[meeting.id]),
         )
         self.assertNotContains(response, "Detailed pastor guide belongs on detail page")
-        self.assertContains(response, "Other Bible Study Sessions")
-        self.assertContains(response, legacy_session.title_en)
+        self.assertNotContains(response, "Other Bible Study Sessions")
+        self.assertNotContains(response, "Legacy Bible Study Sessions")
+        self.assertNotContains(response, v1_session.title_en)
 
     def test_study_list_hides_other_group_v2_meeting_from_normal_user(self):
         self.set_language("en")
@@ -1982,8 +1983,9 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "No current small-group Bible Study meeting is available yet.",
+            "No current Bible Study is available yet.",
         )
+        self.assertNotContains(response, "Other Bible Study Sessions")
         self.assertNotContains(response, "Other Group Weekly Guide")
 
     def test_study_list_hides_draft_and_cancelled_v2_meetings_from_normal_user(self):
@@ -2013,7 +2015,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "No current small-group Bible Study meeting is available yet.",
+            "No current Bible Study is available yet.",
         )
         self.assertNotContains(response, "Draft Meeting Guide")
         self.assertNotContains(response, "Cancelled Meeting Guide")
@@ -2037,7 +2039,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "No current small-group Bible Study meeting is available yet.",
+            "No current Bible Study is available yet.",
         )
         self.assertNotContains(response, "Draft Weekly Guide")
 
@@ -2050,7 +2052,7 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Your profile is not linked to a small group yet.")
+        self.assertContains(response, "No current Bible Study is available yet.")
 
     def test_study_list_staff_sees_v2_management_links(self):
         self.set_language("en")
@@ -2065,6 +2067,8 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
         self.assertContains(response, reverse("bible_study_lesson_manage_list"))
         self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+        self.assertNotContains(response, "Legacy Bible Study Sessions")
+        self.assertNotContains(response, reverse("create_study_session"))
 
     def test_chinese_study_list_uses_expected_v2_landing_wording(self):
         self.set_language("zh")
@@ -2076,10 +2080,12 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "当前查经")
         self.assertContains(response, "查经安排")
         self.assertContains(response, "每周查经指引")
+        self.assertContains(response, "小组查经聚会")
+        self.assertNotContains(response, "旧版查经安排")
         self.assertNotContains(response, "查经课程")
         self.assertNotContains(response, "查经管理")
 
-    def test_v1_studies_list_route_still_uses_session_page(self):
+    def test_studies_list_route_preserves_v2_landing_without_promoting_v1(self):
         self.set_language("en")
         self.create_session(title_en="V1 Session")
         self.client.login(username="regular", password="testpass123")
@@ -2088,8 +2094,10 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bible Studies")
-        self.assertContains(response, "V1 Session")
-        self.assertContains(response, "Other Bible Study Sessions")
+        self.assertContains(response, "Current Bible Study")
+        self.assertNotContains(response, "V1 Session")
+        self.assertNotContains(response, "Other Bible Study Sessions")
+        self.assertNotContains(response, "Legacy Bible Study Sessions")
 
     def test_bible_study_lesson_can_be_created(self):
         lesson = self.create_lesson()

@@ -24,6 +24,10 @@ body {
     line-height: 1.6;
 }
 
+body.nav-menu-open {
+    overflow: hidden;
+}
+
 a {
     color: var(--primary);
     text-decoration: none;
@@ -374,12 +378,21 @@ th {
         align-items: flex-start;
     }
 
-    .nav-staff-menu-panel {
-        position: static;
-        margin-top: 8px;
-        width: min(100vw - 40px, 280px);
-        max-height: calc(100vh - 150px);
+    .nav-staff-menu[open] .nav-staff-menu-panel {
+        position: fixed;
+        top: var(--staff-menu-top, 88px);
+        right: 12px;
+        bottom: 12px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        left: 12px;
+        width: auto;
+        min-width: 0;
+        max-height: calc(100vh - var(--staff-menu-top, 88px) - 12px);
+        max-height: calc(100dvh - var(--staff-menu-top, 88px) - max(12px, env(safe-area-inset-bottom)));
         overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        z-index: 30;
     }
 
     .grid-2 {

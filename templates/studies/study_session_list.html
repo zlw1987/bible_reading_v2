@@ -20,9 +20,9 @@
     {% if v2_landing.staff_summary %}
     <p class="muted">
         {% if language == "zh" %}
-            请使用同工入口管理查经安排、每周查经指引和小组查经聚会。
+            同工可使用以下入口维护查经安排、每周查经指引和小组查经聚会。
         {% else %}
-            Use the staff links for Bible Study schedules, weekly guides, and small group meetings.
+            Use these staff links for Bible Study schedules, weekly guides, and small group meetings.
         {% endif %}
     </p>
     <div class="actions">
@@ -39,9 +39,9 @@
     {% elif v2_landing.show_no_small_group %}
     <p class="muted">
         {% if language == "zh" %}
-            你的个人资料还没有关联小组。
+            目前还没有可见的查经安排。
         {% else %}
-            Your profile is not linked to a small group yet.
+            No current Bible Study is available yet.
         {% endif %}
     </p>
     {% elif v2_landing.primary_meeting %}
@@ -88,83 +88,11 @@
     {% else %}
     <p class="muted">
         {% if language == "zh" %}
-            目前还没有可见的小组查经聚会。
+            目前还没有可见的查经安排。
         {% else %}
-            No current small-group Bible Study meeting is available yet.
+            No current Bible Study is available yet.
         {% endif %}
     </p>
     {% endif %}
 </div>
-
-<div class="section-heading">
-    <h2>
-        {% if can_manage %}
-            {% if language == "zh" %}旧版查经安排{% else %}Legacy Bible Study Sessions{% endif %}
-        {% else %}
-            {% if language == "zh" %}其他查经安排{% else %}Other Bible Study Sessions{% endif %}
-        {% endif %}
-    </h2>
-</div>
-
-<div class="card">
-    <div class="actions">
-        <a class="button {% if tab != 'upcoming' %}button-secondary{% endif %}"
-           href="{% url 'study_session_list' %}?tab=upcoming">
-            {% if language == "zh" %}即将开始{% else %}Upcoming{% endif %}
-        </a>
-        <a class="button {% if tab != 'past' %}button-secondary{% endif %}"
-           href="{% url 'study_session_list' %}?tab=past">
-            {% if language == "zh" %}过去{% else %}Past{% endif %}
-        </a>
-        {% if can_manage %}
-        <a class="button {% if tab != 'drafts' %}button-secondary{% endif %}"
-           href="{% url 'study_session_list' %}?tab=drafts">
-            {% if language == "zh" %}草稿{% else %}Drafts{% endif %}
-        </a>
-        <a class="button"
-           href="{% url 'create_study_session' %}">
-            {% if language == "zh" %}新增查经{% else %}New Bible Study Session{% endif %}
-        </a>
-        {% endif %}
-    </div>
-</div>
-
-{% if sessions %}
-<div class="grid grid-2">
-    {% for session in sessions %}
-    <div class="card">
-        <h2 class="card-title">
-            <a href="{% url 'study_session_detail' session.id %}">
-                {{ session|study_session_title:language }}
-            </a>
-        </h2>
-        <p class="muted">
-            {{ session|study_status_label:language }} · {{ session|study_scope_label:language }}
-        </p>
-        {% if session.scripture_reference %}
-        <p>
-            <strong>{% if language == "zh" %}经文{% else %}Scripture{% endif %}:</strong>
-            {{ session.scripture_reference }}
-        </p>
-        {% endif %}
-        {% if session.prestudy_datetime %}
-        <p>
-            <strong>{% if language == "zh" %}周四预查{% else %}Thursday Pre-study{% endif %}:</strong>
-            {{ session.prestudy_datetime }}
-        </p>
-        {% endif %}
-        <p>
-            <strong>{% if language == "zh" %}周五查经{% else %}Friday Bible Study{% endif %}:</strong>
-            {{ session.study_datetime }}
-        </p>
-    </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="card">
-    <p class="muted">
-        {% if language == "zh" %}目前没有可见的查经安排。{% else %}No visible Bible study sessions are available.{% endif %}
-    </p>
-</div>
-{% endif %}
 {% endblock %}

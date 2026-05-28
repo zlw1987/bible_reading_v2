@@ -55,9 +55,6 @@
                         <a href="{% url 'bible_study_meeting_manage_list' %}">
                             {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
                         </a>
-                        <a href="{% url 'study_session_list' %}">
-                            {% if language == "zh" %}旧版查经安排{% else %}Legacy Bible Study Sessions{% endif %}
-                        </a>
 
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}
@@ -141,6 +138,65 @@
         (function () {
             var staffMenus = document.querySelectorAll(".nav-staff-menu");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+            var mobileDropdown = window.matchMedia("(hover: none), (max-width: 760px)");
+            var lockedMenu = null;
+            var lockedScrollY = 0;
+            var bodyOriginalStyles = {};
+
+            function setMenuTop() {
+                var header = document.querySelector(".site-header");
+                var top = 88;
+
+                if (header) {
+                    top = Math.max(header.getBoundingClientRect().bottom + 8, 12);
+                }
+
+                document.documentElement.style.setProperty("--staff-menu-top", top + "px");
+            }
+
+            function shouldUseMobileOverlay() {
+                return mobileDropdown.matches && !finePointer.matches;
+            }
+
+            function lockBodyScroll(menu) {
+                if (lockedMenu === menu) {
+                    setMenuTop();
+                    return;
+                }
+
+                if (lockedMenu) {
+                    unlockBodyScroll();
+                }
+
+                lockedScrollY = window.scrollY || window.pageYOffset || 0;
+                bodyOriginalStyles = {
+                    position: document.body.style.position,
+                    top: document.body.style.top,
+                    width: document.body.style.width,
+                };
+
+                setMenuTop();
+                document.body.classList.add("nav-menu-open");
+                document.body.style.position = "fixed";
+                document.body.style.top = "-" + lockedScrollY + "px";
+                document.body.style.width = "100%";
+                lockedMenu = menu;
+            }
+
+            function unlockBodyScroll() {
+                if (!lockedMenu) {
+                    return;
+                }
+
+                document.body.classList.remove("nav-menu-open");
+                document.body.style.position = bodyOriginalStyles.position || "";
+                document.body.style.top = bodyOriginalStyles.top || "";
+                document.body.style.width = bodyOriginalStyles.width || "";
+                window.scrollTo(0, lockedScrollY);
+                lockedMenu = null;
+                lockedScrollY = 0;
+                bodyOriginalStyles = {};
+            }
 
             staffMenus.forEach(function (menu) {
                 var summary = menu.querySelector("summary");
@@ -150,6 +206,7 @@
 
                 menu.addEventListener("mouseenter", function () {
                     if (finePointer.matches) {
+                        unlockBodyScroll();
                         menu.open = true;
                     }
                 });
@@ -172,11 +229,31 @@
                     }
                 });
 
+                menu.addEventListener("toggle", function () {
+                    if (menu.open && shouldUseMobileOverlay()) {
+                        lockBodyScroll(menu);
+                    } else if (lockedMenu === menu) {
+                        unlockBodyScroll();
+                    }
+                });
+
                 summary.addEventListener("click", function (event) {
                     if (finePointer.matches) {
                         event.preventDefault();
                     }
                 });
+            });
+
+            window.addEventListener("resize", function () {
+                if (!lockedMenu) {
+                    return;
+                }
+
+                if (lockedMenu.open && shouldUseMobileOverlay()) {
+                    setMenuTop();
+                } else {
+                    unlockBodyScroll();
+                }
             });
         })();
     </script>

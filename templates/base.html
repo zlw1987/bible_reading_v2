@@ -144,18 +144,37 @@
             var bodyOriginalStyles = {};
             var outsideClickListening = false;
 
-            function setMenuTop(menu) {
+            function clamp(value, min, max) {
+                return Math.min(Math.max(value, min), max);
+            }
+
+            function setMenuPosition(menu) {
                 var header = document.querySelector(".site-header");
                 var summary = menu ? menu.querySelector("summary") : null;
+                var viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+                var horizontalMargin = 16;
+                var availableWidth = Math.max(viewportWidth - (horizontalMargin * 2), 0);
+                var panelWidth = Math.min(viewportWidth * 0.82, 520, availableWidth);
                 var top = 88;
+                var left = horizontalMargin;
+
+                panelWidth = Math.max(panelWidth, Math.min(300, availableWidth));
 
                 if (summary && shouldUseMobileOverlay()) {
-                    top = Math.max(summary.getBoundingClientRect().bottom + 6, 12);
+                    var summaryRect = summary.getBoundingClientRect();
+                    top = Math.max(summaryRect.bottom + 8, 12);
+                    left = clamp(
+                        summaryRect.left,
+                        horizontalMargin,
+                        Math.max(horizontalMargin, viewportWidth - panelWidth - horizontalMargin)
+                    );
                 } else if (header) {
                     top = Math.max(header.getBoundingClientRect().bottom + 8, 12);
                 }
 
                 document.documentElement.style.setProperty("--staff-menu-top", top + "px");
+                document.documentElement.style.setProperty("--staff-menu-left", left + "px");
+                document.documentElement.style.setProperty("--staff-menu-width", panelWidth + "px");
             }
 
             function shouldUseMobileOverlay() {
@@ -206,7 +225,7 @@
 
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
-                    setMenuTop(menu);
+                    setMenuPosition(menu);
                     addOutsideCloseHandlers();
                     return;
                 }
@@ -222,7 +241,7 @@
                     width: document.body.style.width,
                 };
 
-                setMenuTop(menu);
+                setMenuPosition(menu);
                 document.body.classList.add("nav-menu-open");
                 document.body.style.position = "fixed";
                 document.body.style.top = "-" + lockedScrollY + "px";
@@ -299,7 +318,7 @@
                 }
 
                 if (lockedMenu.open && shouldUseMobileOverlay()) {
-                    setMenuTop(lockedMenu);
+                    setMenuPosition(lockedMenu);
                 } else {
                     unlockBodyScroll();
                 }

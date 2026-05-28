@@ -381,12 +381,13 @@ th {
     .nav-staff-menu[open] .nav-staff-menu-panel {
         position: fixed;
         top: var(--staff-menu-top, 88px);
-        right: 12px;
+        right: auto;
         bottom: 12px;
         bottom: max(12px, env(safe-area-inset-bottom));
-        left: 12px;
-        width: auto;
-        min-width: 0;
+        left: var(--staff-menu-left, 16px);
+        width: var(--staff-menu-width, min(82vw, 520px));
+        min-width: min(300px, calc(100vw - 32px));
+        max-width: calc(100vw - 32px);
         max-height: calc(100vh - var(--staff-menu-top, 88px) - 12px);
         max-height: calc(100dvh - var(--staff-menu-top, 88px) - max(12px, env(safe-area-inset-bottom)));
         overflow-y: auto;

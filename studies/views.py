@@ -94,6 +94,60 @@ def get_visible_study_sessions(user):
     return sessions.filter(id__in=visible_ids)
 
 
+def get_v2_landing_context(user):
+    if can_manage_bible_studies(user):
+        return {
+            "user_small_group": None,
+            "primary_meeting": None,
+            "upcoming_meetings": [],
+            "show_no_small_group": False,
+            "staff_summary": True,
+        }
+
+    profile = getattr(user, "profile", None)
+    user_small_group = getattr(profile, "small_group", None)
+    if not user_small_group:
+        return {
+            "user_small_group": None,
+            "primary_meeting": None,
+            "upcoming_meetings": [],
+            "show_no_small_group": True,
+            "staff_summary": False,
+        }
+
+    visible_statuses = [
+        BibleStudyMeeting.STATUS_PUBLISHED,
+        BibleStudyMeeting.STATUS_COMPLETED,
+    ]
+    meetings = BibleStudyMeeting.objects.select_related(
+        "lesson",
+        "lesson__series",
+        "small_group",
+    ).filter(
+        small_group=user_small_group,
+        meeting_datetime__gte=timezone.now(),
+        status__in=visible_statuses,
+        lesson__status__in=[
+            BibleStudyLesson.STATUS_PUBLISHED,
+            BibleStudyLesson.STATUS_COMPLETED,
+        ],
+        lesson__series__is_active=True,
+        lesson__series__status__in=[
+            BibleStudySeries.STATUS_PUBLISHED,
+            BibleStudySeries.STATUS_COMPLETED,
+        ],
+    ).order_by("meeting_datetime")[:3]
+    upcoming_meetings = [meeting for meeting in meetings if meeting.can_be_seen_by(user)]
+
+    return {
+        "user_small_group": user_small_group,
+        "primary_meeting": upcoming_meetings[0] if upcoming_meetings else None,
+        "upcoming_meetings": upcoming_meetings,
+        "show_no_small_group": False,
+        "staff_summary": False,
+    }
+
+
 def get_default_meeting_datetime(lesson):
     meeting_datetime = datetime.combine(lesson.lesson_date, time(hour=19, minute=30))
     if timezone.is_naive(meeting_datetime):
@@ -957,6 +1011,7 @@ def study_session_list(request):
             "sessions": sessions,
             "tab": tab,
             "can_manage": can_manage,
+            "v2_landing": get_v2_landing_context(request.user),
         },
     )
 

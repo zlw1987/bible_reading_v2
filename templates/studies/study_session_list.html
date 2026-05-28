@@ -15,6 +15,98 @@
 </div>
 
 <div class="card">
+    <h2 class="card-title">{% if language == "zh" %}当前查经{% else %}Current Bible Study{% endif %}</h2>
+
+    {% if v2_landing.staff_summary %}
+    <p class="muted">
+        {% if language == "zh" %}
+            请使用同工入口管理查经安排、每周查经指引和小组查经聚会。
+        {% else %}
+            Use the staff links for Bible Study schedules, weekly guides, and small group meetings.
+        {% endif %}
+    </p>
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'bible_study_schedule_manage_list' %}">
+            {% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'bible_study_lesson_manage_list' %}">
+            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}
+        </a>
+        <a class="button button-secondary" href="{% url 'bible_study_meeting_manage_list' %}">
+            {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
+        </a>
+    </div>
+    {% elif v2_landing.show_no_small_group %}
+    <p class="muted">
+        {% if language == "zh" %}
+            你的个人资料还没有关联小组。
+        {% else %}
+            Your profile is not linked to a small group yet.
+        {% endif %}
+    </p>
+    {% elif v2_landing.primary_meeting %}
+    {% with meeting=v2_landing.primary_meeting %}
+    <h3>{% if language == "zh" %}我的小组查经聚会{% else %}My Small Group Meeting{% endif %}</h3>
+    <p>
+        <strong>{% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}:</strong>
+        {{ meeting.lesson.series|study_series_title:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guide{% endif %}:</strong>
+        {{ meeting.lesson|study_lesson_title:language }}
+    </p>
+    {% if meeting.lesson.scripture_reference %}
+    <p>
+        <strong>{% if language == "zh" %}经文{% else %}Scripture{% endif %}:</strong>
+        {{ meeting.lesson.scripture_reference }}
+    </p>
+    {% endif %}
+    <p>
+        <strong>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}:</strong>
+        {{ meeting.meeting_datetime }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}小组{% else %}Small Group{% endif %}:</strong>
+        {{ meeting.small_group }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
+        {{ meeting|study_status_label:language }}
+    </p>
+    {% if meeting|study_meeting_location:language %}
+    <p>
+        <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
+        {{ meeting|study_meeting_location:language }}
+    </p>
+    {% endif %}
+    <div class="actions">
+        <a class="button" href="{% url 'bible_study_meeting_detail' meeting.id %}">
+            {% if language == "zh" %}查看我的小组查经聚会{% else %}Open My Group Meeting{% endif %}
+        </a>
+    </div>
+    {% endwith %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+            目前还没有可见的小组查经聚会。
+        {% else %}
+            No current small-group Bible Study meeting is available yet.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<div class="section-heading">
+    <h2>
+        {% if can_manage %}
+            {% if language == "zh" %}旧版查经安排{% else %}Legacy Bible Study Sessions{% endif %}
+        {% else %}
+            {% if language == "zh" %}其他查经安排{% else %}Other Bible Study Sessions{% endif %}
+        {% endif %}
+    </h2>
+</div>
+
+<div class="card">
     <div class="actions">
         <a class="button {% if tab != 'upcoming' %}button-secondary{% endif %}"
            href="{% url 'study_session_list' %}?tab=upcoming">

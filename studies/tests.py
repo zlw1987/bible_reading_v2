@@ -1925,6 +1925,160 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(worship_response.status_code, 200)
         self.assertNotContains(worship_response, "查经课程")
 
+    def test_study_list_shows_v2_current_bible_study_for_own_group_meeting(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_PUBLISHED
+        self.series.save()
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Weekly Guide",
+            pastor_guide_body_en="Detailed pastor guide belongs on detail page",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        legacy_session = self.create_session(title_en="Fallback V1 Session")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Current Bible Study")
+        self.assertContains(response, "My Small Group Meeting")
+        self.assertContains(response, "Bible Study Schedule")
+        self.assertContains(response, "John Bible Study")
+        self.assertContains(response, "Weekly Bible Study Guide")
+        self.assertContains(response, "Weekly Guide")
+        self.assertContains(response, "John 15:1-17")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "Small group home")
+        self.assertContains(response, "Open My Group Meeting")
+        self.assertContains(
+            response,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertNotContains(response, "Detailed pastor guide belongs on detail page")
+        self.assertContains(response, "Other Bible Study Sessions")
+        self.assertContains(response, legacy_session.title_en)
+
+    def test_study_list_hides_other_group_v2_meeting_from_normal_user(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_PUBLISHED
+        self.series.save()
+        other_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Other Group Weekly Guide",
+        )
+        self.create_meeting(
+            lesson=other_lesson,
+            small_group=self.other_group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No current small-group Bible Study meeting is available yet.",
+        )
+        self.assertNotContains(response, "Other Group Weekly Guide")
+
+    def test_study_list_hides_draft_and_cancelled_v2_meetings_from_normal_user(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_PUBLISHED
+        self.series.save()
+        draft_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Draft Meeting Guide",
+        )
+        cancelled_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Cancelled Meeting Guide",
+        )
+        self.create_meeting(
+            lesson=draft_lesson,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        self.create_meeting(
+            lesson=cancelled_lesson,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No current small-group Bible Study meeting is available yet.",
+        )
+        self.assertNotContains(response, "Draft Meeting Guide")
+        self.assertNotContains(response, "Cancelled Meeting Guide")
+
+    def test_study_list_hides_v2_meeting_under_draft_guide_from_normal_user(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_PUBLISHED
+        self.series.save()
+        draft_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_DRAFT,
+            title_en="Draft Weekly Guide",
+        )
+        self.create_meeting(
+            lesson=draft_lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No current small-group Bible Study meeting is available yet.",
+        )
+        self.assertNotContains(response, "Draft Weekly Guide")
+
+    def test_study_list_user_without_small_group_gets_safe_v2_empty_state(self):
+        self.set_language("en")
+        self.user.profile.small_group = None
+        self.user.profile.save()
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your profile is not linked to a small group yet.")
+
+    def test_study_list_staff_sees_v2_management_links(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Schedules")
+        self.assertContains(response, "Weekly Bible Study Guides")
+        self.assertContains(response, "Small Group Meetings")
+        self.assertContains(response, reverse("bible_study_schedule_manage_list"))
+        self.assertContains(response, reverse("bible_study_lesson_manage_list"))
+        self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+
+    def test_chinese_study_list_uses_expected_v2_landing_wording(self):
+        self.set_language("zh")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "当前查经")
+        self.assertContains(response, "查经安排")
+        self.assertContains(response, "每周查经指引")
+        self.assertNotContains(response, "查经课程")
+        self.assertNotContains(response, "查经管理")
+
     def test_v1_studies_list_route_still_uses_session_page(self):
         self.set_language("en")
         self.create_session(title_en="V1 Session")
@@ -1935,7 +2089,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Bible Studies")
         self.assertContains(response, "V1 Session")
-        self.assertNotContains(response, "Weekly Bible Study Guides")
+        self.assertContains(response, "Other Bible Study Sessions")
 
     def test_bible_study_lesson_can_be_created(self):
         lesson = self.create_lesson()

@@ -144,11 +144,14 @@
             var bodyOriginalStyles = {};
             var outsideClickListening = false;
 
-            function setMenuTop() {
+            function setMenuTop(menu) {
                 var header = document.querySelector(".site-header");
+                var summary = menu ? menu.querySelector("summary") : null;
                 var top = 88;
 
-                if (header) {
+                if (summary && shouldUseMobileOverlay()) {
+                    top = Math.max(summary.getBoundingClientRect().bottom + 6, 12);
+                } else if (header) {
                     top = Math.max(header.getBoundingClientRect().bottom + 8, 12);
                 }
 
@@ -203,7 +206,7 @@
 
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
-                    setMenuTop();
+                    setMenuTop(menu);
                     addOutsideCloseHandlers();
                     return;
                 }
@@ -219,7 +222,7 @@
                     width: document.body.style.width,
                 };
 
-                setMenuTop();
+                setMenuTop(menu);
                 document.body.classList.add("nav-menu-open");
                 document.body.style.position = "fixed";
                 document.body.style.top = "-" + lockedScrollY + "px";
@@ -296,7 +299,7 @@
                 }
 
                 if (lockedMenu.open && shouldUseMobileOverlay()) {
-                    setMenuTop();
+                    setMenuTop(lockedMenu);
                 } else {
                     unlockBodyScroll();
                 }

@@ -194,6 +194,7 @@ class AccountProfileTests(TestCase):
         self.assertIn("lockBodyScroll", content)
         self.assertIn("unlockBodyScroll", content)
         self.assertIn("--staff-menu-top", content)
+        self.assertIn("summary.getBoundingClientRect().bottom + 6", content)
         self.assertIn("closeMenuFromOutside", content)
         self.assertIn('document.addEventListener("click"', content)
         self.assertIn("lockedMenu.contains(event.target)", content)

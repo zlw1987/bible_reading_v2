@@ -142,6 +142,7 @@
             var lockedMenu = null;
             var lockedScrollY = 0;
             var bodyOriginalStyles = {};
+            var outsideClickListening = false;
 
             function setMenuTop() {
                 var header = document.querySelector(".site-header");
@@ -158,9 +159,52 @@
                 return mobileDropdown.matches && !finePointer.matches;
             }
 
+            function closeMenuFromOutside(event) {
+                if (!lockedMenu || !shouldUseMobileOverlay()) {
+                    return;
+                }
+
+                if (lockedMenu.contains(event.target)) {
+                    return;
+                }
+
+                lockedMenu.open = false;
+                unlockBodyScroll();
+            }
+
+            function closeMenuWithKeyboard(event) {
+                if (event.key !== "Escape" || !lockedMenu) {
+                    return;
+                }
+
+                lockedMenu.open = false;
+                unlockBodyScroll();
+            }
+
+            function addOutsideCloseHandlers() {
+                if (outsideClickListening) {
+                    return;
+                }
+
+                document.addEventListener("click", closeMenuFromOutside);
+                document.addEventListener("keydown", closeMenuWithKeyboard);
+                outsideClickListening = true;
+            }
+
+            function removeOutsideCloseHandlers() {
+                if (!outsideClickListening) {
+                    return;
+                }
+
+                document.removeEventListener("click", closeMenuFromOutside);
+                document.removeEventListener("keydown", closeMenuWithKeyboard);
+                outsideClickListening = false;
+            }
+
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
                     setMenuTop();
+                    addOutsideCloseHandlers();
                     return;
                 }
 
@@ -181,6 +225,7 @@
                 document.body.style.top = "-" + lockedScrollY + "px";
                 document.body.style.width = "100%";
                 lockedMenu = menu;
+                addOutsideCloseHandlers();
             }
 
             function unlockBodyScroll() {
@@ -188,6 +233,7 @@
                     return;
                 }
 
+                removeOutsideCloseHandlers();
                 document.body.classList.remove("nav-menu-open");
                 document.body.style.position = bodyOriginalStyles.position || "";
                 document.body.style.top = bodyOriginalStyles.top || "";

@@ -38,7 +38,9 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
-Church structure domain planning is now needed before deeper Bible Study roles, Community Activities, ServiceEvent CM/EM support, or Ministry Operations expansion. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
+Church structure domain planning is recorded for future scope and audience work. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
+
+Future flexible Church Structure Foundation planning should keep current `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, and arbitrary future structure units. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
 
 ## 3. Module Boundaries
 
@@ -188,6 +190,7 @@ Planning clarification:
 - CM and EM are ministry contexts / language ministries, not MinistryTeam records.
 - There is no fake Combined Ministry record; combined events should involve both CM and EM.
 - Community Activities should use future audience segments for signup visibility rather than being forced into ServiceEvent.
+- Future flexible hierarchy should not hard-code Church -> CM/EM -> District -> SmallGroup forever; use a future `ChurchStructureUnit` only after the need is proven.
 
 ## 4. Completed V1 Features
 
@@ -302,7 +305,7 @@ Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, 
 
 Next major product/domain phase:
 
-Bible Study V2 schedule/scope alignment, starting with staff IA cleanup and treating `BibleStudySeries` as Bible Study Schedule / 查经安排.
+Bible Study V2 Flow QA using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`, followed by fixes for QA findings before starting new modules.
 
 Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
 Checklist V1 remains deferred until Lighting Pilot validation and should not be revived because of Community Activities.
@@ -433,17 +436,20 @@ Only after real use:
 
 ### Phase 9: Church Structure / Bible Study Roles / Community Activities Planning
 
-Near-term planning and implementation sequence:
-- Church structure domain plan.
-- Small group coworker roles planning.
-- BS-V2.5A Simple `BibleStudyMeetingRole` UI.
-- BS-V2.5B Group-level worship set UI.
-- Bible Study V2 Schedule/Scope Replan.
-- Staff IA cleanup.
-- Treat `BibleStudySeries` as Bible Study Schedule / 查经安排.
-- Manual idempotent generation of small-group meetings from guide/scope.
-- Normal user V2 landing integration.
-- Bible Study V2 Flow QA.
+Current sequence:
+- Church structure domain plan completed.
+- Small group coworker roles planning completed.
+- BS-V2.5A Simple `BibleStudyMeetingRole` UI completed.
+- BS-V2.5B Group-level worship set UI completed.
+- BS-V2.6.0 Bible Study V2 Schedule/Scope Replan completed.
+- BS-V2.6.1 Staff IA cleanup completed.
+- BS-V2.6.2 Treat `BibleStudySeries` as Bible Study Schedule / 查经安排 completed.
+- BS-V2.6.3 Schedule lifecycle fields completed.
+- BS-V2.6.4 Schedule scope fields completed.
+- BS-V2.6.5 Manual idempotent generation of small-group meetings from guide/scope completed.
+- BS-V2.6.6 Normal user V2 landing integration completed.
+- Next: Bible Study V2 Flow QA.
+- Church Structure Foundation planning after Bible Study V2 Flow QA and before advanced mixed audience segments.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.
 - Later Community Activities V1 with audience segments.
@@ -535,11 +541,15 @@ For feature tasks:
 
 Next documentation/QA task:
 
-Bible Study V2 Schedule/Scope Replan and staff IA alignment, depending on the next accepted scope.
+Use `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md` for manual browser QA of the full Bible Study V2 flow.
 
 Next major development task:
 
-BS-V2.6.1 Staff IA cleanup, followed by BS-V2.6.2 treating `BibleStudySeries` as Bible Study Schedule / 查经安排.
+Fix Bible Study V2 QA findings before starting new modules.
+
+Future foundation planning:
+
+Church Structure Foundation remains future planning/foundation work after Bible Study V2 Flow QA and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. It is not the immediate implementation task.
 
 Checklist V1 remains deferred until Lighting Pilot validation.
 

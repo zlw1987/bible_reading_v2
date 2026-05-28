@@ -54,20 +54,26 @@ Work:
 
 ## Phase 4 - Bible Study V2 Implementation
 
-Functional pieces now exist through BS-V2.5B, but browser review showed the schedule/scope layer is missing.
+Functional pieces now exist through BS-V2.6.6, including schedule/scope fields, staff IA cleanup, meeting generation, and normal `/studies/` V2 landing integration.
 
-Corrected next order:
+Completed BS-V2.6 sequence:
 - BS-V2.6.0 - Schedule/scope replan documentation.
 - BS-V2.6.1 - Staff IA cleanup.
 - BS-V2.6.2 - Treat BibleStudySeries as Bible Study Schedule / 查经安排.
-- BS-V2.6.3 - Add schedule fields if needed, additive only.
-- BS-V2.6.4 - Add short-term scope/audience fields if needed.
+- BS-V2.6.3 - Add schedule lifecycle fields.
+- BS-V2.6.4 - Add schedule scope fields.
 - BS-V2.6.5 - Generate group meetings from guide/scope with a manual, idempotent staff action.
 - BS-V2.6.6 - Normal user V2 landing integration.
-- BS-V2.6.7 - Bible Study V2 Flow QA.
+
+Current next step:
+- BS-V2.6.7 - Bible Study V2 Flow QA using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- Fix QA findings before starting new modules.
+
+Future:
+- Future foundation - Church Structure Foundation planning after Bible Study V2 Flow QA, before advanced mixed audience segments.
 - BS-V2.7 - Role-aware editing permissions later only if needed.
 
-Do not proceed directly from BS-V2.5B to role-aware permissions or broad QA before the schedule/scope hierarchy is clarified.
+Do not proceed directly to role-aware permissions or new modules before the V2 flow is manually/browser QA'd.
 Generated small-group meetings should reference the weekly guide and derive schedule through the guide's series/schedule. Do not copy church-wide guide content into each meeting.
 
 ## Phase 5 - Lighting Pilot Preflight Cleanup
@@ -121,6 +127,8 @@ ServiceEvent remains the official church gathering, operations, and ministry ass
 
 Future Community Activities planning should use audience segments rather than a single simple scope value. Audience segments may target the whole church, a ministry context such as CM/EM, selected districts, or selected small groups. Do not create a separate SpecialEvent model, and do not force CommunityActivity into ServiceEvent.
 
+Advanced mixed audience segments should align with the future Church Structure Foundation plan. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
+
 Do not add Activities to top navigation yet. A future navigation option may be:
 - English: Today, Reading, Bible Study, Prayer, Activities, My Serving, Profile
 - Chinese: 今日, 读经, 查经, 代祷, 活动, 我的服事, 个人资料
@@ -131,15 +139,10 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 
 ## Current Recommended Next Sequence
 
-- Church structure domain plan.
-- Small group coworker roles planning.
-- BS-V2.5A Simple BibleStudyMeetingRole UI.
-- BS-V2.5B Group-level worship set UI.
-- Bible Study V2 Schedule/Scope Replan.
-- Staff IA cleanup.
-- Schedule/scope alignment and manual meeting generation.
-- Normal user V2 landing integration.
 - Bible Study V2 Flow QA.
+- QA fixes if needed.
+- Church Structure Foundation planning before advanced mixed audience segments or CM/EM-aware ServiceEvent filtering.
+- Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.
 - Later Community Activities V1 with audience segments.

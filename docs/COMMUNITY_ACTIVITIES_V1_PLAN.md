@@ -147,6 +147,8 @@ The UI and queries should avoid exposing private group membership unnecessarily.
 
 Future planning may need `MinistryContext` and `District.ministry_context`; see `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
 
+For longer-term flexible hierarchy and arbitrary audience units, see `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`. Community Activities V1 should not require the flexible tree immediately, but advanced mixed audience segments should wait for or align with that foundation.
+
 ## 6. Permission Direction
 
 Keep permissions simple.
@@ -236,6 +238,7 @@ No:
 Community Activities V1 should be planned as a separate future module after:
 - Bible Study V2 direction is resolved
 - Lighting Pilot preflight validation is complete
+- Church Structure Foundation is planned enough to support mixed CM/EM, district, small-group, and future arbitrary unit audiences
 
 It should not change the current pre-pilot priority order.
 

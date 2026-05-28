@@ -2,7 +2,7 @@
 
 ## 1. Problem Statement
 
-Bible Study V2 now has useful functional pieces, but the product model is structurally incomplete.
+Bible Study V2 now has the schedule/scope layer and meeting generation pieces in place. This document remains useful as the planning record for why the hierarchy exists and how later scope work should align.
 
 Completed pieces include:
 - church-wide Bible Study Guides
@@ -11,9 +11,9 @@ Completed pieces include:
 - meeting roles
 - worship set management
 
-The missing top-level concept is Bible Study Schedule / 查经安排: one quarter, season, or planned sequence of Bible Study work.
+The top-level concept is Bible Study Schedule / 查经安排: one quarter, season, or planned sequence of Bible Study work.
 
-The current staff IA makes V1 `BibleStudySession`, V2 `BibleStudyLesson`, and V2 `BibleStudyMeeting` look like parallel systems. In browser review, this appears as confusing peer concepts such as 查经管理, 查经指引, and 小组查经聚会.
+Earlier staff IA made V1 `BibleStudySession`, V2 `BibleStudyLesson`, and V2 `BibleStudyMeeting` look like parallel systems. Staff and normal navigation should now present one coherent V2 Bible Study experience instead of promoting V1 as a visible second Bible Study system.
 
 The real workflow should be hierarchical:
 
@@ -26,7 +26,7 @@ Bible Study Schedule / 查经安排
 -> Worship set / 敬拜诗歌安排
 ```
 
-The system should not continue patching labels only. The planning model and staff IA should be corrected so users understand one workflow rather than three unrelated Bible Study tools.
+The system should preserve this hierarchy so users understand one workflow rather than three unrelated Bible Study tools.
 
 ## 2. Current Code Inventory Summary
 
@@ -59,8 +59,11 @@ Current V1:
 Current V2:
 
 `BibleStudySeries`
-- lightweight title/description container
-- fields: `title`, `title_en`, `description`, `description_en`, `is_active`
+- functions as Bible Study Schedule / 查经安排
+- fields: `title`, `title_en`, `description`, `description_en`, `is_active`, `start_date`, `end_date`, `status`, `published_at`, `created_by`, `scope_type`, `district`, `small_group`
+- `get_eligible_small_groups()` supports whole church/global, district, and small_group scope for generation
+- `BibleStudyLesson.series` is the schedule relationship
+- `BibleStudyMeeting` derives schedule through `meeting.lesson.series`
 
 `BibleStudyLesson`
 - church-wide guide material
@@ -241,6 +244,7 @@ Near-term Bible Study V2 should support current available structure first:
 Future enhancement:
 - ministry context CM/EM
 - mixed audience segments if needed
+- flexible `ChurchStructureUnit` scope only after a separate Church Structure Foundation step proves the need
 
 Recommended future audience segment concept:
 
@@ -256,6 +260,8 @@ Recommended future audience segment concept:
 - `small_group` nullable
 
 Do not implement this now.
+
+See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the future flexible hierarchy direction. Near-term Bible Study V2 should continue with whole church / district / small group scope and current `District` / `SmallGroup` meeting generation helpers.
 
 ## 6. Meeting Generation From Schedule / Guide Scope
 
@@ -338,11 +344,10 @@ V1 should be treated as compatibility/legacy behavior:
 - Keep V1 `BibleStudySession` available for now.
 - Do not treat it as the future primary model.
 - Do not delete or migrate V1 data immediately.
-- Do not break current `/studies/` normal user page until V2 landing is ready.
+- V1 models, routes, and data may remain internally preserved for compatibility.
+- Normal and staff UI should not promote V1 as a visible second Bible Study system.
 
-Staff IA should label it clearly if retained:
-- English: Legacy Bible Study Sessions
-- Chinese: 旧版查经安排
+V1 routes may remain accessible internally or by direct URL if needed for compatibility, but normal/staff navigation should present the V2 schedule -> guide -> meeting workflow.
 
 Future migration may map V1 sessions to:
 - `BibleStudySeries` / Bible Study Schedule
@@ -353,27 +358,28 @@ That migration should be planned separately and should preserve data.
 
 ## 9. Staff IA Recommendation
 
-Preferred future staff menu under Content Management:
-
-Chinese:
-- 查经安排
-- 小组查经聚会
-- 旧版查经安排
+Preferred visible staff Bible Study menu under Content Management:
 
 English:
 - Bible Study Schedules
+- Weekly Bible Study Guides
 - Small Group Meetings
-- Legacy Bible Study Sessions
+
+Chinese:
+- 查经安排
+- 每周查经指引
+- 小组查经聚会
 
 Guides should be accessed primarily through a schedule detail page:
 - Schedule detail shows weekly guides.
 - Weekly guide detail shows generated small-group meetings.
 - Small Group Meetings page remains useful for filtering/reviewing all meetings.
 
-Avoid staff menu showing these as three unrelated peer concepts:
+Avoid staff menu showing V1 and V2 as parallel Bible Study systems, or showing these as unrelated peer concepts:
 - 查经管理
 - 查经指引
 - 小组查经聚会
+- 旧版查经安排 / Legacy Bible Study Sessions
 
 ## 10. Bible Study Schedule Page Flow
 
@@ -469,47 +475,37 @@ Do not build:
 
 ### BS-V2.6.0 - Schedule / Scope Replan Documentation
 
-- This task.
-- Planning only.
-- No application code changes.
+- Completed.
 
 ### BS-V2.6.1 - Staff IA Cleanup
 
-- Rename staff menu concepts.
-- Clearly mark V1 sessions as legacy.
-- Make schedule/guide/meeting hierarchy clear.
-- No model changes.
+- Completed.
+- Staff navigation should present the V2 schedule/guide/meeting hierarchy.
+- Do not show Legacy Bible Study Sessions / 旧版查经安排 as a visible staff menu item.
 
 ### BS-V2.6.2 - Treat BibleStudySeries as Bible Study Schedule
 
-- User-facing wording changes from Series to Bible Study Schedule / 查经安排.
-- Add schedule list/detail management if not present.
-- Keep internal model name for now.
-- No destructive rename.
+- Completed.
+- `BibleStudySeries` is presented as Bible Study Schedule / 查经安排.
+- Internal model name remains `BibleStudySeries`.
 
-### BS-V2.6.3 - Add Schedule Fields If Needed
+### BS-V2.6.3 - Add Schedule Fields
 
-- Additive fields only, such as:
-  - `start_date`
-  - `end_date`
-  - `status`
-  - maybe `published_at`
-  - maybe `created_by`
-- Migration required.
-- Preserve existing data.
+- Completed.
+- Schedule lifecycle fields include `start_date`, `end_date`, `status`, `published_at`, and `created_by`.
 
-### BS-V2.6.4 - Add Scope / Audience Planning Fields
+### BS-V2.6.4 - Add Scope Fields
 
-- Short-term scope: whole church / district / small group using existing models.
+- Completed.
+- Short-term scope supports whole church / district / small group using existing models.
 - Future scope: `MinistryContext` / audience segments.
-- Additive only.
 
 ### BS-V2.6.5 - Generate Group Meetings From Guide / Scope
 
-- Explicit staff action first.
-- System creates missing `BibleStudyMeeting` for each eligible small group.
+- Completed.
+- Explicit staff action creates missing `BibleStudyMeeting` rows for each eligible small group.
 - Idempotent.
-- Preview before create if feasible.
+- Preview before create.
 - No automatic role/worship assignment.
 - No `TeamAssignment`.
 - No automatic `ServiceEvent`.
@@ -517,9 +513,9 @@ Do not build:
 
 ### BS-V2.6.6 - Normal User V2 Landing Integration
 
-- `/studies/` or Bible Study top nav clearly shows current V2 schedule/guide/own-group meeting.
-- V1 fallback preserved.
-- Normal users do not need to understand V1/V2 split.
+- Completed.
+- `/studies/` and Bible Study top nav show the current V2 schedule/guide/own-group meeting experience.
+- V1 remains internally preserved for compatibility, but normal users should not see or need to understand a V1/V2 split.
 
 ### BS-V2.6.7 - Bible Study V2 Flow QA Checklist
 
@@ -534,15 +530,10 @@ Do not build:
 
 ## 16. Roadmap Update Direction
 
-Immediate next step should not be the QA checklist and should not be role-aware permissions.
-
 Current recommended sequence:
-- Bible Study V2 Schedule/Scope Replan.
-- Staff IA cleanup.
-- Schedule/scope alignment implementation.
-- Meeting generation from guide/scope.
-- Normal user V2 landing integration.
-- Bible Study V2 Flow QA.
+- Bible Study V2 Flow QA using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- Fix QA findings before starting new modules.
+- Church Structure Foundation planning before advanced CM/EM or mixed audience scope work.
 - Later role-aware editing permissions only if needed.
 
 Checklist V1 remains deferred.

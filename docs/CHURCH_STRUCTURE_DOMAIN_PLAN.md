@@ -8,6 +8,8 @@ The project remains a lightweight church spiritual life and ministry workflow sy
 
 This is a planning artifact only. Do not implement models, migrations, views, templates, or permission changes from this document without a separate implementation task.
 
+For the future flexible hierarchy foundation, see `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`. This domain plan records current boundaries; the foundation plan records how CM/EM, districts, small groups, and future variable-depth structures may eventually align without hard-coding Church -> CM/EM -> District -> SmallGroup forever.
+
 ## 2. Fellowship Small Groups
 
 Fellowship small groups are the smallest Friday Bible Study unit.
@@ -110,15 +112,17 @@ Manual assignment should come first. Do not implement automatic rotation/schedul
 
 The real workflow suggests meeting roles should come before deeper worship-set ownership logic.
 
-BS-V2.5A and BS-V2.5B have now produced the basic meeting roles and group-level worship set surfaces. Browser review showed that the next correction is not role-aware permissions yet; it is schedule/scope and staff IA alignment.
+BS-V2.5A through BS-V2.6.6 have now produced the basic meeting roles, group-level worship set surfaces, schedule/scope alignment, staff IA cleanup, meeting generation, and normal `/studies/` V2 landing integration. The next correction is Bible Study V2 Flow QA, not role-aware permissions yet.
 
-Updated recommended Bible Study sequence:
-- BS-V2.6.0 - Schedule/scope replan documentation
-- BS-V2.6.1 - Staff IA cleanup
-- BS-V2.6.2 - Treat `BibleStudySeries` as Bible Study Schedule / 查经安排
-- BS-V2.6.5 - Manual idempotent meeting generation from guide/scope
-- BS-V2.6.6 - Normal user V2 landing integration
-- BS-V2.6.7 - Bible Study V2 Flow QA
+Updated Bible Study status:
+- BS-V2.6.0 - Schedule/scope replan documentation completed
+- BS-V2.6.1 - Staff IA cleanup completed
+- BS-V2.6.2 - Treat `BibleStudySeries` as Bible Study Schedule / 查经安排 completed
+- BS-V2.6.3 - Schedule lifecycle fields completed
+- BS-V2.6.4 - Schedule scope fields completed
+- BS-V2.6.5 - Manual idempotent meeting generation from guide/scope completed
+- BS-V2.6.6 - Normal user V2 landing integration completed
+- BS-V2.6.7 - Bible Study V2 Flow QA is next
 - BS-V2.7 - Role-aware editing permissions, if needed later
 
 Earlier sequence now completed:
@@ -318,17 +322,15 @@ Future planning may consider:
 
 Do not implement this now.
 
+Longer-term planning may introduce `ChurchStructureUnit` for variable-depth hierarchy after Bible Study V2 and Community Activities prove the need. Until then, keep `District` and `SmallGroup` canonical and avoid destructive migration.
+
 ## 11. Roadmap Implications
 
 Recommended next sequence:
-- Church structure domain plan
-- Small group coworker roles planning
-- BS-V2.5A Simple `BibleStudyMeetingRole` UI
-- BS-V2.5B Group-level worship set UI
-- Bible Study V2 Schedule/Scope Replan
-- Staff IA cleanup
-- Schedule/scope alignment and meeting generation
-- Later role-aware editing permissions
+- Bible Study V2 Flow QA
+- QA fixes if needed
+- Later Church Structure Foundation, after Bible Study V2 Flow QA and before advanced mixed audience segments
+- Later role-aware editing permissions, if needed
 - Later `ServiceEvent` participating_ministries / `MinistryContext` planning
 - Later Community Activities V1 with audience segments
 - Checklist V1 remains deferred

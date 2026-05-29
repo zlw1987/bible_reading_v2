@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implements only the short-term `MinistryContext` bridge; do not implement additional models, migrations, views, templates, permissions, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, and CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility; do not implement additional models, migrations, views, templates, permissions, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -59,6 +59,7 @@ Current code assumptions:
 - There is no flexible `OrganizationUnit` or `ChurchStructureUnit` tree yet.
 - Current Bible Study schedule scope uses:
   - whole church
+  - ministry context
   - district
   - small group
 - Current Community Activities planning expects future audience segments.
@@ -181,12 +182,13 @@ Long term:
 
 ## 8. Relationship to Bible Study
 
-Bible Study V2 near-term should continue using `BibleStudySeries` scope:
+Bible Study V2 near-term uses `BibleStudySeries` scope:
 - whole church
+- ministry context
 - district
 - small group
 
-Schedule generation should continue using the current `District` / `SmallGroup` helper direction.
+Schedule generation uses the current `MinistryContext` -> `District` -> `SmallGroup` bridge through `BibleStudySeries.get_eligible_small_groups()`.
 
 Future Bible Study schedule scope may use `ChurchStructureUnit` or audience segments.
 
@@ -271,6 +273,7 @@ Do not build:
 Church Structure Foundation should be treated as the current foundation step:
 - Bible Study V2 Flow QA has passed
 - CS-F.1 implements the short-term `MinistryContext` bridge
+- CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
@@ -283,7 +286,7 @@ This plan documents:
 - flexible hierarchy through a future `ChurchStructureUnit` tree
 - implemented short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
 - long-term variable-depth structure with separate membership history
-- Bible Study relationship through current schedule scope now and possible future structure-unit scope later
+- Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later
 - Community Activities relationship through future audience segments
 - ServiceEvent and Ministry Operations boundaries
 - roadmap placement after Bible Study V2 Flow QA and before advanced mixed audience work

@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from accounts.models import District, SmallGroup
+from accounts.models import District, MinistryContext, SmallGroup
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -13,11 +13,13 @@ from accounts.permissions import (
 
 class BibleStudySeries(models.Model):
     SCOPE_GLOBAL = "global"
+    SCOPE_MINISTRY_CONTEXT = "ministry_context"
     SCOPE_DISTRICT = "district"
     SCOPE_SMALL_GROUP = "small_group"
 
     SCOPE_CHOICES = [
         (SCOPE_GLOBAL, "Global"),
+        (SCOPE_MINISTRY_CONTEXT, "Ministry Context"),
         (SCOPE_DISTRICT, "District"),
         (SCOPE_SMALL_GROUP, "Small Group"),
     ]
@@ -57,6 +59,13 @@ class BibleStudySeries(models.Model):
         max_length=32,
         choices=SCOPE_CHOICES,
         default=SCOPE_GLOBAL,
+    )
+    ministry_context = models.ForeignKey(
+        MinistryContext,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bible_study_series",
     )
     district = models.ForeignKey(
         District,
@@ -111,18 +120,43 @@ class BibleStudySeries(models.Model):
             errors["status"] = "Invalid Bible study schedule status."
 
         if self.scope_type == self.SCOPE_GLOBAL:
+            if self.ministry_context_id:
+                errors["ministry_context"] = (
+                    "Whole-church schedules cannot be scoped to a ministry context."
+                )
             if self.district_id:
                 errors["district"] = "Whole-church schedules cannot be scoped to a district."
             if self.small_group_id:
                 errors["small_group"] = "Whole-church schedules cannot be scoped to a small group."
+        elif self.scope_type == self.SCOPE_MINISTRY_CONTEXT:
+            if not self.ministry_context_id:
+                errors["ministry_context"] = (
+                    "Ministry-context-scoped schedules require a ministry context."
+                )
+            if self.district_id:
+                errors["district"] = (
+                    "Ministry-context-scoped schedules cannot also use a district."
+                )
+            if self.small_group_id:
+                errors["small_group"] = (
+                    "Ministry-context-scoped schedules cannot also use a small group."
+                )
         elif self.scope_type == self.SCOPE_DISTRICT:
             if not self.district_id:
                 errors["district"] = "District-scoped schedules require a district."
+            if self.ministry_context_id:
+                errors["ministry_context"] = (
+                    "District-scoped schedules cannot also use a ministry context."
+                )
             if self.small_group_id:
                 errors["small_group"] = "District-scoped schedules cannot also use a small group."
         elif self.scope_type == self.SCOPE_SMALL_GROUP:
             if not self.small_group_id:
                 errors["small_group"] = "Small-group-scoped schedules require a small group."
+            if self.ministry_context_id:
+                errors["ministry_context"] = (
+                    "Small-group-scoped schedules cannot also use a ministry context."
+                )
             if self.district_id:
                 errors["district"] = "Small-group-scoped schedules cannot also use a district."
         else:
@@ -142,6 +176,11 @@ class BibleStudySeries(models.Model):
 
         if self.scope_type == self.SCOPE_GLOBAL:
             return groups
+
+        if self.scope_type == self.SCOPE_MINISTRY_CONTEXT:
+            if not self.ministry_context_id:
+                return groups.none()
+            return groups.filter(district__ministry_context_id=self.ministry_context_id)
 
         if self.scope_type == self.SCOPE_DISTRICT:
             if not self.district_id:

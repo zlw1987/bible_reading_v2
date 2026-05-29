@@ -179,7 +179,11 @@ def bible_study_schedule_manage_list(request):
         messages.error(request, study_ui_text(language, "no_permission"))
         return redirect("study_session_list")
 
-    schedules = BibleStudySeries.objects.annotate(
+    schedules = BibleStudySeries.objects.select_related(
+        "ministry_context",
+        "district",
+        "small_group",
+    ).annotate(
         guide_count=Count("lessons"),
     ).order_by("title")
 
@@ -198,7 +202,11 @@ def bible_study_schedule_detail(request, series_id):
         return redirect("study_session_list")
 
     schedule = get_object_or_404(
-        BibleStudySeries.objects.annotate(guide_count=Count("lessons")),
+        BibleStudySeries.objects.select_related(
+            "ministry_context",
+            "district",
+            "small_group",
+        ).annotate(guide_count=Count("lessons")),
         id=series_id,
     )
 
@@ -308,7 +316,11 @@ def bible_study_lesson_detail(request, lesson_id):
         return redirect("study_session_list")
 
     lesson = get_object_or_404(
-        BibleStudyLesson.objects.select_related("series", "created_by"),
+        BibleStudyLesson.objects.select_related(
+            "series",
+            "series__ministry_context",
+            "created_by",
+        ),
         id=lesson_id,
     )
 
@@ -334,7 +346,11 @@ def generate_bible_study_meetings(request, lesson_id):
         return redirect("study_session_list")
 
     lesson = get_object_or_404(
-        BibleStudyLesson.objects.select_related("series", "created_by"),
+        BibleStudyLesson.objects.select_related(
+            "series",
+            "series__ministry_context",
+            "created_by",
+        ),
         id=lesson_id,
     )
     preview = get_bible_study_meeting_generation_preview(lesson)

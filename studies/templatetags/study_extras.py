@@ -41,9 +41,18 @@ def study_series_scope_label(series, language):
     if not series:
         return ""
 
+    def ministry_context_label():
+        if not series.ministry_context_id:
+            return "-"
+        context = series.ministry_context
+        name = context.name_en or context.name
+        return f"{context.code} / {name}"
+
     if language == "zh":
         if series.scope_type == "global":
             return "全教会"
+        if series.scope_type == "ministry_context":
+            return f"事工范围：{ministry_context_label()}"
         if series.scope_type == "district":
             name = series.district.name if series.district_id else "-"
             return f"区：{name}"
@@ -54,6 +63,8 @@ def study_series_scope_label(series, language):
 
     if series.scope_type == "global":
         return "Whole Church"
+    if series.scope_type == "ministry_context":
+        return f"Ministry Context: {ministry_context_label()}"
     if series.scope_type == "district":
         name = series.district.name if series.district_id else "-"
         return f"District: {name}"

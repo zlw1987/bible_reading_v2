@@ -68,8 +68,9 @@ Completed BS-V2.6 sequence:
 Completed QA:
 - BS-V2.6.7 - Bible Study V2 Flow QA passed.
 
-Current next step:
+Completed foundation steps:
 - CS-F.1 - MinistryContext bridge foundation.
+- CS-F.2 - MinistryContext Bible Study Schedule scope.
 
 Future:
 - Future foundation - flexible Church Structure Foundation only after the short-term bridge proves insufficient, before advanced mixed audience segments.
@@ -142,7 +143,8 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 ## Current Recommended Next Sequence
 
 - Bible Study V2 Flow QA passed.
-- CS-F.1 MinistryContext bridge foundation.
+- CS-F.1 MinistryContext bridge foundation completed.
+- CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
 - Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
 - Later role-aware editing permissions.

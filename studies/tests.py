@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
 from events.models import ServiceEvent
 from ministry.models import TeamAssignment
 from .forms import (
@@ -27,8 +27,10 @@ from .models import (
 
 class BibleStudyModuleTests(TestCase):
     def setUp(self):
-        self.north = District.objects.create(name="North")
-        self.south = District.objects.create(name="South")
+        self.cm = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        self.em = MinistryContext.objects.create(code="EM", name="English Ministry")
+        self.north = District.objects.create(name="North", ministry_context=self.cm)
+        self.south = District.objects.create(name="South", ministry_context=self.em)
         self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.north)
         self.same_group = SmallGroup.objects.create(name="Rainbow 4B", district=self.north)
         self.other_group = SmallGroup.objects.create(name="Rainbow 5", district=self.south)
@@ -273,6 +275,7 @@ class BibleStudyModuleTests(TestCase):
             "end_date": end_date.strftime("%Y-%m-%d"),
             "status": BibleStudySeries.STATUS_PUBLISHED,
             "scope_type": BibleStudySeries.SCOPE_GLOBAL,
+            "ministry_context": "",
             "district": "",
             "small_group": "",
             "is_active": "on",
@@ -392,6 +395,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(schedule.title_en, "Spring Bible Study Schedule")
         self.assertEqual(schedule.status, BibleStudySeries.STATUS_PUBLISHED)
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertIsNone(schedule.ministry_context)
         self.assertIsNone(schedule.district)
         self.assertIsNone(schedule.small_group)
         self.assertIsNotNone(schedule.published_at)
@@ -415,7 +419,29 @@ class BibleStudyModuleTests(TestCase):
         schedule = BibleStudySeries.objects.get(title="分区查经安排")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_DISTRICT)
+        self.assertIsNone(schedule.ministry_context)
         self.assertEqual(schedule.district, self.north)
+        self.assertIsNone(schedule.small_group)
+
+    def test_staff_can_create_bible_study_schedule_with_ministry_context_scope(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(
+                title="ä¸­æ–‡äº‹å·¥æŸ¥ç»å®‰æŽ’",
+                title_en="CM Bible Study Schedule",
+                scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+                ministry_context=self.cm.id,
+            ),
+        )
+
+        schedule = BibleStudySeries.objects.get(title="ä¸­æ–‡äº‹å·¥æŸ¥ç»å®‰æŽ’")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_MINISTRY_CONTEXT)
+        self.assertEqual(schedule.ministry_context, self.cm)
+        self.assertIsNone(schedule.district)
         self.assertIsNone(schedule.small_group)
 
     def test_staff_can_create_bible_study_schedule_with_small_group_scope(self):
@@ -435,6 +461,7 @@ class BibleStudyModuleTests(TestCase):
         schedule = BibleStudySeries.objects.get(title="小组查经安排")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
+        self.assertIsNone(schedule.ministry_context)
         self.assertEqual(schedule.small_group, self.group)
         self.assertIsNone(schedule.district)
 
@@ -564,6 +591,11 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Status")
         self.assertContains(response, "Scope")
         self.assertContains(response, "Whole Church")
+        self.assertContains(response, "Ministry Context")
+        self.assertContains(
+            response,
+            "Select a ministry context such as Chinese Ministry or English Ministry.",
+        )
         self.assertContains(response, "District")
         self.assertContains(response, "Small Group")
         self.assertNotContains(response, "Series")
@@ -587,6 +619,27 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertContains(form_response, "区")
         self.assertContains(form_response, "小组")
+
+    def test_schedule_list_and_detail_display_ministry_context_scope_label(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_MINISTRY_CONTEXT
+        self.series.ministry_context = self.cm
+        self.series.save()
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(
+            list_response,
+            "Ministry Context: CM / Chinese Ministry",
+        )
+        self.assertContains(
+            detail_response,
+            "Ministry Context: CM / Chinese Ministry",
+        )
 
     def test_schedule_list_and_detail_display_district_scope_label(self):
         self.set_language("en")
@@ -646,19 +699,52 @@ class BibleStudyModuleTests(TestCase):
         schedule = BibleStudySeries.objects.create(title="默认范围查经安排")
 
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertIsNone(schedule.ministry_context)
         self.assertIsNone(schedule.district)
         self.assertIsNone(schedule.small_group)
 
-    def test_bible_study_schedule_global_scope_rejects_district_or_group(self):
+    def test_bible_study_schedule_global_scope_rejects_context_district_or_group(self):
         schedule = BibleStudySeries(
             title="错误全教会范围",
             scope_type=BibleStudySeries.SCOPE_GLOBAL,
+            ministry_context=self.cm,
             district=self.north,
             small_group=self.group,
         )
 
         with self.assertRaises(ValidationError):
             schedule.full_clean()
+
+    def test_bible_study_schedule_ministry_context_scope_requires_context(self):
+        missing_context = BibleStudySeries(
+            title="Missing ministry context schedule",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+        )
+        with_district = BibleStudySeries(
+            title="Context and district schedule",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=self.cm,
+            district=self.north,
+        )
+        with_group = BibleStudySeries(
+            title="Context and group schedule",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=self.cm,
+            small_group=self.group,
+        )
+        valid_schedule = BibleStudySeries(
+            title="Valid context schedule",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=self.cm,
+        )
+
+        with self.assertRaises(ValidationError):
+            missing_context.full_clean()
+        with self.assertRaises(ValidationError):
+            with_district.full_clean()
+        with self.assertRaises(ValidationError):
+            with_group.full_clean()
+        valid_schedule.full_clean()
 
     def test_bible_study_schedule_district_scope_requires_district(self):
         missing_district = BibleStudySeries(
@@ -693,6 +779,25 @@ class BibleStudyModuleTests(TestCase):
             missing_group.full_clean()
         with self.assertRaises(ValidationError):
             with_district.full_clean()
+
+    def test_bible_study_schedule_specific_scopes_reject_ministry_context_field(self):
+        district_schedule = BibleStudySeries(
+            title="District with context",
+            scope_type=BibleStudySeries.SCOPE_DISTRICT,
+            ministry_context=self.cm,
+            district=self.north,
+        )
+        group_schedule = BibleStudySeries(
+            title="Group with context",
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+            ministry_context=self.cm,
+            small_group=self.group,
+        )
+
+        with self.assertRaises(ValidationError):
+            district_schedule.full_clean()
+        with self.assertRaises(ValidationError):
+            group_schedule.full_clean()
 
     def test_bible_study_schedule_get_eligible_small_groups_global_scope(self):
         inactive_group = SmallGroup.objects.create(
@@ -730,6 +835,31 @@ class BibleStudyModuleTests(TestCase):
         self.assertIn(self.same_group, groups)
         self.assertNotIn(self.other_group, groups)
         self.assertNotIn(inactive_group, groups)
+
+    def test_bible_study_schedule_get_eligible_small_groups_ministry_context_scope(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive CM Group",
+            district=self.north,
+            is_active=False,
+        )
+        unlinked_district = District.objects.create(name="Unlinked")
+        unlinked_group = SmallGroup.objects.create(
+            name="Unlinked Group",
+            district=unlinked_district,
+        )
+        schedule = BibleStudySeries.objects.create(
+            title="CM Bible Study Schedule",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=self.cm,
+        )
+
+        groups = list(schedule.get_eligible_small_groups())
+
+        self.assertIn(self.group, groups)
+        self.assertIn(self.same_group, groups)
+        self.assertNotIn(self.other_group, groups)
+        self.assertNotIn(inactive_group, groups)
+        self.assertNotIn(unlinked_group, groups)
 
     def test_bible_study_schedule_get_eligible_small_groups_small_group_scope(self):
         schedule = BibleStudySeries.objects.create(
@@ -1024,6 +1154,54 @@ class BibleStudyModuleTests(TestCase):
                 flat=True,
             )),
             {self.group.id, self.same_group.id},
+        )
+
+    def test_generate_meetings_preview_uses_ministry_context_scope(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_MINISTRY_CONTEXT
+        self.series.ministry_context = self.cm
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["generation_preview"]["eligible_count"], 2)
+        self.assertEqual(response.context["generation_preview"]["existing_count"], 1)
+        self.assertEqual(response.context["generation_preview"]["missing_count"], 1)
+
+    def test_generate_meetings_uses_ministry_context_scope_idempotently(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_MINISTRY_CONTEXT
+        self.series.ministry_context = self.cm
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        first_response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+        second_response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertContains(first_response, "Created 2 small group meetings")
+        self.assertContains(second_response, "Created 0 small group meetings")
+        self.assertContains(second_response, "Skipped 2 existing meetings")
+        self.assertEqual(meetings.count(), 2)
+        self.assertEqual(
+            set(meetings.values_list("small_group", flat=True)),
+            {self.group.id, self.same_group.id},
+        )
+        self.assertFalse(
+            meetings.filter(small_group__district__ministry_context=self.em).exists()
         )
 
     def test_generate_meetings_uses_small_group_scope(self):

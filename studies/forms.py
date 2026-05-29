@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 
-from accounts.models import District, SmallGroup
+from accounts.models import District, MinistryContext, SmallGroup
 
 from .models import (
     BibleStudyGuide,
@@ -27,8 +27,13 @@ FORM_TEXT = {
         "status": "Status",
         "schedule_scope_type": "Scope",
         "schedule_global": "Whole Church",
+        "schedule_ministry_context": "Ministry Context",
         "schedule_district": "District",
         "schedule_small_group": "Small Group",
+        "ministry_context": "Ministry Context",
+        "ministry_context_help": (
+            "Select a ministry context such as Chinese Ministry or English Ministry."
+        ),
         "is_active": "Active",
         "series": "Series",
         "title": "Title",
@@ -170,6 +175,7 @@ class BibleStudySeriesForm(forms.ModelForm):
             "end_date",
             "status",
             "scope_type",
+            "ministry_context",
             "district",
             "small_group",
             "is_active",
@@ -198,6 +204,18 @@ class BibleStudySeriesForm(forms.ModelForm):
         self.fields["end_date"].label = text["end_date"]
         self.fields["status"].label = text["status"]
         self.fields["scope_type"].label = text["schedule_scope_type"]
+        self.fields["ministry_context"].label = text.get(
+            "ministry_context",
+            "事工范围" if language == "zh" else "Ministry Context",
+        )
+        self.fields["ministry_context"].help_text = text.get(
+            "ministry_context_help",
+            (
+                "选择事工范围，例如中文事工或英文事工。"
+                if language == "zh"
+                else "Select a ministry context such as Chinese Ministry or English Ministry."
+            ),
+        )
         self.fields["district"].label = text["schedule_district"]
         self.fields["small_group"].label = text["schedule_small_group"]
         self.fields["is_active"].label = text["is_active"]
@@ -209,9 +227,22 @@ class BibleStudySeriesForm(forms.ModelForm):
         ]
         self.fields["scope_type"].choices = [
             (BibleStudySeries.SCOPE_GLOBAL, text["schedule_global"]),
+            (
+                BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+                text.get(
+                    "schedule_ministry_context",
+                    "事工范围" if language == "zh" else "Ministry Context",
+                ),
+            ),
             (BibleStudySeries.SCOPE_DISTRICT, text["schedule_district"]),
             (BibleStudySeries.SCOPE_SMALL_GROUP, text["schedule_small_group"]),
         ]
+        ministry_context_filter = Q(is_active=True)
+        if self.instance.ministry_context_id:
+            ministry_context_filter |= Q(id=self.instance.ministry_context_id)
+        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
+            ministry_context_filter,
+        ).distinct().order_by("sort_order", "code")
         district_filter = Q(is_active=True)
         if self.instance.district_id:
             district_filter |= Q(id=self.instance.district_id)

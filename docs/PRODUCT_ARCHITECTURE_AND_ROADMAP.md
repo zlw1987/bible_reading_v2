@@ -38,7 +38,7 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
-Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge while keeping flexible `ChurchStructureUnit` work future. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
+Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, and CS-F.2 uses it for Bible Study Schedule scope eligibility while keeping flexible `ChurchStructureUnit` work future. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
 
 Future flexible Church Structure Foundation planning should keep current `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, and arbitrary future structure units. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
 
@@ -305,7 +305,7 @@ Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, 
 
 Current foundation step:
 
-Bible Study V2 Flow QA has passed. CS-F.1 MinistryContext bridge foundation is the current narrow foundation step after that QA pass.
+Bible Study V2 Flow QA has passed. CS-F.1 MinistryContext bridge foundation is complete, and CS-F.2 adds MinistryContext as a Bible Study Schedule scope.
 
 Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
 Checklist V1 remains deferred until Lighting Pilot validation and should not be revived because of Community Activities.
@@ -449,7 +449,8 @@ Current sequence:
 - BS-V2.6.5 Manual idempotent generation of small-group meetings from guide/scope completed.
 - BS-V2.6.6 Normal user V2 landing integration completed.
 - BS-V2.6.7 Bible Study V2 Flow QA passed.
-- CS-F.1 MinistryContext bridge foundation current.
+- CS-F.1 MinistryContext bridge foundation completed.
+- CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - Later flexible Church Structure Foundation only after the short-term bridge proves insufficient.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.
@@ -540,13 +541,13 @@ For feature tasks:
 
 ## 11. Next Recommended Work
 
-Current foundation task:
+Current foundation status:
 
-CS-F.1 MinistryContext bridge foundation after the Bible Study V2 Flow QA pass.
+CS-F.1 MinistryContext bridge foundation and CS-F.2 MinistryContext Bible Study Schedule scope are complete after the Bible Study V2 Flow QA pass.
 
 Future foundation planning:
 
-Flexible `ChurchStructureUnit` remains future planning work after the short-term bridge and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. It is not part of CS-F.1.
+Flexible `ChurchStructureUnit` remains future planning work after the short-term bridge and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. It is not part of CS-F.1 or CS-F.2.
 
 Checklist V1 remains deferred until Lighting Pilot validation.
 

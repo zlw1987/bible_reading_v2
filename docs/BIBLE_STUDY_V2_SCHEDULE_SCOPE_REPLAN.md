@@ -60,8 +60,8 @@ Current V2:
 
 `BibleStudySeries`
 - functions as Bible Study Schedule / 查经安排
-- fields: `title`, `title_en`, `description`, `description_en`, `is_active`, `start_date`, `end_date`, `status`, `published_at`, `created_by`, `scope_type`, `district`, `small_group`
-- `get_eligible_small_groups()` supports whole church/global, district, and small_group scope for generation
+- fields: `title`, `title_en`, `description`, `description_en`, `is_active`, `start_date`, `end_date`, `status`, `published_at`, `created_by`, `scope_type`, `ministry_context`, `district`, `small_group`
+- `get_eligible_small_groups()` supports whole church/global, ministry_context, district, and small_group scope for generation
 - `BibleStudyLesson.series` is the schedule relationship
 - `BibleStudyMeeting` derives schedule through `meeting.lesson.series`
 
@@ -221,28 +221,27 @@ Church hierarchy to plan around:
 - District / 区
 - SmallGroup / 小组
 
-Current code only has:
+Current code has:
+- `MinistryContext`
 - `District`
 - `SmallGroup`
 - `Profile.small_group`
-- no `MinistryContext` model yet
+- nullable `District.ministry_context`
 
-Future planning:
-- `MinistryContext`
-  - CM
-  - EM
-- `District` should eventually belong to `MinistryContext`.
-- `SmallGroup` belongs to `District` and should therefore derive `MinistryContext`.
+Implemented bridge:
+- `MinistryContext` represents contexts such as CM and EM without hard-coding the only allowed values.
+- `District` may belong to `MinistryContext`.
+- `SmallGroup` belongs to `District` and can therefore derive `MinistryContext`.
 - Do not create a fake Combined Ministry.
 - Combined means multiple participating ministry contexts.
 
 Near-term Bible Study V2 should support current available structure first:
 - whole church
+- ministry context
 - district
 - small group
 
 Future enhancement:
-- ministry context CM/EM
 - mixed audience segments if needed
 - flexible `ChurchStructureUnit` scope only after a separate Church Structure Foundation step proves the need
 
@@ -261,7 +260,7 @@ Recommended future audience segment concept:
 
 Do not implement this now.
 
-See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the future flexible hierarchy direction. Near-term Bible Study V2 should continue with whole church / district / small group scope and current `District` / `SmallGroup` meeting generation helpers.
+See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the future flexible hierarchy direction. Near-term Bible Study V2 should continue with whole church / ministry context / district / small group scope and current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
 
 ## 6. Meeting Generation From Schedule / Guide Scope
 
@@ -283,9 +282,9 @@ Recommendation:
 
 Examples:
 - Whole church: create `BibleStudyMeeting` for every active `SmallGroup`.
+- Ministry context: create `BibleStudyMeeting` for every active `SmallGroup` whose district belongs to that `MinistryContext`.
 - District: create `BibleStudyMeeting` for every active `SmallGroup` in that district.
 - Small group: create `BibleStudyMeeting` only for that group.
-- Future CM/EM: create meetings for groups under that ministry context.
 
 Generation behavior:
 - System-generated based on scope/audience.
@@ -466,7 +465,7 @@ Do not build:
 - Checklist V1
 - Community Activities implementation
 - `ServiceEvent` ministry context implementation yet
-- `MinistryContext` implementation yet unless a later task explicitly plans it
+- additional `MinistryContext` integrations beyond Bible Study Schedule scope
 - full ERP
 - Google Docs full-content migration
 - sensitive/private data import
@@ -498,7 +497,8 @@ Do not build:
 
 - Completed.
 - Short-term scope supports whole church / district / small group using existing models.
-- Future scope: `MinistryContext` / audience segments.
+- CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope using the bridge from `MinistryContext` to `District` to `SmallGroup`.
+- Future scope: audience segments only if needed.
 
 ### BS-V2.6.5 - Generate Group Meetings From Guide / Scope
 
@@ -531,9 +531,10 @@ Do not build:
 ## 16. Roadmap Update Direction
 
 Current recommended sequence:
-- Bible Study V2 Flow QA using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
-- Fix QA findings before starting new modules.
-- Church Structure Foundation planning before advanced CM/EM or mixed audience scope work.
+- Bible Study V2 Flow QA passed.
+- CS-F.1 MinistryContext bridge foundation completed.
+- CS-F.2 MinistryContext Bible Study Schedule scope completed.
+- Future flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
 - Later role-aware editing permissions only if needed.
 
 Checklist V1 remains deferred.

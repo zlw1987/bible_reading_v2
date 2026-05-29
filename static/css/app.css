@@ -333,72 +333,92 @@ th {
     font-size: 14px;
 }
 
-.bible-study-schedule-table {
-    min-width: 980px;
-    table-layout: fixed;
+.schedule-list {
+    display: grid;
+    gap: 14px;
 }
 
-.bible-study-schedule-table th {
-    white-space: nowrap;
+.schedule-list-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    padding: 16px;
+    box-shadow: var(--shadow);
 }
 
-.bible-study-schedule-table th,
-.bible-study-schedule-table td {
-    padding: 13px 12px;
+.schedule-list-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: start;
 }
 
-.schedule-title-col {
-    width: 16%;
+.schedule-list-title-block {
+    min-width: 0;
 }
 
-.schedule-description-col {
-    width: 22%;
+.schedule-list-label {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 4px;
 }
 
-.schedule-date-col {
-    width: 14%;
-}
-
-.schedule-scope-col {
-    width: 10%;
-}
-
-.schedule-status-col,
-.schedule-active-col {
-    width: 8%;
-}
-
-.schedule-guides-col {
-    width: 10%;
-}
-
-.schedule-actions-col {
-    width: 12%;
-}
-
-.schedule-title-cell,
-.schedule-description-cell {
-    white-space: normal;
+.schedule-list-title {
+    margin: 0;
+    font-size: 20px;
+    line-height: 1.3;
     overflow-wrap: anywhere;
 }
 
-.schedule-nowrap {
-    white-space: nowrap;
-}
-
-.schedule-count-cell {
-    text-align: center;
-}
-
-.schedule-action-buttons {
+.schedule-list-actions {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    align-items: center;
+    justify-content: flex-end;
 }
 
-.schedule-actions-cell .button {
+.schedule-list-actions .button {
     white-space: nowrap;
+}
+
+.schedule-list-description {
+    margin-top: 12px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.schedule-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin: 14px 0 0;
+}
+
+.schedule-meta-item {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-soft);
+    padding: 9px 10px;
+}
+
+.schedule-meta-item dt {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.3;
+    margin-bottom: 3px;
+    white-space: nowrap;
+}
+
+.schedule-meta-item dd {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .actions {
@@ -477,56 +497,20 @@ th {
         font-size: 26px;
     }
 
-    .bible-study-schedule-table-wrap {
-        overflow-x: visible;
+    .schedule-list-card {
+        padding: 14px;
     }
 
-    .bible-study-schedule-table {
-        min-width: 0;
-        table-layout: auto;
+    .schedule-list-header {
+        grid-template-columns: 1fr;
     }
 
-    .bible-study-schedule-table,
-    .bible-study-schedule-table thead,
-    .bible-study-schedule-table tbody,
-    .bible-study-schedule-table tr,
-    .bible-study-schedule-table th,
-    .bible-study-schedule-table td {
-        display: block;
-        width: 100%;
+    .schedule-list-actions {
+        justify-content: flex-start;
     }
 
-    .bible-study-schedule-table colgroup,
-    .bible-study-schedule-table thead {
-        display: none;
-    }
-
-    .bible-study-schedule-table tr {
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 12px;
-        margin-bottom: 12px;
-        background: var(--surface-soft);
-    }
-
-    .bible-study-schedule-table td {
-        border-bottom: 0;
-        padding: 7px 0;
-    }
-
-    .bible-study-schedule-table td::before {
-        content: attr(data-label);
-        display: block;
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
-        margin-bottom: 2px;
-        white-space: nowrap;
-    }
-
-    .schedule-action-buttons {
-        display: flex;
-        flex-direction: row;
+    .schedule-meta-grid {
+        grid-template-columns: 1fr;
     }
 }
 

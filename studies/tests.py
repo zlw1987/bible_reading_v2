@@ -366,8 +366,11 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Status")
         self.assertContains(response, "Weekly Guides")
         self.assertContains(response, "1")
-        self.assertContains(response, "bible-study-schedule-table")
-        self.assertContains(response, "schedule-actions-cell")
+        self.assertContains(response, "schedule-list-card")
+        self.assertContains(response, "schedule-meta-grid")
+        self.assertContains(response, "View")
+        self.assertContains(response, "Edit")
+        self.assertNotContains(response, "bible-study-schedule-table")
         self.assertNotContains(response, "Series")
 
     def test_regular_user_cannot_access_schedule_management_list(self):
@@ -621,6 +624,15 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertContains(form_response, "区")
         self.assertContains(form_response, "小组")
+        self.assertContains(list_response, "日期范围")
+        self.assertContains(list_response, "范围")
+        self.assertContains(list_response, "状态")
+        self.assertContains(list_response, "启用")
+        self.assertContains(list_response, "每周查经指引")
+        self.assertContains(list_response, "查看")
+        self.assertContains(list_response, "编辑")
+        self.assertContains(list_response, "schedule-list-card")
+        self.assertNotContains(list_response, "bible-study-schedule-table")
 
     def test_schedule_list_and_detail_display_ministry_context_scope_label(self):
         self.set_language("en")

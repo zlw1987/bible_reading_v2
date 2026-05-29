@@ -19,8 +19,8 @@ FORM_TEXT = {
         "end_datetime": "End Time",
         "location": "Location",
         "meeting_link": "Meeting Link",
-        "ministry_context": "Ministry Context",
-        "scope_type": "Scope",
+        "ministry_context": "Ministry Context Label",
+        "scope_type": "Audience Scope",
         "district": "District",
         "small_group": "Small Group",
         "status": "Status",
@@ -34,6 +34,17 @@ FORM_TEXT = {
         "global": "Global",
         "scope_district": "District",
         "scope_small_group": "Small Group",
+        "ministry_context_help": (
+            "Optional label for CM, EM, or a similar ministry context. "
+            "Blank can mean whole-church, combined, legacy, or uncategorized. "
+            "This does not control visibility, assignment filtering, or audience scope."
+        ),
+        "scope_type_help": (
+            "Current version supports whole church, one district, or one small group. "
+            "Multi-level and multi-select audience selection is future Church Structure work."
+        ),
+        "district_help": "Use only when Audience Scope is District.",
+        "small_group_help": "Use only when Audience Scope is Small Group.",
         "draft": "Draft",
         "published": "Published",
         "completed": "Completed",
@@ -119,7 +130,24 @@ class ServiceEventForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         text = form_text(language)
         if language == "zh":
-            text = {**text, "ministry_context": "事工范围"}
+            text = {
+                **text,
+                "ministry_context": "事工标签（可选）",
+                "scope_type": "覆盖对象",
+                "district": "适用区",
+                "small_group": "适用小组",
+                "ministry_context_help": (
+                    "仅用于标记中文部、英文部等事工背景。"
+                    "留空可以表示全教会、联合、旧数据或未分类。"
+                    "不会控制可见范围、服事分配或用户权限。"
+                ),
+                "scope_type_help": (
+                    "当前版本只支持全教会、单一区或单一小组。"
+                    "多层级、多选受众范围属于未来 Church Structure 工作。"
+                ),
+                "district_help": "仅在覆盖对象为“区”时使用。",
+                "small_group_help": "仅在覆盖对象为“小组”时使用。",
+            }
 
         for field_name in self.fields:
             self.fields[field_name].label = text.get(
@@ -159,6 +187,10 @@ class ServiceEventForm(forms.ModelForm):
         self.fields["meeting_link"].widget.attrs.update(
             {"placeholder": text["meeting_link_placeholder"]}
         )
+        self.fields["ministry_context"].help_text = text["ministry_context_help"]
+        self.fields["scope_type"].help_text = text["scope_type_help"]
+        self.fields["district"].help_text = text["district_help"]
+        self.fields["small_group"].help_text = text["small_group_help"]
         ministry_context_filter = Q(is_active=True)
         if self.instance.ministry_context_id:
             ministry_context_filter |= Q(id=self.instance.ministry_context_id)
@@ -247,15 +279,21 @@ class RecurringServiceEventForm(forms.Form):
         for field_name, label in recurring_labels.items():
             self.fields[field_name].label = label
 
-        self.fields["event_type"].choices = ServiceEventForm(language=language).fields[
+        service_event_form = ServiceEventForm(language=language)
+        self.fields["event_type"].choices = service_event_form.fields[
             "event_type"
         ].choices
-        self.fields["scope_type"].choices = ServiceEventForm(language=language).fields[
+        self.fields["scope_type"].choices = service_event_form.fields[
             "scope_type"
         ].choices
-        self.fields["status"].choices = ServiceEventForm(language=language).fields[
+        self.fields["status"].choices = service_event_form.fields[
             "status"
         ].choices
+        for field_name in ["scope_type", "district", "small_group"]:
+            self.fields[field_name].label = service_event_form.fields[field_name].label
+            self.fields[field_name].help_text = service_event_form.fields[
+                field_name
+            ].help_text
         self.fields["weekday"].choices = weekday_choices(language)
 
         if not self.is_bound:

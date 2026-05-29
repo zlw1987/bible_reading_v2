@@ -24,9 +24,10 @@
 <form method="post" class="card">
     {% csrf_token %}
     {% for field in form %}
-    <div class="form-row">
+    <div class="form-row" data-field="{{ field.name }}">
         {{ field.label_tag }}
         {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
         {{ field.errors }}
     </div>
     {% endfor %}
@@ -77,4 +78,32 @@
     </div>
 </div>
 {% endif %}
+
+<script>
+    (function () {
+        var scopeSelect = document.getElementById("id_scope_type");
+        if (!scopeSelect) {
+            return;
+        }
+
+        function setRow(fieldName, visible) {
+            var row = document.querySelector('[data-field="' + fieldName + '"]');
+            var field = document.getElementById("id_" + fieldName);
+            if (!row || !field) {
+                return;
+            }
+            row.hidden = !visible;
+            field.disabled = !visible;
+        }
+
+        function updateScopeFields() {
+            var value = scopeSelect.value;
+            setRow("district", value === "district");
+            setRow("small_group", value === "small_group");
+        }
+
+        scopeSelect.addEventListener("change", updateScopeFields);
+        updateScopeFields();
+    })();
+</script>
 {% endblock %}

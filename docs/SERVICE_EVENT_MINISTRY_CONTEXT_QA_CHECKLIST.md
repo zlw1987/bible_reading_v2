@@ -1,6 +1,6 @@
 # ServiceEvent MinistryContext QA Checklist
 
-Manual/browser QA checklist for CS-F.3A closure after CS-F.3 added optional `ServiceEvent.ministry_context`.
+Manual/browser QA checklist for CS-F.3A/CS-F.3B closure after CS-F.3 added optional `ServiceEvent.ministry_context` and CS-F.3B clarified that the current UI is label-only.
 
 This checklist verifies label-only behavior for `events.ServiceEvent`. It must not be used to expand scope into ServiceEvent audience filtering, TeamAssignment filtering, MinistryTeam changes, My Serving changes, Bible Study changes, Community Activities, Checklist V1, `ChurchStructureUnit`, scheduling, reminders, availability, swaps, attendance, or role-aware permissions.
 
@@ -9,9 +9,11 @@ Current code reality:
 - `ServiceEvent` is in the `events` app.
 - `ServiceEvent.ministry_context` is optional and nullable.
 - `ServiceEvent.ministry_context` is a label only.
+- Staff-facing wording should be Ministry Context Label / 事工标签（可选）, not Ministry Context as an audience scope and not 事工范围.
 - Visibility remains controlled by existing ServiceEvent status/scope rules.
 - TeamAssignment visibility and member selection remain controlled by existing TeamAssignment and MinistryTeam rules.
 - My Serving remains based on assigned TeamAssignmentMember rows, assignment status, and event time.
+- Flexible hierarchy, multi-select audience scope, `ChurchStructureUnit`, and ServiceEvent filtering remain future work.
 
 ## 1. Required Test Data
 
@@ -62,8 +64,11 @@ Expected:
 - EM saves successfully.
 - Clearing the value works.
 - Form wording or surrounding staff guidance makes clear this is a label only.
+- Help text explains that blank can mean whole-church, combined, legacy, or uncategorized.
+- Help text explains that the label does not control visibility, assignment filtering, audience scope, or user permissions.
 - UI does not imply MinistryContext controls visibility, assignment eligibility, or filtering.
 - No fake Combined Ministry option is required or created.
+- Existing Audience Scope / 覆盖对象 fields remain separate from Ministry Context Label / 事工标签（可选）.
 
 ## 3. ServiceEvent List/Detail Display QA
 
@@ -82,6 +87,7 @@ Expected:
 - Staff can distinguish CM, EM, and blank events.
 - No layout break.
 - No wording suggests MinistryContext is an audience filter.
+- Display labels use Ministry Label / 事工标签 when showing ServiceEvent metadata.
 
 ## 4. TeamAssignment Create/Edit/List/Detail QA
 
@@ -104,6 +110,7 @@ Expected:
 - MinistryContext label appears only as helpful metadata if currently displayed.
 - Blank ServiceEvents do not crash assignment pages.
 - No accidental filtering was introduced.
+- ServiceEvent choices are not filtered by MinistryContext.
 
 ## 5. My Serving QA
 
@@ -153,7 +160,11 @@ Expected:
 
 Check labels:
 
-- Ministry Context / 事工范围.
+- Ministry Context Label / 事工标签（可选）.
+- Ministry Label / 事工标签.
+- Audience Scope / 覆盖对象.
+- District / 适用区.
+- Small Group / 适用小组.
 - Service Event / 聚会事件, or the existing project wording for service events.
 - My Serving / 我的服事.
 - Team Assignment / existing Chinese wording for team assignments.
@@ -162,6 +173,9 @@ Expected:
 
 - English and Chinese labels are understandable.
 - No misleading wording suggests MinistryContext filters events, assignments, or My Serving.
+- No label uses 事工范围 for the ServiceEvent MinistryContext label field.
+- Audience Scope help text makes clear the current version supports only whole church, one district, or one small group.
+- Audience Scope help text keeps multi-level and multi-select audience selection as future Church Structure work.
 - No old ambiguous Bible Study Admin wording reappears.
 - Existing project wording remains consistent enough for staff to understand the workflow.
 

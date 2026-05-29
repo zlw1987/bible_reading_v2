@@ -32,3 +32,13 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "ministry_context__name_en",
     )
     readonly_fields = ("created_at", "updated_at", "published_at")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "ministry_context":
+            formfield.label = "Ministry Context Label"
+            formfield.help_text = (
+                "Optional label for CM, EM, or a similar ministry context. "
+                "This does not control visibility, assignment filtering, or audience scope."
+            )
+        return formfield

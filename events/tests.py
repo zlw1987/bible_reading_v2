@@ -6,6 +6,7 @@ from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
 
+from .forms import ServiceEventForm
 from .models import ServiceEvent
 
 
@@ -389,6 +390,44 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIsNone(event.ministry_context)
 
+    def test_service_event_form_clarifies_ministry_context_is_label_only(self):
+        english_form = ServiceEventForm(language="en")
+        chinese_form = ServiceEventForm(language="zh")
+
+        self.assertEqual(
+            english_form.fields["ministry_context"].label,
+            "Ministry Context Label",
+        )
+        self.assertIn(
+            "does not control visibility",
+            english_form.fields["ministry_context"].help_text,
+        )
+        self.assertEqual(
+            chinese_form.fields["ministry_context"].label,
+            "事工标签（可选）",
+        )
+        self.assertNotEqual(
+            chinese_form.fields["ministry_context"].label,
+            "事工范围",
+        )
+        self.assertIn(
+            "不会控制可见范围、服事分配或用户权限",
+            chinese_form.fields["ministry_context"].help_text,
+        )
+
+    def test_service_event_scope_form_labels_are_audience_specific(self):
+        english_form = ServiceEventForm(language="en")
+        chinese_form = ServiceEventForm(language="zh")
+
+        self.assertEqual(english_form.fields["scope_type"].label, "Audience Scope")
+        self.assertEqual(chinese_form.fields["scope_type"].label, "覆盖对象")
+        self.assertEqual(chinese_form.fields["district"].label, "适用区")
+        self.assertEqual(chinese_form.fields["small_group"].label, "适用小组")
+        self.assertIn(
+            "Multi-level and multi-select audience selection is future",
+            english_form.fields["scope_type"].help_text,
+        )
+
     def test_ministry_context_label_can_be_saved_without_changing_visibility(self):
         self.set_language("en")
         event = self.create_event(
@@ -414,6 +453,42 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
         self.assertEqual(event.ministry_context, self.em)
+
+    def test_manager_can_create_event_with_existing_district_scope(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                scope_type=ServiceEvent.SCOPE_DISTRICT,
+                district=self.north.id,
+                small_group="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_DISTRICT)
+        self.assertEqual(event.district, self.north)
+
+    def test_manager_can_create_event_with_existing_small_group_scope(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+                district="",
+                small_group=self.group.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_SMALL_GROUP)
+        self.assertEqual(event.small_group, self.group)
 
     def test_chinese_list_and_detail_pages_show_chinese_labels(self):
         self.set_language("zh")

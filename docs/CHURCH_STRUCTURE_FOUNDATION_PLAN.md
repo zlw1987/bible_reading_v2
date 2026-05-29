@@ -239,6 +239,8 @@ Important boundaries:
 
 CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only. It is metadata for identifying the ministry context of an official church service/event anchor and must not drive audience filtering, `TeamAssignment` visibility, My Serving visibility, or MinistryTeam behavior.
 
+CS-F.3B clarifies the current UI wording: this field should be presented as a Ministry Context Label / 事工标签（可选）, separate from the existing single Audience Scope / 覆盖对象 fields. Flexible hierarchy, multi-select audience scope, `ChurchStructureUnit`, and CM/EM-aware ServiceEvent filtering remain future work.
+
 Future `ServiceEvent` may reference participating structure units or multiple `MinistryContext` records, but this should be separately planned.
 
 ## 11. Flexible Hierarchy Rules

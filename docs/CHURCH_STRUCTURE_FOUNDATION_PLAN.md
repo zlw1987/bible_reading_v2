@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, and CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility; do not implement additional models, migrations, views, templates, permissions, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, and CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only; do not implement additional models, migrations, views, templates, permissions, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -237,7 +237,9 @@ Important boundaries:
 - `BibleStudyMeetingRole` remains for one-meeting Bible Study responsibilities.
 - `CommunityActivity` remains for signup-oriented activities.
 
-Future `ServiceEvent` may reference participating structure units or `MinistryContext`, but this should be separately planned.
+CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only. It is metadata for identifying the ministry context of an official church service/event anchor and must not drive audience filtering, `TeamAssignment` visibility, My Serving visibility, or MinistryTeam behavior.
+
+Future `ServiceEvent` may reference participating structure units or multiple `MinistryContext` records, but this should be separately planned.
 
 ## 11. Flexible Hierarchy Rules
 
@@ -274,6 +276,7 @@ Church Structure Foundation should be treated as the current foundation step:
 - Bible Study V2 Flow QA has passed
 - CS-F.1 implements the short-term `MinistryContext` bridge
 - CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope
+- CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering

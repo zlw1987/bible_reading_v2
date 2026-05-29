@@ -39,6 +39,7 @@ def can_manage_service_events(user):
 def get_visible_service_events(user):
     events = ServiceEvent.objects.select_related(
         "district",
+        "ministry_context",
         "small_group",
         "created_by",
     ).order_by("-start_datetime")
@@ -88,7 +89,12 @@ def service_event_list(request):
 @login_required
 def service_event_detail(request, event_id):
     event = get_object_or_404(
-        ServiceEvent.objects.select_related("district", "small_group", "created_by"),
+        ServiceEvent.objects.select_related(
+            "district",
+            "ministry_context",
+            "small_group",
+            "created_by",
+        ),
         id=event_id,
     )
 

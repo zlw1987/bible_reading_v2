@@ -292,6 +292,7 @@ class TeamAssignmentForm(forms.ModelForm):
         self.fields["service_event"].language = language
         self.fields["service_event"].queryset = ServiceEvent.objects.select_related(
             "district",
+            "ministry_context",
             "small_group",
         ).order_by(
             "start_datetime",

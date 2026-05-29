@@ -184,10 +184,12 @@ Future planning may consider:
 - `is_active`
 
 For `ServiceEvent`, future planning may consider:
+- current foundation field: optional `ministry_context` FK label on one event
 - `participating_ministries`: ManyToMany to `MinistryContext`
 - `lead_ministry`: optional FK to `MinistryContext`, if ownership/leadership needs to be tracked
 
 Important distinction:
+- current `ServiceEvent.ministry_context` is an optional label only and does not filter audiences or assignments
 - `participating_ministries` answers: who is this event for / who participates?
 - `lead_ministry` answers: who is responsible for leading/owning it?
 

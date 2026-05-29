@@ -97,6 +97,7 @@ def visible_assignments_for_user(user):
     assignments = (
         TeamAssignment.objects.select_related(
             "service_event",
+            "service_event__ministry_context",
             "ministry_team",
             "created_by",
         )
@@ -127,6 +128,7 @@ def my_serving_assignments(user, tab="upcoming"):
         TeamAssignmentMember.objects.select_related(
             "assignment",
             "assignment__service_event",
+            "assignment__service_event__ministry_context",
             "assignment__ministry_team",
             "membership",
             "membership__team",
@@ -538,7 +540,12 @@ def team_assignment_list(request):
 def team_assignment_detail(request, assignment_id):
     language = get_user_language(request)
     assignment = get_object_or_404(
-        TeamAssignment.objects.select_related("service_event", "ministry_team", "created_by"),
+        TeamAssignment.objects.select_related(
+            "service_event",
+            "service_event__ministry_context",
+            "ministry_team",
+            "created_by",
+        ),
         id=assignment_id,
     )
 

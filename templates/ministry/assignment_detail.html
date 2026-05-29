@@ -29,6 +29,12 @@
         <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
         {{ assignment.service_event|event_title:language }}
     </p>
+    {% if assignment.service_event.ministry_context_id %}
+    <p>
+        <strong>{% if language == "zh" %}事工范围{% else %}Ministry Context{% endif %}:</strong>
+        {{ assignment.service_event|event_ministry_context_label:language }}
+    </p>
+    {% endif %}
     <p>
         <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
         {{ assignment.service_event.start_datetime }}

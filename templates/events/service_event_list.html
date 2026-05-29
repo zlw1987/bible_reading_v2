@@ -48,6 +48,12 @@
                 {{ event|event_title:language }}
             </a>
         </h2>
+        {% if event.ministry_context_id %}
+        <p class="muted">
+            <strong>{% if language == "zh" %}事工范围{% else %}Ministry Context{% endif %}:</strong>
+            {{ event|event_ministry_context_label:language }}
+        </p>
+        {% endif %}
         <p class="muted">
             {{ event|event_status_label:language }} · {{ event|event_scope_label:language }}
         </p>

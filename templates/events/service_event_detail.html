@@ -55,6 +55,13 @@
     </p>
     {% endif %}
 
+    {% if event.ministry_context_id %}
+    <p>
+        <strong>{% if language == "zh" %}事工范围{% else %}Ministry Context{% endif %}:</strong>
+        {{ event|event_ministry_context_label:language }}
+    </p>
+    {% endif %}
+
     <p>
         <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
         {{ event|event_scope_label:language }}

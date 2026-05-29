@@ -76,6 +76,13 @@ class ServiceEvent(models.Model):
         blank=True,
         related_name="service_events",
     )
+    ministry_context = models.ForeignKey(
+        "accounts.MinistryContext",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="service_events",
+    )
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,

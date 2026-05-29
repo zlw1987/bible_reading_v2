@@ -76,3 +76,19 @@ def event_scope_label(event, language):
         },
     }
     return labels.get(language, labels["en"]).get(event.scope_type, event.scope_type)
+
+
+@register.filter
+def event_ministry_context_label(event, language):
+    if not event or not event.ministry_context_id:
+        return ""
+
+    context = event.ministry_context
+    if language == "en" and context.name_en:
+        name = context.name_en
+    else:
+        name = context.name
+
+    if context.code:
+        return f"{context.code} - {name}"
+    return name

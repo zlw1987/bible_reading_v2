@@ -71,6 +71,7 @@ Completed QA:
 Completed foundation steps:
 - CS-F.1 - MinistryContext bridge foundation.
 - CS-F.2 - MinistryContext Bible Study Schedule scope.
+- CS-F.3 - ServiceEvent MinistryContext label foundation.
 
 Future:
 - Future foundation - flexible Church Structure Foundation only after the short-term bridge proves insufficient, before advanced mixed audience segments.
@@ -145,9 +146,10 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - Bible Study V2 Flow QA passed.
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
+- CS-F.3 ServiceEvent MinistryContext label foundation completed.
 - Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
 - Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
 - Later role-aware editing permissions.
-- Later ServiceEvent participating_ministries / MinistryContext planning.
+- Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
 - Checklist V1 remains deferred until Lighting Pilot validation.

@@ -1,6 +1,9 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
+
+from accounts.models import MinistryContext
 
 from .models import ServiceEvent
 
@@ -16,6 +19,7 @@ FORM_TEXT = {
         "end_datetime": "End Time",
         "location": "Location",
         "meeting_link": "Meeting Link",
+        "ministry_context": "Ministry Context",
         "scope_type": "Scope",
         "district": "District",
         "small_group": "Small Group",
@@ -92,6 +96,7 @@ class ServiceEventForm(forms.ModelForm):
             "end_datetime",
             "location",
             "meeting_link",
+            "ministry_context",
             "scope_type",
             "district",
             "small_group",
@@ -113,9 +118,14 @@ class ServiceEventForm(forms.ModelForm):
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
         text = form_text(language)
+        if language == "zh":
+            text = {**text, "ministry_context": "事工范围"}
 
         for field_name in self.fields:
-            self.fields[field_name].label = text[field_name]
+            self.fields[field_name].label = text.get(
+                field_name,
+                FORM_TEXT["en"].get(field_name, field_name),
+            )
 
         self.fields["event_type"].choices = [
             (ServiceEvent.EVENT_SUNDAY_SERVICE, text["sunday_service"]),
@@ -148,6 +158,12 @@ class ServiceEventForm(forms.ModelForm):
         )
         self.fields["meeting_link"].widget.attrs.update(
             {"placeholder": text["meeting_link_placeholder"]}
+        )
+        ministry_context_filter = Q(is_active=True)
+        if self.instance.ministry_context_id:
+            ministry_context_filter |= Q(id=self.instance.ministry_context_id)
+        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
+            ministry_context_filter,
         )
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]

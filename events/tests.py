@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
 
 from .models import ServiceEvent
 
@@ -13,6 +13,16 @@ class ServiceEventFoundationTests(TestCase):
     def setUp(self):
         self.north = District.objects.create(name="North")
         self.south = District.objects.create(name="South")
+        self.cm = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            name_en="Chinese Ministry",
+        )
+        self.em = MinistryContext.objects.create(
+            code="EM",
+            name="English Ministry",
+            name_en="English Ministry",
+        )
         self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.north)
         self.same_district_group = SmallGroup.objects.create(
             name="Rainbow 4B",
@@ -100,6 +110,7 @@ class ServiceEventFoundationTests(TestCase):
             "end_datetime": self.end_time.strftime("%Y-%m-%dT%H:%M"),
             "location": "Fellowship Hall",
             "meeting_link": "https://example.com/event",
+            "ministry_context": "",
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "status": ServiceEvent.STATUS_PUBLISHED,
         }
@@ -372,6 +383,37 @@ class ServiceEventFoundationTests(TestCase):
 
         with self.assertRaises(ValidationError):
             event.full_clean()
+
+    def test_ministry_context_label_is_optional(self):
+        event = self.create_event()
+
+        self.assertIsNone(event.ministry_context)
+
+    def test_ministry_context_label_can_be_saved_without_changing_visibility(self):
+        self.set_language("en")
+        event = self.create_event(
+            title_en="CM Sunday Service",
+            ministry_context=self.cm,
+        )
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "CM - Chinese Ministry")
+
+    def test_manager_can_create_event_with_ministry_context_label(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(ministry_context=self.em.id),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(event.ministry_context, self.em)
 
     def test_chinese_list_and_detail_pages_show_chinese_labels(self):
         self.set_language("zh")

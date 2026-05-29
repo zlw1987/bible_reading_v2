@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -607,6 +609,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_chinese_schedule_pages_use_schedule_wording(self):
         self.set_language("zh")
+        self.series.start_date = date(2026, 5, 29)
+        self.series.end_date = date(2026, 5, 29)
+        self.series.save(update_fields=["start_date", "end_date"])
         self.client.login(username="study_staff", password="testpass123")
 
         list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
@@ -628,11 +633,19 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(list_response, "范围")
         self.assertContains(list_response, "状态")
         self.assertContains(list_response, "启用")
-        self.assertContains(list_response, "每周查经指引")
+        self.assertContains(list_response, "每周指引")
+        self.assertContains(list_response, "2026-05-29")
+        self.assertContains(list_response, "至")
         self.assertContains(list_response, "查看")
         self.assertContains(list_response, "编辑")
+        self.assertContains(list_response, "schedule-description-text")
         self.assertContains(list_response, "schedule-list-card")
         self.assertNotContains(list_response, "bible-study-schedule-table")
+        schedule_list_markup = list_response.content.decode().split(
+            '<div class="schedule-list">',
+            1,
+        )[1]
+        self.assertNotIn("每周查经指引", schedule_list_markup)
 
     def test_schedule_list_and_detail_display_ministry_context_scope_label(self):
         self.set_language("en")

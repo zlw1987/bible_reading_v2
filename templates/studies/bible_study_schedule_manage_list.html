@@ -10,7 +10,7 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}管理包含每周查经指引的查经安排。{% else %}Manage Bible Study schedules that contain weekly guides.{% endif %}
+        {% if language == "zh" %}管理包含每周指引的查经安排。{% else %}Manage Bible Study schedules that contain weekly guides.{% endif %}
     </p>
 </div>
 
@@ -20,7 +20,7 @@
             {% if language == "zh" %}新增查经安排{% else %}New Bible Study Schedule{% endif %}
         </a>
         <a class="button button-secondary" href="{% url 'bible_study_lesson_manage_list' %}">
-            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}
+            {% if language == "zh" %}每周指引{% else %}Weekly Bible Study Guides{% endif %}
         </a>
     </div>
 </div>
@@ -58,7 +58,9 @@
                 {% if language == "zh" %}描述{% else %}Description{% endif %}
             </span>
             {% if schedule|study_series_description:language %}
-                {{ schedule|study_series_description:language|truncatechars:140 }}
+                <span class="schedule-description-text">
+                    {{ schedule|study_series_description:language }}
+                </span>
             {% else %}
                 <span class="muted">-</span>
             {% endif %}
@@ -69,7 +71,13 @@
                 <dt>{% if language == "zh" %}日期范围{% else %}Date Range{% endif %}</dt>
                 <dd>
                     {% if schedule.start_date or schedule.end_date %}
-                        {{ schedule.start_date|default:"-" }} - {{ schedule.end_date|default:"-" }}
+                        {% if language == "zh" %}
+                            {% if schedule.start_date %}{{ schedule.start_date|date:"Y-m-d" }}{% else %}-{% endif %}
+                            至
+                            {% if schedule.end_date %}{{ schedule.end_date|date:"Y-m-d" }}{% else %}-{% endif %}
+                        {% else %}
+                            {{ schedule.start_date|default:"-" }} - {{ schedule.end_date|default:"-" }}
+                        {% endif %}
                     {% else %}
                         -
                     {% endif %}
@@ -94,7 +102,7 @@
                 </dd>
             </div>
             <div class="schedule-meta-item">
-                <dt>{% if language == "zh" %}每周查经指引{% else %}Weekly Guides{% endif %}</dt>
+                <dt>{% if language == "zh" %}每周指引{% else %}Weekly Guides{% endif %}</dt>
                 <dd>{{ schedule.guide_count }}</dd>
             </div>
         </dl>

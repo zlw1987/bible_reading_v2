@@ -390,6 +390,13 @@ th {
     overflow-wrap: anywhere;
 }
 
+.schedule-description-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+}
+
 .schedule-meta-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

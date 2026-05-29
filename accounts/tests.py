@@ -567,6 +567,9 @@ class StaffPasswordResetTests(TestCase):
         self.assertIn("/admin/login/", response.url)
 
     def test_staff_can_access_user_list(self):
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
         self.client.login(username="staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_user_list"))
@@ -574,6 +577,29 @@ class StaffPasswordResetTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "User Admin")
         self.assertContains(response, "elder")
+
+    def test_chinese_staff_user_list_uses_chinese_labels(self):
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_user_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "用户管理")
+        self.assertContains(response, "搜索用户，并为无法使用邮件找回密码的成员重置密码")
+        self.assertContains(response, "搜索")
+        self.assertContains(response, "用户名")
+        self.assertContains(response, "邮箱")
+        self.assertContains(response, "小组")
+        self.assertContains(response, "语言")
+        self.assertContains(response, "密码状态")
+        self.assertContains(response, "操作")
+        self.assertContains(response, "重置密码")
+        self.assertContains(response, "正常")
+        self.assertNotContains(response, "User Admin")
+        self.assertNotContains(response, "Reset Password")
 
     def test_staff_can_search_user_list(self):
         self.client.login(username="staff", password="StaffPass123!")

@@ -241,6 +241,8 @@ CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only. It is metada
 
 CS-F.3B clarifies the current UI wording: this field should be presented as a Ministry Context Label / 事工标签（可选）, separate from the existing single Audience Scope / 覆盖对象 fields. Flexible hierarchy, multi-select audience scope, `ChurchStructureUnit`, and CM/EM-aware ServiceEvent filtering remain future work.
 
+CS-F.3C clarifies the limited current ServiceEvent scope UI: Audience Scope supports Whole Church, one District, or one Small Group. Selecting District binds the event at the district level and does not expand into child small-group selection. Multi-level and multi-select audience selection remain future Church Structure work. MinistryTeam handbook/manual links open in a new tab.
+
 Future `ServiceEvent` may reference participating structure units or multiple `MinistryContext` records, but this should be separately planned.
 
 ## 11. Flexible Hierarchy Rules

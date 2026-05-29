@@ -61,6 +61,11 @@ class ReflectionReportModerationTests(TestCase):
             body="Reportable reflection.",
         )
 
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
     def test_user_can_report_visible_reflection(self):
         self.client.login(username="other", password="OtherPass123!")
 
@@ -130,6 +135,7 @@ class ReflectionReportModerationTests(TestCase):
             reason="Needs review.",
         )
 
+        self.set_language("en")
         self.client.login(username="staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_reflection_reports"))
@@ -138,6 +144,41 @@ class ReflectionReportModerationTests(TestCase):
         self.assertContains(response, "Reflection Reports")
         self.assertContains(response, "Needs review.")
         self.assertContains(response, "Reportable reflection.")
+
+    def test_chinese_staff_report_page_uses_chinese_labels(self):
+        ReflectionReport.objects.create(
+            comment=self.comment,
+            reporter=self.other_user,
+            reason="Needs review.",
+        )
+        self.comment.is_hidden = True
+        self.comment.hidden_reason = "Internal handling note."
+        self.comment.save(update_fields=["is_hidden", "hidden_reason"])
+
+        self.set_language("zh")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_reflection_reports"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "默想举报")
+        self.assertContains(response, "查看被举报的默想并管理可见性")
+        self.assertContains(response, "搜索")
+        self.assertContains(response, "状态")
+        self.assertContains(response, "未处理")
+        self.assertContains(response, "筛选")
+        self.assertContains(response, "作者")
+        self.assertContains(response, "已隐藏")
+        self.assertContains(response, "举报人")
+        self.assertContains(response, "原因")
+        self.assertContains(response, "隐藏原因")
+        self.assertContains(response, "仅内部可见的处理原因")
+        self.assertContains(response, "隐藏默想")
+        self.assertContains(response, "取消隐藏默想")
+        self.assertContains(response, "标记举报已处理")
+        self.assertContains(response, "忽略举报")
+        self.assertNotContains(response, "Reflection Reports")
+        self.assertNotContains(response, "Hide Reflection")
 
     def test_non_staff_cannot_view_report_page(self):
         self.client.login(username="levin", password="UserPass123!")

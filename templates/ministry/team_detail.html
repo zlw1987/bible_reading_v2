@@ -42,7 +42,7 @@
     {% if team.playbook_link %}
     <p>
         <strong>{% if language == "zh" %}服事手册链接{% else %}Playbook Link{% endif %}:</strong>
-        <a href="{{ team.playbook_link }}">{{ team.playbook_link }}</a>
+        <a href="{{ team.playbook_link }}" target="_blank" rel="noopener noreferrer">{{ team.playbook_link }}</a>
     </p>
     {% endif %}
 

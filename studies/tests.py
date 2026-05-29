@@ -366,6 +366,8 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Status")
         self.assertContains(response, "Weekly Guides")
         self.assertContains(response, "1")
+        self.assertContains(response, "bible-study-schedule-table")
+        self.assertContains(response, "schedule-actions-cell")
         self.assertNotContains(response, "Series")
 
     def test_regular_user_cannot_access_schedule_management_list(self):

@@ -2,10 +2,10 @@
 
 {% block content %}
 <p>
-    <a href="{% url 'home' %}">← Back to Today</a>
+    <a href="{% url 'home' %}">← {{ ui.back_to_today }}</a>
 </p>
 
-<h1>My Reading Plans</h1>
+<h1>{{ ui.my_reading_plans }}</h1>
 
 {% if plan_rows %}
     {% for row in plan_rows %}
@@ -17,16 +17,25 @@
     </h2>
 
     <p class="muted">
-        Status: <strong>{{ row.status }}</strong>
+        {{ ui.status_label }}{% if language == "zh" %}：{% else %}:{% endif %}
+        <strong>
+            {% if row.status == "Not started" %}
+                {{ ui.not_started }}
+            {% elif row.status == "Ended" %}
+                {{ ui.ended }}
+            {% else %}
+                {{ ui.in_progress }}
+            {% endif %}
+        </strong>
     </p>
 
     <p class="muted">
-        Starts on {{ row.active_plan.start_date }}
+        {{ ui.starts_on }} {{ row.active_plan.start_date }}
     </p>
 
     <p>
-        Progress:
-        {{ row.checked_days }} / {{ row.total_reading_days }} reading days
+        {{ ui.progress }}{% if language == "zh" %}：{% else %}:{% endif %}
+        {{ row.checked_days }} / {{ row.total_reading_days }} {{ ui.reading_days }}
         — {{ row.progress_percent }}%
     </p>
 
@@ -36,7 +45,7 @@
 
     <p>
         <a href="{% url 'active_plan_detail' row.active_plan.id %}">
-            View Plan
+            {{ ui.view_plan }}
         </a>
         ·
         <a href="{% url 'active_plan_intro' row.active_plan.id %}">
@@ -47,14 +56,14 @@
     <form method="post" action="{% url 'leave_active_plan' row.active_plan.id %}">
         {% csrf_token %}
         <button type="submit">
-            Leave Plan
+            {{ ui.leave_plan }}
         </button>
     </form>
 </div>
     {% endfor %}
 {% else %}
 <div class="card">
-    <p>You have not joined any reading plan yet.</p>
+    <p>{{ ui.no_reading_plan_yet }}</p>
 </div>
 {% endif %}
 

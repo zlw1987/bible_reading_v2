@@ -40,8 +40,9 @@ FORM_TEXT = {
             "This does not control visibility, assignment filtering, or audience scope."
         ),
         "scope_type_help": (
-            "Current version supports whole church, one district, or one small group. "
-            "Multi-level and multi-select audience selection is future Church Structure work."
+            "Current version supports Whole Church, one District, or one Small Group. "
+            "Selecting District binds the event at the district level; it does not expand into child small-group selection. "
+            "Multi-level and multi-select audience selection belongs to future Church Structure work."
         ),
         "district_help": "Use only when Audience Scope is District.",
         "small_group_help": "Use only when Audience Scope is Small Group.",
@@ -142,8 +143,9 @@ class ServiceEventForm(forms.ModelForm):
                     "不会控制可见范围、服事分配或用户权限。"
                 ),
                 "scope_type_help": (
-                    "当前版本只支持全教会、单一区或单一小组。"
-                    "多层级、多选受众范围属于未来 Church Structure 工作。"
+                    "当前版本支持全教会、单一区或单一小组。"
+                    "选择“区”表示此聚会事件绑定在区这一层级，不会继续展开下属小组。"
+                    "多层级、多选覆盖对象属于后续 Church Structure 工作。"
                 ),
                 "district_help": "仅在覆盖对象为“区”时使用。",
                 "small_group_help": "仅在覆盖对象为“小组”时使用。",

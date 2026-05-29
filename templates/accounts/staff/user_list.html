@@ -1,24 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}User Admin | {{ ui.site_title }}{% endblock %}
+{% block title %}{{ ui.user_admin }} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">User Admin</h1>
+    <h1 class="page-title">{{ ui.user_admin }}</h1>
     <p class="page-subtitle">
-        Search users and reset passwords for members who cannot use email recovery.
+        {{ ui.user_admin_subtitle }}
     </p>
 </div>
 
 <div class="card">
     <form method="get">
-        <label for="q">Search</label>
+        <label for="q">{{ ui.search }}</label>
         <input type="text"
                id="q"
                name="q"
                value="{{ query }}"
-               placeholder="Username, email, or small group">
-        <button type="submit" style="margin-top: 12px;">Search</button>
+               placeholder="{{ ui.user_search_placeholder }}">
+        <button type="submit" style="margin-top: 12px;">{{ ui.search }}</button>
     </form>
 </div>
 
@@ -27,12 +27,12 @@
         <table>
             <thead>
                 <tr>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Small Group</th>
-                    <th>Language</th>
-                    <th>Password Status</th>
-                    <th>Action</th>
+                    <th>{{ ui.username }}</th>
+                    <th>{{ ui.admin_email }}</th>
+                    <th>{{ ui.admin_small_group }}</th>
+                    <th>{{ ui.language }}</th>
+                    <th>{{ ui.password_status }}</th>
+                    <th>{{ ui.action }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -50,21 +50,21 @@
                     <td>{{ member.profile.preferred_language }}</td>
                     <td>
                         {% if member.profile.must_change_password %}
-                        <span class="status status-warning">Must change password</span>
+                        <span class="status status-warning">{{ ui.must_change_password }}</span>
                         {% else %}
-                        <span class="status status-good">OK</span>
+                        <span class="status status-good">{{ ui.ok }}</span>
                         {% endif %}
                     </td>
                     <td>
                         <a class="button button-secondary"
                            href="{% url 'staff_user_password_reset' member.id %}">
-                            Reset Password
+                            {{ ui.reset_password }}
                         </a>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6">No users found.</td>
+                    <td colspan="6">{{ ui.no_users_found }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

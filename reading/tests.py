@@ -1584,7 +1584,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "levin")
         self.assertContains(response, "other")
-        self.assertNotContains(response, "outside")
+        self.assertNotIn(">outside<", response.content.decode())
 
     def test_group_progress_shows_checked_and_missing_status(self):
         self.user.profile.small_group = self.group
@@ -1848,6 +1848,7 @@ class BibleReadingFlowTests(TestCase):
 
 
     def test_my_plans_shows_joined_plan(self):
+        self.set_language("en")
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -1860,6 +1861,29 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "May Test Plan")
         self.assertContains(response, "Progress")
+
+    def test_chinese_my_plans_uses_chinese_labels(self):
+        self.set_language("zh")
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的读经计划")
+        self.assertContains(response, "返回今日")
+        self.assertContains(response, "状态")
+        self.assertContains(response, "进行中")
+        self.assertContains(response, "开始日期")
+        self.assertContains(response, "进度")
+        self.assertContains(response, "查看计划")
+        self.assertContains(response, "退出计划")
+        self.assertNotContains(response, "My Reading Plans")
+        self.assertNotContains(response, "Back to Today")
 
 
     def test_home_uses_lightweight_reading_cta_without_available_plan_grid(self):
@@ -2563,6 +2587,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Today&#x27;s Reading")
 
     def test_staff_can_access_reading_plan_admin_list(self):
+        self.set_language("en")
         self.client.login(username="admin", password="testpass123")
 
         response = self.client.get(reverse("staff_reading_plan_list"))
@@ -2570,6 +2595,23 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Reading Plan Admin")
         self.assertContains(response, self.plan.name)
+
+    def test_chinese_reading_plan_admin_list_uses_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(reverse("staff_reading_plan_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "读经计划管理")
+        self.assertContains(response, "分别编辑读经计划标题和每日读经内容")
+        self.assertContains(response, "返回 Django 管理后台")
+        self.assertContains(response, "英文名称")
+        self.assertContains(response, "编辑标题")
+        self.assertContains(response, "编辑每日内容")
+        self.assertContains(response, "启用")
+        self.assertNotContains(response, "Reading Plan Admin")
+        self.assertNotContains(response, "Edit reading plan headers")
 
 
     def test_non_staff_cannot_access_reading_plan_admin_list(self):

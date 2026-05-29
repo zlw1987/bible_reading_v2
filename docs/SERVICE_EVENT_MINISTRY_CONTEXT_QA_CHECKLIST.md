@@ -13,7 +13,10 @@ Current code reality:
 - Visibility remains controlled by existing ServiceEvent status/scope rules.
 - TeamAssignment visibility and member selection remain controlled by existing TeamAssignment and MinistryTeam rules.
 - My Serving remains based on assigned TeamAssignmentMember rows, assignment status, and event time.
+- Current ServiceEvent Audience Scope remains limited to Whole Church, one District, or one Small Group.
+- District scope binds the event at the district level; it does not expand into child small-group selection.
 - Flexible hierarchy, multi-select audience scope, `ChurchStructureUnit`, and ServiceEvent filtering remain future work.
+- MinistryTeam handbook/manual links should open in a new browser tab.
 
 ## 1. Required Test Data
 
@@ -69,6 +72,7 @@ Expected:
 - UI does not imply MinistryContext controls visibility, assignment eligibility, or filtering.
 - No fake Combined Ministry option is required or created.
 - Existing Audience Scope / 覆盖对象 fields remain separate from Ministry Context Label / 事工标签（可选）.
+- Audience Scope help text explains that selecting District binds the event at the district level and does not continue expanding child small groups.
 
 ## 3. ServiceEvent List/Detail Display QA
 
@@ -108,6 +112,7 @@ Expected:
 - Member filtering remains based on MinistryTeam, not MinistryContext.
 - Cross-context ServiceEvents are not blocked.
 - MinistryContext label appears only as helpful metadata if currently displayed.
+- MinistryTeam handbook/manual links open in a new tab when viewed from the team detail page.
 - Blank ServiceEvents do not crash assignment pages.
 - No accidental filtering was introduced.
 - ServiceEvent choices are not filtered by MinistryContext.
@@ -175,6 +180,7 @@ Expected:
 - No misleading wording suggests MinistryContext filters events, assignments, or My Serving.
 - No label uses 事工范围 for the ServiceEvent MinistryContext label field.
 - Audience Scope help text makes clear the current version supports only whole church, one district, or one small group.
+- Audience Scope help text makes clear District scope binds at the district level and does not expand into child small groups.
 - Audience Scope help text keeps multi-level and multi-select audience selection as future Church Structure work.
 - No old ambiguous Bible Study Admin wording reappears.
 - Existing project wording remains consistent enough for staff to understand the workflow.
@@ -216,6 +222,7 @@ Quick browser checks:
 - Existing ServiceEvents created before CS-F.3 still display and edit correctly.
 - Existing TeamAssignments still display and edit correctly.
 - Existing My Serving assignments still display correctly.
+- MinistryTeam handbook/manual links open in a new tab.
 
 ## 10. Go / No-Go Decision
 

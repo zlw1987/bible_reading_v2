@@ -27,8 +27,18 @@
 
 {% if schedules %}
 <div class="card">
-    <div class="table-wrap">
-        <table>
+    <div class="table-wrap bible-study-schedule-table-wrap">
+        <table class="bible-study-schedule-table">
+            <colgroup>
+                <col class="schedule-title-col">
+                <col class="schedule-description-col">
+                <col class="schedule-date-col">
+                <col class="schedule-scope-col">
+                <col class="schedule-status-col">
+                <col class="schedule-active-col">
+                <col class="schedule-guides-col">
+                <col class="schedule-actions-col">
+            </colgroup>
             <thead>
                 <tr>
                     <th>{% if language == "zh" %}标题{% else %}Title{% endif %}</th>
@@ -44,38 +54,48 @@
             <tbody>
                 {% for schedule in schedules %}
                 <tr>
-                    <td>
+                    <td class="schedule-title-cell" data-label="{% if language == 'zh' %}标题{% else %}Title{% endif %}">
                         <a href="{% url 'bible_study_schedule_detail' schedule.id %}">
                             {{ schedule|study_series_title:language }}
                         </a>
                     </td>
-                    <td>{{ schedule|study_series_description:language|truncatechars:80|default:"-" }}</td>
-                    <td>
+                    <td class="schedule-description-cell" data-label="{% if language == 'zh' %}描述{% else %}Description{% endif %}">
+                        {{ schedule|study_series_description:language|truncatechars:80|default:"-" }}
+                    </td>
+                    <td class="schedule-nowrap" data-label="{% if language == 'zh' %}日期范围{% else %}Date Range{% endif %}">
                         {% if schedule.start_date or schedule.end_date %}
                             {{ schedule.start_date|default:"-" }} - {{ schedule.end_date|default:"-" }}
                         {% else %}
                             -
                         {% endif %}
                     </td>
-                    <td>{{ schedule|study_series_scope_label:language }}</td>
-                    <td>{{ schedule|study_series_status_label:language }}</td>
-                    <td>
+                    <td class="schedule-nowrap" data-label="{% if language == 'zh' %}范围{% else %}Scope{% endif %}">
+                        {{ schedule|study_series_scope_label:language }}
+                    </td>
+                    <td class="schedule-nowrap" data-label="{% if language == 'zh' %}状态{% else %}Status{% endif %}">
+                        {{ schedule|study_series_status_label:language }}
+                    </td>
+                    <td class="schedule-nowrap" data-label="{% if language == 'zh' %}启用{% else %}Active{% endif %}">
                         {% if schedule.is_active %}
                             {% if language == "zh" %}启用{% else %}Active{% endif %}
                         {% else %}
                             {% if language == "zh" %}停用{% else %}Inactive{% endif %}
                         {% endif %}
                     </td>
-                    <td>{{ schedule.guide_count }}</td>
-                    <td>
-                        <a class="button button-secondary"
-                           href="{% url 'bible_study_schedule_detail' schedule.id %}">
-                            {% if language == "zh" %}查看{% else %}View{% endif %}
-                        </a>
-                        <a class="button button-secondary"
-                           href="{% url 'edit_bible_study_schedule' schedule.id %}">
-                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
-                        </a>
+                    <td class="schedule-nowrap schedule-count-cell" data-label="{% if language == 'zh' %}每周查经指引{% else %}Weekly Guides{% endif %}">
+                        {{ schedule.guide_count }}
+                    </td>
+                    <td class="schedule-actions-cell" data-label="{% if language == 'zh' %}操作{% else %}Actions{% endif %}">
+                        <div class="schedule-action-buttons">
+                            <a class="button button-secondary"
+                               href="{% url 'bible_study_schedule_detail' schedule.id %}">
+                                {% if language == "zh" %}查看{% else %}View{% endif %}
+                            </a>
+                            <a class="button button-secondary"
+                               href="{% url 'edit_bible_study_schedule' schedule.id %}">
+                                {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

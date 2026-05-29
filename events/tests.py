@@ -424,8 +424,16 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(chinese_form.fields["district"].label, "适用区")
         self.assertEqual(chinese_form.fields["small_group"].label, "适用小组")
         self.assertIn(
-            "Multi-level and multi-select audience selection is future",
+            "does not expand into child small-group selection",
             english_form.fields["scope_type"].help_text,
+        )
+        self.assertIn(
+            "Multi-level and multi-select audience selection belongs to future",
+            english_form.fields["scope_type"].help_text,
+        )
+        self.assertIn(
+            "不会继续展开下属小组",
+            chinese_form.fields["scope_type"].help_text,
         )
 
     def test_ministry_context_label_can_be_saved_without_changing_visibility(self):

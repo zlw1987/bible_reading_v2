@@ -1,33 +1,33 @@
 {% extends "base.html" %}
 {% load reading_extras %}
 
-{% block title %}Reflection Reports | {{ ui.site_title }}{% endblock %}
+{% block title %}{{ ui.reflection_reports }} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Reflection Reports</h1>
+    <h1 class="page-title">{{ ui.reflection_reports }}</h1>
     <p class="page-subtitle">
-        Review reported reflections and moderate visibility.
+        {{ ui.reflection_reports_subtitle }}
     </p>
 </div>
 
 <div class="card">
     <form method="get">
-        <label for="q">Search</label>
+        <label for="q">{{ ui.search }}</label>
         <input type="text"
                id="q"
                name="q"
                value="{{ query }}"
-               placeholder="Author, reporter, scripture, reason, or content">
+               placeholder="{{ ui.report_search_placeholder }}">
 
-        <label for="status" style="margin-top: 12px;">Status</label>
+        <label for="status" style="margin-top: 12px;">{{ ui.status }}</label>
         <select id="status" name="status">
-            <option value="open" {% if status == "open" %}selected{% endif %}>Open</option>
-            <option value="reviewed" {% if status == "reviewed" %}selected{% endif %}>Reviewed</option>
-            <option value="dismissed" {% if status == "dismissed" %}selected{% endif %}>Dismissed</option>
+            <option value="open" {% if status == "open" %}selected{% endif %}>{{ ui.open }}</option>
+            <option value="reviewed" {% if status == "reviewed" %}selected{% endif %}>{{ ui.reviewed }}</option>
+            <option value="dismissed" {% if status == "dismissed" %}selected{% endif %}>{{ ui.dismissed }}</option>
         </select>
 
-        <button type="submit" style="margin-top: 12px;">Filter</button>
+        <button type="submit" style="margin-top: 12px;">{{ ui.filter }}</button>
     </form>
 </div>
 
@@ -39,21 +39,21 @@
     </h2>
 
     <p>
-        <strong>Author:</strong>
+        <strong>{{ ui.author }}{% if language == "zh" %}：{% else %}:{% endif %}</strong>
         {{ report.comment|comment_author:user }}
         {% if report.comment.is_hidden %}
-        <span class="status status-danger">Hidden</span>
+        <span class="status status-danger">{{ ui.hidden }}</span>
         {% endif %}
         <span class="status">{{ report.comment|visibility_label:language }}</span>
     </p>
 
     <p class="muted">
-        Reported by {{ report.reporter.username }} · {{ report.created_at }}
+        {{ ui.reported_by }} {{ report.reporter.username }} · {{ report.created_at }}
     </p>
 
     {% if report.reason %}
     <p>
-        <strong>Reason:</strong>
+        <strong>{{ ui.reason }}{% if language == "zh" %}：{% else %}:{% endif %}</strong>
         {{ report.reason|linebreaksbr }}
     </p>
     {% endif %}
@@ -64,7 +64,7 @@
 
     {% if report.comment.hidden_reason %}
     <p class="muted">
-        <strong>Hidden reason:</strong>
+        <strong>{{ ui.hidden_reason }}{% if language == "zh" %}：{% else %}:{% endif %}</strong>
         {{ report.comment.hidden_reason }}
     </p>
     {% endif %}
@@ -74,14 +74,14 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="hide">
 
-            <label for="reason-{{ report.id }}">Hide reason</label>
+            <label for="reason-{{ report.id }}">{{ ui.hide_reason }}</label>
             <input type="text"
                    id="reason-{{ report.id }}"
                    name="reason"
-                   placeholder="Reason shown internally">
+                   placeholder="{{ ui.reason_shown_internally }}">
 
             <button type="submit" class="button-danger" style="margin-top: 12px;">
-                Hide Reflection
+                {{ ui.hide_reflection }}
             </button>
         </form>
 
@@ -90,7 +90,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="unhide">
                 <button type="submit" class="button-secondary">
-                    Unhide Reflection
+                    {{ ui.unhide_reflection }}
                 </button>
             </form>
 
@@ -98,7 +98,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="mark_reviewed">
                 <button type="submit" class="button-secondary">
-                    Mark Reports Reviewed
+                    {{ ui.mark_reports_reviewed }}
                 </button>
             </form>
 
@@ -106,7 +106,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="dismiss_reports">
                 <button type="submit" class="button-secondary">
-                    Dismiss Reports
+                    {{ ui.dismiss_reports }}
                 </button>
             </form>
         </div>
@@ -115,7 +115,7 @@
     {% endfor %}
 {% else %}
 <div class="card">
-    <p>No reports found.</p>
+    <p>{{ ui.no_reports_found }}</p>
 </div>
 {% endif %}
 {% endblock %}

@@ -311,6 +311,11 @@ class MinistryTeamFoundationTests(TestCase):
 
         self.assertContains(list_response, "Ministry Teams")
         self.assertContains(detail_response, "Manage Members")
+        self.assertContains(
+            detail_response,
+            '<a href="https://example.com/playbook" target="_blank" rel="noopener noreferrer">',
+            html=False,
+        )
         self.assertContains(form_response, "Non-sensitive notes")
 
     def test_normal_top_nav_does_not_show_ministry_teams(self):

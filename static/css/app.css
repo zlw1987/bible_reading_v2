@@ -333,6 +333,74 @@ th {
     font-size: 14px;
 }
 
+.bible-study-schedule-table {
+    min-width: 980px;
+    table-layout: fixed;
+}
+
+.bible-study-schedule-table th {
+    white-space: nowrap;
+}
+
+.bible-study-schedule-table th,
+.bible-study-schedule-table td {
+    padding: 13px 12px;
+}
+
+.schedule-title-col {
+    width: 16%;
+}
+
+.schedule-description-col {
+    width: 22%;
+}
+
+.schedule-date-col {
+    width: 14%;
+}
+
+.schedule-scope-col {
+    width: 10%;
+}
+
+.schedule-status-col,
+.schedule-active-col {
+    width: 8%;
+}
+
+.schedule-guides-col {
+    width: 10%;
+}
+
+.schedule-actions-col {
+    width: 12%;
+}
+
+.schedule-title-cell,
+.schedule-description-cell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.schedule-nowrap {
+    white-space: nowrap;
+}
+
+.schedule-count-cell {
+    text-align: center;
+}
+
+.schedule-action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.schedule-actions-cell .button {
+    white-space: nowrap;
+}
+
 .actions {
     display: flex;
     gap: 10px;
@@ -407,6 +475,58 @@ th {
 
     .page-title {
         font-size: 26px;
+    }
+
+    .bible-study-schedule-table-wrap {
+        overflow-x: visible;
+    }
+
+    .bible-study-schedule-table {
+        min-width: 0;
+        table-layout: auto;
+    }
+
+    .bible-study-schedule-table,
+    .bible-study-schedule-table thead,
+    .bible-study-schedule-table tbody,
+    .bible-study-schedule-table tr,
+    .bible-study-schedule-table th,
+    .bible-study-schedule-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .bible-study-schedule-table colgroup,
+    .bible-study-schedule-table thead {
+        display: none;
+    }
+
+    .bible-study-schedule-table tr {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 12px;
+        background: var(--surface-soft);
+    }
+
+    .bible-study-schedule-table td {
+        border-bottom: 0;
+        padding: 7px 0;
+    }
+
+    .bible-study-schedule-table td::before {
+        content: attr(data-label);
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 2px;
+        white-space: nowrap;
+    }
+
+    .schedule-action-buttons {
+        display: flex;
+        flex-direction: row;
     }
 }
 

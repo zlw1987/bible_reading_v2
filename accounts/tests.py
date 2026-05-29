@@ -1,11 +1,12 @@
 import re
 
+from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
-from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
 from accounts.permissions import (
     CAP_PUBLISH_READING_GUIDES,
     CAP_VIEW_ALL_GROUP_PROGRESS,
@@ -358,6 +359,73 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "我的服事")
+
+
+class MinistryContextBridgeTests(TestCase):
+    def test_ministry_context_can_be_created(self):
+        context = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            name_en="Chinese Ministry",
+            description="Chinese ministry context",
+            description_en="Chinese ministry context",
+            sort_order=10,
+        )
+
+        self.assertEqual(context.code, "CM")
+        self.assertEqual(str(context), "CM - Chinese Ministry")
+        self.assertTrue(context.is_active)
+
+    def test_ministry_context_code_is_normalized_to_uppercase(self):
+        context = MinistryContext.objects.create(
+            code="em",
+            name="English Ministry",
+        )
+
+        self.assertEqual(context.code, "EM")
+
+    def test_district_can_be_linked_to_ministry_context(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="District 1",
+            ministry_context=context,
+        )
+
+        self.assertEqual(district.ministry_context, context)
+        self.assertIn(district, context.districts.all())
+
+    def test_existing_district_without_ministry_context_remains_valid(self):
+        district = District.objects.create(name="District without context")
+
+        district.full_clean()
+        self.assertIsNone(district.ministry_context)
+
+    def test_small_group_still_belongs_to_district(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+
+        self.assertEqual(group.district, district)
+        self.assertIn(group, district.small_groups.all())
+
+    def test_profile_small_group_behavior_is_unchanged(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        user = User.objects.create_user(
+            username="member_context",
+            password="TestPass123!",
+        )
+
+        user.profile.small_group = group
+        user.profile.save()
+
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.small_group, group)
+        self.assertIn(user.profile, group.members.all())
+
+    def test_church_structure_unit_model_is_not_introduced(self):
+        model_names = {model.__name__ for model in apps.get_models()}
+
+        self.assertNotIn("ChurchStructureUnit", model_names)
 
 
 class ChurchRolePermissionTests(TestCase):

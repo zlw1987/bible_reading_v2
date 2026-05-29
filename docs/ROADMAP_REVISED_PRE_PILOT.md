@@ -65,15 +65,17 @@ Completed BS-V2.6 sequence:
 - BS-V2.6.5 - Generate group meetings from guide/scope with a manual, idempotent staff action.
 - BS-V2.6.6 - Normal user V2 landing integration.
 
+Completed QA:
+- BS-V2.6.7 - Bible Study V2 Flow QA passed.
+
 Current next step:
-- BS-V2.6.7 - Bible Study V2 Flow QA using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
-- Fix QA findings before starting new modules.
+- CS-F.1 - MinistryContext bridge foundation.
 
 Future:
-- Future foundation - Church Structure Foundation planning after Bible Study V2 Flow QA, before advanced mixed audience segments.
+- Future foundation - flexible Church Structure Foundation only after the short-term bridge proves insufficient, before advanced mixed audience segments.
 - BS-V2.7 - Role-aware editing permissions later only if needed.
 
-Do not proceed directly to role-aware permissions or new modules before the V2 flow is manually/browser QA'd.
+Do not proceed directly to role-aware permissions or new modules after the V2 flow QA pass.
 Generated small-group meetings should reference the weekly guide and derive schedule through the guide's series/schedule. Do not copy church-wide guide content into each meeting.
 
 ## Phase 5 - Lighting Pilot Preflight Cleanup
@@ -139,9 +141,9 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 
 ## Current Recommended Next Sequence
 
-- Bible Study V2 Flow QA.
-- QA fixes if needed.
-- Church Structure Foundation planning before advanced mixed audience segments or CM/EM-aware ServiceEvent filtering.
+- Bible Study V2 Flow QA passed.
+- CS-F.1 MinistryContext bridge foundation.
+- Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
 - Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext planning.

@@ -3,8 +3,40 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 
+class MinistryContext(models.Model):
+    code = models.CharField(max_length=16, unique=True)
+    name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "code"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    def clean(self):
+        if self.code:
+            self.code = self.code.upper()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
 class District(models.Model):
     name = models.CharField(max_length=120, unique=True)
+    ministry_context = models.ForeignKey(
+        MinistryContext,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="districts",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

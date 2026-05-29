@@ -1,6 +1,6 @@
 # Bible Study V2 Flow QA Checklist
 
-Manual/browser QA checklist for the complete Bible Study V2 staff-to-normal-user flow after BS-V2.6.6.
+Manual/browser QA checklist for the complete Bible Study V2 staff-to-normal-user flow after BS-V2.6.6 and the CS-F.2 MinistryContext schedule-scope bridge.
 
 This checklist verifies:
 
@@ -24,6 +24,12 @@ Prepare or identify:
 - Normal user in Small Group A.
 - Normal user in Small Group B.
 - Normal user without a small group.
+- MinistryContext CM / Chinese Ministry.
+- MinistryContext EM / English Ministry.
+- At least one district under CM.
+- At least one district under EM.
+- At least two active small groups under CM districts.
+- At least one active small group under an EM district.
 - At least two active small groups.
 - At least one inactive small group.
 - At least one district with at least one active small group, if district data exists.
@@ -34,6 +40,12 @@ Recommended QA names:
 - Small Group A: `QA Small Group A`
 - Small Group B: `QA Small Group B`
 - Inactive group: `QA Inactive Small Group`
+- CM context: `CM / Chinese Ministry`
+- EM context: `EM / English Ministry`
+- CM district: `QA CM District`
+- EM district: `QA EM District`
+- CM groups: `QA CM Small Group A`, `QA CM Small Group B`
+- EM group: `QA EM Small Group A`
 - District: `QA District`
 - Schedule: `QA Spring Bible Study Schedule`
 - Weekly guide: `QA Weekly Bible Study Guide`
@@ -70,6 +82,8 @@ Create hidden-state data:
 Create scope-specific data:
 
 - Whole-church schedule: should target all active small groups.
+- MinistryContext schedule for CM: should target only active small groups under CM districts.
+- MinistryContext schedule for EM: should target only active small groups under EM districts.
 - District schedule: should target only active small groups in the selected district.
 - Small-group schedule: should target only the selected active small group.
 - Inactive small groups should not be generated from any schedule scope.
@@ -125,6 +139,255 @@ Verify generation eligibility:
 - District schedule preview counts only active small groups in the selected district.
 - Small-group schedule preview counts only the selected active small group.
 - Inactive small groups are excluded from generation preview/counts.
+
+## 5A. MinistryContext Scope Browser QA
+
+This section is the focused CS-F.2A closure path for MinistryContext-scoped Bible Study Schedules. It verifies only the short-term bridge:
+
+```text
+MinistryContext -> District -> SmallGroup -> Profile.small_group
+```
+
+It must not expand scope into `ChurchStructureUnit`, Community Activities, ServiceEvent audience filtering, Checklist V1, scheduling, reminders, attendance, availability, swaps, or role-aware permissions.
+
+### 5A.1 Test Data Setup
+
+Prepare or confirm:
+
+- MinistryContext: `CM / Chinese Ministry`.
+- MinistryContext: `EM / English Ministry`.
+- At least one District under CM.
+- At least one District under EM.
+- At least two active SmallGroups under CM districts.
+- At least one active SmallGroup under an EM district.
+- At least one inactive SmallGroup under CM or EM.
+- Normal user in a CM small group.
+- Normal user in an EM small group.
+- Normal user with no small group.
+- Staff or Bible Study manager user.
+
+Record the exact data used:
+
+- CM MinistryContext:
+- EM MinistryContext:
+- CM District(s):
+- EM District(s):
+- CM active SmallGroups:
+- EM active SmallGroups:
+- Inactive SmallGroup:
+- CM normal user:
+- EM normal user:
+- No-small-group user:
+- Staff/manager user:
+
+### 5A.2 Staff Schedule Creation QA
+
+Manual steps:
+
+- Log in as staff or Bible Study manager.
+- Open Staff > Bible Study Schedules / 查经安排.
+- Create a Bible Study Schedule scoped to Whole Church / 全教会.
+- Create a Bible Study Schedule scoped to Ministry Context / 事工范围 = CM.
+- Create a Bible Study Schedule scoped to Ministry Context / 事工范围 = EM.
+- Create a Bible Study Schedule scoped to District / 区.
+- Create a Bible Study Schedule scoped to Small Group / 小组.
+- Try saving a MinistryContext-scoped schedule with no MinistryContext selected.
+
+Expected:
+
+- Scope fields are understandable.
+- MinistryContext field appears only as needed, or remains clearly understandable when shown with other scope fields.
+- English and Chinese labels are clear.
+- Whole Church, District, and Small Group behavior still makes sense.
+- Staff can save a MinistryContext-scoped schedule when a MinistryContext is selected.
+- Missing MinistryContext for `ministry_context` scope is rejected.
+- No fake Combined Ministry option is required or created.
+
+### 5A.3 Weekly Guide Creation Under MinistryContext Schedule
+
+Manual steps:
+
+- Create a Weekly Bible Study Guide / 每周查经指引 under the CM-scoped schedule.
+- Create a Weekly Bible Study Guide / 每周查经指引 under the EM-scoped schedule.
+- Publish or complete the schedules and guides as needed for visibility checks.
+- Open each guide detail page.
+
+Expected:
+
+- Guide detail shows the parent Bible Study Schedule / 查经安排 clearly.
+- Staff can identify the schedule and scope before generating meetings.
+- The guide remains church-wide guide content; it does not copy per-group meeting content.
+
+### 5A.4 Meeting Generation Preview And Confirmation
+
+Manual steps for CM:
+
+- Open the CM-scoped weekly guide.
+- Open Review Generation Preview / 查看生成预览.
+- Verify Eligible Small Groups / 符合范围的小组 count.
+- Confirm Generate Missing Meetings / 生成缺少的小组聚会.
+- Repeat generation for the same guide.
+
+Expected for CM:
+
+- Only active small groups under CM districts are counted.
+- EM small groups are excluded.
+- Inactive small groups are excluded.
+- Generated meetings default to Draft.
+- Generated meetings default to the guide date at 19:30 local timezone.
+- Generated meetings link to the weekly guide through `meeting.lesson`.
+- Re-running generation is idempotent and does not duplicate meetings.
+- Existing meeting location, preparation, status, roles, worship set, and notes are not overwritten.
+
+Repeat equivalent steps for EM:
+
+- Only active small groups under EM districts are counted.
+- CM small groups are excluded.
+- Inactive small groups are excluded.
+- Re-running generation is idempotent.
+
+### 5A.5 Normal `/studies/` Visibility
+
+Manual steps:
+
+- Log in as the CM small group user.
+- Visit `/studies/`.
+- Open the user's own visible meeting, if one is published/completed.
+- Log out.
+- Log in as the EM small group user.
+- Visit `/studies/`.
+- Open the user's own visible meeting, if one is published/completed.
+- Log out.
+- Log in as the user with no small group.
+- Visit `/studies/`.
+
+Expected:
+
+- CM user sees only their own small group's published/completed current meeting where applicable.
+- EM user does not see CM meetings.
+- CM user does not see EM meetings.
+- User with no small group sees a safe empty state.
+- No cross-small-group leakage.
+- No cross-MinistryContext leakage.
+- Direct URL access to another group's meeting redirects or is denied safely.
+
+### 5A.6 Staff Meeting List And Detail Sanity
+
+Manual steps:
+
+- Staff opens Small Group Meetings / 小组查经聚会.
+- Confirm generated CM and EM meetings are distinguishable by schedule, guide, and group.
+- Open a generated CM meeting detail page.
+- Open a generated EM meeting detail page.
+
+Expected:
+
+- Staff can tell what meeting belongs to what guide, schedule, and group.
+- Staff detail page displays enough parent guide/schedule context to understand the meeting.
+- No confusing legacy V1 UI is visible.
+- Legacy Bible Study Sessions / 旧版查经安排 is not visible in the normal/staff visible Bible Study flow.
+
+### 5A.7 Bilingual UI
+
+Check English and Chinese labels:
+
+- Bible Study Schedule / 查经安排
+- Weekly Bible Study Guide / 每周查经指引
+- Small Group Meeting / 小组查经聚会
+- Ministry Context / 事工范围
+- Whole Church / 全教会
+- District / 区
+- Small Group / 小组
+
+Expected:
+
+- English and Chinese UI are understandable.
+- No old confusing Bible Study Admin / 查经管理 label reappears.
+- Legacy Bible Study Sessions / 旧版查经安排 is not visible in normal/staff visible UI.
+
+### 5A.8 Mobile QA
+
+Manual steps at mobile width:
+
+- Test staff Bible Study menu.
+- Create and edit schedule form.
+- Schedule detail.
+- Weekly guide detail.
+- Meeting generation page.
+- Normal `/studies/` landing.
+
+Expected:
+
+- Scope fields are usable.
+- Staff dropdown remains usable.
+- No horizontal overflow.
+- Buttons are reachable.
+- Long schedule names and scope labels do not break layout badly.
+- MinistryContext names such as `CM / Chinese Ministry` and `EM / English Ministry` wrap acceptably.
+
+### 5A.9 Regression Checks
+
+Quick browser checks:
+
+- Today still loads.
+- Reading still loads.
+- Prayer still loads.
+- My Serving still loads.
+- Profile still loads.
+- Staff menu still groups correctly.
+- Bible Study normal `/studies/` remains V2, not legacy V1.
+- Meeting generation for whole church/global still works.
+- Meeting generation for district still works.
+- Meeting generation for small group still works.
+
+### 5A.10 Go / No-Go Decision
+
+Go if:
+
+- MinistryContext scope generates correct meetings.
+- No duplicate generation.
+- No cross-context visibility leakage.
+- Staff can understand schedule, guide, and meeting relationship.
+- Normal users see only appropriate own-group content.
+- Bilingual and mobile checks pass.
+
+No-go if:
+
+- CM/EM groups leak across users.
+- Inactive groups receive meetings.
+- Re-generation duplicates meetings.
+- Staff cannot tell which scope generated which meetings.
+- Legacy V1 UI reappears visibly.
+- Mobile schedule/generation flow is unusable.
+
+Sign-off:
+
+- [ ] Go: pass.
+- [ ] Go with minor non-blocking UI issues.
+- [ ] No-go: blocked by data setup.
+- [ ] No-go: blocked by MinistryContext scope selection.
+- [ ] No-go: blocked by meeting generation/idempotency.
+- [ ] No-go: blocked by cross-context visibility/privacy.
+- [ ] No-go: blocked by staff context clarity.
+- [ ] No-go: blocked by bilingual wording.
+- [ ] No-go: blocked by mobile usability.
+
+Notes:
+
+- Tester:
+- Date:
+- Browser/device:
+- Desktop viewport tested:
+- Mobile viewport tested:
+- Language(s) tested:
+- CM user:
+- EM user:
+- User without small group:
+- Staff/manager user:
+- Scope cases tested:
+- Blocking issues:
+- Minor follow-up issues:
+- Go/no-go decision:
 
 ## 6. Meeting Generation From Guide/Scope
 
@@ -451,8 +714,8 @@ Do not treat QA findings as permission to implement or expect:
 - Attendance.
 - Role-aware permissions.
 - Coworker rotation.
-- MinistryContext.
-- CM/EM filtering.
+- Additional MinistryContext integrations beyond Bible Study Schedule scope.
+- Mixed CM/EM audience segment filtering.
 - Full ERP behavior.
 - Worship ministry scheduling system.
 - Small-group coworker role model.

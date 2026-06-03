@@ -1451,6 +1451,97 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
             self.run_backfill_command("--dry-run", "--apply")
 
 
+class ChurchStructureAdminClarityTests(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="structure_admin",
+            email="structure_admin@example.com",
+            password="AdminPass123!",
+        )
+        self.client.login(username="structure_admin", password="AdminPass123!")
+
+    def test_legacy_small_group_admin_explains_current_runtime_source(self):
+        group = SmallGroup.objects.create(name="Rainbow 4")
+
+        response = self.client.get(
+            reverse("admin:accounts_smallgroup_change", args=[group.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Legacy Small Groups")
+        self.assertContains(response, "旧小组")
+        self.assertContains(response, "current runtime still uses this model")
+        self.assertContains(response, "Profile.small_group")
+        self.assertContains(response, "Bridge mapping status")
+
+    def test_legacy_district_and_ministry_context_admin_labels_are_clear(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(name="一区", ministry_context=context)
+
+        context_response = self.client.get(
+            reverse("admin:accounts_ministrycontext_change", args=[context.pk])
+        )
+        district_response = self.client.get(
+            reverse("admin:accounts_district_change", args=[district.pk])
+        )
+
+        self.assertEqual(context_response.status_code, 200)
+        self.assertContains(context_response, "Ministry Contexts")
+        self.assertContains(context_response, "事工范围")
+        self.assertContains(context_response, "current runtime still uses this")
+
+        self.assertEqual(district_response.status_code, 200)
+        self.assertContains(district_response, "Legacy Districts")
+        self.assertContains(district_response, "旧区")
+        self.assertContains(district_response, "current runtime still uses this model")
+
+    def test_church_structure_unit_admin_explains_future_foundation_status(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+        )
+
+        response = self.client.get(
+            reverse("admin:accounts_churchstructureunit_change", args=[unit.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Structure Units")
+        self.assertContains(response, "教会结构单元")
+        self.assertContains(response, "future flexible structure foundation")
+        self.assertContains(response, "does not drive runtime visibility yet")
+        self.assertContains(response, "Path label")
+
+    def test_church_structure_membership_admin_explains_future_belonging_status(self):
+        user = User.objects.create_user(username="membership_admin_member")
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+        )
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        response = self.client.get(
+            reverse(
+                "admin:accounts_churchstructuremembership_change",
+                args=[membership.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Structure Memberships")
+        self.assertContains(response, "教会结构归属")
+        self.assertContains(response, "Runtime still uses Profile.small_group")
+        self.assertContains(response, "Notes must stay operational and non-sensitive")
+
+
 class ChurchRolePermissionTests(TestCase):
     def setUp(self):
         self.district = District.objects.create(name="North")

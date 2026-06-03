@@ -47,6 +47,11 @@ No unresolved production data QA item was reported.
 
 No runtime behavior switch occurred.
 
+CS-H.5E follow-up:
+- Django Admin clarity was improved so legacy current-runtime structure models and future structure/membership foundation models are easier to distinguish.
+- Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` must not be deleted during this transition.
+- Custom staff admin UI remains future work.
+
 ## 5. Runtime Behavior Confirmation
 
 CS-H.5D does not change:
@@ -67,6 +72,8 @@ Membership is not yet the runtime source of truth.
 Requested membership still does not grant visibility.
 
 Backfilled membership does not grant permissions or serving assignments.
+
+CS-H.5E also does not change runtime behavior. It only clarifies Django Admin labels/help text/list displays for staff clarity.
 
 ## 6. Go / No-Go
 

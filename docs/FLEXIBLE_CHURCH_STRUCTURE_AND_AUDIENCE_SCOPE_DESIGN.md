@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, and CS-H.5D records user-attested GoDaddy production/staging backfill verification.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, and CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -198,6 +198,7 @@ CS-H.3 strategy note:
 - CS-H.5B adds helper/query hardening only. Requested, rejected, cancelled, and ended memberships still do not grant visibility.
 - CS-H.5C adds `backfill_church_structure_memberships` for explicit dry-run/apply membership backfill from mapped `Profile.small_group` values. It does not modify `Profile.small_group`, add signup or approval UI, add audience selection or filtering, or migrate any runtime consumer.
 - CS-H.5D records production/staging backfill verification as user-attested. Exact command-output counts were not recorded. No runtime source-of-truth switch is authorized.
+- CS-H.5E improves Django Admin clarity only. Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain current runtime source during transition and must not be deleted yet.
 - Signup/onboarding should collect a requested unit or group for staff review, not direct final self-assignment.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
@@ -234,6 +235,7 @@ CS-H.4 design note:
 - CS-H.5A model-only foundation exists, but current runtime still uses `Profile.small_group`.
 - CS-H.5B query helpers are available for future phases, but no current consumer uses them.
 - CS-H.5C backfill command exists and CS-H.5D production/staging verification is recorded by user confirmation, but no current consumer uses membership yet.
+- CS-H.5E admin clarity exists to reduce staff confusion; custom staff admin UI remains future.
 - See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 ## 6. Audience Selection Model
@@ -363,6 +365,7 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - CS-H.5B completed membership helper/validation hardening. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.5C completed the explicit membership backfill command.
 - CS-H.5D completed production/staging backfill verification by user-attested GoDaddy run; exact output counts were not recorded. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5E completed Django Admin clarity for legacy structure versus future structure/membership foundation. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 
 ### Later Phase: First Audience Consumer
 
@@ -477,6 +480,7 @@ Possible next planning or implementation steps:
 - CS-H.5B membership model hardening/tests. Completed.
 - CS-H.5C membership backfill command with dry-run/apply. Completed.
 - CS-H.5D production/staging backfill verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
+- CS-H.5E Django Admin clarity for legacy structure vs future structure/membership foundation. Completed.
 - Later audience selection model design for one consumer.
 - CA-V1.1 Community Activities planning refinement.
 - PP-SA.1 Staff Admin Surface Expansion Plan.

@@ -23,6 +23,7 @@
 - CS-H.6 Signup Requested-Unit Flow Design Doc is complete.
 - CS-H.7 Admin Approval Workflow Design Doc is complete.
 - CS-H.7A Membership Approval Workflow Implementation Plan is complete.
+- CS-H.7B/C Membership Approval Capability + Pending Request List is complete.
 
 The pilot closure decision is Go. No `v0.9-pilot-rc2` is required unless new pilot issues are discovered.
 
@@ -94,6 +95,7 @@ Likely candidates:
 - CS-H.6 Signup Requested-Unit Flow Design Doc. Completed.
 - CS-H.7 Admin Approval Workflow Design Doc. Completed.
 - CS-H.7A Membership Approval Workflow Implementation Plan. Completed.
+- CS-H.7B/C Membership Approval Capability + Pending Request List. Completed.
 - ServiceEvent audience/filtering design doc.
 - Staff Admin Surface Expansion plan.
 - Deployment/operations hardening plan.
@@ -143,12 +145,13 @@ These remain future modules. Do not start implementation until post-pilot eviden
 17. CS-H.6 Signup Requested-Unit Flow Design Doc completed.
 18. CS-H.7 Admin Approval Workflow Design Doc completed.
 19. CS-H.7A Membership Approval Workflow Implementation Plan completed.
-20. Plan CS-H.7B capability/list implementation or CS-H.6A signup request capture implementation if needed.
-21. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
-22. Revisit Community Activities only after the audience model is clarified.
-23. Revisit Checklist V1 only if ministry pilot feedback proves need.
+20. CS-H.7B/C Membership Approval Capability + Pending Request List completed.
+21. Plan CS-H.7D request detail/approve/reject actions or CS-H.6A signup request capture implementation if needed.
+22. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
+23. Revisit Community Activities only after the audience model is clarified.
+24. Revisit Checklist V1 only if ministry pilot feedback proves need.
 
-CS-H.6, CS-H.7, and CS-H.7A are design/planning only. CS-H.5E improves Django Admin clarity only. Exact CS-H.5D command-output counts were not recorded. Current runtime behavior still uses the legacy models and `Profile.small_group`. Signup/onboarding assignment changes, approval UI, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and custom Staff Admin implementation remain future phased work.
+CS-H.6, CS-H.7, and CS-H.7A are design/planning only. CS-H.7B/C adds only the membership-management capability and a read-only pending request list. CS-H.5E improves Django Admin clarity only. Exact CS-H.5D command-output counts were not recorded. Current runtime behavior still uses the legacy models and `Profile.small_group`. Signup/onboarding assignment changes, approve/reject actions, `Profile.small_group` approval sync, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and custom Staff Admin implementation remain future phased work.
 
 ## 5. Decision Framework
 
@@ -192,6 +195,7 @@ Include these as planning options only. Do not start them from this triage docum
 - CS-H.6 Signup Requested-Unit Flow Design Doc. Completed.
 - CS-H.7 Admin Approval Workflow Design Doc. Completed.
 - CS-H.7A Membership Approval Workflow Implementation Plan. Completed.
+- CS-H.7B/C Membership Approval Capability + Pending Request List. Completed.
 - PP-SA.1 Staff Admin Surface Expansion Plan.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
@@ -204,4 +208,4 @@ Roadmap documents should remain aligned on these points:
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
 - Large deferred items remain deferred pending real pilot feedback.
-- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6 records signup requested-unit flow design, CS-H.7 records admin approval workflow design, and CS-H.7A records approval implementation planning. Runtime still uses legacy models and `Profile.small_group`. Signup/onboarding code changes, approval UI, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.
+- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6 records signup requested-unit flow design, CS-H.7 records admin approval workflow design, CS-H.7A records approval implementation planning, and CS-H.7B/C adds the membership-management capability plus read-only pending request list. Runtime still uses legacy models and `Profile.small_group`. Signup/onboarding code changes, approve/reject actions, `Profile.small_group` approval sync, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.

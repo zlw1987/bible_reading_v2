@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ui.membership_requests }} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{{ ui.membership_requests }}</h1>
+    <p class="page-subtitle">
+        {{ ui.membership_requests_subtitle }}
+    </p>
+</div>
+
+<div class="card">
+    <p class="form-help">{{ ui.notes_must_be_non_sensitive }}</p>
+</div>
+
+<div class="card">
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{{ ui.username }}</th>
+                    <th>{{ ui.requested_unit }}</th>
+                    <th>{{ ui.requested_by }}</th>
+                    <th>{{ ui.submitted }}</th>
+                    <th>{{ ui.current_small_group }}</th>
+                    <th>{{ ui.request_note }}</th>
+                    <th>{{ ui.status }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in membership_rows %}
+                {% with membership=row.membership %}
+                <tr>
+                    <td>{{ membership.user.username }}</td>
+                    <td>{{ row.unit_path }}</td>
+                    <td>
+                        {% if membership.requested_by %}
+                        {{ membership.requested_by.username }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ membership.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if membership.user.profile.small_group %}
+                        {{ membership.user.profile.small_group.name }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ membership.notes|truncatechars:80|default:"-" }}</td>
+                    <td><span class="status status-warning">{{ membership.get_status_display }}</span></td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr>
+                    <td colspan="7">{{ ui.no_membership_requests_found }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

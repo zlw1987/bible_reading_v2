@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
@@ -11,9 +11,14 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 
 from .forms import ProfileForm, SignUpForm, StaffPasswordResetForm
-from .language import set_user_language
+from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
-from .models import Profile
+from .models import ChurchStructureMembership, Profile
+from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
+
+
+def can_manage_church_memberships(user):
+    return has_capability(user, CAP_MANAGE_CHURCH_MEMBERSHIPS)
 
 def signup(request):
     if request.method == "POST":
@@ -150,5 +155,38 @@ def staff_user_password_reset(request, user_id):
         {
             "target_user": target_user,
             "form": form,
+        },
+    )
+
+
+@user_passes_test(can_manage_church_memberships)
+def staff_membership_request_list(request):
+    memberships = (
+        ChurchStructureMembership.objects
+        .filter(status=ChurchStructureMembership.STATUS_REQUESTED)
+        .select_related(
+            "user",
+            "user__profile",
+            "user__profile__small_group",
+            "unit",
+            "unit__parent",
+            "requested_by",
+        )
+        .order_by("-created_at", "user__username", "id")
+    )
+    language = get_user_language(request)
+    membership_rows = [
+        {
+            "membership": membership,
+            "unit_path": membership.unit.path_label(language),
+        }
+        for membership in memberships
+    ]
+
+    return render(
+        request,
+        "accounts/staff/membership_request_list.html",
+        {
+            "membership_rows": membership_rows,
         },
     )

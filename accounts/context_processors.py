@@ -67,6 +67,7 @@ STAFF_NAV_URLS = {
     "staff_prayer_action",
     "staff_user_list",
     "staff_user_password_reset",
+    "staff_membership_request_list",
     "service_event_list",
     "create_service_event",
     "create_recurring_service_events",

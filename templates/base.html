@@ -78,6 +78,9 @@
                         <a href="{% url 'staff_user_list' %}">
                             {% if language == "zh" %}用户管理{% else %}User Admin{% endif %}
                         </a>
+                        <a href="{% url 'staff_membership_request_list' %}">
+                            {{ ui.membership_requests }}
+                        </a>
                         <a href="{% url 'staff_reflection_reports' %}">
                             {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
                         </a>

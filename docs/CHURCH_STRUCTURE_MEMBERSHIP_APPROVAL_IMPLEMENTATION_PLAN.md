@@ -11,8 +11,8 @@ Runtime still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.sma
 ## 2. Implementation Slices
 
 Recommended small phases:
-- CS-H.7B: capability constant/check planning or implementation.
-- CS-H.7C: staff-only pending requested memberships list.
+- CS-H.7B: capability constant/check implementation. Completed.
+- CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail with approve/reject actions.
 - CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships.
 - CS-H.7F: browser QA and docs closure.
@@ -32,6 +32,15 @@ That means:
 - do not change signup behavior
 
 Reasoning: the pending list lets staff inspect future request data and validates permissions/query shape without introducing write actions. Approve/reject should wait until the list, authorization, and display context are proven.
+
+CS-H.7B/C implementation status:
+- `CAP_MANAGE_CHURCH_MEMBERSHIPS` exists in the project capability system.
+- Staff/superuser users receive the capability through the existing override pattern.
+- Pastor/elder role assignments receive the capability through the existing role capability map.
+- Membership records themselves do not grant this capability.
+- A read-only staff/capability-gated pending request list exists.
+- The list shows only `status=requested` memberships.
+- No approve, reject, cancel, needs-clarification, signup, `Profile.small_group` sync, or runtime consumer migration behavior was added.
 
 ## 4. Data Behavior
 
@@ -82,7 +91,7 @@ Capability behavior:
 - membership in a unit must not grant approval permission
 - requested or active membership must not imply staff access
 
-The actual capability implementation is future work. CS-H.7A only records the intended shape.
+The initial capability implementation is complete for CS-H.7B/C. Further capability refinement can happen in later implementation slices if staff approval rules become more granular.
 
 ## 8. UI and UX
 
@@ -109,6 +118,8 @@ Future actions:
 - approve as different unit
 - reject or cancel
 - mark needs clarification if supported
+
+CS-H.7B/C intentionally does not include these actions.
 
 Bilingual labels should be supported. Mobile should be reasonable, but staff desktop can be V1 priority.
 
@@ -151,8 +162,8 @@ CS-H.7A does not include:
 
 Recommended next sequence:
 - CS-H.7A: Membership Approval Workflow Implementation Plan. Completed by this document.
-- CS-H.7B: capability constant/check implementation or detailed implementation planning.
-- CS-H.7C: staff-only pending requested memberships list.
+- CS-H.7B: capability constant/check implementation. Completed.
+- CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail and approve/reject actions.
 - CS-H.7E: explicit `Profile.small_group` sync behavior.
 - CS-H.7F: browser QA and docs closure.

@@ -19,6 +19,7 @@ from accounts.models import (
     SmallGroup,
 )
 from accounts.permissions import (
+    CAP_MANAGE_CHURCH_MEMBERSHIPS,
     CAP_PUBLISH_READING_GUIDES,
     CAP_VIEW_ALL_GROUP_PROGRESS,
     CAP_VIEW_DISTRICT_PROGRESS,
@@ -1603,10 +1604,20 @@ class ChurchRolePermissionTests(TestCase):
         self.assertTrue(has_capability(self.staff, CAP_VIEW_ALL_GROUP_PROGRESS))
         self.assertTrue(has_capability(self.staff, CAP_VIEW_DISTRICT_PROGRESS))
         self.assertTrue(has_capability(self.staff, CAP_VIEW_GROUP_PROGRESS))
+        self.assertTrue(has_capability(self.staff, CAP_MANAGE_CHURCH_MEMBERSHIPS))
+
+    def test_superuser_has_membership_management_capability(self):
+        superuser = User.objects.create_superuser(
+            username="super_roles",
+            password="TestPass123!",
+        )
+
+        self.assertTrue(has_capability(superuser, CAP_MANAGE_CHURCH_MEMBERSHIPS))
 
     def test_regular_user_without_role_has_no_capabilities(self):
         self.assertFalse(has_capability(self.user, CAP_PUBLISH_READING_GUIDES))
         self.assertFalse(has_capability(self.user, CAP_VIEW_ALL_GROUP_PROGRESS))
+        self.assertFalse(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
 
     def test_pastor_assignment_grants_expected_capabilities(self):
         ChurchRoleAssignment.objects.create(
@@ -1617,6 +1628,23 @@ class ChurchRolePermissionTests(TestCase):
 
         self.assertTrue(has_capability(self.user, CAP_PUBLISH_READING_GUIDES))
         self.assertTrue(has_capability(self.user, CAP_VIEW_ALL_GROUP_PROGRESS))
+        self.assertTrue(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
+
+    def test_membership_alone_does_not_grant_membership_management_capability(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        self.assertFalse(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
 
     def test_district_leader_gets_only_assigned_district_groups(self):
         ChurchRoleAssignment.objects.create(
@@ -1650,6 +1678,170 @@ class ChurchRolePermissionTests(TestCase):
         groups = list(get_accessible_progress_groups(self.user))
 
         self.assertEqual(groups, [self.group])
+
+
+class StaffMembershipRequestListTests(TestCase):
+    def setUp(self):
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.user = User.objects.create_user(
+            username="request_user",
+            password="TestPass123!",
+        )
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+        self.requester = User.objects.create_user(
+            username="requester",
+            password="TestPass123!",
+        )
+        self.staff = User.objects.create_user(
+            username="membership_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="normal_user",
+            password="TestPass123!",
+        )
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+            name_en="Rainbow 4",
+        )
+        self.other_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW5",
+            name="Rainbow 5",
+            name_en="Rainbow 5",
+        )
+
+    def create_membership(self, **overrides):
+        defaults = {
+            "user": self.user,
+            "unit": self.unit,
+            "requested_by": self.requester,
+            "status": ChurchStructureMembership.STATUS_REQUESTED,
+            "notes": "I attend Rainbow 4.",
+        }
+        defaults.update(overrides)
+        return ChurchStructureMembership.objects.create(**defaults)
+
+    def test_pending_list_requires_login(self):
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_normal_user_without_permission_cannot_access_pending_list(self):
+        self.client.login(username="normal_user", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_can_view_pending_requested_memberships(self):
+        self.create_membership()
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Membership Requests")
+        self.assertContains(response, "request_user")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "requester")
+        self.assertContains(response, "I attend Rainbow 4.")
+        self.assertContains(response, "Requested")
+        self.assertNotContains(response, "Approve")
+        self.assertNotContains(response, "Reject")
+
+    def test_chinese_pending_list_uses_chinese_labels(self):
+        self.create_membership()
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "会籍申请")
+        self.assertContains(response, "申请单位")
+        self.assertContains(response, "当前小组")
+        self.assertContains(response, "备注必须只包含非敏感")
+
+    def test_pending_list_excludes_active_memberships(self):
+        self.create_membership()
+        active_user = User.objects.create_user(username="active_member")
+        ChurchStructureMembership.objects.create(
+            user=active_user,
+            unit=self.other_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            notes="Already active.",
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "request_user")
+        self.assertNotContains(response, "active_member")
+        self.assertNotContains(response, "Already active.")
+
+    def test_user_with_capability_can_view_pending_list(self):
+        ChurchRoleAssignment.objects.create(
+            user=self.normal_user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        self.create_membership()
+        self.client.login(username="normal_user", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "request_user")
+
+    def test_membership_alone_does_not_allow_pending_list_access(self):
+        ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.client.login(username="normal_user", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_requested_membership_does_not_change_service_event_visibility(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="District Group", district=district)
+        self.create_membership(user=self.normal_user)
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
+
+        self.normal_user.profile.small_group = group
+        self.normal_user.profile.save()
+
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
 
 
 class StaffPasswordResetTests(TestCase):

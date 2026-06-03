@@ -23,6 +23,11 @@ urlpatterns = [
 
     path("staff/users/", views.staff_user_list, name="staff_user_list"),
     path(
+        "staff/membership-requests/",
+        views.staff_membership_request_list,
+        name="staff_membership_request_list",
+    ),
+    path(
         "staff/users/<int:user_id>/password/",
         views.staff_user_password_reset,
         name="staff_user_password_reset",

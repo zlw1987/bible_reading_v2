@@ -147,10 +147,15 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - CS-F.3 ServiceEvent MinistryContext label foundation completed.
-- RC-P.2 Pilot Release Candidate Readiness Pass before pilot validation.
+- RC-P.2 Pilot Release Candidate Readiness Pass completed.
+- RC-P.3 Pilot release candidate tag `v0.9-pilot-rc1` created and pushed.
+- RC-P.4 Pilot Validation Runbook prepared for pilot validation.
+- `v0.9-pilot-rc1` deployed and pilot validation passed.
+- Current next phase: Post-Pilot Backlog Planning.
+- Deferred items remain deferred unless pilot feedback elevates them.
 - Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
-- Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
+- Lighting Pilot operational follow-up and Community Activities planning should be classified through post-pilot backlog planning before implementation.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
-- Checklist V1 remains deferred until Lighting Pilot validation.
+- Checklist V1 remains deferred unless pilot feedback proves need.

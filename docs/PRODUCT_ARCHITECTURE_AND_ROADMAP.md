@@ -301,14 +301,14 @@ V2 correction after browser review:
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support are in closure / QA / stabilization.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`.
 
 Current foundation step:
 
-Bible Study V2 Flow QA has passed. CS-F.1 MinistryContext bridge foundation is complete, CS-F.2 adds MinistryContext as a Bible Study Schedule scope, and CS-F.3 adds optional ServiceEvent MinistryContext labeling.
+Bible Study V2 Flow QA has passed. CS-F.1 MinistryContext bridge foundation is complete, CS-F.2 adds MinistryContext as a Bible Study Schedule scope, and CS-F.3 adds optional ServiceEvent MinistryContext labeling. `v0.9-pilot-rc1` was deployed and pilot validation passed.
 
-Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future.
-Checklist V1 remains deferred until Lighting Pilot validation and should not be revived because of Community Activities.
+Checklist, availability, swap requests, reminder automation, and advanced scheduling remain future unless pilot feedback elevates a specific need.
+Checklist V1 remains deferred and should not be revived without pilot feedback proving need.
 
 Before new large features:
 - Keep tests passing.
@@ -544,17 +544,17 @@ For feature tasks:
 
 Current foundation status:
 
-CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Schedule scope, and CS-F.3 optional ServiceEvent MinistryContext labeling are complete after the Bible Study V2 Flow QA pass.
+CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Schedule scope, and CS-F.3 optional ServiceEvent MinistryContext labeling are complete after the Bible Study V2 Flow QA pass. `v0.9-pilot-rc1` was deployed and pilot validation passed.
 
-Current pilot-readiness step:
+Current post-pilot step:
 
-RC-P.2 Pilot Release Candidate Readiness Pass documents the final pilot scope, manual QA checklist, blockers, known limitations, and sign-off criteria before pilot validation.
+PV-C.1 records pilot validation closure. The current next phase is Post-Pilot Backlog Planning: collect real pilot feedback, classify issues by severity, and only then choose hotfixes, near-term usability improvements, backlog items, or larger architecture planning.
 
 Future foundation planning:
 
 Flexible `ChurchStructureUnit` remains future planning work after the short-term bridge and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Checklist V1 remains deferred until Lighting Pilot validation.
+Checklist V1 remains deferred unless pilot feedback elevates it.
 
 Not next:
 - Lighting Team-specific model

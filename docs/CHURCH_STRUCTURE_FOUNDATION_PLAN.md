@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, and CS-H.3 records the mapping/membership/source-of-truth strategy. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, and CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -59,7 +59,8 @@ Current code assumptions:
 - CS-H.2 adds `ChurchStructureUnit` as a model-only flexible tree foundation.
 - CS-H.2A adds indirect cycle validation and safe ancestor/path display for corrupted tree states.
 - CS-H.3 records that long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
-- There is no `ChurchStructureUnit` data seeding or mapping yet.
+- CS-H.3B adds nullable `church_structure_unit` mapping fields on `MinistryContext`, `District`, and `SmallGroup`.
+- There is no `ChurchStructureUnit` data seeding yet.
 - There is no `ChurchStructureMembership` model yet.
 - Current Bible Study schedule scope uses:
   - whole church
@@ -185,7 +186,7 @@ Short term:
 - Keep `District` and `SmallGroup`.
 - Keep `MinistryContext` as the bridge for CM/EM.
 - Keep `Profile.small_group` as the current primary-small-group field.
-- Keep `ChurchStructureUnit` model-only until a separate seeding/mapping task.
+- Keep `ChurchStructureUnit` mapping fields optional and non-runtime until a separate seeding/mapping task.
 - Keep signup/onboarding assignment approval separate from final membership.
 
 Long term:
@@ -297,6 +298,7 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-H.2 adds model-only `ChurchStructureUnit` foundation with no seeding, no mapping, no audience selection, and no filtering
 - CS-H.2A hardens `ChurchStructureUnit` cycle validation without adding seeding, mapping, audience selection, or filtering
 - CS-H.3 records mapping, membership, and signup/onboarding approval strategy without implementation
+- CS-H.3B adds nullable legacy mapping fields without seeding, runtime behavior changes, membership, audience selection, or filtering
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
@@ -310,6 +312,7 @@ This plan documents:
 - implemented short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
 - CS-H.3 long-term source-of-truth decision: `ChurchStructureUnit` plus `ChurchStructureMembership`
 - CS-H.3 signup/onboarding direction: requested unit plus staff approval, not direct self-assignment
+- CS-H.3B nullable mapping fields from legacy structure models to `ChurchStructureUnit`
 - no current `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
 - Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later

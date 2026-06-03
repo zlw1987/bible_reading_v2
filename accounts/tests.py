@@ -424,6 +424,7 @@ class MinistryContextBridgeTests(TestCase):
         self.assertEqual(context.code, "CM")
         self.assertEqual(str(context), "CM - Chinese Ministry")
         self.assertTrue(context.is_active)
+        self.assertIsNone(context.church_structure_unit)
 
     def test_ministry_context_code_is_normalized_to_uppercase(self):
         context = MinistryContext.objects.create(
@@ -448,6 +449,13 @@ class MinistryContextBridgeTests(TestCase):
 
         district.full_clean()
         self.assertIsNone(district.ministry_context)
+        self.assertIsNone(district.church_structure_unit)
+
+    def test_small_group_can_be_created_without_church_structure_unit(self):
+        group = SmallGroup.objects.create(name="Rainbow without mapping")
+
+        group.full_clean()
+        self.assertIsNone(group.church_structure_unit)
 
     def test_small_group_still_belongs_to_district(self):
         district = District.objects.create(name="District 1")
@@ -455,6 +463,49 @@ class MinistryContextBridgeTests(TestCase):
 
         self.assertEqual(group.district, district)
         self.assertIn(group, district.small_groups.all())
+
+    def test_ministry_context_can_link_to_church_structure_unit(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+        )
+        context = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            church_structure_unit=unit,
+        )
+
+        self.assertEqual(context.church_structure_unit, unit)
+        self.assertIn(context, unit.legacy_ministry_contexts.all())
+
+    def test_district_can_link_to_church_structure_unit(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="第一区",
+        )
+        district = District.objects.create(
+            name="District 1",
+            church_structure_unit=unit,
+        )
+
+        self.assertEqual(district.church_structure_unit, unit)
+        self.assertIn(district, unit.legacy_districts.all())
+
+    def test_small_group_can_link_to_church_structure_unit(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+        )
+        group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            church_structure_unit=unit,
+        )
+
+        self.assertEqual(group.church_structure_unit, unit)
+        self.assertIn(group, unit.legacy_small_groups.all())
 
     def test_profile_small_group_behavior_is_unchanged(self):
         district = District.objects.create(name="District 1")

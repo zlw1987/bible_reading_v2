@@ -11,28 +11,60 @@ from .models import (
 
 @admin.register(MinistryContext)
 class MinistryContextAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "name_en", "is_active", "sort_order", "created_at")
-    list_filter = ("is_active",)
-    search_fields = ("code", "name", "name_en", "description", "description_en")
+    list_display = (
+        "code",
+        "name",
+        "name_en",
+        "church_structure_unit",
+        "is_active",
+        "sort_order",
+        "created_at",
+    )
+    list_filter = ("is_active", "church_structure_unit")
+    search_fields = (
+        "code",
+        "name",
+        "name_en",
+        "description",
+        "description_en",
+        "church_structure_unit__code",
+        "church_structure_unit__name",
+        "church_structure_unit__name_en",
+    )
 
 
 @admin.register(District)
 class DistrictAdmin(admin.ModelAdmin):
-    list_display = ("name", "ministry_context", "is_active", "created_at")
-    list_filter = ("ministry_context", "is_active")
+    list_display = (
+        "name",
+        "ministry_context",
+        "church_structure_unit",
+        "is_active",
+        "created_at",
+    )
+    list_filter = ("ministry_context", "church_structure_unit", "is_active")
     search_fields = (
         "name",
         "ministry_context__code",
         "ministry_context__name",
         "ministry_context__name_en",
+        "church_structure_unit__code",
+        "church_structure_unit__name",
+        "church_structure_unit__name_en",
     )
 
 
 @admin.register(SmallGroup)
 class SmallGroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "district", "is_active")
-    list_filter = ("district", "is_active")
-    search_fields = ("name", "district__name")
+    list_display = ("name", "district", "church_structure_unit", "is_active")
+    list_filter = ("district", "church_structure_unit", "is_active")
+    search_fields = (
+        "name",
+        "district__name",
+        "church_structure_unit__code",
+        "church_structure_unit__name",
+        "church_structure_unit__name_en",
+    )
 
 
 @admin.register(ChurchStructureUnit)

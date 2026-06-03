@@ -10,6 +10,7 @@
 - CS-H.2 ChurchStructureUnit model-only foundation is complete.
 - CS-H.2A ChurchStructureUnit model hardening is complete.
 - CS-H.3 Current Structure Mapping and Membership Strategy Design is complete.
+- CS-H.3B nullable legacy-to-ChurchStructureUnit mapping fields are complete.
 
 The pilot closure decision is Go. No `v0.9-pilot-rc2` is required unless new pilot issues are discovered.
 
@@ -68,6 +69,7 @@ Likely candidates:
 - CS-H.2 ChurchStructureUnit model-only foundation.
 - CS-H.2A ChurchStructureUnit model hardening.
 - CS-H.3 Current Structure Mapping and Membership Strategy Design.
+- CS-H.3B Legacy Structure Mapping Fields, Model-Only.
 - ServiceEvent audience/filtering design doc.
 - Staff Admin Surface Expansion plan.
 - Deployment/operations hardening plan.
@@ -104,11 +106,13 @@ These remain future modules. Do not start implementation until post-pilot eviden
 4. CS-H.2 `ChurchStructureUnit` model-only foundation completed.
 5. CS-H.2A `ChurchStructureUnit` model hardening completed.
 6. CS-H.3 current structure mapping and membership strategy completed.
-7. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
-8. Revisit Community Activities only after the audience model is clarified.
-9. Revisit Checklist V1 only if ministry pilot feedback proves need.
+7. CS-H.3B nullable legacy-to-`ChurchStructureUnit` mapping fields completed.
+8. CS-H.3C idempotent structure seeding/mapping should be a separate future task.
+9. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
+10. Revisit Community Activities only after the audience model is clarified.
+11. Revisit Checklist V1 only if ministry pilot feedback proves need.
 
-CS-H.3 is design-only. `ChurchStructureUnit` seeding/mapping, `ChurchStructureMembership`, signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
+CS-H.3B is model-only. `ChurchStructureUnit` data seeding/mapping, `ChurchStructureMembership`, signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
 
 ## 5. Decision Framework
 
@@ -139,6 +143,7 @@ Include these as planning options only. Do not start them from this triage docum
 - CS-H.2 ChurchStructureUnit model-only foundation. Completed.
 - CS-H.2A ChurchStructureUnit model hardening. Completed.
 - CS-H.3 Current Structure Mapping and Membership Strategy Design. Completed.
+- CS-H.3B Legacy Structure Mapping Fields, Model-Only. Completed.
 - PP-SA.1 Staff Admin Surface Expansion Plan.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
@@ -151,4 +156,4 @@ Roadmap documents should remain aligned on these points:
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
 - Large deferred items remain deferred pending real pilot feedback.
-- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, but seeding/mapping, `ChurchStructureMembership`, signup/onboarding changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.
+- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, and CS-H.3B adds nullable legacy mapping fields, but data seeding/mapping, `ChurchStructureMembership`, signup/onboarding changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.

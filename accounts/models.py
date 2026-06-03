@@ -11,6 +11,17 @@ class MinistryContext(models.Model):
     description_en = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
+    church_structure_unit = models.ForeignKey(
+        "ChurchStructureUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legacy_ministry_contexts",
+        help_text=(
+            "Optional bridge to the future ChurchStructureUnit tree. "
+            "Not required and does not change current runtime behavior."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -37,6 +48,17 @@ class District(models.Model):
         blank=True,
         related_name="districts",
     )
+    church_structure_unit = models.ForeignKey(
+        "ChurchStructureUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legacy_districts",
+        help_text=(
+            "Optional bridge to the future ChurchStructureUnit tree. "
+            "Not required and does not change current runtime behavior."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -55,6 +77,17 @@ class SmallGroup(models.Model):
         null=True,
         blank=True,
         related_name="small_groups",
+    )
+    church_structure_unit = models.ForeignKey(
+        "ChurchStructureUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="legacy_small_groups",
+        help_text=(
+            "Optional bridge to the future ChurchStructureUnit tree. "
+            "Not required and does not change current runtime behavior."
+        ),
     )
     is_active = models.BooleanField(default=True)
 

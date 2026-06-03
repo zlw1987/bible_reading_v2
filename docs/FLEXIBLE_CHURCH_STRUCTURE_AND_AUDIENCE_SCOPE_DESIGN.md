@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, and CS-H.3 records the mapping, membership, and signup/onboarding strategy.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, and CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -189,6 +189,7 @@ CS-H.2 implementation note:
 CS-H.3 strategy note:
 - Long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
 - Short-term runtime behavior continues to use `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.3B adds nullable mapping fields from `MinistryContext`, `District`, and `SmallGroup` to `ChurchStructureUnit`, but they do not drive current behavior.
 - Signup/onboarding should collect a requested unit or group for staff review, not direct final self-assignment.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
@@ -440,7 +441,7 @@ Possible next planning or implementation steps:
 - CS-H.2 ChurchStructureUnit model-only foundation. Completed.
 - CS-H.2A ChurchStructureUnit model hardening. Completed.
 - CS-H.3 current structure mapping and membership strategy. Completed.
-- CS-H.3B mapping fields/table model-only.
+- CS-H.3B nullable legacy mapping fields model-only. Completed.
 - CS-H.3C idempotent structure seeding.
 - CS-H.4 audience selection model design for one consumer.
 - CA-V1.1 Community Activities planning refinement.

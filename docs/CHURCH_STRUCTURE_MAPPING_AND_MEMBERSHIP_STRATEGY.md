@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This is a planning document only. It does not implement models, migrations, seed data, signup changes, audience selection, filtering, or admin UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. It does not seed data, migrate existing records into the tree, change signup, add membership, add audience selection, add filtering, or add staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -17,6 +17,7 @@ Long-term target:
 Short-term transition:
 - `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of truth for current runtime behavior.
 - `ChurchStructureUnit` is initially a mirror or mapped structure.
+- CS-H.3B adds nullable mapping fields on the legacy structure models, but those fields do not drive runtime behavior.
 - No existing behavior should switch to `ChurchStructureUnit` until a specific consumer is planned, implemented, and tested.
 
 Current pilot behavior must remain stable:
@@ -45,6 +46,7 @@ Recommended transition stance:
 - Legacy models remain editable source-of-truth until mapping is seeded and verified.
 - `ChurchStructureUnit` mirrors them at first.
 - Only after admin QA should any staff workflow edit structure through `ChurchStructureUnit`.
+- CS-H.3B prepares this by adding nullable mapping fields only; CS-H.3C owns idempotent seeding/mapping.
 
 ## 4. Membership Strategy
 
@@ -131,6 +133,8 @@ Add fields such as:
 - `District.church_structure_unit`
 - `SmallGroup.church_structure_unit`
 
+CS-H.3B status: selected and implemented as nullable, permissive mapping fields.
+
 Pros:
 - Clear and easy to inspect.
 - Simple joins from current runtime models to the future tree.
@@ -175,7 +179,7 @@ Cons:
 - High drift risk.
 
 Recommendation:
-- Prefer explicit nullable FK mapping fields on existing models if migration risk is acceptable.
+- Prefer explicit nullable FK mapping fields on existing models if migration risk is acceptable. CS-H.3B follows this recommendation.
 - Use a separate mapping table only if keeping legacy models completely untouched is more important.
 - Do not rely on name/code matching only.
 
@@ -191,7 +195,8 @@ CHURCH / Whole Church / 全教会
 ```
 
 Rules:
-- No seeding in CS-H.3.
+- No seeding in CS-H.3 or CS-H.3B.
+- CS-H.3C should handle idempotent seeding/mapping of existing `MinistryContext`, `District`, and `SmallGroup` records into `ChurchStructureUnit`.
 - Seeding must be idempotent.
 - Do not delete legacy records.
 - Do not drop orphan records.
@@ -274,7 +279,7 @@ Membership does not automatically assign serving roles.
 
 Recommended phases:
 - CS-H.3: design mapping/membership strategy.
-- CS-H.3B: choose and implement mapping fields/table model-only.
+- CS-H.3B: choose and implement mapping fields/table model-only. Completed with nullable FKs on legacy structure models.
 - CS-H.3C: seed root and current structure idempotently.
 - CS-H.3D: admin sanity QA, no runtime behavior change.
 - CS-H.4: design `ChurchStructureMembership` model.
@@ -309,9 +314,7 @@ Mitigation direction:
 
 ## 14. Non-Goals
 
-CS-H.3 does not include:
-- implementation
-- migration
+CS-H.3/CS-H.3B do not include:
 - seeding
 - signup changes
 - membership model
@@ -342,5 +345,5 @@ Open decisions:
 Current recommendation:
 - long-term source of truth: `ChurchStructureUnit` + `ChurchStructureMembership`
 - short-term runtime source of truth: current legacy models
-- mapping: explicit nullable FK fields if migration risk is acceptable
+- mapping: explicit nullable FK fields, added in CS-H.3B
 - signup: requested unit plus admin approval, never direct final self-assignment

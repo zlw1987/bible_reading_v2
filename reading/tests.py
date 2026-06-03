@@ -1,5 +1,6 @@
 import os
 import tempfile
+from pathlib import Path
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -2591,16 +2592,31 @@ class BibleReadingFlowTests(TestCase):
         self.client.login(username="admin", password="testpass123")
 
         response = self.client.get(reverse("staff_reading_plan_list"))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Reading Plan Admin")
         self.assertContains(response, self.plan.name)
+        self.assertIn("staff-plan-table-card", content)
+        self.assertIn("staff-plan-card-list", content)
+        self.assertIn("staff-plan-card-actions", content)
+        self.assertContains(response, "Edit Header")
+        self.assertContains(response, "Edit Days")
+        self.assertContains(
+            response,
+            reverse("staff_reading_plan_header", args=[self.plan.id]),
+        )
+        self.assertContains(
+            response,
+            reverse("staff_reading_plan_days", args=[self.plan.id]),
+        )
 
     def test_chinese_reading_plan_admin_list_uses_chinese_labels(self):
         self.set_language("zh")
         self.client.login(username="admin", password="testpass123")
 
         response = self.client.get(reverse("staff_reading_plan_list"))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "读经计划管理")
@@ -2610,9 +2626,29 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "编辑标题")
         self.assertContains(response, "编辑每日内容")
         self.assertContains(response, "启用")
+        self.assertIn("staff-plan-card-list", content)
+        self.assertIn("staff-plan-card-actions", content)
+        self.assertContains(
+            response,
+            reverse("staff_reading_plan_header", args=[self.plan.id]),
+        )
+        self.assertContains(
+            response,
+            reverse("staff_reading_plan_days", args=[self.plan.id]),
+        )
         self.assertNotContains(response, "Reading Plan Admin")
         self.assertNotContains(response, "Edit reading plan headers")
 
+    def test_reading_plan_admin_mobile_cards_replace_table_layout(self):
+        css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
+        css = css_path.read_text(encoding="utf-8")
+
+        self.assertIn(".staff-plan-card-list", css)
+        self.assertIn(".staff-plan-table-card", css)
+        self.assertIn("display: none;", css)
+        self.assertIn("display: grid;", css)
+        self.assertIn(".staff-plan-card-actions .button", css)
+        self.assertIn("white-space: nowrap;", css)
 
     def test_non_staff_cannot_access_reading_plan_admin_list(self):
         self.client.login(username="levin", password="testpass123")

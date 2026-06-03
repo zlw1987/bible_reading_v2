@@ -435,6 +435,14 @@ th {
     overflow: hidden;
 }
 
+.staff-plan-card-list {
+    display: none;
+}
+
+.staff-plan-card-actions .button {
+    white-space: nowrap;
+}
+
 .actions {
     display: flex;
     gap: 10px;
@@ -494,21 +502,21 @@ th {
 
     .nav-staff-menu[open] .nav-staff-menu-panel {
         position: fixed;
-        top: var(--staff-menu-top, 72px);
-        right: 16px;
-        right: max(16px, env(safe-area-inset-right));
+        top: 88px;
+        right: 12px;
+        right: max(12px, env(safe-area-inset-right));
         bottom: 12px;
         bottom: max(12px, env(safe-area-inset-bottom));
-        left: var(--staff-menu-left, 16px);
+        left: 12px;
+        left: max(12px, env(safe-area-inset-left));
         width: auto;
         min-width: 0;
         max-width: none;
-        max-height: calc(100vh - var(--staff-menu-top, 72px) - 12px);
-        max-height: calc(100dvh - var(--staff-menu-top, 72px) - max(12px, env(safe-area-inset-bottom)));
+        max-height: none;
         overflow-y: auto;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
-        z-index: 30;
+        z-index: 100;
     }
 
     .grid-2 {
@@ -538,6 +546,19 @@ th {
 
     .schedule-meta-grid {
         grid-template-columns: 1fr;
+    }
+
+    .staff-plan-table-card {
+        display: none;
+    }
+
+    .staff-plan-card-list {
+        display: grid;
+        gap: 14px;
+    }
+
+    .staff-plan-card-actions {
+        justify-content: flex-start;
     }
 }
 

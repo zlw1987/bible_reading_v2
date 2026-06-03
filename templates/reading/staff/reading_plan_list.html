@@ -19,7 +19,7 @@
 </div>
 
 {% if plans %}
-<div class="card">
+<div class="card staff-plan-table-card">
     <div class="table-wrap">
         <table>
             <thead>
@@ -60,6 +60,45 @@
             </tbody>
         </table>
     </div>
+</div>
+
+<div class="staff-plan-card-list">
+    {% for plan in plans %}
+    <article class="schedule-list-card staff-plan-card">
+        <div class="schedule-list-header">
+            <div class="schedule-list-title-block">
+                <span class="schedule-list-label">{{ ui.plan }}</span>
+                <h2 class="schedule-list-title">{{ plan.name }}</h2>
+            </div>
+            <div class="schedule-list-actions staff-plan-card-actions">
+                <a class="button button-secondary"
+                   href="{% url 'staff_reading_plan_header' plan.id %}">
+                    {{ ui.edit_header }}
+                </a>
+                <a class="button button-secondary"
+                   href="{% url 'staff_reading_plan_days' plan.id %}">
+                    {{ ui.edit_days }}
+                </a>
+            </div>
+        </div>
+        <dl class="schedule-meta-grid">
+            <div class="schedule-meta-item">
+                <dt>{{ ui.english_name }}</dt>
+                <dd>{{ plan.name_en|default:"-" }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{{ ui.status }}</dt>
+                <dd>
+                    {% if plan.is_active %}
+                    {{ ui.active }}
+                    {% else %}
+                    {{ ui.inactive }}
+                    {% endif %}
+                </dd>
+            </div>
+        </dl>
+    </article>
+    {% endfor %}
 </div>
 {% else %}
 <div class="card">

@@ -201,7 +201,11 @@ class AccountProfileTests(TestCase):
         self.assertNotIn("requestHeaderVisibilityUpdate", content)
         self.assertNotIn('window.addEventListener("scroll"', content)
         self.assertNotIn("summaryRect.bottom + 8", content)
-        self.assertNotIn("getBoundingClientRect().bottom + 8", content)
+        self.assertIn("summary.getBoundingClientRect().bottom + 8", content)
+        self.assertIn("viewportHeight * 0.55", content)
+        self.assertIn("Math.min(420, Math.max(280", content)
+        self.assertIn("clamp(desiredTop, minTop, Math.max(minTop, maxTop))", content)
+        self.assertIn("--staff-menu-top", content)
         self.assertIn("closeMenuFromOutside", content)
         self.assertIn('document.addEventListener("click"', content)
         self.assertIn("lockedMenu.contains(event.target)", content)
@@ -235,7 +239,7 @@ class AccountProfileTests(TestCase):
         css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
         css = css_path.read_text(encoding="utf-8")
 
-        self.assertIn("top: 88px;", css)
+        self.assertIn("top: var(--staff-menu-top, 88px);", css)
         self.assertIn("left: max(12px, env(safe-area-inset-left));", css)
         self.assertIn("right: max(12px, env(safe-area-inset-right));", css)
         self.assertIn("bottom: max(12px, env(safe-area-inset-bottom));", css)
@@ -246,7 +250,6 @@ class AccountProfileTests(TestCase):
         self.assertIn("z-index: 100;", css)
         self.assertNotIn("site-header--hidden", css)
         self.assertNotIn("translateY(calc(-100% - 1px))", css)
-        self.assertNotIn("max-height: calc(100dvh - var(--staff-menu-top", css)
         self.assertNotIn("min-width: min(300px", css)
 
     def test_normal_chinese_user_sees_simple_primary_nav(self):

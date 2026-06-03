@@ -493,7 +493,7 @@ th {
 
     .nav-staff-menu[open] .nav-staff-menu-panel {
         position: fixed;
-        top: 88px;
+        top: var(--staff-menu-top, 88px);
         right: 12px;
         right: max(12px, env(safe-area-inset-right));
         bottom: 12px;

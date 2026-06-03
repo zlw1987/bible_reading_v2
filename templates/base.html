@@ -148,6 +148,27 @@
                 return mobileDropdown.matches && !finePointer.matches;
             }
 
+            function clamp(value, min, max) {
+                return Math.min(Math.max(value, min), max);
+            }
+
+            function setMenuPosition(menu) {
+                var summary = menu ? menu.querySelector("summary") : null;
+                var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+                var bottomMargin = 12;
+                var minTop = 72;
+                var minPanelHeight = Math.min(420, Math.max(280, viewportHeight * 0.55));
+                var maxTop = viewportHeight - minPanelHeight - bottomMargin;
+                var desiredTop = 88;
+                var top = 88;
+
+                if (summary && shouldUseMobileOverlay()) {
+                    desiredTop = summary.getBoundingClientRect().bottom + 8;
+                    top = clamp(desiredTop, minTop, Math.max(minTop, maxTop));
+                    document.documentElement.style.setProperty("--staff-menu-top", top + "px");
+                }
+            }
+
             function closeMenuFromOutside(event) {
                 if (!lockedMenu || !shouldUseMobileOverlay()) {
                     return;
@@ -192,6 +213,7 @@
 
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
+                    setMenuPosition(menu);
                     addOutsideCloseHandlers();
                     return;
                 }
@@ -207,6 +229,7 @@
                     width: document.body.style.width,
                 };
 
+                setMenuPosition(menu);
                 document.body.classList.add("nav-menu-open");
                 document.body.style.position = "fixed";
                 document.body.style.top = "-" + lockedScrollY + "px";
@@ -283,6 +306,7 @@
                 }
 
                 if (lockedMenu.open && shouldUseMobileOverlay()) {
+                    setMenuPosition(lockedMenu);
                     addOutsideCloseHandlers();
                 } else {
                     unlockBodyScroll();

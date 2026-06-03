@@ -65,7 +65,7 @@ Whole Church
    -> English Youth Groups
       -> related small groups
 -> Unassigned Groups
-   -> Santa Clara 3
+   -> originally contained Santa Clara 3 before data QA closure
 ```
 
 ## 4. Idempotency Verification
@@ -93,21 +93,21 @@ Idempotency passed.
 
 No further seed changes are pending. This confirms the command can be safely re-run without duplicate creation when the legacy structure data has not changed.
 
-## 5. Data QA Note
+## 5. Data QA Closure
 
-`Santa Clara 3` is currently under `UNASSIGNED-GROUPS`.
+CS-H.3D recorded one remaining data QA item: `Santa Clara 3` was under `UNASSIGNED-GROUPS`.
 
-Reason: the legacy `SmallGroup` record currently has no `district`.
+Reason: the legacy `SmallGroup` record had no `district` at the time of the first production/staging seed.
 
-Business decision needed:
-- If `Santa Clara 3` belongs to `一区`, update the legacy `SmallGroup.district` first, then rerun `seed_church_structure_units --apply` and `seed_church_structure_units --dry-run`.
-- If `Santa Clara 3` is intentionally unassigned, leave it as-is.
+CS-H.3E closes this item. The legacy data was corrected or otherwise handled first, rather than manually moving only the `ChurchStructureUnit`.
 
-Do not fix this by manually moving only the `ChurchStructureUnit`, because the legacy `SmallGroup` model is still the current runtime source of truth.
+After resolving the legacy data issue and rerunning the seed/apply flow, this item should remain closed as long as the final dry-run reports zero create/update/link changes.
+
+Do not regress this by manually moving only the `ChurchStructureUnit`, because the legacy `SmallGroup` model is still the current runtime source of truth.
 
 ## 6. Runtime Behavior Confirmation
 
-CS-H.3D does not change:
+CS-H.3D and CS-H.3E do not change:
 - `Profile.small_group` behavior.
 - `/studies/` visibility.
 - `BibleStudySeries` scope behavior.
@@ -126,7 +126,7 @@ CS-H.3D does not change:
 - [ ] CM districts `一区` through `九区` appear under Chinese Ministry.
 - [ ] `English Adult` and `English Youth Groups` appear under English Ministry.
 - [ ] `SmallGroup` mapping fields are populated.
-- [ ] `Santa Clara 3` appears under Unassigned Groups unless the legacy district is corrected.
+- [ ] `Santa Clara 3` no longer appears as an unresolved Unassigned Groups QA item after the legacy data correction/handling and seed rerun.
 - [ ] Legacy `SmallGroup` records still exist.
 - [ ] `Profile.small_group` values remain unchanged.
 
@@ -151,9 +151,8 @@ CS-H.3D does not change:
 ## 10. Next Steps
 
 Recommended next steps:
-- Resolve the `Santa Clara 3` business data question if needed.
-- Optionally perform CS-H.3E admin/browser sanity QA after data review.
-- Then plan CS-H.4 ChurchStructureMembership Design Doc.
+- Treat CS-H.3 seeded structure data QA as closed, provided the final dry-run remains clean.
+- Plan CS-H.4 ChurchStructureMembership Design Doc.
 - Do not implement membership or signup changes until CS-H.4 design is accepted.
 
 ## 11. Deferred Items

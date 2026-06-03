@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D is production/staging verification documentation only. These steps do not auto-run, change signup, add membership, add audience selection, add filtering, switch runtime source of truth, or add staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. These steps do not auto-run, change signup, add membership, add audience selection, add filtering, switch runtime source of truth, or add staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -223,7 +223,12 @@ CS-H.3D verification result:
 - GoDaddy production/staging `--apply` completed with return code 0.
 - The command created 35 `ChurchStructureUnit` rows and linked 33 legacy records.
 - The second dry-run reported `would created: 0`, `would updated: 0`, `would linked: 0`, and `warnings: 0`.
-- `Santa Clara 3` remains under `UNASSIGNED-GROUPS` because the legacy `SmallGroup` has no district; this is a business/data QA item, not a command failure.
+- `Santa Clara 3` was under `UNASSIGNED-GROUPS` because the legacy `SmallGroup` had no district; this was a business/data QA item, not a command failure.
+
+CS-H.3E data QA closure:
+- The `Santa Clara 3` legacy data issue was corrected or otherwise handled first, rather than manually moving only the `ChurchStructureUnit`.
+- The seed/apply flow was rerun as needed.
+- This item should remain closed as long as the final dry-run reports zero create/update/link changes.
 - See `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`.
 
 ## 9. Requested Unit Rules
@@ -300,7 +305,7 @@ Recommended phases:
 - CS-H.3B: choose and implement mapping fields/table model-only. Completed with nullable FKs on legacy structure models.
 - CS-H.3C: seed root and current structure idempotently through a management command. Completed.
 - CS-H.3D: production/staging seeding verification closure. Completed.
-- CS-H.3E: optional admin/browser sanity QA, no runtime behavior change.
+- CS-H.3E: seeded structure data QA closure. Completed.
 - CS-H.4: design `ChurchStructureMembership` model, not implementation.
 - CS-H.5: implement membership model + requested assignment model-only.
 - CS-H.6: signup requested-unit flow.
@@ -358,7 +363,6 @@ Open decisions:
 - when membership becomes source of truth for `/studies/`
 - how to handle transfers
 - how to handle orphan districts or groups during seed
-- whether `Santa Clara 3` should be assigned to `一区` in the legacy `SmallGroup.district` field or remain unassigned
 - when to enforce one active Whole Church root in the database
 
 Current recommendation:
@@ -366,4 +370,5 @@ Current recommendation:
 - short-term runtime source of truth: current legacy models
 - mapping: explicit nullable FK fields, added in CS-H.3B
 - seeding: explicit dry-run/apply management command, added in CS-H.3C
+- data QA: production/staging seeded structure QA closed in CS-H.3E
 - signup: requested unit plus admin approval, never direct final self-assignment

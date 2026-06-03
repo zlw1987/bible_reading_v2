@@ -83,7 +83,7 @@ Future staff/admin workflow should include:
 
 During the transition, approval of a primary small-group/fellowship membership may sync `Profile.small_group` when the approved `ChurchStructureUnit` maps to a legacy `SmallGroup`. That sync should be explicit, tested, and reversible enough for the transition period.
 
-This document does not add custom staff admin UI. CS-H.7 should design the approval workflow separately before implementation.
+This document does not add custom staff admin UI. CS-H.7 separately documents the future approval workflow in `docs/CHURCH_STRUCTURE_MEMBERSHIP_APPROVAL_WORKFLOW_DESIGN.md`.
 
 ## 8. Visibility and Permission Rules
 
@@ -159,7 +159,8 @@ CS-H.6 does not include:
 Recommended sequence:
 - CS-H.6: Signup Requested-Unit Flow Design Doc. Completed by this document.
 - CS-H.6A: model/form implementation planning if needed.
-- CS-H.7: admin approval workflow design.
+- CS-H.7: admin approval workflow design. Completed.
+- CS-H.7A: membership approval workflow implementation plan. Completed.
 - Later: implement requested-unit capture.
 - Later: implement staff/admin approval workflow.
 - Later: transition sync with `Profile.small_group` if selected.

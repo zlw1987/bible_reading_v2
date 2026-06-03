@@ -6,7 +6,7 @@
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E improves Django Admin clarity for legacy current-runtime structure models versus future structure/membership foundation models. CS-H.6 records the signup requested-unit flow design. These steps do not authorize signup changes, custom staff admin UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
+The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E improves Django Admin clarity for legacy current-runtime structure models versus future structure/membership foundation models. CS-H.6 records the signup requested-unit flow design. CS-H.7 records the admin approval workflow design. These steps do not authorize signup changes, custom staff admin UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
 ## 2. Current State
 
@@ -26,6 +26,7 @@ Current structure state:
 - CS-H.5D records production/staging backfill verification as user-attested; exact command-output counts were not recorded.
 - CS-H.5E improves Django Admin clarity so legacy models and future foundation models are labeled more clearly.
 - CS-H.6 documents the future signup requested-unit flow; it is design-only.
+- CS-H.7 documents the future admin approval workflow; it is design-only.
 - No runtime consumer uses membership yet.
 - There is no requested-unit signup/onboarding flow today.
 - There is no admin approval workflow today.
@@ -391,7 +392,7 @@ Recommended sequence:
 - CS-H.5D: production/staging backfill verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.5E: Django Admin clarity for legacy structure vs future structure/membership foundation. Completed.
 - CS-H.6: signup requested-unit design. Completed.
-- CS-H.7: admin approval workflow design.
+- CS-H.7: admin approval workflow design. Completed.
 - Later: consumer migration from `Profile.small_group` to membership.
 
 Do not implement membership, signup approval, or consumer migration all at once.
@@ -402,7 +403,7 @@ Open decisions:
 - exact `membership_type` choices
 - whether to enforce one active primary membership at the database level
 - whether approved membership immediately syncs `Profile.small_group`
-- who can approve membership
+- exact capability and staff/superuser override rules for approving membership
 - how to handle transfers
 - whether implementation should support broader district/ministry-context request routing, beyond the CS-H.6 recommendation to prefer active leaf small-group/fellowship units plus "Not sure / New visitor"
 - how to display membership history

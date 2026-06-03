@@ -38,9 +38,9 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
-Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, and CS-H.2 adds a model-only `ChurchStructureUnit` foundation. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
+Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, and CS-H.3 records mapping/membership strategy. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
-Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, and arbitrary future structure units. CS-H.2 is model-only; there is no data seeding, mapping, audience selection, or filtering yet. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
+Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, arbitrary future structure units, and future membership history. Long-term source of truth should be `ChurchStructureUnit` plus `ChurchStructureMembership`; short-term runtime behavior still uses existing models. There is no data seeding, mapping, membership model, audience selection, or filtering yet. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
 
 ## 3. Module Boundaries
 
@@ -303,7 +303,7 @@ Current phase:
 
 Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers.
 
-The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, and CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior, CS-H.2A hardens that model, and CS-H.3 records mapping/membership/source-of-truth strategy. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
 Current foundation step:
 
@@ -456,7 +456,9 @@ Current sequence:
 - CS-F.3 optional ServiceEvent MinistryContext label foundation completed.
 - CS-H.1 Flexible Church Structure and Audience Scope Design Doc completed.
 - CS-H.2 model-only `ChurchStructureUnit` foundation completed.
-- Later structure seeding/mapping only after phased planning.
+- CS-H.2A `ChurchStructureUnit` model hardening completed.
+- CS-H.3 current structure mapping and membership strategy completed.
+- Later structure mapping fields/table, seeding, membership model, and signup approval workflow only after phased planning.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
@@ -552,11 +554,11 @@ CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Sch
 
 Current post-pilot step:
 
-PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, and CS-H.2 adds the model-only `ChurchStructureUnit` foundation; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation, CS-H.2A hardens it, and CS-H.3 records mapping/membership strategy; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
 Future foundation planning:
 
-Flexible `ChurchStructureUnit` seeding/mapping remains future planning work after the model-only CS-H.2 foundation and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
+Flexible `ChurchStructureUnit` mapping fields/table, seeding, `ChurchStructureMembership`, and signup/onboarding approval remain future phased work after CS-H.3 and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
 Large deferred items remain deferred pending feedback. Checklist V1 remains deferred unless pilot feedback elevates it.
 

@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, and CS-H.2A hardens tree validation. Do not implement additional models, views, templates, permissions, audience selection, filtering, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, and CS-H.3 records the mapping/membership/source-of-truth strategy. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -58,7 +58,9 @@ Current code assumptions:
 - CS-F.1 adds `MinistryContext` and nullable `District.ministry_context` as the short-term bridge.
 - CS-H.2 adds `ChurchStructureUnit` as a model-only flexible tree foundation.
 - CS-H.2A adds indirect cycle validation and safe ancestor/path display for corrupted tree states.
+- CS-H.3 records that long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
 - There is no `ChurchStructureUnit` data seeding or mapping yet.
+- There is no `ChurchStructureMembership` model yet.
 - Current Bible Study schedule scope uses:
   - whole church
   - ministry context
@@ -140,6 +142,8 @@ Suggested concept:
 Rules:
 - Current user small group may remain on `Profile.small_group` in the near term.
 - Future membership history can be added later.
+- Long-term membership source of truth should be `ChurchStructureMembership`.
+- Requested signup/onboarding units should require staff approval before becoming active membership.
 - Do not import phone/private/sensitive data.
 - Do not do full historical import in the first version.
 
@@ -182,9 +186,11 @@ Short term:
 - Keep `MinistryContext` as the bridge for CM/EM.
 - Keep `Profile.small_group` as the current primary-small-group field.
 - Keep `ChurchStructureUnit` model-only until a separate seeding/mapping task.
+- Keep signup/onboarding assignment approval separate from final membership.
 
 Long term:
 - Map current structure into `ChurchStructureUnit` only after Bible Study V2 and Community Activities needs prove the need.
+- Move belonging to `ChurchStructureMembership` only after model design, approval workflow, and visibility tests.
 - Avoid destructive migration.
 
 ## 8. Relationship to Bible Study
@@ -290,6 +296,7 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only
 - CS-H.2 adds model-only `ChurchStructureUnit` foundation with no seeding, no mapping, no audience selection, and no filtering
 - CS-H.2A hardens `ChurchStructureUnit` cycle validation without adding seeding, mapping, audience selection, or filtering
+- CS-H.3 records mapping, membership, and signup/onboarding approval strategy without implementation
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
@@ -301,6 +308,8 @@ Keep `ChurchStructureUnit` seeding/mapping, audience selection, Community Activi
 This plan documents:
 - flexible hierarchy through the model-only `ChurchStructureUnit` tree foundation
 - implemented short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
+- CS-H.3 long-term source-of-truth decision: `ChurchStructureUnit` plus `ChurchStructureMembership`
+- CS-H.3 signup/onboarding direction: requested unit plus staff approval, not direct self-assignment
 - no current `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
 - Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later

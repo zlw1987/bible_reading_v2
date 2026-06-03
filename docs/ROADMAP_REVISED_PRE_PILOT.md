@@ -151,9 +151,9 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - RC-P.3 Pilot release candidate tag `v0.9-pilot-rc1` created and pushed.
 - RC-P.4 Pilot Validation Runbook prepared for pilot validation.
 - `v0.9-pilot-rc1` deployed and pilot validation passed.
-- Current next phase: Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, and CS-H.2 model-only `ChurchStructureUnit` foundation is complete. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+- Current next phase: Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 model-only `ChurchStructureUnit` foundation is complete, CS-H.2A model hardening is complete, and CS-H.3 mapping/membership strategy is complete. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 - Large deferred items remain deferred pending feedback.
-- Flexible Church Structure seeding/mapping, audience selection, and filtering remain future and phased after CS-H.2.
+- Flexible Church Structure mapping fields/table, seeding, membership model, signup approval workflow, audience selection, and filtering remain future and phased after CS-H.3.
 - Lighting Pilot operational follow-up and Community Activities planning should be classified through post-pilot backlog planning before implementation.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.

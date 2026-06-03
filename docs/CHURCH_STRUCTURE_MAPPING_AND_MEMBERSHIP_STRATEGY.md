@@ -1,0 +1,346 @@
+# Church Structure Mapping and Membership Strategy
+
+## 1. Purpose
+
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers.
+
+Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
+
+This is a planning document only. It does not implement models, migrations, seed data, signup changes, audience selection, filtering, or admin UI.
+
+## 2. Source-of-Truth Decision
+
+Long-term target:
+- `ChurchStructureUnit` is the canonical church structure source.
+- `ChurchStructureMembership` is the canonical user belonging / membership source.
+
+Short-term transition:
+- `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of truth for current runtime behavior.
+- `ChurchStructureUnit` is initially a mirror or mapped structure.
+- No existing behavior should switch to `ChurchStructureUnit` until a specific consumer is planned, implemented, and tested.
+
+Current pilot behavior must remain stable:
+- Bible Study visibility continues to use `Profile.small_group` and `SmallGroup`.
+- Bible Study schedule scope continues to use `BibleStudySeries.scope_type`, `ministry_context`, `district`, and `small_group`.
+- ServiceEvent audience behavior continues to use `scope_type`, `district`, and `small_group`.
+- `ServiceEvent.ministry_context` remains label-only.
+
+## 3. SmallGroup Absorption Strategy
+
+`SmallGroup` should eventually be represented as `ChurchStructureUnit` rows.
+
+Likely future mapping:
+- `SmallGroup` -> `ChurchStructureUnit` with `unit_type=small_group`, or
+- `SmallGroup` -> `ChurchStructureUnit` with `unit_type=fellowship`, depending on final naming.
+
+Rules:
+- Do not delete `SmallGroup` early.
+- Do not replace `Profile.small_group` early.
+- Do not replace `BibleStudyMeeting.small_group` early.
+- During coexistence, `Profile.small_group` and `BibleStudyMeeting.small_group` continue to work.
+- A future migration should map each current `SmallGroup` to exactly one `ChurchStructureUnit`.
+- Avoid dual-edit drift by deciding which side is editable during the transition.
+
+Recommended transition stance:
+- Legacy models remain editable source-of-truth until mapping is seeded and verified.
+- `ChurchStructureUnit` mirrors them at first.
+- Only after admin QA should any staff workflow edit structure through `ChurchStructureUnit`.
+
+## 4. Membership Strategy
+
+Future model concept:
+
+`ChurchStructureMembership`
+- `user`
+- `unit`
+- `membership_type` or `role`
+- `start_date`
+- `end_date`
+- `is_primary`
+- `status`
+  - `requested`
+  - `active`
+  - `ended`
+  - `rejected`
+- `approved_by`
+- `approved_at`
+- `notes` optional, non-sensitive
+
+Clarifications:
+- Membership is for belonging, not staff permissions.
+- `ChurchRoleAssignment` and the capability system remain separate for permissions.
+- `TeamAssignment` remains separate for serving assignments.
+- Membership does not automatically grant staff permissions.
+- Membership does not automatically assign ministry serving roles.
+- Notes must not store sensitive counseling, pastoral, medical, financial, or private information.
+
+This membership model should eventually replace `Profile.small_group` as the canonical belonging source, but only after staged migration and visibility tests.
+
+## 5. Registration / Onboarding Strategy
+
+Use the compromise approach.
+
+Signup or onboarding may collect:
+- username/password
+- optional email
+- language
+- requested structure unit or requested small group
+- optional note, such as "I attend Rainbow 1" or "I am new"
+
+But:
+- the requested unit is not final membership
+- the user starts as pending assignment or limited/unassigned
+- admin/staff reviews and approves membership
+- after approval, official membership is created or activated
+- during transition, approval may also set `Profile.small_group`
+
+Why this approach:
+- Users may choose the wrong group.
+- New people may not know their group.
+- Group membership affects Bible Study visibility.
+- Future membership will affect audience scope.
+- Church belonging should be confirmed pastorally and administratively.
+
+Do not allow normal users to directly self-assign final membership during signup.
+
+## 6. Transition States
+
+Likely user states:
+- `unassigned` / no group
+- requested assignment pending
+- active assigned membership
+- rejected / needs clarification
+- ended / transferred membership
+
+Current behavior mapping:
+- Today, current pilot behavior may use `Profile.small_group`.
+- A user without `Profile.small_group` receives current safe empty/limited states where implemented.
+- Future membership may drive visibility only after explicit consumer migration.
+- During transition, approved primary small-group membership can synchronize `Profile.small_group`.
+
+Important transition rule:
+- Do not trust requested membership for visibility.
+- Only approved active membership should influence future visibility.
+
+## 7. Mapping Strategy Options
+
+### Option A: Nullable Mapping FKs on Existing Models
+
+Add fields such as:
+- `MinistryContext.church_structure_unit`
+- `District.church_structure_unit`
+- `SmallGroup.church_structure_unit`
+
+Pros:
+- Clear and easy to inspect.
+- Simple joins from current runtime models to the future tree.
+- Good admin/debug visibility.
+- Avoids generic source-model/source-id logic.
+
+Cons:
+- Requires migrations on legacy models.
+- Adds future-tree awareness to old models.
+- Needs careful handling if long-term deletion/deprecation is planned.
+
+### Option B: Separate Mapping Table
+
+Possible model:
+
+`ChurchStructureLegacyMap`
+- `unit`
+- `source_model`
+- `source_id`
+- `source_label_snapshot`
+
+Pros:
+- Keeps legacy models untouched.
+- Flexible for multiple legacy source types.
+- Can preserve historical labels.
+
+Cons:
+- More indirection.
+- Easier to create invalid source references.
+- Needs custom validation and admin tooling.
+
+### Option C: Derive By Code/Name Only
+
+Pros:
+- No migration.
+- Simple initial script logic.
+
+Cons:
+- Fragile under renames.
+- Ambiguous when names repeat.
+- Poor auditability.
+- High drift risk.
+
+Recommendation:
+- Prefer explicit nullable FK mapping fields on existing models if migration risk is acceptable.
+- Use a separate mapping table only if keeping legacy models completely untouched is more important.
+- Do not rely on name/code matching only.
+
+## 8. Seeded Tree Plan
+
+Conceptual tree only:
+
+```text
+CHURCH / Whole Church / 全教会
+-> MinistryContext units, such as CM and EM
+   -> District units under their MinistryContext unit when available
+      -> SmallGroup units under their District unit when available
+```
+
+Rules:
+- No seeding in CS-H.3.
+- Seeding must be idempotent.
+- Do not delete legacy records.
+- Do not drop orphan records.
+- Orphan `District` rows without `MinistryContext` should be placed under root or a clearly named holding unit.
+- Orphan `SmallGroup` rows without `District` should be placed under root, a holding unit, or flagged for admin review.
+- Seed labels should preserve bilingual names where available.
+
+Root:
+- One active Whole Church root is the intended system shape.
+- Root uniqueness enforcement remains deferred until the seed plan defines the root row and code policy.
+
+## 9. Requested Unit Rules
+
+Future signup requested unit should probably point to:
+- a selectable active `ChurchStructureUnit`
+- likely only membership-eligible units, such as `small_group` or `fellowship`
+- visitor/unassigned choices when the user is unsure
+- not arbitrary operational units
+- not `MinistryTeam`
+
+Open decisions:
+- Should users request only leaf/small-group units?
+- Should users be allowed to request ministry context or district if unsure?
+- Should there be a "Not sure / New visitor" option?
+
+Recommendation:
+- Offer known small-group/fellowship leaf units when available.
+- Also offer "Not sure / New visitor".
+- Allow an optional note field to help admin assign correctly.
+- Do not let requested unit become active membership without approval.
+
+## 10. Admin Approval Workflow
+
+Future staff workflow:
+- Staff sees pending requested assignments.
+- Staff can approve into official membership.
+- Staff can change requested unit before approval.
+- Staff can reject or mark needs clarification.
+- Staff can assign no group / visitor state.
+- Approval creates or activates future membership.
+- During transition, approval updates `Profile.small_group` when the approved primary unit maps to a `SmallGroup`.
+
+Do not implement this now.
+
+The workflow should be simple enough for non-technical staff: review request, choose official group/unit, approve, or mark for clarification.
+
+## 11. Impact on Current Modules
+
+### Bible Study
+
+Current `/studies/` visibility uses `Profile.small_group`.
+
+Future membership may replace this only after tests prove no cross-group visibility leaks. Do not switch now.
+
+### Reading Group Progress
+
+Current group progress uses `Profile.small_group` / `SmallGroup`.
+
+Do not switch now.
+
+### ServiceEvent
+
+`ServiceEvent.ministry_context` remains label-only.
+
+Audience/filtering remains future work.
+
+### Community Activities
+
+Future Community Activities should use `ChurchStructureUnit` audience/membership from the start if the structure and membership layers are ready.
+
+Do not implement Community Activities now.
+
+### My Serving / TeamAssignment
+
+Serving assignment remains `TeamAssignment`-based.
+
+Membership does not automatically assign serving roles.
+
+## 12. Source-of-Truth Transition Phases
+
+Recommended phases:
+- CS-H.3: design mapping/membership strategy.
+- CS-H.3B: choose and implement mapping fields/table model-only.
+- CS-H.3C: seed root and current structure idempotently.
+- CS-H.3D: admin sanity QA, no runtime behavior change.
+- CS-H.4: design `ChurchStructureMembership` model.
+- CS-H.5: implement membership model + requested assignment model-only.
+- CS-H.6: signup requested-unit flow.
+- CS-H.7: admin approval workflow.
+- Later: migrate selected consumers from `Profile.small_group` to membership.
+
+No hard cutover should happen early.
+
+## 13. Risks
+
+Known risks:
+- two sources of truth drift
+- users self-select wrong group
+- visibility leaks if membership is trusted too early
+- admin workload
+- orphan records
+- renames and moves
+- overbuilding HR/ERP
+- confusing membership with permissions
+- confusing membership with serving assignments
+- approving requests without enough context
+
+Mitigation direction:
+- keep legacy behavior during coexistence
+- use explicit mapping rather than name matching
+- make seeding idempotent
+- require admin approval before active membership
+- separate membership from permissions and serving
+- add one consumer at a time only after tests
+
+## 14. Non-Goals
+
+CS-H.3 does not include:
+- implementation
+- migration
+- seeding
+- signup changes
+- membership model
+- audience selector
+- ServiceEvent filtering
+- Community Activities
+- Staff Admin UI
+- replacement of `Profile.small_group`
+- replacement of `BibleStudySeries` scope
+- deletion of `SmallGroup`
+- deletion of `District`
+- deletion of `MinistryContext`
+
+## 15. Open Decisions
+
+Open decisions:
+- mapping FK vs mapping table
+- exact `unit_type` name for `SmallGroup` / fellowship
+- whether users can request only leaf units or broader units
+- whether to add requested unit to `Profile` or create a separate request model
+- approval roles/capabilities
+- whether approved membership syncs `Profile.small_group` immediately
+- when membership becomes source of truth for `/studies/`
+- how to handle transfers
+- how to handle orphan districts or groups during seed
+- when to enforce one active Whole Church root in the database
+
+Current recommendation:
+- long-term source of truth: `ChurchStructureUnit` + `ChurchStructureMembership`
+- short-term runtime source of truth: current legacy models
+- mapping: explicit nullable FK fields if migration risk is acceptable
+- signup: requested unit plus admin approval, never direct final self-assignment

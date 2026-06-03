@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. It does not auto-run, change signup, add membership, add audience selection, add filtering, or add staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D is production/staging verification documentation only. These steps do not auto-run, change signup, add membership, add audience selection, add filtering, switch runtime source of truth, or add staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -219,6 +219,13 @@ Recommended deployment flow:
 - Run `python manage.py seed_church_structure_units --apply`.
 - Run `python manage.py seed_church_structure_units --dry-run` again to confirm no remaining changes are expected.
 
+CS-H.3D verification result:
+- GoDaddy production/staging `--apply` completed with return code 0.
+- The command created 35 `ChurchStructureUnit` rows and linked 33 legacy records.
+- The second dry-run reported `would created: 0`, `would updated: 0`, `would linked: 0`, and `warnings: 0`.
+- `Santa Clara 3` remains under `UNASSIGNED-GROUPS` because the legacy `SmallGroup` has no district; this is a business/data QA item, not a command failure.
+- See `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`.
+
 ## 9. Requested Unit Rules
 
 Future signup requested unit should probably point to:
@@ -292,8 +299,9 @@ Recommended phases:
 - CS-H.3: design mapping/membership strategy.
 - CS-H.3B: choose and implement mapping fields/table model-only. Completed with nullable FKs on legacy structure models.
 - CS-H.3C: seed root and current structure idempotently through a management command. Completed.
-- CS-H.3D: admin sanity QA, no runtime behavior change.
-- CS-H.4: design `ChurchStructureMembership` model.
+- CS-H.3D: production/staging seeding verification closure. Completed.
+- CS-H.3E: optional admin/browser sanity QA, no runtime behavior change.
+- CS-H.4: design `ChurchStructureMembership` model, not implementation.
 - CS-H.5: implement membership model + requested assignment model-only.
 - CS-H.6: signup requested-unit flow.
 - CS-H.7: admin approval workflow.
@@ -350,6 +358,7 @@ Open decisions:
 - when membership becomes source of truth for `/studies/`
 - how to handle transfers
 - how to handle orphan districts or groups during seed
+- whether `Santa Clara 3` should be assigned to `一区` in the legacy `SmallGroup.district` field or remain unassigned
 - when to enforce one active Whole Church root in the database
 
 Current recommendation:

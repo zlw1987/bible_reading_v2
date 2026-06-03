@@ -38,9 +38,9 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
-Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, and CS-H.3C adds an explicit idempotent seeding/mapping command. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
+Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, and CS-H.3D verifies GoDaddy production/staging seeding. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, and `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`.
 
-Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, arbitrary future structure units, and future membership history. Long-term source of truth should be `ChurchStructureUnit` plus `ChurchStructureMembership`; short-term runtime behavior still uses existing models. Nullable legacy mapping fields and explicit command-based seeding/mapping now exist, but there is no membership model, audience selection, filtering, or runtime switch yet. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
+Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, arbitrary future structure units, and future membership history. Long-term source of truth should be `ChurchStructureUnit` plus `ChurchStructureMembership`; short-term runtime behavior still uses existing models. Nullable legacy mapping fields and verified command-based seeding/mapping now exist, but there is no membership model, audience selection, filtering, or runtime switch yet. `Santa Clara 3` remains a business/data QA item. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
 
 ## 3. Module Boundaries
 
@@ -303,7 +303,7 @@ Current phase:
 
 Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers.
 
-The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior, CS-H.2A hardens that model, CS-H.3 records mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy mapping fields, and CS-H.3C adds an explicit idempotent seeding/mapping command. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
+The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior, CS-H.2A hardens that model, CS-H.3 records mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, and CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, and `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`.
 
 Current foundation step:
 
@@ -460,7 +460,9 @@ Current sequence:
 - CS-H.3 current structure mapping and membership strategy completed.
 - CS-H.3B nullable legacy mapping fields completed.
 - CS-H.3C idempotent structure seeding/mapping command completed.
-- Later membership model and signup approval workflow only after phased planning.
+- CS-H.3D production/staging seeding verification completed.
+- Next major planning step: CS-H.4 ChurchStructureMembership Design Doc.
+- Later membership model implementation and signup approval workflow only after phased planning.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
@@ -556,11 +558,11 @@ CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Sch
 
 Current post-pilot step:
 
-PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation, CS-H.2A hardens it, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, and CS-H.3C adds explicit command-based seeding/mapping; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, and `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
+PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation, CS-H.2A hardens it, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, and CS-H.3D verifies GoDaddy production/staging seeding; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, and `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`.
 
 Future foundation planning:
 
-`ChurchStructureUnit` seeding/mapping now exists only as an explicit management command. `ChurchStructureMembership` and signup/onboarding approval remain future phased work before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
+`ChurchStructureUnit` seeding/mapping now exists only as an explicit management command and passed GoDaddy production/staging verification. `Santa Clara 3` remains a data QA item. The next major planning step is CS-H.4 ChurchStructureMembership Design Doc; membership implementation and signup/onboarding approval remain future phased work before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
 Large deferred items remain deferred pending feedback. Checklist V1 remains deferred unless pilot feedback elevates it.
 

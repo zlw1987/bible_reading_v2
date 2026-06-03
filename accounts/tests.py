@@ -3,7 +3,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 
-from django.core.management import call_command
+from django.core.management import call_command, CommandError
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -959,6 +959,56 @@ class ChurchStructureMembershipFoundationTests(TestCase):
 
         self.assertFalse(membership.active_for_date(timezone.localdate()))
 
+    def test_inactive_statuses_do_not_count_as_active(self):
+        user = User.objects.create_user(username="inactive_statuses")
+        today = timezone.localdate()
+
+        for status in [
+            ChurchStructureMembership.STATUS_REJECTED,
+            ChurchStructureMembership.STATUS_CANCELLED,
+            ChurchStructureMembership.STATUS_ENDED,
+        ]:
+            unit = self.create_unit(f"UNIT-{status}", f"Unit {status}")
+            membership = ChurchStructureMembership.objects.create(
+                user=user,
+                unit=unit,
+                status=status,
+                start_date=today - timedelta(days=10),
+                end_date=today - timedelta(days=1),
+            )
+
+            self.assertFalse(membership.is_active_membership)
+            self.assertFalse(membership.active_for_date(today))
+
+    def test_active_membership_with_future_start_date_is_not_active_today(self):
+        user = User.objects.create_user(username="future_start")
+        unit = self.create_unit()
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            start_date=timezone.localdate() + timedelta(days=1),
+        )
+
+        self.assertFalse(membership.is_active_membership)
+        self.assertFalse(
+            ChurchStructureMembership.active_for_user(user).filter(pk=membership.pk).exists()
+        )
+
+    def test_active_membership_with_current_date_window_is_active(self):
+        user = User.objects.create_user(username="current_window")
+        unit = self.create_unit()
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            start_date=timezone.localdate() - timedelta(days=1),
+            end_date=timezone.localdate() + timedelta(days=1),
+        )
+
+        self.assertTrue(membership.is_active_membership)
+        self.assertIn(membership, ChurchStructureMembership.active_for_user(user))
+
     def test_can_create_active_primary_membership(self):
         user = User.objects.create_user(username="active_primary")
         unit = self.create_unit()
@@ -974,6 +1024,41 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         )
 
         self.assertTrue(membership.is_active_membership)
+        self.assertTrue(membership.is_current_primary)
+
+    def test_current_primary_for_user_returns_active_primary_membership(self):
+        user = User.objects.create_user(username="current_primary")
+        primary = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.create_unit("PRIMARY", "Primary"),
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.create_unit("NONPRIMARY", "Non-primary"),
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=False,
+            start_date=timezone.localdate(),
+        )
+
+        self.assertEqual(
+            ChurchStructureMembership.current_primary_for_user(user),
+            primary,
+        )
+
+    def test_current_primary_for_user_ignores_requested_primary_membership(self):
+        user = User.objects.create_user(username="requested_primary")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.create_unit(),
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        self.assertIsNone(ChurchStructureMembership.current_primary_for_user(user))
 
     def test_duplicate_active_primary_membership_for_same_user_is_rejected(self):
         user = User.objects.create_user(username="duplicate_primary")
@@ -1170,6 +1255,200 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         user.profile.save()
 
         self.assertTrue(event.can_be_seen_by(user))
+
+
+class ChurchStructureMembershipBackfillCommandTests(TestCase):
+    def run_backfill_command(self, *args):
+        output = StringIO()
+        call_command(
+            "backfill_church_structure_memberships",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_mapped_group(self, group_name="Rainbow 4", unit_code="RAINBOW4"):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=unit_code,
+            name=group_name,
+        )
+        group = SmallGroup.objects.create(
+            name=group_name,
+            church_structure_unit=unit,
+        )
+        return group, unit
+
+    def assign_group(self, user, group):
+        user.profile.small_group = group
+        user.profile.save()
+
+    def test_dry_run_creates_no_memberships(self):
+        group, _unit = self.create_mapped_group()
+        user = User.objects.create_user(username="dry_run_member")
+        self.assign_group(user, group)
+
+        output = self.run_backfill_command()
+
+        self.assertIn("Church structure membership backfill mode: DRY RUN", output)
+        self.assertIn("would_created: 1", output)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.small_group, group)
+
+    def test_apply_creates_active_primary_membership_from_profile_small_group(self):
+        group, unit = self.create_mapped_group()
+        user = User.objects.create_user(username="apply_member")
+        self.assign_group(user, group)
+
+        output = self.run_backfill_command("--apply")
+
+        self.assertIn("Church structure membership backfill mode: APPLY", output)
+        self.assertIn("created: 1", output)
+
+        membership = ChurchStructureMembership.objects.get(user=user)
+        self.assertEqual(membership.unit, unit)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertTrue(membership.is_primary)
+        self.assertEqual(membership.start_date, timezone.localdate())
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertIsNone(membership.requested_by)
+        self.assertIn("Backfilled from Profile.small_group", membership.notes)
+
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.small_group, group)
+
+    def test_apply_skips_user_without_profile_small_group(self):
+        User.objects.create_user(username="no_profile_group")
+
+        output = self.run_backfill_command("--apply")
+
+        self.assertIn("created: 0", output)
+        self.assertIn("skipped_no_profile_group: 1", output)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+
+    def test_apply_skips_and_warns_for_unmapped_profile_small_group(self):
+        group = SmallGroup.objects.create(name="Unmapped Group")
+        user = User.objects.create_user(username="unmapped_member")
+        self.assign_group(user, group)
+
+        output = self.run_backfill_command("--apply")
+
+        self.assertIn("WARNING:", output)
+        self.assertIn("skipped_unmapped_group: 1", output)
+        self.assertIn("warnings: 1", output)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+
+    def test_apply_skips_existing_active_primary_membership(self):
+        group, _unit = self.create_mapped_group()
+        existing_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="EXISTING",
+            name="Existing Group",
+        )
+        user = User.objects.create_user(username="existing_primary")
+        self.assign_group(user, group)
+        existing = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=existing_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        output = self.run_backfill_command("--apply")
+
+        self.assertIn("created: 0", output)
+        self.assertIn("skipped_existing_active_primary: 1", output)
+        self.assertEqual(list(ChurchStructureMembership.objects.all()), [existing])
+
+    def test_apply_and_second_dry_run_are_idempotent(self):
+        group, _unit = self.create_mapped_group()
+        user = User.objects.create_user(username="idempotent_member")
+        self.assign_group(user, group)
+
+        self.run_backfill_command("--apply")
+        second_apply_output = self.run_backfill_command("--apply")
+        dry_run_output = self.run_backfill_command("--dry-run")
+
+        self.assertEqual(ChurchStructureMembership.objects.filter(user=user).count(), 1)
+        self.assertIn("created: 0", second_apply_output)
+        self.assertIn("would_created: 0", dry_run_output)
+        self.assertIn("skipped_existing_active_primary: 1", dry_run_output)
+
+    def test_requested_membership_does_not_block_backfill(self):
+        group, unit = self.create_mapped_group()
+        user = User.objects.create_user(username="requested_backfill")
+        self.assign_group(user, group)
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            requested_by=user,
+        )
+
+        output = self.run_backfill_command("--apply")
+
+        self.assertIn("created: 1", output)
+        self.assertEqual(ChurchStructureMembership.objects.filter(user=user).count(), 2)
+        self.assertTrue(
+            ChurchStructureMembership.objects.filter(
+                user=user,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+            ).exists()
+        )
+
+    def test_backfill_command_preserves_bible_study_and_service_event_behavior(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="District 1",
+            ministry_context=context,
+        )
+        group, unit = self.create_mapped_group()
+        group.district = district
+        group.save()
+        user = User.objects.create_user(username="runtime_profile_member")
+        other_user = User.objects.create_user(username="runtime_no_profile_group")
+        self.assign_group(user, group)
+        ChurchStructureMembership.objects.create(
+            user=other_user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        series = BibleStudySeries.objects.create(
+            title="CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.run_backfill_command("--apply")
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+        self.assertTrue(event.can_be_seen_by(user))
+        self.assertFalse(event.can_be_seen_by(other_user))
+
+    def test_dry_run_and_apply_flags_cannot_be_combined(self):
+        with self.assertRaises(CommandError):
+            self.run_backfill_command("--dry-run", "--apply")
 
 
 class ChurchRolePermissionTests(TestCase):

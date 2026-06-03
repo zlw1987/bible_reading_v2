@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, and CS-H.5A adds the model-only membership foundation.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, and CS-H.5C adds an explicit dry-run/apply membership backfill command.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -195,6 +195,8 @@ CS-H.3 strategy note:
 - CS-H.3E records that the `Santa Clara 3` legacy data issue was handled and the seeded structure data QA item is closed, as long as final dry-run remains clean.
 - CS-H.4 designs `ChurchStructureMembership` and requested-unit approval flow, but does not implement the model, signup flow, admin UI, or consumer migration.
 - CS-H.5A adds `ChurchStructureMembership` model/admin/tests only. It does not add signup flow, approval UI, backfill, audience selection, filtering, or consumer migration.
+- CS-H.5B adds helper/query hardening only. Requested, rejected, cancelled, and ended memberships still do not grant visibility.
+- CS-H.5C adds `backfill_church_structure_memberships` for explicit dry-run/apply membership backfill from mapped `Profile.small_group` values. It does not modify `Profile.small_group`, add signup or approval UI, add audience selection or filtering, or migrate any runtime consumer.
 - Signup/onboarding should collect a requested unit or group for staff review, not direct final self-assignment.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
@@ -229,6 +231,8 @@ CS-H.4 design note:
 - Requested membership must not grant visibility.
 - Only approved active membership may be considered by future consumers after explicit migration and tests.
 - CS-H.5A model-only foundation exists, but current runtime still uses `Profile.small_group`.
+- CS-H.5B query helpers are available for future phases, but no current consumer uses them.
+- CS-H.5C backfill command exists for production dry-run/apply QA, but no current consumer uses membership yet.
 - See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 ## 6. Audience Selection Model
@@ -355,6 +359,8 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - CS-H.3E completed seeded structure data QA closure. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.4 completed membership design. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.5A completed membership model-only foundation. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5B completed membership helper/validation hardening. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5C completed the explicit membership backfill command. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`; production dry-run/apply QA remains the next step before any consumer migration.
 
 ### Later Phase: First Audience Consumer
 
@@ -466,8 +472,8 @@ Possible next planning or implementation steps:
 - CS-H.3E seeded structure data QA closure. Completed.
 - CS-H.4 ChurchStructureMembership design doc. Completed.
 - CS-H.5A ChurchStructureMembership model-only foundation. Completed.
-- CS-H.5B membership model hardening/tests if needed.
-- CS-H.5C membership backfill command with dry-run/apply.
+- CS-H.5B membership model hardening/tests. Completed.
+- CS-H.5C membership backfill command with dry-run/apply. Completed locally; production dry-run/apply QA is next.
 - Later audience selection model design for one consumer.
 - CA-V1.1 Community Activities planning refinement.
 - PP-SA.1 Staff Admin Surface Expansion Plan.

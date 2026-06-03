@@ -303,6 +303,27 @@ class ChurchStructureMembership(models.Model):
     def is_active_membership(self):
         return self.active_for_date(timezone.localdate())
 
+    @property
+    def is_current_primary(self):
+        return self.is_primary and self.is_active_membership
+
+    @classmethod
+    def active_for_user(cls, user, target_date=None):
+        target_date = target_date or timezone.localdate()
+        return cls.objects.filter(
+            user=user,
+            status=cls.STATUS_ACTIVE,
+            start_date__lte=target_date,
+        ).filter(
+            models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date)
+        )
+
+    @classmethod
+    def current_primary_for_user(cls, user, target_date=None):
+        return cls.active_for_user(user, target_date=target_date).filter(
+            is_primary=True
+        ).first()
+
     def active_for_date(self, date):
         if self.status != self.STATUS_ACTIVE or not self.start_date:
             return False

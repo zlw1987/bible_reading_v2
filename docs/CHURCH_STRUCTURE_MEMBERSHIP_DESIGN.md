@@ -6,7 +6,7 @@
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. Neither step authorizes signup changes, admin approval UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
+The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. These steps do not authorize signup changes, admin approval UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
 ## 2. Current State
 
@@ -21,7 +21,8 @@ Current structure state:
 - `ChurchStructureUnit` exists.
 - Current `MinistryContext`, `District`, and `SmallGroup` data has been seeded/mapped into `ChurchStructureUnit`.
 - `ChurchStructureUnit` is not the runtime source of truth.
-- CS-H.5A adds the model-only `ChurchStructureMembership` table, but no backfill or runtime consumer uses it yet.
+- CS-H.5A adds the model-only `ChurchStructureMembership` table.
+- CS-H.5C adds the explicit `backfill_church_structure_memberships` command, but no runtime consumer uses membership yet.
 - There is no requested-unit signup/onboarding flow today.
 - There is no admin approval workflow today.
 
@@ -88,6 +89,20 @@ CS-H.5A implementation note:
 - It does not backfill from `Profile.small_group`.
 - It does not change `/studies/`, reading progress, `BibleStudySeries`, `ServiceEvent`, or My Serving behavior.
 - Requested membership does not grant visibility.
+
+CS-H.5B hardening note:
+- Query helpers exist for active membership and current primary membership.
+- Helpers count only `status=active` records within their start/end date window.
+- Requested, rejected, cancelled, and ended memberships do not count as active.
+- Duplicate active primary membership remains application-validated, not DB-enforced.
+- No runtime consumer uses these helpers yet.
+
+CS-H.5C backfill command note:
+- `python manage.py backfill_church_structure_memberships` defaults to dry-run.
+- `--apply` creates active primary `small_group_member` memberships from `Profile.small_group` when the related `SmallGroup.church_structure_unit` mapping exists.
+- The command is idempotent and skips users with no profile group, unmapped groups, or an existing active primary membership.
+- The command does not modify `Profile.small_group`, create requested memberships, infer permissions, infer serving assignments, or switch runtime behavior.
+- Next step after local verification is production dry-run/apply QA, not consumer migration.
 
 ## 5. Requested Assignment Model Options
 
@@ -244,14 +259,14 @@ Important:
 
 ## 11. Backfill Strategy
 
-Design only:
-- For each user with `Profile.small_group`:
-  - find the mapped `ChurchStructureUnit` from `SmallGroup.church_structure_unit`
-  - create active primary membership if missing
+CS-H.5C implementation status:
+- `backfill_church_structure_memberships` is an explicit management command, not an automatic migration.
+- For each user with `Profile.small_group`, it finds the mapped `ChurchStructureUnit` from `SmallGroup.church_structure_unit`.
+- In dry-run mode, it reports memberships that would be created without writing data.
+- In apply mode, it creates an active primary membership when no active primary membership already exists.
 - Users without `Profile.small_group` remain unassigned.
-- Backfill must be idempotent.
-- Backfill should be a management command, not an automatic migration, if production data risk is high.
-- Dry-run/apply behavior is preferred, following the CS-H.3C seeding command pattern.
+- Users whose small group has no mapped `ChurchStructureUnit` are skipped with a warning.
+- The command is idempotent; after apply, a clean dry-run should report zero would-created rows if source data has not changed.
 - Do not import sensitive/private data.
 - Do not infer permissions or serving roles.
 
@@ -356,8 +371,8 @@ CS-H.4 does not include:
 Recommended sequence:
 - CS-H.4: ChurchStructureMembership design doc. Completed by this task.
 - CS-H.5A: `ChurchStructureMembership` model-only foundation. Completed.
-- CS-H.5B: membership model hardening/tests.
-- CS-H.5C: backfill command design/implementation with dry-run/apply.
+- CS-H.5B: membership model hardening/tests. Completed.
+- CS-H.5C: backfill command design/implementation with dry-run/apply. Completed locally; next step is production dry-run/apply QA.
 - CS-H.6: signup requested-unit design.
 - CS-H.7: admin approval workflow design.
 - Later: consumer migration from `Profile.small_group` to membership.

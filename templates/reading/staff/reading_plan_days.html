@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Days | {{ ui.site_title }}{% endblock %}
+{% block title %}{% if language == "zh" %}编辑每日读经内容{% else %}Edit Reading Plan Days{% endif %} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <p>
-    <a href="{% url 'staff_reading_plan_list' %}">← Back to Reading Plan Admin</a>
+    <a href="{% url 'staff_reading_plan_list' %}">
+        ← {% if language == "zh" %}返回读经计划管理{% else %}Back to Reading Plan Admin{% endif %}
+    </a>
 </p>
 
 <div class="page-header">
-    <h1 class="page-title">Edit Reading Plan Days</h1>
+    <h1 class="page-title">
+        {% if language == "zh" %}编辑每日读经内容{% else %}Edit Reading Plan Days{% endif %}
+    </h1>
     <p class="page-subtitle">
         {{ plan.name }}
     </p>
@@ -18,37 +22,71 @@
     <div class="actions">
         <a class="button button-secondary"
            href="{% url 'staff_reading_plan_header' plan.id %}">
-            Edit Header
+            {{ ui.edit_header }}
         </a>
 
     </div>
 </div>
 
 <div class="card">
-    <h2>Add Day</h2>
+    <h2>{% if language == "zh" %}新增一天{% else %}Add Day{% endif %}</h2>
 
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_day">
-        {{ create_form.as_p }}
-        <button type="submit">Add Day</button>
+        {{ create_form.non_field_errors }}
+        <p>
+            {{ create_form.day_number.errors }}
+            <label for="{{ create_form.day_number.id_for_label }}">{% if language == "zh" %}第几天{% else %}Day number{% endif %}</label>
+            {{ create_form.day_number }}
+        </p>
+        <p>
+            {{ create_form.reading_text.errors }}
+            <label for="{{ create_form.reading_text.id_for_label }}">{% if language == "zh" %}读经内容{% else %}Reading text{% endif %}</label>
+            {{ create_form.reading_text }}
+        </p>
+        <p>
+            {{ create_form.memory_verse.errors }}
+            <label for="{{ create_form.memory_verse.id_for_label }}">{{ ui.memory_verse }}</label>
+            {{ create_form.memory_verse }}
+        </p>
+        <button type="submit">{% if language == "zh" %}新增一天{% else %}Add Day{% endif %}</button>
     </form>
 </div>
 
 {% if day_rows %}
     {% for row in day_rows %}
 <div class="card" id="day-{{ row.day.id }}">
-    <h2 class="card-title">Day {{ row.day.day_number }}</h2>
+    <h2 class="card-title">
+        {% if language == "zh" %}第 {{ row.day.day_number }} 天{% else %}Day {{ row.day.day_number }}{% endif %}
+    </h2>
 
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save_day">
         <input type="hidden" name="day_id" value="{{ row.day.id }}">
 
-        {{ row.form.as_p }}
+        {{ row.form.non_field_errors }}
+        <p>
+            {{ row.form.day_number.errors }}
+            <label for="{{ row.form.day_number.id_for_label }}">{% if language == "zh" %}第几天{% else %}Day number{% endif %}</label>
+            {{ row.form.day_number }}
+        </p>
+        <p>
+            {{ row.form.reading_text.errors }}
+            <label for="{{ row.form.reading_text.id_for_label }}">{% if language == "zh" %}读经内容{% else %}Reading text{% endif %}</label>
+            {{ row.form.reading_text }}
+        </p>
+        <p>
+            {{ row.form.memory_verse.errors }}
+            <label for="{{ row.form.memory_verse.id_for_label }}">{{ ui.memory_verse }}</label>
+            {{ row.form.memory_verse }}
+        </p>
 
         <div class="actions">
-            <button type="submit">Save Day {{ row.day.day_number }}</button>
+            <button type="submit">
+                {% if language == "zh" %}保存第 {{ row.day.day_number }} 天{% else %}Save Day {{ row.day.day_number }}{% endif %}
+            </button>
         </div>
     </form>
 
@@ -58,14 +96,14 @@
         <input type="hidden" name="day_id" value="{{ row.day.id }}">
 
         <button type="submit" class="button-danger">
-            Delete Day {{ row.day.day_number }}
+            {% if language == "zh" %}删除第 {{ row.day.day_number }} 天{% else %}Delete Day {{ row.day.day_number }}{% endif %}
         </button>
     </form>
 </div>
     {% endfor %}
 {% else %}
 <div class="card">
-    <p>No reading days found.</p>
+    <p>{% if language == "zh" %}没有找到读经日。{% else %}No reading days found.{% endif %}</p>
 </div>
 {% endif %}
 {% endblock %}

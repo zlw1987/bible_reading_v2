@@ -479,15 +479,6 @@ th {
 }
 
 @media (max-width: 760px) {
-    .site-header {
-        transition: transform 180ms ease;
-        will-change: transform;
-    }
-
-    .site-header.site-header--hidden {
-        transform: translateY(calc(-100% - 1px));
-    }
-
     .site-header-inner {
         align-items: flex-start;
         flex-direction: column;
@@ -559,12 +550,6 @@ th {
 
     .staff-plan-card-actions {
         justify-content: flex-start;
-    }
-}
-
-@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
-    .site-header {
-        transition: none;
     }
 }
 

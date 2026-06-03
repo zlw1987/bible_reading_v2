@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Edit Header | {{ ui.site_title }}{% endblock %}
+{% block title %}{% if language == "zh" %}编辑读经计划标题{% else %}Edit Reading Plan Header{% endif %} | {{ ui.site_title }}{% endblock %}
 
 {% block content %}
 <p>
-    <a href="{% url 'staff_reading_plan_list' %}">← Back to Reading Plan Admin</a>
+    <a href="{% url 'staff_reading_plan_list' %}">
+        ← {% if language == "zh" %}返回读经计划管理{% else %}Back to Reading Plan Admin{% endif %}
+    </a>
 </p>
 
 <div class="page-header">
-    <h1 class="page-title">Edit Reading Plan Header</h1>
+    <h1 class="page-title">
+        {% if language == "zh" %}编辑读经计划标题{% else %}Edit Reading Plan Header{% endif %}
+    </h1>
     <p class="page-subtitle">
         {{ plan.name }}
     </p>
@@ -17,15 +21,71 @@
 <div class="card">
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
+        {{ form.non_field_errors }}
+
+        <p>
+            {{ form.name.errors }}
+            <label for="{{ form.name.id_for_label }}">{% if language == "zh" %}名称{% else %}Name{% endif %}</label>
+            {{ form.name }}
+        </p>
+        <p>
+            {{ form.name_en.errors }}
+            <label for="{{ form.name_en.id_for_label }}">{{ ui.english_name }}</label>
+            {{ form.name_en }}
+        </p>
+        <p>
+            {{ form.description.errors }}
+            <label for="{{ form.description.id_for_label }}">{% if language == "zh" %}描述{% else %}Description{% endif %}</label>
+            {{ form.description }}
+        </p>
+        <p>
+            {{ form.description_en.errors }}
+            <label for="{{ form.description_en.id_for_label }}">{% if language == "zh" %}英文描述{% else %}English Description{% endif %}</label>
+            {{ form.description_en }}
+        </p>
+        <p>
+            {{ form.introduction.errors }}
+            <label for="{{ form.introduction.id_for_label }}">{% if language == "zh" %}计划简介{% else %}Introduction{% endif %}</label>
+            {{ form.introduction }}
+        </p>
+        <p>
+            {{ form.introduction_en.errors }}
+            <label for="{{ form.introduction_en.id_for_label }}">{% if language == "zh" %}英文计划简介{% else %}English Introduction{% endif %}</label>
+            {{ form.introduction_en }}
+        </p>
+        <p>
+            {{ form.reading_guidance.errors }}
+            <label for="{{ form.reading_guidance.id_for_label }}">{% if language == "zh" %}读经说明{% else %}Reading Guidance{% endif %}</label>
+            {{ form.reading_guidance }}
+        </p>
+        <p>
+            {{ form.reading_guidance_en.errors }}
+            <label for="{{ form.reading_guidance_en.id_for_label }}">{% if language == "zh" %}英文读经说明{% else %}English Reading Guidance{% endif %}</label>
+            {{ form.reading_guidance_en }}
+        </p>
+        <p>
+            {{ form.pastoral_note.errors }}
+            <label for="{{ form.pastoral_note.id_for_label }}">{% if language == "zh" %}牧者提醒{% else %}Pastoral Note{% endif %}</label>
+            {{ form.pastoral_note }}
+        </p>
+        <p>
+            {{ form.pastoral_note_en.errors }}
+            <label for="{{ form.pastoral_note_en.id_for_label }}">{% if language == "zh" %}英文牧者提醒{% else %}English Pastoral Note{% endif %}</label>
+            {{ form.pastoral_note_en }}
+        </p>
+        <p class="checkbox-option">
+            {{ form.is_active.errors }}
+            {{ form.is_active }}
+            <label for="{{ form.is_active.id_for_label }}">{{ ui.active }}</label>
+        </p>
 
         <button type="submit">
-            Save Header
+            {% if language == "zh" %}保存标题{% else %}Save Header{% endif %}
         </button>
 
         <a class="button button-secondary"
            href="{% url 'staff_reading_plan_days' plan.id %}">
-            Edit Days
+            {{ ui.edit_days }}
         </a>
     </form>
 </div>

@@ -2650,6 +2650,85 @@ class BibleReadingFlowTests(TestCase):
         self.assertIn(".staff-plan-card-actions .button", css)
         self.assertIn("white-space: nowrap;", css)
 
+    def test_chinese_reading_plan_header_edit_page_uses_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("staff_reading_plan_header", args=[self.plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "返回读经计划管理")
+        self.assertContains(response, "编辑读经计划标题")
+        self.assertContains(response, "名称")
+        self.assertContains(response, "英文名称")
+        self.assertContains(response, "描述")
+        self.assertContains(response, "保存标题")
+        self.assertContains(response, "编辑每日内容")
+        self.assertNotContains(response, "Back to Reading Plan Admin")
+        self.assertNotContains(response, "Edit Reading Plan Header")
+        self.assertNotContains(response, "Name en")
+
+    def test_english_reading_plan_header_edit_page_stays_english(self):
+        self.set_language("en")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("staff_reading_plan_header", args=[self.plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Back to Reading Plan Admin")
+        self.assertContains(response, "Edit Reading Plan Header")
+        self.assertContains(response, "Name")
+        self.assertContains(response, "English Name")
+        self.assertContains(response, "Description")
+        self.assertContains(response, "Save Header")
+        self.assertContains(response, "Edit Days")
+
+    def test_chinese_reading_plan_days_edit_page_uses_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("staff_reading_plan_days", args=[self.plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "返回读经计划管理")
+        self.assertContains(response, "编辑每日读经内容")
+        self.assertContains(response, "编辑标题")
+        self.assertContains(response, "新增一天")
+        self.assertContains(response, "第几天")
+        self.assertContains(response, "读经内容")
+        self.assertContains(response, "背诵经文")
+        self.assertContains(response, "保存第 1 天")
+        self.assertContains(response, "删除第 1 天")
+        self.assertNotContains(response, "Back to Reading Plan Admin")
+        self.assertNotContains(response, "Edit Reading Plan Days")
+        self.assertNotContains(response, "Day number")
+        self.assertNotContains(response, "Reading text")
+
+    def test_english_reading_plan_days_edit_page_stays_english(self):
+        self.set_language("en")
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("staff_reading_plan_days", args=[self.plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Back to Reading Plan Admin")
+        self.assertContains(response, "Edit Reading Plan Days")
+        self.assertContains(response, "Edit Header")
+        self.assertContains(response, "Add Day")
+        self.assertContains(response, "Day number")
+        self.assertContains(response, "Reading text")
+        self.assertContains(response, "Memory Verse")
+        self.assertContains(response, "Save Day 1")
+        self.assertContains(response, "Delete Day 1")
+
     def test_non_staff_cannot_access_reading_plan_admin_list(self):
         self.client.login(username="levin", password="testpass123")
 

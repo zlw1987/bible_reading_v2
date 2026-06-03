@@ -136,76 +136,16 @@
     </main>
     <script>
         (function () {
-            var header = document.querySelector(".site-header");
             var menuNodes = document.querySelectorAll(".nav-staff-menu");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
             var mobileDropdown = window.matchMedia("(hover: none), (max-width: 760px)");
-            var mobileHeader = window.matchMedia("(max-width: 760px)");
             var lockedMenu = null;
             var lockedScrollY = 0;
             var bodyOriginalStyles = {};
             var outsideClickListening = false;
-            var lastHeaderScrollY = window.scrollY || window.pageYOffset || 0;
-            var headerScrollQueued = false;
-            var keepHeaderVisibleUntil = 0;
-
-            function setMenuPosition(menu) {
-                if (shouldUseMobileOverlay()) {
-                    showHeader();
-                }
-            }
 
             function shouldUseMobileOverlay() {
                 return mobileDropdown.matches && !finePointer.matches;
-            }
-
-            function anyMenuOpen() {
-                return Array.prototype.some.call(menuNodes, function (menu) {
-                    return menu.open;
-                });
-            }
-
-            function showHeader() {
-                if (header) {
-                    header.classList.remove("site-header--hidden");
-                }
-            }
-
-            function keepHeaderVisible() {
-                keepHeaderVisibleUntil = Date.now() + 1200;
-                showHeader();
-            }
-
-            function updateHeaderVisibility() {
-                var currentScrollY = Math.max(window.scrollY || window.pageYOffset || 0, 0);
-                var scrollingDown = currentScrollY > lastHeaderScrollY + 8;
-                var scrollingUp = currentScrollY < lastHeaderScrollY - 4;
-                var headerHasFocus = header && header.contains(document.activeElement);
-                var shouldStayVisible = (
-                    !mobileHeader.matches ||
-                    currentScrollY <= 8 ||
-                    anyMenuOpen() ||
-                    headerHasFocus ||
-                    Date.now() < keepHeaderVisibleUntil
-                );
-
-                if (shouldStayVisible || scrollingUp) {
-                    showHeader();
-                } else if (scrollingDown && currentScrollY > 80 && header) {
-                    header.classList.add("site-header--hidden");
-                }
-
-                lastHeaderScrollY = currentScrollY;
-                headerScrollQueued = false;
-            }
-
-            function requestHeaderVisibilityUpdate() {
-                if (headerScrollQueued) {
-                    return;
-                }
-
-                headerScrollQueued = true;
-                window.requestAnimationFrame(updateHeaderVisibility);
             }
 
             function closeMenuFromOutside(event) {
@@ -252,7 +192,6 @@
 
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
-                    setMenuPosition(menu);
                     addOutsideCloseHandlers();
                     return;
                 }
@@ -268,7 +207,6 @@
                     width: document.body.style.width,
                 };
 
-                setMenuPosition(menu);
                 document.body.classList.add("nav-menu-open");
                 document.body.style.position = "fixed";
                 document.body.style.top = "-" + lockedScrollY + "px";
@@ -325,8 +263,6 @@
                 });
 
                 menu.addEventListener("toggle", function () {
-                    keepHeaderVisible();
-
                     if (menu.open && shouldUseMobileOverlay()) {
                         lockBodyScroll(menu);
                     } else if (lockedMenu === menu) {
@@ -342,25 +278,16 @@
             });
 
             window.addEventListener("resize", function () {
-                keepHeaderVisible();
-
                 if (!lockedMenu) {
                     return;
                 }
 
                 if (lockedMenu.open && shouldUseMobileOverlay()) {
-                    setMenuPosition(lockedMenu);
+                    addOutsideCloseHandlers();
                 } else {
                     unlockBodyScroll();
                 }
             });
-
-            if (header) {
-                header.addEventListener("pointerdown", keepHeaderVisible);
-                header.addEventListener("focusin", keepHeaderVisible);
-                header.addEventListener("mouseenter", keepHeaderVisible);
-                window.addEventListener("scroll", requestHeaderVisibilityUpdate, { passive: true });
-            }
         })();
     </script>
 </body>

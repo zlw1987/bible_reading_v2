@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design. CS-H.5A adds the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens membership helpers and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification. CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design. CS-H.5A adds the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens membership helpers and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification. CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models. CS-H.6 records the signup requested-unit flow design.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. CS-H.4 is membership design only. CS-H.5A adds the model/admin/test foundation only. CS-H.5B adds helper/validation hardening only. CS-H.5C adds only an explicit backfill command and tests. CS-H.5D is verification documentation only. CS-H.5E is Django Admin clarity only. These steps do not auto-run, change signup, add audience selection, add filtering, switch runtime source of truth, or add custom staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. CS-H.4 is membership design only. CS-H.5A adds the model/admin/test foundation only. CS-H.5B adds helper/validation hardening only. CS-H.5C adds only an explicit backfill command and tests. CS-H.5D is verification documentation only. CS-H.5E is Django Admin clarity only. CS-H.6 is signup requested-unit flow design only. These steps do not auto-run, change signup, add audience selection, add filtering, switch runtime source of truth, or add custom staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -288,6 +288,7 @@ Recommendation:
 - Also offer "Not sure / New visitor".
 - Allow an optional note field to help admin assign correctly.
 - Do not let requested unit become active membership without approval.
+- See `docs/CHURCH_STRUCTURE_SIGNUP_REQUEST_FLOW_DESIGN.md` for the CS-H.6 signup request design.
 
 ## 10. Admin Approval Workflow
 
@@ -350,7 +351,7 @@ Recommended phases:
 - CS-H.5C: backfill command with dry-run/apply from `Profile.small_group`. Completed.
 - CS-H.5D: production/staging backfill verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.5E: admin clarity for legacy structure vs future structure/membership foundation. Completed.
-- CS-H.6: signup requested-unit flow.
+- CS-H.6: signup requested-unit flow. Completed.
 - CS-H.7: admin approval workflow.
 - Later: migrate selected consumers from `Profile.small_group` to membership.
 
@@ -398,7 +399,7 @@ CS-H.3/CS-H.3B/CS-H.3C do not include:
 Open decisions:
 - mapping FK vs mapping table
 - exact `unit_type` name for `SmallGroup` / fellowship
-- whether users can request only leaf units or broader units
+- whether implementation should support broader district/ministry-context request routing, beyond the CS-H.6 recommendation to prefer active leaf small-group/fellowship units plus "Not sure / New visitor"
 - whether to add requested unit to `Profile` or create a separate request model
 - approval roles/capabilities
 - whether approved membership syncs `Profile.small_group` immediately

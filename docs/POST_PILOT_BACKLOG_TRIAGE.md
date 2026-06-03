@@ -20,6 +20,7 @@
 - CS-H.5C ChurchStructureMembership backfill command is complete.
 - CS-H.5D ChurchStructureMembership production/staging backfill verification is complete by user-attested GoDaddy run.
 - CS-H.5E Admin clarity for legacy structure vs future structure/membership foundation is complete.
+- CS-H.6 Signup Requested-Unit Flow Design Doc is complete.
 
 The pilot closure decision is Go. No `v0.9-pilot-rc2` is required unless new pilot issues are discovered.
 
@@ -88,6 +89,7 @@ Likely candidates:
 - CS-H.5C ChurchStructureMembership Backfill Command. Completed.
 - CS-H.5D ChurchStructureMembership Production Backfill Verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.5E Admin Clarity for Legacy SmallGroup vs Future Church Structure. Completed.
+- CS-H.6 Signup Requested-Unit Flow Design Doc. Completed.
 - ServiceEvent audience/filtering design doc.
 - Staff Admin Surface Expansion plan.
 - Deployment/operations hardening plan.
@@ -134,12 +136,13 @@ These remain future modules. Do not start implementation until post-pilot eviden
 14. CS-H.5C backfill command with dry-run/apply from `Profile.small_group` completed.
 15. CS-H.5D production/staging backfill verification completed by user-attested GoDaddy run.
 16. CS-H.5E Admin clarity for legacy structure vs future structure/membership foundation completed.
-17. Plan CS-H.6 Signup Requested-Unit Flow Design Doc or CS-H.7 Admin Approval Workflow Design Doc.
-18. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
-19. Revisit Community Activities only after the audience model is clarified.
-20. Revisit Checklist V1 only if ministry pilot feedback proves need.
+17. CS-H.6 Signup Requested-Unit Flow Design Doc completed.
+18. Plan CS-H.7 Admin Approval Workflow Design Doc.
+19. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
+20. Revisit Community Activities only after the audience model is clarified.
+21. Revisit Checklist V1 only if ministry pilot feedback proves need.
 
-CS-H.5E improves Django Admin clarity only. Exact CS-H.5D command-output counts were not recorded. Current runtime behavior still uses the legacy models and `Profile.small_group`. Signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and custom Staff Admin implementation remain future phased work.
+CS-H.6 is design-only. CS-H.5E improves Django Admin clarity only. Exact CS-H.5D command-output counts were not recorded. Current runtime behavior still uses the legacy models and `Profile.small_group`. Signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and custom Staff Admin implementation remain future phased work.
 
 ## 5. Decision Framework
 
@@ -180,6 +183,7 @@ Include these as planning options only. Do not start them from this triage docum
 - CS-H.5C ChurchStructureMembership Backfill Command. Completed.
 - CS-H.5D ChurchStructureMembership Production Backfill Verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.5E Admin Clarity for Legacy SmallGroup vs Future Church Structure. Completed.
+- CS-H.6 Signup Requested-Unit Flow Design Doc. Completed.
 - PP-SA.1 Staff Admin Surface Expansion Plan.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
@@ -192,4 +196,4 @@ Roadmap documents should remain aligned on these points:
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
 - Large deferred items remain deferred pending real pilot feedback.
-- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested GoDaddy production/staging backfill verification, and CS-H.5E improves Django Admin clarity. Runtime still uses legacy models and `Profile.small_group`. Signup/onboarding changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.
+- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity, and CS-H.6 records signup requested-unit flow design. Runtime still uses legacy models and `Profile.small_group`. Signup/onboarding code changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.

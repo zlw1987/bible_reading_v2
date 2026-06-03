@@ -428,6 +428,13 @@ th {
     overflow-wrap: anywhere;
 }
 
+.guide-list-scripture {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+}
+
 .actions {
     display: flex;
     gap: 10px;
@@ -464,13 +471,25 @@ th {
 }
 
 @media (max-width: 760px) {
+    .site-header {
+        transition: transform 180ms ease;
+        will-change: transform;
+    }
+
+    .site-header.site-header--hidden {
+        transform: translateY(calc(-100% - 1px));
+    }
+
     .site-header-inner {
         align-items: flex-start;
         flex-direction: column;
+        gap: 10px;
+        padding: 10px 16px;
     }
 
     .nav {
         align-items: flex-start;
+        gap: 8px;
     }
 
     .nav-staff-menu[open] .nav-staff-menu-panel {
@@ -518,6 +537,12 @@ th {
 
     .schedule-meta-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+    .site-header {
+        transition: none;
     }
 }
 

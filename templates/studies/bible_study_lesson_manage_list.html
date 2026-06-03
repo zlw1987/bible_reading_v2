@@ -51,46 +51,65 @@
 </div>
 
 {% if lessons %}
-<div class="card">
-    <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    <th>{% if language == "zh" %}标题{% else %}Title{% endif %}</th>
-                    <th>{% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}</th>
-                    <th>{% if language == "zh" %}经文{% else %}Scripture{% endif %}</th>
-                    <th>{% if language == "zh" %}指引日期{% else %}Guide Date{% endif %}</th>
-                    <th>{% if language == "zh" %}周四预查{% else %}Thursday Pre-study{% endif %}</th>
-                    <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
-                    <th>{% if language == "zh" %}发布时间{% else %}Published{% endif %}</th>
-                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for lesson in lessons %}
-                <tr>
-                    <td>
-                        <a href="{% url 'bible_study_lesson_detail' lesson.id %}">
-                            {{ lesson|study_lesson_title:language }}
-                        </a>
-                    </td>
-                    <td>{{ lesson.series|study_series_title:language }}</td>
-                    <td>{{ lesson.scripture_reference|default:"-" }}</td>
-                    <td>{{ lesson.lesson_date }}</td>
-                    <td>{{ lesson.prestudy_datetime|default:"-" }}</td>
-                    <td>{{ lesson|study_status_label:language }}</td>
-                    <td>{{ lesson.published_at|default:"-" }}</td>
-                    <td>
-                        <a class="button button-secondary"
-                           href="{% url 'edit_bible_study_lesson' lesson.id %}">
-                            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="schedule-list">
+    {% for lesson in lessons %}
+    <article class="schedule-list-card guide-list-card">
+        <div class="schedule-list-header">
+            <div class="schedule-list-title-block">
+                <div class="schedule-list-label">
+                    {% if language == "zh" %}标题{% else %}Title{% endif %}
+                </div>
+                <h2 class="schedule-list-title">
+                    <a href="{% url 'bible_study_lesson_detail' lesson.id %}">
+                        {{ lesson|study_lesson_title:language }}
+                    </a>
+                </h2>
+            </div>
+
+            <div class="schedule-list-actions" aria-label="{% if language == 'zh' %}操作{% else %}Actions{% endif %}">
+                <a class="button button-secondary"
+                   href="{% url 'bible_study_lesson_detail' lesson.id %}">
+                    {% if language == "zh" %}查看{% else %}View{% endif %}
+                </a>
+                <a class="button button-secondary"
+                   href="{% url 'edit_bible_study_lesson' lesson.id %}">
+                    {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                </a>
+            </div>
+        </div>
+
+        <dl class="schedule-meta-grid">
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}</dt>
+                <dd>{{ lesson.series|study_series_title:language }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}经文{% else %}Scripture{% endif %}</dt>
+                <dd class="guide-list-scripture">{{ lesson.scripture_reference|default:"-" }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}指引日期{% else %}Guide Date{% endif %}</dt>
+                <dd>{{ lesson.lesson_date }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}周四预查{% else %}Thursday Pre-study{% endif %}</dt>
+                <dd>{{ lesson.prestudy_datetime|default:"-" }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>
+                <dd>{{ lesson|study_status_label:language }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}范围{% else %}Scope{% endif %}</dt>
+                <dd>{{ lesson.series|study_series_scope_label:language }}</dd>
+            </div>
+            <div class="schedule-meta-item">
+                <dt>{% if language == "zh" %}发布时间{% else %}Published{% endif %}</dt>
+                <dd>{{ lesson.published_at|default:"-" }}</dd>
+            </div>
+        </dl>
+    </article>
+    {% endfor %}
 </div>
 {% else %}
 <div class="card">

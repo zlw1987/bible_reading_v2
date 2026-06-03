@@ -1044,6 +1044,42 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Visible Lesson")
         self.assertContains(response, "John 17")
+        self.assertContains(response, "guide-list-card")
+        self.assertContains(response, "schedule-meta-grid")
+        self.assertContains(response, "Bible Study Schedule")
+        self.assertContains(response, "Guide Date")
+        self.assertContains(response, "Thursday Pre-study")
+        self.assertContains(response, "Scope")
+        self.assertContains(response, "View")
+        self.assertContains(response, "Edit")
+        self.assertNotContains(response, "<table")
+        self.assertContains(
+            response,
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+    def test_chinese_lesson_management_list_uses_mobile_card_labels(self):
+        self.set_language("zh")
+        lesson = self.create_lesson(
+            title="很长的每周查经指引用来确认手机布局不会把中文挤成竖排",
+            scripture_reference="约翰福音 17:1-26",
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "每周查经指引")
+        self.assertContains(response, "很长的每周查经指引")
+        self.assertContains(response, "查经安排")
+        self.assertContains(response, "指引日期")
+        self.assertContains(response, "周四预查")
+        self.assertContains(response, "范围")
+        self.assertContains(response, "查看")
+        self.assertContains(response, "编辑")
+        self.assertContains(response, "guide-list-card")
+        self.assertContains(response, "guide-list-scripture")
+        self.assertNotContains(response, "<table")
         self.assertContains(
             response,
             reverse("bible_study_lesson_detail", args=[lesson.id]),

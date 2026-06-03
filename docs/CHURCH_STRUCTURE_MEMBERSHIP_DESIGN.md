@@ -6,7 +6,7 @@
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. These steps do not authorize signup changes, admin approval UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
+The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. These steps do not authorize signup changes, admin approval UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
 ## 2. Current State
 
@@ -22,7 +22,9 @@ Current structure state:
 - Current `MinistryContext`, `District`, and `SmallGroup` data has been seeded/mapped into `ChurchStructureUnit`.
 - `ChurchStructureUnit` is not the runtime source of truth.
 - CS-H.5A adds the model-only `ChurchStructureMembership` table.
-- CS-H.5C adds the explicit `backfill_church_structure_memberships` command, but no runtime consumer uses membership yet.
+- CS-H.5C adds the explicit `backfill_church_structure_memberships` command.
+- CS-H.5D records production/staging backfill verification as user-attested; exact command-output counts were not recorded.
+- No runtime consumer uses membership yet.
 - There is no requested-unit signup/onboarding flow today.
 - There is no admin approval workflow today.
 
@@ -102,7 +104,12 @@ CS-H.5C backfill command note:
 - `--apply` creates active primary `small_group_member` memberships from `Profile.small_group` when the related `SmallGroup.church_structure_unit` mapping exists.
 - The command is idempotent and skips users with no profile group, unmapped groups, or an existing active primary membership.
 - The command does not modify `Profile.small_group`, create requested memberships, infer permissions, infer serving assignments, or switch runtime behavior.
-- Next step after local verification is production dry-run/apply QA, not consumer migration.
+
+CS-H.5D verification note:
+- GoDaddy production/staging dry-run/apply/second dry-run was completed by user confirmation.
+- Exact numeric command-output counts were not provided or recorded.
+- No unresolved warnings, errors, or data QA item was reported.
+- Runtime still uses `Profile.small_group`; membership is not yet the source of truth.
 
 ## 5. Requested Assignment Model Options
 
@@ -372,7 +379,8 @@ Recommended sequence:
 - CS-H.4: ChurchStructureMembership design doc. Completed by this task.
 - CS-H.5A: `ChurchStructureMembership` model-only foundation. Completed.
 - CS-H.5B: membership model hardening/tests. Completed.
-- CS-H.5C: backfill command design/implementation with dry-run/apply. Completed locally; next step is production dry-run/apply QA.
+- CS-H.5C: backfill command design/implementation with dry-run/apply. Completed.
+- CS-H.5D: production/staging backfill verification. Completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.6: signup requested-unit design.
 - CS-H.7: admin approval workflow design.
 - Later: consumer migration from `Profile.small_group` to membership.

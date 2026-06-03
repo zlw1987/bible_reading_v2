@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit dry-run/apply seeding command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, and CS-H.5C adds an explicit dry-run/apply membership backfill command. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or runtime behavior changes from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit dry-run/apply seeding command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, and CS-H.5D records user-attested GoDaddy production/staging backfill verification. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or runtime behavior changes from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -67,6 +67,7 @@ Current code assumptions:
 - CS-H.5A adds `ChurchStructureMembership` as a model-only foundation with admin registration and tests.
 - CS-H.5B adds active/date-window membership helpers and validation tests.
 - CS-H.5C adds `backfill_church_structure_memberships`, an explicit dry-run/apply command that can create active primary memberships from mapped `Profile.small_group` values.
+- CS-H.5D records production/staging backfill verification as user-attested. Exact command-output counts were not recorded.
 - There is no automatic `ChurchStructureUnit` data seeding through migrations or app startup.
 - There is no automatic membership backfill, signup/onboarding approval flow, or membership-driven visibility yet.
 - Current Bible Study schedule scope uses:
@@ -156,6 +157,7 @@ Rules:
 - CS-H.5A adds the membership table only; current runtime behavior still uses `Profile.small_group`.
 - CS-H.5B query helpers count only active memberships within their date window; requested, rejected, cancelled, and ended memberships are excluded.
 - CS-H.5C adds a command to backfill active primary memberships from existing `Profile.small_group` values where the small group is mapped to `ChurchStructureUnit`; it does not change `Profile.small_group` or switch runtime consumers.
+- CS-H.5D records production/staging backfill verification by user confirmation; membership still does not drive runtime visibility.
 - Do not import phone/private/sensitive data.
 - Do not do full historical import in the first version.
 
@@ -317,11 +319,12 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-H.5A adds membership model-only foundation, with no signup, admin approval UI, backfill, consumer migration, or runtime behavior changes
 - CS-H.5B hardens membership helpers/validation, with no signup, backfill, consumer migration, or runtime behavior changes
 - CS-H.5C adds an explicit membership backfill command, with no signup, admin approval UI, consumer migration, or runtime behavior changes
+- CS-H.5D records production/staging backfill verification by user-attested GoDaddy run, with no runtime behavior changes
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
 
-Keep production backfill QA, signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureMembership` exists as a model/helper foundation with an explicit backfill command. Runtime behavior still uses the legacy structure models and `Profile.small_group`.
+Keep signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureMembership` exists as a model/helper foundation with an explicit backfill command and user-attested production/staging verification. Runtime behavior still uses the legacy structure models and `Profile.small_group`.
 
 ## 14. Deliverable Summary
 
@@ -338,6 +341,7 @@ This plan documents:
 - CS-H.5A `ChurchStructureMembership` model-only foundation
 - CS-H.5B `ChurchStructureMembership` helper/validation hardening
 - CS-H.5C `ChurchStructureMembership` backfill command
+- CS-H.5D `ChurchStructureMembership` production/staging backfill verification
 - no automatic `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
 - Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later

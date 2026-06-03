@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. It does not seed data, migrate existing records into the tree, change signup, add membership, add audience selection, add filtering, or add staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. It does not auto-run, change signup, add membership, add audience selection, add filtering, or add staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -18,6 +18,7 @@ Short-term transition:
 - `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of truth for current runtime behavior.
 - `ChurchStructureUnit` is initially a mirror or mapped structure.
 - CS-H.3B adds nullable mapping fields on the legacy structure models, but those fields do not drive runtime behavior.
+- CS-H.3C can populate `ChurchStructureUnit` rows and fill those mapping fields through an explicit management command, but the mappings still do not drive runtime behavior.
 - No existing behavior should switch to `ChurchStructureUnit` until a specific consumer is planned, implemented, and tested.
 
 Current pilot behavior must remain stable:
@@ -46,7 +47,7 @@ Recommended transition stance:
 - Legacy models remain editable source-of-truth until mapping is seeded and verified.
 - `ChurchStructureUnit` mirrors them at first.
 - Only after admin QA should any staff workflow edit structure through `ChurchStructureUnit`.
-- CS-H.3B prepares this by adding nullable mapping fields only; CS-H.3C owns idempotent seeding/mapping.
+- CS-H.3B prepares this by adding nullable mapping fields only; CS-H.3C owns idempotent seeding/mapping through the `seed_church_structure_units` command.
 
 ## 4. Membership Strategy
 
@@ -196,17 +197,27 @@ CHURCH / Whole Church / 全教会
 
 Rules:
 - No seeding in CS-H.3 or CS-H.3B.
-- CS-H.3C should handle idempotent seeding/mapping of existing `MinistryContext`, `District`, and `SmallGroup` records into `ChurchStructureUnit`.
-- Seeding must be idempotent.
+- CS-H.3C handles idempotent seeding/mapping of existing `MinistryContext`, `District`, and `SmallGroup` records into `ChurchStructureUnit` through `python manage.py seed_church_structure_units`.
+- The command defaults to dry-run; use `--apply` only after reviewing dry-run output.
+- Seeding is idempotent and may be re-run after future structure edits.
 - Do not delete legacy records.
 - Do not drop orphan records.
-- Orphan `District` rows without `MinistryContext` should be placed under root or a clearly named holding unit.
-- Orphan `SmallGroup` rows without `District` should be placed under root, a holding unit, or flagged for admin review.
+- Orphan `District` rows without `MinistryContext` are placed under an `UNASSIGNED-DISTRICTS` holding unit.
+- Orphan `SmallGroup` rows without `District` are placed under an `UNASSIGNED-GROUPS` holding unit.
 - Seed labels should preserve bilingual names where available.
 
 Root:
 - One active Whole Church root is the intended system shape.
-- Root uniqueness enforcement remains deferred until the seed plan defines the root row and code policy.
+- CS-H.3C seeds a parentless `CHURCH` root when applying the command.
+- Root uniqueness database enforcement remains deferred; the command warns about duplicate active roots or duplicate parentless `CHURCH` units without destructively fixing them.
+
+Recommended deployment flow:
+- Deploy code.
+- Run migrations.
+- Run `python manage.py seed_church_structure_units --dry-run`.
+- Inspect output for unexpected creates, updates, links, or warnings.
+- Run `python manage.py seed_church_structure_units --apply`.
+- Run `python manage.py seed_church_structure_units --dry-run` again to confirm no remaining changes are expected.
 
 ## 9. Requested Unit Rules
 
@@ -280,7 +291,7 @@ Membership does not automatically assign serving roles.
 Recommended phases:
 - CS-H.3: design mapping/membership strategy.
 - CS-H.3B: choose and implement mapping fields/table model-only. Completed with nullable FKs on legacy structure models.
-- CS-H.3C: seed root and current structure idempotently.
+- CS-H.3C: seed root and current structure idempotently through a management command. Completed.
 - CS-H.3D: admin sanity QA, no runtime behavior change.
 - CS-H.4: design `ChurchStructureMembership` model.
 - CS-H.5: implement membership model + requested assignment model-only.
@@ -314,8 +325,7 @@ Mitigation direction:
 
 ## 14. Non-Goals
 
-CS-H.3/CS-H.3B do not include:
-- seeding
+CS-H.3/CS-H.3B/CS-H.3C do not include:
 - signup changes
 - membership model
 - audience selector
@@ -346,4 +356,5 @@ Current recommendation:
 - long-term source of truth: `ChurchStructureUnit` + `ChurchStructureMembership`
 - short-term runtime source of truth: current legacy models
 - mapping: explicit nullable FK fields, added in CS-H.3B
+- seeding: explicit dry-run/apply management command, added in CS-H.3C
 - signup: requested unit plus admin approval, never direct final self-assignment

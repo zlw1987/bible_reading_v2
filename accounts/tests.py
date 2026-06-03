@@ -1,6 +1,8 @@
 import re
+from io import StringIO
 from pathlib import Path
 
+from django.core.management import call_command
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -745,6 +747,174 @@ class ChurchStructureUnitFoundationTests(TestCase):
             district.path_label("en"),
             "Whole Church > Chinese Ministry > District 1",
         )
+
+
+class ChurchStructureUnitSeedingCommandTests(TestCase):
+    def run_seed_command(self, *args):
+        output = StringIO()
+        call_command("seed_church_structure_units", *args, stdout=output)
+        return output.getvalue()
+
+    def test_dry_run_creates_no_units_or_mappings(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(name="District 1", ministry_context=context)
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+
+        output = self.run_seed_command("--dry-run")
+
+        self.assertIn("Church structure unit seeding mode: DRY RUN", output)
+        self.assertEqual(ChurchStructureUnit.objects.count(), 0)
+
+        context.refresh_from_db()
+        district.refresh_from_db()
+        group.refresh_from_db()
+        self.assertIsNone(context.church_structure_unit)
+        self.assertIsNone(district.church_structure_unit)
+        self.assertIsNone(group.church_structure_unit)
+
+    def test_apply_creates_root_and_maps_current_structure(self):
+        context = MinistryContext.objects.create(
+            code="cm",
+            name="中文事工",
+            name_en="Chinese Ministry",
+            description="中文事工说明",
+            description_en="Chinese ministry description",
+            sort_order=10,
+        )
+        district = District.objects.create(name="第一区", ministry_context=context)
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+
+        output = self.run_seed_command("--apply")
+
+        self.assertIn("Church structure unit seeding mode: APPLY", output)
+
+        root = ChurchStructureUnit.objects.get(
+            parent__isnull=True,
+            code="CHURCH",
+        )
+        self.assertEqual(root.unit_type, ChurchStructureUnit.UNIT_ROOT)
+        self.assertEqual(root.name, "全教会")
+        self.assertEqual(root.name_en, "Whole Church")
+
+        context.refresh_from_db()
+        district.refresh_from_db()
+        group.refresh_from_db()
+
+        self.assertEqual(context.church_structure_unit.parent, root)
+        self.assertEqual(
+            context.church_structure_unit.unit_type,
+            ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        )
+        self.assertEqual(context.church_structure_unit.code, "CM")
+        self.assertEqual(context.church_structure_unit.name, "中文事工")
+        self.assertEqual(context.church_structure_unit.name_en, "Chinese Ministry")
+
+        self.assertEqual(district.church_structure_unit.parent, context.church_structure_unit)
+        self.assertEqual(district.church_structure_unit.code, f"DISTRICT-{district.id}")
+        self.assertEqual(
+            district.church_structure_unit.unit_type,
+            ChurchStructureUnit.UNIT_DISTRICT,
+        )
+
+        self.assertEqual(group.church_structure_unit.parent, district.church_structure_unit)
+        self.assertEqual(group.church_structure_unit.code, f"SMALLGROUP-{group.id}")
+        self.assertEqual(
+            group.church_structure_unit.unit_type,
+            ChurchStructureUnit.UNIT_SMALL_GROUP,
+        )
+
+    def test_apply_handles_orphan_district_and_group_with_holding_units(self):
+        district = District.objects.create(name="District without context")
+        group = SmallGroup.objects.create(name="Group without district")
+
+        dry_run_output = self.run_seed_command("--dry-run")
+
+        self.assertEqual(
+            dry_run_output.count("Would create holding unit UNASSIGNED-DISTRICTS"),
+            1,
+        )
+        self.assertEqual(
+            dry_run_output.count("Would create holding unit UNASSIGNED-GROUPS"),
+            1,
+        )
+
+        self.run_seed_command("--apply")
+
+        root = ChurchStructureUnit.objects.get(
+            parent__isnull=True,
+            code="CHURCH",
+        )
+        unassigned_districts = ChurchStructureUnit.objects.get(
+            parent=root,
+            code="UNASSIGNED-DISTRICTS",
+        )
+        unassigned_groups = ChurchStructureUnit.objects.get(
+            parent=root,
+            code="UNASSIGNED-GROUPS",
+        )
+
+        district.refresh_from_db()
+        group.refresh_from_db()
+
+        self.assertEqual(district.church_structure_unit.parent, unassigned_districts)
+        self.assertEqual(group.church_structure_unit.parent, unassigned_groups)
+        self.assertEqual(unassigned_districts.name_en, "Unassigned Districts")
+        self.assertEqual(unassigned_groups.name_en, "Unassigned Groups")
+
+    def test_apply_is_idempotent(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(name="District 1", ministry_context=context)
+        SmallGroup.objects.create(name="Rainbow 4", district=district)
+
+        self.run_seed_command("--apply")
+        first_unit_count = ChurchStructureUnit.objects.count()
+
+        second_output = self.run_seed_command("--apply")
+        dry_run_output = self.run_seed_command("--dry-run")
+
+        self.assertEqual(ChurchStructureUnit.objects.count(), first_unit_count)
+        self.assertIn("created: 0", second_output)
+        self.assertIn("would created: 0", dry_run_output)
+        self.assertIn("would linked: 0", dry_run_output)
+
+    def test_apply_preserves_existing_runtime_behavior(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(name="District 1", ministry_context=context)
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        other_group = SmallGroup.objects.create(name="Rainbow 5")
+        user = User.objects.create_user(
+            username="seeded_member",
+            password="TestPass123!",
+        )
+        other_user = User.objects.create_user(
+            username="seeded_other_member",
+            password="TestPass123!",
+        )
+        user.profile.small_group = group
+        user.profile.save()
+        other_user.profile.small_group = other_group
+        other_user.profile.save()
+
+        series = BibleStudySeries.objects.create(
+            title="CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.run_seed_command("--apply")
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+        self.assertEqual(user.profile.small_group, group)
+        self.assertTrue(event.can_be_seen_by(user))
+        self.assertFalse(event.can_be_seen_by(other_user))
 
 
 class ChurchRolePermissionTests(TestCase):

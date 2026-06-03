@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, and CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, and CS-H.3C adds an explicit idempotent seeding/mapping management command.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -181,7 +181,7 @@ Root may be persisted or virtual; this remains an open decision. Persisting root
 CS-H.2 implementation note:
 - `ChurchStructureUnit` exists as a model-only foundation.
 - CS-H.2A rejects indirect parent cycles and makes ancestor/path display safe against corrupted cycles.
-- No root, CM, EM, district, or small-group rows are seeded yet.
+- No root, CM, EM, district, or small-group rows are created automatically by migrations or app startup.
 - Existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of current behavior.
 - No audience selection or filtering uses `ChurchStructureUnit` yet.
 - One active Whole Church root is the intended future system shape, but root uniqueness enforcement is deferred until root seeding/mapping policy is decided.
@@ -190,6 +190,7 @@ CS-H.3 strategy note:
 - Long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
 - Short-term runtime behavior continues to use `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.3B adds nullable mapping fields from `MinistryContext`, `District`, and `SmallGroup` to `ChurchStructureUnit`, but they do not drive current behavior.
+- CS-H.3C adds `seed_church_structure_units` with dry-run/apply modes to seed a `CHURCH` root, mirror current structure units, and fill legacy mapping fields. It does not auto-run and still does not make `ChurchStructureUnit` drive runtime behavior.
 - Signup/onboarding should collect a requested unit or group for staff review, not direct final self-assignment.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
@@ -336,6 +337,8 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - Keep `Profile.small_group`.
 - Keep current `BibleStudySeries` scope behavior.
 - Decide which model is source of truth during the bridge period.
+- CS-H.3B completed nullable mapping fields.
+- CS-H.3C completed explicit idempotent seeding/mapping through `python manage.py seed_church_structure_units`.
 
 ### Phase CS-H.4: First Audience Consumer
 
@@ -442,7 +445,7 @@ Possible next planning or implementation steps:
 - CS-H.2A ChurchStructureUnit model hardening. Completed.
 - CS-H.3 current structure mapping and membership strategy. Completed.
 - CS-H.3B nullable legacy mapping fields model-only. Completed.
-- CS-H.3C idempotent structure seeding.
+- CS-H.3C idempotent structure seeding command. Completed.
 - CS-H.4 audience selection model design for one consumer.
 - CA-V1.1 Community Activities planning refinement.
 - PP-SA.1 Staff Admin Surface Expansion Plan.

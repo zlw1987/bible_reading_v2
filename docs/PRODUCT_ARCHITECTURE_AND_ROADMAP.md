@@ -546,6 +546,10 @@ Current foundation status:
 
 CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Schedule scope, and CS-F.3 optional ServiceEvent MinistryContext labeling are complete after the Bible Study V2 Flow QA pass.
 
+Current pilot-readiness step:
+
+RC-P.2 Pilot Release Candidate Readiness Pass documents the final pilot scope, manual QA checklist, blockers, known limitations, and sign-off criteria before pilot validation.
+
 Future foundation planning:
 
 Flexible `ChurchStructureUnit` remains future planning work after the short-term bridge and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.

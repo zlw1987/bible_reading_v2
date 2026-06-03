@@ -147,6 +147,7 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - CS-F.3 ServiceEvent MinistryContext label foundation completed.
+- RC-P.2 Pilot Release Candidate Readiness Pass before pilot validation.
 - Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
 - Lighting Pilot preflight/validation or Community Activities planning depending on chosen priority.
 - Later role-aware editing permissions.

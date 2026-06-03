@@ -301,7 +301,9 @@ V2 correction after browser review:
 
 Current phase:
 
-Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`.
+Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers.
+
+The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is the selected next design-only task. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 Current foundation step:
 
@@ -452,7 +454,8 @@ Current sequence:
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - CS-F.3 optional ServiceEvent MinistryContext label foundation completed.
-- Later flexible Church Structure Foundation only after the short-term bridge proves insufficient.
+- CS-H.1 Flexible Church Structure and Audience Scope Design Doc selected as the next design-only task.
+- Later flexible Church Structure Foundation implementation only after the short-term bridge proves insufficient and after phased planning.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
@@ -548,13 +551,13 @@ CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Sch
 
 Current post-pilot step:
 
-PV-C.1 records pilot validation closure. The current next phase is Post-Pilot Backlog Planning: collect real pilot feedback, classify issues by severity, and only then choose hotfixes, near-term usability improvements, backlog items, or larger architecture planning.
+PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is the selected next design-only task; implementation remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 Future foundation planning:
 
 Flexible `ChurchStructureUnit` remains future planning work after the short-term bridge and before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Checklist V1 remains deferred unless pilot feedback elevates it.
+Large deferred items remain deferred pending feedback. Checklist V1 remains deferred unless pilot feedback elevates it.
 
 Not next:
 - Lighting Team-specific model

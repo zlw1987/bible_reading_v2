@@ -151,9 +151,9 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - RC-P.3 Pilot release candidate tag `v0.9-pilot-rc1` created and pushed.
 - RC-P.4 Pilot Validation Runbook prepared for pilot validation.
 - `v0.9-pilot-rc1` deployed and pilot validation passed.
-- Current next phase: Post-Pilot Backlog Planning.
-- Deferred items remain deferred unless pilot feedback elevates them.
-- Flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
+- Current next phase: Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is the selected next design-only task. See `docs/POST_PILOT_BACKLOG_TRIAGE.md` and `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+- Large deferred items remain deferred pending feedback.
+- Flexible Church Structure Foundation implementation remains future and phased after CS-H.1 planning and only after the short-term bridge proves insufficient.
 - Lighting Pilot operational follow-up and Community Activities planning should be classified through post-pilot backlog planning before implementation.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.

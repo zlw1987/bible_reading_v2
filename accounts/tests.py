@@ -1,13 +1,19 @@
 import re
 from pathlib import Path
 
-from django.apps import apps
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
+from accounts.models import (
+    ChurchRoleAssignment,
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    SmallGroup,
+)
 from accounts.permissions import (
     CAP_PUBLISH_READING_GUIDES,
     CAP_VIEW_ALL_GROUP_PROGRESS,
@@ -16,6 +22,8 @@ from accounts.permissions import (
     get_accessible_progress_groups,
     has_capability,
 )
+from events.models import ServiceEvent
+from studies.models import BibleStudySeries
 
 class AccountProfileTests(TestCase):
     def setUp(self):
@@ -463,10 +471,176 @@ class MinistryContextBridgeTests(TestCase):
         self.assertEqual(user.profile.small_group, group)
         self.assertIn(user.profile, group.members.all())
 
-    def test_church_structure_unit_model_is_not_introduced(self):
-        model_names = {model.__name__ for model in apps.get_models()}
+    def test_profile_small_group_still_drives_bible_study_scope(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="District 1",
+            ministry_context=context,
+        )
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
 
-        self.assertNotIn("ChurchStructureUnit", model_names)
+        series = BibleStudySeries.objects.create(
+            title="CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+
+    def test_profile_small_group_still_drives_service_event_scope(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        other_group = SmallGroup.objects.create(name="Rainbow 5")
+        user = User.objects.create_user(
+            username="service_event_member",
+            password="TestPass123!",
+        )
+        other_user = User.objects.create_user(
+            username="other_service_event_member",
+            password="TestPass123!",
+        )
+
+        user.profile.small_group = group
+        user.profile.save()
+        other_user.profile.small_group = other_group
+        other_user.profile.save()
+
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.assertTrue(event.can_be_seen_by(user))
+        self.assertFalse(event.can_be_seen_by(other_user))
+
+
+class ChurchStructureUnitFoundationTests(TestCase):
+    def test_church_structure_unit_can_be_created_as_root(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="church",
+            name="全教会",
+            name_en="Whole Church",
+        )
+
+        self.assertEqual(root.code, "CHURCH")
+        self.assertIsNone(root.parent)
+        self.assertEqual(str(root), "CHURCH - 全教会")
+        self.assertEqual(root.display_name("zh"), "全教会")
+        self.assertEqual(root.display_name("en"), "Whole Church")
+
+    def test_child_unit_can_be_created_under_parent(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        child = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="cm",
+            name="中文事工",
+            name_en="Chinese Ministry",
+            sort_order=10,
+        )
+
+        self.assertEqual(child.code, "CM")
+        self.assertEqual(child.parent, root)
+        self.assertIn(child, root.children.all())
+
+    def test_same_code_is_allowed_under_different_parents(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+        )
+        cm = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+        )
+        em = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="EM",
+            name="英文事工",
+        )
+
+        ChurchStructureUnit.objects.create(
+            parent=cm,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="第一区",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=em,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="District 1",
+        )
+
+        self.assertEqual(ChurchStructureUnit.objects.filter(code="D1").count(), 2)
+
+    def test_self_parent_validation_rejects_direct_self_parent(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="CUSTOM",
+            name="Custom Unit",
+        )
+        unit.parent = unit
+
+        with self.assertRaises(ValidationError):
+            unit.full_clean()
+
+    def test_root_with_parent_is_invalid(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+        )
+        child_root = ChurchStructureUnit(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="ROOT2",
+            name="Second Root",
+        )
+
+        with self.assertRaises(ValidationError):
+            child_root.full_clean()
+
+    def test_ancestor_and_path_label_helpers(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        context = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+            name_en="Chinese Ministry",
+        )
+        district = ChurchStructureUnit.objects.create(
+            parent=context,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="第一区",
+            name_en="District 1",
+        )
+
+        self.assertEqual(district.get_ancestors(), [root, context])
+        self.assertEqual(
+            district.path_label("en"),
+            "Whole Church > Chinese Ministry > District 1",
+        )
 
 
 class ChurchRolePermissionTests(TestCase):

@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -178,6 +178,12 @@ Rules:
 
 Root may be persisted or virtual; this remains an open decision. Persisting root usually makes selection storage, historical display, and admin UI simpler, but it creates one special system row that must be protected.
 
+CS-H.2 implementation note:
+- `ChurchStructureUnit` exists as a model-only foundation.
+- No root, CM, EM, district, or small-group rows are seeded yet.
+- Existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of current behavior.
+- No audience selection or filtering uses `ChurchStructureUnit` yet.
+
 ## 5. Membership Model
 
 Future model concept:
@@ -307,15 +313,16 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 ### Phase CS-H.2: Model-Only Foundation
 
 - Add `ChurchStructureUnit` model only.
-- Seed root plus current `MinistryContext`, `District`, and `SmallGroup` into the tree.
 - Keep old models unchanged.
 - No behavior change.
 - No filtering change.
 - No destructive migration.
+- No data seeding or mapping yet.
 
 ### Phase CS-H.3: Current Structure Mapping
 
 - Add mapping or bridge between old models and `ChurchStructureUnit`.
+- Seed root plus current `MinistryContext`, `District`, and `SmallGroup` into the tree if the mapping design chooses persisted units.
 - Keep `Profile.small_group`.
 - Keep current `BibleStudySeries` scope behavior.
 - Decide which model is source of truth during the bridge period.

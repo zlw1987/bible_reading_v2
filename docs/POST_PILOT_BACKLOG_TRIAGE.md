@@ -6,7 +6,8 @@
 - Pilot validation passed.
 - No P0/P1 pilot blockers are known.
 - Current phase: Post-Pilot Backlog Planning.
-- Selected next task: CS-H.1 Flexible Church Structure and Audience Scope Design Doc.
+- CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete.
+- CS-H.2 ChurchStructureUnit model-only foundation is complete.
 
 The pilot closure decision is Go. No `v0.9-pilot-rc2` is required unless new pilot issues are discovered.
 
@@ -62,6 +63,7 @@ These are not pilot blockers and should be scheduled only after higher-priority 
 Likely candidates:
 
 - CS-H.1 Flexible Church Structure and Audience Scope Design Doc.
+- CS-H.2 ChurchStructureUnit model-only foundation.
 - ServiceEvent audience/filtering design doc.
 - Staff Admin Surface Expansion plan.
 - Deployment/operations hardening plan.
@@ -94,12 +96,13 @@ These remain future modules. Do not start implementation until post-pilot eviden
 
 1. Collect real pilot feedback for a fixed period.
 2. Record feedback into this backlog.
-3. Do CS-H.1 flexible hierarchy/audience design doc as the selected next design-only task.
-4. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
-5. Revisit Community Activities only after the audience model is clarified.
-6. Revisit Checklist V1 only if ministry pilot feedback proves need.
+3. CS-H.1 flexible hierarchy/audience design doc completed.
+4. CS-H.2 `ChurchStructureUnit` model-only foundation completed.
+5. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
+6. Revisit Community Activities only after the audience model is clarified.
+7. Revisit Checklist V1 only if ministry pilot feedback proves need.
 
-CS-H.1 is design-only. Flexible `ChurchStructureUnit`, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
+CS-H.2 is model-only. `ChurchStructureUnit` seeding/mapping, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
 
 ## 5. Decision Framework
 
@@ -126,7 +129,8 @@ Severity assignment:
 
 Include these as planning options only. Do not start them from this triage document.
 
-- CS-H.1 Flexible Church Structure and Audience Scope Design Doc. Selected next task; design-only.
+- CS-H.1 Flexible Church Structure and Audience Scope Design Doc. Completed.
+- CS-H.2 ChurchStructureUnit model-only foundation. Completed.
 - PP-SA.1 Staff Admin Surface Expansion Plan.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
@@ -139,4 +143,4 @@ Roadmap documents should remain aligned on these points:
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
 - Large deferred items remain deferred pending real pilot feedback.
-- Flexible `ChurchStructureUnit`, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.
+- `ChurchStructureUnit` model-only foundation exists, but seeding/mapping, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.

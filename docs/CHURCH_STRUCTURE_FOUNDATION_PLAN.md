@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, and CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only; do not implement additional models, migrations, views, templates, permissions, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, and CS-H.2 adds a model-only `ChurchStructureUnit` foundation. Do not implement additional models, views, templates, permissions, audience selection, filtering, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -56,7 +56,8 @@ Current code assumptions:
 - `SmallGroup` exists.
 - `Profile.small_group` exists.
 - CS-F.1 adds `MinistryContext` and nullable `District.ministry_context` as the short-term bridge.
-- There is no flexible `OrganizationUnit` or `ChurchStructureUnit` tree yet.
+- CS-H.2 adds `ChurchStructureUnit` as a model-only flexible tree foundation.
+- There is no `ChurchStructureUnit` data seeding or mapping yet.
 - Current Bible Study schedule scope uses:
   - whole church
   - ministry context
@@ -170,14 +171,16 @@ Cons:
 
 ### Recommendation
 
-Do not implement the flexible tree immediately.
+Do not switch current behavior to the flexible tree immediately.
 
 Short term:
 - Keep `District` and `SmallGroup`.
-- Plan `MinistryContext` as the bridge for CM/EM when needed.
+- Keep `MinistryContext` as the bridge for CM/EM.
+- Keep `Profile.small_group` as the current primary-small-group field.
+- Keep `ChurchStructureUnit` model-only until a separate seeding/mapping task.
 
 Long term:
-- Introduce `ChurchStructureUnit` only after Bible Study V2 and Community Activities needs prove the need.
+- Map current structure into `ChurchStructureUnit` only after Bible Study V2 and Community Activities needs prove the need.
 - Avoid destructive migration.
 
 ## 8. Relationship to Bible Study
@@ -281,17 +284,19 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-F.1 implements the short-term `MinistryContext` bridge
 - CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope
 - CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only
+- CS-H.2 adds model-only `ChurchStructureUnit` foundation with no seeding, no mapping, no audience selection, and no filtering
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
 
-Keep flexible `ChurchStructureUnit` work, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen.
+Keep `ChurchStructureUnit` seeding/mapping, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen.
 
 ## 14. Deliverable Summary
 
 This plan documents:
-- flexible hierarchy through a future `ChurchStructureUnit` tree
+- flexible hierarchy through the model-only `ChurchStructureUnit` tree foundation
 - implemented short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
+- no current `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
 - Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later
 - Community Activities relationship through future audience segments

@@ -62,6 +62,97 @@ class SmallGroup(models.Model):
         return self.name
 
 
+class ChurchStructureUnit(models.Model):
+    UNIT_ROOT = "root"
+    UNIT_MINISTRY_CONTEXT = "ministry_context"
+    UNIT_DISTRICT = "district"
+    UNIT_SMALL_GROUP = "small_group"
+    UNIT_FELLOWSHIP = "fellowship"
+    UNIT_DEPARTMENT = "department"
+    UNIT_CUSTOM = "custom"
+
+    UNIT_TYPE_CHOICES = [
+        (UNIT_ROOT, "Root"),
+        (UNIT_MINISTRY_CONTEXT, "Ministry Context"),
+        (UNIT_DISTRICT, "District"),
+        (UNIT_SMALL_GROUP, "Small Group"),
+        (UNIT_FELLOWSHIP, "Fellowship"),
+        (UNIT_DEPARTMENT, "Department"),
+        (UNIT_CUSTOM, "Custom"),
+    ]
+
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="children",
+    )
+    unit_type = models.CharField(max_length=32, choices=UNIT_TYPE_CHOICES)
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["parent_id", "sort_order", "code", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent", "code"],
+                name="unique_church_structure_unit_parent_code",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    def clean(self):
+        errors = {}
+
+        if self.code:
+            self.code = self.code.upper()
+
+        if self.parent_id and self.pk and self.parent_id == self.pk:
+            errors["parent"] = "A church structure unit cannot be its own parent."
+
+        if self.parent is self:
+            errors["parent"] = "A church structure unit cannot be its own parent."
+
+        if self.unit_type == self.UNIT_ROOT and self.parent_id:
+            errors["parent"] = "Root church structure units cannot have a parent."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_name(self, language="zh"):
+        if language == "en" and self.name_en:
+            return self.name_en
+        return self.name
+
+    def get_ancestors(self):
+        ancestors = []
+        current = self.parent
+
+        while current:
+            ancestors.append(current)
+            current = current.parent
+
+        return list(reversed(ancestors))
+
+    def path_label(self, language="zh"):
+        units = self.get_ancestors() + [self]
+        return " > ".join(unit.display_name(language) for unit in units)
+
+
 class ChurchRoleAssignment(models.Model):
     ROLE_PASTOR = "pastor"
     ROLE_ELDER = "elder"

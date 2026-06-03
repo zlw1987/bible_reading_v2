@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import ChurchRoleAssignment, District, MinistryContext, Profile, SmallGroup
+from .models import (
+    ChurchRoleAssignment,
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    Profile,
+    SmallGroup,
+)
 
 
 @admin.register(MinistryContext)
@@ -26,6 +33,22 @@ class SmallGroupAdmin(admin.ModelAdmin):
     list_display = ("name", "district", "is_active")
     list_filter = ("district", "is_active")
     search_fields = ("name", "district__name")
+
+
+@admin.register(ChurchStructureUnit)
+class ChurchStructureUnitAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "name",
+        "name_en",
+        "unit_type",
+        "parent",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("unit_type", "is_active")
+    search_fields = ("code", "name", "name_en")
+    ordering = ("parent_id", "sort_order", "code")
 
 
 @admin.register(ChurchRoleAssignment)

@@ -493,16 +493,13 @@ th {
 
     .nav-staff-menu[open] .nav-staff-menu-panel {
         position: fixed;
-        top: var(--staff-menu-top, 88px);
-        right: 12px;
-        right: max(12px, env(safe-area-inset-right));
+        top: var(--staff-menu-top, var(--nav-dropdown-top, 88px));
+        left: var(--staff-menu-left, var(--nav-dropdown-left, 12px));
+        width: var(--staff-menu-width, var(--nav-dropdown-width, calc(100vw - 24px)));
         bottom: 12px;
         bottom: max(12px, env(safe-area-inset-bottom));
-        left: 12px;
-        left: max(12px, env(safe-area-inset-left));
-        width: auto;
         min-width: 0;
-        max-width: none;
+        max-width: calc(100vw - 24px);
         max-height: none;
         overflow-y: auto;
         overscroll-behavior: contain;

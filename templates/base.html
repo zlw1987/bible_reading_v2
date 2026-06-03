@@ -35,11 +35,11 @@
                    href="{% url 'profile' %}">{{ ui.profile }}</a>
 
                 {% if user.is_staff %}
-                <details class="nav-staff-menu">
+                <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">
                     <summary class="nav-link{% if active_nav == 'staff' %} active{% endif %}">
                         {% if language == "zh" %}同工管理{% else %}Staff{% endif %}
                     </summary>
-                    <div class="nav-staff-menu-panel">
+                    <div class="nav-staff-menu-panel nav-dropdown-panel">
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
                         </span>
@@ -136,7 +136,7 @@
     </main>
     <script>
         (function () {
-            var menuNodes = document.querySelectorAll(".nav-staff-menu");
+            var menuNodes = document.querySelectorAll(".nav-dropdown");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
             var mobileDropdown = window.matchMedia("(hover: none), (max-width: 760px)");
             var lockedMenu = null;
@@ -148,24 +148,43 @@
                 return mobileDropdown.matches && !finePointer.matches;
             }
 
-            function clamp(value, min, max) {
-                return Math.min(Math.max(value, min), max);
+            function setCssLength(name, value) {
+                document.documentElement.style.setProperty(name, value + "px");
             }
 
-            function setMenuPosition(menu) {
+            function setDropdownPosition(menu) {
                 var summary = menu ? menu.querySelector("summary") : null;
-                var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-                var bottomMargin = 12;
-                var minTop = 72;
-                var minPanelHeight = Math.min(420, Math.max(280, viewportHeight * 0.55));
-                var maxTop = viewportHeight - minPanelHeight - bottomMargin;
-                var desiredTop = 88;
-                var top = 88;
+                if (!summary || !shouldUseMobileOverlay()) {
+                    return;
+                }
 
-                if (summary && shouldUseMobileOverlay()) {
-                    desiredTop = summary.getBoundingClientRect().bottom + 8;
-                    top = clamp(desiredTop, minTop, Math.max(minTop, maxTop));
-                    document.documentElement.style.setProperty("--staff-menu-top", top + "px");
+                var summaryRect = summary.getBoundingClientRect();
+                var viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+                var viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+                var margin = 12;
+                var desiredTop = summaryRect.bottom + 8;
+                var desiredLeft = summaryRect.left;
+                var minPanelHeight = Math.min(420, Math.max(280, viewportHeight * 0.55));
+                var maxAllowedTop = viewportHeight - minPanelHeight - margin;
+                var top = Math.min(desiredTop, Math.max(margin, maxAllowedTop));
+                var availableWidth = Math.max(0, viewportWidth - margin * 2);
+                var panelWidth = Math.min(availableWidth, 520);
+                var left = Math.min(
+                    Math.max(desiredLeft, margin),
+                    Math.max(margin, viewportWidth - panelWidth - margin)
+                );
+                var varPrefix = menu.getAttribute("data-dropdown-var-prefix");
+
+                top = Math.max(margin, top);
+
+                setCssLength("--nav-dropdown-top", top);
+                setCssLength("--nav-dropdown-left", left);
+                setCssLength("--nav-dropdown-width", panelWidth);
+
+                if (varPrefix) {
+                    setCssLength("--" + varPrefix + "-top", top);
+                    setCssLength("--" + varPrefix + "-left", left);
+                    setCssLength("--" + varPrefix + "-width", panelWidth);
                 }
             }
 
@@ -213,7 +232,7 @@
 
             function lockBodyScroll(menu) {
                 if (lockedMenu === menu) {
-                    setMenuPosition(menu);
+                    setDropdownPosition(menu);
                     addOutsideCloseHandlers();
                     return;
                 }
@@ -229,7 +248,7 @@
                     width: document.body.style.width,
                 };
 
-                setMenuPosition(menu);
+                setDropdownPosition(menu);
                 document.body.classList.add("nav-menu-open");
                 document.body.style.position = "fixed";
                 document.body.style.top = "-" + lockedScrollY + "px";
@@ -306,7 +325,7 @@
                 }
 
                 if (lockedMenu.open && shouldUseMobileOverlay()) {
-                    setMenuPosition(lockedMenu);
+                    setDropdownPosition(lockedMenu);
                     addOutsideCloseHandlers();
                 } else {
                     unlockBodyScroll();

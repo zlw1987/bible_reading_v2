@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 from django.apps import apps
 from django.contrib.auth.models import User
@@ -202,7 +203,8 @@ class AccountProfileTests(TestCase):
         self.assertIn("--staff-menu-top", content)
         self.assertIn("--staff-menu-left", content)
         self.assertIn("--staff-menu-width", content)
-        self.assertIn("summaryRect.bottom + 8", content)
+        self.assertIn("mobileMenuTop = 72", content)
+        self.assertNotIn("summaryRect.bottom + 8", content)
         self.assertIn("viewportWidth * 0.82", content)
         self.assertIn("closeMenuFromOutside", content)
         self.assertIn('document.addEventListener("click"', content)
@@ -232,6 +234,18 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Reflection Reports")
         self.assertContains(response, "Prayer Reports")
         self.assertContains(response, "Django Admin")
+
+    def test_mobile_staff_menu_css_uses_viewport_overlay_height(self):
+        css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
+        css = css_path.read_text(encoding="utf-8")
+
+        self.assertIn("top: var(--staff-menu-top, 72px);", css)
+        self.assertIn("right: max(16px, env(safe-area-inset-right));", css)
+        self.assertIn("width: auto;", css)
+        self.assertIn("min-width: 0;", css)
+        self.assertIn("max-height: calc(100dvh - var(--staff-menu-top, 72px)", css)
+        self.assertIn("overflow-y: auto;", css)
+        self.assertNotIn("min-width: min(300px", css)
 
     def test_normal_chinese_user_sees_simple_primary_nav(self):
         self.set_language("zh")

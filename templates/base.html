@@ -149,31 +149,26 @@
             var headerScrollQueued = false;
             var keepHeaderVisibleUntil = 0;
 
-            function clamp(value, min, max) {
-                return Math.min(Math.max(value, min), max);
-            }
-
             function setMenuPosition(menu) {
                 var header = document.querySelector(".site-header");
-                var summary = menu ? menu.querySelector("summary") : null;
                 var viewportWidth = window.innerWidth || document.documentElement.clientWidth;
                 var horizontalMargin = 16;
                 var availableWidth = Math.max(viewportWidth - (horizontalMargin * 2), 0);
                 var panelWidth = Math.min(viewportWidth * 0.82, 520, availableWidth);
+                var mobileMenuTop = 72;
                 var top = 88;
                 var left = horizontalMargin;
 
                 panelWidth = Math.max(panelWidth, Math.min(300, availableWidth));
 
-                if (summary && shouldUseMobileOverlay()) {
-                    var summaryRect = summary.getBoundingClientRect();
-                    top = Math.max(summaryRect.bottom + 8, 12);
-                    left = clamp(
-                        summaryRect.left,
-                        horizontalMargin,
-                        Math.max(horizontalMargin, viewportWidth - panelWidth - horizontalMargin)
-                    );
-                } else if (header) {
+                if (shouldUseMobileOverlay()) {
+                    document.documentElement.style.setProperty("--staff-menu-top", mobileMenuTop + "px");
+                    document.documentElement.style.setProperty("--staff-menu-left", horizontalMargin + "px");
+                    document.documentElement.style.setProperty("--staff-menu-width", "calc(100vw - " + (horizontalMargin * 2) + "px)");
+                    return;
+                }
+
+                if (header) {
                     top = Math.max(header.getBoundingClientRect().bottom + 8, 12);
                 }
 

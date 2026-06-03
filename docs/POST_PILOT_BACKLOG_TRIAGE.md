@@ -14,6 +14,7 @@
 - CS-H.3C idempotent ChurchStructureUnit seeding/mapping command is complete.
 - CS-H.3D production/staging seeding verification passed.
 - CS-H.3E seeded structure data QA closure is complete.
+- CS-H.4 ChurchStructureMembership Design Doc is complete.
 
 The pilot closure decision is Go. No `v0.9-pilot-rc2` is required unless new pilot issues are discovered.
 
@@ -77,6 +78,7 @@ Likely candidates:
 - CS-H.3D Production/Staging Seeding Verification Closure.
 - CS-H.3E Seeded Structure Data QA Closure.
 - CS-H.4 ChurchStructureMembership Design Doc.
+- CS-H.5A ChurchStructureMembership Model-Only Foundation.
 - ServiceEvent audience/filtering design doc.
 - Staff Admin Surface Expansion plan.
 - Deployment/operations hardening plan.
@@ -117,12 +119,13 @@ These remain future modules. Do not start implementation until post-pilot eviden
 8. CS-H.3C idempotent structure seeding/mapping command completed.
 9. CS-H.3D production/staging seeding verification completed.
 10. CS-H.3E seeded structure data QA closure completed.
-11. Plan CS-H.4 ChurchStructureMembership Design Doc before membership or signup implementation.
-12. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
-13. Revisit Community Activities only after the audience model is clarified.
-14. Revisit Checklist V1 only if ministry pilot feedback proves need.
+11. CS-H.4 ChurchStructureMembership Design Doc completed.
+12. Consider CS-H.5A ChurchStructureMembership model-only foundation only after accepting the CS-H.4 design.
+13. Do Staff Admin Surface Expansion planning if setup/admin friction is real.
+14. Revisit Community Activities only after the audience model is clarified.
+15. Revisit Checklist V1 only if ministry pilot feedback proves need.
 
-CS-H.3E is documentation-only data QA closure. GoDaddy production/staging apply completed successfully, the second dry-run was clean, the `Santa Clara 3` legacy data issue has been handled, and current runtime behavior still uses the legacy models. `ChurchStructureMembership`, signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
+CS-H.4 is design-only. Current runtime behavior still uses the legacy models and `Profile.small_group`. `ChurchStructureMembership` implementation, signup/onboarding assignment changes, hierarchical multi-select audience scope, ServiceEvent filtering, Community Activities, and Staff Admin implementation remain future phased work.
 
 ## 5. Decision Framework
 
@@ -157,7 +160,8 @@ Include these as planning options only. Do not start them from this triage docum
 - CS-H.3C Idempotent ChurchStructureUnit Seeding Command. Completed.
 - CS-H.3D Production/Staging Seeding Verification Closure. Completed.
 - CS-H.3E Seeded Structure Data QA Closure. Completed.
-- CS-H.4 ChurchStructureMembership Design Doc.
+- CS-H.4 ChurchStructureMembership Design Doc. Completed.
+- CS-H.5A ChurchStructureMembership Model-Only Foundation.
 - PP-SA.1 Staff Admin Surface Expansion Plan.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
@@ -170,4 +174,4 @@ Roadmap documents should remain aligned on these points:
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
 - Large deferred items remain deferred pending real pilot feedback.
-- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, and CS-H.3E closes seeded structure data QA. `ChurchStructureMembership`, signup/onboarding changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.
+- `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, and CS-H.4 records the membership design. Runtime still uses legacy models and `Profile.small_group`. `ChurchStructureMembership` implementation, signup/onboarding changes, audience selection, Community Activities, Checklist V1, ServiceEvent filtering, reminders, scheduling, swaps, availability, and attendance should not start without a separate planning decision.

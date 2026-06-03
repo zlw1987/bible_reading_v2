@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. These steps do not auto-run, change signup, add membership, add audience selection, add filtering, switch runtime source of truth, or add staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. CS-H.4 is membership design only. These steps do not auto-run, change signup, add membership, add audience selection, add filtering, switch runtime source of truth, or add staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -78,6 +78,13 @@ Clarifications:
 - Notes must not store sensitive counseling, pastoral, medical, financial, or private information.
 
 This membership model should eventually replace `Profile.small_group` as the canonical belonging source, but only after staged migration and visibility tests.
+
+CS-H.4 design recommendation:
+- Use `ChurchStructureMembership` as the eventual canonical belonging source.
+- Prefer a single membership lifecycle model with `status=requested` for V1 unless implementation discovers stronger audit needs for a separate request model.
+- Treat only approved active membership as eligible for future visibility.
+- Keep `Profile.small_group` as the runtime source for now.
+- See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 ## 5. Registration / Onboarding Strategy
 
@@ -306,7 +313,7 @@ Recommended phases:
 - CS-H.3C: seed root and current structure idempotently through a management command. Completed.
 - CS-H.3D: production/staging seeding verification closure. Completed.
 - CS-H.3E: seeded structure data QA closure. Completed.
-- CS-H.4: design `ChurchStructureMembership` model, not implementation.
+- CS-H.4: design `ChurchStructureMembership` model, not implementation. Completed.
 - CS-H.5: implement membership model + requested assignment model-only.
 - CS-H.6: signup requested-unit flow.
 - CS-H.7: admin approval workflow.

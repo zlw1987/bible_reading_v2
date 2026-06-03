@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, and CS-H.3E closes the remaining seeded data QA item.
+This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, and CS-H.4 records the `ChurchStructureMembership` design.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -193,6 +193,7 @@ CS-H.3 strategy note:
 - CS-H.3C adds `seed_church_structure_units` with dry-run/apply modes to seed a `CHURCH` root, mirror current structure units, and fill legacy mapping fields. It does not auto-run and still does not make `ChurchStructureUnit` drive runtime behavior.
 - CS-H.3D verifies the GoDaddy apply and clean second dry-run.
 - CS-H.3E records that the `Santa Clara 3` legacy data issue was handled and the seeded structure data QA item is closed, as long as final dry-run remains clean.
+- CS-H.4 designs `ChurchStructureMembership` and requested-unit approval flow, but does not implement the model, signup flow, admin UI, or consumer migration.
 - Signup/onboarding should collect a requested unit or group for staff review, not direct final self-assignment.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
@@ -220,6 +221,13 @@ Rules:
 - Notes must be non-sensitive and operational only.
 
 Membership should be planned separately from hierarchy. A structure unit can exist without immediately importing full membership history.
+
+CS-H.4 design note:
+- `ChurchStructureMembership` should become the eventual belonging source.
+- `Profile.small_group` remains the runtime source during transition.
+- Requested membership must not grant visibility.
+- Only approved active membership may be considered by future consumers after explicit migration and tests.
+- See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 ## 6. Audience Selection Model
 
@@ -343,21 +351,22 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - CS-H.3C completed explicit idempotent seeding/mapping through `python manage.py seed_church_structure_units`.
 - CS-H.3D completed production/staging seeding verification. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.3E completed seeded structure data QA closure. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.4 completed membership design. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 
-### Phase CS-H.4: First Audience Consumer
+### Later Phase: First Audience Consumer
 
 - Add audience selection for one consumer, likely `ServiceEvent` or `CommunityActivity`.
 - Keep behavior narrow.
 - Do not add broad filtering until the data model and UI are tested.
 - Keep existing fixed fields available during coexistence.
 
-### Phase CS-H.5: Bible Study Consideration
+### Later Phase: Bible Study Consideration
 
 - Consider moving `BibleStudySeries` scope to audience selection only after ServiceEvent or CommunityActivity proves the model stable.
 - Preserve safe `BibleStudyMeeting` visibility.
 - Avoid breaking generated meeting workflows.
 
-### Phase CS-H.6: Deprecation Consideration
+### Later Phase: Deprecation Consideration
 
 - Consider deprecating old fixed fields only after safe migration, tested data reconciliation, and clear rollback strategy.
 - No hard cutover.
@@ -452,7 +461,8 @@ Possible next planning or implementation steps:
 - CS-H.3C idempotent structure seeding command. Completed.
 - CS-H.3D production/staging seeding verification closure. Completed.
 - CS-H.3E seeded structure data QA closure. Completed.
-- CS-H.4 ChurchStructureMembership design doc.
+- CS-H.4 ChurchStructureMembership design doc. Completed.
+- CS-H.5A ChurchStructureMembership model-only foundation.
 - Later audience selection model design for one consumer.
 - CA-V1.1 Community Activities planning refinement.
 - PP-SA.1 Staff Admin Surface Expansion Plan.

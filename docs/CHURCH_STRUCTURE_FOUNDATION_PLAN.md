@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit dry-run/apply seeding command, CS-H.3D records successful GoDaddy production/staging seeding verification, and CS-H.3E closes the remaining seeded data QA item. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or runtime behavior changes from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit dry-run/apply seeding command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, and CS-H.4 records the `ChurchStructureMembership` design. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, or runtime behavior changes from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -63,6 +63,7 @@ Current code assumptions:
 - CS-H.3C adds `seed_church_structure_units` to explicitly seed/map current `MinistryContext`, `District`, and `SmallGroup` rows into `ChurchStructureUnit`.
 - CS-H.3D verifies GoDaddy production/staging seeding: 35 units created, 33 legacy records linked, and the second dry-run reported no pending create/update/link work.
 - CS-H.3E records that the `Santa Clara 3` legacy data issue was corrected or otherwise handled and the seeded structure data QA item is closed, provided final dry-run remains clean.
+- CS-H.4 designs `ChurchStructureMembership`, requested-unit approval, backfill, and visibility migration strategy without implementation.
 - There is no automatic `ChurchStructureUnit` data seeding through migrations or app startup.
 - There is no `ChurchStructureMembership` model yet.
 - Current Bible Study schedule scope uses:
@@ -148,6 +149,7 @@ Rules:
 - Future membership history can be added later.
 - Long-term membership source of truth should be `ChurchStructureMembership`.
 - Requested signup/onboarding units should require staff approval before becoming active membership.
+- CS-H.4 recommends keeping requested membership separate from visibility; only approved active membership should count for future consumers.
 - Do not import phone/private/sensitive data.
 - Do not do full historical import in the first version.
 
@@ -305,11 +307,12 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-H.3C adds an idempotent management command for explicit seeding/mapping, with no runtime behavior changes, membership, audience selection, or filtering
 - CS-H.3D verifies production/staging command execution and idempotency, with no runtime behavior changes, membership, audience selection, or filtering
 - CS-H.3E closes seeded structure data QA, with no runtime behavior changes, membership, audience selection, or filtering
+- CS-H.4 designs membership and requested-unit approval, with no model, signup, admin UI, consumer migration, or runtime behavior changes
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
 
-Keep membership, signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, has passed GoDaddy production/staging verification, and has completed seeded data QA closure. Runtime behavior still uses the legacy structure models.
+Keep membership implementation, signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, has passed GoDaddy production/staging verification, and has completed seeded data QA closure. Runtime behavior still uses the legacy structure models and `Profile.small_group`.
 
 ## 14. Deliverable Summary
 
@@ -322,6 +325,7 @@ This plan documents:
 - CS-H.3C explicit `seed_church_structure_units` command for idempotent seeding/mapping
 - CS-H.3D production/staging seeding verification closure
 - CS-H.3E seeded structure data QA closure
+- CS-H.4 `ChurchStructureMembership` design
 - no automatic `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
 - Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later

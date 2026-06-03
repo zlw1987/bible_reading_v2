@@ -6,7 +6,7 @@
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. This document does not authorize implementation, migrations, signup changes, admin UI, audience selection, filtering, or a runtime source-of-truth switch.
+The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. Neither step authorizes signup changes, admin approval UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
 ## 2. Current State
 
@@ -21,7 +21,7 @@ Current structure state:
 - `ChurchStructureUnit` exists.
 - Current `MinistryContext`, `District`, and `SmallGroup` data has been seeded/mapped into `ChurchStructureUnit`.
 - `ChurchStructureUnit` is not the runtime source of truth.
-- There is no membership history model today.
+- CS-H.5A adds the model-only `ChurchStructureMembership` table, but no backfill or runtime consumer uses it yet.
 - There is no requested-unit signup/onboarding flow today.
 - There is no admin approval workflow today.
 
@@ -44,7 +44,7 @@ Boundary rules:
 
 ## 4. Proposed Model: ChurchStructureMembership
 
-Future model concept:
+Model concept, implemented model-only in CS-H.5A:
 
 `ChurchStructureMembership`
 - `user` FK
@@ -79,6 +79,15 @@ Suggested `membership_type` values:
 Avoid broad or permission-like values in V1. In particular, `coworker` should not be added casually because it can be confused with permissions, church roles, or serving assignments. If coworker-style belonging is needed later, define it with explicit boundaries and tests.
 
 V1 should keep `membership_type` narrow. The first useful target is approved active primary small-group/fellowship membership, not a full HR/personnel taxonomy.
+
+CS-H.5A implementation note:
+- The model exists in `accounts`.
+- It has admin registration for inspection only.
+- It does not change signup/onboarding.
+- It does not create requested-unit UI.
+- It does not backfill from `Profile.small_group`.
+- It does not change `/studies/`, reading progress, `BibleStudySeries`, `ServiceEvent`, or My Serving behavior.
+- Requested membership does not grant visibility.
 
 ## 5. Requested Assignment Model Options
 
@@ -346,7 +355,7 @@ CS-H.4 does not include:
 
 Recommended sequence:
 - CS-H.4: ChurchStructureMembership design doc. Completed by this task.
-- CS-H.5A: `ChurchStructureMembership` model-only foundation.
+- CS-H.5A: `ChurchStructureMembership` model-only foundation. Completed.
 - CS-H.5B: membership model hardening/tests.
 - CS-H.5C: backfill command design/implementation with dry-run/apply.
 - CS-H.6: signup requested-unit design.

@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 
 class MinistryContext(models.Model):
@@ -211,6 +212,154 @@ class ChurchStructureUnit(models.Model):
     def path_label(self, language="zh"):
         units = self.get_ancestors() + [self]
         return " > ".join(unit.display_name(language) for unit in units)
+
+
+class ChurchStructureMembership(models.Model):
+    STATUS_REQUESTED = "requested"
+    STATUS_ACTIVE = "active"
+    STATUS_ENDED = "ended"
+    STATUS_REJECTED = "rejected"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_REQUESTED, "Requested"),
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_ENDED, "Ended"),
+        (STATUS_REJECTED, "Rejected"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    TYPE_MEMBER = "member"
+    TYPE_VISITOR = "visitor"
+    TYPE_REGULAR_ATTENDEE = "regular_attendee"
+    TYPE_SMALL_GROUP_MEMBER = "small_group_member"
+
+    MEMBERSHIP_TYPE_CHOICES = [
+        (TYPE_MEMBER, "Member"),
+        (TYPE_VISITOR, "Visitor"),
+        (TYPE_REGULAR_ATTENDEE, "Regular Attendee"),
+        (TYPE_SMALL_GROUP_MEMBER, "Small Group Member"),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="church_structure_memberships",
+    )
+    unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.PROTECT,
+        related_name="memberships",
+    )
+    membership_type = models.CharField(
+        max_length=32,
+        choices=MEMBERSHIP_TYPE_CHOICES,
+        default=TYPE_SMALL_GROUP_MEMBER,
+    )
+    status = models.CharField(
+        max_length=32,
+        choices=STATUS_CHOICES,
+        default=STATUS_REQUESTED,
+    )
+    is_primary = models.BooleanField(default=False)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_church_structure_memberships",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_church_structure_memberships",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Operational/non-sensitive notes only. Do not store counseling, "
+            "pastoral, medical, financial, or private information."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["user__username", "-is_primary", "status", "start_date", "id"]
+
+    def __str__(self):
+        return f"{self.user} - {self.unit.display_name('en')} ({self.get_status_display()})"
+
+    @property
+    def is_requested(self):
+        return self.status == self.STATUS_REQUESTED
+
+    @property
+    def is_active_membership(self):
+        return self.active_for_date(timezone.localdate())
+
+    def active_for_date(self, date):
+        if self.status != self.STATUS_ACTIVE or not self.start_date:
+            return False
+        if self.start_date > date:
+            return False
+        if self.end_date and self.end_date < date:
+            return False
+        return True
+
+    def clean(self):
+        errors = {}
+        today = timezone.localdate()
+
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "End date cannot be before start date."
+
+        if self.status == self.STATUS_ACTIVE:
+            if not self.start_date:
+                errors["start_date"] = "Active membership requires a start date."
+            if self.end_date and self.end_date < today:
+                errors["end_date"] = (
+                    "Active membership cannot have an end date in the past. "
+                    "Use ended status for historical membership."
+                )
+
+        if self.status in {self.STATUS_REJECTED, self.STATUS_CANCELLED} and self.is_primary:
+            errors["is_primary"] = "Rejected or cancelled membership cannot be primary."
+
+        if (
+            self.unit_id
+            and self.unit
+            and not self.unit.is_active
+            and self.status in {self.STATUS_REQUESTED, self.STATUS_ACTIVE}
+        ):
+            errors["unit"] = (
+                "Requested or active membership must use an active church structure unit."
+            )
+
+        if self.user_id and self.status == self.STATUS_ACTIVE and self.is_primary:
+            duplicate = ChurchStructureMembership.objects.filter(
+                user=self.user,
+                status=self.STATUS_ACTIVE,
+                is_primary=True,
+            )
+            if self.pk:
+                duplicate = duplicate.exclude(pk=self.pk)
+            if duplicate.exists():
+                errors["is_primary"] = (
+                    "A user can have only one active primary church structure membership."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class ChurchRoleAssignment(models.Model):

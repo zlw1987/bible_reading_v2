@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     ChurchRoleAssignment,
+    ChurchStructureMembership,
     ChurchStructureUnit,
     District,
     MinistryContext,
@@ -81,6 +82,32 @@ class ChurchStructureUnitAdmin(admin.ModelAdmin):
     list_filter = ("unit_type", "is_active")
     search_fields = ("code", "name", "name_en")
     ordering = ("parent_id", "sort_order", "code")
+
+
+@admin.register(ChurchStructureMembership)
+class ChurchStructureMembershipAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "unit",
+        "membership_type",
+        "status",
+        "is_primary",
+        "start_date",
+        "end_date",
+        "approved_by",
+        "approved_at",
+    )
+    list_filter = ("status", "membership_type", "is_primary", "unit__unit_type")
+    search_fields = (
+        "user__username",
+        "user__email",
+        "unit__code",
+        "unit__name",
+        "unit__name_en",
+    )
+    raw_id_fields = ("user", "unit", "approved_by", "requested_by")
+    readonly_fields = ("created_at", "updated_at")
+    ordering = ("user__username", "-is_primary", "status", "start_date")
 
 
 @admin.register(ChurchRoleAssignment)

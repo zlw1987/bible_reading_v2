@@ -1,4 +1,5 @@
 import re
+from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from accounts.models import (
     ChurchRoleAssignment,
+    ChurchStructureMembership,
     ChurchStructureUnit,
     District,
     MinistryContext,
@@ -915,6 +917,259 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertEqual(user.profile.small_group, group)
         self.assertTrue(event.can_be_seen_by(user))
         self.assertFalse(event.can_be_seen_by(other_user))
+
+
+class ChurchStructureMembershipFoundationTests(TestCase):
+    def create_unit(self, code="RAINBOW4", name="Rainbow 4", is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=name,
+            is_active=is_active,
+        )
+
+    def test_can_create_requested_membership(self):
+        user = User.objects.create_user(username="requested_member")
+        unit = self.create_unit()
+
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            requested_by=user,
+            notes="New attendee asked for this group.",
+        )
+
+        self.assertTrue(membership.is_requested)
+        self.assertFalse(membership.is_active_membership)
+        self.assertIn(membership, user.church_structure_memberships.all())
+        self.assertIn(membership, unit.memberships.all())
+
+    def test_requested_membership_does_not_count_as_active_for_date(self):
+        user = User.objects.create_user(username="requested_not_active")
+        unit = self.create_unit()
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            start_date=timezone.localdate(),
+            is_primary=True,
+        )
+
+        self.assertFalse(membership.active_for_date(timezone.localdate()))
+
+    def test_can_create_active_primary_membership(self):
+        user = User.objects.create_user(username="active_primary")
+        unit = self.create_unit()
+
+        membership = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            approved_by=user,
+            approved_at=timezone.now(),
+        )
+
+        self.assertTrue(membership.is_active_membership)
+
+    def test_duplicate_active_primary_membership_for_same_user_is_rejected(self):
+        user = User.objects.create_user(username="duplicate_primary")
+        first_unit = self.create_unit("RAINBOW4", "Rainbow 4")
+        second_unit = self.create_unit("RAINBOW5", "Rainbow 5")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=first_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        duplicate = ChurchStructureMembership(
+            user=user,
+            unit=second_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
+    def test_active_non_primary_membership_can_coexist(self):
+        user = User.objects.create_user(username="non_primary_member")
+        primary_unit = self.create_unit("RAINBOW4", "Rainbow 4")
+        other_unit = self.create_unit("CHOIR", "Choir")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=primary_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        other = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=other_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=False,
+            start_date=timezone.localdate(),
+        )
+
+        self.assertTrue(other.is_active_membership)
+
+    def test_ended_historical_membership_can_coexist(self):
+        user = User.objects.create_user(username="ended_member")
+        old_unit = self.create_unit("OLDGROUP", "Old Group")
+        new_unit = self.create_unit("NEWGROUP", "New Group")
+        yesterday = timezone.localdate() - timedelta(days=1)
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=old_unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=True,
+            start_date=yesterday - timedelta(days=30),
+            end_date=yesterday,
+        )
+
+        active = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=new_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        self.assertTrue(active.is_active_membership)
+        self.assertEqual(user.church_structure_memberships.count(), 2)
+
+    def test_end_date_before_start_date_is_rejected(self):
+        user = User.objects.create_user(username="bad_dates")
+        unit = self.create_unit()
+        today = timezone.localdate()
+        membership = ChurchStructureMembership(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=today,
+            end_date=today - timedelta(days=1),
+        )
+
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
+    def test_rejected_or_cancelled_primary_membership_is_rejected(self):
+        user = User.objects.create_user(username="rejected_primary")
+        unit = self.create_unit()
+
+        for status in [
+            ChurchStructureMembership.STATUS_REJECTED,
+            ChurchStructureMembership.STATUS_CANCELLED,
+        ]:
+            membership = ChurchStructureMembership(
+                user=user,
+                unit=unit,
+                status=status,
+                is_primary=True,
+            )
+            with self.assertRaises(ValidationError):
+                membership.full_clean()
+
+    def test_active_membership_requires_start_date(self):
+        user = User.objects.create_user(username="active_no_start")
+        unit = self.create_unit()
+        membership = ChurchStructureMembership(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+        )
+
+        with self.assertRaises(ValidationError):
+            membership.full_clean()
+
+    def test_notes_help_text_warns_against_sensitive_information(self):
+        help_text = ChurchStructureMembership._meta.get_field("notes").help_text
+
+        self.assertIn("Operational/non-sensitive", help_text)
+        self.assertIn("pastoral", help_text)
+        self.assertIn("medical", help_text)
+        self.assertIn("financial", help_text)
+
+    def test_membership_does_not_change_profile_small_group(self):
+        user = User.objects.create_user(username="profile_unchanged")
+        group = SmallGroup.objects.create(name="Rainbow 4")
+        unit = self.create_unit()
+
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        user.profile.refresh_from_db()
+        self.assertIsNone(user.profile.small_group)
+
+        user.profile.small_group = group
+        user.profile.save()
+
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.small_group, group)
+
+    def test_membership_does_not_change_bible_study_scope_behavior(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="District 1",
+            ministry_context=context,
+        )
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        unit = self.create_unit()
+        user = User.objects.create_user(username="study_membership")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        series = BibleStudySeries.objects.create(
+            title="CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+
+    def test_membership_does_not_change_service_event_visibility(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        unit = self.create_unit()
+        user = User.objects.create_user(username="event_membership")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.assertFalse(event.can_be_seen_by(user))
+
+        user.profile.small_group = group
+        user.profile.save()
+
+        self.assertTrue(event.can_be_seen_by(user))
 
 
 class ChurchRolePermissionTests(TestCase):

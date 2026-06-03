@@ -20,7 +20,7 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, and CS-H.2 adds a model-only `ChurchStructureUnit` foundation. Do not implement additional models, views, templates, permissions, audience selection, filtering, or data migration from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, and CS-H.2A hardens tree validation. Do not implement additional models, views, templates, permissions, audience selection, filtering, or data migration from this document without a separate implementation task.
 
 ## 2. Current Reality
 
@@ -57,6 +57,7 @@ Current code assumptions:
 - `Profile.small_group` exists.
 - CS-F.1 adds `MinistryContext` and nullable `District.ministry_context` as the short-term bridge.
 - CS-H.2 adds `ChurchStructureUnit` as a model-only flexible tree foundation.
+- CS-H.2A adds indirect cycle validation and safe ancestor/path display for corrupted tree states.
 - There is no `ChurchStructureUnit` data seeding or mapping yet.
 - Current Bible Study schedule scope uses:
   - whole church
@@ -113,10 +114,13 @@ Possible `unit_type` values:
 Rules:
 - `unit_type` should allow known system types plus future custom types.
 - `parent` creates the tree hierarchy.
+- A unit cannot be its own parent or ancestor.
+- Ancestor/path helpers should not hang if corrupted data contains a cycle.
 - Different branches can have different depths.
 - CM and EM do not need identical depth.
 - Do not create a fake Combined Ministry.
 - Combined events or activities should reference multiple units or audience segments.
+- One active Whole Church root is intended, but database enforcement is deferred until root seeding and mapping policy are decided.
 
 ## 6. Membership Direction
 
@@ -285,6 +289,7 @@ Church Structure Foundation should be treated as the current foundation step:
 - CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope
 - CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only
 - CS-H.2 adds model-only `ChurchStructureUnit` foundation with no seeding, no mapping, no audience selection, and no filtering
+- CS-H.2A hardens `ChurchStructureUnit` cycle validation without adding seeding, mapping, audience selection, or filtering
 - before or alongside Community Activities implementation planning
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering

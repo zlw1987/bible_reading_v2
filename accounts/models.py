@@ -126,6 +126,26 @@ class ChurchStructureUnit(models.Model):
         if self.unit_type == self.UNIT_ROOT and self.parent_id:
             errors["parent"] = "Root church structure units cannot have a parent."
 
+        seen_parent_ids = set()
+        current = self.parent
+
+        while current:
+            current_id = current.pk
+
+            if current is self or (self.pk and current_id == self.pk):
+                errors["parent"] = "A church structure unit cannot be its own ancestor."
+                break
+
+            if current_id is None:
+                break
+
+            if current_id in seen_parent_ids:
+                errors["parent"] = "Parent chain contains a cycle."
+                break
+
+            seen_parent_ids.add(current_id)
+            current = current.parent
+
         if errors:
             raise ValidationError(errors)
 
@@ -141,9 +161,16 @@ class ChurchStructureUnit(models.Model):
     def get_ancestors(self):
         ancestors = []
         current = self.parent
+        seen_ids = {self.pk} if self.pk else set()
 
         while current:
+            current_id = current.pk
+
+            if current_id is None or current_id in seen_ids:
+                break
+
             ancestors.append(current)
+            seen_ids.add(current_id)
             current = current.parent
 
         return list(reversed(ancestors))

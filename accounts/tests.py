@@ -598,6 +598,59 @@ class ChurchStructureUnitFoundationTests(TestCase):
         with self.assertRaises(ValidationError):
             unit.full_clean()
 
+    def test_indirect_cycle_validation_rejects_self_as_ancestor(self):
+        top = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="TOP",
+            name="Top",
+        )
+        branch = ChurchStructureUnit.objects.create(
+            parent=top,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="BRANCH",
+            name="Branch",
+        )
+        leaf = ChurchStructureUnit.objects.create(
+            parent=branch,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="LEAF",
+            name="Leaf",
+        )
+
+        ChurchStructureUnit.objects.filter(pk=top.pk).update(parent=leaf)
+        top.refresh_from_db()
+
+        with self.assertRaises(ValidationError):
+            top.full_clean()
+
+    def test_get_ancestors_stops_on_corrupted_cycle(self):
+        top = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="TOP",
+            name="Top",
+            name_en="Top",
+        )
+        branch = ChurchStructureUnit.objects.create(
+            parent=top,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="BRANCH",
+            name="Branch",
+            name_en="Branch",
+        )
+        leaf = ChurchStructureUnit.objects.create(
+            parent=branch,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="LEAF",
+            name="Leaf",
+            name_en="Leaf",
+        )
+
+        ChurchStructureUnit.objects.filter(pk=top.pk).update(parent=leaf)
+        top.refresh_from_db()
+
+        self.assertEqual(top.get_ancestors(), [branch, leaf])
+        self.assertEqual(top.path_label("en"), "Branch > Leaf > Top")
+
     def test_root_with_parent_is_invalid(self):
         root = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,

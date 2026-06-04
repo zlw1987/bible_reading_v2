@@ -139,16 +139,88 @@
     </main>
     <script>
         (function () {
+            var siteHeader = document.querySelector(".site-header");
             var menuNodes = document.querySelectorAll(".nav-dropdown");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
             var mobileDropdown = window.matchMedia("(hover: none), (max-width: 760px)");
+            var mobileHeader = window.matchMedia("(max-width: 760px)");
             var lockedMenu = null;
             var lockedScrollY = 0;
             var bodyOriginalStyles = {};
             var outsideClickListening = false;
+            var lastScrollY = window.scrollY || window.pageYOffset || 0;
+            var headerTouchActive = false;
+            var headerPointerInside = false;
+            var scrollTicking = false;
+            var scrollThreshold = 12;
+            var topThreshold = 24;
+            var hideStartOffset = 80;
 
             function shouldUseMobileOverlay() {
                 return mobileDropdown.matches && !finePointer.matches;
+            }
+
+            function shouldUseMobileHeaderAutoHide() {
+                return siteHeader && mobileHeader.matches;
+            }
+
+            function hasOpenDropdown() {
+                return Array.prototype.some.call(menuNodes, function (menu) {
+                    return menu.open;
+                });
+            }
+
+            function headerHasActiveInteraction() {
+                return headerTouchActive ||
+                    headerPointerInside ||
+                    (siteHeader && siteHeader.contains(document.activeElement)) ||
+                    hasOpenDropdown();
+            }
+
+            function showSiteHeader() {
+                if (siteHeader) {
+                    siteHeader.classList.remove("site-header--hidden");
+                }
+            }
+
+            function updateHeaderVisibility() {
+                scrollTicking = false;
+
+                if (!shouldUseMobileHeaderAutoHide()) {
+                    showSiteHeader();
+                    lastScrollY = window.scrollY || window.pageYOffset || 0;
+                    return;
+                }
+
+                var currentScrollY = Math.max(0, window.scrollY || window.pageYOffset || 0);
+                var scrollDelta = currentScrollY - lastScrollY;
+
+                if (currentScrollY <= topThreshold || headerHasActiveInteraction()) {
+                    showSiteHeader();
+                    lastScrollY = currentScrollY;
+                    return;
+                }
+
+                if (Math.abs(scrollDelta) < scrollThreshold) {
+                    return;
+                }
+
+                if (scrollDelta > 0 && currentScrollY > hideStartOffset) {
+                    siteHeader.classList.add("site-header--hidden");
+                } else if (scrollDelta < 0) {
+                    showSiteHeader();
+                }
+
+                lastScrollY = currentScrollY;
+            }
+
+            function requestHeaderVisibilityUpdate() {
+                if (scrollTicking) {
+                    return;
+                }
+
+                scrollTicking = true;
+                window.requestAnimationFrame(updateHeaderVisibility);
             }
 
             function setCssLength(name, value) {
@@ -234,6 +306,8 @@
             }
 
             function lockBodyScroll(menu) {
+                showSiteHeader();
+
                 if (lockedMenu === menu) {
                     setDropdownPosition(menu);
                     addOutsideCloseHandlers();
@@ -274,6 +348,8 @@
                 lockedMenu = null;
                 lockedScrollY = 0;
                 bodyOriginalStyles = {};
+                lastScrollY = window.scrollY || window.pageYOffset || 0;
+                requestHeaderVisibilityUpdate();
             }
 
             menuNodes.forEach(function (menu) {
@@ -308,10 +384,16 @@
                 });
 
                 menu.addEventListener("toggle", function () {
+                    if (menu.open) {
+                        showSiteHeader();
+                    }
+
                     if (menu.open && shouldUseMobileOverlay()) {
                         lockBodyScroll(menu);
                     } else if (lockedMenu === menu) {
                         unlockBodyScroll();
+                    } else {
+                        requestHeaderVisibilityUpdate();
                     }
                 });
 
@@ -323,6 +405,9 @@
             });
 
             window.addEventListener("resize", function () {
+                showSiteHeader();
+                lastScrollY = window.scrollY || window.pageYOffset || 0;
+
                 if (!lockedMenu) {
                     return;
                 }
@@ -334,6 +419,38 @@
                     unlockBodyScroll();
                 }
             });
+
+            if (siteHeader) {
+                siteHeader.addEventListener("pointerenter", function () {
+                    headerPointerInside = true;
+                    showSiteHeader();
+                });
+
+                siteHeader.addEventListener("pointerleave", function () {
+                    headerPointerInside = false;
+                    requestHeaderVisibilityUpdate();
+                });
+
+                siteHeader.addEventListener("touchstart", function () {
+                    headerTouchActive = true;
+                    showSiteHeader();
+                }, { passive: true });
+
+                siteHeader.addEventListener("touchend", function () {
+                    headerTouchActive = false;
+                    requestHeaderVisibilityUpdate();
+                });
+
+                siteHeader.addEventListener("touchcancel", function () {
+                    headerTouchActive = false;
+                    requestHeaderVisibilityUpdate();
+                });
+
+                siteHeader.addEventListener("focusin", showSiteHeader);
+                siteHeader.addEventListener("focusout", requestHeaderVisibilityUpdate);
+            }
+
+            window.addEventListener("scroll", requestHeaderVisibilityUpdate, { passive: true });
         })();
     </script>
 </body>

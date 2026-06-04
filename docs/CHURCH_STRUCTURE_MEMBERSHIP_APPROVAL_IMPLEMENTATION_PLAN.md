@@ -15,7 +15,7 @@ Recommended small phases:
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail with approve/reject actions. Completed.
 - CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships. Completed.
-- CS-H.7F: browser QA and docs closure.
+- CS-H.7F: browser QA and docs closure. Completed.
 
 Each slice should preserve current runtime behavior. Do not switch `/studies/`, reading progress, `ServiceEvent`, My Serving, or any other consumer to membership in these slices.
 
@@ -57,6 +57,17 @@ CS-H.7E implementation status:
 - Approval syncs `Profile.small_group` only when the approved active primary membership unit maps to exactly one active legacy `SmallGroup`.
 - Unmapped, multi-mapped, inactive legacy group, rejected, blocked, and non-POST cases do not sync `Profile.small_group`.
 - Runtime still uses `Profile.small_group`; no signup capture, audience filtering, or consumer migration was added.
+
+CS-H.7F closure status:
+- Browser/manual QA was completed against an isolated local Django server and throwaway SQLite database.
+- Normal users could not access staff membership request pages.
+- Authorized membership managers could access the pending request list and request detail page.
+- The detail page showed user, requested unit, requester, submitted/current legacy group context, request note, active-primary context, transfer/sync warning context, and approve/reject POST actions.
+- GET approve remained non-mutating.
+- POST approve activated the requested membership and synced `Profile.small_group` only for the exactly-one active mapped legacy `SmallGroup` case.
+- POST reject changed the request to rejected and did not sync `Profile.small_group`.
+- Targeted automated coverage passed for the broader no-sync cases: unmapped unit, multiple mappings, inactive mapped group, blocked active-primary conflict, GET/non-POST, and reject.
+- No signup capture, consumer migration, audience filtering, model change, or migration was added.
 
 ## 4. Data Behavior
 
@@ -187,6 +198,6 @@ Recommended next sequence:
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail and approve/reject actions. Completed.
 - CS-H.7E: explicit `Profile.small_group` sync behavior. Completed.
-- CS-H.7F: browser QA and docs closure.
+- CS-H.7F: browser QA and docs closure. Completed.
 - CS-H.6A: signup request capture implementation planning can proceed before or after CS-H.7B/7C depending on product priority.
 - Later: consumer migration from `Profile.small_group` to membership, one consumer at a time.

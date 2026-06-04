@@ -44,7 +44,7 @@ class AccountProfileTests(TestCase):
         )
         self.other_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="PROFILE5",
+            code="SMALLGROUP-6",
             name="Profile Rainbow 5",
             name_en="Profile Rainbow 5",
         )
@@ -102,7 +102,9 @@ class AccountProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "levin")
         self.assertContains(response, "Rainbow 4")
-        self.assertContains(response, "申请单位")
+        self.assertContains(response, "申请小组")
+        self.assertContains(response, "Profile Rainbow 5")
+        self.assertNotContains(response, "SMALLGROUP-6 - Profile Rainbow 5")
         self.assertNotIn('name="small_group"', content)
 
     def test_user_can_update_profile_without_email(self):
@@ -2700,7 +2702,7 @@ class AccountSignupLanguageTests(TestCase):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
         self.unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="RAINBOW4",
+            code="SMALLGROUP-1",
             name="Rainbow 4",
             name_en="Rainbow 4",
         )
@@ -2954,7 +2956,9 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email（可选）")
-        self.assertContains(response, "申请单位")
+        self.assertContains(response, "申请小组")
+        self.assertContains(response, "Rainbow 4")
+        self.assertNotContains(response, "SMALLGROUP-1 - Rainbow 4")
 
     def test_signup_page_can_render_english_labels(self):
         self.client.post(
@@ -2969,4 +2973,6 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email (optional)")
-        self.assertContains(response, "Requested Unit")
+        self.assertContains(response, "Requested Small Group")
+        self.assertContains(response, "Rainbow 4")
+        self.assertNotContains(response, "SMALLGROUP-1 - Rainbow 4")

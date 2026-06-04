@@ -22,6 +22,15 @@ def requestable_signup_units():
     ).order_by("parent_id", "sort_order", "code", "name")
 
 
+class RequestableUnitChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="zh", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        return obj.display_name(self.language)
+
+
 def create_or_update_signup_membership_request(user, requested_unit):
     membership = (
         ChurchStructureMembership.objects
@@ -69,7 +78,7 @@ class LocalizedAuthenticationForm(AuthenticationForm):
 
 class SignUpForm(UserCreationForm):
     email = forms.EmailField(required=False)
-    requested_unit = forms.ModelChoiceField(
+    requested_unit = RequestableUnitChoiceField(
         queryset=ChurchStructureUnit.objects.none(),
         required=False,
         empty_label="No small group yet",
@@ -88,7 +97,8 @@ class SignUpForm(UserCreationForm):
         self.fields["username"].label = ui["username"]
         self.fields["email"].label = ui["email_optional"]
         self.fields["requested_unit"].queryset = requestable_signup_units()
-        self.fields["requested_unit"].label = ui["requested_unit"]
+        self.fields["requested_unit"].language = language
+        self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]
         self.fields["password1"].label = ui["password"]
         self.fields["password2"].label = ui["password_confirmation"]
@@ -112,7 +122,7 @@ class SignUpForm(UserCreationForm):
 
 class ProfileForm(forms.Form):
     email = forms.EmailField(required=False)
-    requested_unit = forms.ModelChoiceField(
+    requested_unit = RequestableUnitChoiceField(
         queryset=ChurchStructureUnit.objects.none(),
         required=False,
     )
@@ -135,7 +145,8 @@ class ProfileForm(forms.Form):
 
         self.fields["email"].label = ui["email_optional"]
         self.fields["requested_unit"].queryset = requestable_signup_units()
-        self.fields["requested_unit"].label = ui["requested_unit"]
+        self.fields["requested_unit"].language = language
+        self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]
         self.fields["preferred_language"].label = ui["preferred_language"]
 

@@ -14,7 +14,7 @@ Recommended small phases:
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail with approve/reject actions. Completed.
-- CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships.
+- CS-H.7E: `Profile.small_group` sync behavior plan for approved mapped small-group memberships. Completed in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`; implementation deferred.
 - CS-H.7F: browser QA and docs closure.
 
 Each slice should preserve current runtime behavior. Do not switch `/studies/`, reading progress, `ServiceEvent`, My Serving, or any other consumer to membership in these slices.
@@ -53,6 +53,11 @@ CS-H.7D implementation status:
 - Reject preserves `requested_by`, notes, and `Profile.small_group`.
 - Signup capture, `Profile.small_group` approval sync, and consumer migration remain future work.
 
+CS-H.7E planning status:
+- `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md` records the proposed transition sync rule and no-sync cases.
+- CS-H.7E remains planning-only until explicitly approved for implementation.
+- Runtime still uses `Profile.small_group`; approval sync would be consequential because it would affect current consumers through that legacy field.
+
 ## 4. Data Behavior
 
 Future approval behavior:
@@ -70,14 +75,16 @@ Approval should not create permissions, serving assignments, team membership, or
 
 ## 5. Profile.small_group Sync
 
-Transition sync plan:
-- if the approved active primary membership maps to a legacy `SmallGroup`, sync `Profile.small_group`
-- if the approved unit does not map to a legacy `SmallGroup`, do not force sync
-- if sync is enabled, make it explicit in the approval action and tests
+CS-H.7E is planned in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`.
+
+Proposed transition sync rule:
+- if the approved membership is active and primary, and the unit maps to exactly one active legacy `SmallGroup`, sync `Profile.small_group`
+- if the approved unit has no legacy mapping, multiple mappings, or an inactive legacy `SmallGroup`, do not sync
+- if the user already has a different `Profile.small_group`, allow the update only as part of explicit staff approval and include a warning/test requirement
 - do not remove `Profile.small_group`
 - do not migrate consumers to membership
 
-CS-H.7E should own this behavior. It should not be bundled into the first pending-list slice.
+CS-H.7E should own this behavior. It should not be bundled into signup capture, consumer migration, or unrelated approval refinements.
 
 ## 6. Conflict Handling
 
@@ -145,11 +152,14 @@ Future tests should cover:
 - approval sets `approved_by` and `approved_at`
 - approval syncs `Profile.small_group` only when mapped and sync is enabled
 - unmapped approved unit does not force `Profile.small_group`
+- inactive legacy `SmallGroup` mapping does not sync
+- reject and blocked approval do not sync `Profile.small_group`
+- requested membership still grants no visibility before approval
 - duplicate active primary membership is blocked or explicitly resolved
-- `/studies/` behavior does not change
-- reading progress behavior does not change
-- `ServiceEvent` behavior does not change
-- My Serving behavior does not change
+- `/studies/` behavior changes only when `Profile.small_group` changes
+- reading progress behavior changes only when `Profile.small_group` changes
+- `ServiceEvent` behavior changes only when `Profile.small_group` changes
+- My Serving behavior does not change unless it already depends on `Profile.small_group`
 
 Do not run tests as part of CS-H.7A because this task is documentation only.
 
@@ -176,7 +186,7 @@ Recommended next sequence:
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail and approve/reject actions. Completed.
-- CS-H.7E: explicit `Profile.small_group` sync behavior.
+- CS-H.7E: explicit `Profile.small_group` sync behavior plan. Completed; implementation deferred pending product confirmation.
 - CS-H.7F: browser QA and docs closure.
 - CS-H.6A: signup request capture implementation planning can proceed before or after CS-H.7B/7C depending on product priority.
 - Later: consumer migration from `Profile.small_group` to membership, one consumer at a time.

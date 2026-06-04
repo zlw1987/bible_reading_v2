@@ -110,22 +110,31 @@ Deliverables:
 
 ### PP-SA.2 Staff Dashboard / Read-Only Overview
 
+Status: completed.
+
 Goal:
 - Add a read-only staff home that helps authorized staff scan operational health without creating new workflows.
 
-Candidate overview cards or sections:
+Implemented overview cards or sections:
 - Pending membership requests.
 - Draft or upcoming Bible Study schedules/guides/meetings.
-- Recent reported or hidden prayer/reflection items.
+- Reported or hidden prayer/reflection moderation items.
 - Upcoming ServiceEvents.
 - Upcoming TeamAssignments and unconfirmed My Serving assignments.
 - Basic user/profile/group admin links.
 
+Completion notes:
+- Implemented as a permission-protected read-only staff overview at `/staff/`.
+- Includes counts and links only for existing workflows.
+- Browser/mobile QA was completed via local Chrome Playwright because the in-app browser connector failed.
+
 Boundaries:
 - Read-only first.
 - Link to existing staff/admin workflows rather than rebuilding them.
-- No schema changes unless separately justified.
-- No consumer migration, audience filtering, Community Activities, notifications, or new dashboard automation.
+- No write actions.
+- No schema changes.
+- No new workflow states.
+- No consumer migration, audience filtering, Community Activities, notifications, attendance, announcements, care workflows, file center, permission matrix expansion, or new dashboard automation.
 
 ### PP-SA.3 Membership / Admin Workflow Polish
 
@@ -232,11 +241,9 @@ This plan specifically does not start:
 
 ## 9. Recommended First Implementation Slice
 
-The safest next implementation slice is PP-SA.2: a read-only staff dashboard overview.
+PP-SA.2 is complete as a read-only staff dashboard overview.
 
-Recommended first slice:
-- Add one permission-protected staff overview page.
-- Show counts and links only, using existing data and existing workflows.
-- Start with pending membership requests, draft/upcoming Bible Study items, reported moderation items, upcoming ServiceEvents, and upcoming/unconfirmed TeamAssignments.
-- Do not add write actions, schema changes, notifications, consumer migration, or audience filtering in the first slice.
-
+Recommended next safe slice:
+- PP-SA.3 Membership / Admin Workflow Polish.
+- Keep the next slice narrow and continue linking to existing workflows unless a separately planned workflow change is approved.
+- Do not add write actions to the overview, schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.2 completion alone.

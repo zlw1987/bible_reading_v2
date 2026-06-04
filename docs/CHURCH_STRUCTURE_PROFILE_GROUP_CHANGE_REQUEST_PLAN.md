@@ -157,8 +157,26 @@ CS-H.6C does not include:
 Recommended next sequence:
 - CS-H.6C: profile group-change request capture planning. Completed by this document.
 - CS-H.6D: implement normal-user Profile request capture only, with focused tests. Completed.
+- CS-H.6D.1: rendered-page/manual QA and docs closure for normal-user Profile request capture. Completed.
 - Later: decide whether staff support surfaces need a dedicated legacy `Profile.small_group` edit form.
 - CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
 - Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.
 
 Do not bundle profile request capture with approval rewrites, consumer migration, audience filtering, or Community Activities.
+
+## 12. CS-H.6D.1 QA Closure
+
+CS-H.6D.1 verified the rendered Profile request flow with local QA data.
+
+Verified:
+- normal Profile shows current `Profile.small_group` as read-only context
+- normal Profile no longer renders an editable `small_group` field
+- email and preferred language still save
+- tampered `small_group` POST data does not update `Profile.small_group`
+- saving with no `requested_unit` creates no membership request
+- active requestable small-group/fellowship units create or update one pending `ChurchStructureMembership`
+- inactive and non-requestable units are rejected by normal form validation
+- profile-created requests appear in the existing CS-H.7 staff membership request list and detail pages
+- requested profile changes do not grant `/studies/`, reading, `ServiceEvent`, My Serving, permission, serving assignment, audience, or Community Activities access
+
+No signup behavior, models, migrations, approval ownership, consumer migration, audience filtering, or Community Activities behavior changed in CS-H.6D.1.

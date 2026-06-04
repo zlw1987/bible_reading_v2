@@ -102,7 +102,7 @@ class AccountProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "levin")
         self.assertContains(response, "Rainbow 4")
-        self.assertContains(response, "申请小组")
+        self.assertContains(response, "我参加的小组")
         self.assertContains(response, "Profile Rainbow 5")
         self.assertNotContains(response, "SMALLGROUP-6 - Profile Rainbow 5")
         self.assertNotIn('name="small_group"', content)
@@ -2051,12 +2051,12 @@ class StaffMembershipRequestListTests(TestCase):
         response = self.client.get(reverse("staff_membership_request_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Membership Requests")
+        self.assertContains(response, "Group Requests")
         self.assertContains(response, "request_user")
         self.assertContains(response, "Rainbow 4")
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
-        self.assertContains(response, "Requested")
+        self.assertContains(response, "Pending review")
         self.assertContains(
             response,
             reverse("staff_membership_request_detail", args=[membership.id]),
@@ -2074,9 +2074,9 @@ class StaffMembershipRequestListTests(TestCase):
         response = self.client.get(reverse("staff_membership_request_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "会籍申请")
-        self.assertContains(response, "申请单位")
-        self.assertContains(response, "当前小组")
+        self.assertContains(response, "小组申请审核")
+        self.assertContains(response, "申请加入的小组/团契")
+        self.assertContains(response, "当前运行小组")
         self.assertContains(response, "备注必须只包含非敏感")
 
     def test_pending_list_excludes_active_memberships(self):
@@ -2136,14 +2136,14 @@ class StaffMembershipRequestListTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Membership Request Detail")
+        self.assertContains(response, "Group Request Detail")
         self.assertContains(response, "request_user")
         self.assertContains(response, "Rainbow 4")
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
-        self.assertContains(response, "No existing active primary membership")
-        self.assertContains(response, "Approve Request")
-        self.assertContains(response, "Reject Request")
+        self.assertContains(response, "No existing future primary membership")
+        self.assertContains(response, "Confirm Request")
+        self.assertContains(response, "Decline Request")
 
     def test_detail_shows_transfer_warning_for_different_mapped_small_group(self):
         mapped_group = SmallGroup.objects.create(
@@ -2163,7 +2163,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "approving this request will update the current small group",
+            "confirming this request will update the current runtime small group",
         )
         self.assertContains(response, mapped_group.name)
 
@@ -2949,7 +2949,7 @@ class AccountSignupLanguageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "staff_handoff_user")
         self.assertContains(response, "Rainbow 4")
-        self.assertContains(response, "Requested")
+        self.assertContains(response, "等待审核")
 
     def test_language_switch_updates_session(self):
         response = self.client.post(
@@ -2977,7 +2977,7 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email（可选）")
-        self.assertContains(response, "申请小组")
+        self.assertContains(response, "我参加的小组")
         self.assertContains(response, "Rainbow 4")
         self.assertNotContains(response, "SMALLGROUP-1 - Rainbow 4")
 
@@ -2994,6 +2994,6 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email (optional)")
-        self.assertContains(response, "Requested Small Group")
+        self.assertContains(response, "Your small group")
         self.assertContains(response, "Rainbow 4")
         self.assertNotContains(response, "SMALLGROUP-1 - Rainbow 4")

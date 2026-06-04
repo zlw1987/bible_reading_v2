@@ -22,13 +22,22 @@ def can_manage_church_memberships(user):
     return has_capability(user, CAP_MANAGE_CHURCH_MEMBERSHIPS)
 
 def signup(request):
+    language = get_user_language(request)
+    ui = UI_TEXT[language]
+
     if request.method == "POST":
         form = SignUpForm(request.POST, request=request)
 
         if form.is_valid():
+            requested_unit = form.cleaned_data.get("requested_unit")
             user = form.save()
             login(request, user)
-            messages.success(request, "Your account has been created.")
+            set_user_language(request, language)
+            message_key = (
+                "account_created_with_group_request"
+                if requested_unit else "account_created"
+            )
+            messages.success(request, ui[message_key])
             return redirect("home")
     else:
         form = SignUpForm(request=request)
@@ -55,13 +64,35 @@ def change_language(request):
 
 @login_required
 def profile(request):
+    language = get_user_language(request)
+    pending_group_request = (
+        ChurchStructureMembership.objects
+        .filter(
+            user=request.user,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+        .select_related("unit", "unit__parent")
+        .order_by("-updated_at", "-created_at", "id")
+        .first()
+    )
+    pending_group_request_label = (
+        pending_group_request.unit.path_label(language)
+        if pending_group_request else ""
+    )
+
     if request.method == "POST":
         form = ProfileForm(request.POST, user=request.user, request=request)
 
         if form.is_valid():
+            requested_unit = form.cleaned_data.get("requested_unit")
             profile_obj = form.save()
             set_user_language(request, profile_obj.preferred_language)
-            messages.success(request, UI_TEXT[profile_obj.preferred_language]["profile_saved"])
+            ui = UI_TEXT[profile_obj.preferred_language]
+            message_key = (
+                "profile_saved_with_group_request"
+                if requested_unit else "profile_saved"
+            )
+            messages.success(request, ui[message_key])
             return redirect("profile")
     else:
         form = ProfileForm(user=request.user, request=request)
@@ -71,6 +102,8 @@ def profile(request):
         "accounts/profile.html",
         {
             "form": form,
+            "pending_group_request": pending_group_request,
+            "pending_group_request_label": pending_group_request_label,
         },
     )
 
@@ -266,7 +299,7 @@ def staff_membership_request_approve(request, membership_id):
     if active_primary:
         messages.error(
             request,
-            "Approval blocked: user already has an active primary membership.",
+            "Approval blocked: this user already has an active future primary membership.",
         )
         return redirect("staff_membership_request_detail", membership_id=membership.id)
 
@@ -296,14 +329,17 @@ def staff_membership_request_approve(request, membership_id):
         messages.success(
             request,
             (
-                "Membership request approved. Current small group updated to "
+                "Group request confirmed. Current runtime small group updated to "
                 f"{mapped_legacy_small_group.name}."
             ),
         )
     else:
         messages.warning(
             request,
-            "Membership request approved. No legacy small-group sync was performed.",
+            (
+                "Group request confirmed. Current runtime small group was not "
+                "changed because there is not exactly one active mapped small group."
+            ),
         )
     return redirect("staff_membership_request_list")
 
@@ -318,5 +354,5 @@ def staff_membership_request_reject(request, membership_id):
     membership.is_primary = False
     membership.save()
 
-    messages.success(request, "Membership request rejected.")
+    messages.success(request, "Group request declined.")
     return redirect("staff_membership_request_list")

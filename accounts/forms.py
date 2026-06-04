@@ -100,6 +100,7 @@ class SignUpForm(UserCreationForm):
         self.fields["requested_unit"].language = language
         self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]
+        self.fields["requested_unit"].help_text = ui["requested_small_group_help"]
         self.fields["password1"].label = ui["password"]
         self.fields["password2"].label = ui["password_confirmation"]
 
@@ -148,6 +149,7 @@ class ProfileForm(forms.Form):
         self.fields["requested_unit"].language = language
         self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]
+        self.fields["requested_unit"].help_text = ui["profile_requested_small_group_help"]
         self.fields["preferred_language"].label = ui["preferred_language"]
 
         if not self.is_bound:

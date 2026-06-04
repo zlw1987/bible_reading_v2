@@ -22,7 +22,7 @@
         </p>
 
         <p>
-            <strong>{{ ui.current_small_group }}:</strong>
+            <strong>{{ ui.current_confirmed_small_group }}:</strong>
             {% if form.profile.small_group %}
             {{ form.profile.small_group.name }}
             {% else %}
@@ -30,9 +30,44 @@
             {% endif %}
         </p>
 
+        {% if pending_group_request %}
+        <div class="notice-panel">
+            <strong>{{ ui.pending_group_request }}</strong>
+            <p>{{ pending_group_request_label }}</p>
+            <p class="muted">{{ ui.pending_group_request_help }}</p>
+        </div>
+        {% endif %}
+
         <form method="post">
             {% csrf_token %}
-            {{ form.as_p }}
+            {{ form.non_field_errors }}
+
+            <div class="form-field">
+                {{ form.email.label_tag }}
+                {{ form.email }}
+                {{ form.email.errors }}
+                {% if form.email.help_text %}
+                <div class="form-help">{{ form.email.help_text }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-field">
+                {{ form.requested_unit.label_tag }}
+                {{ form.requested_unit }}
+                {{ form.requested_unit.errors }}
+                {% if form.requested_unit.help_text %}
+                <div class="form-help">{{ form.requested_unit.help_text }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-field">
+                {{ form.preferred_language.label_tag }}
+                {{ form.preferred_language }}
+                {{ form.preferred_language.errors }}
+                {% if form.preferred_language.help_text %}
+                <div class="form-help">{{ form.preferred_language.help_text }}</div>
+                {% endif %}
+            </div>
 
             <button type="submit">
                 {{ ui.save_profile }}

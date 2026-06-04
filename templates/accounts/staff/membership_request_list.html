@@ -14,7 +14,7 @@
     <p class="form-help">{{ ui.notes_must_be_non_sensitive }}</p>
 </div>
 
-<div class="card">
+<div class="card membership-request-table-card">
     <div class="table-wrap">
         <table>
             <thead>
@@ -58,7 +58,7 @@
                         {% endif %}
                     </td>
                     <td>{{ membership.notes|truncatechars:80|default:"-" }}</td>
-                    <td><span class="status status-warning">{{ membership.get_status_display }}</span></td>
+                    <td><span class="status status-warning">{{ ui.pending_review }}</span></td>
                 </tr>
                 {% endwith %}
                 {% empty %}
@@ -69,5 +69,54 @@
             </tbody>
         </table>
     </div>
+</div>
+
+<div class="membership-request-card-list">
+    {% for row in membership_rows %}
+    {% with membership=row.membership %}
+    <article class="membership-request-card">
+        <div class="membership-request-card-header">
+            <h2 class="card-title">
+                <a href="{% url 'staff_membership_request_detail' membership.id %}">
+                    {{ membership.user.username }}
+                </a>
+            </h2>
+            <span class="status status-warning">{{ ui.pending_review }}</span>
+        </div>
+        <dl class="detail-list">
+            <dt>{{ ui.future_foundation_membership_request }}</dt>
+            <dd>
+                <a href="{% url 'staff_membership_request_detail' membership.id %}">
+                    {{ row.unit_path }}
+                </a>
+            </dd>
+            <dt>{{ ui.current_runtime_small_group }}</dt>
+            <dd>
+                {% if membership.user.profile.small_group %}
+                {{ membership.user.profile.small_group.name }}
+                {% else %}
+                -
+                {% endif %}
+            </dd>
+            <dt>{{ ui.requested_by }}</dt>
+            <dd>
+                {% if membership.requested_by %}
+                {{ membership.requested_by.username }}
+                {% else %}
+                -
+                {% endif %}
+            </dd>
+            <dt>{{ ui.submitted }}</dt>
+            <dd>{{ membership.created_at|date:"Y-m-d H:i" }}</dd>
+            <dt>{{ ui.request_note }}</dt>
+            <dd>{{ membership.notes|truncatechars:120|default:"-" }}</dd>
+        </dl>
+    </article>
+    {% endwith %}
+    {% empty %}
+    <div class="card">
+        <p>{{ ui.no_membership_requests_found }}</p>
+    </div>
+    {% endfor %}
 </div>
 {% endblock %}

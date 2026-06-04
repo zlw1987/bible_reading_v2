@@ -17,7 +17,53 @@
 <div class="card">
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
+        {{ form.non_field_errors }}
+
+        <div class="form-field">
+            {{ form.username.label_tag }}
+            {{ form.username }}
+            {{ form.username.errors }}
+            {% if form.username.help_text %}
+            <div class="form-help">{{ form.username.help_text }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-field">
+            {{ form.email.label_tag }}
+            {{ form.email }}
+            {{ form.email.errors }}
+            {% if form.email.help_text %}
+            <div class="form-help">{{ form.email.help_text }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-field">
+            {{ form.requested_unit.label_tag }}
+            {{ form.requested_unit }}
+            {{ form.requested_unit.errors }}
+            {% if form.requested_unit.help_text %}
+            <div class="form-help">{{ form.requested_unit.help_text }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-field">
+            {{ form.password1.label_tag }}
+            {{ form.password1 }}
+            {{ form.password1.errors }}
+            {% if form.password1.help_text %}
+            <div class="form-help">{{ form.password1.help_text }}</div>
+            {% endif %}
+        </div>
+
+        <div class="form-field">
+            {{ form.password2.label_tag }}
+            {{ form.password2 }}
+            {{ form.password2.errors }}
+            {% if form.password2.help_text %}
+            <div class="form-help">{{ form.password2.help_text }}</div>
+            {% endif %}
+        </div>
+
         <button type="submit">{{ ui.create_account }}</button>
     </form>
 </div>

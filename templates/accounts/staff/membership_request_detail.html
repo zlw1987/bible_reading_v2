@@ -19,62 +19,49 @@
 </div>
 
 <div class="card">
-    <div class="table-wrap">
-        <table>
-            <tbody>
-                <tr>
-                    <th>{{ ui.username }}</th>
-                    <td>{{ membership.user.username }}</td>
-                </tr>
-                <tr>
-                    <th>{{ ui.requested_unit }}</th>
-                    <td>{{ unit_path }}</td>
-                </tr>
-                <tr>
-                    <th>{{ ui.requested_by }}</th>
-                    <td>
-                        {% if membership.requested_by %}
-                        {{ membership.requested_by.username }}
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr>
-                    <th>{{ ui.submitted }}</th>
-                    <td>{{ membership.created_at|date:"Y-m-d H:i" }}</td>
-                </tr>
-                <tr>
-                    <th>{{ ui.current_small_group }}</th>
-                    <td>
-                        {% if membership.user.profile.small_group %}
-                        {{ membership.user.profile.small_group.name }}
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr>
-                    <th>{{ ui.existing_active_primary_membership }}</th>
-                    <td>
-                        {% if active_primary %}
-                        {{ active_primary_path }}
-                        {% else %}
-                        {{ ui.no_active_primary_membership }}
-                        {% endif %}
-                    </td>
-                </tr>
-                <tr>
-                    <th>{{ ui.request_note }}</th>
-                    <td>{{ membership.notes|default:"-" }}</td>
-                </tr>
-                <tr>
-                    <th>{{ ui.status }}</th>
-                    <td><span class="status status-warning">{{ membership.get_status_display }}</span></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
+    <dl class="detail-list">
+        <dt>{{ ui.username }}</dt>
+        <dd>{{ membership.user.username }}</dd>
+
+        <dt>{{ ui.future_foundation_membership_request }}</dt>
+        <dd>{{ unit_path }}</dd>
+
+        <dt>{{ ui.current_runtime_small_group }}</dt>
+        <dd>
+            {% if membership.user.profile.small_group %}
+            {{ membership.user.profile.small_group.name }}
+            {% else %}
+            -
+            {% endif %}
+        </dd>
+
+        <dt>{{ ui.existing_active_primary_membership }}</dt>
+        <dd>
+            {% if active_primary %}
+            {{ active_primary_path }}
+            {% else %}
+            {{ ui.no_active_primary_membership }}
+            {% endif %}
+        </dd>
+
+        <dt>{{ ui.requested_by }}</dt>
+        <dd>
+            {% if membership.requested_by %}
+            {{ membership.requested_by.username }}
+            {% else %}
+            -
+            {% endif %}
+        </dd>
+
+        <dt>{{ ui.submitted }}</dt>
+        <dd>{{ membership.created_at|date:"Y-m-d H:i" }}</dd>
+
+        <dt>{{ ui.request_note }}</dt>
+        <dd>{{ membership.notes|default:"-" }}</dd>
+
+        <dt>{{ ui.status }}</dt>
+        <dd><span class="status status-warning">{{ ui.pending_review }}</span></dd>
+    </dl>
 </div>
 
 {% if show_profile_sync_warning %}
@@ -89,11 +76,11 @@
 {% endif %}
 
 <div class="card">
-    <form method="post" action="{% url 'staff_membership_request_approve' membership.id %}" style="display: inline-block; margin-right: 12px;">
+    <form method="post" action="{% url 'staff_membership_request_approve' membership.id %}" class="inline-action-form">
         {% csrf_token %}
         <button type="submit">{{ ui.approve_request }}</button>
     </form>
-    <form method="post" action="{% url 'staff_membership_request_reject' membership.id %}" style="display: inline-block;">
+    <form method="post" action="{% url 'staff_membership_request_reject' membership.id %}" class="inline-action-form">
         {% csrf_token %}
         <button type="submit" class="button-secondary">{{ ui.reject_request }}</button>
     </form>

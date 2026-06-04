@@ -132,3 +132,13 @@ Recommended slice name:
 `mobile-header-auto-hide-dropdown-safe`
 
 The slice should include mobile-only JS state handling, minimal CSS class support, and focused QA around dropdown preservation. It should not include navigation redesign, staff menu regrouping, church structure work, consumer migration, audience filtering, or Community Activities.
+
+## 9. Deferred Polish / Known Follow-up (CS-H.7F)
+
+Current mobile header auto-hide behavior is acceptable for now.
+
+Known follow-up:
+- Under some mobile scrolling conditions, hide/show behavior can still feel slightly imperfect or jittery.
+- Future polish should remain small and limited to mobile auto-hide hysteresis and threshold tuning.
+- Dropdown behavior must stay preserved.
+- Do not bundle redesign, navigation information architecture changes, menu regrouping, route changes, or unrelated feature work with this polish.

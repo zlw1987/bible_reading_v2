@@ -59,6 +59,8 @@ Profile may later capture:
 - optional short operational note
 - current pending request status, if one exists
 
+CS-H.6C plans this profile group-change request behavior in `docs/CHURCH_STRUCTURE_PROFILE_GROUP_CHANGE_REQUEST_PLAN.md`.
+
 The signup/profile UI should not expose the full church structure tree. It should present active requestable small-group/fellowship choices in a simple list, plus the "Not sure / New visitor" path.
 
 ## 5. Requestable Choices
@@ -179,7 +181,8 @@ Recommended next sequence:
 - CS-H.6A: signup request capture implementation planning. Completed by this document.
 - CS-H.6B: implement signup request capture only, with focused tests. Completed.
 - CS-H.6B.1: browser/manual QA and docs closure for signup membership request capture. Completed.
-- CS-H.6C: optionally implement profile-based request/change capture, with focused tests.
+- CS-H.6C: profile group-change request capture planning. Completed.
+- CS-H.6D: optionally implement profile-based request/change capture, with focused tests.
 - CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
 - Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.
 

@@ -6,7 +6,7 @@
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E improves Django Admin clarity for legacy current-runtime structure models versus future structure/membership foundation models. CS-H.6 records the signup requested-unit flow design. CS-H.7 records the admin approval workflow design. These steps do not authorize signup changes, custom staff admin UI, audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
+The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E improves Django Admin clarity for legacy current-runtime structure models versus future structure/membership foundation models. CS-H.6 records the signup requested-unit flow design, CS-H.6A/CS-H.6B add signup request capture planning and implementation, and CS-H.6D adds Profile request capture. CS-H.7 records the admin approval workflow design, and CS-H.7A through CS-H.7E add approval planning, staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync. CS-H.8 records the integration checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint. These steps do not authorize audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
 ## 2. Current State
 
@@ -25,11 +25,14 @@ Current structure state:
 - CS-H.5C adds the explicit `backfill_church_structure_memberships` command.
 - CS-H.5D records production/staging backfill verification as user-attested; exact command-output counts were not recorded.
 - CS-H.5E improves Django Admin clarity so legacy models and future foundation models are labeled more clearly.
-- CS-H.6 documents the future signup requested-unit flow; it is design-only.
-- CS-H.7 documents the future admin approval workflow; it is design-only.
+- CS-H.6 documents the signup requested-unit flow; CS-H.6A/CS-H.6B add signup request capture planning and implementation.
+- CS-H.6D adds Profile request capture.
+- CS-H.7 documents the admin approval workflow; CS-H.7A through CS-H.7E add approval planning, staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync.
+- CS-H.8 integration checkpoint is complete.
+- CS-H.9 membership request UX hardening is complete.
+- CS-H.10 CMS hardening checkpoint is complete, including deferred/accepted mobile nav polish and the root `AGENTS.md` verification policy.
 - No runtime consumer uses membership yet.
-- There is no requested-unit signup/onboarding flow today.
-- There is no admin approval workflow today.
+- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers still primarily use legacy models and `Profile.small_group`.
 
 ## 3. Long-Term Target
 
@@ -253,7 +256,7 @@ Future staff workflow:
 - Show bilingual UI labels when implemented.
 - Require an explicit permission/capability.
 
-Do not implement UI in CS-H.4.
+CS-H.7B/C/D implemented the first staff request review UI and approve/reject actions. Broader staff admin expansion, richer request routing, needs-clarification handling, and history views remain future work.
 
 Approval permission should be separate from ordinary membership. Being a member of a group should not let a user approve membership requests.
 
@@ -263,8 +266,8 @@ Recommended phases:
 - Phase M.1: CS-H.4 design only.
 - Phase M.2: add `ChurchStructureMembership` model only, no behavior change.
 - Phase M.3: backfill active primary membership from `Profile.small_group`.
-- Phase M.4: signup requested-unit flow stores requested membership/request, not active membership.
-- Phase M.5: admin approval updates membership and syncs `Profile.small_group`.
+- Phase M.4: signup/Profile requested-unit flow stores requested membership/request, not active membership. Completed.
+- Phase M.5: admin approval updates membership and syncs `Profile.small_group` only for the narrow exactly-one active mapped legacy `SmallGroup` case. Completed.
 - Phase M.6: selected consumers may read membership with fallback to `Profile.small_group`.
 - Phase M.7: `Profile.small_group` becomes cache/compatibility or is deprecated after safe migration.
 
@@ -393,9 +396,18 @@ Recommended sequence:
 - CS-H.5E: Django Admin clarity for legacy structure vs future structure/membership foundation. Completed.
 - CS-H.6: signup requested-unit design. Completed.
 - CS-H.7: admin approval workflow design. Completed.
+- CS-H.6A/CS-H.6B: signup request capture planning and implementation. Completed.
+- CS-H.6D: Profile request capture. Completed.
+- CS-H.7A: membership approval workflow implementation plan. Completed.
+- CS-H.7B/C: membership approval capability plus pending request list. Completed.
+- CS-H.7D: membership request detail plus approve/reject actions. Completed.
+- CS-H.7E: narrow `Profile.small_group` approval sync. Completed.
+- CS-H.8: integrated membership request flow checkpoint. Completed.
+- CS-H.9: membership request UX hardening. Completed.
+- CS-H.10: CMS hardening checkpoint. Completed.
 - Later: consumer migration from `Profile.small_group` to membership.
 
-Do not implement membership, signup approval, or consumer migration all at once.
+Do not implement audience filtering or consumer migration without a separate plan. Do not migrate `/studies/`, reading progress, `ServiceEvent`, My Serving, or other consumers from `Profile.small_group` until explicitly authorized.
 
 ## 18. Open Decisions
 

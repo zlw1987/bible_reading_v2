@@ -38,9 +38,9 @@ Checklist and scheduling enhancements are still future phases.
 
 The entire project is not complete. The stable center is Daily Reading, Prayer, Bible Study, ServiceEvent foundation, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, and limited Lighting Team Pilot Data/setup support; future checklist and scheduling operations should be added deliberately and kept within clear boundaries.
 
-Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, CS-H.3D verifies GoDaddy production/staging seeding, CS-H.3E closes seeded structure data QA, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, and CS-H.5E improves Django Admin clarity for legacy structure versus future foundation models. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
+Church structure domain planning is recorded for future scope and audience work. CS-F.1 adds the short-term `MinistryContext` bridge, CS-F.2 uses it for Bible Study Schedule scope eligibility, CS-F.3 adds optional ServiceEvent MinistryContext labeling, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, CS-H.3D verifies GoDaddy production/staging seeding, CS-H.3E closes seeded structure data QA, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity for legacy structure versus future foundation models, CS-H.6/CS-H.6A/CS-H.6B add signup requested-unit design and capture, CS-H.7 through CS-H.7E add staff approval planning, staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync, CS-H.8 records the integration checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
-Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, arbitrary future structure units, and future membership history. Long-term source of truth should be `ChurchStructureUnit` plus `ChurchStructureMembership`; short-term runtime behavior still uses existing models. Nullable legacy mapping fields, verified command-based seeding/mapping, seeded data QA closure, membership design, a model-only membership table, helper hardening, explicit command-based membership backfill, user-attested production/staging backfill verification, and clearer Django Admin labeling now exist, but there is no signup approval workflow, audience selection, filtering, consumer migration, custom staff admin UI, or runtime switch yet. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
+Future flexible Church Structure Foundation planning should keep current `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` assumptions usable while leaving room for CM/EM, variable-depth branches, arbitrary future structure units, and future membership history. Long-term source of truth should be `ChurchStructureUnit` plus `ChurchStructureMembership`; short-term runtime behavior still uses existing models. Nullable legacy mapping fields, verified command-based seeding/mapping, seeded data QA closure, membership design, a model-only membership table, helper hardening, explicit command-based membership backfill, user-attested production/staging backfill verification, clearer Django Admin labeling, signup/Profile requested-unit capture, staff request review, approve/reject actions, and narrow approval sync now exist. Audience selection, filtering, consumer migration, broad custom staff admin expansion, and a runtime source-of-truth switch are still future and not authorized here. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`.
 
 ## 3. Module Boundaries
 
@@ -192,6 +192,23 @@ Planning clarification:
 - Community Activities should use future audience segments for signup visibility rather than being forced into ServiceEvent.
 - Future flexible hierarchy should not hard-code Church -> CM/EM -> District -> SmallGroup forever; use a future `ChurchStructureUnit` only after the need is proven.
 
+### H. Long-Term CMS Product Scope
+
+These are final CMS product directions, not authorization to implement them now. "Not V1" or "not now" means deferred unless separately planned and approved; it does not mean outside the final product.
+
+Future CMS scope may include:
+- Prayer Wall continued refinement.
+- Bible Study / small group attendance.
+- Notifications through email, SMS, WeChat, and app notifications.
+- Pastor/staff announcements.
+- Group leader dashboard.
+- Children, family, couples, and newcomer care workflows.
+- Activities signup, check-in, and capacity management.
+- Resources, materials, and file center.
+- Finer permission matrix for ministry role, small group leader, district leader, and staff capabilities.
+
+The ERP boundary remains: no finance, payroll, HR/personnel system, full CRM, legal/compliance system, or broad sensitive contact import. Children/family care workflow is future CMS scope, but child security check-in is not automatically authorized by that scope.
+
 ## 4. Completed V1 Features
 
 ### Daily Reading
@@ -303,7 +320,7 @@ Current phase:
 
 Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, MinistryTeam Foundation, TeamAssignment V1, My Serving Page V1, and Lighting Team Pilot Data/setup support reached pilot validation on `v0.9-pilot-rc1`. Pilot validation passed with no known P0/P1 blockers.
 
-The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior, CS-H.2A hardens that model, CS-H.3 records mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested production/staging backfill verification, and CS-H.5E improves Django Admin clarity. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
+The current next phase is Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation without changing current behavior, CS-H.2A hardens that model, CS-H.3 records mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping command, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6 through CS-H.7E complete requested-unit capture and staff approval/sync slices, CS-H.8 integration checkpoint is complete, CS-H.9 membership request UX hardening is complete, and CS-H.10 CMS hardening checkpoint is complete. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 Current foundation step:
 
@@ -468,7 +485,19 @@ Current sequence:
 - CS-H.5C ChurchStructureMembership backfill command completed.
 - CS-H.5D ChurchStructureMembership production/staging backfill verification completed by user-attested GoDaddy run; exact output counts were not recorded.
 - CS-H.5E Admin clarity for legacy structure vs future structure/membership foundation completed.
-- Later signup approval workflow and consumer migration only after phased planning.
+- CS-H.6 Signup requested-unit flow design completed.
+- CS-H.6A Signup request capture implementation planning completed.
+- CS-H.6B Signup request capture completed.
+- CS-H.6D Profile request capture completed.
+- CS-H.7 Admin approval workflow design completed.
+- CS-H.7A Membership approval workflow implementation plan completed.
+- CS-H.7B/C Membership approval capability + pending request list completed.
+- CS-H.7D Membership request detail + approve/reject actions completed.
+- CS-H.7E `Profile.small_group` approval sync completed.
+- CS-H.8 Integrated membership request flow checkpoint completed.
+- CS-H.9 Membership request UX hardening completed.
+- CS-H.10 CMS hardening checkpoint completed.
+- Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.
 - Later Community Activities V1 with audience segments.
@@ -482,7 +511,7 @@ Do not build:
 - Finance / offering
 - Payroll
 - Full CRM
-- Children check-in
+- Child security check-in unless separately authorized
 - Legal/compliance system
 - Asset management
 - Complete HR/personnel system
@@ -564,11 +593,11 @@ CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Sch
 
 Current post-pilot step:
 
-PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation, CS-H.2A hardens it, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding, CS-H.3E closes seeded structure data QA, CS-H.4 records membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested production/staging backfill verification, and CS-H.5E improves Django Admin clarity; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
+PV-C.1 records pilot validation closure. Pilot validation passed on `v0.9-pilot-rc1`. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 adds the model-only `ChurchStructureUnit` foundation, CS-H.2A hardens it, CS-H.3 records mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding, CS-H.3E closes seeded structure data QA, CS-H.4 records membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6 through CS-H.7E complete requested-unit capture and staff approval/sync slices, CS-H.8 integration checkpoint is complete, CS-H.9 membership request UX hardening is complete, and CS-H.10 CMS hardening checkpoint is complete. Runtime consumers still primarily use legacy models and `Profile.small_group`; implementation beyond that remains future and phased. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
 Future foundation planning:
 
-`ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded data QA closure. CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested production/staging backfill verification, and CS-H.5E improves Django Admin clarity. Signup/onboarding approval and consumer migration remain future phased work before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
+`ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded data QA closure. CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds an explicit membership backfill command, CS-H.5D records user-attested production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6/CS-H.6B/CS-H.6D add requested-unit capture from signup and Profile, and CS-H.7B/C/D/E add staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync. Consumer migration remains future phased work before advanced mixed audience segments or CM/EM-aware `ServiceEvent` filtering. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
 Large deferred items remain deferred pending feedback. Checklist V1 remains deferred unless pilot feedback elevates it.
 

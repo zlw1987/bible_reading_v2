@@ -141,6 +141,23 @@ Checklist V1 remains deferred and should not be revived because of this module.
 
 See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 
+## Future CMS Product Scope
+
+These items are future CMS product directions, not authorization to implement them from this roadmap. "Not V1" or "not now" means deferred until separately planned and approved, not outside the final product.
+
+Future CMS scope may include:
+- Prayer Wall refinement.
+- Bible Study / small group attendance.
+- Notifications through email, SMS, WeChat, and app notifications.
+- Pastor/staff announcements.
+- Group leader dashboard.
+- Children/family/couples/newcomer care workflows.
+- Activities signup, check-in, and capacity management.
+- Resources/materials/file center.
+- Finer permission matrix for ministry role, small group leader, district leader, and staff capabilities.
+
+The ERP boundary remains: no finance, payroll, HR/personnel system, full CRM, legal/compliance system, or broad sensitive contact import. Children/family care workflow is future CMS scope; child security check-in is not automatically authorized.
+
 ## Current Recommended Next Sequence
 
 - Bible Study V2 Flow QA passed.
@@ -151,9 +168,9 @@ See `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - RC-P.3 Pilot release candidate tag `v0.9-pilot-rc1` created and pushed.
 - RC-P.4 Pilot Validation Runbook prepared for pilot validation.
 - `v0.9-pilot-rc1` deployed and pilot validation passed.
-- Current next phase: Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 model-only `ChurchStructureUnit` foundation is complete, CS-H.2A model hardening is complete, CS-H.3 mapping/membership strategy is complete, CS-H.3B nullable legacy mapping fields are complete, CS-H.3C idempotent seeding/mapping command is complete, CS-H.3D production/staging seeding verification passed, CS-H.3E seeded structure data QA closure is complete, CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A ChurchStructureMembership model-only foundation is complete, CS-H.5B membership helper/validation hardening is complete, CS-H.5C membership backfill command is complete, CS-H.5D production/staging backfill verification is complete by user-attested GoDaddy run, and CS-H.5E Admin clarity for legacy structure vs future foundation models is complete. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
+- Current next phase: Post-Pilot Backlog Triage. CS-H.1 Flexible Church Structure and Audience Scope Design Doc is complete, CS-H.2 model-only `ChurchStructureUnit` foundation is complete, CS-H.2A model hardening is complete, CS-H.3 mapping/membership strategy is complete, CS-H.3B nullable legacy mapping fields are complete, CS-H.3C idempotent seeding/mapping command is complete, CS-H.3D production/staging seeding verification passed, CS-H.3E seeded structure data QA closure is complete, CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A ChurchStructureMembership model-only foundation is complete, CS-H.5B membership helper/validation hardening is complete, CS-H.5C membership backfill command is complete, CS-H.5D production/staging backfill verification is complete by user-attested GoDaddy run, CS-H.5E Admin clarity for legacy structure vs future foundation models is complete, CS-H.6 through CS-H.7E complete requested-unit capture and staff approval/sync slices, CS-H.8 integration checkpoint is complete, CS-H.9 membership request UX hardening is complete, CS-H.10 CMS hardening checkpoint is complete, mobile nav polish is deferred/accepted for now, and root `AGENTS.md` verification policy has been added. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, and `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 - Large deferred items remain deferred pending feedback.
-- Flexible Church Structure seeding/mapping now exists only as an explicit dry-run/apply command, passed GoDaddy production/staging verification, and completed seeded data QA closure. CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds explicit dry-run/apply membership backfill from mapped `Profile.small_group` values, CS-H.5D records user-attested production/staging backfill verification, and CS-H.5E improves Django Admin clarity. Signup approval workflow, audience selection, filtering, custom staff admin UI, and consumer migration remain future and phased.
+- Flexible Church Structure seeding/mapping now exists only as an explicit dry-run/apply command, passed GoDaddy production/staging verification, and completed seeded data QA closure. CS-H.4 ChurchStructureMembership Design Doc is complete, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds explicit dry-run/apply membership backfill from mapped `Profile.small_group` values, CS-H.5D records user-attested production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6/CS-H.6B/CS-H.6D add signup and Profile requested-unit capture, and CS-H.7B/C/D/E add staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync. Runtime consumers still primarily use `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`; `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers are not yet driven by `ChurchStructureMembership`. Audience selection, filtering, broad custom staff admin expansion, and consumer migration remain future and phased.
 - Lighting Pilot operational follow-up and Community Activities planning should be classified through post-pilot backlog planning before implementation.
 - Later role-aware editing permissions.
 - Later ServiceEvent participating_ministries / MinistryContext audience planning.

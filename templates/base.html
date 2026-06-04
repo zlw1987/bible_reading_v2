@@ -150,12 +150,15 @@
             var outsideClickListening = false;
             var lastScrollY = getClampedScrollY();
             var accumulatedScrollDelta = 0;
+            var headerHidden = siteHeader ? siteHeader.classList.contains("site-header--hidden") : false;
+            var visibilityChangedAt = 0;
             var headerTouchActive = false;
             var headerPointerActive = false;
-            var headerFocusActive = false;
             var scrollTicking = false;
-            var hideScrollThreshold = 28;
-            var showScrollThreshold = 72;
+            var hideScrollThreshold = 56;
+            var showScrollThreshold = 96;
+            var visibilityCooldownMs = 125;
+            var tinyScrollDelta = 4;
             var bottomBounceDelta = 24;
             var bottomBounceZone = 48;
             var topThreshold = 32;
@@ -194,7 +197,6 @@
             function clearTransientHeaderInteraction() {
                 headerTouchActive = false;
                 headerPointerActive = false;
-                headerFocusActive = false;
             }
 
             function hasOpenDropdown() {
@@ -206,14 +208,30 @@
             function headerHasActiveInteraction() {
                 return headerTouchActive ||
                     headerPointerActive ||
-                    headerFocusActive ||
                     hasOpenDropdown();
             }
 
             function showSiteHeader() {
-                if (siteHeader) {
-                    siteHeader.classList.remove("site-header--hidden");
+                if (!siteHeader) {
+                    return;
                 }
+
+                if (headerHidden) {
+                    visibilityChangedAt = Date.now();
+                }
+
+                siteHeader.classList.remove("site-header--hidden");
+                headerHidden = false;
+            }
+
+            function hideSiteHeader() {
+                if (!siteHeader || headerHidden) {
+                    return;
+                }
+
+                siteHeader.classList.add("site-header--hidden");
+                headerHidden = true;
+                visibilityChangedAt = Date.now();
             }
 
             function updateHeaderVisibility() {
@@ -228,6 +246,7 @@
                 var currentScrollY = getClampedScrollY();
                 var maxScrollY = getMaxScrollY();
                 var scrollDelta = currentScrollY - lastScrollY;
+                var now = Date.now();
 
                 if (currentScrollY <= topThreshold || headerHasActiveInteraction()) {
                     showSiteHeader();
@@ -235,18 +254,24 @@
                     return;
                 }
 
-                if (scrollDelta === 0) {
+                if (Math.abs(scrollDelta) <= tinyScrollDelta) {
+                    lastScrollY = currentScrollY;
                     return;
                 }
 
-                if (scrollDelta > 0) {
+                if (now - visibilityChangedAt < visibilityCooldownMs) {
+                    resetScrollTracking(currentScrollY);
+                    return;
+                }
+
+                if (!headerHidden && scrollDelta > 0) {
                     accumulatedScrollDelta = Math.max(0, accumulatedScrollDelta) + scrollDelta;
 
                     if (currentScrollY > hideStartOffset && accumulatedScrollDelta >= hideScrollThreshold) {
-                        siteHeader.classList.add("site-header--hidden");
+                        hideSiteHeader();
                         accumulatedScrollDelta = 0;
                     }
-                } else {
+                } else if (headerHidden && scrollDelta < 0) {
                     if (
                         currentScrollY >= maxScrollY - bottomBounceZone &&
                         Math.abs(scrollDelta) < bottomBounceDelta
@@ -261,6 +286,8 @@
                         showSiteHeader();
                         accumulatedScrollDelta = 0;
                     }
+                } else {
+                    accumulatedScrollDelta = 0;
                 }
 
                 lastScrollY = currentScrollY;
@@ -506,12 +533,10 @@
                 });
 
                 siteHeader.addEventListener("focusin", function () {
-                    headerFocusActive = true;
                     showSiteHeader();
                 });
 
                 siteHeader.addEventListener("focusout", function () {
-                    headerFocusActive = false;
                     requestHeaderVisibilityUpdate();
                 });
             }

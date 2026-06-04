@@ -109,7 +109,7 @@ Likely candidates:
 - CS-H.9 Membership Request UX Hardening. Completed.
 - CS-H.10 CMS Hardening Checkpoint. Completed.
 - ServiceEvent audience/filtering design doc.
-- Staff Admin Surface Expansion plan.
+- PP-SA.1 Staff Admin Surface Expansion Plan. Completed as docs-only planning in `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`.
 - Deployment/operations hardening plan.
 
 These are planning deliverables. They should precede implementation when the proposed work changes schema, permissions, audience scope, or module boundaries.
@@ -229,7 +229,7 @@ Include these as planning options only. Do not start them from this triage docum
 - CS-H.8 Integration Checkpoint. Completed.
 - CS-H.9 Membership Request UX Hardening. Completed.
 - CS-H.10 CMS Hardening Checkpoint. Completed.
-- PP-SA.1 Staff Admin Surface Expansion Plan.
+- PP-SA.1 Staff Admin Surface Expansion Plan. Completed as docs-only planning in `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
 - OPS-H.1 Deployment and Operations Hardening.

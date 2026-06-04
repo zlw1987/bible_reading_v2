@@ -135,6 +135,10 @@ UI_TEXT = {
         "approve_request": "批准申请",
         "reject_request": "拒绝申请",
         "back_to_membership_requests": "返回会籍申请",
+        "profile_small_group_sync_warning": (
+            "提醒：批准此申请会把当前小组更新为对应的旧版小组，"
+            "并可能影响目前系统中的可见范围。"
+        ),
 
         "reflection_reports": "默想举报",
         "reflection_reports_subtitle": "查看被举报的默想并管理可见性。",
@@ -292,6 +296,10 @@ UI_TEXT = {
         "approve_request": "Approve Request",
         "reject_request": "Reject Request",
         "back_to_membership_requests": "Back to Membership Requests",
+        "profile_small_group_sync_warning": (
+            "Warning: approving this request will update the current small group "
+            "to the mapped legacy small group and may affect current runtime visibility."
+        ),
 
         "reflection_reports": "Reflection Reports",
         "reflection_reports_subtitle": "Review reported reflections and moderate visibility.",

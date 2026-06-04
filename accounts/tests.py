@@ -28,7 +28,7 @@ from accounts.permissions import (
     has_capability,
 )
 from events.models import ServiceEvent
-from studies.models import BibleStudySeries
+from studies.models import BibleStudySeries, BibleStudySession
 
 class AccountProfileTests(TestCase):
     def setUp(self):
@@ -1844,6 +1844,28 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "Approve Request")
         self.assertContains(response, "Reject Request")
 
+    def test_detail_shows_transfer_warning_for_different_mapped_small_group(self):
+        mapped_group = SmallGroup.objects.create(
+            name="Mapped Rainbow 5",
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership()
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "approving this request will update the current small group",
+        )
+        self.assertContains(response, mapped_group.name)
+
     def test_detail_only_allows_requested_memberships(self):
         active_user = User.objects.create_user(username="active_detail")
         membership = ChurchStructureMembership.objects.create(
@@ -1863,6 +1885,11 @@ class StaffMembershipRequestListTests(TestCase):
 
     def test_approve_is_post_only(self):
         membership = self.create_membership()
+        SmallGroup.objects.create(
+            name="Post Only Mapped Rainbow 4",
+            church_structure_unit=self.unit,
+        )
+        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.get(
@@ -1871,7 +1898,9 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_reject_is_post_only(self):
         membership = self.create_membership()
@@ -1923,8 +1952,75 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(membership.requested_by, requested_by)
         self.assertEqual(self.user.profile.small_group, original_group)
 
+    def test_approve_mapped_unit_updates_profile_small_group(self):
+        mapped_group = SmallGroup.objects.create(
+            name="Mapped Rainbow 4",
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertTrue(membership.is_primary)
+        self.assertEqual(self.user.profile.small_group, mapped_group)
+
+    def test_approve_inactive_mapped_small_group_does_not_update_profile_small_group(self):
+        SmallGroup.objects.create(
+            name="Inactive Mapped Rainbow 4",
+            church_structure_unit=self.unit,
+            is_active=False,
+        )
+        membership = self.create_membership()
+        original_group = self.user.profile.small_group
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertEqual(self.user.profile.small_group, original_group)
+
+    def test_approve_multi_mapped_unit_does_not_update_profile_small_group(self):
+        SmallGroup.objects.create(
+            name="Mapped Rainbow 4A",
+            church_structure_unit=self.unit,
+        )
+        SmallGroup.objects.create(
+            name="Mapped Rainbow 4B",
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership()
+        original_group = self.user.profile.small_group
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertEqual(self.user.profile.small_group, original_group)
+
     def test_approve_blocks_existing_active_primary_membership(self):
         membership = self.create_membership()
+        mapped_group = SmallGroup.objects.create(
+            name="Blocked Mapped Rainbow 4",
+            church_structure_unit=self.unit,
+        )
+        original_group = self.user.profile.small_group
         ChurchStructureMembership.objects.create(
             user=self.user,
             unit=self.other_unit,
@@ -1944,6 +2040,9 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertFalse(membership.is_primary)
         self.assertIsNone(membership.approved_by)
         self.assertIsNone(membership.approved_at)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.small_group, original_group)
+        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_reject_changes_requested_to_rejected_and_not_primary(self):
         membership = self.create_membership(is_primary=True)
@@ -1965,6 +2064,26 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertIsNone(membership.approved_by)
         self.assertIsNone(membership.approved_at)
         self.assertEqual(self.user.profile.small_group, original_group)
+
+    def test_reject_mapped_unit_does_not_update_profile_small_group(self):
+        mapped_group = SmallGroup.objects.create(
+            name="Rejected Mapped Rainbow 4",
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership(is_primary=True)
+        original_group = self.user.profile.small_group
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_reject", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REJECTED)
+        self.assertEqual(self.user.profile.small_group, original_group)
+        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_approve_and_reject_only_allow_requested_status(self):
         membership = self.create_membership()
@@ -1999,7 +2118,11 @@ class StaffMembershipRequestListTests(TestCase):
 
     def test_requested_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="District Group", district=district)
+        group = SmallGroup.objects.create(
+            name="District Group",
+            district=district,
+            church_structure_unit=self.unit,
+        )
         self.create_membership(user=self.normal_user)
         event = ServiceEvent.objects.create(
             title="District Service",
@@ -2017,7 +2140,7 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
-    def test_approved_membership_does_not_change_service_event_visibility(self):
+    def test_unmapped_approved_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(name="District Group", district=district)
         membership = self.create_membership(user=self.normal_user)
@@ -2040,6 +2163,34 @@ class StaffMembershipRequestListTests(TestCase):
         self.normal_user.profile.small_group = group
         self.normal_user.profile.save()
 
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
+
+    def test_mapped_approval_changes_service_event_visibility_through_profile_small_group(self):
+        district = District.objects.create(name="Mapped District 1")
+        group = SmallGroup.objects.create(
+            name="Mapped District Group",
+            district=district,
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership(user=self.normal_user)
+        event = ServiceEvent.objects.create(
+            title="Mapped District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
+
+        self.client.login(username="membership_staff", password="TestPass123!")
+        self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+        self.normal_user.profile.refresh_from_db()
+
+        self.assertEqual(self.normal_user.profile.small_group, group)
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
     def test_rejected_membership_does_not_change_service_event_visibility(self):
@@ -2087,6 +2238,46 @@ class StaffMembershipRequestListTests(TestCase):
         )
 
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
+
+    def test_mapped_approval_keeps_bible_study_scope_legacy_group_based(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="Mapped District 2",
+            ministry_context=context,
+        )
+        group = SmallGroup.objects.create(
+            name="Mapped Bible Study Group",
+            district=district,
+            church_structure_unit=self.unit,
+        )
+        membership = self.create_membership(user=self.normal_user)
+        series = BibleStudySeries.objects.create(
+            title="Mapped CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+        session = BibleStudySession.objects.create(
+            series=series,
+            title="Mapped Group Study",
+            study_datetime=timezone.now(),
+            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
+            small_group=group,
+            status=BibleStudySession.STATUS_PUBLISHED,
+        )
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+        self.assertIsNone(self.normal_user.profile.small_group)
+        self.assertFalse(session.can_be_seen_by(self.normal_user))
+
+        self.client.login(username="membership_staff", password="TestPass123!")
+        self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+        self.normal_user.profile.refresh_from_db()
+
+        self.assertEqual(self.normal_user.profile.small_group, group)
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
+        self.assertTrue(session.can_be_seen_by(self.normal_user))
 
 
 class StaffPasswordResetTests(TestCase):

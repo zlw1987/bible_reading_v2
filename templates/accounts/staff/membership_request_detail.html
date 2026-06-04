@@ -77,6 +77,17 @@
     </div>
 </div>
 
+{% if show_profile_sync_warning %}
+<div class="card">
+    <p class="status status-warning">
+        {{ ui.profile_small_group_sync_warning }}
+        {% if mapped_legacy_small_group %}
+        {{ mapped_legacy_small_group.name }}
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+
 <div class="card">
     <form method="post" action="{% url 'staff_membership_request_approve' membership.id %}" style="display: inline-block; margin-right: 12px;">
         {% csrf_token %}

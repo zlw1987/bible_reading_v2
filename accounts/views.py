@@ -14,7 +14,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import ProfileForm, SignUpForm, StaffPasswordResetForm
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
-from .models import ChurchStructureMembership, Profile
+from .models import ChurchStructureMembership, Profile, SmallGroup
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 
 
@@ -208,12 +208,33 @@ def get_requested_membership_or_404(membership_id):
     )
 
 
+def _get_single_active_legacy_small_group_for_unit(unit):
+    groups = list(
+        SmallGroup.objects.filter(
+            church_structure_unit=unit,
+            is_active=True,
+        )[:2]
+    )
+    if len(groups) == 1:
+        return groups[0]
+    return None
+
+
 @user_passes_test(can_manage_church_memberships)
 def staff_membership_request_detail(request, membership_id):
     membership = get_requested_membership_or_404(membership_id)
     language = get_user_language(request)
     active_primary = ChurchStructureMembership.current_primary_for_user(
         membership.user,
+    )
+    mapped_legacy_small_group = _get_single_active_legacy_small_group_for_unit(
+        membership.unit,
+    )
+    current_small_group = membership.user.profile.small_group
+    show_profile_sync_warning = bool(
+        mapped_legacy_small_group
+        and current_small_group
+        and current_small_group != mapped_legacy_small_group
     )
 
     return render(
@@ -226,6 +247,8 @@ def staff_membership_request_detail(request, membership_id):
             "active_primary_path": (
                 active_primary.unit.path_label(language) if active_primary else ""
             ),
+            "mapped_legacy_small_group": mapped_legacy_small_group,
+            "show_profile_sync_warning": show_profile_sync_warning,
         },
     )
 
@@ -257,7 +280,31 @@ def staff_membership_request_approve(request, membership_id):
     membership.approved_at = timezone.now()
     membership.save()
 
-    messages.success(request, "Membership request approved.")
+    mapped_legacy_small_group = None
+    if (
+        membership.status == ChurchStructureMembership.STATUS_ACTIVE
+        and membership.is_primary
+    ):
+        mapped_legacy_small_group = _get_single_active_legacy_small_group_for_unit(
+            membership.unit,
+        )
+
+    if mapped_legacy_small_group:
+        profile, _ = Profile.objects.get_or_create(user=membership.user)
+        profile.small_group = mapped_legacy_small_group
+        profile.save(update_fields=["small_group"])
+        messages.success(
+            request,
+            (
+                "Membership request approved. Current small group updated to "
+                f"{mapped_legacy_small_group.name}."
+            ),
+        )
+    else:
+        messages.warning(
+            request,
+            "Membership request approved. No legacy small-group sync was performed.",
+        )
     return redirect("staff_membership_request_list")
 
 

@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.7E plans transition behavior for syncing `Profile.small_group` when staff approve a mapped small-group `ChurchStructureMembership`.
+CS-H.7E implements transition behavior for syncing `Profile.small_group` when staff approve a mapped small-group `ChurchStructureMembership`.
 
 Sync is needed during the transition because current runtime consumers still read the legacy `Profile.small_group` field. `/studies/`, reading progress, `ServiceEvent`, and related behavior do not yet use `ChurchStructureMembership`, so approving membership alone does not change what the user can see or do in those flows.
 
-This is planning-only. It does not change code, models, migrations, views, forms, templates, URLs, signup behavior, consumer queries, or runtime visibility.
+This implementation does not change models, migrations, signup behavior, consumer queries, or consumer source of truth. Runtime visibility can change only because `Profile.small_group` changes.
 
 ## 2. Current Behavior
 
@@ -21,9 +21,9 @@ Current approval:
 
 Therefore, approved membership by itself does not affect current `/studies/`, reading progress, `ServiceEvent`, or related visibility. Those consumers continue to depend on `Profile.small_group`.
 
-## 3. Proposed CS-H.7E Behavior
+## 3. Implemented CS-H.7E Behavior
 
-On approve, future CS-H.7E implementation should sync `user.profile.small_group` only when all of these are true:
+On approve, CS-H.7E syncs `user.profile.small_group` only when all of these are true:
 - the approved membership is moving through the normal `requested` to `active` approval flow
 - the approved membership is active
 - the approved membership is primary
@@ -53,9 +53,9 @@ Because CS-H.7D approval already requires staff action, this may be acceptable f
 
 Future implementation should include a warning message and tests for this transfer case. The warning should be shown before or during approval when the mapped group differs from the user's current `Profile.small_group`.
 
-## 6. Tests Required Later
+## 6. Tests Added
 
-Future CS-H.7E implementation tests should cover:
+CS-H.7E implementation tests cover:
 - mapped unit approval updates `Profile.small_group`
 - unmapped unit approval does not update `Profile.small_group`
 - inactive legacy group does not sync
@@ -66,8 +66,6 @@ Future CS-H.7E implementation tests should cover:
 - blocked approval does not sync
 - requested membership grants no visibility before approval
 - different existing `Profile.small_group` requires staff-visible warning coverage
-
-Do not run tests as part of this planning-only task.
 
 ## 7. Risks
 
@@ -80,10 +78,10 @@ Primary risks:
 
 Mitigations should include exact mapping checks, an active legacy group requirement, visible staff warning copy for transfers, and focused tests around no-sync cases.
 
-## 8. Recommendation
+## 8. Completion
 
-Implement CS-H.7E only after confirming this product behavior is desired:
+CS-H.7E is implemented for the confirmed transition behavior:
 
 Approval to a mapped small-group unit should immediately make the user belong to that legacy small group in the current runtime.
 
-Until that decision is confirmed, CS-H.7D's current behavior should remain unchanged: approval updates `ChurchStructureMembership` only, and `Profile.small_group` remains the runtime source for `/studies/`, reading progress, `ServiceEvent`, and related behavior.
+Consumers still read `Profile.small_group`. CS-H.7E did not add signup capture, audience filtering, or consumer migration.

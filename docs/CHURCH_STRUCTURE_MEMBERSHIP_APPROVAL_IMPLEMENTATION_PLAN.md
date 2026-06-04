@@ -14,7 +14,7 @@ Recommended small phases:
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail with approve/reject actions. Completed.
-- CS-H.7E: `Profile.small_group` sync behavior plan for approved mapped small-group memberships. Completed in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`; implementation deferred.
+- CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships. Completed.
 - CS-H.7F: browser QA and docs closure.
 
 Each slice should preserve current runtime behavior. Do not switch `/studies/`, reading progress, `ServiceEvent`, My Serving, or any other consumer to membership in these slices.
@@ -53,10 +53,10 @@ CS-H.7D implementation status:
 - Reject preserves `requested_by`, notes, and `Profile.small_group`.
 - Signup capture, `Profile.small_group` approval sync, and consumer migration remain future work.
 
-CS-H.7E planning status:
-- `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md` records the proposed transition sync rule and no-sync cases.
-- CS-H.7E remains planning-only until explicitly approved for implementation.
-- Runtime still uses `Profile.small_group`; approval sync would be consequential because it would affect current consumers through that legacy field.
+CS-H.7E implementation status:
+- Approval syncs `Profile.small_group` only when the approved active primary membership unit maps to exactly one active legacy `SmallGroup`.
+- Unmapped, multi-mapped, inactive legacy group, rejected, blocked, and non-POST cases do not sync `Profile.small_group`.
+- Runtime still uses `Profile.small_group`; no signup capture, audience filtering, or consumer migration was added.
 
 ## 4. Data Behavior
 
@@ -75,12 +75,12 @@ Approval should not create permissions, serving assignments, team membership, or
 
 ## 5. Profile.small_group Sync
 
-CS-H.7E is planned in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`.
+CS-H.7E is implemented and documented in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`.
 
-Proposed transition sync rule:
+Implemented transition sync rule:
 - if the approved membership is active and primary, and the unit maps to exactly one active legacy `SmallGroup`, sync `Profile.small_group`
 - if the approved unit has no legacy mapping, multiple mappings, or an inactive legacy `SmallGroup`, do not sync
-- if the user already has a different `Profile.small_group`, allow the update only as part of explicit staff approval and include a warning/test requirement
+- if the user already has a different `Profile.small_group`, staff sees a warning before approval
 - do not remove `Profile.small_group`
 - do not migrate consumers to membership
 
@@ -186,7 +186,7 @@ Recommended next sequence:
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
 - CS-H.7D: request detail and approve/reject actions. Completed.
-- CS-H.7E: explicit `Profile.small_group` sync behavior plan. Completed; implementation deferred pending product confirmation.
+- CS-H.7E: explicit `Profile.small_group` sync behavior. Completed.
 - CS-H.7F: browser QA and docs closure.
 - CS-H.6A: signup request capture implementation planning can proceed before or after CS-H.7B/7C depending on product priority.
 - Later: consumer migration from `Profile.small_group` to membership, one consumer at a time.

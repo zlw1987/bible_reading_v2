@@ -35,6 +35,17 @@ CS-H.6B implemented signup-only request capture:
 
 Profile-based change requests remain deferred to CS-H.6C. Signup is the narrower, lower-conflict entry point because brand-new users often have no current active primary membership.
 
+CS-H.6B.1 closure status:
+- Rendered-page manual QA passed against an isolated local Django database.
+- Signup rendered the requested unit field in English and Chinese.
+- Signup with no requested unit created a user and no `ChurchStructureMembership`.
+- Signup with active small-group and fellowship units created `status=requested` memberships.
+- Signup request creation did not update `Profile.small_group`.
+- Inactive and non-requestable units were not available through normal rendered form choices and were rejected by form validation if submitted.
+- Created requests appeared in the existing staff membership request list and detail pages.
+- Existing `/studies/`, `ServiceEvent`, Reading, and My Serving behavior remains legacy `Profile.small_group` based.
+- No profile request capture, consumer migration, audience filtering, Community Activities, model change, migration, or runtime source-of-truth switch was added.
+
 ## 4. Requested Unit Capture Surface
 
 Signup should capture:
@@ -167,6 +178,7 @@ CS-H.6A does not include:
 Recommended next sequence:
 - CS-H.6A: signup request capture implementation planning. Completed by this document.
 - CS-H.6B: implement signup request capture only, with focused tests. Completed.
+- CS-H.6B.1: browser/manual QA and docs closure for signup membership request capture. Completed.
 - CS-H.6C: optionally implement profile-based request/change capture, with focused tests.
 - CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
 - Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.

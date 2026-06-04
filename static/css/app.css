@@ -481,7 +481,6 @@ th {
 @media (max-width: 760px) {
     .site-header {
         transition: transform 180ms ease;
-        will-change: transform;
     }
 
     .site-header.site-header--hidden {
@@ -489,7 +488,7 @@ th {
     }
 
     body.nav-menu-open .site-header {
-        transform: translateY(0);
+        transition: none;
     }
 
     .site-header-inner {

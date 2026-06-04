@@ -148,13 +148,18 @@
             var lockedScrollY = 0;
             var bodyOriginalStyles = {};
             var outsideClickListening = false;
-            var lastScrollY = window.scrollY || window.pageYOffset || 0;
+            var lastScrollY = getClampedScrollY();
+            var accumulatedScrollDelta = 0;
             var headerTouchActive = false;
-            var headerPointerInside = false;
+            var headerPointerActive = false;
+            var headerFocusActive = false;
             var scrollTicking = false;
-            var scrollThreshold = 12;
-            var topThreshold = 24;
-            var hideStartOffset = 80;
+            var hideScrollThreshold = 28;
+            var showScrollThreshold = 72;
+            var bottomBounceDelta = 24;
+            var bottomBounceZone = 48;
+            var topThreshold = 32;
+            var hideStartOffset = 96;
 
             function shouldUseMobileOverlay() {
                 return mobileDropdown.matches && !finePointer.matches;
@@ -162,6 +167,34 @@
 
             function shouldUseMobileHeaderAutoHide() {
                 return siteHeader && mobileHeader.matches;
+            }
+
+            function getMaxScrollY() {
+                var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+                var scrollHeight = Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight,
+                    document.body.offsetHeight,
+                    document.documentElement.offsetHeight
+                );
+
+                return Math.max(0, scrollHeight - viewportHeight);
+            }
+
+            function getClampedScrollY() {
+                var rawScrollY = window.scrollY || window.pageYOffset || 0;
+                return Math.min(Math.max(0, rawScrollY), getMaxScrollY());
+            }
+
+            function resetScrollTracking(scrollY) {
+                lastScrollY = typeof scrollY === "number" ? scrollY : getClampedScrollY();
+                accumulatedScrollDelta = 0;
+            }
+
+            function clearTransientHeaderInteraction() {
+                headerTouchActive = false;
+                headerPointerActive = false;
+                headerFocusActive = false;
             }
 
             function hasOpenDropdown() {
@@ -172,8 +205,8 @@
 
             function headerHasActiveInteraction() {
                 return headerTouchActive ||
-                    headerPointerInside ||
-                    (siteHeader && siteHeader.contains(document.activeElement)) ||
+                    headerPointerActive ||
+                    headerFocusActive ||
                     hasOpenDropdown();
             }
 
@@ -188,27 +221,46 @@
 
                 if (!shouldUseMobileHeaderAutoHide()) {
                     showSiteHeader();
-                    lastScrollY = window.scrollY || window.pageYOffset || 0;
+                    resetScrollTracking();
                     return;
                 }
 
-                var currentScrollY = Math.max(0, window.scrollY || window.pageYOffset || 0);
+                var currentScrollY = getClampedScrollY();
+                var maxScrollY = getMaxScrollY();
                 var scrollDelta = currentScrollY - lastScrollY;
 
                 if (currentScrollY <= topThreshold || headerHasActiveInteraction()) {
                     showSiteHeader();
-                    lastScrollY = currentScrollY;
+                    resetScrollTracking(currentScrollY);
                     return;
                 }
 
-                if (Math.abs(scrollDelta) < scrollThreshold) {
+                if (scrollDelta === 0) {
                     return;
                 }
 
-                if (scrollDelta > 0 && currentScrollY > hideStartOffset) {
-                    siteHeader.classList.add("site-header--hidden");
-                } else if (scrollDelta < 0) {
-                    showSiteHeader();
+                if (scrollDelta > 0) {
+                    accumulatedScrollDelta = Math.max(0, accumulatedScrollDelta) + scrollDelta;
+
+                    if (currentScrollY > hideStartOffset && accumulatedScrollDelta >= hideScrollThreshold) {
+                        siteHeader.classList.add("site-header--hidden");
+                        accumulatedScrollDelta = 0;
+                    }
+                } else {
+                    if (
+                        currentScrollY >= maxScrollY - bottomBounceZone &&
+                        Math.abs(scrollDelta) < bottomBounceDelta
+                    ) {
+                        resetScrollTracking(currentScrollY);
+                        return;
+                    }
+
+                    accumulatedScrollDelta = Math.min(0, accumulatedScrollDelta) + scrollDelta;
+
+                    if (Math.abs(accumulatedScrollDelta) >= showScrollThreshold) {
+                        showSiteHeader();
+                        accumulatedScrollDelta = 0;
+                    }
                 }
 
                 lastScrollY = currentScrollY;
@@ -307,6 +359,7 @@
 
             function lockBodyScroll(menu) {
                 showSiteHeader();
+                resetScrollTracking();
 
                 if (lockedMenu === menu) {
                     setDropdownPosition(menu);
@@ -348,7 +401,8 @@
                 lockedMenu = null;
                 lockedScrollY = 0;
                 bodyOriginalStyles = {};
-                lastScrollY = window.scrollY || window.pageYOffset || 0;
+                clearTransientHeaderInteraction();
+                resetScrollTracking();
                 requestHeaderVisibilityUpdate();
             }
 
@@ -406,7 +460,7 @@
 
             window.addEventListener("resize", function () {
                 showSiteHeader();
-                lastScrollY = window.scrollY || window.pageYOffset || 0;
+                resetScrollTracking();
 
                 if (!lockedMenu) {
                     return;
@@ -421,13 +475,18 @@
             });
 
             if (siteHeader) {
-                siteHeader.addEventListener("pointerenter", function () {
-                    headerPointerInside = true;
+                siteHeader.addEventListener("pointerdown", function () {
+                    headerPointerActive = true;
                     showSiteHeader();
                 });
 
-                siteHeader.addEventListener("pointerleave", function () {
-                    headerPointerInside = false;
+                document.addEventListener("pointerup", function () {
+                    headerPointerActive = false;
+                    requestHeaderVisibilityUpdate();
+                });
+
+                document.addEventListener("pointercancel", function () {
+                    headerPointerActive = false;
                     requestHeaderVisibilityUpdate();
                 });
 
@@ -446,8 +505,15 @@
                     requestHeaderVisibilityUpdate();
                 });
 
-                siteHeader.addEventListener("focusin", showSiteHeader);
-                siteHeader.addEventListener("focusout", requestHeaderVisibilityUpdate);
+                siteHeader.addEventListener("focusin", function () {
+                    headerFocusActive = true;
+                    showSiteHeader();
+                });
+
+                siteHeader.addEventListener("focusout", function () {
+                    headerFocusActive = false;
+                    requestHeaderVisibilityUpdate();
+                });
             }
 
             window.addEventListener("scroll", requestHeaderVisibilityUpdate, { passive: true });

@@ -21,6 +21,7 @@ urlpatterns = [
         name="password_change_done",
     ),
 
+    path("staff/", views.staff_overview, name="staff_overview"),
     path("staff/users/", views.staff_user_list, name="staff_user_list"),
     path(
         "staff/membership-requests/",

@@ -555,6 +555,34 @@ th {
     padding-bottom: 0;
 }
 
+.staff-overview-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.staff-overview-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.staff-count {
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1;
+    margin: 8px 0 18px;
+}
+
+.staff-count-list {
+    margin: 12px 0 18px;
+    padding-left: 20px;
+}
+
+.staff-count-list li {
+    margin-bottom: 6px;
+}
+
 .divider {
     border: none;
     border-top: 1px solid var(--border);
@@ -640,6 +668,10 @@ th {
     .assignment-event-row {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .staff-overview-grid {
+        grid-template-columns: 1fr;
     }
 
     .page-title {

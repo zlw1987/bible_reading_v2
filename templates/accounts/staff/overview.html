@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        只读摘要；请进入现有流程处理具体事项。
+        {% else %}
+        Read-only summary; use the existing workflows for action.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel">
+    <strong>
+        {% if language == "zh" %}当前运行边界{% else %}Current Runtime Boundary{% endif %}
+    </strong>
+    <p>
+        {% if language == "zh" %}
+        查经、读经进度、聚会事件和我的服事目前仍按现有小组资料运行；小组申请审核属于未来教会架构基础，尚未替代这些运行来源。
+        {% else %}
+        Bible Study, reading progress, Service Events, and My Serving still run on the current small-group profile data; membership requests are part of the future church-structure foundation and do not replace those runtime sources yet.
+        {% endif %}
+    </p>
+</section>
+
+<div class="staff-overview-grid">
+    <section class="card staff-overview-card">
+        <div>
+            <h2 class="card-title">
+                {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
+            </h2>
+            <p class="muted">
+                {% if language == "zh" %}等待同工审核。{% else %}Waiting for staff review.{% endif %}
+            </p>
+        </div>
+        <div class="staff-count">{{ pending_membership_requests }}</div>
+        <a class="button" href="{% url 'staff_membership_request_list' %}">
+            {% if language == "zh" %}查看申请{% else %}Review Requests{% endif %}
+        </a>
+    </section>
+
+    <section class="card staff-overview-card">
+        <div>
+            <h2 class="card-title">
+                {% if language == "zh" %}查经安排{% else %}Bible Study{% endif %}
+            </h2>
+            <ul class="staff-count-list">
+                <li>{% if language == "zh" %}草稿安排{% else %}Draft schedules{% endif %}: <strong>{{ draft_schedules }}</strong></li>
+                <li>{% if language == "zh" %}将来安排{% else %}Upcoming schedules{% endif %}: <strong>{{ upcoming_schedules }}</strong></li>
+                <li>{% if language == "zh" %}草稿指引{% else %}Draft guides{% endif %}: <strong>{{ draft_guides }}</strong></li>
+                <li>{% if language == "zh" %}将来指引{% else %}Upcoming guides{% endif %}: <strong>{{ upcoming_guides }}</strong></li>
+                <li>{% if language == "zh" %}草稿聚会{% else %}Draft meetings{% endif %}: <strong>{{ draft_meetings }}</strong></li>
+                <li>{% if language == "zh" %}将来聚会{% else %}Upcoming meetings{% endif %}: <strong>{{ upcoming_meetings }}</strong></li>
+            </ul>
+        </div>
+        <div class="actions">
+            <a class="button" href="{% url 'bible_study_schedule_manage_list' %}">
+                {% if language == "zh" %}查经安排{% else %}Schedules{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'bible_study_lesson_manage_list' %}">
+                {% if language == "zh" %}每周指引{% else %}Guides{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'bible_study_meeting_manage_list' %}">
+                {% if language == "zh" %}小组聚会{% else %}Meetings{% endif %}
+            </a>
+        </div>
+    </section>
+
+    <section class="card staff-overview-card">
+        <div>
+            <h2 class="card-title">
+                {% if language == "zh" %}内容审核{% else %}Moderation{% endif %}
+            </h2>
+            <ul class="staff-count-list">
+                <li>{% if language == "zh" %}待处理代祷举报{% else %}Open prayer reports{% endif %}: <strong>{{ open_prayer_reports }}</strong></li>
+                <li>{% if language == "zh" %}已隐藏代祷{% else %}Hidden prayers{% endif %}: <strong>{{ hidden_prayers }}</strong></li>
+                <li>{% if language == "zh" %}待处理默想举报{% else %}Open reflection reports{% endif %}: <strong>{{ open_reflection_reports }}</strong></li>
+                <li>{% if language == "zh" %}已隐藏默想{% else %}Hidden reflections{% endif %}: <strong>{{ hidden_reflections }}</strong></li>
+            </ul>
+        </div>
+        <div class="actions">
+            <a class="button" href="{% url 'staff_prayer_reports' %}">
+                {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'staff_reflection_reports' %}">
+                {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
+            </a>
+        </div>
+    </section>
+
+    <section class="card staff-overview-card">
+        <div>
+            <h2 class="card-title">
+                {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}
+            </h2>
+            <ul class="staff-count-list">
+                <li>{% if language == "zh" %}将来聚会事件{% else %}Upcoming service events{% endif %}: <strong>{{ upcoming_service_events }}</strong></li>
+                <li>{% if language == "zh" %}将来服事排班{% else %}Upcoming team assignments{% endif %}: <strong>{{ upcoming_assignments }}</strong></li>
+                <li>{% if language == "zh" %}未确认服事排班{% else %}Unconfirmed assignments{% endif %}: <strong>{{ unconfirmed_assignments }}</strong></li>
+            </ul>
+        </div>
+        <div class="actions">
+            <a class="button" href="{% url 'service_event_list' %}">
+                {% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'team_assignment_list' %}?tab=needs_confirmation">
+                {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
+            </a>
+        </div>
+    </section>
+
+    <section class="card staff-overview-card">
+        <div>
+            <h2 class="card-title">
+                {% if language == "zh" %}用户与后台{% else %}Users and Admin{% endif %}
+            </h2>
+            <p class="muted">
+                {% if language == "zh" %}
+                仅链接现有安全的同工/后台页面。
+                {% else %}
+                Links only to existing staff/admin pages.
+                {% endif %}
+            </p>
+        </div>
+        <div class="actions">
+            <a class="button" href="{% url 'staff_user_list' %}">
+                {% if language == "zh" %}用户管理{% else %}User Admin{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'admin:index' %}">
+                {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
+            </a>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -43,6 +43,9 @@
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
                         </span>
+                        <a href="{% url 'staff_overview' %}">
+                            {% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
+                        </a>
                         <a href="{% url 'staff_reading_plan_list' %}">
                             {% if language == "zh" %}读经计划管理{% else %}Reading Plan Admin{% endif %}
                         </a>

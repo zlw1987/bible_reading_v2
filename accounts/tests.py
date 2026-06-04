@@ -28,9 +28,22 @@ from accounts.permissions import (
     get_accessible_progress_groups,
     has_capability,
 )
+from comments.models import ReflectionComment, ReflectionReport
 from events.models import ServiceEvent
-from ministry.models import TeamAssignment, TeamAssignmentMember, TeamMembership
-from studies.models import BibleStudySeries, BibleStudySession
+from ministry.models import (
+    MinistryTeam,
+    TeamAssignment,
+    TeamAssignmentMember,
+    TeamMembership,
+)
+from prayers.models import PrayerReport, PrayerRequest
+from reading.models import ReadingPlan, ReadingPlanDay
+from studies.models import (
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudySeries,
+    BibleStudySession,
+)
 
 class AccountProfileTests(TestCase):
     def setUp(self):
@@ -2579,6 +2592,209 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(self.normal_user.profile.small_group, group)
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
         self.assertTrue(session.can_be_seen_by(self.normal_user))
+
+
+class StaffOverviewTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="overview_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="overview_user",
+            password="UserPass123!",
+        )
+        self.reporter = User.objects.create_user(
+            username="overview_reporter",
+            password="ReporterPass123!",
+        )
+        self.group = SmallGroup.objects.create(name="Overview Group")
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="OVERVIEWGROUP",
+            name="Overview Group",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def create_dashboard_data(self):
+        now = timezone.now()
+        today = timezone.localdate()
+
+        ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+
+        BibleStudySeries.objects.create(
+            title="Draft Schedule",
+            status=BibleStudySeries.STATUS_DRAFT,
+        )
+        upcoming_series = BibleStudySeries.objects.create(
+            title="Upcoming Schedule",
+            start_date=today + timedelta(days=7),
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        BibleStudyLesson.objects.create(
+            series=upcoming_series,
+            title="Draft Guide",
+            lesson_date=today + timedelta(days=1),
+            status=BibleStudyLesson.STATUS_DRAFT,
+        )
+        upcoming_lesson = BibleStudyLesson.objects.create(
+            series=upcoming_series,
+            title="Upcoming Guide",
+            lesson_date=today + timedelta(days=8),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        BibleStudyMeeting.objects.create(
+            lesson=upcoming_lesson,
+            small_group=self.group,
+            meeting_datetime=now + timedelta(days=2),
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        BibleStudyMeeting.objects.create(
+            lesson=upcoming_lesson,
+            small_group=SmallGroup.objects.create(name="Overview Group 2"),
+            meeting_datetime=now + timedelta(days=9),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        hidden_prayer = PrayerRequest.objects.create(
+            user=self.normal_user,
+            title="Hidden prayer",
+            body="Please pray",
+            is_hidden=True,
+        )
+        PrayerReport.objects.create(
+            prayer_request=hidden_prayer,
+            reporter=self.reporter,
+            status=PrayerReport.STATUS_OPEN,
+        )
+
+        plan = ReadingPlan.objects.create(name="Overview Plan")
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+        )
+        hidden_reflection = ReflectionComment.objects.create(
+            plan_day=day,
+            user=self.normal_user,
+            body="Hidden reflection",
+            is_hidden=True,
+        )
+        ReflectionReport.objects.create(
+            comment=hidden_reflection,
+            reporter=self.reporter,
+            status=ReflectionReport.STATUS_OPEN,
+        )
+
+        event = ServiceEvent.objects.create(
+            title="Upcoming Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=now + timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        team = MinistryTeam.objects.create(name="Overview Team")
+        membership = TeamMembership.objects.create(
+            team=team,
+            user=self.normal_user,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=membership,
+        )
+
+    def test_staff_overview_requires_staff_access(self):
+        self.client.login(username="overview_user", password="UserPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_overview_anonymous_user_redirects_to_login(self):
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_overview_renders_counts_and_existing_workflow_links(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff Overview")
+        self.assertContains(response, "Read-only summary")
+        self.assertContains(response, "Current Runtime Boundary")
+        self.assertContains(response, reverse("staff_membership_request_list"))
+        self.assertContains(response, reverse("bible_study_schedule_manage_list"))
+        self.assertContains(response, reverse("bible_study_lesson_manage_list"))
+        self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+        self.assertContains(response, reverse("staff_prayer_reports"))
+        self.assertContains(response, reverse("staff_reflection_reports"))
+        self.assertContains(response, reverse("service_event_list"))
+        self.assertContains(response, reverse("team_assignment_list"))
+        self.assertContains(response, reverse("staff_user_list"))
+        self.assertEqual(response.context["pending_membership_requests"], 1)
+        self.assertEqual(response.context["draft_schedules"], 1)
+        self.assertEqual(response.context["upcoming_schedules"], 1)
+        self.assertEqual(response.context["draft_guides"], 1)
+        self.assertEqual(response.context["upcoming_guides"], 2)
+        self.assertEqual(response.context["draft_meetings"], 1)
+        self.assertEqual(response.context["upcoming_meetings"], 2)
+        self.assertEqual(response.context["open_prayer_reports"], 1)
+        self.assertEqual(response.context["hidden_prayers"], 1)
+        self.assertEqual(response.context["open_reflection_reports"], 1)
+        self.assertEqual(response.context["hidden_reflections"], 1)
+        self.assertEqual(response.context["upcoming_service_events"], 1)
+        self.assertEqual(response.context["upcoming_assignments"], 1)
+        self.assertEqual(response.context["unconfirmed_assignments"], 1)
+
+    def test_staff_menu_includes_overview_but_normal_nav_stays_uncluttered(self):
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        staff_response = self.client.get(reverse("profile"))
+
+        self.assertEqual(staff_response.status_code, 200)
+        self.assertContains(staff_response, "Staff Overview")
+        self.assertContains(staff_response, reverse("staff_overview"))
+
+        self.client.logout()
+        self.client.login(username="overview_user", password="UserPass123!")
+
+        normal_response = self.client.get(reverse("profile"))
+
+        self.assertEqual(normal_response.status_code, 200)
+        self.assertNotContains(normal_response, "Staff Overview")
+        self.assertNotContains(normal_response, reverse("staff_overview"))
+
+    def test_staff_overview_renders_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "同工总览")
+        self.assertContains(response, "只读摘要")
+        self.assertContains(response, "当前运行边界")
 
 
 class StaffPasswordResetTests(TestCase):

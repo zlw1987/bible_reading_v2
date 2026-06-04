@@ -18,6 +18,106 @@ from .models import ChurchStructureMembership, Profile, SmallGroup
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 
 
+@staff_member_required
+def staff_overview(request):
+    from comments.models import ReflectionComment, ReflectionReport
+    from events.models import ServiceEvent
+    from ministry.models import TeamAssignment
+    from prayers.models import PrayerReport, PrayerRequest
+    from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
+
+    now = timezone.now()
+    today = timezone.localdate()
+
+    pending_membership_requests = ChurchStructureMembership.objects.filter(
+        status=ChurchStructureMembership.STATUS_REQUESTED,
+    ).count()
+
+    draft_schedules = BibleStudySeries.objects.filter(
+        status=BibleStudySeries.STATUS_DRAFT,
+    ).count()
+    upcoming_schedules = BibleStudySeries.objects.filter(
+        start_date__gte=today,
+    ).exclude(
+        status=BibleStudySeries.STATUS_CANCELLED,
+    ).count()
+    draft_guides = BibleStudyLesson.objects.filter(
+        status=BibleStudyLesson.STATUS_DRAFT,
+    ).count()
+    upcoming_guides = BibleStudyLesson.objects.filter(
+        lesson_date__gte=today,
+    ).exclude(
+        status=BibleStudyLesson.STATUS_CANCELLED,
+    ).count()
+    draft_meetings = BibleStudyMeeting.objects.filter(
+        status=BibleStudyMeeting.STATUS_DRAFT,
+    ).count()
+    upcoming_meetings = BibleStudyMeeting.objects.filter(
+        meeting_datetime__gte=now,
+    ).exclude(
+        status=BibleStudyMeeting.STATUS_CANCELLED,
+    ).count()
+
+    open_prayer_reports = PrayerReport.objects.filter(
+        status=PrayerReport.STATUS_OPEN,
+    ).count()
+    hidden_prayers = PrayerRequest.objects.filter(is_hidden=True).count()
+    open_reflection_reports = ReflectionReport.objects.filter(
+        status=ReflectionReport.STATUS_OPEN,
+    ).count()
+    hidden_reflections = ReflectionComment.objects.filter(is_hidden=True).count()
+
+    upcoming_service_events = ServiceEvent.objects.filter(
+        start_datetime__gte=now,
+    ).exclude(
+        status__in=[
+            ServiceEvent.STATUS_DRAFT,
+            ServiceEvent.STATUS_CANCELLED,
+        ],
+    ).count()
+
+    upcoming_assignments = TeamAssignment.objects.filter(
+        service_event__start_datetime__gte=now,
+    ).exclude(
+        status__in=[
+            TeamAssignment.STATUS_CANCELLED,
+            TeamAssignment.STATUS_COMPLETED,
+        ],
+    ).count()
+    unconfirmed_assignments = TeamAssignment.objects.filter(
+        service_event__start_datetime__gte=now,
+        assignment_members__membership__is_active=True,
+        assignment_members__confirmed_at__isnull=True,
+    ).exclude(
+        status__in=[
+            TeamAssignment.STATUS_CANCELLED,
+            TeamAssignment.STATUS_COMPLETED,
+        ],
+    ).distinct().count()
+
+    return render(
+        request,
+        "accounts/staff/overview.html",
+        {
+            "active_nav": "staff",
+            "pending_membership_requests": pending_membership_requests,
+            "draft_schedules": draft_schedules,
+            "upcoming_schedules": upcoming_schedules,
+            "draft_guides": draft_guides,
+            "upcoming_guides": upcoming_guides,
+            "draft_meetings": draft_meetings,
+            "upcoming_meetings": upcoming_meetings,
+            "open_prayer_reports": open_prayer_reports,
+            "hidden_prayers": hidden_prayers,
+            "open_reflection_reports": open_reflection_reports,
+            "hidden_reflections": hidden_reflections,
+            "upcoming_service_events": upcoming_service_events,
+            "upcoming_assignments": upcoming_assignments,
+            "unconfirmed_assignments": unconfirmed_assignments,
+        },
+    )
+
+
 def can_manage_church_memberships(user):
     return has_capability(user, CAP_MANAGE_CHURCH_MEMBERSHIPS)
 

@@ -2,11 +2,11 @@
 
 ## 1. Purpose
 
-CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design. CS-H.5A adds the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens membership helpers and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification. CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models. CS-H.6 records the signup requested-unit flow design. CS-H.7 records the admin approval workflow design.
+CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design. CS-H.5A adds the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens membership helpers and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification. CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models. CS-H.6 records the signup requested-unit flow design. CS-H.7 records the admin approval workflow design. CS-H.8 records the integrated request-flow checkpoint across signup, Profile, staff approval, and transition `Profile.small_group` sync.
 
 Before seeding root, CM/EM, districts, or small groups into the tree, the project needs an explicit mapping and membership strategy. The purpose of this document is to avoid duplicate source-of-truth drift, protect permission and visibility behavior, and preserve the validated pilot baseline.
 
-This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. CS-H.4 is membership design only. CS-H.5A adds the model/admin/test foundation only. CS-H.5B adds helper/validation hardening only. CS-H.5C adds only an explicit backfill command and tests. CS-H.5D is verification documentation only. CS-H.5E is Django Admin clarity only. CS-H.6 is signup requested-unit flow design only. CS-H.7 is admin approval workflow design only. These steps do not auto-run, change signup, add audience selection, add filtering, switch runtime source of truth, or add custom staff UI.
+This began as the CS-H.3 planning document. CS-H.3B implements only nullable legacy-to-`ChurchStructureUnit` mapping fields and admin visibility for those fields. CS-H.3C implements only the explicit `seed_church_structure_units` management command with dry-run and apply modes. CS-H.3D and CS-H.3E are production/staging verification and data QA closure documentation only. CS-H.4 is membership design only. CS-H.5A adds the model/admin/test foundation only. CS-H.5B adds helper/validation hardening only. CS-H.5C adds only an explicit backfill command and tests. CS-H.5D is verification documentation only. CS-H.5E is Django Admin clarity only. CS-H.6 is signup requested-unit flow design only. CS-H.7 is admin approval workflow design only. CS-H.8 is an integration checkpoint only. These steps do not auto-run, add audience selection, add filtering, switch runtime source of truth, or add custom staff UI.
 
 ## 2. Source-of-Truth Decision
 
@@ -339,7 +339,22 @@ Serving assignment remains `TeamAssignment`-based.
 
 Membership does not automatically assign serving roles.
 
-## 12. Source-of-Truth Transition Phases
+## 12. CS-H.8 Integration Checkpoint
+
+CS-H.8 verified the integrated request flow across signup, normal-user Profile, staff membership request list/detail, approve/reject actions, and CS-H.7E transition sync behavior.
+
+Checkpoint result:
+- signup and Profile create pending `ChurchStructureMembership(status=requested)` rows without updating `Profile.small_group`
+- Profile updates an existing pending request and normal users cannot self-edit `Profile.small_group`
+- staff list/detail surfaces signup-created and Profile-created pending requests
+- approving a mapped request activates membership and syncs `Profile.small_group` only when the approved active primary unit maps to exactly one active legacy `SmallGroup`
+- reject and requested/pending states do not sync `Profile.small_group`
+- requested memberships do not grant access, permissions, serving assignments, audience eligibility, or runtime visibility before approval
+- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers remain legacy `Profile.small_group` based until separate consumer migration work
+
+No signup/profile feature expansion, consumer migration, audience filtering, or Community Activities work was added in CS-H.8.
+
+## 13. Source-of-Truth Transition Phases
 
 Recommended phases:
 - CS-H.3: design mapping/membership strategy.
@@ -355,11 +370,12 @@ Recommended phases:
 - CS-H.5E: admin clarity for legacy structure vs future structure/membership foundation. Completed.
 - CS-H.6: signup requested-unit flow. Completed.
 - CS-H.7: admin approval workflow. Completed.
+- CS-H.8: integrated membership request flow checkpoint. Completed.
 - Later: migrate selected consumers from `Profile.small_group` to membership.
 
 No hard cutover should happen early.
 
-## 13. Risks
+## 14. Risks
 
 Known risks:
 - two sources of truth drift
@@ -381,7 +397,7 @@ Mitigation direction:
 - separate membership from permissions and serving
 - add one consumer at a time only after tests
 
-## 14. Non-Goals
+## 15. Non-Goals
 
 CS-H.3/CS-H.3B/CS-H.3C do not include:
 - signup changes
@@ -396,7 +412,7 @@ CS-H.3/CS-H.3B/CS-H.3C do not include:
 - deletion of `District`
 - deletion of `MinistryContext`
 
-## 15. Open Decisions
+## 16. Open Decisions
 
 Open decisions:
 - mapping FK vs mapping table

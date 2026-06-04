@@ -41,6 +41,8 @@ Rules:
 
 ## 5. Mobile QA Checklist
 
+For mobile header auto-hide and dropdown-specific planning, see `docs/MOBILE_NAV_AUTO_HIDE_PLAN.md`.
+
 Before shipping normal-user or staff/admin UI changes, verify on mobile width:
 - Signup: labels, dropdown choices, help text, validation, and submit flow are readable and user-facing.
 - Profile: group/church affiliation wording is natural, non-technical, and does not expose internal model names.

@@ -2,17 +2,18 @@
 
 ## 1. Purpose
 
-CS-H.6A plans a future implementation slice for capturing a user's requested `ChurchStructureMembership` unit during normal signup/profile onboarding.
+CS-H.6A planned a future implementation slice for capturing a user's requested `ChurchStructureMembership` unit during normal signup/profile onboarding. CS-H.6B implements the signup-only portion of that plan.
 
-This is planning/docs only. It does not change code, models, migrations, views, forms, templates, URLs, tests, signup behavior, profile behavior, `Profile.small_group`, or any runtime consumer.
+CS-H.6A was planning/docs only. CS-H.6B changes only normal signup request capture and focused tests. It does not change models, migrations, profile behavior, `Profile.small_group`, approval ownership, or any runtime consumer.
 
 Runtime remains legacy `Profile.small_group` based until a separate consumer migration is designed and implemented. Requested membership grants no visibility.
 
 ## 2. Current Runtime Baseline
 
-Current signup/profile behavior:
-- `SignUpForm` exposes legacy `small_group`.
-- Signup writes the selected legacy `SmallGroup` directly to `Profile.small_group`.
+Current signup/profile behavior after CS-H.6B:
+- `SignUpForm` exposes optional `requested_unit` choices backed by active small-group/fellowship `ChurchStructureUnit` rows.
+- Signup creates a pending `ChurchStructureMembership` when a requested unit is selected.
+- Signup does not write `Profile.small_group` at request time.
 - `ProfileForm` also exposes and updates legacy `Profile.small_group`.
 - `/studies/`, reading progress, `ServiceEvent`, My Serving, and other existing consumers continue to use legacy fields.
 
@@ -20,26 +21,26 @@ Current membership workflow state:
 - `ChurchStructureMembership` exists and supports `status=requested`.
 - CS-H.7B through CS-H.7F implemented and verified the staff approval flow for pending requested memberships.
 - Staff approval can activate a requested membership and, during transition, sync `Profile.small_group` only for the exactly-one active mapped legacy `SmallGroup` case.
-- Signup does not create requested memberships today.
+- Signup creates requested memberships only through CS-H.6B request capture.
 
 ## 3. Implementation Slice Recommendation
 
-Recommended CS-H.6A implementation slice:
+CS-H.6B implemented signup-only request capture:
 - replace the signup self-assignment behavior with request capture for normal new users
-- optionally expose the same request capture on profile as a "request a group change" surface
 - create or update a pending `ChurchStructureMembership` with `status=requested`
 - do not approve automatically
 - do not update `Profile.small_group` at request time
 - hand the request to the existing staff membership request list/detail/approve/reject flow
+- defer signup request note capture because no signup note field exists in CS-H.6B
 
-If product risk is a concern, implement signup first and defer profile-based change requests to a later CS-H.6B slice. Signup is the narrower, lower-conflict entry point because brand-new users often have no current active primary membership.
+Profile-based change requests remain deferred to CS-H.6C. Signup is the narrower, lower-conflict entry point because brand-new users often have no current active primary membership.
 
 ## 4. Requested Unit Capture Surface
 
 Signup should capture:
 - account fields already present today
 - optional requested church structure unit
-- optional short operational note
+- optional short operational note in a later slice; CS-H.6B does not implement note capture
 - a clear "Not sure / New visitor" option
 
 Profile may later capture:
@@ -74,7 +75,8 @@ When a user submits a requested unit:
 - set `is_primary=False`
 - leave `start_date`, `approved_by`, and `approved_at` empty
 - set `requested_by` to the same user for normal self-submitted signup/profile requests
-- store only non-sensitive operational notes
+- leave notes empty in CS-H.6B because signup does not yet expose a request note field
+- when note capture is added later, store only non-sensitive operational notes
 
 When the user chooses "Not sure / New visitor":
 - do not create an active membership
@@ -88,7 +90,8 @@ Do not add a new model in CS-H.6A unless implementation discovers a blocking req
 
 Pending duplicate rule:
 - if the user already has a pending `status=requested` membership, update the existing pending request rather than creating another pending row
-- update the requested unit and note, and keep `requested_by` as the submitting user
+- update the requested unit and keep `requested_by` as the submitting user
+- note updates remain deferred until a note field exists
 - do not alter rejected, cancelled, ended, or active history rows
 
 Active primary conflict rule:
@@ -110,6 +113,7 @@ Invalid request rule:
 After request capture, staff should see the request in the existing CS-H.7 pages:
 - pending request list shows `status=requested`
 - detail page shows user, requested unit, requested_by, submitted date, current `Profile.small_group`, request note, and active-primary context
+- CS-H.6B-created requests have an empty request note until note capture is implemented later
 - approve activates the requested membership
 - reject changes it to rejected and does not sync `Profile.small_group`
 - approval syncs `Profile.small_group` only under the CS-H.7E exactly-one active mapped legacy `SmallGroup` rule
@@ -162,7 +166,7 @@ CS-H.6A does not include:
 
 Recommended next sequence:
 - CS-H.6A: signup request capture implementation planning. Completed by this document.
-- CS-H.6B: implement signup request capture only, with focused tests.
+- CS-H.6B: implement signup request capture only, with focused tests. Completed.
 - CS-H.6C: optionally implement profile-based request/change capture, with focused tests.
 - CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
 - Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.

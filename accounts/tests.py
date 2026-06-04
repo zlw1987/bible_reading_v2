@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.forms import create_or_update_signup_membership_request
 from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
@@ -2420,14 +2421,26 @@ class StaffPasswordResetTests(TestCase):
 class AccountSignupLanguageTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+            name_en="Rainbow 4",
+        )
+        self.fellowship_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+            code="FELLOWSHIP",
+            name="Fellowship",
+            name_en="Fellowship",
+        )
 
-    def test_signup_does_not_require_email(self):
+    def test_signup_does_not_require_email_or_requested_unit(self):
         response = self.client.post(
             reverse("signup"),
             {
                 "username": "elder_user",
                 "email": "",
-                "small_group": self.group.id,
+                "requested_unit": "",
                 "password1": "StrongPass123!",
                 "password2": "StrongPass123!",
             },
@@ -2437,7 +2450,206 @@ class AccountSignupLanguageTests(TestCase):
 
         user = User.objects.get(username="elder_user")
         self.assertEqual(user.email, "")
-        self.assertEqual(user.profile.small_group, self.group)
+        self.assertIsNone(user.profile.small_group)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=user).exists(),
+        )
+
+    def test_signup_with_requested_unit_creates_pending_membership_request(self):
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "requested_user",
+                "email": "",
+                "requested_unit": self.unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        user = User.objects.get(username="requested_user")
+        user.profile.refresh_from_db()
+        membership = ChurchStructureMembership.objects.get(user=user)
+
+        self.assertIsNone(user.profile.small_group)
+        self.assertEqual(membership.unit, self.unit)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.requested_by, user)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertIsNone(membership.start_date)
+
+    def test_signup_allows_active_fellowship_request(self):
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "fellowship_user",
+                "email": "",
+                "requested_unit": self.fellowship_unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        user = User.objects.get(username="fellowship_user")
+        membership = ChurchStructureMembership.objects.get(user=user)
+
+        self.assertEqual(membership.unit, self.fellowship_unit)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+
+    def test_signup_rejects_inactive_requested_unit(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVE",
+            name="Inactive",
+            is_active=False,
+        )
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "inactive_request_user",
+                "email": "",
+                "requested_unit": inactive_unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="inactive_request_user").exists())
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+
+    def test_signup_rejects_non_requestable_unit_type(self):
+        root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="ROOT",
+            name="Root",
+        )
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "root_request_user",
+                "email": "",
+                "requested_unit": root_unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(username="root_request_user").exists())
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+
+    def test_duplicate_pending_signup_request_helper_updates_existing_request(self):
+        user = User.objects.create_user(username="duplicate_pending")
+        original = ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            approved_by=user,
+            approved_at=timezone.now(),
+        )
+
+        membership = create_or_update_signup_membership_request(
+            user,
+            self.fellowship_unit,
+        )
+
+        self.assertEqual(membership.id, original.id)
+        self.assertEqual(ChurchStructureMembership.objects.filter(user=user).count(), 1)
+        membership.refresh_from_db()
+        self.assertEqual(membership.unit, self.fellowship_unit)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.requested_by, user)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertIsNone(membership.start_date)
+
+    def test_requested_signup_membership_does_not_grant_service_event_visibility(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(
+            name="District Group",
+            district=district,
+            church_structure_unit=self.unit,
+        )
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "visibility_request_user",
+                "email": "",
+                "requested_unit": self.unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        user = User.objects.get(username="visibility_request_user")
+        user.profile.refresh_from_db()
+        self.assertIsNone(user.profile.small_group)
+        self.assertFalse(event.can_be_seen_by(user))
+
+        user.profile.small_group = group
+        user.profile.save()
+
+        self.assertTrue(event.can_be_seen_by(user))
+
+    def test_signup_request_appears_in_staff_membership_request_flow(self):
+        staff = User.objects.create_user(
+            username="signup_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "staff_handoff_user",
+                "email": "",
+                "requested_unit": self.unit.id,
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.client.logout()
+        self.client.login(username=staff.username, password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "staff_handoff_user")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "Requested")
 
     def test_language_switch_updates_session(self):
         response = self.client.post(
@@ -2465,7 +2677,7 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email（可选）")
-        self.assertContains(response, "小组")
+        self.assertContains(response, "申请单位")
 
     def test_signup_page_can_render_english_labels(self):
         self.client.post(
@@ -2480,4 +2692,4 @@ class AccountSignupLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Email (optional)")
-        self.assertContains(response, "Small group")
+        self.assertContains(response, "Requested Unit")

@@ -1,12 +1,60 @@
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
 
 from .language import get_user_language
-from .models import Profile, SmallGroup
+from .models import (
+    ChurchStructureMembership,
+    ChurchStructureUnit,
+    Profile,
+    SmallGroup,
+)
 from .ui_text import UI_TEXT
+
+
+def requestable_signup_units():
+    return ChurchStructureUnit.objects.filter(
+        is_active=True,
+        unit_type__in=[
+            ChurchStructureUnit.UNIT_SMALL_GROUP,
+            ChurchStructureUnit.UNIT_FELLOWSHIP,
+        ],
+    ).order_by("parent_id", "sort_order", "code", "name")
+
+
+def create_or_update_signup_membership_request(user, requested_unit):
+    membership = (
+        ChurchStructureMembership.objects
+        .filter(
+            user=user,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+        .order_by("id")
+        .first()
+    )
+
+    if membership:
+        membership.unit = requested_unit
+        membership.membership_type = (
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
+        )
+        membership.is_primary = False
+        membership.requested_by = user
+        membership.approved_by = None
+        membership.approved_at = None
+        membership.start_date = None
+        membership.save()
+        return membership
+
+    return ChurchStructureMembership.objects.create(
+        user=user,
+        unit=requested_unit,
+        membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        status=ChurchStructureMembership.STATUS_REQUESTED,
+        is_primary=False,
+        requested_by=user,
+    )
 
 
 class LocalizedAuthenticationForm(AuthenticationForm):
@@ -22,15 +70,15 @@ class LocalizedAuthenticationForm(AuthenticationForm):
 
 class SignUpForm(UserCreationForm):
     email = forms.EmailField(required=False)
-    small_group = forms.ModelChoiceField(
-        queryset=SmallGroup.objects.filter(is_active=True),
+    requested_unit = forms.ModelChoiceField(
+        queryset=ChurchStructureUnit.objects.none(),
         required=False,
         empty_label="No small group yet",
     )
 
     class Meta:
         model = User
-        fields = ("username", "email", "small_group", "password1", "password2")
+        fields = ("username", "email", "requested_unit", "password1", "password2")
 
     def __init__(self, *args, request=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,8 +88,9 @@ class SignUpForm(UserCreationForm):
 
         self.fields["username"].label = ui["username"]
         self.fields["email"].label = ui["email_optional"]
-        self.fields["small_group"].label = ui["small_group"]
-        self.fields["small_group"].empty_label = ui["no_small_group"]
+        self.fields["requested_unit"].queryset = requestable_signup_units()
+        self.fields["requested_unit"].label = ui["requested_unit"]
+        self.fields["requested_unit"].empty_label = ui["no_small_group"]
         self.fields["password1"].label = ui["password"]
         self.fields["password2"].label = ui["password_confirmation"]
 
@@ -55,8 +104,10 @@ class SignUpForm(UserCreationForm):
         if commit:
             user.save()
             profile, _ = Profile.objects.get_or_create(user=user)
-            profile.small_group = self.cleaned_data.get("small_group")
             profile.save()
+            requested_unit = self.cleaned_data.get("requested_unit")
+            if requested_unit:
+                create_or_update_signup_membership_request(user, requested_unit)
 
         return user
 

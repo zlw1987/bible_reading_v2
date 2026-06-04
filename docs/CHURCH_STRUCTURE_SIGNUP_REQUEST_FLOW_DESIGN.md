@@ -6,7 +6,7 @@ CS-H.6 designs a future signup/onboarding flow where a user can request a church
 
 This flow is needed because new users often know the group they attend, but signup is not a safe place to grant final belonging automatically. Group membership affects current and future visibility decisions, including Bible Study access and future audience eligibility. Direct self-assignment is unsafe because users can choose the wrong group, misunderstand the hierarchy, or accidentally gain visibility they should not have.
 
-This is design-only. It does not change signup behavior, models, migrations, views, forms, templates, URLs, admin UI, `Profile.small_group`, or any runtime consumer.
+This is design-only. It does not change signup behavior, models, migrations, views, forms, templates, URLs, admin UI, `Profile.small_group`, or any runtime consumer. CS-H.6A later records the implementation plan in `docs/CHURCH_STRUCTURE_SIGNUP_REQUEST_CAPTURE_IMPLEMENTATION_PLAN.md`.
 
 ## 2. Current Signup State
 
@@ -158,7 +158,7 @@ CS-H.6 does not include:
 
 Recommended sequence:
 - CS-H.6: Signup Requested-Unit Flow Design Doc. Completed by this document.
-- CS-H.6A: model/form implementation planning if needed.
+- CS-H.6A: signup request capture implementation planning. Completed.
 - CS-H.7: admin approval workflow design. Completed.
 - CS-H.7A: membership approval workflow implementation plan. Completed.
 - Later: implement requested-unit capture.

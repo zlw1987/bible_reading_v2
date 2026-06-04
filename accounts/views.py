@@ -7,6 +7,7 @@ from django.contrib.auth.views import PasswordChangeView
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 
@@ -190,3 +191,85 @@ def staff_membership_request_list(request):
             "membership_rows": membership_rows,
         },
     )
+
+
+def get_requested_membership_or_404(membership_id):
+    return get_object_or_404(
+        ChurchStructureMembership.objects.select_related(
+            "user",
+            "user__profile",
+            "user__profile__small_group",
+            "unit",
+            "unit__parent",
+            "requested_by",
+        ),
+        id=membership_id,
+        status=ChurchStructureMembership.STATUS_REQUESTED,
+    )
+
+
+@user_passes_test(can_manage_church_memberships)
+def staff_membership_request_detail(request, membership_id):
+    membership = get_requested_membership_or_404(membership_id)
+    language = get_user_language(request)
+    active_primary = ChurchStructureMembership.current_primary_for_user(
+        membership.user,
+    )
+
+    return render(
+        request,
+        "accounts/staff/membership_request_detail.html",
+        {
+            "membership": membership,
+            "unit_path": membership.unit.path_label(language),
+            "active_primary": active_primary,
+            "active_primary_path": (
+                active_primary.unit.path_label(language) if active_primary else ""
+            ),
+        },
+    )
+
+
+@user_passes_test(can_manage_church_memberships)
+def staff_membership_request_approve(request, membership_id):
+    if request.method != "POST":
+        return redirect("staff_membership_request_detail", membership_id=membership_id)
+
+    membership = get_requested_membership_or_404(membership_id)
+    active_primary = ChurchStructureMembership.current_primary_for_user(
+        membership.user,
+    )
+
+    if active_primary:
+        messages.error(
+            request,
+            "Approval blocked: user already has an active primary membership.",
+        )
+        return redirect("staff_membership_request_detail", membership_id=membership.id)
+
+    membership.status = ChurchStructureMembership.STATUS_ACTIVE
+    membership.is_primary = True
+    if not membership.membership_type:
+        membership.membership_type = ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
+    if not membership.start_date:
+        membership.start_date = timezone.localdate()
+    membership.approved_by = request.user
+    membership.approved_at = timezone.now()
+    membership.save()
+
+    messages.success(request, "Membership request approved.")
+    return redirect("staff_membership_request_list")
+
+
+@user_passes_test(can_manage_church_memberships)
+def staff_membership_request_reject(request, membership_id):
+    if request.method != "POST":
+        return redirect("staff_membership_request_detail", membership_id=membership_id)
+
+    membership = get_requested_membership_or_404(membership_id)
+    membership.status = ChurchStructureMembership.STATUS_REJECTED
+    membership.is_primary = False
+    membership.save()
+
+    messages.success(request, "Membership request rejected.")
+    return redirect("staff_membership_request_list")

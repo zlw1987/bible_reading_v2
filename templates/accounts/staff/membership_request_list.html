@@ -32,8 +32,16 @@
                 {% for row in membership_rows %}
                 {% with membership=row.membership %}
                 <tr>
-                    <td>{{ membership.user.username }}</td>
-                    <td>{{ row.unit_path }}</td>
+                    <td>
+                        <a href="{% url 'staff_membership_request_detail' membership.id %}">
+                            {{ membership.user.username }}
+                        </a>
+                    </td>
+                    <td>
+                        <a href="{% url 'staff_membership_request_detail' membership.id %}">
+                            {{ row.unit_path }}
+                        </a>
+                    </td>
                     <td>
                         {% if membership.requested_by %}
                         {{ membership.requested_by.username }}

@@ -13,7 +13,7 @@ Runtime still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.sma
 Recommended small phases:
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
-- CS-H.7D: request detail with approve/reject actions.
+- CS-H.7D: request detail with approve/reject actions. Completed.
 - CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships.
 - CS-H.7F: browser QA and docs closure.
 
@@ -41,6 +41,17 @@ CS-H.7B/C implementation status:
 - A read-only staff/capability-gated pending request list exists.
 - The list shows only `status=requested` memberships.
 - No approve, reject, cancel, needs-clarification, signup, `Profile.small_group` sync, or runtime consumer migration behavior was added.
+
+CS-H.7D implementation status:
+- A capability-gated request detail page exists for `status=requested` memberships.
+- The pending request list links to request detail.
+- POST-only approve updates the same requested record to active membership.
+- Approve sets `is_primary=True`, `start_date` when empty, `approved_by`, and `approved_at`.
+- Approve preserves `requested_by` and does not sync `Profile.small_group`.
+- Approve is blocked if the user already has a current active primary membership.
+- POST-only reject changes requested membership to `status=rejected` and clears primary status.
+- Reject preserves `requested_by`, notes, and `Profile.small_group`.
+- Signup capture, `Profile.small_group` approval sync, and consumer migration remain future work.
 
 ## 4. Data Behavior
 
@@ -114,12 +125,12 @@ Detail page fields:
 - non-sensitive notes warning
 
 Future actions:
-- approve as requested
+- approve as requested. Basic same-unit approval completed in CS-H.7D.
 - approve as different unit
-- reject or cancel
+- reject or cancel. Basic rejection completed in CS-H.7D.
 - mark needs clarification if supported
 
-CS-H.7B/C intentionally does not include these actions.
+CS-H.7B/C intentionally did not include these actions. CS-H.7D adds only minimal approve/reject actions; change-unit approval, cancellation, needs-clarification, and transfer handling remain future.
 
 Bilingual labels should be supported. Mobile should be reasonable, but staff desktop can be V1 priority.
 
@@ -164,7 +175,7 @@ Recommended next sequence:
 - CS-H.7A: Membership Approval Workflow Implementation Plan. Completed by this document.
 - CS-H.7B: capability constant/check implementation. Completed.
 - CS-H.7C: staff-only pending requested memberships list. Completed.
-- CS-H.7D: request detail and approve/reject actions.
+- CS-H.7D: request detail and approve/reject actions. Completed.
 - CS-H.7E: explicit `Profile.small_group` sync behavior.
 - CS-H.7F: browser QA and docs closure.
 - CS-H.6A: signup request capture implementation planning can proceed before or after CS-H.7B/7C depending on product priority.

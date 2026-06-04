@@ -28,6 +28,21 @@ urlpatterns = [
         name="staff_membership_request_list",
     ),
     path(
+        "staff/membership-requests/<int:membership_id>/",
+        views.staff_membership_request_detail,
+        name="staff_membership_request_detail",
+    ),
+    path(
+        "staff/membership-requests/<int:membership_id>/approve/",
+        views.staff_membership_request_approve,
+        name="staff_membership_request_approve",
+    ),
+    path(
+        "staff/membership-requests/<int:membership_id>/reject/",
+        views.staff_membership_request_reject,
+        name="staff_membership_request_reject",
+    ),
+    path(
         "staff/users/<int:user_id>/password/",
         views.staff_user_password_reset,
         name="staff_user_password_reset",

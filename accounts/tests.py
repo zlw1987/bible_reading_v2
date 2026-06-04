@@ -1741,7 +1741,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertIn("/login/", response.url)
 
     def test_staff_can_view_pending_requested_memberships(self):
-        self.create_membership()
+        membership = self.create_membership()
         session = self.client.session
         session["language"] = "en"
         session.save()
@@ -1756,6 +1756,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
         self.assertContains(response, "Requested")
+        self.assertContains(
+            response,
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
         self.assertNotContains(response, "Approve")
         self.assertNotContains(response, "Reject")
 
@@ -1808,6 +1812,176 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "request_user")
 
+    def test_detail_requires_permission(self):
+        membership = self.create_membership()
+        self.client.login(username="normal_user", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_authorized_user_sees_request_detail(self):
+        membership = self.create_membership()
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Membership Request Detail")
+        self.assertContains(response, "request_user")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "requester")
+        self.assertContains(response, "I attend Rainbow 4.")
+        self.assertContains(response, "No existing active primary membership")
+        self.assertContains(response, "Approve Request")
+        self.assertContains(response, "Reject Request")
+
+    def test_detail_only_allows_requested_memberships(self):
+        active_user = User.objects.create_user(username="active_detail")
+        membership = ChurchStructureMembership.objects.create(
+            user=active_user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_approve_is_post_only(self):
+        membership = self.create_membership()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+
+    def test_reject_is_post_only(self):
+        membership = self.create_membership()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_reject", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+
+    def test_approve_requires_permission(self):
+        membership = self.create_membership()
+        self.client.login(username="normal_user", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+
+    def test_approve_changes_requested_to_active(self):
+        membership = self.create_membership()
+        requested_by = membership.requested_by
+        original_group = self.user.profile.small_group
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("staff_membership_request_list"))
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertTrue(membership.is_primary)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertEqual(membership.start_date, timezone.localdate())
+        self.assertEqual(membership.approved_by, self.staff)
+        self.assertIsNotNone(membership.approved_at)
+        self.assertEqual(membership.requested_by, requested_by)
+        self.assertEqual(self.user.profile.small_group, original_group)
+
+    def test_approve_blocks_existing_active_primary_membership(self):
+        membership = self.create_membership()
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.other_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertFalse(membership.is_primary)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+
+    def test_reject_changes_requested_to_rejected_and_not_primary(self):
+        membership = self.create_membership(is_primary=True)
+        requested_by = membership.requested_by
+        original_group = self.user.profile.small_group
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_reject", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("staff_membership_request_list"))
+        membership.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REJECTED)
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.requested_by, requested_by)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertEqual(self.user.profile.small_group, original_group)
+
+    def test_approve_and_reject_only_allow_requested_status(self):
+        membership = self.create_membership()
+        membership.status = ChurchStructureMembership.STATUS_REJECTED
+        membership.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        approve_response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+        reject_response = self.client.post(
+            reverse("staff_membership_request_reject", args=[membership.id]),
+        )
+
+        self.assertEqual(approve_response.status_code, 404)
+        self.assertEqual(reject_response.status_code, 404)
+
     def test_membership_alone_does_not_allow_pending_list_access(self):
         ChurchStructureMembership.objects.create(
             user=self.normal_user,
@@ -1842,6 +2016,77 @@ class StaffMembershipRequestListTests(TestCase):
         self.normal_user.profile.save()
 
         self.assertTrue(event.can_be_seen_by(self.normal_user))
+
+    def test_approved_membership_does_not_change_service_event_visibility(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="District Group", district=district)
+        membership = self.create_membership(user=self.normal_user)
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
+
+        self.normal_user.profile.small_group = group
+        self.normal_user.profile.save()
+
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
+
+    def test_rejected_membership_does_not_change_service_event_visibility(self):
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="District Group", district=district)
+        membership = self.create_membership(user=self.normal_user)
+        event = ServiceEvent.objects.create(
+            title="District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        self.client.post(
+            reverse("staff_membership_request_reject", args=[membership.id]),
+        )
+
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
+
+        self.normal_user.profile.small_group = group
+        self.normal_user.profile.save()
+
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
+
+    def test_approved_membership_does_not_change_bible_study_scope_behavior(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        district = District.objects.create(
+            name="District 1",
+            ministry_context=context,
+        )
+        group = SmallGroup.objects.create(name="District Group", district=district)
+        membership = self.create_membership(user=self.normal_user)
+        series = BibleStudySeries.objects.create(
+            title="CM Bible Study",
+            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
+            ministry_context=context,
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [group])
 
 
 class StaffPasswordResetTests(TestCase):

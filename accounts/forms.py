@@ -8,7 +8,6 @@ from .models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
     Profile,
-    SmallGroup,
 )
 from .ui_text import UI_TEXT
 
@@ -113,8 +112,8 @@ class SignUpForm(UserCreationForm):
 
 class ProfileForm(forms.Form):
     email = forms.EmailField(required=False)
-    small_group = forms.ModelChoiceField(
-        queryset=SmallGroup.objects.filter(is_active=True),
+    requested_unit = forms.ModelChoiceField(
+        queryset=ChurchStructureUnit.objects.none(),
         required=False,
     )
     preferred_language = forms.ChoiceField(
@@ -135,26 +134,29 @@ class ProfileForm(forms.Form):
         ui = UI_TEXT[language]
 
         self.fields["email"].label = ui["email_optional"]
-        self.fields["small_group"].label = ui["small_group"]
-        self.fields["small_group"].empty_label = ui["no_small_group"]
+        self.fields["requested_unit"].queryset = requestable_signup_units()
+        self.fields["requested_unit"].label = ui["requested_unit"]
+        self.fields["requested_unit"].empty_label = ui["no_small_group"]
         self.fields["preferred_language"].label = ui["preferred_language"]
 
         if not self.is_bound:
             self.initial["email"] = user.email or ""
-            self.initial["small_group"] = self.profile.small_group
             self.initial["preferred_language"] = self.profile.preferred_language
 
+    @transaction.atomic
     def save(self):
         email = self.cleaned_data.get("email", "") or ""
-        small_group = self.cleaned_data.get("small_group")
+        requested_unit = self.cleaned_data.get("requested_unit")
         preferred_language = self.cleaned_data["preferred_language"]
 
         self.user.email = email
         self.user.save(update_fields=["email"])
 
-        self.profile.small_group = small_group
         self.profile.preferred_language = preferred_language
-        self.profile.save(update_fields=["small_group", "preferred_language"])
+        self.profile.save(update_fields=["preferred_language"])
+
+        if requested_unit:
+            create_or_update_signup_membership_request(self.user, requested_unit)
 
         return self.profile
 

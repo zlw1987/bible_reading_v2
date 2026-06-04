@@ -29,12 +29,31 @@ from accounts.permissions import (
     has_capability,
 )
 from events.models import ServiceEvent
+from ministry.models import TeamAssignment, TeamAssignmentMember, TeamMembership
 from studies.models import BibleStudySeries, BibleStudySession
 
 class AccountProfileTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
         self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="PROFILE4",
+            name="Profile Rainbow 4",
+            name_en="Profile Rainbow 4",
+        )
+        self.other_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="PROFILE5",
+            name="Profile Rainbow 5",
+            name_en="Profile Rainbow 5",
+        )
+        self.fellowship_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+            code="PROFILEF",
+            name="Profile Fellowship",
+            name_en="Profile Fellowship",
+        )
 
         self.user = User.objects.create_user(
             username="levin",
@@ -78,10 +97,13 @@ class AccountProfileTests(TestCase):
         self.client.login(username="levin", password="OldPass123!")
 
         response = self.client.get(reverse("profile"))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "levin")
         self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "申请单位")
+        self.assertNotIn('name="small_group"', content)
 
     def test_user_can_update_profile_without_email(self):
         self.client.login(username="levin", password="OldPass123!")
@@ -91,6 +113,7 @@ class AccountProfileTests(TestCase):
             {
                 "email": "",
                 "small_group": self.other_group.id,
+                "requested_unit": "",
                 "preferred_language": "en",
             },
         )
@@ -102,9 +125,12 @@ class AccountProfileTests(TestCase):
         self.user.profile.refresh_from_db()
 
         self.assertEqual(self.user.email, "")
-        self.assertEqual(self.user.profile.small_group, self.other_group)
+        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertEqual(self.user.profile.preferred_language, "en")
         self.assertEqual(self.client.session["language"], "en")
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.user).exists(),
+        )
 
     def test_user_can_update_email(self):
         self.client.login(username="levin", password="OldPass123!")
@@ -114,6 +140,7 @@ class AccountProfileTests(TestCase):
             {
                 "email": "levin@example.com",
                 "small_group": self.group.id,
+                "requested_unit": "",
                 "preferred_language": "zh",
             },
         )
@@ -122,6 +149,256 @@ class AccountProfileTests(TestCase):
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.email, "levin@example.com")
+
+    def test_profile_requested_small_group_unit_creates_pending_membership_request(self):
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "levin@example.com",
+                "requested_unit": self.other_unit.id,
+                "preferred_language": "en",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.user.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        membership = ChurchStructureMembership.objects.get(user=self.user)
+
+        self.assertEqual(self.user.email, "levin@example.com")
+        self.assertEqual(self.user.profile.preferred_language, "en")
+        self.assertEqual(self.user.profile.small_group, self.group)
+        self.assertEqual(membership.unit, self.other_unit)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.requested_by, self.user)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertIsNone(membership.start_date)
+
+    def test_profile_requested_fellowship_unit_creates_pending_membership_request(self):
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "",
+                "requested_unit": self.fellowship_unit.id,
+                "preferred_language": "zh",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        membership = ChurchStructureMembership.objects.get(user=self.user)
+        self.user.profile.refresh_from_db()
+
+        self.assertEqual(membership.unit, self.fellowship_unit)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertEqual(self.user.profile.small_group, self.group)
+
+    def test_profile_rejects_inactive_requested_unit(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="PROFILEINACTIVE",
+            name="Profile Inactive",
+            is_active=False,
+        )
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "changed@example.com",
+                "requested_unit": inactive_unit.id,
+                "preferred_language": "en",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.email, "")
+        self.assertEqual(self.user.profile.preferred_language, "zh")
+        self.assertEqual(self.user.profile.small_group, self.group)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.user).exists(),
+        )
+
+    def test_profile_rejects_non_requestable_requested_unit(self):
+        root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="PROFILEROOT",
+            name="Profile Root",
+        )
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "changed@example.com",
+                "requested_unit": root_unit.id,
+                "preferred_language": "en",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.user.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.email, "")
+        self.assertEqual(self.user.profile.preferred_language, "zh")
+        self.assertEqual(self.user.profile.small_group, self.group)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.user).exists(),
+        )
+
+    def test_profile_duplicate_pending_request_updates_existing_row(self):
+        existing = ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            approved_by=self.staff,
+            approved_at=timezone.now(),
+        )
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "",
+                "requested_unit": self.other_unit.id,
+                "preferred_language": "zh",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        membership = ChurchStructureMembership.objects.get(user=self.user)
+        self.assertEqual(membership.id, existing.id)
+        self.assertEqual(membership.unit, self.other_unit)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.requested_by, self.user)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+        self.assertIsNone(membership.start_date)
+
+    def test_profile_request_leaves_active_primary_membership_unchanged(self):
+        active_primary = ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            approved_by=self.staff,
+            approved_at=timezone.now(),
+        )
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "",
+                "requested_unit": self.other_unit.id,
+                "preferred_language": "zh",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        active_primary.refresh_from_db()
+        pending = ChurchStructureMembership.objects.get(
+            user=self.user,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+
+        self.assertEqual(active_primary.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertTrue(active_primary.is_primary)
+        self.assertEqual(active_primary.unit, self.unit)
+        self.assertEqual(pending.unit, self.other_unit)
+        self.assertFalse(pending.is_primary)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.small_group, self.group)
+
+    def test_profile_request_does_not_grant_runtime_access_or_permissions(self):
+        district = District.objects.create(name="Profile District")
+        district_group = SmallGroup.objects.create(
+            name="Profile District Group",
+            district=district,
+        )
+        event = ServiceEvent.objects.create(
+            title="Profile District Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=district,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "",
+                "requested_unit": self.other_unit.id,
+                "preferred_language": "zh",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.small_group, self.group)
+        self.assertFalse(event.can_be_seen_by(self.user))
+        self.assertFalse(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
+        self.assertEqual(TeamMembership.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+        serving_response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(serving_response.status_code, 200)
+        self.assertContains(serving_response, "你目前还没有服事安排。")
+
+    def test_staff_request_pages_show_profile_created_request(self):
+        self.client.login(username="levin", password="OldPass123!")
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "",
+                "requested_unit": self.other_unit.id,
+                "preferred_language": "zh",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        membership = ChurchStructureMembership.objects.get(user=self.user)
+        self.client.logout()
+        self.client.login(username="staff", password="StaffPass123!")
+
+        list_response = self.client.get(reverse("staff_membership_request_list"))
+        detail_response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "levin")
+        self.assertContains(list_response, "Profile Rainbow 5")
+        self.assertContains(list_response, "Rainbow 4")
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "levin")
+        self.assertContains(detail_response, "Profile Rainbow 5")
+        self.assertContains(detail_response, "Rainbow 4")
 
     def test_password_change_page_requires_login(self):
         response = self.client.get(reverse("password_change"))

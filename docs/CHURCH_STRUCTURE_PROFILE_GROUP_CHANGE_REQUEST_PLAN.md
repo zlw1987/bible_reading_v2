@@ -2,9 +2,9 @@
 
 ## 1. Purpose
 
-CS-H.6C plans a future implementation slice for logged-in users to request a group/unit change from Profile without directly editing `Profile.small_group`.
+CS-H.6C planned a future implementation slice for logged-in users to request a group/unit change from Profile without directly editing `Profile.small_group`. CS-H.6D implements the normal-user Profile request capture portion of that plan.
 
-This is planning/docs only. It does not change code, models, migrations, views, forms, templates, URLs, tests, profile behavior, signup behavior, `Profile.small_group`, or any runtime consumer.
+CS-H.6C was planning/docs only. CS-H.6D changes only normal-user Profile request capture, focused tests, and narrow profile copy. It does not change models, migrations, signup behavior, staff approval ownership, or any runtime consumer.
 
 Runtime remains legacy `Profile.small_group` based until a separate consumer migration is designed and implemented. Staff approval remains owned by the existing CS-H.7 membership approval pages. Approval sync behavior remains owned by CS-H.7E.
 
@@ -21,19 +21,20 @@ Risk:
 
 CS-H.6C should close this normal-user self-assignment gap without removing the legacy field from staff/admin support paths prematurely.
 
-## 3. Future Normal User Profile Behavior
+## 3. Normal User Profile Behavior
 
-For normal logged-in users, Profile should:
+After CS-H.6D, normal logged-in users can:
 - show username read-only as today
 - keep email editable as today
 - keep preferred language editable as today
 - show current `Profile.small_group` as read-only context
 - expose an optional requested unit selector for group/unit change requests
-- optionally expose a short non-sensitive request note if product copy and storage are safe
 - create or update a pending `ChurchStructureMembership(status=requested)` when a requested unit is submitted
 - not update `Profile.small_group` at request time
 - not approve automatically
 - hand off review to the existing CS-H.7 staff membership request list/detail/approve/reject flow
+
+CS-H.6D does not implement request note capture. Notes remain empty for profile-created requests until a later safe note field is explicitly implemented.
 
 The requested unit selector should use the same requestable choices as signup:
 - active `ChurchStructureUnit` rows with `unit_type=small_group` or `unit_type=fellowship`
@@ -155,7 +156,7 @@ CS-H.6C does not include:
 
 Recommended next sequence:
 - CS-H.6C: profile group-change request capture planning. Completed by this document.
-- CS-H.6D: implement normal-user Profile request capture only, with focused tests.
+- CS-H.6D: implement normal-user Profile request capture only, with focused tests. Completed.
 - Later: decide whether staff support surfaces need a dedicated legacy `Profile.small_group` edit form.
 - CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
 - Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.

@@ -21,6 +21,15 @@
             {{ ui.username_readonly }}
         </p>
 
+        <p>
+            <strong>{{ ui.current_small_group }}:</strong>
+            {% if form.profile.small_group %}
+            {{ form.profile.small_group.name }}
+            {% else %}
+            {{ ui.no_small_group }}
+            {% endif %}
+        </p>
+
         <form method="post">
             {% csrf_token %}
             {{ form.as_p }}

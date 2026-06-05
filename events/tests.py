@@ -11,6 +11,7 @@ from ministry.models import (
     MinistryTeam,
     TeamAssignment,
     TeamAssignmentMember,
+    TeamMembership,
 )
 
 from .forms import ServiceEventForm
@@ -679,6 +680,62 @@ class ServiceEventFoundationTests(TestCase):
         self.assertNotContains(response, "Missing")
         self.assertNotContains(response, "Unassigned")
         self.assertNotContains(response, "Coverage")
+
+    def test_regular_event_viewer_does_not_see_coworker_coverage(self):
+        self.set_language("en")
+        event = self.create_event()
+        event.required_teams.add(self.required_team)
+        membership = TeamMembership.objects.create(
+            team=self.required_team,
+            display_name="Levin",
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.required_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=membership,
+        )
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Required Ministry Teams")
+        self.assertNotContains(response, "Assignment Coverage")
+        self.assertNotContains(response, "Assigned 1 person")
+        self.assertNotContains(response, "Levin")
+
+    def test_staff_event_viewer_sees_full_assignment_coverage(self):
+        self.set_language("en")
+        event = self.create_event()
+        event.required_teams.add(self.required_team, self.other_required_team)
+        membership = TeamMembership.objects.create(
+            team=self.required_team,
+            display_name="Levin",
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.required_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=membership,
+        )
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Assignment Coverage")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Assigned 1 person")
+        self.assertContains(response, "Levin")
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Unassigned")
 
     def test_manager_can_open_recurring_event_creator(self):
         self.set_language("en")

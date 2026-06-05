@@ -106,6 +106,13 @@
     {% endif %}
 </div>
 
+{% if event_coverage.rows %}
+<div class="card">
+    <h2>{% if language == "zh" %}本次聚会服事覆盖{% else %}Event Assignment Coverage{% endif %}</h2>
+    {% include "ministry/_coverage_rows.html" with coverage_rows=event_coverage.rows %}
+</div>
+{% endif %}
+
 {% if can_confirm_assignment and assignment.status != "cancelled" %}
 <form method="post" class="card" action="{% url 'confirm_team_assignment' assignment.id %}">
     {% csrf_token %}

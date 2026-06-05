@@ -21,6 +21,11 @@ from .models import (
     TeamMembership,
 )
 from .forms import TeamAssignmentForm
+from .services.assignment_coverage import (
+    assignment_coverage_queryset,
+    build_assignment_coverage,
+    events_with_coverage_queryset,
+)
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -1348,6 +1353,137 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Lighting Pilot Import")
         self.assertContains(response, "New Assignment")
+
+    def test_coverage_helper_reports_required_assignment_states_without_creating_rows(self):
+        self.event.required_teams.add(self.team, self.other_team)
+        empty_assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.other_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        assignment = self.create_assignment(
+            members=[self.membership, self.second_membership],
+        )
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm("Ready.")
+        additional_team = MinistryTeam.objects.create(
+            name="投影团队",
+            name_en="Projection Team",
+        )
+        additional_membership = TeamMembership.objects.create(
+            team=additional_team,
+            display_name="Projection Helper",
+        )
+        additional_assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=additional_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=additional_assignment,
+            membership=additional_membership,
+        )
+        before_assignment_count = TeamAssignment.objects.count()
+        before_member_count = TeamAssignmentMember.objects.count()
+
+        event = events_with_coverage_queryset().get(id=self.event.id)
+        coverage = build_assignment_coverage(
+            [event],
+            list(assignment_coverage_queryset().filter(service_event=event)),
+            language="en",
+        )[event.id]
+
+        rows_by_team = {row["team"].name_en: row for row in coverage["rows"]}
+        self.assertEqual(rows_by_team["Lighting Team"]["summary_label"], "Assigned 2 people")
+        lighting_statuses = [
+            member["status_label"] for member in rows_by_team["Lighting Team"]["members"]
+        ]
+        self.assertIn("Confirmed", lighting_statuses)
+        self.assertIn("Awaiting confirmation", lighting_statuses)
+        self.assertEqual(
+            rows_by_team["Sound Team"]["summary_label"],
+            "Assignment exists, no people assigned",
+        )
+        self.assertEqual(rows_by_team["Projection Team"]["summary_label"], "Additional assignment")
+        self.assertEqual(coverage["missing_count"], 0)
+        self.assertEqual(TeamAssignment.objects.count(), before_assignment_count)
+        self.assertEqual(TeamAssignmentMember.objects.count(), before_member_count)
+        self.assertEqual(empty_assignment.assignment_members.count(), 0)
+
+    def test_coverage_helper_reports_missing_required_team_without_creating_assignment(self):
+        self.event.required_teams.add(self.other_team)
+        before_assignment_count = TeamAssignment.objects.count()
+        before_member_count = TeamAssignmentMember.objects.count()
+
+        event = events_with_coverage_queryset().get(id=self.event.id)
+        coverage = build_assignment_coverage([event], [], language="en")[event.id]
+
+        self.assertEqual(coverage["rows"][0]["summary_label"], "Unassigned")
+        self.assertEqual(coverage["missing_count"], 1)
+        self.assertEqual(TeamAssignment.objects.count(), before_assignment_count)
+        self.assertEqual(TeamAssignmentMember.objects.count(), before_member_count)
+
+    def test_assignment_list_shows_required_team_coverage_and_members(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        assignment = self.create_assignment(
+            members=[self.membership, self.second_membership],
+        )
+        assignment.assignment_members.get(membership=self.membership).confirm()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Assignment Coverage")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Assigned 2 people")
+        self.assertContains(response, "regular_assign（Confirmed）")
+        self.assertContains(response, "other_assign（Awaiting confirmation）")
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Unassigned")
+
+    def test_assignment_list_marks_non_required_assignment_as_additional(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.create_assignment(
+            members=[self.other_team_membership],
+            ministry_team=self.other_team,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Additional assignment")
+
+    def test_team_lead_sees_only_manageable_team_missing_coverage(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Unassigned")
+        self.assertNotContains(response, "Sound Team")
+
+    def test_assignment_detail_shows_compact_event_coverage(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Event Assignment Coverage")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Assigned 1 person")
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Unassigned")
 
 
 class LightingPilotImportCommandTests(TestCase):

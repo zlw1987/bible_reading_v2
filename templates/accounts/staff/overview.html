@@ -106,6 +106,7 @@
                 <li>{% if language == "zh" %}将来聚会事件{% else %}Upcoming service events{% endif %}: <strong>{{ upcoming_service_events }}</strong></li>
                 <li>{% if language == "zh" %}将来服事排班{% else %}Upcoming team assignments{% endif %}: <strong>{{ upcoming_assignments }}</strong></li>
                 <li>{% if language == "zh" %}未确认服事排班{% else %}Unconfirmed assignments{% endif %}: <strong>{{ unconfirmed_assignments }}</strong></li>
+                <li>{% if language == "zh" %}未安排的需要团队{% else %}Unassigned required teams{% endif %}: <strong>{{ upcoming_required_team_gaps }}</strong></li>
             </ul>
             <h3 class="staff-subtitle">{{ ui.ministry_ops_health }}</h3>
             {% if ministry_ops_warning_indicator_count %}

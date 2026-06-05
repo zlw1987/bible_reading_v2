@@ -34,6 +34,11 @@ from .permissions import (
     can_view_team_assignment,
     user_team_memberships,
 )
+from .services.assignment_coverage import (
+    assignment_member_prefetch,
+    build_assignment_coverage,
+    events_with_coverage_queryset,
+)
 from .services.lighting_pilot_import import (
     ImportStructureError,
     import_lighting_pilot,
@@ -433,7 +438,9 @@ def my_serving(request):
 
 @login_required
 def team_assignment_list(request):
-    can_create = manageable_assignment_teams(request.user).exists()
+    manageable_teams = manageable_assignment_teams(request.user)
+    manageable_team_ids = list(manageable_teams.values_list("id", flat=True))
+    can_create = bool(manageable_team_ids)
     can_show_new_assignment = can_create or can_manage_team_assignments(request.user)
     show_setup_actions = can_manage_team_assignments(request.user)
     tab = (request.GET.get("tab") or "upcoming").strip()
@@ -486,6 +493,7 @@ def team_assignment_list(request):
     else:
         status_filter = ""
 
+    team_filter_id = None
     team_filter = (request.GET.get("team") or "").strip()
     if team_filter:
         try:
@@ -496,17 +504,68 @@ def team_assignment_list(request):
             assignments = assignments.filter(ministry_team_id=team_filter_id)
         else:
             team_filter = ""
+            team_filter_id = None
 
-    event_groups = []
-    for assignment in assignments:
-        if not event_groups or event_groups[-1]["event"].id != assignment.service_event_id:
-            event_groups.append(
-                {
-                    "event": assignment.service_event,
-                    "assignments": [],
-                }
+    visible_assignment_list = list(assignments)
+    visible_assignment_ids = [assignment.id for assignment in visible_assignment_list]
+    coverage_team_ids = None
+    if not can_manage_team_assignments(request.user):
+        coverage_team_ids = (
+            manageable_team_ids
+            if manageable_team_ids
+            else sorted({assignment.ministry_team_id for assignment in visible_assignment_list})
+        )
+    if team_filter_id:
+        if coverage_team_ids is None:
+            coverage_team_ids = [team_filter_id]
+        else:
+            coverage_team_ids = [
+                team_id for team_id in coverage_team_ids if team_id == team_filter_id
+            ]
+
+    event_ids = {assignment.service_event_id for assignment in visible_assignment_list}
+    if tab == "upcoming" and not status_filter and (
+        can_manage_team_assignments(request.user) or manageable_team_ids
+    ):
+        required_event_queryset = events_with_coverage_queryset().filter(
+            start_datetime__gte=now,
+        ).exclude(
+            status__in=[
+                "draft",
+                "cancelled",
+            ],
+        )
+        if coverage_team_ids is None:
+            required_event_queryset = required_event_queryset.filter(
+                required_team_links__isnull=False,
             )
-        event_groups[-1]["assignments"].append(assignment)
+        else:
+            required_event_queryset = required_event_queryset.filter(
+                required_team_links__ministry_team_id__in=coverage_team_ids,
+            )
+        event_ids.update(required_event_queryset.values_list("id", flat=True))
+
+    events = list(
+        events_with_coverage_queryset()
+        .filter(id__in=event_ids)
+        .order_by("start_datetime", "title")
+    )
+    coverage_by_event = build_assignment_coverage(
+        events,
+        visible_assignment_list,
+        language=get_user_language(request),
+        allowed_team_ids=coverage_team_ids,
+        allowed_assignment_ids=visible_assignment_ids,
+    )
+    event_groups = [
+        {
+            "event": event,
+            "coverage_rows": coverage_by_event[event.id]["rows"],
+            "missing_count": coverage_by_event[event.id]["missing_count"],
+        }
+        for event in events
+        if coverage_by_event[event.id]["rows"]
+    ]
 
     status_text = assignment_form_text(get_user_language(request))
     status_filter_options = [
@@ -545,7 +604,7 @@ def team_assignment_detail(request, assignment_id):
             "service_event__ministry_context",
             "ministry_team",
             "created_by",
-        ),
+        ).prefetch_related(assignment_member_prefetch()),
         id=assignment_id,
     )
 
@@ -561,6 +620,24 @@ def team_assignment_detail(request, assignment_id):
         membership__user=request.user,
         membership__is_active=True,
     ).first()
+    event = (
+        events_with_coverage_queryset()
+        .filter(id=assignment.service_event_id)
+        .first()
+    )
+    coverage_team_ids = None
+    if not can_manage_team_assignments(request.user):
+        manageable_team_ids = list(
+            manageable_assignment_teams(request.user).values_list("id", flat=True)
+        )
+        coverage_team_ids = manageable_team_ids or [assignment.ministry_team_id]
+    event_coverage = build_assignment_coverage(
+        [event],
+        [assignment],
+        language=language,
+        allowed_team_ids=coverage_team_ids,
+        allowed_assignment_ids=[assignment.id],
+    )[event.id]
 
     return render(
         request,
@@ -575,6 +652,7 @@ def team_assignment_detail(request, assignment_id):
             "can_confirm_assignment": can_confirm_team_assignment(request.user, assignment),
             "user_assignment_member": user_assignment_member,
             "confirm_form": TeamAssignmentConfirmForm(language=language),
+            "event_coverage": event_coverage,
         },
     )
 

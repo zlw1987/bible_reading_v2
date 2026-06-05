@@ -100,23 +100,10 @@
             {% endif %}
         </p>
 
-        <div class="assignment-event-rows">
-            {% for assignment in group.assignments %}
-            <div class="assignment-event-row">
-                <div>
-                    <strong>{{ assignment.ministry_team|ministry_team_name:language }}</strong>
-                    <span class="muted">
-                        · {{ assignment|assignment_status_label:language }}
-                        · {{ assignment.total_assigned_count }}
-                        {% if language == "zh" %}人{% else %}member{{ assignment.total_assigned_count|pluralize }}{% endif %}
-                    </span>
-                </div>
-                <a class="button button-secondary" href="{% url 'team_assignment_detail' assignment.id %}">
-                    {% if language == "zh" %}查看/编辑{% else %}View/Edit{% endif %}
-                </a>
-            </div>
-            {% endfor %}
-        </div>
+        <h3 class="assignment-coverage-title">
+            {% if language == "zh" %}服事覆盖{% else %}Assignment Coverage{% endif %}
+        </h3>
+        {% include "ministry/_coverage_rows.html" with coverage_rows=group.coverage_rows %}
     </div>
     {% endfor %}
 </div>

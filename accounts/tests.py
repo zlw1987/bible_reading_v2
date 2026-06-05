@@ -2842,6 +2842,7 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "Teams with no active members")
         self.assertContains(response, "Upcoming assignments without active members")
         self.assertContains(response, "Upcoming assignments using inactive teams")
+        self.assertContains(response, "Unassigned required teams")
         self.assertEqual(response.context["pending_membership_requests"], 1)
         self.assertEqual(response.context["draft_schedules"], 1)
         self.assertEqual(response.context["upcoming_schedules"], 1)
@@ -2862,7 +2863,33 @@ class StaffOverviewTests(TestCase):
         self.assertEqual(response.context["teams_without_active_members"], 1)
         self.assertEqual(response.context["upcoming_assignments_without_active_members"], 2)
         self.assertEqual(response.context["upcoming_assignments_with_inactive_team"], 1)
+        self.assertEqual(response.context["upcoming_required_team_gaps"], 0)
         self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 7)
+
+    def test_staff_overview_shows_upcoming_required_team_gap_count(self):
+        now = timezone.now()
+        required_team = MinistryTeam.objects.create(
+            name="Required Overview Team",
+            playbook_link="https://example.com/required",
+        )
+        event = ServiceEvent.objects.create(
+            title="Required Team Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=now + timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        event.required_teams.add(required_team)
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unassigned required teams")
+        self.assertEqual(response.context["upcoming_required_team_gaps"], 1)
+        self.assertContains(response, "Team Assignments")
+        self.assertFalse(TeamAssignment.objects.exists())
+        self.assertFalse(TeamAssignmentMember.objects.exists())
 
     def test_staff_menu_includes_overview_but_normal_nav_stays_uncluttered(self):
         self.set_language("en")

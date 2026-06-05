@@ -1,0 +1,26 @@
+{% load ministry_extras %}
+
+<div class="assignment-coverage-rows">
+    {% for row in coverage_rows %}
+    <div class="assignment-coverage-row assignment-coverage-row-{{ row.kind }}">
+        <div class="assignment-coverage-main">
+            <strong>{{ row.team|ministry_team_name:language }}</strong>
+            <span class="status {% if row.kind == 'assigned' %}status-good{% elif row.kind == 'unassigned' %}status-danger{% elif row.kind == 'empty_assignment' %}status-warning{% else %}status{% endif %}">
+                {{ row.summary_label }}
+            </span>
+            {% if row.members %}
+            <span class="assignment-coverage-members">
+                {% for member in row.members %}
+                    {{ member.name }}（{{ member.status_label }}）{% if not forloop.last %}、{% endif %}
+                {% endfor %}
+            </span>
+            {% endif %}
+        </div>
+        {% if row.assignment %}
+        <a class="button button-secondary" href="{% url 'team_assignment_detail' row.assignment.id %}">
+            {% if language == "zh" %}查看/编辑{% else %}View/Edit{% endif %}
+        </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

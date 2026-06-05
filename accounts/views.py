@@ -23,6 +23,11 @@ def staff_overview(request):
     from comments.models import ReflectionComment, ReflectionReport
     from events.models import ServiceEvent
     from ministry.models import MinistryTeam, TeamAssignment, TeamMembership
+    from ministry.services.assignment_coverage import (
+        assignment_coverage_queryset,
+        count_upcoming_required_team_gaps,
+        events_with_coverage_queryset,
+    )
     from prayers.models import PrayerReport, PrayerRequest
     from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 
@@ -136,6 +141,25 @@ def staff_overview(request):
     upcoming_assignments_with_inactive_team = upcoming_assignment_queryset.filter(
         ministry_team__is_active=False,
     ).count()
+    upcoming_events_with_required_teams = list(
+        events_with_coverage_queryset()
+        .filter(start_datetime__gte=now, required_team_links__isnull=False)
+        .exclude(
+            status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ],
+        )
+        .distinct()
+    )
+    upcoming_required_team_gaps = count_upcoming_required_team_gaps(
+        upcoming_events_with_required_teams,
+        list(
+            assignment_coverage_queryset().filter(
+                id__in=upcoming_assignment_queryset.values("id"),
+            )
+        ),
+    )
     ministry_ops_warning_indicator_count = sum(
         [
             inactive_ministry_teams,
@@ -144,6 +168,7 @@ def staff_overview(request):
             teams_without_active_members,
             upcoming_assignments_without_active_members,
             upcoming_assignments_with_inactive_team,
+            upcoming_required_team_gaps,
         ]
     )
 
@@ -176,6 +201,7 @@ def staff_overview(request):
             "upcoming_assignments_with_inactive_team": (
                 upcoming_assignments_with_inactive_team
             ),
+            "upcoming_required_team_gaps": upcoming_required_team_gaps,
             "ministry_ops_warning_indicator_count": ministry_ops_warning_indicator_count,
         },
     )

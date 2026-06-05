@@ -85,14 +85,6 @@
     <p>{{ event|event_description:language|linebreaksbr }}</p>
     {% endif %}
 
-    <p class="muted">
-        {% if language == "zh" %}
-        V1 只记录聚会本身；服事团队安排不在本阶段。
-        {% else %}
-        V1 records the event itself; ministry team assignments are not part of this phase.
-        {% endif %}
-    </p>
-
     {% if can_manage %}
     <div class="actions">
         <a class="button button-secondary" href="{% url 'edit_service_event' event.id %}">
@@ -107,4 +99,11 @@
     </div>
     {% endif %}
 </div>
+
+{% if can_view_coverage and event_coverage.rows %}
+<div class="card">
+    <h2>{% if language == "zh" %}服事覆盖{% else %}Assignment Coverage{% endif %}</h2>
+    {% include "ministry/_coverage_rows.html" with coverage_rows=event_coverage.rows %}
+</div>
+{% endif %}
 {% endblock %}

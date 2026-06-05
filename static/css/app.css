@@ -629,6 +629,38 @@ th {
     padding-bottom: 0;
 }
 
+.assignment-coverage-title {
+    font-size: 15px;
+    margin: 14px 0 8px;
+}
+
+.assignment-coverage-rows {
+    display: grid;
+    gap: 10px;
+}
+
+.assignment-coverage-row {
+    align-items: center;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 12px 0 0;
+}
+
+.assignment-coverage-main {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.assignment-coverage-members {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
 .staff-overview-grid {
     display: grid;
     gap: 18px;
@@ -749,6 +781,11 @@ th {
     }
 
     .assignment-event-row {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .assignment-coverage-row {
         align-items: flex-start;
         flex-direction: column;
     }

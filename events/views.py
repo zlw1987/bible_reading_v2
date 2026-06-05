@@ -5,6 +5,12 @@ from django.utils import timezone
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
+from ministry.permissions import can_manage_team_assignments
+from ministry.services.assignment_coverage import (
+    assignment_coverage_queryset,
+    build_assignment_coverage,
+    events_with_coverage_queryset,
+)
 
 from .forms import RecurringServiceEventForm, ServiceEventForm
 from .models import ServiceEvent
@@ -89,12 +95,7 @@ def service_event_list(request):
 @login_required
 def service_event_detail(request, event_id):
     event = get_object_or_404(
-        ServiceEvent.objects.select_related(
-            "district",
-            "ministry_context",
-            "small_group",
-            "created_by",
-        ).prefetch_related("required_teams"),
+        events_with_coverage_queryset().prefetch_related("required_teams"),
         id=event_id,
     )
 
@@ -105,13 +106,26 @@ def service_event_detail(request, event_id):
         )
         return redirect("service_event_list")
 
+    can_manage = can_manage_service_events(request.user)
+    can_view_coverage = can_manage or can_manage_team_assignments(request.user)
+    event_coverage = None
+    if can_view_coverage:
+        assignments = assignment_coverage_queryset().filter(service_event=event)
+        event_coverage = build_assignment_coverage(
+            [event],
+            list(assignments),
+            language=get_user_language(request),
+        )[event.id]
+
     return render(
         request,
         "events/service_event_detail.html",
         {
             "event": event,
-            "can_manage": can_manage_service_events(request.user),
+            "can_manage": can_manage,
             "required_teams": event.required_teams.all().order_by("name"),
+            "can_view_coverage": can_view_coverage,
+            "event_coverage": event_coverage,
         },
     )
 

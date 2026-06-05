@@ -70,7 +70,7 @@ Keep the Django/Python app environment separate from the Node/Playwright browser
 - When running Node/Playwright scripts from this repo, set `$env:NODE_PATH = "C:\dev\codex-browser-qa\node_modules"`.
 - If using Codex's bundled Node executable, still set the same `NODE_PATH`.
 - Do not rely on Codex cached runtime paths or partial bundled Playwright shims.
-- Temporary browser QA helper scripts may be created only when necessary.
+- Temporary browser QA helper scripts may be created only when explicitly authorized, must be short and reviewed, must not be generated through long inline PowerShell, and must be removed before the final report.
 - Temporary browser QA helper scripts must be narrow in purpose and removed before the final report.
 - Browser QA must not create QA users or seed ministry/business data unless explicitly authorized.
 - Creating an authenticated session row for an existing staff account is allowed only for QA login/session purposes, and must be reported clearly.

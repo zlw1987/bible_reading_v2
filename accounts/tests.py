@@ -2092,7 +2092,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "小组申请审核")
         self.assertContains(response, "申请加入的小组/团契")
-        self.assertContains(response, "当前运行小组")
+        self.assertContains(response, "当前小组")
         self.assertContains(response, "等待审核队列")
         self.assertContains(response, "备注必须只包含非敏感")
 
@@ -2172,13 +2172,50 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
         self.assertContains(response, "Request Source")
-        self.assertContains(response, "Current runtime data")
-        self.assertContains(response, "Future church-structure foundation")
+        self.assertContains(response, "Current active group data")
+        self.assertContains(response, "Current small group")
+        self.assertContains(response, "Current group update target")
+        self.assertContains(response, "Group membership after approval")
         self.assertContains(response, "Approval state")
-        self.assertContains(response, "No single active mapped legacy small group")
-        self.assertContains(response, "No existing future primary membership")
+        self.assertContains(
+            response,
+            "Approval creates the primary membership record.",
+        )
+        self.assertContains(response, "No single active current small group")
+        self.assertContains(response, "No existing confirmed membership")
+        self.assertNotContains(response, "future foundation")
+        self.assertNotContains(response, "Future church-structure foundation")
+        self.assertNotContains(response, "Current runtime data")
+        self.assertNotContains(response, "legacy small group")
         self.assertContains(response, "Confirm and Sync by Rule")
         self.assertContains(response, "Decline Request")
+
+    def test_chinese_authorized_user_sees_request_detail_staff_wording(self):
+        membership = self.create_membership()
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("staff_membership_request_detail", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "小组申请详情")
+        self.assertContains(response, "申请加入的小组/团契")
+        self.assertContains(response, "目前生效的小组资料")
+        self.assertContains(response, "当前小组")
+        self.assertContains(response, "确认后会更新到的小组")
+        self.assertContains(response, "确认后的归属记录")
+        self.assertContains(response, "现有已确认归属")
+        self.assertContains(
+            response,
+            "确认后会建立主要归属记录；只有当申请的小组正好对应一个启用中的当前小组时，才会更新目前生效的小组资料。",
+        )
+        self.assertNotContains(response, "未来教会架构基础")
+        self.assertNotContains(response, "当前运行资料")
+        self.assertNotContains(response, "确认后可同步的旧小组")
 
     def test_detail_shows_transfer_warning_for_different_mapped_small_group(self):
         mapped_group = SmallGroup.objects.create(
@@ -2198,7 +2235,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "confirming this request will update the current runtime small group",
+            "confirming this request will update the current active group data",
         )
         self.assertContains(response, mapped_group.name)
 

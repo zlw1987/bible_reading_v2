@@ -180,18 +180,21 @@ Boundaries:
 
 ### PP-SA.5 Ministry Ops Admin Improvements
 
-Goal:
-- Improve staff oversight for ServiceEvent, MinistryTeam, TeamAssignment, and My Serving operations.
+Status: complete.
 
-Candidate work:
-- Upcoming ServiceEvent and assignment overview.
-- Team setup health: missing members, display-name-only members, inactive teams, missing playbook links.
-- Assignment confirmation review.
-- Generic pilot setup support for additional ministry teams.
+Goal:
+- Completed as focused read-only ministry ops health indicators on `/staff/`.
+
+Completed scope:
+- Shows upcoming ServiceEvents, upcoming TeamAssignments, and unconfirmed assignments.
+- Shows read-only health indicators for inactive teams, active teams missing playbook links, display-name-only active members, active teams with no active members, upcoming assignments without active members, and upcoming assignments using inactive teams.
+- The aggregate health value is a sum of warning indicator buckets, not a unique problematic-record count. The same object may contribute to multiple indicators.
+- Links only to existing ServiceEvent, MinistryTeam, and TeamAssignment workflows.
+- Browser/mobile QA: initial headless Chromium QA completed before wording clarification; final wording change should be manually checked if browser automation remains unavailable.
 
 Boundaries:
 - Keep models generic; do not add LightingTeam-specific models.
-- Do not add availability, swap requests, reminders, attendance, checklist, or scheduling automation in this phase unless separately planned.
+- No schema changes, write actions, new states, availability, swaps, reminders, attendance, checklist, scheduling automation, notifications, Community Activities, audience filtering, consumer migration, file center, care workflows, announcements, or permission expansion.
 - Do not infer ministry team assignment or serving permissions from church structure membership.
 
 ## 5. Permission and Capability Boundaries
@@ -257,9 +260,11 @@ PP-SA.3 is complete as membership/admin workflow polish for the existing staff m
 
 PP-SA.4 is complete as a read-only staff moderation queue at `/staff/moderation/`.
 
+PP-SA.5 is complete as read-only ministry ops health indicators on `/staff/`.
+
 Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline PowerShell `manage.py shell` commands, prefer tests/fixtures/app UI, keep one-off commands short and transparent, and never bypass endpoint security.
 
 Recommended next safe slice:
-- PP-SA.5 Ministry Ops Admin Improvements.
+- Manually check the final PP-SA.5 wording in browser/mobile if automation remains unavailable, then choose the next staff/admin slice only through separate planning.
 - Keep the next slice narrow and continue linking to existing workflows unless a separately planned workflow change is approved.
-- Do not add schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.4 completion alone.
+- Do not add schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, or ChurchStructureMembership serving inference from the PP-SA.5 completion alone.

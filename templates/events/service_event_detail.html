@@ -62,6 +62,15 @@
     </p>
     {% endif %}
 
+    {% if required_teams %}
+    <p>
+        <strong>{% if language == "zh" %}需要的事工团队{% else %}Required Ministry Teams{% endif %}:</strong>
+        {% for team in required_teams %}
+            {{ team|ministry_team_name:language }}{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+    </p>
+    {% endif %}
+
     <p>
         <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
         {{ event|event_scope_label:language }}

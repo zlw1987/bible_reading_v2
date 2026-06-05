@@ -81,6 +81,40 @@ Reason:
 - Browser QA dependencies are intentionally externalized to avoid polluting this Django repo with Node artifacts.
 - The Windows Codex browser sandbox can fail, so fallback QA should be deterministic instead of repeatedly searching cached runtime/plugin paths.
 
+## Endpoint-Safe Browser QA Commands
+
+Do not run browser QA through long inline PowerShell scripts.
+
+Do not use PowerShell to dynamically write and execute temporary Node/Playwright scripts with embedded JavaScript, session cookies, or browser automation logic.
+
+Do not use patterns like:
+
+- `powershell.exe -NoProfile -Command "..."`
+- `Set-Content` to create a temporary `.js` browser QA script
+- setting `NODE_PATH` inside a long inline PowerShell command
+- running `node $script` from that same inline PowerShell command
+- deleting the script with `Remove-Item` in the same command
+- embedding Django `sessionid` cookies inside a long inline command
+- launching hidden or background processes through PowerShell
+- `System.Diagnostics.ProcessStartInfo`
+- `Start-Process`
+- `Start-Job`
+
+Reason:
+
+- Endpoint security may flag long inline PowerShell plus dynamic script creation, session-cookie injection, browser automation, hidden process launch, or cleanup/deletion behavior as malicious-looking.
+- This has already triggered Netgear Armor / Antivirus blocks for PowerShell commands that attempted to start Django runserver and run Playwright browser QA.
+
+Allowed safer alternatives:
+
+- Prefer a user-started foreground Django server:
+  - `.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000 --noreload`
+- Prefer checked-in or clearly reviewed QA scripts only when explicitly authorized.
+- Use short, transparent commands.
+- If browser QA cannot run without long inline PowerShell or endpoint-security-looking behavior, stop and report browser QA as blocked.
+- Report the exact manual QA URL and steps instead of trying more launcher/script variants.
+- Never ask the user to disable Netgear Armor, antivirus, or endpoint protection.
+
 ## QA Data Seeding
 
 - Do not use long inline PowerShell commands to run `manage.py shell -c` for QA data seeding.

@@ -83,6 +83,12 @@ class ServiceEvent(models.Model):
         on_delete=models.SET_NULL,
         related_name="service_events",
     )
+    required_teams = models.ManyToManyField(
+        "ministry.MinistryTeam",
+        through="ServiceEventRequiredTeam",
+        related_name="required_service_events",
+        blank=True,
+    )
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,
@@ -200,4 +206,32 @@ class ServiceEvent(models.Model):
 
         return False
 
-# Create your models here.
+
+class ServiceEventRequiredTeam(models.Model):
+    service_event = models.ForeignKey(
+        ServiceEvent,
+        on_delete=models.CASCADE,
+        related_name="required_team_links",
+    )
+    ministry_team = models.ForeignKey(
+        "ministry.MinistryTeam",
+        on_delete=models.PROTECT,
+        related_name="required_event_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["service_event__start_datetime", "ministry_team__name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service_event", "ministry_team"],
+                name="unique_service_event_required_team",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["service_event"]),
+            models.Index(fields=["ministry_team"]),
+        ]
+
+    def __str__(self):
+        return f"{self.ministry_team} required for {self.service_event}"

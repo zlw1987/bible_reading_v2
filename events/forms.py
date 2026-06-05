@@ -4,6 +4,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import MinistryContext
+from ministry.models import MinistryTeam
 
 from .models import ServiceEvent
 
@@ -20,6 +21,7 @@ FORM_TEXT = {
         "location": "Location",
         "meeting_link": "Meeting Link",
         "ministry_context": "Ministry Context Label",
+        "required_teams": "Required Ministry Teams",
         "scope_type": "Audience Scope",
         "district": "District",
         "small_group": "Small Group",
@@ -38,6 +40,10 @@ FORM_TEXT = {
             "Optional label for CM, EM, or a similar ministry context. "
             "Blank can mean whole-church, combined, legacy, or uncategorized. "
             "This does not control visibility, assignment filtering, or audience scope."
+        ),
+        "required_teams_help": (
+            "Select teams expected for this event. "
+            "This records expectations only and does not create team assignments."
         ),
         "scope_type_help": (
             "Current version supports Whole Church, one District, or one Small Group. "
@@ -66,6 +72,7 @@ FORM_TEXT = {
         "location": "地点",
         "meeting_link": "会议链接",
         "scope_type": "范围",
+        "required_teams": "需要的事工团队",
         "district": "区",
         "small_group": "小组",
         "status": "状态",
@@ -95,7 +102,22 @@ def form_text(language):
     return FORM_TEXT.get(language, FORM_TEXT["en"])
 
 
+class RequiredTeamChoiceField(forms.ModelMultipleChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, team):
+        return team.get_name(self.language)
+
+
 class ServiceEventForm(forms.ModelForm):
+    required_teams = RequiredTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
     class Meta:
         model = ServiceEvent
         fields = [
@@ -109,6 +131,7 @@ class ServiceEventForm(forms.ModelForm):
             "location",
             "meeting_link",
             "ministry_context",
+            "required_teams",
             "scope_type",
             "district",
             "small_group",
@@ -134,6 +157,7 @@ class ServiceEventForm(forms.ModelForm):
             text = {
                 **text,
                 "ministry_context": "事工标签（可选）",
+                "required_teams": "需要的事工团队",
                 "scope_type": "覆盖对象",
                 "district": "适用区",
                 "small_group": "适用小组",
@@ -141,6 +165,10 @@ class ServiceEventForm(forms.ModelForm):
                     "仅用于标记中文部、英文部等事工背景。"
                     "留空可以表示全教会、联合、旧数据或未分类。"
                     "不会控制可见范围、服事分配或用户权限。"
+                ),
+                "required_teams_help": (
+                    "选择这个聚会预期需要的事工团队。"
+                    "这里只记录需要，不会自动建立服事排班。"
                 ),
                 "scope_type_help": (
                     "当前版本支持全教会、单一区或单一小组。"
@@ -190,6 +218,8 @@ class ServiceEventForm(forms.ModelForm):
             {"placeholder": text["meeting_link_placeholder"]}
         )
         self.fields["ministry_context"].help_text = text["ministry_context_help"]
+        self.fields["required_teams"].help_text = text["required_teams_help"]
+        self.fields["required_teams"].language = language
         self.fields["scope_type"].help_text = text["scope_type_help"]
         self.fields["district"].help_text = text["district_help"]
         self.fields["small_group"].help_text = text["small_group_help"]
@@ -198,6 +228,14 @@ class ServiceEventForm(forms.ModelForm):
             ministry_context_filter |= Q(id=self.instance.ministry_context_id)
         self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
             ministry_context_filter,
+        )
+        required_team_filter = Q(is_active=True)
+        if self.instance.pk:
+            required_team_filter |= Q(required_service_events=self.instance)
+        self.fields["required_teams"].queryset = (
+            MinistryTeam.objects.filter(required_team_filter)
+            .distinct()
+            .order_by("name")
         )
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
@@ -241,6 +279,11 @@ class RecurringServiceEventForm(forms.Form):
         required=False,
     )
     status = forms.ChoiceField(choices=ServiceEvent.STATUS_CHOICES)
+    required_teams = RequiredTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
     description = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
     description_en = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
 
@@ -272,6 +315,7 @@ class RecurringServiceEventForm(forms.Form):
             "event_type",
             "location",
             "meeting_link",
+            "required_teams",
             "scope_type",
             "district",
             "small_group",
@@ -296,6 +340,16 @@ class RecurringServiceEventForm(forms.Form):
             self.fields[field_name].help_text = service_event_form.fields[
                 field_name
             ].help_text
+        self.fields["required_teams"].label = service_event_form.fields[
+            "required_teams"
+        ].label
+        self.fields["required_teams"].help_text = service_event_form.fields[
+            "required_teams"
+        ].help_text
+        self.fields["required_teams"].language = language
+        self.fields["required_teams"].queryset = MinistryTeam.objects.filter(
+            is_active=True,
+        ).order_by("name")
         self.fields["weekday"].choices = weekday_choices(language)
 
         if not self.is_bound:

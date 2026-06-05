@@ -92,3 +92,10 @@ def event_ministry_context_label(event, language):
     if context.code:
         return f"{context.code} - {name}"
     return name
+
+
+@register.filter
+def ministry_team_name(team, language):
+    if not team:
+        return ""
+    return team.get_name(language)

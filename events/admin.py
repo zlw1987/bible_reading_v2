@@ -1,10 +1,17 @@
 from django.contrib import admin
 
-from .models import ServiceEvent
+from .models import ServiceEvent, ServiceEventRequiredTeam
+
+
+class ServiceEventRequiredTeamInline(admin.TabularInline):
+    model = ServiceEventRequiredTeam
+    extra = 0
+    autocomplete_fields = ("ministry_team",)
 
 
 @admin.register(ServiceEvent)
 class ServiceEventAdmin(admin.ModelAdmin):
+    inlines = (ServiceEventRequiredTeamInline,)
     list_display = (
         "title",
         "event_type",

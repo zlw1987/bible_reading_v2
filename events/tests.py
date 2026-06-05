@@ -1,13 +1,20 @@
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
+from ministry.models import (
+    MinistryTeam,
+    TeamAssignment,
+    TeamAssignmentMember,
+)
 
 from .forms import ServiceEventForm
-from .models import ServiceEvent
+from .models import ServiceEvent, ServiceEventRequiredTeam
 
 
 class ServiceEventFoundationTests(TestCase):
@@ -32,6 +39,19 @@ class ServiceEventFoundationTests(TestCase):
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
             district=self.south,
+        )
+        self.required_team = MinistryTeam.objects.create(
+            name="灯光团队",
+            name_en="Lighting Team",
+        )
+        self.other_required_team = MinistryTeam.objects.create(
+            name="音响团队",
+            name_en="Sound Team",
+        )
+        self.inactive_required_team = MinistryTeam.objects.create(
+            name="停用团队",
+            name_en="Inactive Team",
+            is_active=False,
         )
 
         self.user = User.objects.create_user(
@@ -112,6 +132,7 @@ class ServiceEventFoundationTests(TestCase):
             "location": "Fellowship Hall",
             "meeting_link": "https://example.com/event",
             "ministry_context": "",
+            "required_teams": [],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "status": ServiceEvent.STATUS_PUBLISHED,
         }
@@ -141,6 +162,7 @@ class ServiceEventFoundationTests(TestCase):
             "end_time": "11:30",
             "location": "Sanctuary",
             "meeting_link": "",
+            "required_teams": [],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "district": "",
             "small_group": "",
@@ -301,6 +323,82 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(event.status, ServiceEvent.STATUS_DRAFT)
         self.assertIsNone(event.published_at)
 
+    def test_existing_event_can_have_no_required_teams(self):
+        event = self.create_event()
+
+        self.assertEqual(event.required_teams.count(), 0)
+        event.full_clean()
+
+    def test_required_team_relationship_rejects_duplicate_team_for_event(self):
+        event = self.create_event()
+        ServiceEventRequiredTeam.objects.create(
+            service_event=event,
+            ministry_team=self.required_team,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ServiceEventRequiredTeam.objects.create(
+                    service_event=event,
+                    ministry_team=self.required_team,
+                )
+
+    def test_required_team_protects_referenced_team_from_delete(self):
+        event = self.create_event()
+        event.required_teams.add(self.required_team)
+
+        with self.assertRaises(ProtectedError):
+            self.required_team.delete()
+
+    def test_deleting_event_removes_required_team_links(self):
+        event = self.create_event()
+        event.required_teams.add(self.required_team)
+
+        event.delete()
+
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        self.assertTrue(MinistryTeam.objects.filter(id=self.required_team.id).exists())
+
+    def test_service_event_form_shows_active_teams_only_for_new_event(self):
+        form = ServiceEventForm(language="en")
+        team_ids = set(form.fields["required_teams"].queryset.values_list("id", flat=True))
+
+        self.assertIn(self.required_team.id, team_ids)
+        self.assertIn(self.other_required_team.id, team_ids)
+        self.assertNotIn(self.inactive_required_team.id, team_ids)
+
+    def test_service_event_edit_form_keeps_selected_inactive_team_visible(self):
+        event = self.create_event()
+        event.required_teams.add(self.inactive_required_team)
+
+        form = ServiceEventForm(instance=event, language="en")
+        team_ids = set(form.fields["required_teams"].queryset.values_list("id", flat=True))
+
+        self.assertIn(self.inactive_required_team.id, team_ids)
+
+    def test_manager_can_create_event_with_required_teams_without_assignments(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                required_teams=[
+                    self.required_team.id,
+                    self.other_required_team.id,
+                ],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="特别聚会")
+        self.assertEqual(
+            set(event.required_teams.values_list("id", flat=True)),
+            {self.required_team.id, self.other_required_team.id},
+        )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_manager_can_edit_event(self):
         self.set_language("en")
         event = self.create_event(status=ServiceEvent.STATUS_DRAFT)
@@ -320,6 +418,49 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(event.title, "更新后的聚会")
         self.assertEqual(event.title_en, "Updated Event")
         self.assertIsNotNone(event.published_at)
+
+    def test_manager_edit_replaces_required_teams(self):
+        self.set_language("en")
+        event = self.create_event(status=ServiceEvent.STATUS_DRAFT)
+        event.required_teams.add(self.required_team)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                required_teams=[self.other_required_team.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(
+            set(event.required_teams.values_list("id", flat=True)),
+            {self.other_required_team.id},
+        )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_manager_can_remove_selected_inactive_required_team_on_edit(self):
+        self.set_language("en")
+        event = self.create_event(status=ServiceEvent.STATUS_DRAFT)
+        event.required_teams.add(self.inactive_required_team)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                required_teams=[],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.required_teams.count(), 0)
 
     def test_manager_can_cancel_event(self):
         self.set_language("en")
@@ -524,6 +665,21 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(detail_response, "Start Time")
         self.assertContains(detail_response, "Scope")
 
+    def test_detail_page_shows_required_teams_as_plain_metadata_only(self):
+        self.set_language("en")
+        event = self.create_event()
+        event.required_teams.add(self.required_team)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Required Ministry Teams")
+        self.assertContains(response, "Lighting Team")
+        self.assertNotContains(response, "Missing")
+        self.assertNotContains(response, "Unassigned")
+        self.assertNotContains(response, "Coverage")
+
     def test_manager_can_open_recurring_event_creator(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
@@ -557,18 +713,35 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("service_event_list"))
 
+    def test_regular_user_cannot_create_event_with_required_teams(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(required_teams=[self.required_team.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ServiceEvent.objects.filter(title="特别聚会").exists())
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+
     def test_recurring_preview_creates_no_service_event(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.post(
             reverse("create_recurring_service_events"),
-            self.recurring_post_data(preview="1"),
+            self.recurring_post_data(
+                preview="1",
+                required_teams=[self.required_team.id],
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Events to Create")
         self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
 
     def test_recurring_create_creates_weekly_sunday_events_in_range(self):
         self.set_language("en")
@@ -582,6 +755,32 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
 
+    def test_recurring_create_applies_same_required_teams_to_each_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                required_teams=[
+                    self.required_team.id,
+                    self.other_required_team.id,
+                ],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(
+                set(event.required_teams.values_list("id", flat=True)),
+                {self.required_team.id, self.other_required_team.id},
+            )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_recurring_create_skips_existing_events(self):
         self.set_language("en")
         start_date = self.next_sunday()
@@ -589,7 +788,7 @@ class ServiceEventFoundationTests(TestCase):
             timezone.datetime.combine(start_date, timezone.datetime.strptime("10:00", "%H:%M").time()),
             timezone.get_current_timezone(),
         )
-        self.create_event(
+        existing_event = self.create_event(
             title="主日崇拜",
             title_en="Sunday Service",
             start_datetime=start_datetime,
@@ -598,12 +797,16 @@ class ServiceEventFoundationTests(TestCase):
 
         response = self.client.post(
             reverse("create_recurring_service_events"),
-            self.recurring_post_data(create="1"),
+            self.recurring_post_data(
+                create="1",
+                required_teams=[self.required_team.id],
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
         self.assertContains(response, "skipped: 1")
+        self.assertEqual(existing_event.required_teams.count(), 0)
 
     def test_recurring_range_longer_than_eighteen_months_rejected(self):
         self.set_language("en")

@@ -94,7 +94,7 @@ def service_event_detail(request, event_id):
             "ministry_context",
             "small_group",
             "created_by",
-        ),
+        ).prefetch_related("required_teams"),
         id=event_id,
     )
 
@@ -111,6 +111,7 @@ def service_event_detail(request, event_id):
         {
             "event": event,
             "can_manage": can_manage_service_events(request.user),
+            "required_teams": event.required_teams.all().order_by("name"),
         },
     )
 
@@ -128,6 +129,7 @@ def create_service_event(request):
             event = form.save(commit=False)
             event.created_by = request.user
             event.save()
+            event.required_teams.set(form.cleaned_data["required_teams"])
             messages.success(request, event_ui_text(language, "saved"))
             return redirect("service_event_detail", event_id=event.id)
     else:
@@ -176,6 +178,7 @@ def build_recurring_event_preview(cleaned_data):
 def create_recurring_events(cleaned_data, user):
     dates_to_create, dates_to_skip = build_recurring_event_preview(cleaned_data)
     created_count = 0
+    required_teams = cleaned_data.get("required_teams")
 
     for event_date in dates_to_create:
         start_datetime = timezone.make_aware(
@@ -188,7 +191,7 @@ def create_recurring_events(cleaned_data, user):
                 timezone.datetime.combine(event_date, cleaned_data["end_time"]),
                 timezone.get_current_timezone(),
             )
-        ServiceEvent.objects.create(
+        event = ServiceEvent.objects.create(
             title=cleaned_data["title"],
             title_en=cleaned_data.get("title_en") or "",
             description=cleaned_data.get("description") or "",
@@ -204,6 +207,7 @@ def create_recurring_events(cleaned_data, user):
             status=cleaned_data["status"],
             created_by=user,
         )
+        event.required_teams.set(required_teams)
         created_count += 1
 
     return created_count, len(dates_to_skip), dates_to_create, dates_to_skip
@@ -267,7 +271,9 @@ def edit_service_event(request, event_id):
     if request.method == "POST":
         form = ServiceEventForm(request.POST, instance=event, language=language)
         if form.is_valid():
-            event = form.save()
+            event = form.save(commit=False)
+            event.save()
+            event.required_teams.set(form.cleaned_data["required_teams"])
             messages.success(request, event_ui_text(language, "saved"))
             return redirect("service_event_detail", event_id=event.id)
     else:

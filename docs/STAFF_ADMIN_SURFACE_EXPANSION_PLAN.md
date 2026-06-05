@@ -161,16 +161,22 @@ Boundaries:
 Goal:
 - Create focused staff queues for content that already supports report/hide/moderation workflows.
 
-Candidate queues:
-- Reported prayer requests/comments.
-- Reported reading reflections/replies.
-- Hidden or recently moderated items.
-- Recent unanswered moderation actions.
+Completion notes:
+- Completed as a permission-protected read-only staff moderation queue at `/staff/moderation/`.
+- The queue summarizes existing report and hidden states only, linking staff to existing moderation workflows for action.
+- Included reported and hidden prayer request categories.
+- Included reported and hidden reflection post and reply categories.
+- Prayer comment report/hidden categories are shown as not separately tracked by existing data.
+- No new moderation actions or states were added.
+- Browser/mobile QA was completed via headless Chromium fallback because the in-app browser connector failed.
 
 Boundaries:
 - Moderation queues are not pastoral case management.
+- No schema changes.
+- No sensitive notes.
 - Do not add care workflows, announcements, notifications, attendance, private contact imports, or sensitive notes.
 - Keep normal-user copy kind and non-technical; staff copy may show moderation state and audit context.
+- Did not add file center, Community Activities, audience filtering, consumer migration, or permission matrix expansion.
 
 ### PP-SA.5 Ministry Ops Admin Improvements
 
@@ -249,7 +255,11 @@ PP-SA.2 is complete as a read-only staff dashboard overview.
 
 PP-SA.3 is complete as membership/admin workflow polish for the existing staff membership request flow.
 
+PP-SA.4 is complete as a read-only staff moderation queue at `/staff/moderation/`.
+
+Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline PowerShell `manage.py shell` commands, prefer tests/fixtures/app UI, keep one-off commands short and transparent, and never bypass endpoint security.
+
 Recommended next safe slice:
-- PP-SA.4 Moderation / Admin Queues.
+- PP-SA.5 Ministry Ops Admin Improvements.
 - Keep the next slice narrow and continue linking to existing workflows unless a separately planned workflow change is approved.
-- Do not add schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.3 completion alone.
+- Do not add schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.4 completion alone.

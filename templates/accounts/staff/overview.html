@@ -36,7 +36,7 @@
                 {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
             </h2>
             <p class="muted">
-                {% if language == "zh" %}等待同工审核。{% else %}Waiting for staff review.{% endif %}
+                {% if language == "zh" %}等待同工审核；确认时仍按旧小组唯一映射规则同步当前运行小组。{% else %}Waiting for staff review; approval still syncs the current runtime small group only by the existing one-mapped-group rule.{% endif %}
             </p>
         </div>
         <div class="staff-count">{{ pending_membership_requests }}</div>

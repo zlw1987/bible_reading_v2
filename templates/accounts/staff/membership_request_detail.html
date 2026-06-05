@@ -18,7 +18,8 @@
     </p>
 </div>
 
-<div class="card">
+<div class="card membership-request-detail-card">
+    <h2 class="card-title">{{ ui.requested_unit }}</h2>
     <dl class="detail-list">
         <dt>{{ ui.username }}</dt>
         <dd>{{ membership.user.username }}</dd>
@@ -26,25 +27,7 @@
         <dt>{{ ui.future_foundation_membership_request }}</dt>
         <dd>{{ unit_path }}</dd>
 
-        <dt>{{ ui.current_runtime_small_group }}</dt>
-        <dd>
-            {% if membership.user.profile.small_group %}
-            {{ membership.user.profile.small_group.name }}
-            {% else %}
-            -
-            {% endif %}
-        </dd>
-
-        <dt>{{ ui.existing_active_primary_membership }}</dt>
-        <dd>
-            {% if active_primary %}
-            {{ active_primary_path }}
-            {% else %}
-            {{ ui.no_active_primary_membership }}
-            {% endif %}
-        </dd>
-
-        <dt>{{ ui.requested_by }}</dt>
+        <dt>{{ ui.request_source }}</dt>
         <dd>
             {% if membership.requested_by %}
             {{ membership.requested_by.username }}
@@ -58,10 +41,50 @@
 
         <dt>{{ ui.request_note }}</dt>
         <dd>{{ membership.notes|default:"-" }}</dd>
-
-        <dt>{{ ui.status }}</dt>
-        <dd><span class="status status-warning">{{ ui.pending_review }}</span></dd>
     </dl>
+</div>
+
+<div class="grid grid-2 membership-request-context-grid">
+    <section class="card membership-request-detail-card">
+        <h2 class="card-title">{{ ui.current_runtime_context }}</h2>
+        <dl class="detail-list">
+            <dt>{{ ui.current_runtime_small_group }}</dt>
+            <dd>
+                {% if membership.user.profile.small_group %}
+                {{ membership.user.profile.small_group.name }}
+                {% else %}
+                -
+                {% endif %}
+            </dd>
+
+            <dt>{{ ui.legacy_sync_target }}</dt>
+            <dd>
+                {% if mapped_legacy_small_group %}
+                {{ mapped_legacy_small_group.name }}
+                {% else %}
+                {{ ui.no_legacy_sync_target }}
+                {% endif %}
+            </dd>
+        </dl>
+    </section>
+
+    <section class="card membership-request-detail-card">
+        <h2 class="card-title">{{ ui.future_foundation_context }}</h2>
+        <dl class="detail-list">
+            <dt>{{ ui.existing_active_primary_membership }}</dt>
+            <dd>
+                {% if active_primary %}
+                {{ active_primary_path }}
+                {% else %}
+                {{ ui.no_active_primary_membership }}
+                {% endif %}
+            </dd>
+
+            <dt>{{ ui.approval_state }}</dt>
+            <dd><span class="status status-warning">{{ ui.pending_review }}</span></dd>
+        </dl>
+        <p class="form-help">{{ ui.approval_state_help }}</p>
+    </section>
 </div>
 
 {% if show_profile_sync_warning %}
@@ -75,7 +98,7 @@
 </div>
 {% endif %}
 
-<div class="card">
+<div class="card membership-request-actions">
     <form method="post" action="{% url 'staff_membership_request_approve' membership.id %}" class="inline-action-form">
         {% csrf_token %}
         <button type="submit">{{ ui.approve_request }}</button>

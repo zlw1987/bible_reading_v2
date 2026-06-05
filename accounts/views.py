@@ -316,12 +316,16 @@ def staff_membership_request_list(request):
         }
         for membership in memberships
     ]
+    status_summary = {
+        "requested": len(membership_rows),
+    }
 
     return render(
         request,
         "accounts/staff/membership_request_list.html",
         {
             "membership_rows": membership_rows,
+            "status_summary": status_summary,
         },
     )
 

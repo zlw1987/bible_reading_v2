@@ -2069,7 +2069,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "Rainbow 4")
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
+        self.assertContains(response, "Pending review queue")
+        self.assertContains(response, "This list only shows requests")
         self.assertContains(response, "Pending review")
+        self.assertEqual(response.context["status_summary"]["requested"], 1)
         self.assertContains(
             response,
             reverse("staff_membership_request_detail", args=[membership.id]),
@@ -2090,7 +2093,21 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "小组申请审核")
         self.assertContains(response, "申请加入的小组/团契")
         self.assertContains(response, "当前运行小组")
+        self.assertContains(response, "等待审核队列")
         self.assertContains(response, "备注必须只包含非敏感")
+
+    def test_pending_list_has_clear_empty_state(self):
+        session = self.client.session
+        session["language"] = "en"
+        session.save()
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.get(reverse("staff_membership_request_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No requests are waiting for review")
+        self.assertContains(response, "An empty queue does not change")
+        self.assertEqual(response.context["status_summary"]["requested"], 0)
 
     def test_pending_list_excludes_active_memberships(self):
         self.create_membership()
@@ -2154,8 +2171,13 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "Rainbow 4")
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
+        self.assertContains(response, "Request Source")
+        self.assertContains(response, "Current runtime data")
+        self.assertContains(response, "Future church-structure foundation")
+        self.assertContains(response, "Approval state")
+        self.assertContains(response, "No single active mapped legacy small group")
         self.assertContains(response, "No existing future primary membership")
-        self.assertContains(response, "Confirm Request")
+        self.assertContains(response, "Confirm and Sync by Rule")
         self.assertContains(response, "Decline Request")
 
     def test_detail_shows_transfer_warning_for_different_mapped_small_group(self):
@@ -2742,6 +2764,7 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "Staff Overview")
         self.assertContains(response, "Read-only summary")
         self.assertContains(response, "Current Runtime Boundary")
+        self.assertContains(response, "existing one-mapped-group rule")
         self.assertContains(response, reverse("staff_membership_request_list"))
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
         self.assertContains(response, reverse("bible_study_lesson_manage_list"))

@@ -377,6 +377,33 @@ textarea {
     margin: 0 12px 0 0;
 }
 
+.membership-request-summary {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.membership-request-summary-card strong {
+    display: block;
+    font-size: 28px;
+    margin: 8px 0 0;
+}
+
+.membership-request-detail-card .card-title {
+    font-size: 18px;
+}
+
+.membership-request-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.membership-request-actions .inline-action-form {
+    margin: 0;
+}
+
 .membership-request-card-list {
     display: none;
 }
@@ -646,6 +673,10 @@ th {
     .inline-action-form {
         display: block;
         margin: 0 0 10px;
+    }
+
+    .membership-request-actions {
+        display: block;
     }
 
     .inline-action-form button {

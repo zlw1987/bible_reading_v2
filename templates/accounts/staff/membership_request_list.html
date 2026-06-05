@@ -10,8 +10,16 @@
     </p>
 </div>
 
-<div class="card">
+<div class="notice-panel">
     <p class="form-help">{{ ui.notes_must_be_non_sensitive }}</p>
+</div>
+
+<div class="membership-request-summary">
+    <div class="card membership-request-summary-card">
+        <span class="status status-warning">{{ ui.pending_review_queue }}</span>
+        <strong>{{ status_summary.requested }}</strong>
+        <p class="form-help">{{ ui.pending_review_queue_help }}</p>
+    </div>
 </div>
 
 <div class="card membership-request-table-card">
@@ -63,7 +71,10 @@
                 {% endwith %}
                 {% empty %}
                 <tr>
-                    <td colspan="7">{{ ui.no_membership_requests_found }}</td>
+                    <td colspan="7">
+                        <strong>{{ ui.staff_membership_empty_title }}</strong><br>
+                        <span class="form-help">{{ ui.staff_membership_empty_body }}</span>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -115,7 +126,8 @@
     {% endwith %}
     {% empty %}
     <div class="card">
-        <p>{{ ui.no_membership_requests_found }}</p>
+        <h2 class="card-title">{{ ui.staff_membership_empty_title }}</h2>
+        <p class="muted">{{ ui.staff_membership_empty_body }}</p>
     </div>
     {% endfor %}
 </div>

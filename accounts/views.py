@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login

@@ -117,6 +117,7 @@
                 <li>{{ ui.teams_without_active_members }}: <strong>{{ teams_without_active_members }}</strong></li>
                 <li>{{ ui.assignments_without_active_members }}: <strong>{{ upcoming_assignments_without_active_members }}</strong></li>
                 <li>{{ ui.assignments_with_inactive_team }}: <strong>{{ upcoming_assignments_with_inactive_team }}</strong></li>
+                <li>{% if language == "zh" %}未安排的需要团队{% else %}Unassigned required teams{% endif %}: <strong>{{ upcoming_required_team_gaps }}</strong></li>
             </ul>
             {% else %}
             <p class="muted">{{ ui.no_ministry_ops_issues }}</p>

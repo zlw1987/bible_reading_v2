@@ -107,10 +107,26 @@
                 <li>{% if language == "zh" %}将来服事排班{% else %}Upcoming team assignments{% endif %}: <strong>{{ upcoming_assignments }}</strong></li>
                 <li>{% if language == "zh" %}未确认服事排班{% else %}Unconfirmed assignments{% endif %}: <strong>{{ unconfirmed_assignments }}</strong></li>
             </ul>
+            <h3 class="staff-subtitle">{{ ui.ministry_ops_health }}</h3>
+            {% if ministry_ops_warning_indicator_count %}
+            <ul class="staff-count-list">
+                <li>{{ ui.inactive_ministry_teams }}: <strong>{{ inactive_ministry_teams }}</strong></li>
+                <li>{{ ui.teams_missing_playbook }}: <strong>{{ teams_missing_playbook }}</strong></li>
+                <li>{{ ui.display_name_only_members }}: <strong>{{ display_name_only_members }}</strong></li>
+                <li>{{ ui.teams_without_active_members }}: <strong>{{ teams_without_active_members }}</strong></li>
+                <li>{{ ui.assignments_without_active_members }}: <strong>{{ upcoming_assignments_without_active_members }}</strong></li>
+                <li>{{ ui.assignments_with_inactive_team }}: <strong>{{ upcoming_assignments_with_inactive_team }}</strong></li>
+            </ul>
+            {% else %}
+            <p class="muted">{{ ui.no_ministry_ops_issues }}</p>
+            {% endif %}
         </div>
         <div class="actions">
             <a class="button" href="{% url 'service_event_list' %}">
                 {% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'ministry_team_list' %}">
+                {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
             </a>
             <a class="button-secondary button" href="{% url 'team_assignment_list' %}?tab=needs_confirmation">
                 {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}

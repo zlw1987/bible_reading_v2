@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -22,7 +22,7 @@ from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 def staff_overview(request):
     from comments.models import ReflectionComment, ReflectionReport
     from events.models import ServiceEvent
-    from ministry.models import TeamAssignment
+    from ministry.models import MinistryTeam, TeamAssignment, TeamMembership
     from prayers.models import PrayerReport, PrayerRequest
     from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 
@@ -84,6 +84,14 @@ def staff_overview(request):
             TeamAssignment.STATUS_COMPLETED,
         ],
     ).count()
+    upcoming_assignment_queryset = TeamAssignment.objects.filter(
+        service_event__start_datetime__gte=now,
+    ).exclude(
+        status__in=[
+            TeamAssignment.STATUS_CANCELLED,
+            TeamAssignment.STATUS_COMPLETED,
+        ],
+    )
     unconfirmed_assignments = TeamAssignment.objects.filter(
         service_event__start_datetime__gte=now,
         assignment_members__membership__is_active=True,
@@ -94,6 +102,50 @@ def staff_overview(request):
             TeamAssignment.STATUS_COMPLETED,
         ],
     ).distinct().count()
+    active_ministry_teams = MinistryTeam.objects.filter(is_active=True)
+    inactive_ministry_teams = MinistryTeam.objects.filter(is_active=False).count()
+    teams_missing_playbook = active_ministry_teams.filter(playbook_link="").count()
+    display_name_only_members = TeamMembership.objects.filter(
+        is_active=True,
+        user__isnull=True,
+    ).count()
+    teams_without_active_members = (
+        active_ministry_teams
+        .annotate(
+            active_member_count=Count(
+                "memberships",
+                filter=Q(memberships__is_active=True),
+                distinct=True,
+            )
+        )
+        .filter(active_member_count=0)
+        .count()
+    )
+    upcoming_assignments_without_active_members = (
+        upcoming_assignment_queryset
+        .annotate(
+            active_member_count=Count(
+                "assignment_members",
+                filter=Q(assignment_members__membership__is_active=True),
+                distinct=True,
+            )
+        )
+        .filter(active_member_count=0)
+        .count()
+    )
+    upcoming_assignments_with_inactive_team = upcoming_assignment_queryset.filter(
+        ministry_team__is_active=False,
+    ).count()
+    ministry_ops_warning_indicator_count = sum(
+        [
+            inactive_ministry_teams,
+            teams_missing_playbook,
+            display_name_only_members,
+            teams_without_active_members,
+            upcoming_assignments_without_active_members,
+            upcoming_assignments_with_inactive_team,
+        ]
+    )
 
     return render(
         request,
@@ -114,6 +166,17 @@ def staff_overview(request):
             "upcoming_service_events": upcoming_service_events,
             "upcoming_assignments": upcoming_assignments,
             "unconfirmed_assignments": unconfirmed_assignments,
+            "inactive_ministry_teams": inactive_ministry_teams,
+            "teams_missing_playbook": teams_missing_playbook,
+            "display_name_only_members": display_name_only_members,
+            "teams_without_active_members": teams_without_active_members,
+            "upcoming_assignments_without_active_members": (
+                upcoming_assignments_without_active_members
+            ),
+            "upcoming_assignments_with_inactive_team": (
+                upcoming_assignments_with_inactive_team
+            ),
+            "ministry_ops_warning_indicator_count": ministry_ops_warning_indicator_count,
         },
     )
 

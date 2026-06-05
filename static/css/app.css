@@ -641,6 +641,11 @@ th {
     justify-content: space-between;
 }
 
+.staff-subtitle {
+    font-size: 15px;
+    margin: 16px 0 8px;
+}
+
 .staff-count {
     font-size: 42px;
     font-weight: 800;

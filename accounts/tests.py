@@ -2728,6 +2728,10 @@ class StaffOverviewTests(TestCase):
             team=team,
             user=self.normal_user,
         )
+        TeamMembership.objects.create(
+            team=team,
+            display_name="Display Only Helper",
+        )
         assignment = TeamAssignment.objects.create(
             service_event=event,
             ministry_team=team,
@@ -2736,6 +2740,25 @@ class StaffOverviewTests(TestCase):
         TeamAssignmentMember.objects.create(
             assignment=assignment,
             membership=membership,
+        )
+        empty_team = MinistryTeam.objects.create(
+            name="Overview Empty Team",
+            playbook_link="https://example.com/empty-team",
+        )
+        TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=empty_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        inactive_team = MinistryTeam.objects.create(
+            name="Overview Inactive Team",
+            playbook_link="https://example.com/inactive-team",
+            is_active=False,
+        )
+        TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=inactive_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
         )
 
     def test_staff_overview_requires_staff_access(self):
@@ -2773,8 +2796,15 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, reverse("staff_prayer_reports"))
         self.assertContains(response, reverse("staff_reflection_reports"))
         self.assertContains(response, reverse("service_event_list"))
+        self.assertContains(response, reverse("ministry_team_list"))
         self.assertContains(response, reverse("team_assignment_list"))
         self.assertContains(response, reverse("staff_user_list"))
+        self.assertContains(response, "Ministry ops health flags")
+        self.assertContains(response, "Teams missing playbook links")
+        self.assertContains(response, "Display-name-only members")
+        self.assertContains(response, "Teams with no active members")
+        self.assertContains(response, "Upcoming assignments without active members")
+        self.assertContains(response, "Upcoming assignments using inactive teams")
         self.assertEqual(response.context["pending_membership_requests"], 1)
         self.assertEqual(response.context["draft_schedules"], 1)
         self.assertEqual(response.context["upcoming_schedules"], 1)
@@ -2787,8 +2817,15 @@ class StaffOverviewTests(TestCase):
         self.assertEqual(response.context["open_reflection_reports"], 1)
         self.assertEqual(response.context["hidden_reflections"], 1)
         self.assertEqual(response.context["upcoming_service_events"], 1)
-        self.assertEqual(response.context["upcoming_assignments"], 1)
+        self.assertEqual(response.context["upcoming_assignments"], 3)
         self.assertEqual(response.context["unconfirmed_assignments"], 1)
+        self.assertEqual(response.context["inactive_ministry_teams"], 1)
+        self.assertEqual(response.context["teams_missing_playbook"], 1)
+        self.assertEqual(response.context["display_name_only_members"], 1)
+        self.assertEqual(response.context["teams_without_active_members"], 1)
+        self.assertEqual(response.context["upcoming_assignments_without_active_members"], 2)
+        self.assertEqual(response.context["upcoming_assignments_with_inactive_team"], 1)
+        self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 7)
 
     def test_staff_menu_includes_overview_but_normal_nav_stays_uncluttered(self):
         self.set_language("en")
@@ -2819,6 +2856,9 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "同工总览")
         self.assertContains(response, "只读摘要")
         self.assertContains(response, "当前运行边界")
+        self.assertContains(response, "事工运作提醒指标")
+        self.assertContains(response, "目前没有可由现有资料看出的事工设置提醒指标")
+        self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
 
 
 class StaffModerationQueueTests(TestCase):

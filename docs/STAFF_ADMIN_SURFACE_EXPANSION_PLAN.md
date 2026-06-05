@@ -61,10 +61,10 @@ Current state:
 - Optional `ministry_context` label exists; it is label-only.
 - MO-S.2 is complete: staff can select required `MinistryTeam` records when creating, editing, or recurring batch-creating `ServiceEvent` records.
 - Required teams are stored through explicit `ServiceEventRequiredTeam` rows; `ministry_team` uses `PROTECT`, so referenced teams should be deactivated rather than deleted.
+- MO-S.3 is complete: staff/service-event or team-assignment managers can see read-only assignment coverage on ServiceEvent detail; ordinary event viewers do not see coworker coverage.
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
-- Staff need required-team coverage to be visible without mistaking aggregate assignment counts for real coverage.
 - Current ServiceEvent scope remains legacy-field based. It must not be silently replaced with `ChurchStructureMembership` or audience filtering.
 - ServiceEvent should not become Community Activities, full event management, or scheduling automation without separate planning.
 
@@ -74,12 +74,12 @@ Current state:
 - Ministry Operations includes `MinistryTeam`, `TeamMembership`, `TeamAssignment`, `TeamAssignmentMember`, manual ServiceEvent-based assignments, per-member confirmation, Playbook link, non-sensitive assignment notes, and My Serving Page V1.
 - Lighting Team pilot data/setup support exists on the generic ministry operations foundation.
 - MO-S.2 keeps `ServiceEvent` required teams as event-level expectations, `TeamAssignment` as actual scheduled assignments, and `TeamAssignmentMember` as assigned people plus confirmation.
-- Batch-created events share the selected required teams; existing events remain valid with no required teams; already-selected inactive teams remain visible/removable on edit; ServiceEvent detail shows required teams as plain metadata only.
+- Batch-created events share the selected required teams; existing events remain valid with no required teams; already-selected inactive teams remain visible/removable on edit.
 - No `TeamAssignment` or `TeamAssignmentMember` is auto-created.
+- MO-S.3 adds read-only assignment coverage display. The `TeamAssignment` list is the primary operational coverage surface; assignment detail shows compact event coverage; `/staff/` adds upcoming required-team gap counts. Coverage states include assigned required teams with members, required teams with assignment but no active members, unassigned/missing required teams, and non-required additional assignments. Multiple assigned coworkers display with confirmation status.
 
 Gaps:
 - Staff may need a compact operations overview for upcoming assignments, unconfirmed assignments, missing members, team setup health, and generic pilot setup status.
-- `TeamAssignment` pages need to show required teams, assigned coworkers, and confirmation status. Missing required teams should show as missing or unassigned.
 - Ministry team leaders need an efficient scheduling entry point for their own team on recurring or same-type events, especially Sunday Service rotation.
 - Team membership and serving assignment should remain separate from church structure membership.
 - Do not infer serving roles from `ChurchStructureMembership`.
@@ -274,12 +274,11 @@ MO-S.1 is complete as docs-only ministry scheduling requirements planning in `do
 
 MO-S.2 is complete as event required-team implementation.
 
-Browser/mobile QA for MO-S.2 was blocked by Windows sandbox/endpoint/browser issues and requires manual QA if not already manually verified.
+MO-S.3 is complete as read-only assignment coverage display. Browser automation was blocked; user completed manual QA and accepted the MO-S.3 UI.
 
 Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline PowerShell `manage.py shell` commands, prefer tests/fixtures/app UI, keep one-off commands short and transparent, and never bypass endpoint security.
 
 Recommended next safe slice:
-- MO-S.3 assignment coverage display should follow after required-team data exists and MO-S.2 UI is manually verified if browser automation remains unavailable.
 - MO-S.4 team-leader scheduling workspace should follow coverage display and stay scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities.
 - MO-S.5 limited copy-forward or rotation helper should wait until manual same-type event scheduling is proven.
-- Do not add assignment coverage display, missing/unassigned status, team-leader scheduling workspace, rotation/copy-forward, automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.2 alone.
+- Do not add team-leader scheduling workspace, rotation/copy-forward, automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.3 alone.

@@ -77,20 +77,24 @@ Boundaries:
 
 ### MO-S.3 Assignment Coverage Display for Required Teams
 
-Goal:
-- Show coverage per required team on `TeamAssignment` and relevant staff/team-leader pages.
+Status: completed.
 
-Likely scope:
-- For each required team, show assigned coworkers and confirmation status.
-- Show required teams with no assignment as missing or unassigned.
-- Keep display usable when a team has one person, multiple people, or no assigned people.
-- Link to existing assignment workflows for edits instead of creating a new scheduling engine.
+Completed scope:
+- Added read-only assignment coverage display that compares `ServiceEvent` required teams against actual `TeamAssignment` and `TeamAssignmentMember` data.
+- `TeamAssignment` list is the primary operational coverage surface.
+- `TeamAssignment` detail shows compact event coverage.
+- `ServiceEvent` detail shows coverage only to staff/service-event or team-assignment managers; ordinary event viewers do not see coworker coverage.
+- `/staff/` adds an upcoming required-team gap count.
+- Coverage states include required team assigned with members, required team with assignment but no active members, required team unassigned/missing, and non-required additional assignment.
+- Multiple assigned coworkers display with confirmation status.
+- Browser automation was blocked; user completed manual QA and accepted the MO-S.3 UI.
 
 Boundaries:
 - Coverage display is not a checklist.
 - Coverage display is not availability tracking.
 - Coverage display is not automatic scheduling.
 - Coverage display should not hide missing teams behind aggregate counts.
+- No schema changes, migrations, assignment auto-creation, workflow-state changes, new permissions, team-leader scheduling workspace, rotation/copy-forward, availability, swaps, reminders, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, or LightingTeam-specific model were added.
 
 ### MO-S.4 Team-Leader Scheduling Workspace for Same-Type Events
 
@@ -142,6 +146,6 @@ Required-team coverage is a scheduling clarity feature. It is not a checklist, a
 
 ## 7. Recommended Next Implementation Slice
 
-MO-S.2 is complete. MO-S.3 should be the next safe ministry scheduling slice after manual/browser QA of the MO-S.2 UI, because coverage display depends on comparing event-level required teams against actual assignments.
+MO-S.3 is complete as a read-only assignment coverage display after user-completed manual QA.
 
-MO-S.3 should keep the existing boundary: `TeamAssignment` is the actual scheduled assignment and `TeamAssignmentMember` is the assigned person plus confirmation record.
+MO-S.4 is the next safe ministry scheduling phase if the team wants to continue: a team-leader scheduling workspace for same-type events that stays scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities and does not add rotation/copy-forward or automation yet.

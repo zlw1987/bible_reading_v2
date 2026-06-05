@@ -141,16 +141,20 @@ Boundaries:
 Goal:
 - Improve staff membership request handling and adjacent user/profile/group admin workflows.
 
-Candidate work:
-- Better pending/requested/approved/rejected filters.
-- Clear detail layout showing requested unit, current runtime small group, future foundation membership, and approval action state.
-- Needs-clarification or cancellation state only if the current model/status support and workflow are explicitly planned.
-- Operational, non-sensitive notes guidance.
+Completion notes:
+- Completed as staff membership request workflow polish.
+- Added a clearer pending queue summary, stronger empty states, clearer detail sections, approval-state/context labels, and staff overview context.
+- The detail flow now separates requested group/unit, current runtime small group, future foundation membership, request source/note, and approval state for staff review.
+- Browser/mobile QA was completed via headless Chromium fallback because the in-app browser connector failed.
 
 Boundaries:
+- Preserved the existing requested-status workflow and existing approve/reject behavior.
+- Preserved CS-H.7E exactly-one active mapped legacy `SmallGroup` sync for `Profile.small_group`.
+- No schema changes.
 - `ChurchStructureMembership` remains separate from permissions and serving assignment.
 - `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers continue to use legacy runtime behavior until separately authorized.
 - Do not treat requested membership as access-granting.
+- Did not add audience filtering, Community Activities, notifications, attendance, announcements, care workflows, file center, or permission matrix expansion.
 
 ### PP-SA.4 Moderation / Admin Queues
 
@@ -243,7 +247,9 @@ This plan specifically does not start:
 
 PP-SA.2 is complete as a read-only staff dashboard overview.
 
+PP-SA.3 is complete as membership/admin workflow polish for the existing staff membership request flow.
+
 Recommended next safe slice:
-- PP-SA.3 Membership / Admin Workflow Polish.
+- PP-SA.4 Moderation / Admin Queues.
 - Keep the next slice narrow and continue linking to existing workflows unless a separately planned workflow change is approved.
-- Do not add write actions to the overview, schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.2 completion alone.
+- Do not add schema changes, notifications, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, or permission matrix expansion from the PP-SA.3 completion alone.

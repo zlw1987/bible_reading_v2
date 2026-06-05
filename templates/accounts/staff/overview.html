@@ -85,7 +85,10 @@
             </ul>
         </div>
         <div class="actions">
-            <a class="button" href="{% url 'staff_prayer_reports' %}">
+            <a class="button" href="{% url 'staff_moderation_queue' %}">
+                {% if language == "zh" %}审核队列{% else %}Moderation Queue{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'staff_prayer_reports' %}">
                 {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
             </a>
             <a class="button-secondary button" href="{% url 'staff_reflection_reports' %}">

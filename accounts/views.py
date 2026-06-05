@@ -118,6 +118,80 @@ def staff_overview(request):
     )
 
 
+@staff_member_required
+def staff_moderation_queue(request):
+    from comments.models import ReflectionComment, ReflectionReport
+    from prayers.models import PrayerReport, PrayerRequest
+
+    open_prayer_reports = (
+        PrayerReport.objects
+        .filter(status=PrayerReport.STATUS_OPEN)
+        .select_related(
+            "prayer_request",
+            "prayer_request__user",
+            "reporter",
+        )
+        .order_by("-created_at")
+    )
+    hidden_prayers = (
+        PrayerRequest.objects
+        .filter(is_hidden=True)
+        .select_related("user", "hidden_by")
+        .order_by("-hidden_at", "-created_at")
+    )
+    open_reflection_reports = (
+        ReflectionReport.objects
+        .filter(status=ReflectionReport.STATUS_OPEN)
+        .select_related(
+            "comment",
+            "comment__user",
+            "comment__parent",
+            "comment__plan_day",
+            "reporter",
+        )
+        .order_by("-created_at")
+    )
+    hidden_reflections = (
+        ReflectionComment.objects
+        .filter(is_hidden=True)
+        .select_related("user", "parent", "plan_day", "hidden_by")
+        .order_by("-hidden_at", "-created_at")
+    )
+
+    reported_reflection_posts = open_reflection_reports.filter(
+        comment__parent__isnull=True,
+    )
+    reported_reflection_replies = open_reflection_reports.filter(
+        comment__parent__isnull=False,
+    )
+    hidden_reflection_posts = hidden_reflections.filter(parent__isnull=True)
+    hidden_reflection_replies = hidden_reflections.filter(parent__isnull=False)
+
+    return render(
+        request,
+        "accounts/staff/moderation_queue.html",
+        {
+            "active_nav": "staff",
+            "open_prayer_reports": open_prayer_reports,
+            "hidden_prayers": hidden_prayers,
+            "reported_reflection_posts": reported_reflection_posts,
+            "reported_reflection_replies": reported_reflection_replies,
+            "hidden_reflection_posts": hidden_reflection_posts,
+            "hidden_reflection_replies": hidden_reflection_replies,
+            "moderation_counts": {
+                "reported_prayer_requests": open_prayer_reports.count(),
+                "reported_prayer_comments": 0,
+                "hidden_prayer_requests": hidden_prayers.count(),
+                "hidden_prayer_comments": 0,
+                "reported_reflection_posts": reported_reflection_posts.count(),
+                "reported_reflection_replies": reported_reflection_replies.count(),
+                "hidden_reflection_posts": hidden_reflection_posts.count(),
+                "hidden_reflection_replies": hidden_reflection_replies.count(),
+            },
+        },
+    )
+
+
 def can_manage_church_memberships(user):
     return has_capability(user, CAP_MANAGE_CHURCH_MEMBERSHIPS)
 

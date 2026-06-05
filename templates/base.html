@@ -84,6 +84,9 @@
                         <a href="{% url 'staff_membership_request_list' %}">
                             {{ ui.membership_requests }}
                         </a>
+                        <a href="{% url 'staff_moderation_queue' %}">
+                            {{ ui.moderation_queue }}
+                        </a>
                         <a href="{% url 'staff_reflection_reports' %}">
                             {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
                         </a>

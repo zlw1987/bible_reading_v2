@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ ui.moderation_queue }} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{{ ui.moderation_queue }}</h1>
+    <p class="page-subtitle">{{ ui.moderation_queue_subtitle }}</p>
+</section>
+
+<section class="notice-panel">
+    <strong>{{ ui.review_queue }}</strong>
+    <p>{{ ui.moderation_queue_boundary }}</p>
+</section>
+
+<div class="moderation-summary-grid">
+    <section class="card moderation-summary-card">
+        <span class="status status-warning">{{ ui.reported_prayer_requests }}</span>
+        <strong>{{ moderation_counts.reported_prayer_requests }}</strong>
+        <a class="button" href="{% url 'staff_prayer_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-warning">{{ ui.reported_prayer_comments }}</span>
+        <strong>{{ moderation_counts.reported_prayer_comments }}</strong>
+        <p class="form-help">{{ ui.not_tracked_existing_data }}</p>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-danger">{{ ui.hidden_prayer_requests }}</span>
+        <strong>{{ moderation_counts.hidden_prayer_requests }}</strong>
+        <a class="button" href="{% url 'staff_prayer_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-danger">{{ ui.hidden_prayer_comments }}</span>
+        <strong>{{ moderation_counts.hidden_prayer_comments }}</strong>
+        <p class="form-help">{{ ui.not_tracked_existing_data }}</p>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-warning">{{ ui.reported_reflection_posts }}</span>
+        <strong>{{ moderation_counts.reported_reflection_posts }}</strong>
+        <a class="button" href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-warning">{{ ui.reported_reflection_replies }}</span>
+        <strong>{{ moderation_counts.reported_reflection_replies }}</strong>
+        <a class="button" href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-danger">{{ ui.hidden_reflection_posts }}</span>
+        <strong>{{ moderation_counts.hidden_reflection_posts }}</strong>
+        <a class="button" href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+    <section class="card moderation-summary-card">
+        <span class="status status-danger">{{ ui.hidden_reflection_replies }}</span>
+        <strong>{{ moderation_counts.hidden_reflection_replies }}</strong>
+        <a class="button" href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+    </section>
+</div>
+
+<div class="moderation-queue-grid">
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.reported_prayer_requests }}</h2>
+        {% if open_prayer_reports %}
+        <ul class="moderation-item-list">
+            {% for report in open_prayer_reports|slice:":5" %}
+            <li>
+                <strong>{{ report.prayer_request.title }}</strong>
+                <span class="muted">{{ ui.reported_by }} {{ report.reporter.username }} · {{ report.created_at|date:"Y-m-d H:i" }}</span>
+                <a href="{% url 'prayer_detail' report.prayer_request.id %}">{{ ui.view_prayer }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.hidden_prayer_requests }}</h2>
+        {% if hidden_prayers %}
+        <ul class="moderation-item-list">
+            {% for prayer in hidden_prayers|slice:":5" %}
+            <li>
+                <strong>{{ prayer.title }}</strong>
+                <span class="muted">{{ prayer.hidden_at|date:"Y-m-d H:i"|default:"-" }}</span>
+                <a href="{% url 'prayer_detail' prayer.id %}">{{ ui.view_prayer }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.reported_reflection_posts }}</h2>
+        {% if reported_reflection_posts %}
+        <ul class="moderation-item-list">
+            {% for report in reported_reflection_posts|slice:":5" %}
+            <li>
+                <strong>{{ report.comment.scripture_ref_key|default:ui.reflection_reports }}</strong>
+                <span class="muted">{{ ui.reported_by }} {{ report.reporter.username }} · {{ report.created_at|date:"Y-m-d H:i" }}</span>
+                <a href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.reported_reflection_replies }}</h2>
+        {% if reported_reflection_replies %}
+        <ul class="moderation-item-list">
+            {% for report in reported_reflection_replies|slice:":5" %}
+            <li>
+                <strong>{{ report.comment.scripture_ref_key|default:ui.reflection_reports }}</strong>
+                <span class="muted">{{ ui.reported_by }} {{ report.reporter.username }} · {{ report.created_at|date:"Y-m-d H:i" }}</span>
+                <a href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.hidden_reflection_posts }}</h2>
+        {% if hidden_reflection_posts %}
+        <ul class="moderation-item-list">
+            {% for comment in hidden_reflection_posts|slice:":5" %}
+            <li>
+                <strong>{{ comment.scripture_ref_key|default:ui.reflection_reports }}</strong>
+                <span class="muted">{{ comment.hidden_at|date:"Y-m-d H:i"|default:"-" }}</span>
+                <a href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card moderation-queue-card">
+        <h2 class="card-title">{{ ui.hidden_reflection_replies }}</h2>
+        {% if hidden_reflection_replies %}
+        <ul class="moderation-item-list">
+            {% for comment in hidden_reflection_replies|slice:":5" %}
+            <li>
+                <strong>{{ comment.scripture_ref_key|default:ui.reflection_reports }}</strong>
+                <span class="muted">{{ comment.hidden_at|date:"Y-m-d H:i"|default:"-" }}</span>
+                <a href="{% url 'staff_reflection_reports' %}">{{ ui.open_existing_workflow }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="muted">{{ ui.no_items_in_queue }}</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

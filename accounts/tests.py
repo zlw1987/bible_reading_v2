@@ -2769,6 +2769,7 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
         self.assertContains(response, reverse("bible_study_lesson_manage_list"))
         self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+        self.assertContains(response, reverse("staff_moderation_queue"))
         self.assertContains(response, reverse("staff_prayer_reports"))
         self.assertContains(response, reverse("staff_reflection_reports"))
         self.assertContains(response, reverse("service_event_list"))
@@ -2818,6 +2819,167 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "同工总览")
         self.assertContains(response, "只读摘要")
         self.assertContains(response, "当前运行边界")
+
+
+class StaffModerationQueueTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="moderation_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="moderation_user",
+            password="UserPass123!",
+        )
+        self.reporter = User.objects.create_user(
+            username="moderation_reporter",
+            password="ReporterPass123!",
+        )
+        self.plan = ReadingPlan.objects.create(name="Moderation Plan")
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def create_queue_data(self):
+        reported_prayer = PrayerRequest.objects.create(
+            user=self.normal_user,
+            title="Reported prayer queue",
+            body="Please review this prayer.",
+        )
+        PrayerReport.objects.create(
+            prayer_request=reported_prayer,
+            reporter=self.reporter,
+            status=PrayerReport.STATUS_OPEN,
+        )
+        PrayerRequest.objects.create(
+            user=self.normal_user,
+            title="Hidden prayer queue",
+            body="Hidden prayer body.",
+            is_hidden=True,
+            hidden_at=timezone.now(),
+            hidden_by=self.staff,
+        )
+
+        reported_reflection = ReflectionComment.objects.create(
+            plan_day=self.day,
+            user=self.normal_user,
+            body="Reported reflection post.",
+            scripture_ref_key="John 1:1",
+        )
+        ReflectionReport.objects.create(
+            comment=reported_reflection,
+            reporter=self.reporter,
+            status=ReflectionReport.STATUS_OPEN,
+        )
+        reply_parent = ReflectionComment.objects.create(
+            plan_day=self.day,
+            user=self.normal_user,
+            body="Parent reflection.",
+            scripture_ref_key="John 1:2",
+        )
+        reported_reply = ReflectionComment.objects.create(
+            plan_day=self.day,
+            user=self.normal_user,
+            parent=reply_parent,
+            body="Reported reflection reply.",
+            scripture_ref_key="John 1:2",
+        )
+        ReflectionReport.objects.create(
+            comment=reported_reply,
+            reporter=self.reporter,
+            status=ReflectionReport.STATUS_OPEN,
+        )
+        ReflectionComment.objects.create(
+            plan_day=self.day,
+            user=self.normal_user,
+            body="Hidden reflection post.",
+            scripture_ref_key="Psalm 1:1",
+            is_hidden=True,
+            hidden_at=timezone.now(),
+            hidden_by=self.staff,
+        )
+        ReflectionComment.objects.create(
+            plan_day=self.day,
+            user=self.normal_user,
+            parent=reply_parent,
+            body="Hidden reflection reply.",
+            scripture_ref_key="Psalm 1:2",
+            is_hidden=True,
+            hidden_at=timezone.now(),
+            hidden_by=self.staff,
+        )
+
+    def test_staff_moderation_queue_requires_staff_access(self):
+        self.client.login(username="moderation_user", password="UserPass123!")
+
+        response = self.client.get(reverse("staff_moderation_queue"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_moderation_queue_anonymous_redirects_to_login(self):
+        response = self.client.get(reverse("staff_moderation_queue"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_moderation_queue_shows_counts_and_existing_workflow_links(self):
+        self.create_queue_data()
+        self.set_language("en")
+        self.client.login(username="moderation_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_moderation_queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Moderation Queue")
+        self.assertContains(response, "This page summarizes existing report and hidden states only")
+        self.assertContains(response, "Reported prayer requests")
+        self.assertContains(response, "Reported prayer comments")
+        self.assertContains(response, "Hidden prayer requests")
+        self.assertContains(response, "Hidden prayer comments")
+        self.assertContains(response, "Reported reflections")
+        self.assertContains(response, "Reported reflection replies")
+        self.assertContains(response, "Hidden reflections")
+        self.assertContains(response, "Hidden reflection replies")
+        self.assertContains(response, "Reported prayer queue")
+        self.assertContains(response, "Hidden prayer queue")
+        self.assertContains(response, "John 1:1")
+        self.assertContains(response, "John 1:2")
+        self.assertContains(response, "Psalm 1:1")
+        self.assertContains(response, "Psalm 1:2")
+        self.assertContains(response, reverse("staff_prayer_reports"))
+        self.assertContains(response, reverse("staff_reflection_reports"))
+        self.assertContains(response, "Existing data does not track separate report or hidden state")
+        self.assertNotContains(response, "Hide Prayer Request")
+        self.assertEqual(response.context["moderation_counts"]["reported_prayer_requests"], 1)
+        self.assertEqual(response.context["moderation_counts"]["reported_prayer_comments"], 0)
+        self.assertEqual(response.context["moderation_counts"]["hidden_prayer_requests"], 1)
+        self.assertEqual(response.context["moderation_counts"]["hidden_prayer_comments"], 0)
+        self.assertEqual(response.context["moderation_counts"]["reported_reflection_posts"], 1)
+        self.assertEqual(response.context["moderation_counts"]["reported_reflection_replies"], 1)
+        self.assertEqual(response.context["moderation_counts"]["hidden_reflection_posts"], 1)
+        self.assertEqual(response.context["moderation_counts"]["hidden_reflection_replies"], 1)
+
+    def test_staff_moderation_queue_empty_state_is_bilingual(self):
+        self.set_language("zh")
+        self.client.login(username="moderation_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_moderation_queue"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "内容审核队列")
+        self.assertContains(response, "此队列目前没有项目")
+        self.assertContains(response, "现有资料没有单独记录")
+        self.assertEqual(response.context["moderation_counts"]["reported_prayer_requests"], 0)
+        self.assertEqual(response.context["moderation_counts"]["hidden_reflection_replies"], 0)
 
 
 class StaffPasswordResetTests(TestCase):

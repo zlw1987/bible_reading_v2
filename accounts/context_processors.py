@@ -61,6 +61,7 @@ STAFF_NAV_URLS = {
     "staff_reading_plan_list",
     "staff_reading_plan_header",
     "staff_reading_plan_days",
+    "staff_moderation_queue",
     "staff_reflection_reports",
     "staff_reflection_action",
     "staff_prayer_reports",

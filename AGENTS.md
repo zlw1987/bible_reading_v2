@@ -23,6 +23,16 @@ For accounts changes:
 
 For UI or browser behavior changes, perform explicit browser and mobile QA before commit.
 
+## QA Data Seeding
+
+- Do not use long inline PowerShell commands to run `manage.py shell -c` for QA data seeding.
+- Do not create QA users, set passwords, or insert dev DB records through long PowerShell one-liners.
+- Reason: endpoint security may flag PowerShell plus long inline scripts plus user creation, password setting, or database writes as malicious-looking behavior.
+- Prefer Django tests, factories, fixtures, existing test setup, or the app UI for QA data.
+- For browser/manual QA that needs seeded data, use existing safe dev data if available, create a short reviewed Django management command or fixture only when explicitly authorized, or report that manual QA needs seed data.
+- If a one-off shell command is unavoidable, keep it short and transparent, and ask or report before running it.
+- Never bypass endpoint security or suggest disabling Netgear Armor/AV.
+
 ## Project Constraints
 
 - Do not migrate `/studies/`, Reading progress, `ServiceEvent`, My Serving, or other consumers from `Profile.small_group` to `ChurchStructureMembership` unless explicitly authorized.

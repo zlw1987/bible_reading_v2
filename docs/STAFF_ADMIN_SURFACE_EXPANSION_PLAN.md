@@ -59,7 +59,8 @@ Gaps:
 Current state:
 - ServiceEvent Foundation V1 supports generic church events, event type, date/time, location, meeting link, draft/published/completed/cancelled workflow, global/district/small_group scope, and permission-controlled editing.
 - Optional `ministry_context` label exists; it is label-only.
-- MO-S.1 records pilot feedback that staff need to select required `MinistryTeam` records when creating or batch-creating `ServiceEvent` records.
+- MO-S.2 is complete: staff can select required `MinistryTeam` records when creating, editing, or recurring batch-creating `ServiceEvent` records.
+- Required teams are stored through explicit `ServiceEventRequiredTeam` rows; `ministry_team` uses `PROTECT`, so referenced teams should be deactivated rather than deleted.
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
@@ -72,7 +73,9 @@ Gaps:
 Current state:
 - Ministry Operations includes `MinistryTeam`, `TeamMembership`, `TeamAssignment`, `TeamAssignmentMember`, manual ServiceEvent-based assignments, per-member confirmation, Playbook link, non-sensitive assignment notes, and My Serving Page V1.
 - Lighting Team pilot data/setup support exists on the generic ministry operations foundation.
-- MO-S.1 keeps `ServiceEvent` required teams as event-level expectations, `TeamAssignment` as actual scheduled assignments, and `TeamAssignmentMember` as assigned people plus confirmation.
+- MO-S.2 keeps `ServiceEvent` required teams as event-level expectations, `TeamAssignment` as actual scheduled assignments, and `TeamAssignmentMember` as assigned people plus confirmation.
+- Batch-created events share the selected required teams; existing events remain valid with no required teams; already-selected inactive teams remain visible/removable on edit; ServiceEvent detail shows required teams as plain metadata only.
+- No `TeamAssignment` or `TeamAssignmentMember` is auto-created.
 
 Gaps:
 - Staff may need a compact operations overview for upcoming assignments, unconfirmed assignments, missing members, team setup health, and generic pilot setup status.
@@ -269,11 +272,14 @@ PP-SA.5 is complete as read-only ministry ops health indicators on `/staff/`.
 
 MO-S.1 is complete as docs-only ministry scheduling requirements planning in `docs/MINISTRY_SCHEDULING_REQUIREMENTS_PLAN.md`.
 
+MO-S.2 is complete as event required-team implementation.
+
+Browser/mobile QA for MO-S.2 was blocked by Windows sandbox/endpoint/browser issues and requires manual QA if not already manually verified.
+
 Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline PowerShell `manage.py shell` commands, prefer tests/fixtures/app UI, keep one-off commands short and transparent, and never bypass endpoint security.
 
 Recommended next safe slice:
-- MO-S.2 event required-team model/design implementation is the recommended first ministry scheduling implementation slice after MO-S.1.
-- MO-S.3 assignment coverage display should follow after required-team data exists.
+- MO-S.3 assignment coverage display should follow after required-team data exists and MO-S.2 UI is manually verified if browser automation remains unavailable.
 - MO-S.4 team-leader scheduling workspace should follow coverage display and stay scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities.
 - MO-S.5 limited copy-forward or rotation helper should wait until manual same-type event scheduling is proven.
-- Do not add automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, or ChurchStructureMembership serving inference from MO-S.1 or PP-SA.5 alone.
+- Do not add assignment coverage display, missing/unassigned status, team-leader scheduling workspace, rotation/copy-forward, automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.2 alone.

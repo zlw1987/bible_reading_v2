@@ -55,19 +55,25 @@ Deliverables:
 
 ### MO-S.2 Event Required-Team Model / Design Implementation
 
+Status: completed.
+
 Goal:
 - Add a generic way for staff to mark required `MinistryTeam` records on `ServiceEvent`.
 
-Likely scope:
-- Design and implement an event-level relationship between `ServiceEvent` and required `MinistryTeam` records.
-- Support create and batch-create workflows if those workflows are in active use.
-- Preserve existing `TeamAssignment` and `TeamAssignmentMember` semantics.
-- Add targeted tests for model validation, forms, permissions, and staff-visible behavior.
+Completed scope:
+- `ServiceEvent` now records required `MinistryTeam` records through the explicit `ServiceEventRequiredTeam` through model.
+- `ServiceEventRequiredTeam.ministry_team` uses `PROTECT`; teams referenced by event requirements should be deactivated rather than deleted.
+- Staff single create/edit and recurring batch-create can select required teams.
+- Batch-created `ServiceEvent` records share the required-team selection from the batch form.
+- Existing events remain valid with no required teams.
+- Active teams are selectable; already-selected inactive teams remain visible/removable on edit.
+- ServiceEvent detail shows required teams as plain metadata only.
+- No `TeamAssignment` or `TeamAssignmentMember` is auto-created.
 
 Boundaries:
 - No automatic assignments.
-- No availability, swaps, reminders, notifications, checklist, or rotation algorithm.
-- No Community Activities or audience filtering.
+- No assignment coverage display, missing/unassigned status, team-leader scheduling workspace, rotation/copy-forward, availability, swaps, reminders, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, or LightingTeam-specific model.
+- Browser/mobile QA was blocked by Windows sandbox/endpoint/browser issues and requires manual QA if not already manually verified.
 
 ### MO-S.3 Assignment Coverage Display for Required Teams
 
@@ -134,10 +140,8 @@ The following remain deferred unless separately planned:
 
 Required-team coverage is a scheduling clarity feature. It is not a checklist, availability system, swap workflow, reminder workflow, notification system, or automatic scheduler.
 
-## 7. Recommended First Implementation Slice
+## 7. Recommended Next Implementation Slice
 
-The recommended first implementation slice after this docs-only pass is MO-S.2.
+MO-S.2 is complete. MO-S.3 should be the next safe ministry scheduling slice after manual/browser QA of the MO-S.2 UI, because coverage display depends on comparing event-level required teams against actual assignments.
 
-MO-S.2 should add the generic event required-team relationship and update ServiceEvent create/batch-create workflows only as much as needed to record required teams. It should preserve the boundary that `TeamAssignment` is the actual scheduled assignment and `TeamAssignmentMember` is the assigned person plus confirmation record.
-
-MO-S.3 should follow only after the required-team data exists, because coverage display depends on comparing event-level required teams against actual assignments.
+MO-S.3 should keep the existing boundary: `TeamAssignment` is the actual scheduled assignment and `TeamAssignmentMember` is the assigned person plus confirmation record.

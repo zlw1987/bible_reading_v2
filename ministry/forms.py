@@ -377,6 +377,78 @@ class TeamAssignmentForm(forms.ModelForm):
         return cleaned_data
 
 
+class TeamScheduleAssignmentForm(forms.ModelForm):
+    assigned_members = TeamMembershipChoiceField(
+        queryset=TeamMembership.objects.none(),
+        required=False,
+    )
+
+    class Meta:
+        model = TeamAssignment
+        fields = [
+            "assigned_members",
+            "status",
+            "notes",
+        ]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 4}),
+        }
+
+    def __init__(self, *args, language="en", team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.team = team
+        text = assignment_form_text(language)
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+        self.fields["assigned_members"].language = language
+        self.fields["assigned_members"].queryset = (
+            TeamMembership.objects.filter(team=team, is_active=True)
+            .select_related("team", "user")
+            .order_by(
+                "role",
+                "display_name",
+                "user__first_name",
+                "user__username",
+            )
+        )
+        if self.instance and self.instance.pk:
+            self.fields["assigned_members"].initial = (
+                self.instance.assigned_members.filter(is_active=True)
+            )
+
+        self.fields["status"].choices = [
+            (TeamAssignment.STATUS_SCHEDULED, text["scheduled"]),
+            (TeamAssignment.STATUS_CONFIRMED, text["confirmed"]),
+            (TeamAssignment.STATUS_PREPARED, text["prepared"]),
+            (TeamAssignment.STATUS_COMPLETED, text["completed"]),
+            (TeamAssignment.STATUS_CANCELLED, text["cancelled"]),
+        ]
+        self.fields["notes"].widget.attrs.update(
+            {"placeholder": text["notes_placeholder"]}
+        )
+        self.fields["notes"].help_text = text["notes_help"]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        assigned_members = cleaned_data.get("assigned_members")
+
+        if assigned_members:
+            invalid_members = [
+                membership
+                for membership in assigned_members
+                if membership.team_id != self.team.id or not membership.is_active
+            ]
+            if invalid_members:
+                self.add_error(
+                    "assigned_members",
+                    "Assigned members must be active members of the selected team.",
+                )
+
+        return cleaned_data
+
+
 class TeamAssignmentConfirmForm(forms.Form):
     confirmation_note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 3}))
 

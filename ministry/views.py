@@ -1,18 +1,22 @@
 from io import StringIO
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
+from events.models import ServiceEvent
 
 from .forms import (
     MinistryTeamForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
+    TeamScheduleAssignmentForm,
     TeamMembershipForm,
     assignment_form_text,
 )
@@ -59,6 +63,7 @@ def ministry_ui_text(language, key):
             "assignment_confirmed": "Team assignment confirmed.",
             "no_assignment_permission": "You do not have permission to manage team assignments.",
             "assignment_not_available": "This team assignment is not available.",
+            "event_not_available": "This service event is not available for this team schedule.",
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -71,6 +76,7 @@ def ministry_ui_text(language, key):
             "assignment_confirmed": "服事安排已确认。",
             "no_assignment_permission": "你没有管理服事排班的权限。",
             "assignment_not_available": "这个服事排班目前不可用。",
+            "event_not_available": "这个聚会事件不适用于这个团队排班。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -185,6 +191,72 @@ def assignment_form_initial_from_query(request):
     return initial
 
 
+def schedule_date_from_query(value, default):
+    parsed = parse_date(value or "")
+    return parsed or default
+
+
+def schedule_filter_values(request):
+    today = timezone.localdate()
+    event_type = (request.GET.get("event_type") or ServiceEvent.EVENT_SUNDAY_SERVICE).strip()
+    valid_event_types = {value for value, _label in ServiceEvent.EVENT_TYPE_CHOICES}
+    if event_type not in valid_event_types:
+        event_type = ServiceEvent.EVENT_SUNDAY_SERVICE
+
+    start_date = schedule_date_from_query(request.GET.get("start_date"), today)
+    end_date = schedule_date_from_query(
+        request.GET.get("end_date"),
+        today + timezone.timedelta(weeks=8),
+    )
+    if start_date > end_date:
+        end_date = start_date
+
+    return {
+        "event_type": event_type,
+        "start_date": start_date,
+        "end_date": end_date,
+    }
+
+
+def schedule_query_string(filters, **extra):
+    params = {
+        "event_type": filters["event_type"],
+        "start_date": filters["start_date"].isoformat(),
+        "end_date": filters["end_date"].isoformat(),
+    }
+    for key, value in extra.items():
+        if value:
+            params[key] = value
+    return urlencode(params)
+
+
+def schedule_event_type_options(language):
+    labels = {
+        "en": {
+            ServiceEvent.EVENT_SUNDAY_SERVICE: "Sunday Service",
+            ServiceEvent.EVENT_BIBLE_STUDY: "Bible Study",
+            ServiceEvent.EVENT_SPECIAL_MEETING: "Special Meeting",
+            ServiceEvent.EVENT_CONFERENCE: "Conference",
+            ServiceEvent.EVENT_GOSPEL_MUSIC: "Gospel Music Night",
+            ServiceEvent.EVENT_BAPTISM: "Baptism",
+            ServiceEvent.EVENT_OTHER: "Other",
+        },
+        "zh": {
+            ServiceEvent.EVENT_SUNDAY_SERVICE: "主日崇拜",
+            ServiceEvent.EVENT_BIBLE_STUDY: "查经",
+            ServiceEvent.EVENT_SPECIAL_MEETING: "特别聚会",
+            ServiceEvent.EVENT_CONFERENCE: "特会",
+            ServiceEvent.EVENT_GOSPEL_MUSIC: "福音音乐会",
+            ServiceEvent.EVENT_BAPTISM: "洗礼",
+            ServiceEvent.EVENT_OTHER: "其他",
+        },
+    }.get(language, {})
+    return [
+        {"value": value, "label": labels.get(value, label)}
+        for value, label in ServiceEvent.EVENT_TYPE_CHOICES
+    ]
+
+
 @login_required
 def ministry_team_list(request):
     can_manage = can_manage_ministry_teams(request.user)
@@ -263,6 +335,206 @@ def ministry_team_detail(request, team_id):
             "memberships": memberships,
             "can_manage_team": can_manage_ministry_team(request.user, team),
             "can_manage_members": can_manage_team_memberships(request.user, team),
+            "can_schedule_team": can_manage_team_assignment_for_team(request.user, team),
+        },
+    )
+
+
+@login_required
+def team_schedule(request, team_id):
+    language = get_user_language(request)
+    team = get_object_or_404(MinistryTeam, id=team_id)
+
+    if not can_manage_team_assignment_for_team(request.user, team):
+        messages.error(request, ministry_ui_text(language, "no_assignment_permission"))
+        return redirect("ministry_team_list")
+
+    filters = schedule_filter_values(request)
+    base_path = request.path
+    event_filter = {
+        "service_event__event_type": filters["event_type"],
+        "service_event__start_datetime__date__gte": filters["start_date"],
+        "service_event__start_datetime__date__lte": filters["end_date"],
+    }
+    assignments = list(
+        TeamAssignment.objects.select_related(
+            "service_event",
+            "service_event__ministry_context",
+            "ministry_team",
+        )
+        .prefetch_related(assignment_member_prefetch())
+        .filter(ministry_team=team, **event_filter)
+        .exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ]
+        )
+        .order_by("service_event__start_datetime", "id")
+    )
+    assigned_event_ids = {assignment.service_event_id for assignment in assignments}
+    event_queryset = (
+        events_with_coverage_queryset()
+        .filter(
+            event_type=filters["event_type"],
+            start_datetime__date__gte=filters["start_date"],
+            start_datetime__date__lte=filters["end_date"],
+        )
+        .exclude(
+            status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ],
+        )
+        .filter(Q(required_team_links__ministry_team=team) | Q(id__in=assigned_event_ids))
+        .distinct()
+        .order_by("start_datetime", "title")
+    )
+    events = list(event_queryset)
+    displayed_event_ids = {event.id for event in events}
+    visible_assignment_ids = [assignment.id for assignment in assignments]
+    coverage_by_event = build_assignment_coverage(
+        events,
+        assignments,
+        language=language,
+        allowed_team_ids=[team.id],
+        allowed_assignment_ids=visible_assignment_ids,
+    )
+
+    assignments_by_event = {}
+    for assignment in assignments:
+        assignments_by_event.setdefault(assignment.service_event_id, []).append(assignment)
+
+    active_assignment = None
+    active_event = None
+    action_error = False
+    assignment_param = (request.GET.get("assignment") or "").strip()
+    event_param = (request.GET.get("event") or "").strip()
+
+    if assignment_param:
+        try:
+            assignment_id = int(assignment_param)
+        except ValueError:
+            assignment_id = None
+        if assignment_id:
+            active_assignment = next(
+                (
+                    assignment
+                    for assignment in assignments
+                    if assignment.id == assignment_id
+                    and assignment.service_event_id in displayed_event_ids
+                ),
+                None,
+            )
+        action_error = active_assignment is None
+    elif event_param:
+        try:
+            event_id = int(event_param)
+        except ValueError:
+            event_id = None
+        if event_id and event_id in displayed_event_ids:
+            active_assignment = next(iter(assignments_by_event.get(event_id, [])), None)
+            if active_assignment is None:
+                active_event = next(
+                    (event for event in events if event.id == event_id),
+                    None,
+                )
+        action_error = active_assignment is None and active_event is None and bool(event_param)
+
+    if request.method == "POST" and action_error:
+        messages.error(request, ministry_ui_text(language, "event_not_available"))
+        return redirect(
+            f"{base_path}?{schedule_query_string(filters)}"
+        )
+
+    active_form = None
+    active_form_event = None
+    active_form_assignment = active_assignment
+    if active_assignment is not None:
+        active_form_event = active_assignment.service_event
+        form_instance = active_assignment
+    elif active_event is not None:
+        duplicate_assignment = next(iter(assignments_by_event.get(active_event.id, [])), None)
+        if duplicate_assignment is not None:
+            active_form_assignment = duplicate_assignment
+            active_form_event = duplicate_assignment.service_event
+            form_instance = duplicate_assignment
+        else:
+            active_form_event = active_event
+            form_instance = TeamAssignment(
+                service_event=active_event,
+                ministry_team=team,
+                status=TeamAssignment.STATUS_SCHEDULED,
+            )
+    else:
+        form_instance = None
+
+    if form_instance is not None:
+        if request.method == "POST":
+            active_form = TeamScheduleAssignmentForm(
+                request.POST,
+                instance=form_instance,
+                language=language,
+                team=team,
+            )
+            if active_form.is_valid():
+                assignment = active_form.save(commit=False)
+                assignment.service_event = active_form_event
+                assignment.ministry_team = team
+                if not assignment.pk:
+                    assignment.created_by = request.user
+                assignment.save()
+                sync_assignment_members(
+                    assignment,
+                    active_form.cleaned_data["assigned_members"],
+                )
+                messages.success(request, ministry_ui_text(language, "assignment_saved"))
+                return redirect(
+                    f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
+                )
+        else:
+            active_form = TeamScheduleAssignmentForm(
+                instance=form_instance,
+                language=language,
+                team=team,
+            )
+
+    schedule_rows = []
+    for event in events:
+        event_assignments = assignments_by_event.get(event.id, [])
+        rows = coverage_by_event[event.id]["rows"]
+        if not rows:
+            continue
+        assignment = event_assignments[0] if event_assignments else None
+        schedule_rows.append(
+            {
+                "event": event,
+                "coverage_rows": rows,
+                "assignment": assignment,
+                "action_url": (
+                    f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
+                    if assignment
+                    else f"{base_path}?{schedule_query_string(filters, event=event.id)}"
+                ),
+                "is_active": (
+                    bool(active_form_event)
+                    and active_form_event.id == event.id
+                ),
+            }
+        )
+
+    return render(
+        request,
+        "ministry/team_schedule.html",
+        {
+            "team": team,
+            "filters": filters,
+            "event_type_options": schedule_event_type_options(language),
+            "schedule_rows": schedule_rows,
+            "active_form": active_form,
+            "active_form_event": active_form_event,
+            "active_form_assignment": active_form_assignment,
+            "clear_action_url": f"{base_path}?{schedule_query_string(filters)}",
         },
     )
 

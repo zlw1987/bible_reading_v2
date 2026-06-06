@@ -81,6 +81,7 @@ STAFF_NAV_URLS = {
     "ministry_team_list",
     "create_ministry_team",
     "ministry_team_detail",
+    "team_schedule",
     "edit_ministry_team",
     "manage_team_members",
     "edit_team_membership",

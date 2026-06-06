@@ -661,6 +661,32 @@ th {
     overflow-wrap: anywhere;
 }
 
+.team-schedule-list {
+    display: grid;
+    gap: 18px;
+}
+
+.team-schedule-row-active {
+    border-color: var(--primary);
+}
+
+.team-schedule-row-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.team-schedule-coverage {
+    margin-top: 12px;
+}
+
+.team-schedule-form {
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+    padding-top: 16px;
+}
+
 .staff-overview-grid {
     display: grid;
     gap: 18px;
@@ -788,6 +814,14 @@ th {
     .assignment-coverage-row {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .team-schedule-row-header {
+        flex-direction: column;
+    }
+
+    .team-schedule-row-header .button {
+        width: 100%;
     }
 
     .staff-overview-grid {

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load event_extras ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}团队排班{% else %}Team Schedule{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'ministry_team_detail' team.id %}">
+        ← {% if language == "zh" %}返回团队{% else %}Back to Team{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}安排团队服事{% else %}Schedule Team{% endif %}
+    </h1>
+    <p class="page-subtitle">{{ team|ministry_team_name:language }}</p>
+</div>
+
+<div class="card">
+    <form method="get" class="assignment-filter-form">
+        <div class="grid grid-2">
+            <div class="form-row">
+                <label for="team-schedule-event-type">
+                    {% if language == "zh" %}聚会类型{% else %}Event Type{% endif %}
+                </label>
+                <select id="team-schedule-event-type" name="event_type">
+                    {% for option in event_type_options %}
+                    <option value="{{ option.value }}" {% if filters.event_type == option.value %}selected{% endif %}>
+                        {{ option.label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="team-schedule-start-date">
+                    {% if language == "zh" %}开始日期{% else %}Start Date{% endif %}
+                </label>
+                <input id="team-schedule-start-date" type="date" name="start_date" value="{{ filters.start_date|date:'Y-m-d' }}">
+            </div>
+            <div class="form-row">
+                <label for="team-schedule-end-date">
+                    {% if language == "zh" %}结束日期{% else %}End Date{% endif %}
+                </label>
+                <input id="team-schedule-end-date" type="date" name="end_date" value="{{ filters.end_date|date:'Y-m-d' }}">
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit">{% if language == "zh" %}筛选{% else %}Apply Filters{% endif %}</button>
+            <a class="button button-secondary" href="{% url 'team_schedule' team.id %}">
+                {% if language == "zh" %}恢复默认{% else %}Reset{% endif %}
+            </a>
+        </div>
+    </form>
+</div>
+
+{% if schedule_rows %}
+<div class="team-schedule-list">
+    {% for item in schedule_rows %}
+    <div class="card team-schedule-row{% if item.is_active %} team-schedule-row-active{% endif %}">
+        <div class="team-schedule-row-header">
+            <div>
+                <h2 class="card-title">{{ item.event|event_title:language }}</h2>
+                <p class="muted">
+                    {{ item.event.start_datetime|date:"Y-m-d H:i" }}
+                    · {{ item.event|event_type_label:language }}
+                    {% if item.event.location %}
+                        · {{ item.event.location }}
+                    {% endif %}
+                </p>
+            </div>
+            <a class="button button-secondary" href="{{ item.action_url }}">
+                {% if item.assignment %}
+                    {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+                {% else %}
+                    {% if language == "zh" %}安排{% else %}Schedule{% endif %}
+                {% endif %}
+            </a>
+        </div>
+
+        <div class="assignment-coverage-rows team-schedule-coverage">
+            {% for row in item.coverage_rows %}
+            <div class="assignment-coverage-row assignment-coverage-row-{{ row.kind }}">
+                <div class="assignment-coverage-main">
+                    <strong>{{ row.team|ministry_team_name:language }}</strong>
+                    <span class="status {% if row.kind == 'assigned' %}status-good{% elif row.kind == 'unassigned' %}status-danger{% elif row.kind == 'empty_assignment' %}status-warning{% else %}status{% endif %}">
+                        {{ row.summary_label }}
+                    </span>
+                    {% if row.members %}
+                    <span class="assignment-coverage-members">
+                        {% for member in row.members %}
+                            {{ member.name }}（{{ member.status_label }}）{% if not forloop.last %}、{% endif %}
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if item.is_active and active_form %}
+        <form method="post" class="team-schedule-form">
+            {% csrf_token %}
+            <h3>
+                {% if active_form_assignment %}
+                    {% if language == "zh" %}编辑服事排班{% else %}Edit Assignment{% endif %}
+                {% else %}
+                    {% if language == "zh" %}新增服事排班{% else %}Schedule Assignment{% endif %}
+                {% endif %}
+            </h3>
+            <p class="muted">
+                {{ active_form_event|event_title:language }}
+                · {{ active_form_event.start_datetime|date:"Y-m-d H:i" }}
+            </p>
+            {{ active_form.non_field_errors }}
+            {% for field in active_form %}
+            <div class="form-row">
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+                {{ field.errors }}
+            </div>
+            {% endfor %}
+            <div class="actions">
+                <button type="submit">
+                    {% if language == "zh" %}保存排班{% else %}Save Assignment{% endif %}
+                </button>
+                <a class="button button-secondary" href="{{ clear_action_url }}">
+                    {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+                </a>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}
+        这个筛选范围内没有需要或已有这个团队排班的聚会。
+        {% else %}
+        No events in this range require or already include this team.
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

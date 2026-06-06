@@ -381,6 +381,11 @@ class TeamAssignmentV1Tests(TestCase):
             email="assignment-lead@example.com",
             password="testpass123",
         )
+        self.can_lead_user = User.objects.create_user(
+            username="assignment_can_lead",
+            email="assignment-can-lead@example.com",
+            password="testpass123",
+        )
 
         self.team = MinistryTeam.objects.create(
             name="灯光团队",
@@ -405,6 +410,12 @@ class TeamAssignmentV1Tests(TestCase):
             team=self.team,
             user=self.lead_user,
             role=TeamMembership.ROLE_LEAD,
+        )
+        self.can_lead_membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.can_lead_user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
         )
         self.other_team_membership = TeamMembership.objects.create(
             team=self.other_team,
@@ -1484,6 +1495,252 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Assigned 1 person")
         self.assertContains(response, "Sound Team")
         self.assertContains(response, "Unassigned")
+
+    def test_team_schedule_link_appears_for_team_lead_only(self):
+        self.set_language("en")
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        lead_response = self.client.get(reverse("ministry_team_detail", args=[self.team.id]))
+
+        self.client.logout()
+        self.client.login(username="regular_assign", password="testpass123")
+        member_response = self.client.get(reverse("ministry_team_detail", args=[self.team.id]))
+
+        self.assertEqual(lead_response.status_code, 200)
+        self.assertContains(lead_response, "Schedule Team")
+        self.assertContains(
+            lead_response,
+            reverse("team_schedule", args=[self.team.id]),
+        )
+        self.assertEqual(member_response.status_code, 200)
+        self.assertNotContains(member_response, "Schedule Team")
+
+    def test_can_lead_member_sees_team_schedule_link(self):
+        self.set_language("en")
+        self.client.login(username="assignment_can_lead", password="testpass123")
+
+        response = self.client.get(reverse("ministry_team_detail", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Schedule Team")
+        self.assertContains(
+            response,
+            reverse("team_schedule", args=[self.team.id]),
+        )
+
+    def test_team_lead_can_access_own_team_schedule(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Schedule Team")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Unassigned")
+
+    def test_can_lead_member_can_access_own_team_schedule(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_can_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Schedule Team")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Sunday Service")
+
+    def test_team_lead_cannot_access_other_team_schedule(self):
+        self.set_language("en")
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.other_team.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_can_lead_member_cannot_access_other_team_schedule(self):
+        self.set_language("en")
+        self.client.login(username="assignment_can_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.other_team.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_ordinary_member_cannot_access_team_schedule(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_staff_can_access_any_team_schedule(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.other_team)
+        self.client.login(username="assignment_staff", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.other_team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Sunday Service")
+
+    def test_team_schedule_filters_default_sunday_required_or_assigned_events(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        unrelated_event = ServiceEvent.objects.create(
+            title="Unrelated Sunday",
+            title_en="Unrelated Sunday",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        unrelated_event.required_teams.add(self.other_team)
+        bible_study_event = ServiceEvent.objects.create(
+            title="查经",
+            title_en="Bible Study Night",
+            event_type=ServiceEvent.EVENT_BIBLE_STUDY,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=14),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        bible_study_event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertNotContains(response, "Unrelated Sunday")
+        self.assertNotContains(response, "Bible Study Night")
+
+    def test_team_schedule_includes_existing_additional_assignment(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Additional assignment")
+        self.assertContains(response, "regular_assign")
+
+    def test_team_schedule_load_does_not_create_assignment(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_team_schedule_creates_assignment_for_missing_required_event(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}",
+            {
+                "assigned_members": [self.membership.id, self.second_membership.id],
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Schedule from workspace.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment = TeamAssignment.objects.get()
+        self.assertEqual(assignment.service_event, self.event)
+        self.assertEqual(assignment.ministry_team, self.team)
+        self.assertEqual(assignment.created_by, self.lead_user)
+        self.assertEqual(assignment.notes, "Schedule from workspace.")
+        self.assertEqual(assignment.assigned_members.count(), 2)
+
+    def test_team_schedule_updates_existing_assignment_from_event_action_without_duplicate(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}",
+            {
+                "assigned_members": [self.second_membership.id],
+                "status": TeamAssignment.STATUS_PREPARED,
+                "notes": "Updated through event action.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(TeamAssignment.objects.count(), 1)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_PREPARED)
+        self.assertEqual(assignment.notes, "Updated through event action.")
+        self.assertEqual(
+            list(assignment.assigned_members.values_list("id", flat=True)),
+            [self.second_membership.id],
+        )
+
+    def test_team_schedule_updates_existing_assignment_from_assignment_action(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}?assignment={assignment.id}",
+            {
+                "assigned_members": [self.membership.id, self.second_membership.id],
+                "status": TeamAssignment.STATUS_CONFIRMED,
+                "notes": "Edited from workspace.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CONFIRMED)
+        self.assertEqual(assignment.notes, "Edited from workspace.")
+        self.assertEqual(assignment.assigned_members.count(), 2)
+
+    def test_team_schedule_rejects_cross_team_member_submission(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}",
+            {
+                "assigned_members": [self.other_team_membership.id],
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Invalid cross-team member.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select a valid choice", html=False)
+        self.assertFalse(TeamAssignment.objects.exists())
+
+    def test_no_future_workflow_routes_exist_after_team_schedule(self):
+        missing_routes = [
+            "availability_matrix",
+            "swap_request_list",
+            "team_reminder_list",
+            "assignment_checklist",
+            "team_rotation_helper",
+            "copy_forward_assignments",
+        ]
+        for route_name in missing_routes:
+            with self.assertRaises(NoReverseMatch):
+                reverse(route_name)
 
 
 class LightingPilotImportCommandTests(TestCase):

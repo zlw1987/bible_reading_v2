@@ -98,19 +98,30 @@ Boundaries:
 
 ### MO-S.4 Team-Leader Scheduling Workspace for Same-Type Events
 
+Status: completed.
+
 Goal:
 - Give ministry team leaders an efficient entry point to schedule their own team for recurring or same-type events, especially Sunday Service rotation.
 
-Likely scope:
-- Filter events by type and date range.
-- Show only teams the leader is explicitly allowed to manage.
-- Let authorized team leaders create or update `TeamAssignment` records for their own team.
-- Keep staff/superuser broader management separate from team-leader scoped management.
+Completed scope:
+- Added a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`.
+- Team detail shows the contextual Schedule Team / 安排团队服事 link only for users who can manage that team's assignments.
+- Staff, superusers, and global assignment managers can schedule any team.
+- Team leads, coordinators, and `can_lead` users can schedule only their own manageable team.
+- Ordinary members and unrelated users cannot schedule.
+- The default view focuses on Sunday Service across the upcoming 8-week window.
+- The workspace shows events where the selected team is required or already assigned.
+- Scheduling uses one active in-page schedule/edit form selected by event or assignment query parameters.
+- `service_event` and `ministry_team` are server-locked.
+- Existing event/team assignments are updated instead of duplicated.
+- Loading the workspace creates no assignments.
+- Browser automation was blocked by the Windows browser sandbox issue; manual QA acceptance should be recorded when completed.
 
 Boundaries:
 - Do not infer team-leader rights from church-structure membership.
 - Do not expose unrelated teams or private staff-only operational context.
 - Do not add automatic rotation or copy-forward until manual flow is proven.
+- No schema changes, migrations, availability tracking, swaps, reminders, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, or LightingTeam-specific model were added.
 
 ### MO-S.5 Limited Rotation Helper / Copy-Forward Workflow
 
@@ -148,4 +159,6 @@ Required-team coverage is a scheduling clarity feature. It is not a checklist, a
 
 MO-S.3 is complete as a read-only assignment coverage display after user-completed manual QA.
 
-MO-S.4 is the next safe ministry scheduling phase if the team wants to continue: a team-leader scheduling workspace for same-type events that stays scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities and does not add rotation/copy-forward or automation yet.
+MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities and does not add rotation/copy-forward or automation.
+
+MO-S.5 is the next safe ministry scheduling phase if the team wants to continue, but only after the manual scheduling workflow is accepted in real use.

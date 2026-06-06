@@ -62,6 +62,7 @@ Current state:
 - MO-S.2 is complete: staff can select required `MinistryTeam` records when creating, editing, or recurring batch-creating `ServiceEvent` records.
 - Required teams are stored through explicit `ServiceEventRequiredTeam` rows; `ministry_team` uses `PROTECT`, so referenced teams should be deactivated rather than deleted.
 - MO-S.3 is complete: staff/service-event or team-assignment managers can see read-only assignment coverage on ServiceEvent detail; ordinary event viewers do not see coworker coverage.
+- MO-S.4 is complete: authorized team leaders can use a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/` for their own manageable team; staff, superusers, and global assignment managers can schedule any team.
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
@@ -77,10 +78,10 @@ Current state:
 - Batch-created events share the selected required teams; existing events remain valid with no required teams; already-selected inactive teams remain visible/removable on edit.
 - No `TeamAssignment` or `TeamAssignmentMember` is auto-created.
 - MO-S.3 adds read-only assignment coverage display. The `TeamAssignment` list is the primary operational coverage surface; assignment detail shows compact event coverage; `/staff/` adds upcoming required-team gap counts. Coverage states include assigned required teams with members, required teams with assignment but no active members, unassigned/missing required teams, and non-required additional assignments. Multiple assigned coworkers display with confirmation status.
+- MO-S.4 adds the team-scoped manual scheduling workspace for same-type events, especially Sunday Service rotation, without adding automatic rotation or copy-forward.
 
 Gaps:
 - Staff may need a compact operations overview for upcoming assignments, unconfirmed assignments, missing members, team setup health, and generic pilot setup status.
-- Ministry team leaders need an efficient scheduling entry point for their own team on recurring or same-type events, especially Sunday Service rotation.
 - Team membership and serving assignment should remain separate from church structure membership.
 - Do not infer serving roles from `ChurchStructureMembership`.
 
@@ -276,9 +277,10 @@ MO-S.2 is complete as event required-team implementation.
 
 MO-S.3 is complete as read-only assignment coverage display. Browser automation was blocked; user completed manual QA and accepted the MO-S.3 UI.
 
+MO-S.4 is complete as a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`. Team detail shows the contextual Schedule Team / 安排团队服事 link only for users who can manage that team's assignments. Staff, superusers, and global assignment managers can schedule any team; team leads, coordinators, and `can_lead` users can schedule only their own manageable team; ordinary members and unrelated users cannot schedule. The default view focuses on Sunday Service over an upcoming 8-week window, shows events where the selected team is required or already assigned, uses one active in-page schedule/edit form via event or assignment query selection, server-locks `service_event` and `ministry_team`, updates an existing event/team assignment instead of duplicating it, and creates no assignments on page load. Browser automation was blocked by the Windows browser sandbox issue; manual QA acceptance should be recorded when completed.
+
 Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline PowerShell `manage.py shell` commands, prefer tests/fixtures/app UI, keep one-off commands short and transparent, and never bypass endpoint security.
 
 Recommended next safe slice:
-- MO-S.4 team-leader scheduling workspace should follow coverage display and stay scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities.
 - MO-S.5 limited copy-forward or rotation helper should wait until manual same-type event scheduling is proven.
-- Do not add team-leader scheduling workspace, rotation/copy-forward, automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.3 alone.
+- Do not add rotation/copy-forward, automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.4 alone.

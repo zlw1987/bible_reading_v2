@@ -118,7 +118,7 @@ Likely candidates:
 - CS-H.8 Integration Checkpoint. Completed.
 - CS-H.9 Membership Request UX Hardening. Completed.
 - CS-H.10 CMS Hardening Checkpoint. Completed.
-- ServiceEvent audience/filtering design doc.
+- SE-AS.1 ServiceEvent Audience Scope Redesign Plan. Completed as docs-only planning in `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md`; SE-AS.2 model work, audience filtering, and consumer migration remain deferred until separately approved.
 - PP-SA.1 Staff Admin Surface Expansion Plan. Completed as docs-only planning in `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`.
 - PP-SA.2 Read-Only Staff Dashboard Overview. Completed as a permission-protected read-only staff overview at `/staff/`, with counts and links only for existing workflows.
 - PP-SA.3 Membership / Admin Workflow Polish. Completed as staff membership request workflow polish with clearer queue summary, empty states, detail sections, approval-state/context labels, and overview context.
@@ -275,6 +275,7 @@ Include these as planning options only. Do not start them from this triage docum
 - MO-S.4A Scheduling Semantic Cleanup. Completed after manual QA.
 - MO-S.5A Rotation Anchor Foundation. Completed.
 - MO-S.5B Limited Copy-Forward Suggestion Helper. Completed.
+- SE-AS.1 ServiceEvent Audience Scope Redesign Plan. Completed as docs-only planning; no model, filtering, visibility, or consumer migration work is approved by this status.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
 - OPS-H.1 Deployment and Operations Hardening.
@@ -285,5 +286,5 @@ Roadmap documents should remain aligned on these points:
 
 - Pilot validation passed on `v0.9-pilot-rc1`.
 - The current next phase is Post-Pilot Backlog Triage / Post-Pilot Backlog Planning.
-- Large deferred items remain deferred pending real pilot feedback. MO-S.4 manual team-leader scheduling, MO-S.4A semantic cleanup, MO-S.5A rotation anchor metadata, and MO-S.5B limited copy-forward suggestions now exist, but automatic scheduling, availability, swaps, reminders, checklist, notifications, attendance, Community Activities, audience filtering, and consumer migration remain deferred unless separately planned.
+- Large deferred items remain deferred pending real pilot feedback. MO-S.4 manual team-leader scheduling, MO-S.4A semantic cleanup, MO-S.5A rotation anchor metadata, MO-S.5B limited copy-forward suggestions, and SE-AS.1 ServiceEvent audience-scope planning now exist, but automatic scheduling, availability, swaps, reminders, checklist, notifications, attendance, Community Activities, audience filtering, SE-AS.2 model implementation, and consumer migration remain deferred unless separately planned.
 - `ChurchStructureUnit` model-only foundation exists and has hardened cycle validation. CS-H.3 records the mapping/membership strategy, CS-H.3B adds nullable legacy mapping fields, CS-H.3C adds explicit command-based seeding/mapping, CS-H.3D verifies GoDaddy production/staging seeding with a clean second dry-run, CS-H.3E closes seeded structure data QA, CS-H.4 records the membership design, CS-H.5A adds the membership model-only foundation, CS-H.5B hardens helpers/validation, CS-H.5C adds explicit command-based membership backfill, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity, CS-H.6 records signup requested-unit flow design, CS-H.6A/CS-H.6B add signup request capture planning and implementation, CS-H.6D adds Profile request capture, CS-H.7 records admin approval workflow design, CS-H.7A records approval implementation planning, CS-H.7B/C adds the membership-management capability plus pending request list, CS-H.7D adds request detail plus minimal approve/reject actions, CS-H.7E syncs `Profile.small_group` only for exactly one active legacy small-group mapping, CS-H.8 records the integration checkpoint, CS-H.9 records membership request UX hardening, CS-H.10 records the CMS hardening checkpoint, PP-SA.2 records the read-only staff overview completion, PP-SA.3 records the staff membership request workflow polish completion, PP-SA.4 records the read-only staff moderation queue completion, and PP-SA.5 records the read-only ministry ops health indicator completion. Runtime still uses legacy models and `Profile.small_group`; `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers are not yet membership-driven. Audience selection, Community Activities, Checklist V1, ServiceEvent filtering migration, reminders, scheduling, swaps, availability, attendance, notifications, announcements, care workflows, activities operations, file center, and finer permission matrix work should not start without a separate planning decision.

@@ -17,6 +17,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "event_type",
         "start_datetime",
         "ministry_context",
+        "rotation_anchor_team",
         "scope_type",
         "status",
         "created_by",
@@ -26,6 +27,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "status",
         "scope_type",
         "ministry_context",
+        "rotation_anchor_team",
         "start_datetime",
     )
     search_fields = (
@@ -37,6 +39,8 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "ministry_context__code",
         "ministry_context__name",
         "ministry_context__name_en",
+        "rotation_anchor_team__name",
+        "rotation_anchor_team__name_en",
     )
     readonly_fields = ("created_at", "updated_at", "published_at")
 
@@ -47,5 +51,11 @@ class ServiceEventAdmin(admin.ModelAdmin):
             formfield.help_text = (
                 "Optional label for the host, language, or similar ministry context. "
                 "This is label-only and does not control visibility, serving assignment, or permissions."
+            )
+        if db_field.name == "rotation_anchor_team":
+            formfield.label = "Rotation Anchor Team"
+            formfield.help_text = (
+                "Optional scheduling hint for future copy-forward suggestions. "
+                "This does not make the team required and does not control coverage, audience, visibility, or permissions."
             )
         return formfield

@@ -70,6 +70,10 @@
                     {% if item.event.location %}
                         · {{ item.event.location }}
                     {% endif %}
+                    {% if item.event.rotation_anchor_team_id %}
+                        · {% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:
+                        {{ item.event.rotation_anchor_team|ministry_team_name:language }}
+                    {% endif %}
                 </p>
             </div>
             <a class="button button-secondary" href="{{ item.action_url }}">

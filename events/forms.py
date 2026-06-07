@@ -21,6 +21,7 @@ FORM_TEXT = {
         "location": "Location",
         "meeting_link": "Meeting Link",
         "ministry_context": "Host / Language Label",
+        "rotation_anchor_team": "Rotation Anchor Team",
         "required_teams": "Required Ministry Teams",
         "scope_type": "Audience Scope",
         "district": "District",
@@ -40,6 +41,10 @@ FORM_TEXT = {
             "Optional label for the host, language, or similar ministry context. "
             "Blank can mean whole-church, combined, legacy, or uncategorized. "
             "This is label-only and does not control visibility, serving assignment, or permissions."
+        ),
+        "rotation_anchor_team_help": (
+            "Optional scheduling hint for future copy-forward suggestions, such as Worship C1/C2/C3/A. "
+            "This does not make the team required and does not control coverage, audience, visibility, or permissions."
         ),
         "required_teams_help": (
             "Select teams expected for this event. "
@@ -71,6 +76,7 @@ FORM_TEXT = {
         "end_datetime": "结束时间",
         "location": "地点",
         "meeting_link": "会议链接",
+        "rotation_anchor_team": "配搭参考团队",
         "scope_type": "范围",
         "required_teams": "需要的事工团队",
         "district": "区",
@@ -111,7 +117,20 @@ class RequiredTeamChoiceField(forms.ModelMultipleChoiceField):
         return team.get_name(self.language)
 
 
+class MinistryTeamChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, team):
+        return team.get_name(self.language)
+
+
 class ServiceEventForm(forms.ModelForm):
+    rotation_anchor_team = MinistryTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=False,
+    )
     required_teams = RequiredTeamChoiceField(
         queryset=MinistryTeam.objects.none(),
         required=False,
@@ -131,6 +150,7 @@ class ServiceEventForm(forms.ModelForm):
             "location",
             "meeting_link",
             "ministry_context",
+            "rotation_anchor_team",
             "required_teams",
             "scope_type",
             "district",
@@ -157,6 +177,7 @@ class ServiceEventForm(forms.ModelForm):
             text = {
                 **text,
                 "ministry_context": "主办/语言标签（可选）",
+                "rotation_anchor_team": "配搭参考团队",
                 "required_teams": "需要的事工团队",
                 "scope_type": "覆盖对象",
                 "district": "适用区",
@@ -169,6 +190,10 @@ class ServiceEventForm(forms.ModelForm):
                 "required_teams_help": (
                     "选择这个聚会预期需要的事工团队。"
                     "这里只记录需要，不会自动建立服事排班。"
+                ),
+                "rotation_anchor_team_help": (
+                    "可选，用于以后提供复制排班建议，例如 Worship C1/C2/C3/A。"
+                    "这不是需要的事工团队，不会控制服事覆盖、覆盖对象、可见范围或用户权限。"
                 ),
                 "scope_type_help": (
                     "当前版本支持全教会、单一区或单一小组。"
@@ -218,6 +243,8 @@ class ServiceEventForm(forms.ModelForm):
             {"placeholder": text["meeting_link_placeholder"]}
         )
         self.fields["ministry_context"].help_text = text["ministry_context_help"]
+        self.fields["rotation_anchor_team"].help_text = text["rotation_anchor_team_help"]
+        self.fields["rotation_anchor_team"].language = language
         self.fields["required_teams"].help_text = text["required_teams_help"]
         self.fields["required_teams"].language = language
         self.fields["scope_type"].help_text = text["scope_type_help"]
@@ -228,6 +255,14 @@ class ServiceEventForm(forms.ModelForm):
             ministry_context_filter |= Q(id=self.instance.ministry_context_id)
         self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
             ministry_context_filter,
+        )
+        rotation_anchor_filter = Q(is_active=True)
+        if self.instance.rotation_anchor_team_id:
+            rotation_anchor_filter |= Q(id=self.instance.rotation_anchor_team_id)
+        self.fields["rotation_anchor_team"].queryset = (
+            MinistryTeam.objects.filter(rotation_anchor_filter)
+            .distinct()
+            .order_by("name")
         )
         required_team_filter = Q(is_active=True)
         if self.instance.pk:
@@ -284,6 +319,10 @@ class RecurringServiceEventForm(forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple,
     )
+    rotation_anchor_team = MinistryTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=False,
+    )
     description = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
     description_en = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
 
@@ -315,6 +354,7 @@ class RecurringServiceEventForm(forms.Form):
             "event_type",
             "location",
             "meeting_link",
+            "rotation_anchor_team",
             "required_teams",
             "scope_type",
             "district",
@@ -340,6 +380,16 @@ class RecurringServiceEventForm(forms.Form):
             self.fields[field_name].help_text = service_event_form.fields[
                 field_name
             ].help_text
+        self.fields["rotation_anchor_team"].label = service_event_form.fields[
+            "rotation_anchor_team"
+        ].label
+        self.fields["rotation_anchor_team"].help_text = service_event_form.fields[
+            "rotation_anchor_team"
+        ].help_text
+        self.fields["rotation_anchor_team"].language = language
+        self.fields["rotation_anchor_team"].queryset = MinistryTeam.objects.filter(
+            is_active=True,
+        ).order_by("name")
         self.fields["required_teams"].label = service_event_form.fields[
             "required_teams"
         ].label

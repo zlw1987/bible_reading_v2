@@ -46,6 +46,7 @@ def get_visible_service_events(user):
     events = ServiceEvent.objects.select_related(
         "district",
         "ministry_context",
+        "rotation_anchor_team",
         "small_group",
         "created_by",
     ).order_by("-start_datetime")
@@ -193,6 +194,7 @@ def create_recurring_events(cleaned_data, user):
     dates_to_create, dates_to_skip = build_recurring_event_preview(cleaned_data)
     created_count = 0
     required_teams = cleaned_data.get("required_teams")
+    rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
 
     for event_date in dates_to_create:
         start_datetime = timezone.make_aware(
@@ -215,6 +217,7 @@ def create_recurring_events(cleaned_data, user):
             end_datetime=end_datetime,
             location=cleaned_data.get("location") or "",
             meeting_link=cleaned_data.get("meeting_link") or "",
+            rotation_anchor_team=rotation_anchor_team,
             scope_type=cleaned_data["scope_type"],
             district=cleaned_data.get("district"),
             small_group=cleaned_data.get("small_group"),

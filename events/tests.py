@@ -133,6 +133,7 @@ class ServiceEventFoundationTests(TestCase):
             "location": "Fellowship Hall",
             "meeting_link": "https://example.com/event",
             "ministry_context": "",
+            "rotation_anchor_team": "",
             "required_teams": [],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "status": ServiceEvent.STATUS_PUBLISHED,
@@ -163,6 +164,7 @@ class ServiceEventFoundationTests(TestCase):
             "end_time": "11:30",
             "location": "Sanctuary",
             "meeting_link": "",
+            "rotation_anchor_team": "",
             "required_teams": [],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "district": "",
@@ -330,6 +332,26 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(event.required_teams.count(), 0)
         event.full_clean()
 
+    def test_service_event_can_have_blank_rotation_anchor(self):
+        event = self.create_event()
+
+        self.assertIsNone(event.rotation_anchor_team)
+        event.full_clean()
+
+    def test_service_event_can_save_rotation_anchor_team_without_side_effects(self):
+        event = self.create_event(rotation_anchor_team=self.required_team)
+
+        self.assertEqual(event.rotation_anchor_team, self.required_team)
+        self.assertEqual(event.required_teams.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_rotation_anchor_team_protects_referenced_team_from_delete(self):
+        self.create_event(rotation_anchor_team=self.required_team)
+
+        with self.assertRaises(ProtectedError):
+            self.required_team.delete()
+
     def test_required_team_relationship_rejects_duplicate_team_for_event(self):
         event = self.create_event()
         ServiceEventRequiredTeam.objects.create(
@@ -377,6 +399,26 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIn(self.inactive_required_team.id, team_ids)
 
+    def test_service_event_form_shows_active_rotation_anchors_only_for_new_event(self):
+        form = ServiceEventForm(language="en")
+        team_ids = set(
+            form.fields["rotation_anchor_team"].queryset.values_list("id", flat=True)
+        )
+
+        self.assertIn(self.required_team.id, team_ids)
+        self.assertIn(self.other_required_team.id, team_ids)
+        self.assertNotIn(self.inactive_required_team.id, team_ids)
+
+    def test_service_event_edit_form_keeps_selected_inactive_rotation_anchor_visible(self):
+        event = self.create_event(rotation_anchor_team=self.inactive_required_team)
+
+        form = ServiceEventForm(instance=event, language="en")
+        team_ids = set(
+            form.fields["rotation_anchor_team"].queryset.values_list("id", flat=True)
+        )
+
+        self.assertIn(self.inactive_required_team.id, team_ids)
+
     def test_manager_can_create_event_with_required_teams_without_assignments(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
@@ -397,6 +439,22 @@ class ServiceEventFoundationTests(TestCase):
             set(event.required_teams.values_list("id", flat=True)),
             {self.required_team.id, self.other_required_team.id},
         )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_manager_can_create_event_with_rotation_anchor_without_assignments(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(rotation_anchor_team=self.required_team.id),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="特别聚会")
+        self.assertEqual(event.rotation_anchor_team, self.required_team)
+        self.assertEqual(event.required_teams.count(), 0)
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
@@ -443,6 +501,40 @@ class ServiceEventFoundationTests(TestCase):
         )
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_manager_edit_replaces_and_clears_rotation_anchor(self):
+        self.set_language("en")
+        event = self.create_event(
+            status=ServiceEvent.STATUS_DRAFT,
+            rotation_anchor_team=self.required_team,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                rotation_anchor_team=self.other_required_team.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.rotation_anchor_team, self.other_required_team)
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="再次更新",
+                title_en="Updated Again",
+                rotation_anchor_team="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertIsNone(event.rotation_anchor_team)
 
     def test_manager_can_remove_selected_inactive_required_team_on_edit(self):
         self.set_language("en")
@@ -559,6 +651,35 @@ class ServiceEventFoundationTests(TestCase):
         self.assertIn(
             "不会控制可见范围、服事分配或用户权限",
             chinese_form.fields["ministry_context"].help_text,
+        )
+
+    def test_service_event_form_clarifies_rotation_anchor_is_scheduling_hint_only(self):
+        english_form = ServiceEventForm(language="en")
+        chinese_form = ServiceEventForm(language="zh")
+
+        self.assertEqual(
+            english_form.fields["rotation_anchor_team"].label,
+            "Rotation Anchor Team",
+        )
+        self.assertIn(
+            "future copy-forward suggestions",
+            english_form.fields["rotation_anchor_team"].help_text,
+        )
+        self.assertIn(
+            "does not make the team required",
+            english_form.fields["rotation_anchor_team"].help_text,
+        )
+        self.assertIn(
+            "does not control coverage, audience, visibility, or permissions",
+            english_form.fields["rotation_anchor_team"].help_text,
+        )
+        self.assertEqual(
+            chinese_form.fields["rotation_anchor_team"].label,
+            "配搭参考团队",
+        )
+        self.assertIn(
+            "不会控制服事覆盖、覆盖对象、可见范围或用户权限",
+            chinese_form.fields["rotation_anchor_team"].help_text,
         )
 
     def test_service_event_scope_form_labels_are_audience_specific(self):
@@ -684,6 +805,47 @@ class ServiceEventFoundationTests(TestCase):
         self.assertNotContains(response, "Missing")
         self.assertNotContains(response, "Unassigned")
         self.assertNotContains(response, "Coverage")
+
+    def test_ordinary_event_viewer_does_not_see_rotation_anchor_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Rotation Anchor Team")
+        self.assertNotContains(response, "Lighting Team")
+        self.assertNotContains(response, "Missing")
+        self.assertNotContains(response, "Unassigned")
+        self.assertNotContains(response, "Coverage")
+
+    def test_staff_event_viewer_sees_rotation_anchor_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rotation Anchor Team")
+        self.assertContains(response, "Lighting Team")
+
+    def test_team_assignment_manager_sees_rotation_anchor_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        ChurchRoleAssignment.objects.create(
+            user=self.other_user,
+            role=ChurchRoleAssignment.ROLE_COWORKER,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rotation Anchor Team")
+        self.assertContains(response, "Lighting Team")
 
     def test_regular_event_viewer_does_not_see_coworker_coverage(self):
         self.set_language("en")
@@ -842,6 +1004,27 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_recurring_create_applies_same_rotation_anchor_to_each_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                rotation_anchor_team=self.required_team.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(event.rotation_anchor_team, self.required_team)
+            self.assertEqual(event.required_teams.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_recurring_create_skips_existing_events(self):
         self.set_language("en")
         start_date = self.next_sunday()
@@ -853,6 +1036,7 @@ class ServiceEventFoundationTests(TestCase):
             title="主日崇拜",
             title_en="Sunday Service",
             start_datetime=start_datetime,
+            end_datetime=start_datetime + timezone.timedelta(hours=1, minutes=30),
         )
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -868,6 +1052,8 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
         self.assertContains(response, "skipped: 1")
         self.assertEqual(existing_event.required_teams.count(), 0)
+        existing_event.refresh_from_db()
+        self.assertIsNone(existing_event.rotation_anchor_team)
 
     def test_recurring_range_longer_than_eighteen_months_rejected(self):
         self.set_language("en")

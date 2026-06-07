@@ -62,6 +62,13 @@
     </p>
     {% endif %}
 
+    {% if can_view_coverage and event.rotation_anchor_team_id %}
+    <p>
+        <strong>{% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:</strong>
+        {{ event.rotation_anchor_team|ministry_team_name:language }}
+    </p>
+    {% endif %}
+
     {% if required_teams %}
     <p>
         <strong>{% if language == "zh" %}需要的事工团队{% else %}Required Ministry Teams{% endif %}:</strong>

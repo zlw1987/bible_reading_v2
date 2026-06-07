@@ -66,6 +66,7 @@ def assignment_coverage_queryset():
     return TeamAssignment.objects.select_related(
         "service_event",
         "service_event__ministry_context",
+        "service_event__rotation_anchor_team",
         "ministry_team",
     ).prefetch_related(
         assignment_member_prefetch(),
@@ -79,6 +80,7 @@ def events_with_coverage_queryset():
     return ServiceEvent.objects.select_related(
         "district",
         "ministry_context",
+        "rotation_anchor_team",
         "small_group",
         "created_by",
     ).prefetch_related(

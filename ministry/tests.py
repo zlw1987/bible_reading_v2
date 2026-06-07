@@ -1771,6 +1771,25 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_team_schedule_shows_rotation_anchor_without_creating_assignment(self):
+        self.set_language("en")
+        anchor_team = MinistryTeam.objects.create(
+            name="敬拜 C1",
+            name_en="Worship C1",
+        )
+        self.event.required_teams.add(self.team)
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rotation Anchor Team")
+        self.assertContains(response, "Worship C1")
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_team_schedule_creates_assignment_for_missing_required_event(self):
         self.set_language("en")
         self.event.required_teams.add(self.team)

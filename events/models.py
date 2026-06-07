@@ -83,6 +83,13 @@ class ServiceEvent(models.Model):
         on_delete=models.SET_NULL,
         related_name="service_events",
     )
+    rotation_anchor_team = models.ForeignKey(
+        "ministry.MinistryTeam",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="rotation_anchor_service_events",
+    )
     required_teams = models.ManyToManyField(
         "ministry.MinistryTeam",
         through="ServiceEventRequiredTeam",

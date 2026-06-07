@@ -366,6 +366,7 @@ def team_schedule(request, team_id):
         TeamAssignment.objects.select_related(
             "service_event",
             "service_event__ministry_context",
+            "service_event__rotation_anchor_team",
             "ministry_team",
         )
         .prefetch_related(assignment_member_prefetch())

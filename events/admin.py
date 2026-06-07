@@ -43,9 +43,9 @@ class ServiceEventAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
         if db_field.name == "ministry_context":
-            formfield.label = "Ministry Context Label"
+            formfield.label = "Host / Language Label"
             formfield.help_text = (
-                "Optional label for CM, EM, or a similar ministry context. "
-                "This does not control visibility, assignment filtering, or audience scope."
+                "Optional label for the host, language, or similar ministry context. "
+                "This is label-only and does not control visibility, serving assignment, or permissions."
             )
         return formfield

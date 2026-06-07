@@ -117,7 +117,7 @@ class TeamMembership(models.Model):
         return self.email
 
     def is_leadership(self):
-        return self.role in {self.ROLE_LEAD, self.ROLE_COORDINATOR} or self.can_lead
+        return self.role in {self.ROLE_LEAD, self.ROLE_COORDINATOR}
 
 
 class TeamAssignment(models.Model):

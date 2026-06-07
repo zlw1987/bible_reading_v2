@@ -75,9 +75,6 @@
             <h3>{{ membership.get_display_name }}</h3>
             <p class="muted">
                 {{ membership|membership_role_label:language }}
-                {% if membership.can_lead %}
-                    · {% if language == "zh" %}可带领{% else %}Can Lead{% endif %}
-                {% endif %}
             </p>
             {% if membership.skill_level %}
             <p>

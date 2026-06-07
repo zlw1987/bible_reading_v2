@@ -51,9 +51,6 @@
                 {% else %}
                     {% if language == "zh" %}停用{% else %}Inactive{% endif %}
                 {% endif %}
-                {% if membership.can_lead %}
-                    · {% if language == "zh" %}可带领{% else %}Can Lead{% endif %}
-                {% endif %}
             </p>
             {% if membership.notes %}
             <p>

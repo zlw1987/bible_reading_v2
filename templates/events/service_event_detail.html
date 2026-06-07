@@ -57,7 +57,7 @@
 
     {% if event.ministry_context_id %}
     <p>
-        <strong>{% if language == "zh" %}事工标签{% else %}Ministry Label{% endif %}:</strong>
+        <strong>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}:</strong>
         {{ event|event_ministry_context_label:language }}
     </p>
     {% endif %}

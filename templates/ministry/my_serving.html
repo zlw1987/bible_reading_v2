@@ -31,6 +31,30 @@
     </div>
 </div>
 
+{% if manageable_teams %}
+<div class="card">
+    <h2>{% if language == "zh" %}我负责的团队{% else %}Teams I manage{% endif %}</h2>
+    <div class="grid grid-2">
+        {% for team in manageable_teams %}
+        <div>
+            <h3>{{ team|ministry_team_name:language }}</h3>
+            {% if team|ministry_team_description:language %}
+            <p class="muted">{{ team|ministry_team_description:language|truncatechars:140 }}</p>
+            {% endif %}
+            <div class="actions">
+                <a class="button button-secondary" href="{% url 'ministry_team_detail' team.id %}">
+                    {% if language == "zh" %}查看团队{% else %}View Team{% endif %}
+                </a>
+                <a class="button button-secondary" href="{% url 'team_schedule' team.id %}">
+                    {% if language == "zh" %}安排团队服事{% else %}Schedule Team{% endif %}
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if serving_items %}
 <div class="grid grid-2">
     {% for serving_item in serving_items %}

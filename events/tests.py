@@ -538,15 +538,19 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertEqual(
             english_form.fields["ministry_context"].label,
-            "Ministry Context Label",
+            "Host / Language Label",
         )
         self.assertIn(
-            "does not control visibility",
+            "label-only",
+            english_form.fields["ministry_context"].help_text,
+        )
+        self.assertIn(
+            "does not control visibility, serving assignment, or permissions",
             english_form.fields["ministry_context"].help_text,
         )
         self.assertEqual(
             chinese_form.fields["ministry_context"].label,
-            "事工标签（可选）",
+            "主办/语言标签（可选）",
         )
         self.assertNotEqual(
             chinese_form.fields["ministry_context"].label,

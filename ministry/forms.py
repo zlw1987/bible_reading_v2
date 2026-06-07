@@ -70,7 +70,6 @@ MEMBERSHIP_FORM_TEXT = {
         "email": "Email",
         "role": "Role",
         "skill_level": "Skill Level",
-        "can_lead": "Can Lead",
         "notes": "Non-sensitive notes",
         "is_active": "Active",
         "member": "Member",
@@ -88,7 +87,6 @@ MEMBERSHIP_FORM_TEXT = {
         "email": "邮箱",
         "role": "角色",
         "skill_level": "技能等级",
-        "can_lead": "可带领",
         "notes": "非敏感备注",
         "is_active": "启用",
         "member": "成员",
@@ -200,7 +198,6 @@ class TeamMembershipForm(forms.ModelForm):
             "email",
             "role",
             "skill_level",
-            "can_lead",
             "notes",
             "is_active",
         ]

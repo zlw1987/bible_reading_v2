@@ -198,10 +198,10 @@ def schedule_date_from_query(value, default):
 
 def schedule_filter_values(request):
     today = timezone.localdate()
-    event_type = (request.GET.get("event_type") or ServiceEvent.EVENT_SUNDAY_SERVICE).strip()
+    event_type = (request.GET.get("event_type") or "").strip()
     valid_event_types = {value for value, _label in ServiceEvent.EVENT_TYPE_CHOICES}
-    if event_type not in valid_event_types:
-        event_type = ServiceEvent.EVENT_SUNDAY_SERVICE
+    if event_type and event_type not in valid_event_types:
+        event_type = ""
 
     start_date = schedule_date_from_query(request.GET.get("start_date"), today)
     end_date = schedule_date_from_query(
@@ -220,10 +220,11 @@ def schedule_filter_values(request):
 
 def schedule_query_string(filters, **extra):
     params = {
-        "event_type": filters["event_type"],
         "start_date": filters["start_date"].isoformat(),
         "end_date": filters["end_date"].isoformat(),
     }
+    if filters["event_type"]:
+        params["event_type"] = filters["event_type"]
     for key, value in extra.items():
         if value:
             params[key] = value
@@ -251,7 +252,11 @@ def schedule_event_type_options(language):
             ServiceEvent.EVENT_OTHER: "其他",
         },
     }.get(language, {})
-    return [
+    all_option = {
+        "value": "",
+        "label": "全部类型" if language == "zh" else "All event types",
+    }
+    return [all_option] + [
         {"value": value, "label": labels.get(value, label)}
         for value, label in ServiceEvent.EVENT_TYPE_CHOICES
     ]
@@ -352,10 +357,11 @@ def team_schedule(request, team_id):
     filters = schedule_filter_values(request)
     base_path = request.path
     event_filter = {
-        "service_event__event_type": filters["event_type"],
         "service_event__start_datetime__date__gte": filters["start_date"],
         "service_event__start_datetime__date__lte": filters["end_date"],
     }
+    if filters["event_type"]:
+        event_filter["service_event__event_type"] = filters["event_type"]
     assignments = list(
         TeamAssignment.objects.select_related(
             "service_event",
@@ -373,13 +379,15 @@ def team_schedule(request, team_id):
         .order_by("service_event__start_datetime", "id")
     )
     assigned_event_ids = {assignment.service_event_id for assignment in assignments}
+    event_filters = {
+        "start_datetime__date__gte": filters["start_date"],
+        "start_datetime__date__lte": filters["end_date"],
+    }
+    if filters["event_type"]:
+        event_filters["event_type"] = filters["event_type"]
     event_queryset = (
         events_with_coverage_queryset()
-        .filter(
-            event_type=filters["event_type"],
-            start_datetime__date__gte=filters["start_date"],
-            start_datetime__date__lte=filters["end_date"],
-        )
+        .filter(**event_filters)
         .exclude(
             status__in=[
                 ServiceEvent.STATUS_DRAFT,
@@ -702,6 +710,7 @@ def my_serving(request):
         "ministry/my_serving.html",
         {
             "serving_items": my_serving_assignments(request.user, tab=tab),
+            "manageable_teams": manageable_assignment_teams(request.user),
             "tab": tab,
             "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),
         },

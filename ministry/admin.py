@@ -21,11 +21,10 @@ class TeamMembershipAdmin(admin.ModelAdmin):
         "team",
         "member_display",
         "role",
-        "can_lead",
         "is_active",
         "updated_at",
     )
-    list_filter = ("team", "role", "can_lead", "is_active")
+    list_filter = ("team", "role", "is_active")
     search_fields = (
         "team__name",
         "team__name_en",

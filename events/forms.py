@@ -20,7 +20,7 @@ FORM_TEXT = {
         "end_datetime": "End Time",
         "location": "Location",
         "meeting_link": "Meeting Link",
-        "ministry_context": "Ministry Context Label",
+        "ministry_context": "Host / Language Label",
         "required_teams": "Required Ministry Teams",
         "scope_type": "Audience Scope",
         "district": "District",
@@ -37,9 +37,9 @@ FORM_TEXT = {
         "scope_district": "District",
         "scope_small_group": "Small Group",
         "ministry_context_help": (
-            "Optional label for CM, EM, or a similar ministry context. "
+            "Optional label for the host, language, or similar ministry context. "
             "Blank can mean whole-church, combined, legacy, or uncategorized. "
-            "This does not control visibility, assignment filtering, or audience scope."
+            "This is label-only and does not control visibility, serving assignment, or permissions."
         ),
         "required_teams_help": (
             "Select teams expected for this event. "
@@ -156,15 +156,15 @@ class ServiceEventForm(forms.ModelForm):
         if language == "zh":
             text = {
                 **text,
-                "ministry_context": "事工标签（可选）",
+                "ministry_context": "主办/语言标签（可选）",
                 "required_teams": "需要的事工团队",
                 "scope_type": "覆盖对象",
                 "district": "适用区",
                 "small_group": "适用小组",
                 "ministry_context_help": (
-                    "仅用于标记中文部、英文部等事工背景。"
+                    "仅用于标记主办、语言或类似事工背景。"
                     "留空可以表示全教会、联合、旧数据或未分类。"
-                    "不会控制可见范围、服事分配或用户权限。"
+                    "这是标签用途，不会控制可见范围、服事分配或用户权限。"
                 ),
                 "required_teams_help": (
                     "选择这个聚会预期需要的事工团队。"

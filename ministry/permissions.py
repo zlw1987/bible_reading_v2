@@ -49,7 +49,7 @@ def can_manage_ministry_team(user, team):
             TeamMembership.ROLE_LEAD,
             TeamMembership.ROLE_COORDINATOR,
         ]
-    ).exists() or user_team_memberships(user).filter(team=team, can_lead=True).exists()
+    ).exists()
 
 
 def can_manage_team_memberships(user, team):

@@ -40,6 +40,7 @@ This avoids turning missing coverage into fake assignments and avoids treating a
 - Do not add audience filtering as part of this work.
 - Do not infer serving permissions, team leadership, or team assignments from `ChurchStructureMembership`.
 - Team leaders may manage their own team assignments only through existing or future explicit `MinistryTeam` / `TeamAssignment` capabilities.
+- `TeamMembership.can_lead` is deprecated/reserved for now and does not grant scheduling, member-management, or admin permissions.
 
 ## 5. Phased Implementation
 
@@ -107,21 +108,25 @@ Completed scope:
 - Added a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`.
 - Team detail shows the contextual Schedule Team / 安排团队服事 link only for users who can manage that team's assignments.
 - Staff, superusers, and global assignment managers can schedule any team.
-- Team leads, coordinators, and `can_lead` users can schedule only their own manageable team.
-- Ordinary members and unrelated users cannot schedule.
-- The default view focuses on Sunday Service across the upcoming 8-week window.
+- Lead and Coordinator roles can schedule their own team assignments.
+- Ordinary members, `can_lead`-only members, and unrelated users cannot schedule.
+- My Serving provides the non-staff team leader entry point through Teams I manage / 我负责的团队.
+- The default view uses All event types / 全部类型 across the upcoming 8-week window.
 - The workspace shows events where the selected team is required or already assigned.
+- Specific event type filtering still works.
 - Scheduling uses one active in-page schedule/edit form selected by event or assignment query parameters.
 - `service_event` and `ministry_team` are server-locked.
 - Existing event/team assignments are updated instead of duplicated.
 - Loading the workspace creates no assignments.
-- Browser automation was blocked by the Windows browser sandbox issue; manual QA acceptance should be recorded when completed.
+- ServiceEvent MinistryContext visible wording is Host / Language Label / 主办/语言标签（可选） and is label-only; it does not control visibility, serving assignment, or permissions and does not replace future ChurchStructureUnit-based audience or coverage scope.
+- MO-S.4A scheduling semantic cleanup was completed after manual QA.
+- Browser automation was blocked by the Windows browser sandbox issue; user manually QA'd and accepted the MO-S.4A cleanup.
 
 Boundaries:
 - Do not infer team-leader rights from church-structure membership.
 - Do not expose unrelated teams or private staff-only operational context.
 - Do not add automatic rotation or copy-forward until manual flow is proven.
-- No schema changes, migrations, availability tracking, swaps, reminders, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, or LightingTeam-specific model were added.
+- No schema changes, migrations, MO-S.5 implementation, rotation/copy-forward, availability tracking, swaps, reminders, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, or LightingTeam-specific model were added.
 
 ### MO-S.5 Limited Rotation Helper / Copy-Forward Workflow
 
@@ -136,7 +141,7 @@ Likely scope:
 Boundaries:
 - This is not a full automatic scheduling engine.
 - Do not add availability matrices, swap requests, reminder automation, notifications, or complex optimization unless separately planned.
-- Do not start this phase until MO-S.2 through MO-S.4 have proven the manual workflow.
+- Do not start this phase until MO-S.2 through MO-S.4A have proven the manual workflow.
 
 ## 6. Explicitly Deferred
 
@@ -161,4 +166,4 @@ MO-S.3 is complete as a read-only assignment coverage display after user-complet
 
 MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities and does not add rotation/copy-forward or automation.
 
-MO-S.5 is the next safe ministry scheduling phase if the team wants to continue, but only after the manual scheduling workflow is accepted in real use.
+MO-S.4A is complete as scheduling semantic cleanup after manual QA. The next safe ministry scheduling phase is MO-S.5 planning/design only if the team wants to continue and the manual scheduling workflow is accepted in real use; this document does not authorize implementation.

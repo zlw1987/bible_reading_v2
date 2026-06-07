@@ -105,6 +105,32 @@
             {% endfor %}
         </div>
 
+        <div class="team-schedule-suggestions">
+            <p class="muted">
+                {% if language == "zh" %}排班建议{% else %}Schedule Suggestions{% endif %}
+            </p>
+            <div class="actions">
+                {% if item.anchor_suggestion_url %}
+                <a class="button button-secondary" href="{{ item.anchor_suggestion_url }}">
+                    {% if language == "zh" %}按配搭参考建议{% else %}Suggest from anchor{% endif %}
+                </a>
+                {% else %}
+                <span class="muted">
+                    {% if language == "zh" %}没有配搭参考建议{% else %}No anchor suggestion{% endif %}
+                </span>
+                {% endif %}
+                {% if item.team_suggestion_url %}
+                <a class="button button-secondary" href="{{ item.team_suggestion_url }}">
+                    {% if language == "zh" %}按本团队历史建议{% else %}Suggest from team history{% endif %}
+                </a>
+                {% else %}
+                <span class="muted">
+                    {% if language == "zh" %}没有本团队历史建议{% else %}No team-history suggestion{% endif %}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
         {% if item.is_active and active_form %}
         <form method="post" class="team-schedule-form">
             {% csrf_token %}
@@ -119,6 +145,32 @@
                 {{ active_form_event|event_title:language }}
                 · {{ active_form_event.start_datetime|date:"Y-m-d H:i" }}
             </p>
+            {% if active_suggestion %}
+            <div class="assignment-coverage-rows">
+                <div class="assignment-coverage-row assignment-coverage-row-additional">
+                    <div class="assignment-coverage-main">
+                        <strong>
+                            {% if language == "zh" %}建议来源{% else %}Suggestion Source{% endif %}
+                        </strong>
+                        <span>
+                            {{ active_suggestion.source_assignment.service_event|event_title:language }}
+                            · {{ active_suggestion.source_assignment.service_event.start_datetime|date:"Y-m-d H:i" }}
+                            {% if active_suggestion.source_assignment.service_event.rotation_anchor_team_id %}
+                                · {% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:
+                                {{ active_suggestion.source_assignment.service_event.rotation_anchor_team|ministry_team_name:language }}
+                            {% endif %}
+                        </span>
+                        {% if active_suggestion.source_members %}
+                        <span class="assignment-coverage-members">
+                            {% for member in active_suggestion.source_members %}
+                                {{ member.get_display_name }}{% if not forloop.last %}、{% endif %}
+                            {% endfor %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             {{ active_form.non_field_errors }}
             {% for field in active_form %}
             <div class="form-row">

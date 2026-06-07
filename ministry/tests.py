@@ -26,6 +26,11 @@ from .services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from .services.copy_forward_suggestions import (
+    MODE_ANCHOR,
+    MODE_TEAM,
+    find_copy_forward_suggestion,
+)
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -477,6 +482,207 @@ class TeamAssignmentV1Tests(TestCase):
                 membership=membership,
             )
         return assignment
+
+    def create_schedule_event(self, *, title_en, days_from_now, anchor=None, status=None):
+        return ServiceEvent.objects.create(
+            title=title_en,
+            title_en=title_en,
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=days_from_now),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=status or ServiceEvent.STATUS_PUBLISHED,
+            rotation_anchor_team=anchor,
+        )
+
+    def test_copy_forward_anchor_suggestion_finds_same_anchor_prior_assignment(self):
+        anchor_team = MinistryTeam.objects.create(name="敬拜 C1", name_en="Worship C1")
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+            anchor=anchor_team,
+        )
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.membership, self.second_membership],
+        )
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_ANCHOR)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.source_assignment.service_event, source_event)
+        self.assertEqual(
+            {member.id for member in suggestion.source_members},
+            {self.membership.id, self.second_membership.id},
+        )
+
+    def test_copy_forward_anchor_suggestion_ignores_different_anchor(self):
+        target_anchor = MinistryTeam.objects.create(name="敬拜 C1", name_en="Worship C1")
+        other_anchor = MinistryTeam.objects.create(name="敬拜 C2", name_en="Worship C2")
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+            anchor=other_anchor,
+        )
+        self.event.rotation_anchor_team = target_anchor
+        self.event.save()
+        self.create_assignment(service_event=source_event)
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_ANCHOR)
+
+        self.assertIsNone(suggestion)
+
+    def test_copy_forward_team_only_fallback_works_without_anchor(self):
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(service_event=source_event, members=[self.second_membership])
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.source_assignment.service_event, source_event)
+        self.assertEqual([member.id for member in suggestion.source_members], [self.second_membership.id])
+
+    def test_copy_forward_suggestion_does_not_use_future_assignment(self):
+        future_event = self.create_schedule_event(
+            title_en="Future Sunday",
+            days_from_now=4,
+        )
+        self.create_assignment(service_event=future_event)
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNone(suggestion)
+
+    def test_copy_forward_suggestion_ignores_cancelled_or_draft_sources(self):
+        draft_event = self.create_schedule_event(
+            title_en="Draft Sunday",
+            days_from_now=1,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        cancelled_event = self.create_schedule_event(
+            title_en="Cancelled Sunday",
+            days_from_now=1,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        valid_event = self.create_schedule_event(
+            title_en="Valid Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(service_event=draft_event, members=[self.second_membership])
+        self.create_assignment(service_event=cancelled_event, members=[self.second_membership])
+        self.create_assignment(
+            service_event=valid_event,
+            status=TeamAssignment.STATUS_CANCELLED,
+            members=[self.second_membership],
+        )
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNone(suggestion)
+
+    def test_copy_forward_suggestion_copies_active_members_only(self):
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+        )
+        inactive_membership = TeamMembership.objects.create(
+            team=self.team,
+            display_name="Inactive Helper",
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.membership, inactive_membership],
+        )
+        inactive_membership.is_active = False
+        inactive_membership.save()
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual([member.id for member in suggestion.source_members], [self.membership.id])
+
+    def test_copy_forward_anchor_suggestion_skips_newer_empty_source(self):
+        anchor_team = MinistryTeam.objects.create(name="敬拜 C1", name_en="Worship C1")
+        older_event = self.create_schedule_event(
+            title_en="Older Sunday",
+            days_from_now=0,
+            anchor=anchor_team,
+        )
+        newer_empty_event = self.create_schedule_event(
+            title_en="Newer Empty Sunday",
+            days_from_now=1,
+            anchor=anchor_team,
+        )
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        older_assignment = self.create_assignment(
+            service_event=older_event,
+            members=[self.second_membership],
+        )
+        TeamAssignment.objects.create(
+            service_event=newer_empty_event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_ANCHOR)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.source_assignment, older_assignment)
+        self.assertEqual([member.id for member in suggestion.source_members], [self.second_membership.id])
+
+    def test_copy_forward_team_suggestion_skips_newer_empty_source(self):
+        older_event = self.create_schedule_event(
+            title_en="Older Sunday",
+            days_from_now=0,
+        )
+        newer_empty_event = self.create_schedule_event(
+            title_en="Newer Empty Sunday",
+            days_from_now=1,
+        )
+        older_assignment = self.create_assignment(
+            service_event=older_event,
+            members=[self.second_membership],
+        )
+        TeamAssignment.objects.create(
+            service_event=newer_empty_event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.source_assignment, older_assignment)
+        self.assertEqual([member.id for member in suggestion.source_members], [self.second_membership.id])
+
+    def test_copy_forward_suggestion_returns_none_when_all_sources_empty(self):
+        older_empty_event = self.create_schedule_event(
+            title_en="Older Empty Sunday",
+            days_from_now=0,
+        )
+        newer_empty_event = self.create_schedule_event(
+            title_en="Newer Empty Sunday",
+            days_from_now=1,
+        )
+        TeamAssignment.objects.create(
+            service_event=older_empty_event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignment.objects.create(
+            service_event=newer_empty_event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+
+        suggestion = find_copy_forward_suggestion(self.event, self.team, MODE_TEAM)
+
+        self.assertIsNone(suggestion)
 
     def test_assignment_list_requires_login(self):
         response = self.client.get(reverse("team_assignment_list"))
@@ -1789,6 +1995,208 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Worship C1")
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_team_schedule_anchor_suggestion_get_prefills_without_creating_assignment(self):
+        self.set_language("en")
+        anchor_team = MinistryTeam.objects.create(
+            name="敬拜 C1",
+            name_en="Worship C1",
+        )
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+            anchor=anchor_team,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        before_count = TeamAssignment.objects.count()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=anchor"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Suggestion Source")
+        self.assertContains(response, "Prior Sunday")
+        self.assertContains(response, "regular_assign")
+        self.assertEqual(TeamAssignment.objects.count(), before_count)
+        self.assertFalse(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).exists()
+        )
+
+    def test_team_schedule_suggested_form_creates_assignment_only_after_post(self):
+        self.set_language("en")
+        anchor_team = MinistryTeam.objects.create(
+            name="敬拜 C1",
+            name_en="Worship C1",
+        )
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+            anchor=anchor_team,
+        )
+        source_assignment = self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        source_member = source_assignment.assignment_members.get(
+            membership=self.second_membership,
+        )
+        source_member.confirm()
+        self.event.required_teams.add(self.team)
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=anchor",
+            {
+                "assigned_members": [self.second_membership.id],
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment = TeamAssignment.objects.get(
+            service_event=self.event,
+            ministry_team=self.team,
+        )
+        self.assertEqual(assignment.assigned_members.get(), self.second_membership)
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_SCHEDULED)
+        self.assertEqual(assignment.notes, "")
+        target_member = assignment.assignment_members.get(
+            membership=self.second_membership,
+        )
+        self.assertIsNone(target_member.confirmed_at)
+
+    def test_team_schedule_team_only_suggestion_updates_existing_assignment_without_duplicate(self):
+        self.set_language("en")
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        existing_assignment = self.create_assignment(
+            service_event=self.event,
+            members=[self.membership],
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=team",
+            {
+                "assigned_members": [self.second_membership.id],
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Edited before save.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).count(),
+            1,
+        )
+        existing_assignment.refresh_from_db()
+        self.assertEqual(existing_assignment.notes, "Edited before save.")
+        self.assertEqual(existing_assignment.assigned_members.get(), self.second_membership)
+
+    def test_team_schedule_suggestion_get_preserves_existing_assignment_status(self):
+        self.set_language("en")
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        self.create_assignment(
+            service_event=self.event,
+            members=[self.membership],
+            status=TeamAssignment.STATUS_PREPARED,
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=team"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        form = response.context["active_form"]
+        self.assertEqual(form["status"].value(), TeamAssignment.STATUS_PREPARED)
+        self.assertEqual(
+            [membership.id for membership in form.fields["assigned_members"].initial],
+            [self.second_membership.id],
+        )
+
+    def test_team_schedule_duplicate_target_assignments_block_helper_save(self):
+        self.set_language("en")
+        source_event = self.create_schedule_event(
+            title_en="Prior Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        first_assignment = self.create_assignment(
+            service_event=self.event,
+            members=[self.membership],
+            notes="First target.",
+        )
+        second_assignment = self.create_assignment(
+            service_event=self.event,
+            members=[self.second_membership],
+            notes="Second target.",
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.post(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=team",
+            {
+                "assigned_members": [self.second_membership.id],
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Should not save.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "duplicate assignments for this team")
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).count(),
+            2,
+        )
+        first_assignment.refresh_from_db()
+        second_assignment.refresh_from_db()
+        self.assertEqual(first_assignment.notes, "First target.")
+        self.assertEqual(second_assignment.notes, "Second target.")
 
     def test_team_schedule_creates_assignment_for_missing_required_event(self):
         self.set_language("en")

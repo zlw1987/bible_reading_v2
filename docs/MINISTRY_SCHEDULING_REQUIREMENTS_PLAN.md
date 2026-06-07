@@ -130,18 +130,23 @@ Boundaries:
 
 ### MO-S.5 Limited Rotation Helper / Copy-Forward Workflow
 
-Goal:
-- After manual scheduling is proven, consider a limited helper that copies prior assignments or drafts a simple rotation for review.
+Status: completed as MO-S.5A and MO-S.5B.
 
-Likely scope:
-- Copy assignments forward from a previous same-type event or date range.
-- Require review before publish/use.
-- Keep humans responsible for final assignment choices.
+Completed scope:
+- MO-S.5A added optional `ServiceEvent.rotation_anchor_team` as a nullable `MinistryTeam` scheduling hint for Worship C1/C2/C3/A-style pairing.
+- Rotation anchor is not a required team, coverage, audience/scope, visibility, permission, or assignment source of truth.
+- MO-S.5B added a limited copy-forward suggestion helper inside `/teams/<team_id>/schedule/`.
+- Anchor-based suggestions find the most recent prior same-event-type, same-anchor, same-team assignment.
+- Team-history suggestions find the most recent prior same-event-type, same-team assignment, ignoring anchor.
+- Suggestions prefill the existing one active in-page schedule form for review/edit.
+- Loading the workspace or opening a suggestion writes no database rows.
+- Only explicit form save creates or updates a `TeamAssignment`.
+- Existing event/team assignments update instead of duplicating; duplicate target assignments block helper save until manually cleaned up.
+- Suggestions copy active assigned members only and do not copy confirmations.
 
 Boundaries:
 - This is not a full automatic scheduling engine.
-- Do not add availability matrices, swap requests, reminder automation, notifications, or complex optimization unless separately planned.
-- Do not start this phase until MO-S.2 through MO-S.4A have proven the manual workflow.
+- No availability matrices, swap requests, reminder automation, notifications, checklist, attendance, Community Activities, audience filtering, consumer migration, ChurchStructureMembership serving inference, LightingTeam-specific model, or complex optimization were added.
 
 ## 6. Explicitly Deferred
 
@@ -166,4 +171,6 @@ MO-S.3 is complete as a read-only assignment coverage display after user-complet
 
 MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scoped to explicit `MinistryTeam` / `TeamAssignment` capabilities and does not add rotation/copy-forward or automation.
 
-MO-S.4A is complete as scheduling semantic cleanup after manual QA. The next safe ministry scheduling phase is MO-S.5 planning/design only if the team wants to continue and the manual scheduling workflow is accepted in real use; this document does not authorize implementation.
+MO-S.4A is complete as scheduling semantic cleanup after manual QA.
+
+MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine.

@@ -43,6 +43,12 @@ from .services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from .services.copy_forward_suggestions import (
+    MODE_ANCHOR,
+    MODE_TEAM,
+    VALID_MODES as COPY_FORWARD_MODES,
+    find_copy_forward_suggestion,
+)
 from .services.lighting_pilot_import import (
     ImportStructureError,
     import_lighting_pilot,
@@ -64,6 +70,10 @@ def ministry_ui_text(language, key):
             "no_assignment_permission": "You do not have permission to manage team assignments.",
             "assignment_not_available": "This team assignment is not available.",
             "event_not_available": "This service event is not available for this team schedule.",
+            "duplicate_schedule_conflict": (
+                "This event already has duplicate assignments for this team. "
+                "Please clean up the duplicates before using a suggestion."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -77,6 +87,7 @@ def ministry_ui_text(language, key):
             "no_assignment_permission": "你没有管理服事排班的权限。",
             "assignment_not_available": "这个服事排班目前不可用。",
             "event_not_available": "这个聚会事件不适用于这个团队排班。",
+            "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -419,6 +430,9 @@ def team_schedule(request, team_id):
     action_error = False
     assignment_param = (request.GET.get("assignment") or "").strip()
     event_param = (request.GET.get("event") or "").strip()
+    suggestion_mode = (request.GET.get("suggest") or "").strip()
+    if suggestion_mode not in COPY_FORWARD_MODES:
+        suggestion_mode = ""
 
     if assignment_param:
         try:
@@ -459,6 +473,8 @@ def team_schedule(request, team_id):
     active_form = None
     active_form_event = None
     active_form_assignment = active_assignment
+    active_suggestion = None
+    duplicate_suggestion_conflict = False
     if active_assignment is not None:
         active_form_event = active_assignment.service_event
         form_instance = active_assignment
@@ -478,6 +494,16 @@ def team_schedule(request, team_id):
     else:
         form_instance = None
 
+    if form_instance is not None and suggestion_mode and active_form_event is not None:
+        target_assignments = assignments_by_event.get(active_form_event.id, [])
+        duplicate_suggestion_conflict = len(target_assignments) > 1
+        if not duplicate_suggestion_conflict:
+            active_suggestion = find_copy_forward_suggestion(
+                active_form_event,
+                team,
+                suggestion_mode,
+            )
+
     if form_instance is not None:
         if request.method == "POST":
             active_form = TeamScheduleAssignmentForm(
@@ -486,7 +512,12 @@ def team_schedule(request, team_id):
                 language=language,
                 team=team,
             )
-            if active_form.is_valid():
+            if duplicate_suggestion_conflict:
+                active_form.add_error(
+                    None,
+                    ministry_ui_text(language, "duplicate_schedule_conflict"),
+                )
+            if not duplicate_suggestion_conflict and active_form.is_valid():
                 assignment = active_form.save(commit=False)
                 assignment.service_event = active_form_event
                 assignment.ministry_team = team
@@ -506,6 +537,14 @@ def team_schedule(request, team_id):
                 instance=form_instance,
                 language=language,
                 team=team,
+                suggestion_members=(
+                    active_suggestion.source_members if active_suggestion else None
+                ),
+                suggestion_status=(
+                    TeamAssignment.STATUS_SCHEDULED
+                    if active_suggestion and not form_instance.pk
+                    else None
+                ),
             )
 
     schedule_rows = []
@@ -515,6 +554,8 @@ def team_schedule(request, team_id):
         if not rows:
             continue
         assignment = event_assignments[0] if event_assignments else None
+        anchor_suggestion = find_copy_forward_suggestion(event, team, MODE_ANCHOR)
+        team_suggestion = find_copy_forward_suggestion(event, team, MODE_TEAM)
         schedule_rows.append(
             {
                 "event": event,
@@ -524,6 +565,18 @@ def team_schedule(request, team_id):
                     f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
                     if assignment
                     else f"{base_path}?{schedule_query_string(filters, event=event.id)}"
+                ),
+                "anchor_suggestion": anchor_suggestion,
+                "team_suggestion": team_suggestion,
+                "anchor_suggestion_url": (
+                    f"{base_path}?{schedule_query_string(filters, event=event.id, suggest=MODE_ANCHOR)}"
+                    if anchor_suggestion
+                    else ""
+                ),
+                "team_suggestion_url": (
+                    f"{base_path}?{schedule_query_string(filters, event=event.id, suggest=MODE_TEAM)}"
+                    if team_suggestion
+                    else ""
                 ),
                 "is_active": (
                     bool(active_form_event)
@@ -543,6 +596,8 @@ def team_schedule(request, team_id):
             "active_form": active_form,
             "active_form_event": active_form_event,
             "active_form_assignment": active_form_assignment,
+            "active_suggestion": active_suggestion,
+            "duplicate_suggestion_conflict": duplicate_suggestion_conflict,
             "clear_action_url": f"{base_path}?{schedule_query_string(filters)}",
         },
     )

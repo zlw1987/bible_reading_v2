@@ -391,7 +391,15 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
 
-    def __init__(self, *args, language="en", team=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        language="en",
+        team=None,
+        suggestion_members=None,
+        suggestion_status=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.team = team
         text = assignment_form_text(language)
@@ -414,6 +422,8 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
             self.fields["assigned_members"].initial = (
                 self.instance.assigned_members.filter(is_active=True)
             )
+        if suggestion_members is not None:
+            self.fields["assigned_members"].initial = suggestion_members
 
         self.fields["status"].choices = [
             (TeamAssignment.STATUS_SCHEDULED, text["scheduled"]),
@@ -422,6 +432,8 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
             (TeamAssignment.STATUS_COMPLETED, text["completed"]),
             (TeamAssignment.STATUS_CANCELLED, text["cancelled"]),
         ]
+        if suggestion_status:
+            self.fields["status"].initial = suggestion_status
         self.fields["notes"].widget.attrs.update(
             {"placeholder": text["notes_placeholder"]}
         )

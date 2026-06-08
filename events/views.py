@@ -1,10 +1,12 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
+from ministry.models import TeamAssignment
 from ministry.permissions import can_manage_team_assignments
 from ministry.services.assignment_coverage import (
     assignment_coverage_queryset,
@@ -14,6 +16,20 @@ from ministry.services.assignment_coverage import (
 
 from .forms import RecurringServiceEventForm, ServiceEventForm
 from .models import ServiceEvent
+
+
+def cancel_non_final_assignments_for_event(event):
+    return TeamAssignment.objects.filter(
+        service_event=event,
+        status__in=[
+            TeamAssignment.STATUS_SCHEDULED,
+            TeamAssignment.STATUS_PREPARED,
+            TeamAssignment.STATUS_CONFIRMED,
+        ],
+    ).update(
+        status=TeamAssignment.STATUS_CANCELLED,
+        updated_at=timezone.now(),
+    )
 
 
 def event_ui_text(language, key):
@@ -181,7 +197,11 @@ def build_recurring_event_preview(cleaned_data):
                 "district": cleaned_data.get("district"),
                 "small_group": cleaned_data.get("small_group"),
             }
-            if ServiceEvent.objects.filter(**duplicate_filter).exists():
+            if (
+                ServiceEvent.objects.filter(**duplicate_filter)
+                .exclude(status=ServiceEvent.STATUS_CANCELLED)
+                .exists()
+            ):
                 dates_to_skip.append(current_date)
             else:
                 dates_to_create.append(current_date)
@@ -319,7 +339,9 @@ def cancel_service_event(request, event_id):
     if request.method != "POST":
         return redirect("service_event_detail", event_id=event.id)
 
-    event.status = ServiceEvent.STATUS_CANCELLED
-    event.save()
+    with transaction.atomic():
+        event.status = ServiceEvent.STATUS_CANCELLED
+        event.save(update_fields=["status", "updated_at"])
+        cancel_non_final_assignments_for_event(event)
     messages.success(request, event_ui_text(language, "cancelled"))
     return redirect("service_event_list")

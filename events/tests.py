@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -157,12 +159,39 @@ class ServiceEventFoundationTests(TestCase):
         data.update(overrides)
         return data
 
+    def create_team_assignment(self, event, status=TeamAssignment.STATUS_SCHEDULED):
+        return TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.required_team,
+            status=status,
+        )
+
+    def create_team_assignment_member(self, assignment):
+        membership = TeamMembership.objects.create(
+            team=assignment.ministry_team,
+            display_name="Levin",
+        )
+        return TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=membership,
+        )
+
     def next_sunday(self):
         today = timezone.localdate()
         days_until_sunday = (6 - today.weekday()) % 7
         if days_until_sunday == 0:
             days_until_sunday = 7
         return today + timezone.timedelta(days=days_until_sunday)
+
+    def matching_recurring_start_datetime(self, event_date=None):
+        event_date = event_date or self.next_sunday()
+        return timezone.make_aware(
+            timezone.datetime.combine(
+                event_date,
+                timezone.datetime.strptime("10:00", "%H:%M").time(),
+            ),
+            timezone.get_current_timezone(),
+        )
 
     def recurring_post_data(self, **overrides):
         start_date = self.next_sunday()
@@ -714,6 +743,109 @@ class ServiceEventFoundationTests(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.status, ServiceEvent.STATUS_CANCELLED)
 
+    def test_cancel_event_cancels_scheduled_team_assignment(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+
+    def test_cancel_event_cancels_prepared_team_assignment(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_PREPARED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+
+    def test_cancel_event_cancels_confirmed_team_assignment(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_CONFIRMED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+
+    def test_cancel_event_leaves_completed_team_assignment_unchanged(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_COMPLETED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_COMPLETED)
+
+    def test_cancel_event_leaves_already_cancelled_team_assignment_unchanged(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_CANCELLED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+
+    def test_cancel_event_keeps_assignment_members_attached(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        assignment = self.create_team_assignment(event)
+        assignment_member = self.create_team_assignment_member(assignment)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+        self.assertTrue(
+            TeamAssignmentMember.objects.filter(id=assignment_member.id).exists()
+        )
+        self.assertEqual(assignment.assignment_members.count(), 1)
+
+    def test_cancel_event_rolls_back_status_when_assignment_cancellation_fails(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Cancel Assignment")
+        original_status = event.status
+        self.create_team_assignment(event)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        with patch(
+            "events.views.cancel_non_final_assignments_for_event",
+            side_effect=RuntimeError("assignment cancellation failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse("cancel_service_event", args=[event.id]))
+
+        event.refresh_from_db()
+        self.assertEqual(event.status, original_status)
+
     def test_cancelled_event_hidden_from_regular_users_after_cancellation(self):
         self.set_language("en")
         event = self.create_event(title_en="Cancel Me")
@@ -1176,10 +1308,7 @@ class ServiceEventFoundationTests(TestCase):
     def test_recurring_create_skips_existing_events(self):
         self.set_language("en")
         start_date = self.next_sunday()
-        start_datetime = timezone.make_aware(
-            timezone.datetime.combine(start_date, timezone.datetime.strptime("10:00", "%H:%M").time()),
-            timezone.get_current_timezone(),
-        )
+        start_datetime = self.matching_recurring_start_datetime(start_date)
         existing_event = self.create_event(
             title="主日崇拜",
             title_en="Sunday Service",
@@ -1202,6 +1331,89 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(existing_event.required_teams.count(), 0)
         existing_event.refresh_from_db()
         self.assertIsNone(existing_event.rotation_anchor_team)
+
+    def test_recurring_create_ignores_matching_cancelled_event(self):
+        self.set_language("en")
+        start_date = self.next_sunday()
+        start_datetime = self.matching_recurring_start_datetime(start_date)
+        cancelled_event = self.create_event(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            start_datetime=start_datetime,
+            end_datetime=start_datetime + timezone.timedelta(hours=1, minutes=30),
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                required_teams=[self.required_team.id],
+                rotation_anchor_team=self.other_required_team.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "skipped: 0")
+        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 4)
+        replacement_event = (
+            ServiceEvent.objects.filter(start_datetime=start_datetime)
+            .exclude(id=cancelled_event.id)
+            .get()
+        )
+        self.assertEqual(replacement_event.status, ServiceEvent.STATUS_PUBLISHED)
+        self.assertEqual(replacement_event.rotation_anchor_team, self.other_required_team)
+        self.assertEqual(
+            set(replacement_event.required_teams.values_list("id", flat=True)),
+            {self.required_team.id},
+        )
+        cancelled_event.refresh_from_db()
+        self.assertEqual(cancelled_event.status, ServiceEvent.STATUS_CANCELLED)
+        self.assertEqual(cancelled_event.required_teams.count(), 0)
+        self.assertIsNone(cancelled_event.rotation_anchor_team)
+
+    def test_recurring_create_skips_draft_published_and_completed_events(self):
+        self.set_language("en")
+        start_date = self.next_sunday()
+        existing_events = []
+        for offset_weeks, status in enumerate(
+            [
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_PUBLISHED,
+                ServiceEvent.STATUS_COMPLETED,
+            ]
+        ):
+            event_date = start_date + timezone.timedelta(days=7 * offset_weeks)
+            start_datetime = self.matching_recurring_start_datetime(event_date)
+            existing_events.append(
+                self.create_event(
+                    title="主日崇拜",
+                    title_en="Sunday Service",
+                    start_datetime=start_datetime,
+                    end_datetime=start_datetime
+                    + timezone.timedelta(hours=1, minutes=30),
+                    status=status,
+                )
+            )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                required_teams=[self.required_team.id],
+                rotation_anchor_team=self.other_required_team.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "skipped: 3")
+        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 3)
+        for existing_event in existing_events:
+            existing_event.refresh_from_db()
+            self.assertEqual(existing_event.required_teams.count(), 0)
+            self.assertIsNone(existing_event.rotation_anchor_team)
 
     def test_recurring_range_longer_than_eighteen_months_rejected(self):
         self.set_language("en")

@@ -37,6 +37,7 @@ Current church-structure foundations:
 
 - `ChurchStructureUnit` exists as the future flexible structure tree.
 - `ChurchStructureMembership` exists as the future belonging/membership foundation.
+- `ServiceEventAudienceScope` now exists as a model-only audience-scope foundation (SE-AS.2) linking `ServiceEvent` to `ChurchStructureUnit`, but it is not the current runtime source of truth and does not affect `ServiceEvent.can_be_seen_by`.
 - Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain current runtime source of truth until a separately approved consumer migration.
 - Requested memberships do not grant access.
 
@@ -140,14 +141,26 @@ Scope:
 
 ### SE-AS.2 Model-Only Audience Scope Foundation
 
-Future implementation only.
+Status: complete as a data/model foundation only.
 
-Likely scope:
+Completed scope:
 
-- Add a `ServiceEventAudienceScope` or `ServiceEventAudienceSelection` model linked to `ServiceEvent` and `ChurchStructureUnit`.
-- Keep current legacy fields and `ServiceEvent.can_be_seen_by` unchanged.
-- Add model/admin/tests for storing selections and computing normalized effective audience.
-- Do not add filtering or consumer migration.
+- Added the `ServiceEventAudienceScope` model linking `ServiceEvent` to `ChurchStructureUnit` (`unit`), with a `created_at` timestamp.
+- `ServiceEvent` delete cascades audience scope rows; `ChurchStructureUnit` delete is protected (`PROTECT`) while referenced.
+- A unique `ServiceEvent` + `ChurchStructureUnit` constraint prevents duplicate selections.
+- Validation requires an active unit, rejects redundant ancestor/descendant selection for the same event, and allows sibling unit selections.
+- `ServiceEvent.get_audience_scope_units()` returns the selected units for a saved event.
+- An existing `ServiceEvent` with no audience scope rows remains valid; adding audience scope rows does not change `ServiceEvent.can_be_seen_by`.
+- Model and tests were added; no admin, management command, data backfill, or other surfaces were added.
+
+Explicitly not included (still future):
+
+- Runtime `ServiceEvent` visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. `ServiceEventAudienceScope` is not the current runtime source of truth.
+- No staff UI selector, forms, templates, routes, admin surface, or read-only display.
+- No audience filtering, visibility migration, or consumer migration.
+- No `ServiceEvent.can_be_seen_by` change; requested `ChurchStructureMembership` still does not grant event visibility.
+- Legacy `scope_type`, `district`, and `small_group` fields are not deprecated.
+- SE-AS.3 staff UI selector and SE-AS.5 visibility/filtering consumer migration remain future and require separate approval.
 
 ### SE-AS.3 Staff Create/Edit UI
 

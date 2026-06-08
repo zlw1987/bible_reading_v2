@@ -65,10 +65,11 @@ Current state:
 - MO-S.4/MO-S.4A is complete: authorized Lead and Coordinator role users can use a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/` for their own manageable team; staff, superusers, and global assignment managers can schedule any team; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions.
 - MO-S.5A/MO-S.5B is complete: ServiceEvent has an optional rotation anchor scheduling hint, and the team schedule workspace offers limited anchor-based and team-history copy-forward suggestions that prefill the editable form and write only on explicit save.
 - SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning.
+- SE-AS.2 is complete as a model-only `ServiceEventAudienceScope` data foundation; runtime ServiceEvent visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`, `ServiceEventAudienceScope` is not the runtime source of truth, and there is no UI selector or audience filtering yet.
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
-- Current ServiceEvent scope remains legacy-field based. It must not be silently replaced with `ChurchStructureMembership`, SE-AS.2 model implementation, audience filtering, ServiceEvent visibility migration, or consumer migration from `Profile.small_group`.
+- Current ServiceEvent scope remains legacy-field based and is the runtime source of truth even though the SE-AS.2 `ServiceEventAudienceScope` model now exists. It must not be silently replaced with `ChurchStructureMembership`, the SE-AS.2 audience-scope model, the SE-AS.3 staff UI selector, audience filtering, ServiceEvent visibility migration, or consumer migration from `Profile.small_group`.
 - ServiceEvent should not become Community Activities, full event management, or scheduling automation without separate planning.
 
 ### MinistryTeam / TeamAssignment / My Serving Support
@@ -285,5 +286,5 @@ Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline P
 
 Recommended next safe slice:
 - MO-S.5A rotation anchor foundation and MO-S.5B limited copy-forward suggestion helper are complete. The helper is preview/edit-first: it pre-fills the existing team schedule form from anchor-based or team-history prior assignments and writes only when the user explicitly saves.
-- SE-AS.1 ServiceEvent audience-scope redesign planning is complete. Do not add SE-AS.2 model implementation, ServiceEvent visibility migration, consumer migration, or audience filtering without separate approval.
+- SE-AS.1 audience-scope redesign planning and SE-AS.2 model-only `ServiceEventAudienceScope` foundation are complete; the foundation is model-only and not the runtime source of truth, and `ServiceEvent.can_be_seen_by` is unchanged. Do not add the SE-AS.3 staff UI selector, ServiceEvent visibility migration, SE-AS.5 consumer migration, or audience filtering without separate approval.
 - Do not add automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.5 alone.

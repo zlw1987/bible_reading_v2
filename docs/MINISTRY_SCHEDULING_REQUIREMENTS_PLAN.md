@@ -152,7 +152,7 @@ Boundaries:
 
 The following remain deferred unless separately planned:
 
-- SE-AS.2 ServiceEvent audience-scope model implementation.
+- SE-AS.3 ServiceEvent staff audience UI selector.
 - ServiceEvent audience filtering.
 - ServiceEvent visibility migration.
 - Consumer migration from legacy fields or `Profile.small_group`.
@@ -176,4 +176,4 @@ MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scope
 
 MO-S.4A is complete as scheduling semantic cleanup after manual QA.
 
-MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine; future audience work should not treat SE-AS.1 as authorization for SE-AS.2 model work, filtering, or consumer migration.
+MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning. SE-AS.2 is complete as a model-only ServiceEvent audience-scope data foundation: `ServiceEventAudienceScope` links `ServiceEvent` to `ChurchStructureUnit`, but runtime visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`, `ServiceEventAudienceScope` is not the runtime source of truth, and `ServiceEvent.can_be_seen_by` is unchanged. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine; future audience work must not treat SE-AS.2 as authorization for the SE-AS.3 staff UI selector, audience filtering, or the SE-AS.5 visibility/consumer migration, which remain future and require separate approval.

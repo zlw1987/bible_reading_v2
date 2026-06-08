@@ -413,12 +413,14 @@ class BibleStudyLessonForm(forms.ModelForm):
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
 
-        self.fields["status"].choices = [
+        status_choices = [
             (BibleStudyLesson.STATUS_DRAFT, text["draft"]),
             (BibleStudyLesson.STATUS_PUBLISHED, text["published"]),
             (BibleStudyLesson.STATUS_COMPLETED, text["completed"]),
-            (BibleStudyLesson.STATUS_CANCELLED, text["cancelled"]),
         ]
+        if self.instance.pk and self.instance.status == BibleStudyLesson.STATUS_CANCELLED:
+            status_choices = [(BibleStudyLesson.STATUS_CANCELLED, text["cancelled"])]
+        self.fields["status"].choices = status_choices
         self.fields["title"].widget.attrs.update(
             {"placeholder": text["title_placeholder"]}
         )

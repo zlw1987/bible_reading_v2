@@ -1,4 +1,5 @@
 from datetime import date
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -10,6 +11,7 @@ from accounts.models import ChurchRoleAssignment, District, MinistryContext, Sma
 from events.models import ServiceEvent
 from ministry.models import TeamAssignment
 from .forms import (
+    BibleStudyLessonForm,
     BibleStudyMeetingForm,
     BibleStudyMeetingPreparationForm,
     BibleStudyMeetingRoleForm,
@@ -25,6 +27,7 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
+from .services import cancel_bible_study_lesson_with_meetings
 
 
 class BibleStudyModuleTests(TestCase):
@@ -84,6 +87,7 @@ class BibleStudyModuleTests(TestCase):
             title_en="John Bible Study",
             description="一起查考约翰福音",
             description_en="Study John together",
+            status=BibleStudySeries.STATUS_PUBLISHED,
         )
         self.future_time = timezone.now() + timezone.timedelta(days=3)
         self.prestudy_time = timezone.now() + timezone.timedelta(days=2)
@@ -1017,6 +1021,40 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(lesson.status, BibleStudyLesson.STATUS_PUBLISHED)
         self.assertIsNotNone(lesson.published_at)
 
+    def test_new_lesson_form_does_not_offer_cancelled_status(self):
+        form = BibleStudyLessonForm(language="en")
+
+        self.assertEqual(
+            [choice[0] for choice in form.fields["status"].choices],
+            [
+                BibleStudyLesson.STATUS_DRAFT,
+                BibleStudyLesson.STATUS_PUBLISHED,
+                BibleStudyLesson.STATUS_COMPLETED,
+            ],
+        )
+
+    def test_active_lesson_edit_form_does_not_offer_cancelled_status(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        form = BibleStudyLessonForm(instance=lesson, language="en")
+
+        self.assertEqual(
+            [choice[0] for choice in form.fields["status"].choices],
+            [
+                BibleStudyLesson.STATUS_DRAFT,
+                BibleStudyLesson.STATUS_PUBLISHED,
+                BibleStudyLesson.STATUS_COMPLETED,
+            ],
+        )
+
+    def test_cancelled_lesson_edit_form_only_offers_cancelled_status(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_CANCELLED)
+        form = BibleStudyLessonForm(instance=lesson, language="en")
+
+        self.assertEqual(
+            [choice[0] for choice in form.fields["status"].choices],
+            [BibleStudyLesson.STATUS_CANCELLED],
+        )
+
     def test_staff_can_cancel_bible_study_lesson(self):
         self.set_language("en")
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
@@ -1030,6 +1068,168 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.url, reverse("bible_study_lesson_manage_list"))
         lesson.refresh_from_db()
         self.assertEqual(lesson.status, BibleStudyLesson.STATUS_CANCELLED)
+
+    def test_cancelling_bible_study_lesson_cancels_active_meetings(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        draft = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        published = self.create_meeting(
+            lesson=lesson,
+            small_group=self.same_group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("cancel_bible_study_lesson", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        draft.refresh_from_db()
+        published.refresh_from_db()
+        self.assertEqual(draft.status, BibleStudyMeeting.STATUS_CANCELLED)
+        self.assertEqual(published.status, BibleStudyMeeting.STATUS_CANCELLED)
+
+    def test_cancelling_bible_study_lesson_leaves_final_meetings_unchanged(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        completed = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_COMPLETED,
+        )
+        cancelled = self.create_meeting(
+            lesson=lesson,
+            small_group=self.same_group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+
+        cancel_bible_study_lesson_with_meetings(lesson)
+
+        completed.refresh_from_db()
+        cancelled.refresh_from_db()
+        self.assertEqual(completed.status, BibleStudyMeeting.STATUS_COMPLETED)
+        self.assertEqual(cancelled.status, BibleStudyMeeting.STATUS_CANCELLED)
+
+    def test_cancelling_bible_study_lesson_preserves_meeting_child_data(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        meeting = self.create_meeting(
+            lesson=lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        role = self.create_meeting_role(meeting)
+        song = self.create_meeting_worship_song(meeting)
+
+        cancel_bible_study_lesson_with_meetings(lesson)
+
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_CANCELLED)
+        self.assertTrue(BibleStudyMeetingRole.objects.filter(id=role.id).exists())
+        self.assertTrue(
+            BibleStudyMeetingWorshipSong.objects.filter(id=song.id).exists()
+        )
+
+    def test_cancelling_bible_study_lesson_is_atomic(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        meeting = self.create_meeting(
+            lesson=lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        with mock.patch(
+            "studies.services.cancel_non_final_meetings_for_lesson",
+            side_effect=RuntimeError("meeting cancellation failed"),
+        ):
+            with self.assertRaises(RuntimeError):
+                cancel_bible_study_lesson_with_meetings(lesson)
+
+        lesson.refresh_from_db()
+        meeting.refresh_from_db()
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_PUBLISHED)
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
+
+    def test_lesson_edit_form_cannot_bypass_cancellation_consistency(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        meeting = self.create_meeting(
+            lesson=lesson,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_lesson", args=[lesson.id]),
+            self.lesson_post_data(status=BibleStudyLesson.STATUS_CANCELLED),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        lesson.refresh_from_db()
+        meeting.refresh_from_db()
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_PUBLISHED)
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
+
+    def test_cancelled_lesson_edit_form_cannot_reactivate_to_published(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_CANCELLED)
+        meeting = self.create_meeting(
+            lesson=lesson,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_lesson", args=[lesson.id]),
+            self.lesson_post_data(status=BibleStudyLesson.STATUS_PUBLISHED),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["form"].is_valid())
+        lesson.refresh_from_db()
+        meeting.refresh_from_db()
+        self.assertEqual(lesson.status, BibleStudyLesson.STATUS_CANCELLED)
+        self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_CANCELLED)
+
+    def test_cancelled_lesson_edit_form_cannot_reactivate_to_draft_or_completed(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_CANCELLED)
+        draft_meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        completed_meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.same_group,
+            status=BibleStudyMeeting.STATUS_COMPLETED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        for status in [
+            BibleStudyLesson.STATUS_DRAFT,
+            BibleStudyLesson.STATUS_COMPLETED,
+        ]:
+            response = self.client.post(
+                reverse("edit_bible_study_lesson", args=[lesson.id]),
+                self.lesson_post_data(status=status),
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.context["form"].is_valid())
+            lesson.refresh_from_db()
+            draft_meeting.refresh_from_db()
+            completed_meeting.refresh_from_db()
+            self.assertEqual(lesson.status, BibleStudyLesson.STATUS_CANCELLED)
+            self.assertEqual(
+                draft_meeting.status,
+                BibleStudyMeeting.STATUS_CANCELLED,
+            )
+            self.assertEqual(
+                completed_meeting.status,
+                BibleStudyMeeting.STATUS_COMPLETED,
+            )
 
     def test_lesson_management_list_displays_created_lessons(self):
         self.set_language("en")
@@ -1330,6 +1530,59 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(existing.location, "Do not overwrite")
         self.assertEqual(existing.group_direction, "Existing group preparation")
         self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 3)
+
+    def test_generate_meetings_treats_cancelled_meeting_as_existing(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        existing = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        existing.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Skipped 1 existing meetings")
+        self.assertEqual(existing.status, BibleStudyMeeting.STATUS_CANCELLED)
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(
+                lesson=lesson,
+                small_group=self.group,
+            ).count(),
+            1,
+        )
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 3)
+
+    def test_generate_meetings_does_not_reactivate_cancelled_meeting(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.group
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        existing = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        existing.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Created 0 small group meetings")
+        self.assertContains(response, "Skipped 1 existing meetings")
+        self.assertEqual(existing.status, BibleStudyMeeting.STATUS_CANCELLED)
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 1)
 
     def test_generate_meetings_is_idempotent(self):
         self.set_language("en")
@@ -2109,6 +2362,34 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(draft_response.status_code, 302)
         self.assertEqual(cancelled_response.status_code, 302)
 
+    def test_normal_user_cannot_view_meeting_when_parent_series_inactive(self):
+        self.set_language("en")
+        self.series.is_active = False
+        self.series.save()
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
+    def test_normal_user_cannot_view_meeting_when_parent_series_not_visible(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_DRAFT
+        self.series.save()
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+
     def test_staff_can_view_draft_and_cancelled_meeting(self):
         self.set_language("en")
         draft = self.create_meeting(status=BibleStudyMeeting.STATUS_DRAFT)
@@ -2127,6 +2408,20 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(draft_response.status_code, 200)
         self.assertEqual(cancelled_response.status_code, 200)
+
+    def test_staff_can_view_meeting_when_parent_series_not_public(self):
+        self.set_language("en")
+        self.series.status = BibleStudySeries.STATUS_DRAFT
+        self.series.is_active = False
+        self.series.save()
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
 
     def test_touched_chinese_guide_pages_do_not_use_course_label(self):
         self.set_language("zh")

@@ -35,6 +35,7 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
+from .services import cancel_bible_study_lesson_with_meetings
 
 
 def study_ui_text(language, key):
@@ -479,8 +480,7 @@ def cancel_bible_study_lesson(request, lesson_id):
     if request.method != "POST":
         return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
 
-    lesson.status = BibleStudyLesson.STATUS_CANCELLED
-    lesson.save()
+    cancel_bible_study_lesson_with_meetings(lesson)
     message = (
         "查经指引已取消。"
         if language == "zh"

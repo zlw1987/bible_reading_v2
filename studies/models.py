@@ -551,6 +551,10 @@ class BibleStudyMeeting(models.Model):
         if not self.is_published or not self.lesson.is_published:
             return False
 
+        series = self.lesson.series
+        if not series.is_active or not series.is_published:
+            return False
+
         profile = getattr(user, "profile", None)
         user_group = getattr(profile, "small_group", None)
         return bool(user_group and user_group.id == self.small_group_id)

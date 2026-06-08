@@ -224,12 +224,15 @@ class ServiceEventForm(forms.ModelForm):
             (ServiceEvent.SCOPE_DISTRICT, text["scope_district"]),
             (ServiceEvent.SCOPE_SMALL_GROUP, text["scope_small_group"]),
         ]
-        self.fields["status"].choices = [
-            (ServiceEvent.STATUS_DRAFT, text["draft"]),
-            (ServiceEvent.STATUS_PUBLISHED, text["published"]),
-            (ServiceEvent.STATUS_COMPLETED, text["completed"]),
-            (ServiceEvent.STATUS_CANCELLED, text["cancelled"]),
-        ]
+        if self.instance.status == ServiceEvent.STATUS_CANCELLED:
+            status_choices = [(ServiceEvent.STATUS_CANCELLED, text["cancelled"])]
+        else:
+            status_choices = [
+                (ServiceEvent.STATUS_DRAFT, text["draft"]),
+                (ServiceEvent.STATUS_PUBLISHED, text["published"]),
+                (ServiceEvent.STATUS_COMPLETED, text["completed"]),
+            ]
+        self.fields["status"].choices = status_choices
         self.fields["title"].widget.attrs.update(
             {"placeholder": text["title_placeholder"]}
         )
@@ -274,6 +277,24 @@ class ServiceEventForm(forms.ModelForm):
         )
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+    def clean_status(self):
+        status = self.cleaned_data["status"]
+        if (
+            self.instance.status == ServiceEvent.STATUS_CANCELLED
+            and status != ServiceEvent.STATUS_CANCELLED
+        ):
+            raise ValidationError(
+                "Cancelled service events cannot be reactivated from this form."
+            )
+        if (
+            status == ServiceEvent.STATUS_CANCELLED
+            and self.instance.status != ServiceEvent.STATUS_CANCELLED
+        ):
+            raise ValidationError(
+                "Use the dedicated cancel action to cancel a service event."
+            )
+        return status
 
 
 class RecurringServiceEventForm(forms.Form):

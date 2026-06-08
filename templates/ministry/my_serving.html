@@ -126,7 +126,7 @@
             </a>
         </div>
 
-        {% if not serving_item.confirmed_at %}
+        {% if not serving_item.confirmed_at and serving_item.assignment.is_confirmable %}
         <form method="post" action="{% url 'confirm_team_assignment' serving_item.assignment.id %}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">

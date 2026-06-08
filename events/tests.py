@@ -596,6 +596,22 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIn(self.inactive_required_team.id, team_ids)
 
+    def test_service_event_form_hides_cancelled_status_for_active_event(self):
+        event = self.create_event(status=ServiceEvent.STATUS_PUBLISHED)
+
+        form = ServiceEventForm(instance=event, language="en")
+
+        status_values = [value for value, _label in form.fields["status"].choices]
+        self.assertNotIn(ServiceEvent.STATUS_CANCELLED, status_values)
+
+    def test_service_event_form_shows_only_cancelled_status_for_cancelled_event(self):
+        event = self.create_event(status=ServiceEvent.STATUS_CANCELLED)
+
+        form = ServiceEventForm(instance=event, language="en")
+
+        status_values = [value for value, _label in form.fields["status"].choices]
+        self.assertEqual(status_values, [ServiceEvent.STATUS_CANCELLED])
+
     def test_manager_can_create_event_with_required_teams_without_assignments(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
@@ -678,6 +694,56 @@ class ServiceEventFoundationTests(TestCase):
         )
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_manager_cannot_cancel_event_through_edit_form_post(self):
+        self.set_language("en")
+        event = self.create_event(status=ServiceEvent.STATUS_PUBLISHED)
+        assignment = self.create_team_assignment(
+            event,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(status=ServiceEvent.STATUS_CANCELLED),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        event.refresh_from_db()
+        assignment.refresh_from_db()
+        self.assertEqual(event.status, ServiceEvent.STATUS_PUBLISHED)
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_SCHEDULED)
+
+    def test_manager_cannot_reactivate_cancelled_event_through_edit_form_post(self):
+        self.set_language("en")
+        for status in [
+            ServiceEvent.STATUS_DRAFT,
+            ServiceEvent.STATUS_PUBLISHED,
+            ServiceEvent.STATUS_COMPLETED,
+        ]:
+            with self.subTest(status=status):
+                event = self.create_event(
+                    title=f"Cancelled {status}",
+                    title_en=f"Cancelled {status}",
+                    status=ServiceEvent.STATUS_CANCELLED,
+                )
+                assignment = self.create_team_assignment(
+                    event,
+                    status=TeamAssignment.STATUS_CANCELLED,
+                )
+                self.client.login(username="pastor_event", password="testpass123")
+
+                response = self.client.post(
+                    reverse("edit_service_event", args=[event.id]),
+                    self.event_post_data(status=status),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                event.refresh_from_db()
+                assignment.refresh_from_db()
+                self.assertEqual(event.status, ServiceEvent.STATUS_CANCELLED)
+                self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
 
     def test_manager_edit_replaces_and_clears_rotation_anchor(self):
         self.set_language("en")

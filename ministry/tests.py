@@ -954,6 +954,68 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertIsNotNone(assignment_member.confirmed_at)
         self.assertEqual(assignment_member.confirmation_note, "Confirmed.")
 
+    def test_assigned_member_can_confirm_prepared_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment(status=TeamAssignment.STATUS_PREPARED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {"confirmation_note": "Prepared and ready."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertIsNotNone(assignment_member.confirmed_at)
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CONFIRMED)
+
+    def test_assigned_member_cannot_confirm_cancelled_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment(status=TeamAssignment.STATUS_CANCELLED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(reverse("confirm_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+        self.assertIsNone(assignment_member.confirmed_at)
+
+    def test_assigned_member_cannot_confirm_completed_assignment(self):
+        self.set_language("en")
+        assignment = self.create_assignment(status=TeamAssignment.STATUS_COMPLETED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.post(reverse("confirm_team_assignment", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_COMPLETED)
+        self.assertIsNone(assignment_member.confirmed_at)
+
+    def test_cancelled_assignment_detail_does_not_show_confirmation_form(self):
+        self.set_language("en")
+        assignment = self.create_assignment(status=TeamAssignment.STATUS_CANCELLED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Confirm Assignment")
+
+    def test_completed_assignment_detail_does_not_show_confirmation_form(self):
+        self.set_language("en")
+        assignment = self.create_assignment(status=TeamAssignment.STATUS_COMPLETED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Confirm Assignment")
+
     def test_unassigned_user_cannot_confirm_assignment(self):
         self.set_language("en")
         assignment = self.create_assignment(members=[self.second_membership])
@@ -1132,6 +1194,36 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Sunday Service")
 
+    def test_cancelled_event_assignment_does_not_appear_in_my_serving_upcoming(self):
+        self.set_language("en")
+        cancelled_event = self.create_schedule_event(
+            title_en="Cancelled Service",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        self.create_assignment(service_event=cancelled_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Cancelled Service")
+
+    def test_draft_event_assignment_does_not_appear_in_my_serving_upcoming(self):
+        self.set_language("en")
+        draft_event = self.create_schedule_event(
+            title_en="Draft Service",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        self.create_assignment(service_event=draft_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Draft Service")
+
     def test_past_assignment_appears_in_past_and_all_my_serving_views(self):
         self.set_language("en")
         past_event = ServiceEvent.objects.create(
@@ -1185,6 +1277,17 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Confirmed")
         self.assertContains(response, "Confirmed At")
         self.assertNotContains(response, "Not Confirmed")
+
+    def test_completed_assignment_does_not_show_confirmation_form_on_my_serving_all(self):
+        self.set_language("en")
+        self.create_assignment(status=TeamAssignment.STATUS_COMPLETED)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(f"{reverse('my_serving')}?tab=all")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertNotContains(response, "Confirm Assignment")
 
     def test_duplicate_confirmation_does_not_create_duplicate_state(self):
         self.set_language("en")
@@ -1954,6 +2057,72 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Sunday Service")
         self.assertNotContains(response, "Bible Study Night")
 
+    def test_cancelled_event_assignment_does_not_appear_in_upcoming_assignment_list(self):
+        self.set_language("en")
+        cancelled_event = self.create_schedule_event(
+            title_en="Cancelled Service",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        self.create_assignment(service_event=cancelled_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Cancelled Service")
+
+    def test_draft_event_assignment_does_not_appear_in_upcoming_assignment_list(self):
+        self.set_language("en")
+        draft_event = self.create_schedule_event(
+            title_en="Draft Service",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        self.create_assignment(service_event=draft_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Draft Service")
+
+    def test_cancelled_event_assignment_does_not_appear_in_needs_confirmation_list(self):
+        self.set_language("en")
+        cancelled_event = self.create_schedule_event(
+            title_en="Cancelled Needs Confirmation",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        self.create_assignment(service_event=cancelled_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "needs_confirmation"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Cancelled Needs Confirmation")
+
+    def test_draft_event_assignment_does_not_appear_in_needs_confirmation_list(self):
+        self.set_language("en")
+        draft_event = self.create_schedule_event(
+            title_en="Draft Needs Confirmation",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        self.create_assignment(service_event=draft_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(
+            reverse("team_assignment_list"),
+            {"tab": "needs_confirmation"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Draft Needs Confirmation")
+
     def test_team_schedule_includes_existing_additional_assignment(self):
         self.set_language("en")
         self.create_assignment()
@@ -2530,6 +2699,37 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertEqual(event.title, "主日崇拜")
         self.assertEqual(event.title_en, "Sunday Service")
         self.assertIn("normalized ServiceEvent title", output)
+
+    def test_import_does_not_reuse_cancelled_matching_service_event(self):
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(
+                self.future_date,
+                timezone.datetime.strptime("10:00", "%H:%M").time(),
+            ),
+            timezone.get_current_timezone(),
+        )
+        cancelled_event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=start_datetime,
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        csv_path = self.write_csv(self.csv_content())
+
+        self.run_import(csv_path)
+
+        self.assertEqual(ServiceEvent.objects.count(), 2)
+        cancelled_event.refresh_from_db()
+        self.assertEqual(cancelled_event.status, ServiceEvent.STATUS_CANCELLED)
+        self.assertFalse(cancelled_event.team_assignments.exists())
+        replacement_event = (
+            ServiceEvent.objects.exclude(id=cancelled_event.id).get()
+        )
+        self.assertEqual(replacement_event.status, ServiceEvent.STATUS_PUBLISHED)
+        assignment = TeamAssignment.objects.get()
+        self.assertEqual(assignment.service_event, replacement_event)
 
     def test_forbidden_sensitive_columns_are_rejected(self):
         for forbidden_column in [

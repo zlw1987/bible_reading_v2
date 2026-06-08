@@ -204,6 +204,12 @@ class TeamAssignment(models.Model):
     def is_cancelled(self):
         return self.status == self.STATUS_CANCELLED
 
+    def is_confirmable(self):
+        return self.status in {
+            self.STATUS_SCHEDULED,
+            self.STATUS_PREPARED,
+        }
+
     def active_assignment_members(self):
         return self.assignment_members.filter(
             membership__is_active=True,

@@ -105,6 +105,9 @@ def can_confirm_team_assignment(user, assignment):
     if assignment is None or not getattr(user, "is_authenticated", False):
         return False
 
+    if not assignment.is_confirmable():
+        return False
+
     return assignment.assignment_members.filter(
         membership__user=user,
         membership__is_active=True,

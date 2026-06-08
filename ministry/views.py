@@ -162,6 +162,12 @@ def my_serving_assignments(user, tab="upcoming"):
             membership__team__is_active=True,
         )
         .exclude(assignment__status=TeamAssignment.STATUS_CANCELLED)
+        .exclude(
+            assignment__service_event__status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ]
+        )
     )
 
     if tab == "past":
@@ -807,6 +813,11 @@ def team_assignment_list(request):
                 TeamAssignment.STATUS_CANCELLED,
                 TeamAssignment.STATUS_COMPLETED,
             ]
+        ).exclude(
+            service_event__status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ]
         ).filter(
             assignment_members__membership__is_active=True,
             assignment_members__confirmed_at__isnull=True,
@@ -816,6 +827,11 @@ def team_assignment_list(request):
     else:
         assignments = assignments.filter(
             service_event__start_datetime__gte=now,
+        ).exclude(
+            service_event__status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ]
         ).exclude(
             status__in=[
                 TeamAssignment.STATUS_CANCELLED,

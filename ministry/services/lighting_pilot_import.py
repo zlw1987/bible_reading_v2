@@ -276,6 +276,7 @@ def get_or_create_service_event(
             district__isnull=True,
             small_group__isnull=True,
         )
+        .exclude(status=ServiceEvent.STATUS_CANCELLED)
         .order_by("id")
         .first()
     )

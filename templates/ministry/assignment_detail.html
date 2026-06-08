@@ -113,7 +113,7 @@
 </div>
 {% endif %}
 
-{% if can_confirm_assignment and assignment.status != "cancelled" %}
+{% if can_confirm_assignment %}
 <form method="post" class="card" action="{% url 'confirm_team_assignment' assignment.id %}">
     {% csrf_token %}
     <h2>{% if language == "zh" %}确认服事{% else %}Confirm Assignment{% endif %}</h2>

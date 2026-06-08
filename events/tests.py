@@ -6,7 +6,14 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
+from accounts.models import (
+    ChurchRoleAssignment,
+    ChurchStructureMembership,
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    SmallGroup,
+)
 from ministry.models import (
     MinistryTeam,
     TeamAssignment,
@@ -15,7 +22,7 @@ from ministry.models import (
 )
 
 from .forms import ServiceEventForm
-from .models import ServiceEvent, ServiceEventRequiredTeam
+from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequiredTeam
 
 
 class ServiceEventFoundationTests(TestCase):
@@ -120,6 +127,15 @@ class ServiceEventFoundationTests(TestCase):
         }
         data.update(overrides)
         return ServiceEvent.objects.create(**data)
+
+    def create_structure_unit(self, code, name, parent=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            parent=parent,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code=code,
+            name=name,
+            is_active=is_active,
+        )
 
     def event_post_data(self, **overrides):
         data = {
@@ -381,6 +397,138 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
         self.assertTrue(MinistryTeam.objects.filter(id=self.required_team.id).exists())
+
+    def test_service_event_audience_scope_can_store_selected_unit(self):
+        event = self.create_event()
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=unit,
+        )
+
+        self.assertEqual(scope.service_event, event)
+        self.assertEqual(scope.unit, unit)
+        self.assertEqual(list(event.get_audience_scope_units()), [unit])
+
+    def test_service_event_audience_scope_rejects_duplicate_unit(self):
+        event = self.create_event()
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        with self.assertRaises(ValidationError):
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+    def test_deleting_event_removes_audience_scope_rows(self):
+        event = self.create_event()
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        event.delete()
+
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+        self.assertTrue(ChurchStructureUnit.objects.filter(id=unit.id).exists())
+
+    def test_audience_scope_protects_referenced_unit_from_delete(self):
+        event = self.create_event()
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        with self.assertRaises(ProtectedError):
+            unit.delete()
+
+    def test_existing_event_can_have_no_audience_scope(self):
+        event = self.create_event()
+
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertEqual(list(event.get_audience_scope_units()), [])
+        event.full_clean()
+
+    def test_audience_scope_rejects_inactive_unit(self):
+        event = self.create_event()
+        inactive_unit = self.create_structure_unit(
+            "INACTIVE",
+            "Inactive Unit",
+            is_active=False,
+        )
+
+        with self.assertRaises(ValidationError):
+            ServiceEventAudienceScope.objects.create(
+                service_event=event,
+                unit=inactive_unit,
+            )
+
+    def test_audience_scope_rows_do_not_change_legacy_visibility(self):
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        self.assertTrue(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_requested_membership_does_not_grant_event_visibility(self):
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+        ChurchStructureMembership.objects.create(
+            user=self.other_user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+        )
+
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_audience_scope_rows_do_not_change_ministry_scheduling_data(self):
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        event.required_teams.add(self.required_team)
+        unit = self.create_structure_unit("CM", "Chinese Ministry")
+
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+        event.refresh_from_db()
+
+        self.assertEqual(event.rotation_anchor_team, self.required_team)
+        self.assertEqual(list(event.required_teams.all()), [self.required_team])
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_audience_scope_rejects_parent_then_descendant_selection(self):
+        event = self.create_event()
+        parent = self.create_structure_unit("CM", "Chinese Ministry")
+        child = self.create_structure_unit("CM-D1", "District 1", parent=parent)
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=parent)
+
+        with self.assertRaises(ValidationError):
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=child)
+
+    def test_audience_scope_rejects_descendant_then_parent_selection(self):
+        event = self.create_event()
+        parent = self.create_structure_unit("CM", "Chinese Ministry")
+        child = self.create_structure_unit("CM-D1", "District 1", parent=parent)
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=child)
+
+        with self.assertRaises(ValidationError):
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=parent)
+
+    def test_audience_scope_allows_sibling_units(self):
+        event = self.create_event()
+        parent = self.create_structure_unit("CM", "Chinese Ministry")
+        first_child = self.create_structure_unit("CM-D1", "District 1", parent=parent)
+        second_child = self.create_structure_unit("CM-D2", "District 2", parent=parent)
+
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=first_child)
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=second_child)
+
+        self.assertEqual(
+            set(event.get_audience_scope_units()),
+            {first_child, second_child},
+        )
 
     def test_service_event_form_shows_active_teams_only_for_new_event(self):
         form = ServiceEventForm(language="en")

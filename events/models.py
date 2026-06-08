@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from accounts.models import District, SmallGroup
+from accounts.models import ChurchStructureUnit, District, SmallGroup
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 
 
@@ -173,6 +173,13 @@ class ServiceEvent(models.Model):
             return self.description_en or self.description
         return self.description
 
+    def get_audience_scope_units(self):
+        if not self.pk:
+            return ChurchStructureUnit.objects.none()
+        return ChurchStructureUnit.objects.filter(
+            service_event_audience_scope_links__service_event=self
+        )
+
     def can_be_managed_by(self, user):
         return (
             getattr(user, "is_staff", False)
@@ -242,3 +249,87 @@ class ServiceEventRequiredTeam(models.Model):
 
     def __str__(self):
         return f"{self.ministry_team} required for {self.service_event}"
+
+
+class ServiceEventAudienceScope(models.Model):
+    service_event = models.ForeignKey(
+        ServiceEvent,
+        on_delete=models.CASCADE,
+        related_name="audience_scope_links",
+    )
+    unit = models.ForeignKey(
+        "accounts.ChurchStructureUnit",
+        on_delete=models.PROTECT,
+        related_name="service_event_audience_scope_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = [
+            "service_event__start_datetime",
+            "unit__parent_id",
+            "unit__sort_order",
+            "unit__code",
+            "unit__name",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service_event", "unit"],
+                name="unique_service_event_audience_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["service_event"]),
+            models.Index(fields=["unit"]),
+        ]
+
+    def __str__(self):
+        return f"{self.unit} audience scope for {self.service_event}"
+
+    def clean(self):
+        errors = {}
+
+        if self.unit_id and not self.unit.is_active:
+            errors["unit"] = "Audience scope must use an active church structure unit."
+
+        if self.service_event_id and self.unit_id:
+            selected_units = ChurchStructureUnit.objects.filter(
+                service_event_audience_scope_links__service_event_id=self.service_event_id
+            )
+            if self.pk:
+                selected_units = selected_units.exclude(
+                    service_event_audience_scope_links__pk=self.pk
+                )
+
+            selected_unit_ids = set(selected_units.values_list("id", flat=True))
+            ancestor_ids = {
+                ancestor.id
+                for ancestor in self.unit.get_ancestors()
+                if ancestor.id is not None
+            }
+
+            if ancestor_ids & selected_unit_ids:
+                errors["unit"] = (
+                    "Audience scope cannot include both an ancestor and descendant "
+                    "unit for the same service event."
+                )
+            else:
+                for selected_unit in selected_units:
+                    selected_ancestor_ids = {
+                        ancestor.id
+                        for ancestor in selected_unit.get_ancestors()
+                        if ancestor.id is not None
+                    }
+                    if self.unit_id in selected_ancestor_ids:
+                        errors["unit"] = (
+                            "Audience scope cannot include both an ancestor and "
+                            "descendant unit for the same service event."
+                        )
+                        break
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)

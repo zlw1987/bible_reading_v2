@@ -152,6 +152,10 @@ Boundaries:
 
 The following remain deferred unless separately planned:
 
+- SE-AS.2 ServiceEvent audience-scope model implementation.
+- ServiceEvent audience filtering.
+- ServiceEvent visibility migration.
+- Consumer migration from legacy fields or `Profile.small_group`.
 - Automatic scheduling engine.
 - Availability tracking.
 - Swap requests.
@@ -160,7 +164,6 @@ The following remain deferred unless separately planned:
 - Checklist engine.
 - Service review notes.
 - Community Activities.
-- Audience filtering or visibility migration.
 - ChurchStructureMembership-driven serving permissions.
 
 Required-team coverage is a scheduling clarity feature. It is not a checklist, availability system, swap workflow, reminder workflow, notification system, or automatic scheduler.
@@ -173,4 +176,4 @@ MO-S.4 is complete as a team-scoped manual scheduling workspace that stays scope
 
 MO-S.4A is complete as scheduling semantic cleanup after manual QA.
 
-MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine.
+MO-S.5A is complete as rotation anchor foundation. MO-S.5B is complete as a limited preview/edit-first copy-forward suggestion helper. SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning. Future scheduling work should remain separately planned and must not treat MO-S.5B as authorization for an automatic scheduling engine; future audience work should not treat SE-AS.1 as authorization for SE-AS.2 model work, filtering, or consumer migration.

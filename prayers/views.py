@@ -185,21 +185,25 @@ def prayer_list(request):
         prayers = base_queryset.filter(user=request.user)
 
     elif tab == "group":
+        # Group tab is scoped strictly to group-visible prayers for the user's
+        # current small group. The user's own group prayers already match this
+        # condition; church-wide/private prayers they authored must not appear
+        # here just because they authored them. No small group => no group-scope
+        # prayers (use the "my" tab for own content).
         if user_group:
             prayers = base_queryset.filter(
-                Q(user=request.user)
-                | Q(
-                    visibility=PrayerRequest.VISIBILITY_GROUP,
-                    small_group_at_post=user_group,
-                )
+                visibility=PrayerRequest.VISIBILITY_GROUP,
+                small_group_at_post=user_group,
             )
         else:
-            prayers = base_queryset.filter(user=request.user)
+            prayers = base_queryset.none()
 
     else:
+        # Church tab is scoped strictly to church-wide prayers. The user's own
+        # church-wide prayers already match; group-visible/private prayers they
+        # authored must not appear here just because they authored them.
         prayers = base_queryset.filter(
-            Q(user=request.user)
-            | Q(visibility=PrayerRequest.VISIBILITY_CHURCH)
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
         )
 
     return render(

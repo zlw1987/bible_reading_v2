@@ -4,7 +4,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import SmallGroup
+from prayers.forms import localized_visibility_choices
 from prayers.models import PrayerMark, PrayerReport, PrayerRequest
+from prayers.templatetags.prayer_extras import prayer_visibility_label
 
 
 class PrayerRequestFlowTests(TestCase):
@@ -1082,3 +1084,127 @@ class PrayerListTabAudienceTests(TestCase):
         my_titles = self.titles_for("no_group", "my")
         self.assertIn("NoGroup church request", my_titles)
         self.assertIn("NoGroup private request", my_titles)
+
+
+class PrayerVisibilityLabelConsistencyTests(TestCase):
+    """UI-H.1B: visibility labels use consistent audience-scope wording.
+
+    ``Prayer Wall / 代祷墙`` names the module/page; the church-wide audience
+    scope is labelled ``Church-wide / 全教会``. These unit-level checks pin the
+    label vocabulary without depending on rendered-page whitespace.
+    """
+
+    def test_english_visibility_form_choices(self):
+        choices = dict(localized_visibility_choices("en"))
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_PRIVATE], "Private")
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_GROUP], "My Group")
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_CHURCH], "Church-wide")
+        # The module/page name must not double as the audience-scope label.
+        self.assertNotIn("Prayer Wall", dict(choices).values())
+
+    def test_chinese_visibility_form_choices(self):
+        choices = dict(localized_visibility_choices("zh"))
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_PRIVATE], "私人")
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_GROUP], "我的小组")
+        self.assertEqual(choices[PrayerRequest.VISIBILITY_CHURCH], "全教会")
+        self.assertNotIn("代祷墙", dict(choices).values())
+
+    def test_english_badge_labels(self):
+        cases = {
+            PrayerRequest.VISIBILITY_PRIVATE: "Private",
+            PrayerRequest.VISIBILITY_GROUP: "My Group",
+            PrayerRequest.VISIBILITY_CHURCH: "Church-wide",
+        }
+        for value, expected in cases.items():
+            prayer = PrayerRequest(visibility=value)
+            self.assertEqual(prayer_visibility_label(prayer, "en"), expected)
+        church = PrayerRequest(visibility=PrayerRequest.VISIBILITY_CHURCH)
+        self.assertNotEqual(prayer_visibility_label(church, "en"), "Prayer Wall")
+
+    def test_chinese_badge_labels(self):
+        cases = {
+            PrayerRequest.VISIBILITY_PRIVATE: "私人",
+            PrayerRequest.VISIBILITY_GROUP: "我的小组",
+            PrayerRequest.VISIBILITY_CHURCH: "全教会",
+        }
+        for value, expected in cases.items():
+            prayer = PrayerRequest(visibility=value)
+            self.assertEqual(prayer_visibility_label(prayer, "zh"), expected)
+        church = PrayerRequest(visibility=PrayerRequest.VISIBILITY_CHURCH)
+        self.assertNotEqual(prayer_visibility_label(church, "zh"), "代祷墙")
+
+    def test_stored_values_unchanged(self):
+        # Choice *values* (stored in the DB) must stay exactly as before.
+        self.assertEqual(
+            [value for value, _ in localized_visibility_choices("en")],
+            ["private", "group", "church"],
+        )
+
+
+class PrayerListLabelRenderingTests(TestCase):
+    """UI-H.1B: rendered prayer list uses the consistent labels."""
+
+    def setUp(self):
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.user = User.objects.create_user(
+            username="levin",
+            password="TestPass123!",
+        )
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+        # A church-wide prayer so a card (and its scope badge) renders.
+        PrayerRequest.objects.create(
+            user=self.user,
+            title="Church scope card",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+    def set_language(self, language):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def get_church_tab(self):
+        self.client.login(username="levin", password="TestPass123!")
+        return self.client.get(
+            reverse("prayer_list"),
+            {"tab": "church", "status": "all"},
+        )
+
+    def test_english_tab_labels_title_and_badge(self):
+        self.set_language("en")
+        response = self.get_church_tab()
+        # Module/page title.
+        self.assertContains(response, "Prayer Wall")
+        # Tabs.
+        self.assertContains(response, "My Requests")
+        self.assertContains(response, "My Group")
+        self.assertContains(response, "Church-wide")
+        # Card scope badge for the church-wide prayer.
+        self.assertContains(response, "Church scope card")
+        self.assertEqual(
+            prayer_visibility_label(
+                response.context["prayers"][0], "en"
+            ),
+            "Church-wide",
+        )
+
+    def test_chinese_tab_labels_title_and_badge(self):
+        self.set_language("zh")
+        response = self.get_church_tab()
+        # Module/page title.
+        self.assertContains(response, "代祷墙")
+        # Tabs (我的 is the My Requests tab; 我的小组 group; 全教会 church-wide).
+        self.assertContains(response, "我的小组")
+        self.assertContains(response, "全教会")
+        # English module name must not leak into the Chinese page.
+        self.assertNotContains(response, "Prayer Wall")
+        self.assertNotContains(response, "Church-wide")
+        # Card scope badge for the church-wide prayer.
+        self.assertEqual(
+            prayer_visibility_label(
+                response.context["prayers"][0], "zh"
+            ),
+            "全教会",
+        )

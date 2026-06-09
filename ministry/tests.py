@@ -1089,6 +1089,54 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Team Assignment")
 
+    def test_assignment_detail_shows_back_to_my_serving_for_member(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Back to My Serving")
+        self.assertContains(response, reverse("my_serving"))
+        self.assertNotContains(response, "Back to Assignments")
+
+    def test_assignment_detail_member_back_link_uses_chinese_label(self):
+        self.set_language("zh")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "返回我的服事")
+        self.assertNotContains(response, "返回排班")
+
+    def test_assignment_detail_shows_back_to_assignments_for_manager(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Back to My Serving")
+        self.assertContains(response, "Back to Assignments")
+        self.assertContains(response, reverse("team_assignment_list"))
+
+    def test_assignment_detail_playbook_link_opens_in_new_tab(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("team_assignment_detail", args=[assignment.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '<a href="https://example.com/playbook" target="_blank" rel="noopener noreferrer">',
+        )
+
     def test_assigned_member_can_confirm_assignment(self):
         self.set_language("en")
         assignment = self.create_assignment()
@@ -1319,7 +1367,10 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Sunday Service")
-        self.assertContains(response, "You do not have any serving assignments yet.")
+        self.assertContains(
+            response,
+            "You do not have any upcoming serving assignments right now.",
+        )
 
     def test_inactive_membership_does_not_show_on_my_serving(self):
         self.set_language("en")
@@ -1332,7 +1383,10 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Sunday Service")
-        self.assertContains(response, "You do not have any serving assignments yet.")
+        self.assertContains(
+            response,
+            "You do not have any upcoming serving assignments right now.",
+        )
 
     def test_cancelled_assignment_does_not_appear_in_my_serving_upcoming(self):
         self.set_language("en")
@@ -1587,7 +1641,8 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "我的服事")
-        self.assertContains(response, "即将服事")
+        self.assertContains(response, "查看你的服事安排和确认状态。")
+        self.assertContains(response, "需要你确认")
         self.assertContains(response, "确认服事")
 
     def test_english_my_serving_page_shows_english_labels(self):
@@ -1599,8 +1654,63 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My Serving")
-        self.assertContains(response, "Upcoming Serving")
+        self.assertContains(
+            response,
+            "Your upcoming serving assignments and confirmation status.",
+        )
+        self.assertContains(response, "Needs your confirmation")
         self.assertContains(response, "Confirm Assignment")
+
+    def test_pending_assignment_shows_needs_confirmation_section_and_action(self):
+        self.set_language("en")
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Needs your confirmation")
+        self.assertContains(response, "Needs confirmation")
+        self.assertContains(response, "Confirm Assignment")
+        self.assertContains(response, "View details")
+
+    def test_confirmed_upcoming_assignment_shows_under_upcoming_not_pending(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        assignment_member.confirm("Ready.")
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upcoming serving")
+        self.assertContains(response, "Confirmed")
+        self.assertNotContains(response, "Needs your confirmation")
+        self.assertNotContains(response, "Confirm Assignment")
+
+    def test_empty_my_serving_shows_friendly_empty_state_en(self):
+        self.set_language("en")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "You do not have any upcoming serving assignments right now.",
+        )
+
+    def test_empty_my_serving_shows_friendly_empty_state_zh(self):
+        self.set_language("zh")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "你目前还没有即将到来的服事安排。")
 
     def test_normal_top_nav_shows_my_serving(self):
         self.set_language("en")

@@ -10,11 +10,11 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}即将服事{% else %}Upcoming Serving{% endif %}
+        {% if language == "zh" %}查看你的服事安排和确认状态。{% else %}Your upcoming serving assignments and confirmation status.{% endif %}
     </p>
 </div>
 
-<div class="card">
+<div class="card serving-tabs">
     <div class="actions">
         <a class="button {% if tab != 'upcoming' %}button-secondary{% endif %}"
            href="{% url 'my_serving' %}?tab=upcoming">
@@ -31,13 +31,59 @@
     </div>
 </div>
 
+{% if serving_items %}
+    {% if pending_items %}
+    <section class="serving-section serving-section--pending">
+        <h2 class="serving-section-title">
+            {% if language == "zh" %}需要你确认{% else %}Needs your confirmation{% endif %}
+        </h2>
+        <div class="grid grid-2">
+            {% for serving_item in pending_items %}
+            {% include "ministry/_serving_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if scheduled_items %}
+    <section class="serving-section">
+        <h2 class="serving-section-title">
+            {% if tab == "past" %}
+                {% if language == "zh" %}过去的服事{% else %}Past serving{% endif %}
+            {% elif tab == "all" %}
+                {% if language == "zh" %}全部服事{% else %}All serving{% endif %}
+            {% else %}
+                {% if language == "zh" %}即将到来的服事{% else %}Upcoming serving{% endif %}
+            {% endif %}
+        </h2>
+        <div class="grid grid-2">
+            {% for serving_item in scheduled_items %}
+            {% include "ministry/_serving_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+{% else %}
+<div class="card serving-empty">
+    <p class="muted">
+        {% if tab == "past" %}
+            {% if language == "zh" %}你还没有过去的服事安排。{% else %}You do not have any past serving assignments.{% endif %}
+        {% elif tab == "all" %}
+            {% if language == "zh" %}你目前还没有服事安排。{% else %}You do not have any serving assignments yet.{% endif %}
+        {% else %}
+            {% if language == "zh" %}你目前还没有即将到来的服事安排。{% else %}You do not have any upcoming serving assignments right now.{% endif %}
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+
 {% if manageable_teams %}
-<div class="card">
-    <h2>{% if language == "zh" %}我负责的团队{% else %}Teams I manage{% endif %}</h2>
+<section class="serving-section">
+    <h2 class="serving-section-title">{% if language == "zh" %}我负责的团队{% else %}Teams I manage{% endif %}</h2>
     <div class="grid grid-2">
         {% for team in manageable_teams %}
-        <div>
-            <h3>{{ team|ministry_team_name:language }}</h3>
+        <div class="card">
+            <h3 class="card-title">{{ team|ministry_team_name:language }}</h3>
             {% if team|ministry_team_description:language %}
             <p class="muted">{{ team|ministry_team_description:language|truncatechars:140 }}</p>
             {% endif %}
@@ -52,105 +98,6 @@
         </div>
         {% endfor %}
     </div>
-</div>
-{% endif %}
-
-{% if serving_items %}
-<div class="grid grid-2">
-    {% for serving_item in serving_items %}
-    <div class="card">
-        <h2 class="card-title">
-            <a href="{% url 'team_assignment_detail' serving_item.assignment.id %}">
-                {{ serving_item.assignment.service_event|event_title:language }}
-            </a>
-        </h2>
-
-        <p class="muted">
-            {{ serving_item.assignment.service_event|event_type_label:language }}
-            ·
-            {{ serving_item.assignment.ministry_team|ministry_team_name:language }}
-        </p>
-
-        <p>
-            <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
-            {{ serving_item.assignment.service_event|event_title:language }}
-        </p>
-        <p>
-            <strong>{% if language == "zh" %}时间{% else %}Date/Time{% endif %}:</strong>
-            {{ serving_item.assignment.service_event.start_datetime }}
-        </p>
-        <p>
-            <strong>{% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}:</strong>
-            {{ serving_item.assignment.ministry_team|ministry_team_name:language }}
-        </p>
-        <p>
-            <strong>{% if language == "zh" %}排班状态{% else %}Assignment Status{% endif %}:</strong>
-            {{ serving_item.assignment|assignment_status_label:language }}
-        </p>
-        <p>
-            <strong>{% if language == "zh" %}确认{% else %}Confirmation{% endif %}:</strong>
-            {% if serving_item.confirmed_at %}
-                {% if language == "zh" %}已确认{% else %}Confirmed{% endif %}
-            {% else %}
-                {% if language == "zh" %}未确认{% else %}Not Confirmed{% endif %}
-            {% endif %}
-        </p>
-
-        {% if serving_item.confirmed_at %}
-        <p>
-            <strong>{% if language == "zh" %}确认时间{% else %}Confirmed At{% endif %}:</strong>
-            {{ serving_item.confirmed_at }}
-        </p>
-        {% endif %}
-
-        {% if serving_item.assignment.notes %}
-        <p>
-            <strong>{% if language == "zh" %}排班备注{% else %}Assignment Notes{% endif %}:</strong>
-            {{ serving_item.assignment.notes|linebreaksbr }}
-        </p>
-        {% endif %}
-
-        {% if serving_item.assignment.ministry_team.playbook_link %}
-        <p>
-            <strong>{% if language == "zh" %}服事手册{% else %}Playbook{% endif %}:</strong>
-            <a href="{{ serving_item.assignment.ministry_team.playbook_link }}">
-                {{ serving_item.assignment.ministry_team.playbook_link }}
-            </a>
-        </p>
-        {% endif %}
-
-        <div class="actions">
-            <a class="button button-secondary"
-               href="{% url 'team_assignment_detail' serving_item.assignment.id %}">
-                {% if language == "zh" %}查看服事安排{% else %}View Assignment{% endif %}
-            </a>
-        </div>
-
-        {% if not serving_item.confirmed_at and serving_item.assignment.is_confirmable %}
-        <form method="post" action="{% url 'confirm_team_assignment' serving_item.assignment.id %}">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            {% for field in confirm_form %}
-            <div class="form-row">
-                {{ field.label_tag }}
-                {{ field }}
-                {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
-                {{ field.errors }}
-            </div>
-            {% endfor %}
-            <button type="submit">
-                {% if language == "zh" %}确认服事{% else %}Confirm Assignment{% endif %}
-            </button>
-        </form>
-        {% endif %}
-    </div>
-    {% endfor %}
-</div>
-{% else %}
-<div class="card">
-    <p class="muted">
-        {% if language == "zh" %}你目前还没有服事安排。{% else %}You do not have any serving assignments yet.{% endif %}
-    </p>
-</div>
+</section>
 {% endif %}
 {% endblock %}

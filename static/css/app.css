@@ -807,6 +807,90 @@ th {
     margin-top: auto;
 }
 
+/* My Serving / member-facing serving dashboard */
+.serving-tabs {
+    margin-bottom: 18px;
+}
+
+.serving-section {
+    margin-bottom: 28px;
+}
+
+.serving-section-title {
+    font-size: 22px;
+    margin: 0 0 14px;
+}
+
+.serving-card {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+}
+
+.serving-section--pending .serving-card {
+    border-left: 4px solid var(--primary);
+}
+
+.serving-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.serving-card-title {
+    margin: 0;
+    font-size: 20px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.serving-card-head .status {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.serving-card-meta {
+    margin: 14px 0 0;
+    display: grid;
+    gap: 10px;
+}
+
+.serving-card-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.serving-card-meta dt {
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.serving-card-meta dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.serving-card-notes {
+    margin: 14px 0 0;
+}
+
+.serving-card-playbook {
+    margin: 10px 0 0;
+}
+
+.serving-card-actions {
+    margin-top: 16px;
+}
+
+.serving-card-confirm {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
 @media (max-width: 760px) {
     .site-header {
         transition: transform 180ms ease;

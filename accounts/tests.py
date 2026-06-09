@@ -384,7 +384,7 @@ class AccountProfileTests(TestCase):
         serving_response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(serving_response.status_code, 200)
-        self.assertContains(serving_response, "你目前还没有服事安排。")
+        self.assertContains(serving_response, "你目前还没有即将到来的服事安排。")
 
     def test_staff_request_pages_show_profile_created_request(self):
         self.client.login(username="levin", password="OldPass123!")

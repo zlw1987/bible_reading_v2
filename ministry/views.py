@@ -767,11 +767,25 @@ def my_serving(request):
     if tab not in {"upcoming", "past", "all"}:
         tab = "upcoming"
 
+    serving_items = list(my_serving_assignments(request.user, tab=tab))
+    pending_items = [
+        item
+        for item in serving_items
+        if not item.confirmed_at and item.assignment.is_confirmable()
+    ]
+    scheduled_items = [
+        item
+        for item in serving_items
+        if item.confirmed_at or not item.assignment.is_confirmable()
+    ]
+
     return render(
         request,
         "ministry/my_serving.html",
         {
-            "serving_items": my_serving_assignments(request.user, tab=tab),
+            "serving_items": serving_items,
+            "pending_items": pending_items,
+            "scheduled_items": scheduled_items,
             "manageable_teams": manageable_assignment_teams(request.user),
             "tab": tab,
             "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),

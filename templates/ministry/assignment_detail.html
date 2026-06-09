@@ -7,10 +7,15 @@
 {% endblock %}
 
 {% block content %}
-<p>
-    <a href="{% url 'team_assignment_list' %}">
-        ← {% if language == "zh" %}返回排班{% else %}Back to Assignments{% endif %}
+<p class="actions">
+    <a href="{% url 'my_serving' %}">
+        ← {% if language == "zh" %}返回我的服事{% else %}Back to My Serving{% endif %}
     </a>
+    {% if can_manage_assignment %}
+    <a href="{% url 'team_assignment_list' %}">
+        {% if language == "zh" %}返回排班{% else %}Back to Assignments{% endif %}
+    </a>
+    {% endif %}
 </p>
 
 <div class="page-header">
@@ -19,34 +24,43 @@
 </div>
 
 <div class="card">
-    <p class="muted">
-        {{ assignment|assignment_status_label:language }}
-        ·
-        {{ assignment.ministry_team|ministry_team_name:language }}
-    </p>
+    <div class="serving-card-head">
+        <p class="muted">
+            {{ assignment.ministry_team|ministry_team_name:language }}
+        </p>
+        {% if assignment.status == "confirmed" %}
+        <span class="status status-good">{{ assignment|assignment_status_label:language }}</span>
+        {% elif assignment.is_confirmable %}
+        <span class="status status-warning">{{ assignment|assignment_status_label:language }}</span>
+        {% else %}
+        <span class="status">{{ assignment|assignment_status_label:language }}</span>
+        {% endif %}
+    </div>
 
-    <p>
-        <strong>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}:</strong>
-        {{ assignment.service_event|event_title:language }}
-    </p>
-    {% if assignment.service_event.ministry_context_id %}
-    <p>
-        <strong>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}:</strong>
-        {{ assignment.service_event|event_ministry_context_label:language }}
-    </p>
-    {% endif %}
-    <p>
-        <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
-        {{ assignment.service_event.start_datetime }}
-    </p>
-    <p>
-        <strong>{% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}:</strong>
-        {{ assignment.ministry_team|ministry_team_name:language }}
-    </p>
-    <p>
-        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
-        {{ assignment|assignment_status_label:language }}
-    </p>
+    <dl class="serving-card-meta">
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}</dt>
+            <dd>{{ assignment.service_event|event_title:language }}</dd>
+        </div>
+        {% if assignment.service_event.ministry_context_id %}
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}</dt>
+            <dd>{{ assignment.service_event|event_ministry_context_label:language }}</dd>
+        </div>
+        {% endif %}
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}</dt>
+            <dd>{{ assignment.service_event.start_datetime }}</dd>
+        </div>
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}事工团队{% else %}Ministry Team{% endif %}</dt>
+            <dd>{{ assignment.ministry_team|ministry_team_name:language }}</dd>
+        </div>
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>
+            <dd>{{ assignment|assignment_status_label:language }}</dd>
+        </div>
+    </dl>
 
     {% if assignment.notes %}
     <p>
@@ -58,7 +72,7 @@
     {% if assignment.ministry_team.playbook_link %}
     <p>
         <strong>{% if language == "zh" %}服事手册链接{% else %}Playbook Link{% endif %}:</strong>
-        <a href="{{ assignment.ministry_team.playbook_link }}">{{ assignment.ministry_team.playbook_link }}</a>
+        <a href="{{ assignment.ministry_team.playbook_link }}" target="_blank" rel="noopener noreferrer">{{ assignment.ministry_team.playbook_link }}</a>
     </p>
     {% endif %}
 

@@ -1,0 +1,89 @@
+{% load event_extras ministry_extras %}
+<article class="card serving-card">
+    <div class="serving-card-head">
+        <h3 class="card-title serving-card-title">
+            <a href="{% url 'team_assignment_detail' serving_item.assignment.id %}">
+                {{ serving_item.assignment.service_event|event_title:language }}
+            </a>
+        </h3>
+        {% if serving_item.confirmed_at %}
+        <span class="status status-good">
+            {% if language == "zh" %}已确认{% else %}Confirmed{% endif %}
+        </span>
+        {% elif serving_item.assignment.is_confirmable %}
+        <span class="status status-warning">
+            {% if language == "zh" %}需要确认{% else %}Needs confirmation{% endif %}
+        </span>
+        {% else %}
+        <span class="status">
+            {{ serving_item.assignment|assignment_status_label:language }}
+        </span>
+        {% endif %}
+    </div>
+
+    <dl class="serving-card-meta">
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}时间{% else %}When{% endif %}</dt>
+            <dd>{{ serving_item.assignment.service_event.start_datetime }}</dd>
+        </div>
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}事工团队{% else %}Team{% endif %}</dt>
+            <dd>{{ serving_item.assignment.ministry_team|ministry_team_name:language }}</dd>
+        </div>
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}你的角色{% else %}Your role{% endif %}</dt>
+            <dd>
+                {{ serving_item.membership|membership_role_label:language }}
+                · {{ serving_item.membership.get_display_name }}
+            </dd>
+        </div>
+        {% if serving_item.confirmed_at %}
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}确认时间{% else %}Confirmed At{% endif %}</dt>
+            <dd>{{ serving_item.confirmed_at }}</dd>
+        </div>
+        {% endif %}
+    </dl>
+
+    {% if serving_item.assignment.notes %}
+    <p class="serving-card-notes muted">
+        <strong>{% if language == "zh" %}服事备注{% else %}Notes{% endif %}:</strong>
+        {{ serving_item.assignment.notes|linebreaksbr }}
+    </p>
+    {% endif %}
+
+    {% if serving_item.assignment.ministry_team.playbook_link %}
+    <p class="serving-card-playbook">
+        <a href="{{ serving_item.assignment.ministry_team.playbook_link }}"
+           target="_blank" rel="noopener noreferrer">
+            {% if language == "zh" %}服事手册{% else %}Playbook{% endif %}
+        </a>
+    </p>
+    {% endif %}
+
+    <div class="actions serving-card-actions">
+        <a class="button button-secondary"
+           href="{% url 'team_assignment_detail' serving_item.assignment.id %}">
+            {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+        </a>
+    </div>
+
+    {% if not serving_item.confirmed_at and serving_item.assignment.is_confirmable %}
+    <form class="serving-card-confirm" method="post"
+          action="{% url 'confirm_team_assignment' serving_item.assignment.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% for field in confirm_form %}
+        <div class="form-row">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">
+            {% if language == "zh" %}确认服事{% else %}Confirm Assignment{% endif %}
+        </button>
+    </form>
+    {% endif %}
+</article>

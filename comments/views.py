@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -392,6 +393,22 @@ def staff_reflection_reports(request):
     )
 
 
+def close_open_reflection_reports_for_content(comment, reviewer):
+    """Mark all open reports for ``comment`` as reviewed.
+
+    Used when a comment is hidden so the moderation queue does not keep
+    showing already-handled items. Returns the number of reports updated.
+    """
+    return ReflectionReport.objects.filter(
+        comment=comment,
+        status=ReflectionReport.STATUS_OPEN,
+    ).update(
+        status=ReflectionReport.STATUS_REVIEWED,
+        reviewed_by=reviewer,
+        reviewed_at=timezone.now(),
+    )
+
+
 @staff_member_required
 def staff_reflection_action(request, comment_id):
     if request.method != "POST":
@@ -406,18 +423,20 @@ def staff_reflection_action(request, comment_id):
     reason = (request.POST.get("reason") or "").strip()
 
     if action == "hide":
-        comment.is_hidden = True
-        comment.hidden_reason = reason
-        comment.hidden_by = request.user
-        comment.hidden_at = timezone.now()
-        comment.save(
-            update_fields=[
-                "is_hidden",
-                "hidden_reason",
-                "hidden_by",
-                "hidden_at",
-            ]
-        )
+        with transaction.atomic():
+            comment.is_hidden = True
+            comment.hidden_reason = reason
+            comment.hidden_by = request.user
+            comment.hidden_at = timezone.now()
+            comment.save(
+                update_fields=[
+                    "is_hidden",
+                    "hidden_reason",
+                    "hidden_by",
+                    "hidden_at",
+                ]
+            )
+            close_open_reflection_reports_for_content(comment, request.user)
         messages.success(request, "Reflection hidden.")
 
     elif action == "unhide":

@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import SmallGroup
 from comments.models import ReflectionComment, ReflectionReport
@@ -257,3 +258,154 @@ class ReflectionReportModerationTests(TestCase):
         self.assertFalse(self.comment.is_hidden)
         self.assertEqual(self.comment.hidden_reason, "")
         self.assertIsNone(self.comment.hidden_by)
+
+    def test_hiding_reported_reflection_post_closes_open_reports(self):
+        report = ReflectionReport.objects.create(
+            comment=self.comment,
+            reporter=self.other_user,
+            reason="Inappropriate.",
+        )
+
+        self.client.login(username="staff", password="StaffPass123!")
+        response = self.client.post(
+            reverse("staff_reflection_action", args=[self.comment.id]),
+            {"action": "hide", "reason": "Too sensitive."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.comment.refresh_from_db()
+        self.assertTrue(self.comment.is_hidden)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, ReflectionReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff)
+        self.assertIsNotNone(report.reviewed_at)
+
+    def test_hiding_reported_reflection_reply_closes_open_reports(self):
+        reply = ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            parent=self.comment,
+            body="Reportable reply.",
+        )
+        report = ReflectionReport.objects.create(
+            comment=reply,
+            reporter=self.user,
+            reason="Spam.",
+        )
+
+        self.client.login(username="staff", password="StaffPass123!")
+        response = self.client.post(
+            reverse("staff_reflection_action", args=[reply.id]),
+            {"action": "hide", "reason": "Spam."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        reply.refresh_from_db()
+        self.assertTrue(reply.is_hidden)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, ReflectionReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff)
+
+    def test_hiding_reflection_leaves_already_reviewed_report_untouched(self):
+        # A report already resolved (dismissed) must not be re-touched or duplicated.
+        dismissed = ReflectionReport.objects.create(
+            comment=self.comment,
+            reporter=self.other_user,
+            reason="Old report.",
+            status=ReflectionReport.STATUS_DISMISSED,
+        )
+
+        self.client.login(username="staff", password="StaffPass123!")
+        self.client.post(
+            reverse("staff_reflection_action", args=[self.comment.id]),
+            {"action": "hide", "reason": "Too sensitive."},
+        )
+
+        dismissed.refresh_from_db()
+        self.assertEqual(dismissed.status, ReflectionReport.STATUS_DISMISSED)
+        self.assertIsNone(dismissed.reviewed_by)
+        self.assertEqual(
+            ReflectionReport.objects.filter(comment=self.comment).count(),
+            1,
+        )
+
+    def test_re_hiding_already_hidden_reflection_is_idempotent(self):
+        self.comment.is_hidden = True
+        self.comment.hidden_by = self.staff
+        self.comment.hidden_at = timezone.now()
+        self.comment.save()
+
+        # A report left open even though the content is already hidden.
+        report = ReflectionReport.objects.create(
+            comment=self.comment,
+            reporter=self.other_user,
+            reason="Still open.",
+        )
+
+        self.client.login(username="staff", password="StaffPass123!")
+        response = self.client.post(
+            reverse("staff_reflection_action", args=[self.comment.id]),
+            {"action": "hide", "reason": "Too sensitive."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.comment.refresh_from_db()
+        self.assertTrue(self.comment.is_hidden)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, ReflectionReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff)
+
+    def test_hiding_reflection_does_not_close_reports_for_other_content(self):
+        other_comment = ReflectionComment.objects.create(
+            user=self.other_user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="Other reflection.",
+        )
+        target_report = ReflectionReport.objects.create(
+            comment=self.comment, reporter=self.other_user, reason="A."
+        )
+        other_report = ReflectionReport.objects.create(
+            comment=other_comment, reporter=self.user, reason="B."
+        )
+
+        self.client.login(username="staff", password="StaffPass123!")
+        self.client.post(
+            reverse("staff_reflection_action", args=[self.comment.id]),
+            {"action": "hide", "reason": "Too sensitive."},
+        )
+
+        target_report.refresh_from_db()
+        other_report.refresh_from_db()
+        self.assertEqual(target_report.status, ReflectionReport.STATUS_REVIEWED)
+        self.assertEqual(other_report.status, ReflectionReport.STATUS_OPEN)
+
+    def test_non_staff_cannot_hide_reflection_or_close_reports(self):
+        report = ReflectionReport.objects.create(
+            comment=self.comment, reporter=self.other_user, reason="A."
+        )
+
+        self.client.login(username="other", password="OtherPass123!")
+        response = self.client.post(
+            reverse("staff_reflection_action", args=[self.comment.id]),
+            {"action": "hide", "reason": "Nope."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+        self.comment.refresh_from_db()
+        report.refresh_from_db()
+        self.assertFalse(self.comment.is_hidden)
+        self.assertEqual(report.status, ReflectionReport.STATUS_OPEN)

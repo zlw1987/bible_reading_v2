@@ -931,3 +931,154 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(
             after.context["moderation_counts"]["reported_prayer_requests"], 0
         )
+
+
+class PrayerListTabAudienceTests(TestCase):
+    """Tab filtering on /prayers/ must follow visibility, not authorship.
+
+    Regression coverage for UI-H.1: the current user's own church-wide and
+    private prayers must not leak into the group/church tabs merely because the
+    user authored them.
+    """
+
+    def setUp(self):
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+
+        self.user = User.objects.create_user(
+            username="levin",
+            password="TestPass123!",
+        )
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.same_group_user = User.objects.create_user(
+            username="same_group",
+            password="TestPass123!",
+        )
+        self.same_group_user.profile.small_group = self.group
+        self.same_group_user.profile.save()
+
+        self.other_group_user = User.objects.create_user(
+            username="other_group",
+            password="TestPass123!",
+        )
+        self.other_group_user.profile.small_group = self.other_group
+        self.other_group_user.profile.save()
+
+        self.no_group_user = User.objects.create_user(
+            username="no_group",
+            password="TestPass123!",
+        )
+        # no_group_user keeps the default empty small_group on their profile.
+
+        # Prayers authored by self.user across all three visibilities.
+        self.own_private = PrayerRequest.objects.create(
+            user=self.user,
+            title="Own private request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_PRIVATE,
+        )
+        self.own_group = PrayerRequest.objects.create(
+            user=self.user,
+            title="Own group request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+        )
+        self.own_church = PrayerRequest.objects.create(
+            user=self.user,
+            title="Own church request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        # Prayers authored by others.
+        self.same_group_group = PrayerRequest.objects.create(
+            user=self.same_group_user,
+            title="Same group request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+        )
+        self.other_user_church = PrayerRequest.objects.create(
+            user=self.other_group_user,
+            title="Other church request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+    def titles_for(self, username, tab):
+        self.client.login(username=username, password="TestPass123!")
+        response = self.client.get(
+            reverse("prayer_list"),
+            {"tab": tab, "status": "all"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["tab"], tab)
+        return {prayer.title for prayer in response.context["prayers"]}
+
+    def test_my_tab_includes_own_private_group_and_church(self):
+        titles = self.titles_for("levin", "my")
+        self.assertIn("Own private request", titles)
+        self.assertIn("Own group request", titles)
+        self.assertIn("Own church request", titles)
+        # The "my" tab is scoped to the author, so others' prayers stay out.
+        self.assertNotIn("Same group request", titles)
+        self.assertNotIn("Other church request", titles)
+
+    def test_group_tab_includes_own_and_same_group_group_prayers(self):
+        titles = self.titles_for("levin", "group")
+        self.assertIn("Own group request", titles)
+        self.assertIn("Same group request", titles)
+
+    def test_group_tab_excludes_own_church_prayer(self):
+        titles = self.titles_for("levin", "group")
+        self.assertNotIn("Own church request", titles)
+
+    def test_group_tab_excludes_own_private_prayer(self):
+        titles = self.titles_for("levin", "group")
+        self.assertNotIn("Own private request", titles)
+
+    def test_group_tab_excludes_other_group_prayers(self):
+        # other_group_user's group tab should not see Rainbow 4 group prayers.
+        titles = self.titles_for("other_group", "group")
+        self.assertNotIn("Own group request", titles)
+        self.assertNotIn("Same group request", titles)
+
+    def test_church_tab_includes_own_and_other_church_prayers(self):
+        titles = self.titles_for("levin", "church")
+        self.assertIn("Own church request", titles)
+        self.assertIn("Other church request", titles)
+
+    def test_church_tab_excludes_own_group_prayer(self):
+        titles = self.titles_for("levin", "church")
+        self.assertNotIn("Own group request", titles)
+
+    def test_church_tab_excludes_own_private_prayer(self):
+        titles = self.titles_for("levin", "church")
+        self.assertNotIn("Own private request", titles)
+
+    def test_no_group_user_group_tab_hides_own_church_and_private(self):
+        # A user with no small group authors church + private prayers; the group
+        # tab must not fall back to showing their own unrelated prayers.
+        PrayerRequest.objects.create(
+            user=self.no_group_user,
+            title="NoGroup church request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        PrayerRequest.objects.create(
+            user=self.no_group_user,
+            title="NoGroup private request",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_PRIVATE,
+        )
+
+        group_titles = self.titles_for("no_group", "group")
+        self.assertNotIn("NoGroup church request", group_titles)
+        self.assertNotIn("NoGroup private request", group_titles)
+
+        # Their own content is still reachable through the "my" tab.
+        my_titles = self.titles_for("no_group", "my")
+        self.assertIn("NoGroup church request", my_titles)
+        self.assertIn("NoGroup private request", my_titles)

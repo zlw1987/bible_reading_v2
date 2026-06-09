@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -557,6 +558,22 @@ def staff_prayer_reports(request):
     )
 
 
+def close_open_prayer_reports_for_content(prayer, reviewer):
+    """Mark all open reports for ``prayer`` as reviewed.
+
+    Used when a prayer request is hidden so the moderation queue does not
+    keep showing already-handled items. Returns the number of reports updated.
+    """
+    return PrayerReport.objects.filter(
+        prayer_request=prayer,
+        status=PrayerReport.STATUS_OPEN,
+    ).update(
+        status=PrayerReport.STATUS_REVIEWED,
+        reviewed_by=reviewer,
+        reviewed_at=timezone.now(),
+    )
+
+
 @staff_member_required
 def staff_prayer_action(request, prayer_id):
     if request.method != "POST":
@@ -571,18 +588,20 @@ def staff_prayer_action(request, prayer_id):
     reason = (request.POST.get("reason") or "").strip()
 
     if action == "hide":
-        prayer.is_hidden = True
-        prayer.hidden_reason = reason
-        prayer.hidden_by = request.user
-        prayer.hidden_at = timezone.now()
-        prayer.save(
-            update_fields=[
-                "is_hidden",
-                "hidden_reason",
-                "hidden_by",
-                "hidden_at",
-            ]
-        )
+        with transaction.atomic():
+            prayer.is_hidden = True
+            prayer.hidden_reason = reason
+            prayer.hidden_by = request.user
+            prayer.hidden_at = timezone.now()
+            prayer.save(
+                update_fields=[
+                    "is_hidden",
+                    "hidden_reason",
+                    "hidden_by",
+                    "hidden_at",
+                ]
+            )
+            close_open_prayer_reports_for_content(prayer, request.user)
         messages.success(request, "Prayer request hidden.")
 
     elif action == "unhide":

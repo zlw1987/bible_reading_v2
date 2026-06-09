@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import SmallGroup
 from prayers.models import PrayerMark, PrayerReport, PrayerRequest
@@ -751,3 +752,177 @@ class PrayerRequestFlowTests(TestCase):
         self.assertContains(response, "Prayer Request")
         self.assertContains(response, "Reason")
         self.assertContains(response, "Submit Report")
+
+    def test_hiding_reported_prayer_request_closes_open_reports(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        report = PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Inappropriate.",
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "hide", "reason": "Needs moderation."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        prayer.refresh_from_db()
+        self.assertTrue(prayer.is_hidden)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, PrayerReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff_user)
+        self.assertIsNotNone(report.reviewed_at)
+
+    def test_hiding_prayer_leaves_already_reviewed_report_untouched(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        dismissed = PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Old report.",
+            status=PrayerReport.STATUS_DISMISSED,
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+        self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "hide", "reason": "Needs moderation."},
+        )
+
+        dismissed.refresh_from_db()
+        self.assertEqual(dismissed.status, PrayerReport.STATUS_DISMISSED)
+        self.assertIsNone(dismissed.reviewed_by)
+        self.assertEqual(
+            PrayerReport.objects.filter(prayer_request=prayer).count(),
+            1,
+        )
+
+    def test_re_hiding_already_hidden_prayer_is_idempotent(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+            is_hidden=True,
+            hidden_by=self.staff_user,
+            hidden_at=timezone.now(),
+        )
+        report = PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Still open.",
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "hide", "reason": "Needs moderation."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        prayer.refresh_from_db()
+        self.assertTrue(prayer.is_hidden)
+
+        report.refresh_from_db()
+        self.assertEqual(report.status, PrayerReport.STATUS_REVIEWED)
+        self.assertEqual(report.reviewed_by, self.staff_user)
+
+    def test_hiding_prayer_does_not_close_reports_for_other_content(self):
+        target = PrayerRequest.objects.create(
+            user=self.user,
+            title="Target",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        other = PrayerRequest.objects.create(
+            user=self.user,
+            title="Other",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        target_report = PrayerReport.objects.create(
+            prayer_request=target, reporter=self.same_group_user, reason="A."
+        )
+        other_report = PrayerReport.objects.create(
+            prayer_request=other, reporter=self.same_group_user, reason="B."
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+        self.client.post(
+            reverse("staff_prayer_action", args=[target.id]),
+            {"action": "hide", "reason": "Needs moderation."},
+        )
+
+        target_report.refresh_from_db()
+        other_report.refresh_from_db()
+        self.assertEqual(target_report.status, PrayerReport.STATUS_REVIEWED)
+        self.assertEqual(other_report.status, PrayerReport.STATUS_OPEN)
+
+    def test_non_staff_cannot_hide_prayer_or_close_reports(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        report = PrayerReport.objects.create(
+            prayer_request=prayer, reporter=self.same_group_user, reason="A."
+        )
+
+        self.client.login(username="same_group", password="TestPass123!")
+        response = self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "hide", "reason": "Nope."},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+        prayer.refresh_from_db()
+        report.refresh_from_db()
+        self.assertFalse(prayer.is_hidden)
+        self.assertEqual(report.status, PrayerReport.STATUS_OPEN)
+
+    def test_moderation_queue_drops_open_report_after_hide(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Reportable",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        PrayerReport.objects.create(
+            prayer_request=prayer,
+            reporter=self.same_group_user,
+            reason="Inappropriate.",
+        )
+
+        self.client.login(username="staff", password="TestPass123!")
+
+        before = self.client.get(reverse("staff_moderation_queue"))
+        self.assertEqual(
+            before.context["moderation_counts"]["reported_prayer_requests"], 1
+        )
+
+        self.client.post(
+            reverse("staff_prayer_action", args=[prayer.id]),
+            {"action": "hide", "reason": "Needs moderation."},
+        )
+
+        after = self.client.get(reverse("staff_moderation_queue"))
+        self.assertEqual(
+            after.context["moderation_counts"]["reported_prayer_requests"], 0
+        )

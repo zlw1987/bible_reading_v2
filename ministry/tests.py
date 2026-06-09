@@ -11,8 +11,9 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, MinistryContext
+from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
 from events.models import ServiceEvent
+from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 
 from .models import (
     MinistryTeam,
@@ -2464,6 +2465,151 @@ class TeamAssignmentV1Tests(TestCase):
         for route_name in missing_routes:
             with self.assertRaises(NoReverseMatch):
                 reverse(route_name)
+
+    def assignment_form_event_ids(self, **kwargs):
+        form = TeamAssignmentForm(
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+            **kwargs,
+        )
+        return list(
+            form.fields["service_event"].queryset.values_list("id", flat=True)
+        )
+
+    def make_bible_study_meeting(self, service_event):
+        district = District.objects.create(name="North")
+        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        series = BibleStudySeries.objects.create(title="约翰福音查经")
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="约翰十五章",
+            lesson_date=timezone.localdate() + timezone.timedelta(days=3),
+        )
+        return BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            small_group=group,
+            meeting_datetime=timezone.now() + timezone.timedelta(days=2),
+            service_event=service_event,
+        )
+
+    def test_assignment_form_excludes_cancelled_events(self):
+        cancelled = ServiceEvent.objects.create(
+            title="取消聚会",
+            title_en="Cancelled Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+
+        event_ids = self.assignment_form_event_ids()
+
+        self.assertNotIn(cancelled.id, event_ids)
+        self.assertIn(self.event.id, event_ids)
+
+    def test_assignment_form_excludes_draft_events(self):
+        draft = ServiceEvent.objects.create(
+            title="草稿聚会",
+            title_en="Draft Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+
+        event_ids = self.assignment_form_event_ids()
+
+        self.assertNotIn(draft.id, event_ids)
+        self.assertIn(self.event.id, event_ids)
+
+    def test_assignment_form_excludes_past_events(self):
+        past = ServiceEvent.objects.create(
+            title="过去聚会",
+            title_en="Past Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        event_ids = self.assignment_form_event_ids()
+
+        self.assertNotIn(past.id, event_ids)
+        self.assertIn(self.event.id, event_ids)
+
+    def test_assignment_form_excludes_bible_study_meeting_events(self):
+        study_event = ServiceEvent.objects.create(
+            title="小组查经",
+            title_en="Group Bible Study",
+            event_type=ServiceEvent.EVENT_BIBLE_STUDY,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.make_bible_study_meeting(study_event)
+
+        event_ids = self.assignment_form_event_ids()
+
+        self.assertNotIn(study_event.id, event_ids)
+        self.assertIn(self.event.id, event_ids)
+
+    def test_assignment_form_lists_future_published_operational_events(self):
+        special = ServiceEvent.objects.create(
+            title="特别聚会",
+            title_en="Special Meeting",
+            event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
+            start_datetime=timezone.now() + timezone.timedelta(days=5),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+        event_ids = self.assignment_form_event_ids()
+
+        self.assertIn(self.event.id, event_ids)
+        self.assertIn(special.id, event_ids)
+
+    def test_assignment_edit_keeps_current_filtered_event_available(self):
+        past = ServiceEvent.objects.create(
+            title="过去聚会",
+            title_en="Past Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=past)
+
+        new_event_ids = self.assignment_form_event_ids()
+        edit_event_ids = self.assignment_form_event_ids(instance=assignment)
+
+        self.assertNotIn(past.id, new_event_ids)
+        self.assertIn(past.id, edit_event_ids)
+
+    def test_assignment_edit_does_not_silently_change_event(self):
+        self.set_language("en")
+        past = ServiceEvent.objects.create(
+            title="过去聚会",
+            title_en="Past Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=past)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            self.assignment_post_data(
+                service_event=past.id,
+                notes="Updated note only.",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.service_event_id, past.id)
+        self.assertEqual(assignment.notes, "Updated note only.")
 
 
 class LightingPilotImportCommandTests(TestCase):

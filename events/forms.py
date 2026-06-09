@@ -325,6 +325,10 @@ class RecurringServiceEventForm(forms.Form):
     )
     location = forms.CharField(max_length=180, required=False)
     meeting_link = forms.URLField(max_length=500, required=False)
+    ministry_context = forms.ModelChoiceField(
+        queryset=MinistryContext.objects.none(),
+        required=False,
+    )
     scope_type = forms.ChoiceField(choices=ServiceEvent.SCOPE_CHOICES)
     district = forms.ModelChoiceField(
         queryset=ServiceEvent._meta.get_field("district").remote_field.model.objects.all(),
@@ -387,6 +391,15 @@ class RecurringServiceEventForm(forms.Form):
             self.fields[field_name].label = label
 
         service_event_form = ServiceEventForm(language=language)
+        self.fields["ministry_context"].label = service_event_form.fields[
+            "ministry_context"
+        ].label
+        self.fields["ministry_context"].help_text = service_event_form.fields[
+            "ministry_context"
+        ].help_text
+        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
+            is_active=True,
+        )
         self.fields["event_type"].choices = service_event_form.fields[
             "event_type"
         ].choices

@@ -215,6 +215,7 @@ def create_recurring_events(cleaned_data, user):
     created_count = 0
     required_teams = cleaned_data.get("required_teams")
     rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
+    ministry_context = cleaned_data.get("ministry_context")
 
     for event_date in dates_to_create:
         start_datetime = timezone.make_aware(
@@ -237,6 +238,7 @@ def create_recurring_events(cleaned_data, user):
             end_datetime=end_datetime,
             location=cleaned_data.get("location") or "",
             meeting_link=cleaned_data.get("meeting_link") or "",
+            ministry_context=ministry_context,
             rotation_anchor_team=rotation_anchor_team,
             scope_type=cleaned_data["scope_type"],
             district=cleaned_data.get("district"),

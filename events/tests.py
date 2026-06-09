@@ -23,7 +23,7 @@ from ministry.models import (
     TeamMembership,
 )
 
-from .forms import ServiceEventForm
+from .forms import RecurringServiceEventForm, ServiceEventForm
 from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequiredTeam
 
 
@@ -1520,3 +1520,80 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Create Recurring Events")
         self.assertContains(response, "Preview")
         self.assertContains(response, "Create Events")
+
+    def test_recurring_form_includes_optional_ministry_context_label(self):
+        english_form = RecurringServiceEventForm(language="en")
+        chinese_form = RecurringServiceEventForm(language="zh")
+
+        self.assertIn("ministry_context", english_form.fields)
+        self.assertFalse(english_form.fields["ministry_context"].required)
+        self.assertEqual(
+            english_form.fields["ministry_context"].label,
+            "Host / Language Label",
+        )
+        self.assertFalse(chinese_form.fields["ministry_context"].required)
+        self.assertEqual(
+            chinese_form.fields["ministry_context"].label,
+            "主办/语言标签（可选）",
+        )
+
+    def test_recurring_create_applies_same_ministry_context_to_each_event(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                ministry_context=self.em.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(event.ministry_context, self.em)
+
+    def test_recurring_create_with_blank_ministry_context_keeps_events_blank(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(create="1", ministry_context=""),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertIsNone(event.ministry_context)
+
+    def test_recurring_create_required_teams_unchanged_with_ministry_context(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                ministry_context=self.em.id,
+                required_teams=[
+                    self.required_team.id,
+                    self.other_required_team.id,
+                ],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(event.ministry_context, self.em)
+            self.assertEqual(
+                set(event.required_teams.values_list("id", flat=True)),
+                {self.required_team.id, self.other_required_team.id},
+            )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)

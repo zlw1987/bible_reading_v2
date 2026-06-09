@@ -287,11 +287,31 @@ class TeamAssignmentForm(forms.ModelForm):
         text = assignment_form_text(language)
         self.manageable_teams = manageable_teams
         self.fields["service_event"].language = language
-        self.fields["service_event"].queryset = ServiceEvent.objects.select_related(
+        base_events = ServiceEvent.objects.select_related(
             "district",
             "ministry_context",
             "small_group",
-        ).order_by(
+        )
+        # Assignable operational events only: drop cancelled/draft/past events and
+        # ServiceEvents linked from a small-group BibleStudyMeeting. This is a
+        # display filter; it does not touch visibility, scope, or required teams.
+        assignable_events = (
+            base_events.filter(start_datetime__gte=timezone.now())
+            .exclude(
+                status__in=[
+                    ServiceEvent.STATUS_CANCELLED,
+                    ServiceEvent.STATUS_DRAFT,
+                ]
+            )
+            .exclude(bible_study_meetings__isnull=False)
+        )
+        # When editing, keep the currently linked event selectable even if it would
+        # otherwise be filtered out, so existing assignments stay viewable/editable.
+        if self.instance and self.instance.pk and self.instance.service_event_id:
+            assignable_events = assignable_events | base_events.filter(
+                pk=self.instance.service_event_id
+            )
+        self.fields["service_event"].queryset = assignable_events.distinct().order_by(
             "start_datetime",
             "title",
         )

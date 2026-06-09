@@ -10,7 +10,12 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 
-from .forms import ProfileForm, SignUpForm, StaffPasswordResetForm
+from .forms import (
+    LocalizedPasswordChangeForm,
+    ProfileForm,
+    SignUpForm,
+    StaffPasswordResetForm,
+)
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
 from .models import ChurchStructureMembership, Profile, SmallGroup
@@ -370,8 +375,14 @@ def profile(request):
     )
 
 class ProfilePasswordChangeView(PasswordChangeView):
+    form_class = LocalizedPasswordChangeForm
     template_name = "accounts/password_change_form.html"
     success_url = reverse_lazy("password_change_done")
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["request"] = self.request
+        return kwargs
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -423,8 +434,10 @@ def staff_user_password_reset(request, user_id):
         id=user_id,
     )
 
+    ui = UI_TEXT[get_user_language(request)]
+
     if request.method == "POST":
-        form = StaffPasswordResetForm(target_user, request.POST)
+        form = StaffPasswordResetForm(target_user, request.POST, request=request)
 
         if form.is_valid():
             form.save()
@@ -438,12 +451,12 @@ def staff_user_password_reset(request, user_id):
 
             messages.success(
                 request,
-                f"Password reset for {target_user.username}.",
+                ui["password_reset_done"].format(username=target_user.username),
             )
 
             return redirect("staff_user_list")
     else:
-        form = StaffPasswordResetForm(target_user)
+        form = StaffPasswordResetForm(target_user, request=request)
 
     return render(
         request,

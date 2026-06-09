@@ -445,6 +445,88 @@ class AccountProfileTests(TestCase):
 
         self.assertTrue(login_success)
 
+    def test_password_change_page_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("password_change"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "旧密码")
+        self.assertContains(response, "新密码")
+        self.assertContains(response, "确认新密码")
+        self.assertContains(response, "密码至少 8 个字符")
+        # Default English Django strings must not leak into the Chinese page.
+        self.assertNotContains(response, "Old password")
+        self.assertNotContains(response, "Enter the same password as before")
+
+    def test_password_change_page_english_labels(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("password_change"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Old password")
+        self.assertContains(response, "New password")
+
+    def test_password_change_behavior_unchanged_in_chinese(self):
+        # Localization must not alter the actual change behavior.
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("password_change"),
+            {
+                "old_password": "OldPass123!",
+                "new_password1": "NewStrongPass123!",
+                "new_password2": "NewStrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("password_change_done"))
+        self.client.logout()
+        self.assertTrue(
+            self.client.login(username="levin", password="NewStrongPass123!")
+        )
+
+    def test_password_change_chinese_weak_password_error_localized(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("password_change"),
+            {
+                "old_password": "OldPass123!",
+                "new_password1": "Ab1!",
+                "new_password2": "Ab1!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密码太短")
+        self.assertNotContains(response, "This password is too short")
+        # Password must not change on validation failure.
+        self.client.logout()
+        self.assertTrue(self.client.login(username="levin", password="OldPass123!"))
+
+    def test_password_change_english_weak_password_shows_english_error(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.post(
+            reverse("password_change"),
+            {
+                "old_password": "OldPass123!",
+                "new_password1": "Ab1!",
+                "new_password2": "Ab1!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "too short")
+
     def test_normal_english_user_sees_simple_primary_nav(self):
         self.set_language("en")
         self.client.login(username="levin", password="OldPass123!")
@@ -3223,6 +3305,91 @@ class StaffPasswordResetTests(TestCase):
 
         self.assertTrue(login_success)
 
+    def _set_language(self, language):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_chinese_staff_reset_page_labels_localized(self):
+        self._set_language("zh")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(
+            reverse("staff_user_password_reset", args=[self.user.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "重置密码")
+        self.assertContains(response, "返回用户管理")
+        self.assertContains(response, "为该用户设置一个新的临时密码")
+        self.assertContains(response, "新密码")
+        self.assertContains(response, "确认新密码")
+        self.assertContains(response, "要求用户下次登录时修改密码")
+        self.assertContains(response, "请私下把临时密码交给该用户")
+        # English reset UI strings must be gone in Chinese mode.
+        self.assertNotContains(response, "Reset Password")
+        self.assertNotContains(response, "Back to User Admin")
+        self.assertNotContains(response, "Set a new temporary password")
+        self.assertNotContains(response, "New password confirmation")
+        self.assertNotContains(response, "Require user to change password")
+
+    def test_english_staff_reset_page_labels(self):
+        self._set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(
+            reverse("staff_user_password_reset", args=[self.user.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reset Password")
+        self.assertContains(response, "New password")
+        self.assertContains(response, "Require user to change password on next login")
+
+    def test_chinese_staff_reset_weak_password_error_localized(self):
+        self._set_language("zh")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.post(
+            reverse("staff_user_password_reset", args=[self.user.id]),
+            {
+                "new_password1": "Ab1!",
+                "new_password2": "Ab1!",
+                "require_password_change": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密码太短")
+        self.assertNotContains(response, "This password is too short")
+        # Password must NOT change on validation failure.
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("OldPass123!"))
+
+    def test_chinese_staff_reset_success_message_localized(self):
+        self._set_language("zh")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.post(
+            reverse("staff_user_password_reset", args=[self.user.id]),
+            {
+                "new_password1": "TempPass123!",
+                "new_password2": "TempPass123!",
+                "require_password_change": "on",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "已重置 elder 的密码")
+        self.assertNotContains(response, "Password reset for elder")
+        # Behavior still works: password changed and flag set.
+        self.user.refresh_from_db()
+        self.user.profile.refresh_from_db()
+        self.assertTrue(self.user.check_password("TempPass123!"))
+        self.assertTrue(self.user.profile.must_change_password)
+
+
 class AccountSignupLanguageTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
@@ -3502,3 +3669,208 @@ class AccountSignupLanguageTests(TestCase):
         self.assertContains(response, "Your small group")
         self.assertContains(response, "Rainbow 4")
         self.assertNotContains(response, "SMALLGROUP-1 - Rainbow 4")
+
+    def _set_language(self, language):
+        self.client.post(
+            reverse("change_language"),
+            {"language": language, "next": reverse("signup")},
+        )
+
+    def test_signup_chinese_help_text_is_localized(self):
+        self._set_language("zh")
+
+        response = self.client.get(reverse("signup"))
+
+        self.assertEqual(response.status_code, 200)
+        # Localized Chinese help text is present.
+        self.assertContains(response, "150 个字符以内")
+        self.assertContains(response, "密码至少 8 个字符")
+        self.assertContains(response, "请再次输入相同的密码")
+        # Default English Django help text must not leak into the Chinese page.
+        self.assertNotContains(response, "Required. 150 characters or fewer")
+        self.assertNotContains(response, "Your password can")  # "can't be too similar"
+        self.assertNotContains(response, "Enter the same password as before")
+
+    def test_signup_english_help_text_is_present(self):
+        self._set_language("en")
+
+        response = self.client.get(reverse("signup"))
+
+        self.assertEqual(response.status_code, 200)
+        # English keeps reasonable helper text and the confirmation label.
+        self.assertContains(response, "150 characters or fewer")
+        self.assertContains(response, "Password confirmation")
+
+    def test_signup_chinese_password_mismatch_shows_localized_error(self):
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "mismatch_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "StrongPass123!",
+                "password2": "DifferentPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "两次输入的密码不一致")
+        self.assertNotContains(response, "The two password fields")
+        self.assertFalse(User.objects.filter(username="mismatch_user").exists())
+
+    def test_login_page_chinese_labels(self):
+        self._set_language("zh")
+
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "用户名")
+        self.assertContains(response, "密码")
+        # The localized login form label should replace the English field label.
+        self.assertNotContains(response, ">Username:<")
+
+    def test_login_page_english_labels(self):
+        self._set_language("en")
+
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Username")
+        self.assertContains(response, "Password")
+
+    def test_signup_chinese_too_short_password_error_localized(self):
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "shortpw_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "Ab1!",
+                "password2": "Ab1!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密码太短")
+        self.assertNotContains(response, "This password is too short")
+        self.assertFalse(User.objects.filter(username="shortpw_user").exists())
+
+    def test_signup_chinese_common_password_error_localized(self):
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "commonpw_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "password",
+                "password2": "password",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "这个密码太常见")
+        self.assertNotContains(response, "This password is too common")
+        self.assertFalse(User.objects.filter(username="commonpw_user").exists())
+
+    def test_signup_chinese_numeric_password_error_localized(self):
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "numericpw_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "29384756102",
+                "password2": "29384756102",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "密码不能全部是数字")
+        self.assertNotContains(response, "This password is entirely numeric")
+        self.assertFalse(User.objects.filter(username="numericpw_user").exists())
+
+    def test_signup_english_weak_password_shows_english_error(self):
+        self._set_language("en")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "weakpw_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "Ab1!",
+                "password2": "Ab1!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "too short")
+        self.assertFalse(User.objects.filter(username="weakpw_user").exists())
+
+    def test_signup_chinese_duplicate_username_error_localized(self):
+        User.objects.create_user(username="taken_user", password="StrongPass123!")
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "taken_user",
+                "email": "",
+                "requested_unit": "",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "这个用户名已被使用")
+        self.assertNotContains(response, "already exists")
+
+    def test_signup_case_insensitive_duplicate_username_rejected(self):
+        # Behavior preservation: Django's inherited UserCreationForm.clean_username
+        # rejected usernames differing only in case (username__iexact). UI-H.6 must
+        # keep that semantics, only localizing the message.
+        User.objects.create_user(username="Mixed_Case", password="StrongPass123!")
+        self._set_language("zh")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "mixed_case",
+                "email": "",
+                "requested_unit": "",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "这个用户名已被使用")
+        self.assertEqual(User.objects.filter(username="mixed_case").count(), 0)
+
+    def test_signup_english_case_insensitive_duplicate_username_rejected(self):
+        User.objects.create_user(username="Casey", password="StrongPass123!")
+        self._set_language("en")
+
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "casey",
+                "email": "",
+                "requested_unit": "",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already taken")
+        self.assertEqual(User.objects.filter(username="casey").count(), 0)

@@ -1,7 +1,14 @@
 from django import forms
+from django.contrib.auth import password_validation
 from django.contrib.auth.models import User
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import transaction
-from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm, UserCreationForm
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    PasswordChangeForm,
+    SetPasswordForm,
+    UserCreationForm,
+)
 
 from .language import get_user_language
 from .models import (
@@ -65,6 +72,68 @@ def create_or_update_signup_membership_request(user, requested_unit):
     )
 
 
+# Django's built-in password validators raise ValidationError with a stable
+# ``code`` per failure. We translate by code (not by matching the English
+# string) so behaviour stays version-robust.
+PASSWORD_VALIDATION_MESSAGES = {
+    "zh": {
+        "password_too_short": "密码太短，至少需要 8 个字符。",
+        "password_too_common": "这个密码太常见，请换一个更安全的密码。",
+        "password_entirely_numeric": "密码不能全部是数字。",
+        "password_too_similar": "密码不能与用户名或个人资料太相似。",
+    },
+}
+
+
+class LocalizedPasswordValidationMixin:
+    """Localize built-in password-validator error messages by error code.
+
+    Django runs every configured ``AUTH_PASSWORD_VALIDATORS`` validator through
+    ``validate_password_for_user``. We keep that call exactly as-is, so the
+    validation itself is unchanged, and only swap the *displayed* message for
+    known error codes when the active language is Chinese. Unknown codes fall
+    back to Django's original message, and English keeps Django's defaults.
+    """
+
+    password_error_language = "en"
+
+    def validate_password_for_user(self, user, password_field_name="password2"):
+        password = self.cleaned_data.get(password_field_name)
+        if not password:
+            return
+        try:
+            password_validation.validate_password(password, user)
+        except forms.ValidationError as error:
+            self.add_error(password_field_name, self._localize_password_error(error))
+
+    def _localize_password_error(self, error):
+        messages = PASSWORD_VALIDATION_MESSAGES.get(self.password_error_language)
+        if not messages:
+            return error
+
+        localized = []
+        for sub_error in error.error_list:
+            code = getattr(sub_error, "code", None)
+            message = messages.get(code)
+            if message:
+                localized.append(forms.ValidationError(message, code=code))
+            else:
+                localized.append(sub_error)
+        return forms.ValidationError(localized)
+
+    def localize_set_password_fields(self, language):
+        """Localize new-password labels/help/mismatch error for set-password
+        style forms (``SetPasswordForm`` / ``PasswordChangeForm`` subclasses)."""
+        self.password_error_language = language
+        ui = UI_TEXT[language]
+        self.fields["new_password1"].label = ui["new_password"]
+        self.fields["new_password2"].label = ui["new_password_confirmation"]
+        if language == "zh":
+            self.fields["new_password1"].help_text = ui["password_help"]
+            self.fields["new_password2"].help_text = ui["password_confirmation_help"]
+            self.error_messages["password_mismatch"] = ui["password_mismatch"]
+
+
 class LocalizedAuthenticationForm(AuthenticationForm):
     def __init__(self, request=None, *args, **kwargs):
         super().__init__(request, *args, **kwargs)
@@ -75,8 +144,28 @@ class LocalizedAuthenticationForm(AuthenticationForm):
         self.fields["username"].label = ui["username"]
         self.fields["password"].label = ui["password"]
 
+        if language == "zh":
+            # English login errors are reasonable as-is; localize for Chinese.
+            self.error_messages["invalid_login"] = ui["invalid_login"]
 
-class SignUpForm(UserCreationForm):
+
+class LocalizedPasswordChangeForm(LocalizedPasswordValidationMixin, PasswordChangeForm):
+    def __init__(self, user, *args, request=None, **kwargs):
+        super().__init__(user, *args, **kwargs)
+
+        language = get_user_language(request) if request else "zh"
+        ui = UI_TEXT[language]
+
+        self.fields["old_password"].label = ui["old_password"]
+        # Localizes new-password labels/help/mismatch + enables zh validator
+        # error translation (validators themselves are unchanged).
+        self.localize_set_password_fields(language)
+
+        if language == "zh":
+            self.error_messages["password_incorrect"] = ui["old_password_incorrect"]
+
+
+class SignUpForm(LocalizedPasswordValidationMixin, UserCreationForm):
     email = forms.EmailField(required=False)
     requested_unit = RequestableUnitChoiceField(
         queryset=ChurchStructureUnit.objects.none(),
@@ -93,6 +182,9 @@ class SignUpForm(UserCreationForm):
 
         language = get_user_language(request) if request else "zh"
         ui = UI_TEXT[language]
+        self.language = language
+        self._ui = ui
+        self.password_error_language = language
 
         self.fields["username"].label = ui["username"]
         self.fields["email"].label = ui["email_optional"]
@@ -104,7 +196,46 @@ class SignUpForm(UserCreationForm):
         self.fields["password1"].label = ui["password"]
         self.fields["password2"].label = ui["password_confirmation"]
 
+        if language == "zh":
+            # Django's defaults for these help texts / errors are English only.
+            # Replace the displayed strings for Chinese without touching the
+            # password validators themselves (validation behaviour unchanged).
+            self.fields["username"].help_text = ui["username_help"]
+            self.fields["password1"].help_text = ui["password_help"]
+            self.fields["password2"].help_text = ui["password_confirmation_help"]
+            self.error_messages["password_mismatch"] = ui["password_mismatch"]
+            self._localize_username_invalid_message(ui["username_invalid"])
+
         self.fields["email"].required = False
+
+    def _localize_username_invalid_message(self, message):
+        # Replace only the username regex validator with a fresh instance that
+        # carries a localized message. A new instance avoids mutating Django's
+        # shared module-level validator (which would leak across all forms); the
+        # regex/behaviour is identical, only the displayed message changes.
+        localized = []
+        for validator in self.fields["username"].validators:
+            if getattr(validator, "code", None) == "invalid":
+                localized.append(UnicodeUsernameValidator(message=message))
+            else:
+                localized.append(validator)
+        self.fields["username"].validators = localized
+
+    def clean_username(self):
+        # Preserve the pre-existing duplicate-username behaviour. Before UI-H.6
+        # this form had no clean_username and inherited Django's
+        # UserCreationForm.clean_username, which rejects usernames differing only
+        # in case (docstring "Reject usernames that differ only in case.";
+        # query username__iexact). We keep that exact semantics and only swap in
+        # a localized message — switching to an exact match would *loosen*
+        # uniqueness and change behaviour, which is out of scope for an i18n task.
+        username = self.cleaned_data.get("username")
+        if (
+            username
+            and self._meta.model.objects.filter(username__iexact=username).exists()
+        ):
+            raise forms.ValidationError(self._ui["username_taken"], code="unique")
+        return username
 
     @transaction.atomic
     def save(self, commit=True):
@@ -173,9 +304,18 @@ class ProfileForm(forms.Form):
 
         return self.profile
 
-class StaffPasswordResetForm(SetPasswordForm):
+class StaffPasswordResetForm(LocalizedPasswordValidationMixin, SetPasswordForm):
     require_password_change = forms.BooleanField(
         required=False,
         initial=True,
         label="Require user to change password on next login",
     )
+
+    def __init__(self, user, *args, request=None, **kwargs):
+        super().__init__(user, *args, **kwargs)
+
+        language = get_user_language(request) if request else "zh"
+        ui = UI_TEXT[language]
+        # Localizes new-password labels/help/mismatch + zh validator errors.
+        self.localize_set_password_fields(language)
+        self.fields["require_password_change"].label = ui["require_password_change_label"]

@@ -43,12 +43,12 @@ VISIBILITY_LABELS = {
     "en": {
         PrayerRequest.VISIBILITY_PRIVATE: "Private",
         PrayerRequest.VISIBILITY_GROUP: "My Group",
-        PrayerRequest.VISIBILITY_CHURCH: "Prayer Wall",
+        PrayerRequest.VISIBILITY_CHURCH: "Church-wide",
     },
     "zh": {
         PrayerRequest.VISIBILITY_PRIVATE: "私人",
         PrayerRequest.VISIBILITY_GROUP: "我的小组",
-        PrayerRequest.VISIBILITY_CHURCH: "代祷墙",
+        PrayerRequest.VISIBILITY_CHURCH: "全教会",
     },
 }
 

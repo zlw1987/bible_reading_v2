@@ -2,14 +2,14 @@
 {% load prayer_extras %}
 
 {% block title %}
-    {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
+    {% if language == "zh" %}代祷墙{% else %}Prayer Wall{% endif %}
     | {{ ui.site_title }}
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
     <h1 class="page-title">
-        {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
+        {% if language == "zh" %}代祷墙{% else %}Prayer Wall{% endif %}
     </h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
@@ -72,7 +72,7 @@
 
         <a class="reader-tab {% if tab == 'church' %}active{% endif %}"
            href="{% url 'prayer_list' %}?tab=church&status={{ status }}">
-            {% if language == "zh" %}代祷墙{% else %}Prayer Wall{% endif %}
+            {% if language == "zh" %}全教会{% else %}Church-wide{% endif %}
         </a>
     </div>
 

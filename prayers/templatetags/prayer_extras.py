@@ -45,14 +45,14 @@ def prayer_visibility_label(prayer, language):
     if language == "zh":
         labels = {
             "private": "私人",
-            "group": "小组",
-            "church": "代祷墙",
+            "group": "我的小组",
+            "church": "全教会",
         }
     else:
         labels = {
             "private": "Private",
             "group": "My Group",
-            "church": "Prayer Wall",
+            "church": "Church-wide",
         }
 
     return labels.get(prayer.visibility, prayer.visibility)

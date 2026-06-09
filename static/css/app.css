@@ -750,6 +750,63 @@ th {
     margin: 22px 0;
 }
 
+/* Home / Today dashboard ------------------------------------------------- */
+.dashboard-hero {
+    border-color: var(--primary);
+    border-left: 4px solid var(--primary);
+}
+
+.dashboard-hero-head {
+    align-items: flex-start;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+}
+
+.dashboard-eyebrow {
+    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    margin: 0 0 4px;
+    text-transform: uppercase;
+}
+
+.dashboard-progress-meta {
+    margin: 4px 0 10px;
+}
+
+.dashboard-passage-label {
+    margin: 16px 0 8px;
+}
+
+.dashboard-reminder {
+    border-left: 4px solid var(--primary);
+}
+
+.dashboard-section-title {
+    font-size: 22px;
+    margin: 28px 0 14px;
+}
+
+.dashboard-actions-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dashboard-action-card {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0;
+}
+
+.dashboard-action-card .card-title {
+    font-size: 18px;
+}
+
+.dashboard-action-card .button {
+    align-self: flex-start;
+    margin-top: auto;
+}
+
 @media (max-width: 760px) {
     .site-header {
         transition: transform 180ms ease;
@@ -906,6 +963,14 @@ th {
 
     .grid-2 {
         grid-template-columns: 1fr;
+    }
+
+    .dashboard-actions-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-hero-head {
+        flex-direction: column;
     }
 
     .detail-list {

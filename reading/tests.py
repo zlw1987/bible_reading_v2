@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -2119,7 +2120,9 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotContains(response, "Share your reflection")
         self.assertNotContains(response, "Post anonymously")
         self.assertNotContains(response, "Reply anonymously")
-        self.assertNotContains(response, "Visibility")
+        # Match the visible English label only, not base.html JS identifiers
+        # such as updateHeaderVisibility / requestHeaderVisibilityUpdate.
+        self.assertNotRegex(response.content.decode(), r">\s*Visibility\s*<")
         self.assertNotContains(response, "Passage " + "Wall")
         self.assertNotContains(response, "经文" + "墙")
 
@@ -2555,6 +2558,108 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "发表默想")
 
+    def test_english_home_renders_dashboard_title_and_primary_reading_action(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "What to read today, and where to go next.")
+        self.assertContains(response, "Today&#x27;s reading")
+        self.assertContains(response, "Start Today")
+        self.assertContains(
+            response,
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+
+    def test_chinese_home_renders_dashboard_wording_and_primary_reading_action(self):
+        self.set_language("zh")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "今天读什么")
+        self.assertContains(response, "今日读经")
+        self.assertContains(response, "开始今日读经")
+        self.assertNotContains(response, "Today&#x27;s reading")
+        self.assertContains(
+            response,
+            reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
+        )
+
+    def test_home_reading_progress_distinguishes_plan_day_from_completed_days(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        CheckIn.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        # Plan day (today's scheduled day) is distinct from completed reading days.
+        self.assertContains(response, "Plan day 1")
+        self.assertContains(response, "1 of 3 reading days completed")
+        self.assertContains(response, "Checked in today")
+
+    def test_chinese_home_reading_progress_wording(self):
+        self.set_language("zh")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "计划第 1 天")
+        self.assertContains(response, "已完成 0 / 3 个读经日")
+        self.assertContains(response, "今日未打卡")
+
+    def test_home_empty_state_points_to_browse_reading_plans(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No reading plan in progress yet")
+        self.assertContains(response, "You do not have an active reading plan right now.")
+        self.assertContains(response, "Browse reading plans")
+        self.assertContains(response, reverse("my_plans"))
+
+    def test_home_shows_secondary_actions_for_logged_in_user(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Where to go next")
+        self.assertContains(response, "Open Bible Study")
+        self.assertContains(response, "Open Prayer Wall")
+        self.assertContains(response, "Open My Serving")
+        self.assertContains(response, reverse("study_session_list"))
+        self.assertContains(response, reverse("prayer_list"))
+        self.assertContains(response, reverse("my_serving"))
+
+    def test_chinese_home_shows_secondary_actions_for_logged_in_user(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "接下来去哪里")
+        self.assertContains(response, "打开查经")
+        self.assertContains(response, "打开代祷墙")
+        self.assertContains(response, "打开我的服事")
+
     def test_home_shows_pending_serving_summary_for_current_user(self):
         team = MinistryTeam.objects.create(name="Lighting Team", name_en="Lighting Team")
         membership = TeamMembership.objects.create(team=team, user=self.user)
@@ -2585,7 +2690,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Lighting Team")
         self.assertContains(response, reverse("my_serving"))
-        self.assertContains(response, "Today&#x27;s Reading")
+        self.assertContains(response, "Today&#x27;s reading")
 
     def test_staff_can_access_reading_plan_admin_list(self):
         self.set_language("en")

@@ -372,12 +372,37 @@ class TeamAssignmentForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        service_event = cleaned_data.get("service_event")
         team = cleaned_data.get("ministry_team")
+        status = cleaned_data.get("status")
         assigned_members = cleaned_data.get("assigned_members")
 
         if team and self.manageable_teams is not None:
             if not self.manageable_teams.filter(id=team.id).exists():
                 self.add_error("ministry_team", "You cannot manage assignments for this team.")
+
+        # Block duplicate active (non-cancelled) assignments for the same
+        # ServiceEvent + MinistryTeam. A cancelled submission may always coexist
+        # with other rows, and a cancelled historical row never blocks a new
+        # active assignment. This is an app-level rule only (no DB constraint).
+        if (
+            service_event
+            and team
+            and status != TeamAssignment.STATUS_CANCELLED
+        ):
+            conflicting = TeamAssignment.objects.filter(
+                service_event=service_event,
+                ministry_team=team,
+            ).exclude(status=TeamAssignment.STATUS_CANCELLED)
+            if self.instance and self.instance.pk:
+                conflicting = conflicting.exclude(pk=self.instance.pk)
+            if conflicting.exists():
+                self.add_error(
+                    "ministry_team",
+                    "An active assignment already exists for this service event "
+                    "and team. Cancel or edit the existing assignment instead of "
+                    "creating a duplicate.",
+                )
 
         if team and assigned_members:
             invalid_members = [

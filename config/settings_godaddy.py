@@ -1,17 +1,31 @@
 from .settings import *
 import os
 
+from django.core.exceptions import ImproperlyConfigured
+
 DEBUG = False
 
+# Comma-separated list of hostnames, sourced from the environment so the real
+# production domain can be set at deploy time without a code change. Falls back
+# to the temporary domain only when the env var is unset.
+# TODO: confirm the real production domain and set DJANGO_ALLOWED_HOSTS before cutover.
 ALLOWED_HOSTS = [
-    "4z8.d4d.mytemp.website",
+    host.strip()
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", "4z8.d4d.mytemp.website"
+    ).split(",")
+    if host.strip()
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://4z8.d4d.mytemp.website",
-]
+CSRF_TRUSTED_ORIGINS = [f"https://{host}" for host in ALLOWED_HOSTS]
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", SECRET_KEY)
+# Require an explicit secret in production; never fall back to the public,
+# committed dev key from config/settings.py.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY environment variable is required in production."
+    )
 
 DATABASES = {
     "default": {

@@ -61,10 +61,15 @@ class PrayerRequestFlowTests(TestCase):
         self.assertContains(response, "代祷标题")
         self.assertContains(response, "分享你的代祷事项")
         self.assertContains(response, "发表代祷")
+        self.assertContains(response, "可见范围")
         self.assertNotContains(response, "Prayer title")
         self.assertNotContains(response, "Share your prayer request")
         self.assertNotContains(response, "Post anonymously")
-        self.assertNotContains(response, "Visibility")
+        # The bare substring "Visibility" also appears in base.html's
+        # header-auto-hide JS (updateHeaderVisibility /
+        # requestHeaderVisibilityUpdate), so assert the English visibility
+        # *form label* specifically instead of the raw word.
+        self.assertNotRegex(response.content.decode(), r">\s*Visibility\s*<")
         self.assertNotContains(response, "Prayer Wall")
 
     def test_english_prayer_list_uses_prayer_wall_names(self):

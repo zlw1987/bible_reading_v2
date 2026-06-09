@@ -762,6 +762,155 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(assignment.created_by, self.manager)
         self.assertEqual(assignment.assigned_members.count(), 1)
 
+    def test_create_blocks_duplicate_scheduled_assignment_for_same_event_team(self):
+        self.set_language("en")
+        self.create_assignment(status=TeamAssignment.STATUS_SCHEDULED)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_team_assignment"),
+            self.assignment_post_data(notes="Attempted duplicate."),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "An active assignment already exists")
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).count(),
+            1,
+        )
+
+    def test_create_blocks_duplicate_non_cancelled_assignment_for_each_active_status(self):
+        self.set_language("en")
+        self.client.login(username="assignment_pastor", password="testpass123")
+        for status in (
+            TeamAssignment.STATUS_PREPARED,
+            TeamAssignment.STATUS_CONFIRMED,
+            TeamAssignment.STATUS_COMPLETED,
+        ):
+            with self.subTest(status=status):
+                event = self.create_schedule_event(
+                    title_en=f"Event {status}",
+                    days_from_now=3,
+                )
+                self.create_assignment(service_event=event, status=status)
+
+                response = self.client.post(
+                    reverse("create_team_assignment"),
+                    self.assignment_post_data(
+                        service_event=event.id,
+                        notes=f"Duplicate against {status}.",
+                    ),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "An active assignment already exists")
+                self.assertEqual(
+                    TeamAssignment.objects.filter(
+                        service_event=event,
+                        ministry_team=self.team,
+                    ).count(),
+                    1,
+                )
+
+    def test_create_allows_active_assignment_when_only_existing_is_cancelled(self):
+        self.set_language("en")
+        self.create_assignment(status=TeamAssignment.STATUS_CANCELLED)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_team_assignment"),
+            self.assignment_post_data(notes="New active alongside cancelled."),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).count(),
+            2,
+        )
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            )
+            .exclude(status=TeamAssignment.STATUS_CANCELLED)
+            .count(),
+            1,
+        )
+
+    def test_edit_same_assignment_is_allowed(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            self.assignment_post_data(notes="Same assignment edited."),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.notes, "Same assignment edited.")
+        self.assertEqual(
+            TeamAssignment.objects.filter(
+                service_event=self.event,
+                ministry_team=self.team,
+            ).count(),
+            1,
+        )
+
+    def test_edit_to_existing_event_team_pair_is_blocked(self):
+        self.set_language("en")
+        other_event = self.create_schedule_event(
+            title_en="Other Sunday",
+            days_from_now=4,
+        )
+        self.create_assignment(service_event=other_event)
+        assignment = self.create_assignment(notes="Editable assignment.")
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            self.assignment_post_data(
+                service_event=other_event.id,
+                notes="Moved into a conflicting pair.",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "An active assignment already exists")
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.service_event, self.event)
+        self.assertEqual(assignment.notes, "Editable assignment.")
+
+    def test_edit_changing_only_notes_status_members_still_works(self):
+        self.set_language("en")
+        assignment = self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_team_assignment", args=[assignment.id]),
+            self.assignment_post_data(
+                status=TeamAssignment.STATUS_CONFIRMED,
+                assigned_members=[self.second_membership.id],
+                notes="Updated notes, status, and members.",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CONFIRMED)
+        self.assertEqual(assignment.notes, "Updated notes, status, and members.")
+        self.assertEqual(
+            list(assignment.assigned_members.values_list("id", flat=True)),
+            [self.second_membership.id],
+        )
+
     def test_assignment_form_service_event_choices_include_date_time(self):
         self.set_language("en")
         later_event = ServiceEvent.objects.create(

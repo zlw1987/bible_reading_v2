@@ -2,9 +2,28 @@
 
 Project: bible_reading_v2 / CMS.
 
+Shared instruction source for Codex, Claude Code, and other coding agents.
+
 Work compactly. Keep changes scoped to the user's request. Optimize for token and runtime efficiency without reducing required work.
 
 Do not commit, push, or stage files unless explicitly instructed.
+
+## ChatGPT / Implementer Workflow Discipline
+
+- ChatGPT and the user are the planner/reviewer/scope controller.
+- The coding agent is the implementer.
+- Work directly on `master` unless the user explicitly requests a feature branch.
+- Do not create a feature branch unless explicitly requested.
+- Do not commit, push, or stage files unless the user explicitly says to do so.
+- Expected workflow: implement -> report changed files/tests/status -> user reviews with ChatGPT -> user commits/pushes manually, usually via GitHub Desktop.
+
+## Scope Quality
+
+- Complete the approved task thoroughly within scope.
+- Do not under-fix directly related code paths, tests, UI states, language variants, or permission-visible states just to keep the diff small.
+- Do not expand into unrelated redesign, business logic, schema changes, roadmap rewrites, deployment changes, or future modules.
+- If a directly related issue is discovered, fix it when it is clearly part of the approved task; otherwise report it as a follow-up.
+- Preserve existing runtime behavior unless the task explicitly approves changing it.
 
 ## Start-of-Task Discipline
 
@@ -34,27 +53,91 @@ If using `python` instead of `.venv\Scripts\python.exe`, report which interprete
 
 ## Verification
 
-Prefer targeted tests during development.
+Use a split verification workflow to save tokens and runtime.
 
-Do not run the full project test suite unless explicitly requested.
+The coding agent must run only:
+
+- required short checks;
+- directly targeted tests for the changed code path;
+- tests it added or modified;
+- the smallest additional test class/methods needed to prove the immediate fix.
+
+The user will run larger app suites and full regression manually when needed, then paste failing test names and traceback excerpts back to the coding agent for follow-up fixes.
+
+Do not run full app suites or full project regression unless the user explicitly authorizes it.
 
 For code, model, form, view, URL, template, or CSS changes where applicable, always run:
 
 - `.venv\Scripts\python.exe manage.py makemigrations --check`
 - `.venv\Scripts\python.exe manage.py check`
+- `git diff --check`
+
+For tests:
+
+- Start with exact test methods or the smallest relevant test class.
+- If the task changes one view/template/form, prefer tests that exercise that view/template/form.
+- If the task adds or edits tests, run those tests directly.
+- If targeted tests pass but broader coverage is prudent, report the exact recommended command for the user to run manually instead of launching it automatically.
+- When the user reports failures from a manually run larger suite, fix only the reported failures and the directly related root cause, then rerun the failed test method/class plus minimal impacted targeted tests.
 
 For accounts changes:
 
 - `accounts` tests may exceed 10 minutes.
-- If running `accounts` app tests, start with timeout >= 900 seconds / 15 minutes.
+- Do not run the full `accounts` app suite unless explicitly authorized.
+- Prefer exact accounts test methods/classes relevant to the change.
+- If the user explicitly authorizes full `accounts` tests, start with timeout >= 900 seconds / 15 minutes.
 - Do not run accounts tests with a 2-minute timeout first.
 - Do not rerun only because the first timeout was too short.
 - If a long-timeout app test still exceeds 15 minutes, stop and report partial output.
 
 For UI or browser behavior changes:
 
-- Perform explicit browser and mobile QA before commit.
-- If browser automation is unavailable, report the limitation clearly and say whether manual QA is still required.
+- Perform explicit browser and mobile QA when practical and authorized by the task.
+- If browser automation is unavailable, blocked, or would require unsafe commands, report the limitation clearly and say whether manual QA is still required.
+- Browser QA does not replace targeted Django tests.
+- Do not run broad browser sweeps when a narrow page/state check is sufficient.
+
+## Test and Command Output Discipline
+
+Testing should be token-efficient and evidence-driven.
+
+- Prefer targeted tests first.
+- Do not run full app suites or full project regression unless explicitly requested.
+- Do not rerun the same passing targeted tests repeatedly.
+- Do not rerun a long suite just to get a cleaner final report.
+- If the user will run a larger suite manually, provide the exact command and stop.
+
+When running long tests or commands:
+
+- Do not repeatedly print "waiting", "still running", "polling", "test is running", or similar status messages.
+- Either wait silently until the command finishes, or give one brief status update and stop producing output until there is a final result.
+- Do not create repeated background monitor tasks or repeated polling loops just to watch test output.
+- Do not repeatedly read the same test-output file while the command is still running.
+- If output is redirected to a file, read it only when the command has completed, or at most once or twice if diagnosing a hang.
+- If a test appears hung, report:
+  - command run;
+  - approximate elapsed time;
+  - whether a process is still active;
+  - last meaningful output;
+  - recommended next action.
+- Before launching another long test run, check whether a stale duplicate test process from a previous stopped session is still running.
+- Do not kill unrelated Django dev servers or unrelated processes.
+- Only stop stale test processes when they are clearly identified.
+
+When the user provides manual test results:
+
+- Treat the pasted failure output as the source of truth.
+- Fix the root cause of the reported failure without broad unrelated changes.
+- Rerun only the failed test method/class and directly related targeted tests.
+- Ask the user to rerun the larger suite manually if broader confirmation is needed.
+
+## Pre-existing Failures and Brittle Tests
+
+- If a test fails, determine whether it is caused by the current change.
+- If claiming a failure is pre-existing, provide evidence such as a clean-tree/stash comparison or a clear explanation tied to the failure.
+- Do not hide, ignore, or normalize known failing tests.
+- If the current task already touches the same test file or UI area, it is acceptable to fix a brittle assertion when the fix is test-only and does not change production behavior.
+- Prefer precise assertions that target visible UI labels or behavior rather than broad raw-page substring checks that can accidentally match JavaScript identifiers, CSS class names, or unrelated markup.
 
 ## Windows Browser QA / Playwright Fallback
 
@@ -62,15 +145,18 @@ Keep the Django/Python app environment separate from the Node/Playwright browser
 
 - Use the project Python interpreter: `E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe`
 - Start Django with `--noreload`: `.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8000 --noreload`
-- Prefer the official Codex browser control workflow first when browser QA is required.
-- If the in-app browser fails because of the Windows sandbox/browser startup issue, use the headless Chromium fallback.
+- Prefer the official browser control workflow for the current coding tool when browser QA is required.
+- If the in-app browser fails because of a Windows sandbox/browser startup issue, use the headless Chromium fallback.
 - Do not install Node dependencies in this Django repo for browser QA.
 - Do not create `package.json`, `package-lock.json`, or `node_modules` in this repo only for Playwright/browser QA.
-- Use the external browser QA runtime: `C:\dev\codex-browser-qa`
-- When running Node/Playwright scripts from this repo, set `$env:NODE_PATH = "C:\dev\codex-browser-qa\node_modules"`.
-- If using Codex's bundled Node executable, still set the same `NODE_PATH`.
-- Do not rely on Codex cached runtime paths or partial bundled Playwright shims.
-- Temporary browser QA helper scripts may be created only when explicitly authorized, must be short and reviewed, must not be generated through long inline PowerShell, and must be removed before the final report.
+- Use the external browser QA runtime specified by the task.
+- Known external runtimes:
+  - `C:\dev\codex-browser-qa`
+  - `C:\dev\claude-browser-qa`
+- When running Node/Playwright scripts from this repo, set `NODE_PATH` to the selected runtime's `node_modules` directory.
+  - Example: `$env:NODE_PATH = "C:\dev\claude-browser-qa\node_modules"`
+- Do not rely on cached runtime paths or partial bundled Playwright shims.
+- Temporary browser QA helper scripts may be created only when necessary.
 - Temporary browser QA helper scripts must be narrow in purpose and removed before the final report.
 - Browser QA must not create QA users or seed ministry/business data unless explicitly authorized.
 - Creating an authenticated session row for an existing staff account is allowed only for QA login/session purposes, and must be reported clearly.
@@ -190,15 +276,37 @@ Keep ServiceEvent, MinistryTeam, TeamAssignment, and My Serving workflows generi
 
 Real pilot feedback has priority over speculative roadmap work, but pilot feedback must not bypass the explicit non-goals above without a separate planning decision.
 
+## Local Artifacts and Generated Files
+
+- Do not stage or commit local tool/harness artifacts.
+- Never commit:
+  - `.claude/`
+  - `.claude/scheduled_tasks.lock`
+  - `.playwright-mcp/`
+  - temporary browser QA scripts
+  - screenshots
+  - local credentials
+  - local database files
+  - generated cache files
+  - test output logs unless explicitly requested
+- If such files appear in `git status`, report them separately and leave them unstaged.
+
 ## Final Report Format
 
 Keep reports compact. Include:
 
-- Files changed
-- Behavior changed or preserved
-- Verification commands and results
-- Browser/mobile QA status when UI changed
-- Any pre-existing dirty files left untouched
-- Whether runtime behavior changed
+- starting `git status --short`;
+- ending `git status --short`;
+- files changed;
+- behavior changed or preserved;
+- verification commands and final results;
+- tests intentionally not run and why;
+- recommended manual app/full-suite commands for the user, when broader verification is needed;
+- browser/mobile QA status when UI changed;
+- any pre-existing dirty files left untouched;
+- whether runtime behavior changed;
+- confirmation of no commits/staging;
+- confirmation of no schema/migration/business-logic/deployment changes unless explicitly approved.
 
 Do not claim browser/mobile QA passed if it was blocked or only partially completed.
+Do not claim a full app suite or full regression passed unless it was actually run to completion.

@@ -678,6 +678,90 @@ class AccountProfileTests(TestCase):
         self.assertNotIn("transform: translateY(0);", css)
         self.assertNotIn("min-width: min(300px", css)
 
+    def test_english_header_has_mobile_nav_toggle_button(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        # Hamburger button with accessible state + an id'd nav it controls.
+        self.assertIn('class="nav-toggle"', content)
+        self.assertIn('aria-controls="primary-nav"', content)
+        self.assertIn('aria-expanded="false"', content)
+        self.assertIn('aria-label="Open menu"', content)
+        self.assertIn('id="primary-nav"', content)
+        # The primary nav is marked collapsible for the mobile drawer.
+        self.assertIn("nav-collapsible", content)
+
+    def test_chinese_header_has_mobile_nav_toggle_button(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="nav-toggle"', content)
+        self.assertIn('aria-controls="primary-nav"', content)
+        self.assertIn('aria-label="打开菜单"', content)
+
+    def test_anonymous_header_has_no_mobile_nav_toggle(self):
+        # The drawer is scoped to authenticated users; the login page keeps its
+        # compact controls visible without a hamburger.
+        self.set_language("en")
+
+        response = self.client.get(reverse("login"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('class="nav-toggle"', content)
+        self.assertNotIn("nav-collapsible", content)
+
+    def test_mobile_nav_drawer_js_controls_present(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+        content = response.content.decode()
+
+        # Open/close/toggle controller + state, reusing the existing helpers.
+        self.assertIn("function openPrimaryNav()", content)
+        self.assertIn("function closePrimaryNav()", content)
+        self.assertIn("function togglePrimaryNav()", content)
+        self.assertIn("primary-nav-open", content)
+        self.assertIn("var primaryNavOpen = false;", content)
+        self.assertIn('navToggle.setAttribute("aria-expanded"', content)
+        # Outside-click + Escape close.
+        self.assertIn("onPrimaryNavOutsideClick", content)
+        self.assertIn('event.key === "Escape"', content)
+        # Menu-open keeps the header from auto-hiding.
+        self.assertIn("primaryNavOpen ||", content)
+        # Staff overlay must not engage while the drawer is open.
+        self.assertIn("&& !primaryNavOpen", content)
+
+    def test_mobile_nav_drawer_css_present(self):
+        css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
+        css = css_path.read_text(encoding="utf-8")
+
+        # Hamburger styling + collapsed-by-default + drawer-when-open.
+        self.assertIn(".nav-toggle {", css)
+        self.assertIn(".nav-collapsible {", css)
+        self.assertIn("body.primary-nav-open .nav-collapsible {", css)
+        # Header auto-hide is suppressed while the drawer is open.
+        self.assertIn("body.primary-nav-open .site-header", css)
+        # Body scroll is locked while the drawer is open.
+        self.assertIn("body.primary-nav-open {", css)
+        # Staff menu expands inline inside the drawer (not the fixed overlay).
+        self.assertIn(
+            "body.primary-nav-open .nav-staff-menu[open] .nav-staff-menu-panel {",
+            css,
+        )
+        # Hamburger hidden by default (desktop) and shown at mobile width.
+        self.assertIn(".nav-toggle {\n    display: none;", css)
+        self.assertIn(".nav-toggle {\n        display: inline-flex;", css)
+
     def test_normal_chinese_user_sees_simple_primary_nav(self):
         self.set_language("zh")
         self.client.login(username="levin", password="OldPass123!")

@@ -10,10 +10,19 @@
 </head>
 <body>
     <header class="site-header">
-        <div class="site-header-inner">
+        <div class="site-header-inner{% if user.is_authenticated %} site-header-inner--app{% endif %}">
             <a class="brand" href="{% url 'home' %}">{{ ui.site_title }}</a>
 
-            <nav class="nav">
+            {% if user.is_authenticated %}
+            <button type="button" class="nav-toggle" aria-controls="primary-nav" aria-expanded="false"
+                    aria-label="{% if language == 'zh' %}打开菜单{% else %}Open menu{% endif %}">
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+                <span class="nav-toggle-bar" aria-hidden="true"></span>
+            </button>
+            {% endif %}
+
+            <nav class="nav{% if user.is_authenticated %} nav-collapsible{% endif %}" id="primary-nav">
                 {% if user.is_authenticated %}
                 <a class="nav-link{% if active_nav == 'today' %} active{% endif %}"
                    href="{% url 'home' %}">{{ ui.today }}</a>
@@ -125,7 +134,7 @@
                     </button>
                 </form>
 
-                <a href="{% url 'login' %}">{{ ui.login }}</a>
+                <a href="{% url 'login' %}" class="button button-secondary">{{ ui.login }}</a>
                 <a href="{% url 'signup' %}" class="button">{{ ui.create_account }}</a>
                 {% endif %}
             </nav>
@@ -160,6 +169,7 @@
             var visibilityChangedAt = 0;
             var headerTouchActive = false;
             var headerPointerActive = false;
+            var primaryNavOpen = false;
             var scrollTicking = false;
             var hideScrollThreshold = 56;
             var showScrollThreshold = 96;
@@ -171,7 +181,10 @@
             var hideStartOffset = 96;
 
             function shouldUseMobileOverlay() {
-                return mobileDropdown.matches && !finePointer.matches;
+                // While the mobile primary-nav drawer is open the staff menu
+                // expands inline inside it, so the fixed overlay (and its own
+                // body lock) must not engage and fight the drawer.
+                return mobileDropdown.matches && !finePointer.matches && !primaryNavOpen;
             }
 
             function shouldUseMobileHeaderAutoHide() {
@@ -214,6 +227,7 @@
             function headerHasActiveInteraction() {
                 return headerTouchActive ||
                     headerPointerActive ||
+                    primaryNavOpen ||
                     hasOpenDropdown();
             }
 
@@ -546,6 +560,127 @@
                     requestHeaderVisibilityUpdate();
                 });
             }
+
+            // --- Mobile primary-nav drawer (hamburger) -------------------------
+            var navToggle = document.querySelector(".nav-toggle");
+            var primaryNav = document.getElementById("primary-nav");
+            var primaryNavOutsideListening = false;
+
+            function isMobileNav() {
+                return mobileHeader.matches;
+            }
+
+            function syncNavToggleState() {
+                if (navToggle) {
+                    navToggle.setAttribute("aria-expanded", primaryNavOpen ? "true" : "false");
+                }
+            }
+
+            function onPrimaryNavOutsideClick(event) {
+                if (!primaryNavOpen) {
+                    return;
+                }
+                if (primaryNav && primaryNav.contains(event.target)) {
+                    return;
+                }
+                if (navToggle && navToggle.contains(event.target)) {
+                    return;
+                }
+                closePrimaryNav();
+            }
+
+            function onPrimaryNavKeydown(event) {
+                if (event.key === "Escape" && primaryNavOpen) {
+                    closePrimaryNav();
+                    if (navToggle) {
+                        navToggle.focus();
+                    }
+                }
+            }
+
+            function addPrimaryNavOutsideHandlers() {
+                if (primaryNavOutsideListening) {
+                    return;
+                }
+                document.addEventListener("click", onPrimaryNavOutsideClick);
+                document.addEventListener("keydown", onPrimaryNavKeydown);
+                primaryNavOutsideListening = true;
+            }
+
+            function removePrimaryNavOutsideHandlers() {
+                if (!primaryNavOutsideListening) {
+                    return;
+                }
+                document.removeEventListener("click", onPrimaryNavOutsideClick);
+                document.removeEventListener("keydown", onPrimaryNavKeydown);
+                primaryNavOutsideListening = false;
+            }
+
+            function openPrimaryNav() {
+                if (primaryNavOpen || !primaryNav) {
+                    return;
+                }
+                primaryNavOpen = true;
+                showSiteHeader();
+                resetScrollTracking();
+                if (siteHeader) {
+                    setCssLength(
+                        "--primary-nav-top",
+                        Math.round(siteHeader.getBoundingClientRect().height)
+                    );
+                }
+                document.body.classList.add("primary-nav-open");
+                syncNavToggleState();
+                addPrimaryNavOutsideHandlers();
+            }
+
+            function closePrimaryNav() {
+                if (!primaryNavOpen) {
+                    return;
+                }
+                primaryNavOpen = false;
+                // Collapse any inline staff submenu so it reopens cleanly.
+                menuNodes.forEach(function (menu) {
+                    menu.open = false;
+                });
+                document.body.classList.remove("primary-nav-open");
+                syncNavToggleState();
+                removePrimaryNavOutsideHandlers();
+                clearTransientHeaderInteraction();
+                resetScrollTracking();
+                requestHeaderVisibilityUpdate();
+            }
+
+            function togglePrimaryNav() {
+                if (primaryNavOpen) {
+                    closePrimaryNav();
+                } else {
+                    openPrimaryNav();
+                }
+            }
+
+            if (navToggle) {
+                navToggle.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    togglePrimaryNav();
+                });
+            }
+
+            if (primaryNav) {
+                // Navigating via any drawer link should leave the drawer closed.
+                primaryNav.addEventListener("click", function (event) {
+                    var link = event.target.closest("a[href]");
+                    if (link && primaryNavOpen) {
+                        closePrimaryNav();
+                    }
+                });
+            }
+
+            window.addEventListener("resize", function () {
+                if (primaryNavOpen && !isMobileNav()) {
+                    closePrimaryNav();
+                }
+            });
 
             window.addEventListener("scroll", requestHeaderVisibilityUpdate, { passive: true });
         })();

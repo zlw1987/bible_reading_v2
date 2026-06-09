@@ -1120,7 +1120,7 @@ class ServiceEventFoundationTests(TestCase):
         list_response = self.client.get(reverse("service_event_list"))
         detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertContains(list_response, "聚会与活动")
+        self.assertContains(list_response, "教会聚会")
         self.assertContains(list_response, "聚会类型")
         self.assertContains(detail_response, "开始时间")
         self.assertNotContains(detail_response, "范围")
@@ -1133,7 +1133,7 @@ class ServiceEventFoundationTests(TestCase):
         list_response = self.client.get(reverse("service_event_list"))
         detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertContains(list_response, "Services & Events")
+        self.assertContains(list_response, "Church Gatherings")
         self.assertContains(list_response, "Event Type")
         self.assertContains(detail_response, "Start Time")
         self.assertNotContains(detail_response, "Scope")
@@ -1633,7 +1633,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Upcoming services and church events you can view.",
+            "Upcoming worship services, church meetings, and gatherings you can view.",
         )
 
     def test_member_list_shows_member_subtitle_chinese(self):
@@ -1643,7 +1643,7 @@ class ServiceEventFoundationTests(TestCase):
         response = self.client.get(reverse("service_event_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "查看你可以看到的近期聚会和教会活动。")
+        self.assertContains(response, "查看你可以看到的近期主日崇拜、教会聚会和相关安排。")
 
     def test_member_list_empty_state_english(self):
         self.set_language("en")
@@ -1731,8 +1731,21 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Start Time")
         self.assertContains(response, "Worship together.")
+        self.assertContains(response, "Back to Church Gatherings")
         list_url = reverse("service_event_list")
         self.assertContains(response, 'href="%s"' % list_url)
+
+    def test_member_detail_back_link_chinese(self):
+        self.set_language("zh")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "返回教会聚会")
 
     def test_member_event_list_marks_events_nav_active(self):
         self.set_language("en")
@@ -1755,6 +1768,18 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         # The active member nav link always points at the events list.
         self.assert_single_active_nav(response, "service_event_list")
+
+    def test_staff_event_management_page_marks_staff_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="event_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_service_event"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        # Management routes stay under the staff nav, not the member events nav.
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
 
     def test_member_nav_addition_does_not_broaden_event_management(self):
         self.set_language("en")

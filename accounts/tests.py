@@ -643,7 +643,7 @@ class AccountProfileTests(TestCase):
             content.index("Small Group Meetings"),
         )
         self.assertContains(response, "Ministry Operations")
-        self.assertContains(response, "Service Events")
+        self.assertContains(response, "Church Gatherings")
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Team Assignments")
         self.assertContains(response, "Lighting Pilot Import")
@@ -795,7 +795,7 @@ class AccountProfileTests(TestCase):
         self.assertLess(content.index("查经安排"), content.index("每周查经指引"))
         self.assertLess(content.index("每周查经指引"), content.index("小组查经聚会"))
         self.assertContains(response, "事工运作")
-        self.assertContains(response, "聚会事件")
+        self.assertContains(response, "教会聚会")
         self.assertContains(response, "事工团队")
         self.assertContains(response, "服事排班")
         self.assertContains(response, "灯光试点导入")

@@ -2,15 +2,15 @@
 {% load event_extras %}
 
 {% block title %}
-    {% if language == "zh" %}聚会与活动{% else %}Services & Events{% endif %}
+    {% if language == "zh" %}教会聚会{% else %}Church Gatherings{% endif %}
     | {{ ui.site_title }}
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">{% if language == "zh" %}聚会与活动{% else %}Services & Events{% endif %}</h1>
+    <h1 class="page-title">{% if language == "zh" %}教会聚会{% else %}Church Gatherings{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}查看你可以看到的近期聚会和教会活动。{% else %}Upcoming services and church events you can view.{% endif %}
+        {% if language == "zh" %}查看你可以看到的近期主日崇拜、教会聚会和相关安排。{% else %}Upcoming worship services, church meetings, and gatherings you can view.{% endif %}
     </p>
 </div>
 

@@ -8,7 +8,7 @@
 {% block content %}
 <p>
     <a href="{% url 'service_event_list' %}">
-        ← {% if language == "zh" %}返回聚会事件{% else %}Back to Events{% endif %}
+        ← {% if language == "zh" %}返回聚会与活动{% else %}Back to Services & Events{% endif %}
     </a>
 </p>
 
@@ -20,10 +20,6 @@
 </div>
 
 <div class="card">
-    <p class="muted">
-        {{ event|event_status_label:language }} · {{ event|event_scope_label:language }}
-    </p>
-
     <p>
         <strong>{% if language == "zh" %}聚会类型{% else %}Event Type{% endif %}:</strong>
         {{ event|event_type_label:language }}
@@ -57,36 +53,10 @@
 
     {% if event.ministry_context_id %}
     <p>
-        <strong>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}:</strong>
+        <strong>{% if language == "zh" %}主办/语言{% else %}Host / Language{% endif %}:</strong>
         {{ event|event_ministry_context_label:language }}
     </p>
     {% endif %}
-
-    {% if can_view_coverage and event.rotation_anchor_team_id %}
-    <p>
-        <strong>{% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:</strong>
-        {{ event.rotation_anchor_team|ministry_team_name:language }}
-    </p>
-    {% endif %}
-
-    {% if required_teams %}
-    <p>
-        <strong>{% if language == "zh" %}需要的事工团队{% else %}Required Ministry Teams{% endif %}:</strong>
-        {% for team in required_teams %}
-            {{ team|ministry_team_name:language }}{% if not forloop.last %}, {% endif %}
-        {% endfor %}
-    </p>
-    {% endif %}
-
-    <p>
-        <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
-        {{ event|event_scope_label:language }}
-    </p>
-
-    <p>
-        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
-        {{ event|event_status_label:language }}
-    </p>
 
     {% if event|event_description:language %}
     <p>{{ event|event_description:language|linebreaksbr }}</p>
@@ -106,6 +76,38 @@
     </div>
     {% endif %}
 </div>
+
+{% if can_view_coverage %}
+<div class="card">
+    <h2>{% if language == "zh" %}管理信息{% else %}Management details{% endif %}</h2>
+
+    <p>
+        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
+        {{ event|event_status_label:language }}
+    </p>
+
+    <p>
+        <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
+        {{ event|event_scope_label:language }}
+    </p>
+
+    {% if event.rotation_anchor_team_id %}
+    <p>
+        <strong>{% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:</strong>
+        {{ event.rotation_anchor_team|ministry_team_name:language }}
+    </p>
+    {% endif %}
+
+    {% if required_teams %}
+    <p>
+        <strong>{% if language == "zh" %}需要的事工团队{% else %}Required Ministry Teams{% endif %}:</strong>
+        {% for team in required_teams %}
+            {{ team|ministry_team_name:language }}{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+    </p>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if can_view_coverage and event_coverage.rows %}
 <div class="card">

@@ -36,6 +36,10 @@
                    href="{% url 'prayer_list' %}">
                     {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
                 </a>
+                <a class="nav-link{% if active_nav == 'events' %} active{% endif %}"
+                   href="{% url 'service_event_list' %}">
+                    {% if language == "zh" %}聚会与活动{% else %}Services & Events{% endif %}
+                </a>
                 <a class="nav-link{% if active_nav == 'my_serving' %} active{% endif %}"
                    href="{% url 'my_serving' %}">
                     {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}

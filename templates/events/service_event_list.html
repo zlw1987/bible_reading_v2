@@ -2,15 +2,15 @@
 {% load event_extras %}
 
 {% block title %}
-    {% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}
+    {% if language == "zh" %}聚会与活动{% else %}Services & Events{% endif %}
     | {{ ui.site_title }}
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">{% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}</h1>
+    <h1 class="page-title">{% if language == "zh" %}聚会与活动{% else %}Services & Events{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}教会聚会与特别活动{% else %}Church gatherings and special events{% endif %}
+        {% if language == "zh" %}查看你可以看到的近期聚会和教会活动。{% else %}Upcoming services and church events you can view.{% endif %}
     </p>
 </div>
 
@@ -42,21 +42,17 @@
 {% if events %}
 <div class="grid grid-2">
     {% for event in events %}
-    <div class="card">
+    <div class="card event-card">
         <h2 class="card-title">
             <a href="{% url 'service_event_detail' event.id %}">
                 {{ event|event_title:language }}
             </a>
         </h2>
-        {% if event.ministry_context_id %}
-        <p class="muted">
-            <strong>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}:</strong>
-            {{ event|event_ministry_context_label:language }}
-        </p>
-        {% endif %}
+        {% if can_manage %}
         <p class="muted">
             {{ event|event_status_label:language }} · {{ event|event_scope_label:language }}
         </p>
+        {% endif %}
         <p>
             <strong>{% if language == "zh" %}聚会类型{% else %}Event Type{% endif %}:</strong>
             {{ event|event_type_label:language }}
@@ -65,19 +61,41 @@
             <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
             {{ event.start_datetime }}
         </p>
+        {% if event.ministry_context_id %}
+        <p>
+            <strong>{% if language == "zh" %}主办/语言{% else %}Host / Language{% endif %}:</strong>
+            {{ event|event_ministry_context_label:language }}
+        </p>
+        {% endif %}
         {% if event.location %}
         <p>
             <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
             {{ event.location }}
         </p>
         {% endif %}
+        {% if event|event_description:language %}
+        <p class="muted event-card-desc">
+            {{ event|event_description:language|truncatewords:30 }}
+        </p>
+        {% endif %}
+        <p class="event-card-actions">
+            <a class="button button-secondary" href="{% url 'service_event_detail' event.id %}">
+                {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+            </a>
+        </p>
     </div>
     {% endfor %}
 </div>
 {% else %}
 <div class="card">
     <p class="muted">
-        {% if language == "zh" %}目前没有可见的聚会事件。{% else %}No visible service events are available.{% endif %}
+        {% if tab == "past" %}
+            {% if language == "zh" %}目前没有可显示的过去活动。{% else %}There are no past events to show.{% endif %}
+        {% elif tab == "drafts" %}
+            {% if language == "zh" %}目前没有草稿活动。{% else %}There are no draft events to show.{% endif %}
+        {% else %}
+            {% if language == "zh" %}目前没有可显示的近期活动。{% else %}There are no upcoming events to show right now.{% endif %}
+        {% endif %}
     </p>
 </div>
 {% endif %}

@@ -57,6 +57,15 @@ PROFILE_NAV_URLS = {
     "password_change_done",
 }
 
+# Member-facing event discovery pages. These read-only pages are accessible to
+# ordinary members (subject to per-event visibility), so they highlight the
+# primary "events" nav rather than the staff menu. Event management pages
+# (create/edit/cancel/recurring) stay under STAFF_NAV_URLS below.
+EVENT_NAV_URLS = {
+    "service_event_list",
+    "service_event_detail",
+}
+
 STAFF_NAV_URLS = {
     "staff_reading_plan_list",
     "staff_reading_plan_header",
@@ -120,6 +129,8 @@ def get_active_nav(request):
     resolver_match = getattr(request, "resolver_match", None)
     url_name = getattr(resolver_match, "url_name", "")
 
+    if url_name in EVENT_NAV_URLS:
+        return "events"
     if url_name in STAFF_NAV_URLS:
         return "staff"
     if url_name == "home":

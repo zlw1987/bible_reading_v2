@@ -1,3 +1,4 @@
+import re
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -1119,10 +1120,10 @@ class ServiceEventFoundationTests(TestCase):
         list_response = self.client.get(reverse("service_event_list"))
         detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertContains(list_response, "聚会事件")
+        self.assertContains(list_response, "聚会与活动")
         self.assertContains(list_response, "聚会类型")
         self.assertContains(detail_response, "开始时间")
-        self.assertContains(detail_response, "范围")
+        self.assertNotContains(detail_response, "范围")
 
     def test_english_list_and_detail_pages_show_english_labels(self):
         self.set_language("en")
@@ -1132,12 +1133,12 @@ class ServiceEventFoundationTests(TestCase):
         list_response = self.client.get(reverse("service_event_list"))
         detail_response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertContains(list_response, "Service Events")
+        self.assertContains(list_response, "Services & Events")
         self.assertContains(list_response, "Event Type")
         self.assertContains(detail_response, "Start Time")
-        self.assertContains(detail_response, "Scope")
+        self.assertNotContains(detail_response, "Scope")
 
-    def test_detail_page_shows_required_teams_as_plain_metadata_only(self):
+    def test_regular_viewer_does_not_see_required_teams_metadata(self):
         self.set_language("en")
         event = self.create_event()
         event.required_teams.add(self.required_team)
@@ -1146,11 +1147,25 @@ class ServiceEventFoundationTests(TestCase):
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Required Ministry Teams")
-        self.assertContains(response, "Lighting Team")
+        self.assertNotContains(response, "Management details")
+        self.assertNotContains(response, "Required Ministry Teams")
+        self.assertNotContains(response, "Lighting Team")
         self.assertNotContains(response, "Missing")
         self.assertNotContains(response, "Unassigned")
         self.assertNotContains(response, "Coverage")
+
+    def test_staff_viewer_sees_required_teams_metadata(self):
+        self.set_language("en")
+        event = self.create_event()
+        event.required_teams.add(self.required_team)
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Management details")
+        self.assertContains(response, "Required Ministry Teams")
+        self.assertContains(response, "Lighting Team")
 
     def test_ordinary_event_viewer_does_not_see_rotation_anchor_metadata(self):
         self.set_language("en")
@@ -1215,7 +1230,7 @@ class ServiceEventFoundationTests(TestCase):
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Required Ministry Teams")
+        self.assertNotContains(response, "Required Ministry Teams")
         self.assertNotContains(response, "Assignment Coverage")
         self.assertNotContains(response, "Assigned 1 person")
         self.assertNotContains(response, "Levin")
@@ -1597,3 +1612,237 @@ class ServiceEventFoundationTests(TestCase):
             )
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    # --- UI-H.3A member-facing event discovery polish ---
+
+    def assert_single_active_nav(self, response, url_name):
+        content = response.content.decode()
+        expected_href = reverse(url_name)
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertRegex(
+            content,
+            r'class="nav-link active"\s+href="%s"' % re.escape(expected_href),
+        )
+
+    def test_member_list_shows_member_subtitle_english(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Upcoming services and church events you can view.",
+        )
+
+    def test_member_list_shows_member_subtitle_chinese(self):
+        self.set_language("zh")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "查看你可以看到的近期聚会和教会活动。")
+
+    def test_member_list_empty_state_english(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "There are no upcoming events to show right now.",
+        )
+
+    def test_member_list_empty_state_chinese(self):
+        self.set_language("zh")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "目前没有可显示的近期活动。")
+
+    def test_member_list_shows_visible_event_with_type_time_and_detail_link(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Event Type")
+        self.assertContains(response, "View details")
+        detail_url = reverse("service_event_detail", args=[event.id])
+        self.assertContains(response, 'href="%s"' % detail_url)
+
+    def test_member_list_hides_management_actions_from_regular_user(self):
+        self.set_language("en")
+        self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "New Service Event")
+        self.assertNotContains(response, "Create Recurring Events")
+
+    def test_member_list_keeps_management_actions_for_manager(self):
+        self.set_language("en")
+        self.create_event()
+
+        self.client.login(username="pastor_event", password="testpass123")
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "New Service Event")
+        self.assertContains(response, "Create Recurring Events")
+
+    def test_member_list_respects_legacy_district_scope_visibility(self):
+        self.set_language("en")
+        self.create_event(
+            title_en="North District Event",
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        self.client.login(username="same_district", password="testpass123")
+        visible = self.client.get(reverse("service_event_list"))
+        self.assertContains(visible, "North District Event")
+
+        self.client.login(username="other_group", password="testpass123")
+        hidden = self.client.get(reverse("service_event_list"))
+        self.assertNotContains(hidden, "North District Event")
+
+    def test_member_detail_shows_details_and_back_link(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Start Time")
+        self.assertContains(response, "Worship together.")
+        list_url = reverse("service_event_list")
+        self.assertContains(response, 'href="%s"' % list_url)
+
+    def test_member_event_list_marks_events_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("service_event_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_single_active_nav(response, "service_event_list")
+
+    def test_member_event_detail_marks_events_nav_active(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # The active member nav link always points at the events list.
+        self.assert_single_active_nav(response, "service_event_list")
+
+    def test_member_nav_addition_does_not_broaden_event_management(self):
+        self.set_language("en")
+        event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        edit_response = self.client.get(
+            reverse("edit_service_event", args=[event.id])
+        )
+
+        self.assertEqual(edit_response.status_code, 302)
+        self.assertEqual(edit_response.url, reverse("service_event_list"))
+
+    def test_member_detail_hides_management_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        event.required_teams.add(self.required_team)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Attendee-relevant information stays visible.
+        self.assertContains(response, "Event Type")
+        self.assertContains(response, "Start Time")
+        # Management / scheduling metadata is hidden from ordinary members.
+        self.assertNotContains(response, "Management details")
+        self.assertNotContains(response, "Scope")
+        self.assertNotContains(response, "Status")
+        self.assertNotContains(response, "Required Ministry Teams")
+        self.assertNotContains(response, "Rotation Anchor Team")
+        self.assertNotContains(response, "Assignment Coverage")
+        self.assertNotContains(response, "Missing")
+        self.assertNotContains(response, "Unassigned")
+
+    def test_member_detail_hides_management_metadata_chinese(self):
+        self.set_language("zh")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        event.required_teams.add(self.required_team)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "管理信息")
+        self.assertNotContains(response, "范围")
+        self.assertNotContains(response, "状态")
+        self.assertNotContains(response, "需要的事工团队")
+        self.assertNotContains(response, "配搭参考团队")
+        self.assertNotContains(response, "服事覆盖")
+
+    def test_manager_detail_shows_management_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        event.required_teams.add(self.required_team)
+
+        self.client.login(username="pastor_event", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Management details")
+        self.assertContains(response, "Status")
+        self.assertContains(response, "Scope")
+        self.assertContains(response, "Required Ministry Teams")
+        self.assertContains(response, "Rotation Anchor Team")
+
+    def test_coverage_viewer_detail_shows_management_metadata(self):
+        self.set_language("en")
+        event = self.create_event(rotation_anchor_team=self.required_team)
+        event.required_teams.add(self.required_team)
+        ChurchRoleAssignment.objects.create(
+            user=self.other_user,
+            role=ChurchRoleAssignment.ROLE_COWORKER,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.client.login(username="other_group", password="testpass123")
+        response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Management details")
+        self.assertContains(response, "Required Ministry Teams")
+        self.assertContains(response, "Rotation Anchor Team")

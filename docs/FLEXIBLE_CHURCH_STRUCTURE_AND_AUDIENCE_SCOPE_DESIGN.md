@@ -141,7 +141,7 @@ Examples that current fields cannot express:
 - CM > District A > Rainbow 1 and Rainbow 2.
 - CM > District A plus EM > District C > Group 3.
 
-The next design needs a tree that can represent variable depth and a selection model that can store more than one selected audience branch.
+The shared design uses a tree that can represent variable depth and a selection model that can store more than one selected audience branch.
 
 ## 4. Target Hierarchy Model
 
@@ -186,7 +186,6 @@ CS-H.2 implementation note:
 - No root, CM, EM, district, or small-group rows are created automatically by migrations or app startup.
 - Existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of current behavior.
 - At the CS-H.2 stage, no audience selection or filtering used ChurchStructureUnit yet. Later, BS-AS.1 / BS-AS.2 / BS-AS.2A implemented Bible Study Schedule as the first narrow runtime consumer while keeping ordinary visibility on Profile.small_group.
-
 - One active Whole Church root is the intended future system shape, but root uniqueness enforcement is deferred until root seeding/mapping policy is decided.
 
 CS-H.3 strategy note:
@@ -254,9 +253,11 @@ Possible generic name:
 `AudienceSegment`
 
 Possible app-specific through models:
-- `ServiceEventAudienceSelection`
-- `CommunityActivityAudienceSelection`
-- `BibleStudySeriesAudienceScope` (implemented for Bible Study Schedule)
+
+- `BibleStudySeriesAudienceScope` — implemented for Bible Study Schedule.
+- `ServiceEventAudienceScope` — model-only foundation already exists for ServiceEvent; runtime visibility is not migrated.
+- `CommunityActivityAudienceScope` — future suggested direction for Community Activities if/when that module is approved.
+
 
 Each row should link:
 - target object
@@ -277,48 +278,61 @@ V1 should be include-only unless real use proves exclusion is necessary. Exclusi
 
 ## 7. Selection Semantics
 
-Future UI and logic rules:
-- Root = Whole Church / 全教会.
-- If Whole Church is selected, stop expansion and clear or disable lower-level selections.
-- Every non-root level allows multi-select.
-- Selecting a parent expands its children.
-- If a selected parent has no selected children, the target binds to that parent.
-- If a selected parent has selected children, the selected children become the effective targets for that branch.
-- Each branch resolves independently.
-- The final UI must show an effective audience preview.
+Audience selection should avoid saving redundant ancestor/descendant combinations.
 
-Examples:
+Current and future module UI should follow these rules unless a later approved milestone explicitly designs a different mode:
+
+- Root = Whole Church / 全教会.
+- If Whole Church is selected, lower-level selections should be cleared or disabled.
+- Selecting a parent unit should clear selected descendants under that parent.
+- Selecting a child or descendant should clear selected ancestors for that branch.
+- Sibling units may be selected together.
+- Cross-branch units may be selected together.
+- The backend remains the source of truth and should reject or normalize redundant ancestor/descendant combinations if they are submitted through import, stale UI, or non-browser clients.
+- The final UI should show a readable audience preview.
+
+Examples of valid saved selections:
+
 - Whole Church.
 - CM.
 - CM + EM.
 - CM > District A.
-- CM > District A > Rainbow 1, Rainbow 2.
-- CM + EM > District B.
+- CM > District A > Rainbow 1 and CM > District A > Rainbow 2.
 - CM > District A + EM > District C > Group 3.
 
-This rule intentionally treats child selection as narrowing a selected branch. If a future workflow needs both a parent and specific children selected explicitly, that should be a later "include parent and child" mode with its own UI and tests.
+Examples of redundant selections that should not be saved together:
+
+- Whole Church + CM.
+- CM + CM > District A.
+- CM > District A + CM > District A > Rainbow 1.
+
+Narrowing a branch should be represented by replacing the broader parent selection with the narrower child/descendant selection, not by saving both parent and child.
+
+If a future workflow truly needs “include parent and child separately” or include/exclude behavior, that should be a later explicitly approved mode with its own UI, validation, and tests.
+
 
 ## 8. Effective Audience Calculation
 
 Conceptual algorithm:
+
 - Input: selected tree nodes.
 - Output: normalized effective target nodes.
 - If root is selected, output root only.
-- For each selected non-root node, check whether any selected descendant exists.
-- Remove a selected parent when a selected child or descendant under that parent exists.
-- Keep selected parent nodes that have no selected descendants.
-- Deduplicate nodes.
+- Remove duplicate nodes.
+- Do not keep ancestor and descendant selections together in the normalized result.
+- If a redundant ancestor/descendant combination is submitted anyway, normalize or reject it according to the owning module's validation policy.
 - Exclude inactive units from the selectable UI.
-- Preserve historical display of old selections even if a unit later becomes inactive.
+- Preserve historical display of old selections if a unit later becomes inactive.
 
-Examples:
-- Selected `CM` only -> effective `CM`.
-- Selected `CM`, `CM > District A` -> effective `CM > District A`.
-- Selected `CM`, `CM > District A`, `CM > District B` -> effective `CM > District A` and `CM > District B`.
-- Selected `CM > District A`, `CM > District A > Rainbow 1` -> effective `Rainbow 1`.
-- Selected root plus anything else -> effective root only.
+Current implemented Bible Study behavior:
 
-This section remains the generic conceptual algorithm. Bible Study Schedule has implemented a narrow version for meeting generation through BS-AS.1 / BS-AS.2 / BS-AS.2A; broader ServiceEvent and Community Activities runtime filtering remain future work.
+- BS-AS.1 / BS-AS.2 / BS-AS.2A avoid saving ancestor/descendant combinations.
+- The picker convenience behavior clears root/ancestor/descendant conflicts.
+- Backend validation remains the source of truth.
+- Selected `ChurchStructureUnit` rows resolve to eligible legacy `SmallGroup` rows for meeting generation.
+- Ordinary member visibility remains on `Profile.small_group`.
+
+Broader ServiceEvent and Community Activities runtime filtering remain future work and require separate approval.
 
 ## 9. UI Design
 

@@ -19,6 +19,7 @@ the source of truth.
            class="audience-picker-search"
            data-audience-search
            autocomplete="off"
+           aria-label="{% if language == 'zh' %}搜索适用范围{% else %}Search audience scope{% endif %}"
            placeholder="{% if language == 'zh' %}搜索适用范围...{% else %}Search audience scope...{% endif %}">
 
     <div class="audience-picker-list" data-audience-list role="group">
@@ -99,10 +100,11 @@ the source of truth.
                 text.className = "audience-chip-label";
                 text.textContent = checkbox.getAttribute("data-chip-label");
 
+                var chipLabel = checkbox.getAttribute("data-chip-label");
                 var remove = document.createElement("button");
                 remove.type = "button";
                 remove.className = "audience-chip-remove";
-                remove.setAttribute("aria-label", REMOVE_LABEL);
+                remove.setAttribute("aria-label", REMOVE_LABEL + " " + chipLabel);
                 remove.textContent = "×";
                 remove.addEventListener("click", function () {
                     checkbox.checked = false;

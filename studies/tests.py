@@ -3860,6 +3860,25 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "data-audience-picker")
         self.assertContains(response, "Search audience scope...")
 
+    def test_audience_picker_search_input_has_aria_label(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        self.assertContains(response, 'aria-label="Search audience scope"')
+
+    def test_audience_picker_remove_label_includes_unit_label(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        # Each chip carries the readable unit label, and the remove button's
+        # aria-label is built from "Remove" + that label.
+        self.assertContains(response, 'data-chip-label="Chinese Ministry &gt; North"')
+        self.assertContains(response, 'REMOVE_LABEL + " " + chipLabel')
+
     def test_audience_picker_renders_chinese_search_placeholder(self):
         self.set_language("zh")
         self.client.login(username="study_staff", password="testpass123")

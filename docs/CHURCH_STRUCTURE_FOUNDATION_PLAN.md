@@ -329,6 +329,8 @@ Church Structure Foundation should be treated as the current foundation step:
 
 Keep signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureMembership` exists as a model/helper foundation with an explicit backfill command and user-attested production/staging verification. Runtime behavior still uses the legacy structure models and `Profile.small_group`.
 
+CS-MAP (`docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`) is the staff-facing visibility/setup-readiness layer over this foundation: CS-MAP.1 is the completed docs-only plan, CS-MAP.2 proposes a read-only staff structure map with mapping-health indicators, CS-MAP.3 is an optional setup readiness checklist, and CS-SETUP.1 (limited setup/edit UI) is explicitly not approved. Django Admin remains the structure write surface during transition; CS-MAP work changes no schema or runtime behavior.
+
 ## 14. Deliverable Summary
 
 This plan documents:

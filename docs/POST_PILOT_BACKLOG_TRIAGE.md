@@ -137,6 +137,7 @@ Likely candidates:
 - MO-S.4A Scheduling Semantic Cleanup. Completed.
 - MO-S.5A Rotation Anchor Foundation. Completed.
 - MO-S.5B Copy-Forward Suggestion Helper. Completed.
+- CS-MAP.1 Church Structure Map / Setup Readiness Plan. Completed as docs-only planning in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`, recording the June 2026 demo feedback and proposing CS-MAP.2 (read-only staff structure map + mapping health) as the next safe slice. CS-MAP.2, CS-MAP.3, and CS-SETUP.1 require separate approval; CS-SETUP.1 setup/edit UI is explicitly not approved.
 - Deployment/operations hardening plan.
 
 These are planning deliverables. They should precede implementation when the proposed work changes schema, permissions, audience scope, or module boundaries.
@@ -174,6 +175,11 @@ These remain future modules. Do not start implementation until post-pilot eviden
 - Child security check-in unless separately authorized.
 
 Children/family care workflow belongs to future CMS scope; child security check-in is a separate safety-sensitive feature and is not automatically authorized.
+
+### G. June 2026 Demo Feedback Record
+
+1. IM team lead: it is unrealistic for this app to replace every existing church app at once; the system should be modular, adopted module by module, and able to coexist/integrate with existing tools (for example 微读圣经 for small-group reading/study content). Classification: product principle / architecture direction, not a defect. Response: recorded as the Modular Adoption and Coexistence principle in `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md` and `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`. Integration initially means link/reference/mapping; no external-system integration implementation is authorized by this record.
+2. Pastor/elder/deacon: leadership wants a clear church structure architecture, setup support, and a visible structure map / hierarchy map; structure setup currently happens mainly through Django Admin, which is not convenient; church structure is seen as a foundation for many future modules. Classification: P2 staff visibility/usability planning; no P0/P1. Response: CS-MAP.1 docs-only plan completed (`docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`); CS-MAP.2 read-only Staff Structure Map + Mapping Health is the proposed next safe slice and requires separate approval; setup/edit UI (CS-SETUP.1) is not approved and remains gated on read-only evidence plus a separate design doc. Django Admin remains the structure write surface for now.
 
 ## 4. Recommended Next Sequence
 
@@ -218,7 +224,7 @@ Children/family care workflow belongs to future CMS scope; child security check-
 39. DOCS-AS.1 records the shared `ChurchStructureUnit` audience-scope direction across Bible Study Schedule, ServiceEvent / Church Gatherings, and future Community Activities.
 40. BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit` is complete, as the first narrow runtime consumer. It resolves selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows for meeting generation; generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`, ordinary member visibility stays on `Profile.small_group`, and `ChurchStructureMembership` runtime visibility migration remains deferred.
 41. BS-AS.2 (audience picker UX, compact scope display, active-list cancelled cleanup) and BS-AS.2A (audience picker accessibility polish) are complete.
-42. Immediate next step: manual/browser QA of the BS-AS flow after deployment/local migrate, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+42. Immediate QA follow-up (not a product milestone): manual/browser QA of the BS-AS flow after deployment/local migrate, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`. Once that QA follow-up is handled, the next proposed product implementation slice is CS-MAP.2 read-only Staff Structure Map + Mapping Health, which still requires separate approval and must not be bundled with SE-AS.4/SE-AS.5 or Community Activities; CS-SETUP.1 setup/edit UI remains unapproved.
 43. Later: ServiceEvent runtime audience migration and Community Activities reuse the same `ChurchStructureUnit` audience-scope foundation; neither is the next authorized implementation.
 44. Revisit Community Activities only after a separate Community Activities audience/operations plan is explicitly approved; that plan should use the shared `ChurchStructureUnit` audience-scope foundation through its own app-specific join model rather than a separate legacy-only audience segment system. Community Activities is not implemented now.
 45. Revisit Checklist V1 only if ministry pilot feedback proves checklist need separately from required-team coverage.
@@ -296,6 +302,8 @@ Include these as planning options only. Do not start them from this triage docum
 - BS-AS.1 Bible Study Schedule Audience Scope Using ChurchStructureUnit. Completed as the first narrow runtime audience-scope consumer.
 - BS-AS.2 Audience Picker UX / Compact Scope Display / Active-List Cancelled Cleanup. Completed.
 - BS-AS.2A Audience Picker Accessibility Polish. Completed.
+- CS-MAP.1 Church Structure Map / Setup Readiness Plan. Completed as docs-only planning.
+- CS-MAP.2 Read-Only Staff Structure Map + Mapping Health. Next proposed product implementation slice after the BS-AS QA follow-up; requires separate approval; not bundled with SE-AS.4/SE-AS.5 or Community Activities.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.
 - OPS-H.1 Deployment and Operations Hardening.

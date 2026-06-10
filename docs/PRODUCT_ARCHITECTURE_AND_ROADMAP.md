@@ -215,6 +215,18 @@ Future CMS scope may include:
 
 The ERP boundary remains: no finance, payroll, HR/personnel system, full CRM, legal/compliance system, or broad sensitive contact import. Children/family care workflow is future CMS scope, but child security check-in is not automatically authorized by that scope.
 
+### I. Modular Adoption and Coexistence
+
+Recorded as a product principle from June 2026 demo feedback:
+
+- The CMS must not require a church to replace all existing church apps at once.
+- Modules should be adoptable one by one; existing module boundaries and legacy-fallback behavior already support this.
+- External tools may coexist with CMS modules (for example, a small group may keep using 微读圣经 for reading/study content while the CMS provides structure, scheduling, and audience scope).
+- Integration initially means link/reference/mapping, like the existing "link to Google Docs playbooks, do not import them" rule — not deep API integration or data import.
+- No external-system integration work is authorized by this principle alone; any future integration requires its own separately approved plan.
+
+See `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`.
+
 ## 4. Completed V1 Features
 
 ### Daily Reading
@@ -524,7 +536,10 @@ Current sequence:
 - BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit` completed, as the first narrow runtime consumer implemented. `BibleStudySeriesAudienceScope` joins `BibleStudySeries / 查经安排` to `ChurchStructureUnit`; selected units resolve to eligible legacy `SmallGroup` rows for meeting generation; generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`; ordinary member visibility continues to use `Profile.small_group`; legacy scope fields remain compatibility/fallback.
 - BS-AS.2 completed: reusable server-rendered `ChurchStructureUnit` audience picker (searchable, chips, tree order, no-JS fallback, vanilla-JS convenience clearing, backend validation authoritative); compact list/card scope labels and wrapped/chip detail labels with the root prefix omitted; active management lists and related detail lists hide cancelled schedules/guides/meetings; generation still treats cancelled meetings as existing/skipped.
 - BS-AS.2A completed: bilingual audience-picker search `aria-label`, and chip remove buttons include the selected unit label in their `aria-label`; no behavior/schema/visibility changes.
-- Immediate next step: manual/browser QA of the BS-AS flow after deployment/local migrate, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- Immediate QA follow-up (not a product milestone): manual/browser QA of the BS-AS flow after deployment/local migrate, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- CS-MAP.1 Church Structure Map / Setup Readiness Plan completed as docs-only planning in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`, recording June 2026 demo feedback (modular adoption/coexistence; pastor/staff structure map and setup readiness). No runtime behavior changed.
+- CS-MAP.2 read-only Staff Structure Map + Mapping Health (suggested `/staff/structure/`) is the next proposed product implementation slice after the BS-AS QA follow-up is handled. It still requires separate approval. From a product-risk perspective it should land before SE-AS.4/SE-AS.5 and before Community Activities, though SE-AS.4 is technically independent; CS-MAP slices must not be bundled with SE-AS.4/SE-AS.5 or Community Activities.
+- CS-MAP.3 optional setup readiness checklist remains optional and unapproved. CS-SETUP.1 limited structure setup/edit UI is not approved; it is gated on CS-MAP.2 evidence plus a separate design doc (unit↔legacy sync, edit permissions, effect on stored audience rows).
 - Later: ServiceEvent / Church Gatherings runtime migration and Community Activities should reuse the same `ChurchStructureUnit` audience-scope foundation; both remain deferred and require separate approval before implementation.
 - Boundary: `ChurchStructureMembership` runtime visibility migration remains deferred; legacy `SmallGroup`, `District`, `MinistryContext`, and `Profile.small_group` remain current runtime bridge/visibility sources.
 - Later consumer migration only after phased planning.

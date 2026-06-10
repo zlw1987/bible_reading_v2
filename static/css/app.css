@@ -1807,6 +1807,8 @@ th {
 }
 
 .audience-picker-row input {
+    width: auto;
+    max-width: none;
     margin-top: 3px;
     flex: 0 0 auto;
 }

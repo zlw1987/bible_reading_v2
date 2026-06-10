@@ -235,32 +235,31 @@ Implemented bridge:
 - Do not create a fake Combined Ministry.
 - Combined means multiple participating ministry contexts.
 
-Near-term Bible Study V2 should support current available structure first:
+The current shipped Bible Study V2 schedule scope uses existing structure:
 - whole church
 - ministry context
 - district
 - small group
 
-Future enhancement:
-- mixed audience segments if needed
-- flexible `ChurchStructureUnit` scope only after a separate Church Structure Foundation step proves the need
+This currently uses the legacy `BibleStudySeries` scope fields (`scope_type`, `ministry_context`, `district`, `small_group`) and the `MinistryContext` / `District` / `SmallGroup` meeting generation helpers. It remains valid as the current runtime behavior.
 
-Recommended future audience segment concept:
+### BS-AS direction (supersedes the earlier legacy-only future plan)
 
-`BibleStudyScheduleAudience` or `BibleStudyGuideAudience`
-- `schedule` or `guide`
-- `audience_type`
-  - `whole_church`
-  - `ministry_context`
-  - `district`
-  - `small_group`
-- `ministry_context` nullable
-- `district` nullable
-- `small_group` nullable
+The earlier near-term plan to add another legacy-only audience segment model (`BibleStudyScheduleAudience` / `BibleStudyGuideAudience` with `audience_type` plus nullable `ministry_context` / `district` / `small_group`) is superseded by the DOCS-AS.1 shared audience-scope direction.
 
-Do not implement this now.
+The new direction is:
+- `ChurchStructureUnit` is the shared flexible structure / audience-selection foundation.
+- Bible Study Schedule audience scope should use an app-specific join model to `ChurchStructureUnit`, e.g. `BibleStudySeriesAudienceScope`, rather than adding more legacy-only multi-select scope fields.
+- `BibleStudySeries / 查经安排` owns the audience scope.
+- `BibleStudyLesson / 查经指引` continues to inherit/display schedule scope; do not add independent lesson-level scope in BS-AS.1. A future lesson-level override may be considered later, but it is out of scope now.
+- Meeting generation should resolve the selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows.
+- Generated `BibleStudyMeeting` rows should still point to legacy `SmallGroup`.
+- Ordinary member visibility should continue to use `Profile.small_group`.
+- This is the first narrow runtime consumer candidate for `ChurchStructureUnit` audience scope; it does not migrate ordinary user visibility to `ChurchStructureMembership`.
 
-See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the future flexible hierarchy direction. Near-term Bible Study V2 should continue with whole church / ministry context / district / small group scope and current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
+Do not implement this now beyond the BS-AS.1 milestone scope below.
+
+See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md` for the shared `ChurchStructureUnit` audience-scope direction and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the flexible hierarchy background. Until BS-AS.1 is implemented, Bible Study V2 continues with the current whole church / ministry context / district / small group scope and current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
 
 ## 6. Meeting Generation From Schedule / Guide Scope
 
@@ -503,6 +502,7 @@ Do not build:
 ### BS-V2.6.5 - Generate Group Meetings From Guide / Scope
 
 - Completed.
+- Note: the milestone name `BS-V2.6.5` has already been used for this "Generate Group Meetings From Guide / Scope" work and must not be reused for the new `ChurchStructureUnit` audience-scope work. Use the `BS-AS.1` name instead.
 - Explicit staff action creates missing `BibleStudyMeeting` rows for each eligible small group.
 - Idempotent.
 - Preview before create.
@@ -522,6 +522,18 @@ Do not build:
 - Run manual/browser QA after IA and schedule/scope alignment.
 - Use `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
 
+### BS-AS.1 - Bible Study Schedule audience scope using ChurchStructureUnit
+
+- Not yet implemented. Supersedes the earlier legacy-only future scope plan.
+- Add an app-specific join model, e.g. `BibleStudySeriesAudienceScope`, selecting `ChurchStructureUnit` rows for `BibleStudySeries / 查经安排`.
+- `BibleStudySeries` owns the audience scope; `BibleStudyLesson / 查经指引` continues to inherit/display schedule scope. Do not add independent lesson-level scope in BS-AS.1.
+- Meeting generation resolves selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows.
+- Generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`.
+- Ordinary member visibility continues to use `Profile.small_group`.
+- This is the first narrow runtime consumer candidate for `ChurchStructureUnit` audience scope. It does not migrate ordinary user visibility to `ChurchStructureMembership`.
+- A future lesson-level override may be considered later, but it is out of scope now.
+- Do not reuse the already-used `BS-V2.6.5` milestone name for this work.
+
 ### BS-V2.7 - Later Role-Aware Editing Permissions
 
 - Discussion leader may edit group preparation.
@@ -534,7 +546,9 @@ Current recommended sequence:
 - Bible Study V2 Flow QA passed.
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
-- Future flexible Church Structure Foundation planning only after the short-term bridge proves insufficient.
+- DOCS-AS.1 records the shared `ChurchStructureUnit` audience-scope direction.
+- BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit` is the next implementation candidate, as the first narrow runtime audience-scope consumer; it resolves selected units to legacy `SmallGroup` for meeting generation and keeps member visibility on `Profile.small_group`.
+- ServiceEvent / Church Gatherings and future Community Activities should reuse the same `ChurchStructureUnit` audience-scope foundation in later milestones.
 - Later role-aware editing permissions only if needed.
 
 Checklist V1 remains deferred.

@@ -71,11 +71,11 @@ Suggested fields:
 - approved_by
 - approved_at
 
-### CommunityActivityAudience
+### CommunityActivityAudience (early concept, superseded)
 
-Use audience segments instead of one `scope_type`.
+This legacy-only audience segment model is an early concept and is superseded by the DOCS-AS.1 shared audience-scope direction. Future Community Activities should use a `ChurchStructureUnit`-based audience-scope design through an app-specific join model (for example `CommunityActivityAudienceScope` selecting `ChurchStructureUnit` rows) rather than inventing a separate legacy-only `CommunityActivityAudience` segment system. The fields below are retained only to document the original early concept.
 
-Suggested fields:
+Original early-concept fields (superseded):
 - activity
 - audience_type:
   - whole_church
@@ -85,6 +85,8 @@ Suggested fields:
 - ministry_context nullable
 - district nullable
 - small_group nullable
+
+Bible Study Schedule audience scope is the first narrow runtime consumer candidate for `ChurchStructureUnit`; ServiceEvent / Church Gatherings and Community Activities should reuse the same foundation later. See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 ### ActivitySignup
 
@@ -239,6 +241,8 @@ Community Activities V1 should be planned as a separate future module after:
 - Bible Study V2 direction is resolved
 - Lighting Pilot preflight validation is complete
 - Church Structure Foundation is planned enough to support mixed CM/EM, district, small-group, and future arbitrary unit audiences
+
+Per DOCS-AS.1, Community Activities audience scope should reuse the shared `ChurchStructureUnit` audience-scope foundation (an app-specific join model selecting `ChurchStructureUnit` rows), following Bible Study Schedule as the first narrow runtime consumer and alongside ServiceEvent / Church Gatherings. It should not introduce a separate legacy-only audience segment system as the final direction.
 
 It should not change the current pre-pilot priority order.
 

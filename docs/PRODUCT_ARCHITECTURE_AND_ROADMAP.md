@@ -195,7 +195,7 @@ Planning clarification:
 - `BibleStudyMeetingRole` is the per-meeting Bible Study responsibility model.
 - CM and EM are ministry contexts / language ministries, not MinistryTeam records.
 - There is no fake Combined Ministry record; combined events should involve both CM and EM.
-- Community Activities should use future audience segments for signup visibility rather than being forced into ServiceEvent.
+- Community Activities should use the shared `ChurchStructureUnit`-based audience-scope foundation for signup visibility rather than being forced into ServiceEvent or inventing a separate legacy-only audience segment system.
 - Future flexible hierarchy should not hard-code Church -> CM/EM -> District -> SmallGroup forever; use a future `ChurchStructureUnit` only after the need is proven.
 
 ### H. Long-Term CMS Product Scope
@@ -519,10 +519,14 @@ Current sequence:
 - MO-S.5B limited copy-forward suggestion helper completed.
 - SE-AS.1 ServiceEvent Audience Scope Redesign Plan completed as docs-only planning.
 - SE-AS.2 model-only `ServiceEventAudienceScope` foundation completed; runtime visibility and `ServiceEvent.can_be_seen_by` unchanged.
+- DOCS-AS.1 records the shared `ChurchStructureUnit` audience-scope direction: app modules should select `ChurchStructureUnit` rows through app-specific join models rather than adding more legacy-only multi-select scope fields.
+- Next implementation candidate: BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit`, as the first narrow runtime consumer. It resolves selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows for meeting generation; generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`, and ordinary member visibility continues to use `Profile.small_group`.
+- Later: ServiceEvent / Church Gatherings runtime migration and Community Activities should reuse the same `ChurchStructureUnit` audience-scope foundation.
+- Boundary: `ChurchStructureMembership` runtime visibility migration remains deferred; legacy `SmallGroup`, `District`, `MinistryContext`, and `Profile.small_group` remain current runtime bridge/visibility sources.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
 - Later SE-AS.3 staff audience UI selector, audience filtering, and SE-AS.5 ServiceEvent visibility/consumer migration only after separate approval.
-- Later Community Activities V1 with audience segments.
+- Later Community Activities V1 using the shared `ChurchStructureUnit` audience-scope foundation.
 - Checklist V1 remains deferred.
 
 ## 7. Explicit Non-Goals

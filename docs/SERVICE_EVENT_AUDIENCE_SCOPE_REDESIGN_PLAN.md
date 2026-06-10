@@ -8,6 +8,8 @@ The goal is to define how `ServiceEvent` audience selection should eventually mo
 
 This plan does not implement app code, schema changes, migrations, filtering, permissions, or consumer migration.
 
+DOCS-AS.1 alignment: `ServiceEvent` / Church Gatherings shares the same `ChurchStructureUnit` audience-scope foundation as Bible Study Schedule and future Community Activities. Under DOCS-AS.1, Bible Study Schedule audience scope is the first narrow runtime consumer candidate, because it can safely resolve selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation while keeping member visibility on `Profile.small_group`. `ServiceEvent` follows the same foundation later: `ServiceEventAudienceScope` (SE-AS.2) currently exists as a model-only foundation only and does not drive runtime visibility, which still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. This plan does not claim `ServiceEvent` runtime has migrated to `ChurchStructureUnit`.
+
 ## 2. Current State
 
 `ServiceEvent` audience behavior still uses legacy fields:

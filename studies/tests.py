@@ -826,6 +826,63 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["form"]["series"].value())
 
+    def test_create_weekly_guide_form_excludes_cancelled_schedules(self):
+        self.set_language("en")
+        cancelled = BibleStudySeries.objects.create(
+            title="Cancelled Option Schedule",
+            title_en="Cancelled Option Schedule",
+            status=BibleStudySeries.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_lesson"))
+
+        series_options = list(response.context["form"].fields["series"].queryset)
+        self.assertIn(self.series, series_options)
+        self.assertNotIn(cancelled, series_options)
+
+    def test_edit_weekly_guide_keeps_current_cancelled_schedule_selectable(self):
+        self.set_language("en")
+        schedule = BibleStudySeries.objects.create(
+            title="Soon Cancelled Schedule",
+            title_en="Soon Cancelled Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        lesson = self.create_lesson(series=schedule)
+        schedule.status = BibleStudySeries.STATUS_CANCELLED
+        schedule.save()
+        other_cancelled = BibleStudySeries.objects.create(
+            title="Other Cancelled Schedule",
+            title_en="Other Cancelled Schedule",
+            status=BibleStudySeries.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_bible_study_lesson", args=[lesson.id]),
+        )
+
+        series_options = list(response.context["form"].fields["series"].queryset)
+        self.assertIn(schedule, series_options)
+        self.assertNotIn(other_cancelled, series_options)
+
+    def test_create_weekly_guide_ignores_cancelled_schedule_preselect(self):
+        self.set_language("en")
+        cancelled = BibleStudySeries.objects.create(
+            title="Cancelled Preselect Schedule",
+            title_en="Cancelled Preselect Schedule",
+            status=BibleStudySeries.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("create_bible_study_lesson"),
+            {"series": str(cancelled.id)},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["form"]["series"].value())
+
     def test_bible_study_schedule_default_scope_is_global(self):
         schedule = BibleStudySeries.objects.create(title="默认范围查经安排")
 
@@ -4019,6 +4076,21 @@ class BibleStudyModuleTests(TestCase):
 
         choice_values = [value for value, _ in response.context["status_choices"]]
         self.assertNotIn(BibleStudyLesson.STATUS_CANCELLED, choice_values)
+
+    def test_lesson_manage_list_schedule_filter_excludes_cancelled_schedules(self):
+        self.set_language("en")
+        cancelled = BibleStudySeries.objects.create(
+            title="Cancelled Filter Schedule",
+            title_en="Cancelled Filter Schedule",
+            status=BibleStudySeries.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        options = list(response.context["series_options"])
+        self.assertIn(self.series, options)
+        self.assertNotIn(cancelled, options)
 
     def test_schedule_detail_hides_cancelled_lessons(self):
         self.set_language("en")

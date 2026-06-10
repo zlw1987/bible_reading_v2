@@ -332,6 +332,8 @@ def bible_study_lesson_manage_list(request):
             "lessons": lessons,
             "series_options": BibleStudySeries.objects.filter(
                 is_active=True,
+            ).exclude(
+                status=BibleStudySeries.STATUS_CANCELLED,
             ).order_by("title"),
             "status": status,
             "series_id": series_id,
@@ -445,7 +447,11 @@ def create_bible_study_lesson(request):
 
     initial = {}
     series_id = (request.GET.get("series") or "").strip()
-    if series_id.isdigit() and BibleStudySeries.objects.filter(id=series_id).exists():
+    if series_id.isdigit() and BibleStudySeries.objects.filter(
+        id=series_id,
+    ).exclude(
+        status=BibleStudySeries.STATUS_CANCELLED,
+    ).exists():
         initial["series"] = series_id
 
     if request.method == "POST":

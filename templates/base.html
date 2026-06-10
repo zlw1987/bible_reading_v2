@@ -183,6 +183,7 @@
             var bottomBounceZone = 48;
             var topThreshold = 32;
             var hideStartOffset = 96;
+            var lastViewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
 
             function shouldUseMobileOverlay() {
                 // While the mobile primary-nav drawer is open the staff menu
@@ -510,7 +511,17 @@
             });
 
             window.addEventListener("resize", function () {
-                showSiteHeader();
+                var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+                var widthChanged = viewportWidth !== lastViewportWidth;
+                lastViewportWidth = viewportWidth;
+
+                // Mobile browsers fire height-only resize events while the URL
+                // bar collapses/expands mid-scroll; re-showing the header on
+                // those makes it flash during continuous downward scrolling.
+                // Only a width change (rotation/real resize) forces it back.
+                if (widthChanged || !shouldUseMobileHeaderAutoHide()) {
+                    showSiteHeader();
+                }
                 resetScrollTracking();
 
                 if (!lockedMenu) {

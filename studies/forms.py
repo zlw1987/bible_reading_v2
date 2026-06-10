@@ -604,6 +604,16 @@ class BibleStudyLessonForm(forms.ModelForm):
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
 
+        # Cancelled schedules are not offered for new guides. A guide already
+        # attached to a cancelled schedule keeps that one schedule selectable
+        # so the existing record still renders and saves.
+        series_filter = ~Q(status=BibleStudySeries.STATUS_CANCELLED)
+        if self.instance.pk and self.instance.series_id:
+            series_filter |= Q(id=self.instance.series_id)
+        self.fields["series"].queryset = BibleStudySeries.objects.filter(
+            series_filter,
+        ).order_by("title")
+
         status_choices = [
             (BibleStudyLesson.STATUS_DRAFT, text["draft"]),
             (BibleStudyLesson.STATUS_PUBLISHED, text["published"]),

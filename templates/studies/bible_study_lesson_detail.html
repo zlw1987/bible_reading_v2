@@ -15,13 +15,18 @@
 <div class="page-header">
     <h1 class="page-title">{{ lesson|study_lesson_title:language }}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}全教会查经指引内容{% else %}Church-wide Guide Content{% endif %}
+        {% if language == "zh" %}每周查经指引内容{% else %}Weekly Guide Content{% endif %}
         · {% if language == "zh" %}查经安排{% else %}Bible Study Schedule{% endif %}: {{ lesson.series|study_series_title:language }}
     </p>
 </div>
 
 <div class="card">
     <p class="muted">{{ lesson|study_status_label:language }}</p>
+
+    <p>
+        <strong>{% if language == "zh" %}适用范围（来自查经安排）{% else %}Scope from Schedule{% endif %}:</strong>
+        {{ lesson.series|study_series_scope_label:language }}
+    </p>
 
     {% if lesson.scripture_reference %}
     <p>

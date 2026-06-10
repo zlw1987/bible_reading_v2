@@ -3,11 +3,18 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db.models import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
+from accounts.models import (
+    ChurchRoleAssignment,
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    SmallGroup,
+)
 from events.models import ServiceEvent
 from ministry.models import TeamAssignment
 from .forms import (
@@ -16,6 +23,7 @@ from .forms import (
     BibleStudyMeetingPreparationForm,
     BibleStudyMeetingRoleForm,
     BibleStudyMeetingWorshipSongForm,
+    BibleStudySeriesForm,
 )
 from .models import (
     BibleStudyGuide,
@@ -24,6 +32,7 @@ from .models import (
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
+    BibleStudySeriesAudienceScope,
     BibleStudySession,
     BibleStudyWorshipSong,
 )
@@ -39,6 +48,79 @@ class BibleStudyModuleTests(TestCase):
         self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.north)
         self.same_group = SmallGroup.objects.create(name="Rainbow 4B", district=self.north)
         self.other_group = SmallGroup.objects.create(name="Rainbow 5", district=self.south)
+
+        # ChurchStructureUnit tree mirroring the legacy structure (BS-AS.1).
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+            name_en="Chinese Ministry",
+        )
+        self.em_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="EM",
+            name="英文事工",
+            name_en="English Ministry",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North",
+            name_en="North",
+        )
+        self.south_unit = ChurchStructureUnit.objects.create(
+            parent=self.em_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="SOUTH",
+            name="South",
+            name_en="South",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4",
+            name_en="Rainbow 4",
+        )
+        self.same_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4B",
+            name="Rainbow 4B",
+            name_en="Rainbow 4B",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.south_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW5",
+            name="Rainbow 5",
+            name_en="Rainbow 5",
+        )
+
+        # Legacy -> ChurchStructureUnit bridge mappings.
+        self.cm.church_structure_unit = self.cm_unit
+        self.cm.save()
+        self.em.church_structure_unit = self.em_unit
+        self.em.save()
+        self.north.church_structure_unit = self.north_unit
+        self.north.save()
+        self.south.church_structure_unit = self.south_unit
+        self.south.save()
+        self.group.church_structure_unit = self.group_unit
+        self.group.save()
+        self.same_group.church_structure_unit = self.same_group_unit
+        self.same_group.save()
+        self.other_group.church_structure_unit = self.other_group_unit
+        self.other_group.save()
 
         self.user = User.objects.create_user(
             username="regular",
@@ -280,10 +362,7 @@ class BibleStudyModuleTests(TestCase):
             "start_date": start_date.strftime("%Y-%m-%d"),
             "end_date": end_date.strftime("%Y-%m-%d"),
             "status": BibleStudySeries.STATUS_PUBLISHED,
-            "scope_type": BibleStudySeries.SCOPE_GLOBAL,
-            "ministry_context": "",
-            "district": "",
-            "small_group": "",
+            "audience_units": [self.root_unit.id],
             "is_active": "on",
         }
         data.update(overrides)
@@ -412,6 +491,10 @@ class BibleStudyModuleTests(TestCase):
         self.assertIsNotNone(schedule.published_at)
         self.assertEqual(schedule.created_by, self.staff)
         self.assertTrue(schedule.is_active)
+        self.assertEqual(
+            list(schedule.get_audience_scope_units()),
+            [self.root_unit],
+        )
 
     def test_staff_can_create_bible_study_schedule_with_district_scope(self):
         self.set_language("en")
@@ -422,13 +505,17 @@ class BibleStudyModuleTests(TestCase):
             self.schedule_post_data(
                 title="分区查经安排",
                 title_en="District Bible Study Schedule",
-                scope_type=BibleStudySeries.SCOPE_DISTRICT,
-                district=self.north.id,
+                audience_units=[self.north_unit.id],
             ),
         )
 
         schedule = BibleStudySeries.objects.get(title="分区查经安排")
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            list(schedule.get_audience_scope_units()),
+            [self.north_unit],
+        )
+        # Legacy fallback mirrors the single mapped district.
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_DISTRICT)
         self.assertIsNone(schedule.ministry_context)
         self.assertEqual(schedule.district, self.north)
@@ -441,15 +528,18 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.post(
             reverse("create_bible_study_schedule"),
             self.schedule_post_data(
-                title="ä¸­æ–‡äº‹å·¥æŸ¥ç»å®‰æŽ’",
+                title="中文事工查经安排",
                 title_en="CM Bible Study Schedule",
-                scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-                ministry_context=self.cm.id,
+                audience_units=[self.cm_unit.id],
             ),
         )
 
-        schedule = BibleStudySeries.objects.get(title="ä¸­æ–‡äº‹å·¥æŸ¥ç»å®‰æŽ’")
+        schedule = BibleStudySeries.objects.get(title="中文事工查经安排")
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            list(schedule.get_audience_scope_units()),
+            [self.cm_unit],
+        )
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_MINISTRY_CONTEXT)
         self.assertEqual(schedule.ministry_context, self.cm)
         self.assertIsNone(schedule.district)
@@ -464,13 +554,16 @@ class BibleStudyModuleTests(TestCase):
             self.schedule_post_data(
                 title="小组查经安排",
                 title_en="Small Group Bible Study Schedule",
-                scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-                small_group=self.group.id,
+                audience_units=[self.group_unit.id],
             ),
         )
 
         schedule = BibleStudySeries.objects.get(title="小组查经安排")
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            list(schedule.get_audience_scope_units()),
+            [self.group_unit],
+        )
         self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
         self.assertIsNone(schedule.ministry_context)
         self.assertEqual(schedule.small_group, self.group)
@@ -516,13 +609,16 @@ class BibleStudyModuleTests(TestCase):
             self.schedule_post_data(
                 title=self.series.title,
                 title_en=self.series.title_en,
-                scope_type=BibleStudySeries.SCOPE_DISTRICT,
-                district=self.north.id,
+                audience_units=[self.north_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         self.series.refresh_from_db()
+        self.assertEqual(
+            list(self.series.get_audience_scope_units()),
+            [self.north_unit],
+        )
         self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_DISTRICT)
         self.assertEqual(self.series.district, self.north)
         self.assertIsNone(self.series.small_group)
@@ -536,13 +632,16 @@ class BibleStudyModuleTests(TestCase):
             self.schedule_post_data(
                 title=self.series.title,
                 title_en=self.series.title_en,
-                scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-                small_group=self.group.id,
+                audience_units=[self.group_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         self.series.refresh_from_db()
+        self.assertEqual(
+            list(self.series.get_audience_scope_units()),
+            [self.group_unit],
+        )
         self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
         self.assertEqual(self.series.small_group, self.group)
         self.assertIsNone(self.series.district)
@@ -583,7 +682,8 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertContains(
             response,
-            "Meeting generation from guide/scope is planned for a later phase.",
+            "Small-group meetings are generated from weekly guides and "
+            "this schedule’s scope.",
         )
         self.assertNotContains(response, "Series")
 
@@ -600,15 +700,15 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Start Date")
         self.assertContains(response, "End Date")
         self.assertContains(response, "Status")
-        self.assertContains(response, "Scope")
-        self.assertContains(response, "Whole Church")
-        self.assertContains(response, "Ministry Context")
+        self.assertContains(response, "Audience Scope")
         self.assertContains(
             response,
-            "Select a ministry context such as Chinese Ministry or English Ministry.",
+            "The selected units determine which small groups receive generated "
+            "Bible Study meetings.",
         )
-        self.assertContains(response, "District")
-        self.assertContains(response, "Small Group")
+        # Unit options render with readable bilingual path labels.
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "Chinese Ministry &gt; North")
         self.assertNotContains(response, "Series")
 
     def test_chinese_schedule_pages_use_schedule_wording(self):
@@ -631,7 +731,7 @@ class BibleStudyModuleTests(TestCase):
             self.assertNotContains(response, "系列")
             self.assertNotContains(response, "查经课程")
 
-        self.assertContains(form_response, "区")
+        self.assertContains(form_response, "适用范围")
         self.assertContains(form_response, "小组")
         self.assertContains(list_response, "日期范围")
         self.assertContains(list_response, "范围")
@@ -3263,3 +3363,465 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("study_session_list"))
+
+    # ------------------------------------------------------------------
+    # BS-AS.1: Bible Study Schedule audience scope using ChurchStructureUnit
+    # ------------------------------------------------------------------
+
+    def _make_unit_series(self, *units, **overrides):
+        data = {
+            "title": "范围查经安排",
+            "status": BibleStudySeries.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        series = BibleStudySeries.objects.create(**data)
+        for unit in units:
+            BibleStudySeriesAudienceScope.objects.create(series=series, unit=unit)
+        return series
+
+    def test_audience_scope_row_can_use_active_unit(self):
+        series = BibleStudySeries.objects.create(title="活跃单元安排")
+        link = BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(list(series.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(link.unit, self.group_unit)
+
+    def test_audience_scope_duplicate_series_unit_rejected(self):
+        series = BibleStudySeries.objects.create(title="重复单元安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudySeriesAudienceScope.objects.create(
+                series=series,
+                unit=self.group_unit,
+            )
+
+    def test_audience_scope_inactive_unit_rejected(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTUNIT",
+            name="Inactive Unit",
+            is_active=False,
+        )
+        series = BibleStudySeries.objects.create(title="停用单元安排")
+
+        with self.assertRaises(ValidationError):
+            BibleStudySeriesAudienceScope.objects.create(
+                series=series,
+                unit=inactive_unit,
+            )
+
+    def test_audience_scope_ancestor_and_descendant_rejected(self):
+        series = BibleStudySeries.objects.create(title="父子冲突安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.cm_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudySeriesAudienceScope.objects.create(
+                series=series,
+                unit=self.group_unit,
+            )
+
+    def test_audience_scope_root_then_other_unit_rejected(self):
+        series = BibleStudySeries.objects.create(title="全教会加其他安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.root_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudySeriesAudienceScope.objects.create(
+                series=series,
+                unit=self.em_unit,
+            )
+
+    def test_audience_scope_other_then_root_unit_rejected(self):
+        series = BibleStudySeries.objects.create(title="其他加全教会安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.em_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudySeriesAudienceScope.objects.create(
+                series=series,
+                unit=self.root_unit,
+            )
+
+    def test_audience_scope_sibling_units_allowed(self):
+        series = BibleStudySeries.objects.create(title="兄弟单元安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.same_group_unit,
+        )
+
+        self.assertEqual(
+            set(series.get_audience_scope_units()),
+            {self.group_unit, self.same_group_unit},
+        )
+
+    def test_deleting_series_cascades_audience_scope_rows(self):
+        series = BibleStudySeries.objects.create(title="删除安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+        series_id = series.id
+
+        series.delete()
+
+        self.assertFalse(
+            BibleStudySeriesAudienceScope.objects.filter(series_id=series_id).exists()
+        )
+
+    def test_deleting_referenced_unit_is_protected(self):
+        series = BibleStudySeries.objects.create(title="保护单元安排")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.same_group_unit,
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.same_group_unit.delete()
+
+    def test_get_eligible_small_groups_resolves_root_to_all_active(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive Root Group",
+            district=self.north,
+            is_active=False,
+        )
+        series = self._make_unit_series(self.root_unit)
+
+        groups = list(series.get_eligible_small_groups())
+
+        self.assertIn(self.group, groups)
+        self.assertIn(self.same_group, groups)
+        self.assertIn(self.other_group, groups)
+        self.assertNotIn(inactive_group, groups)
+
+    def test_get_eligible_small_groups_resolves_ministry_context_unit(self):
+        series = self._make_unit_series(self.cm_unit)
+
+        self.assertEqual(
+            set(series.get_eligible_small_groups()),
+            {self.group, self.same_group},
+        )
+
+    def test_get_eligible_small_groups_unions_multiple_district_units(self):
+        series = self._make_unit_series(self.north_unit, self.south_unit)
+
+        self.assertEqual(
+            set(series.get_eligible_small_groups()),
+            {self.group, self.same_group, self.other_group},
+        )
+
+    def test_get_eligible_small_groups_resolves_multiple_small_group_units(self):
+        series = self._make_unit_series(self.group_unit, self.other_group_unit)
+
+        self.assertEqual(
+            set(series.get_eligible_small_groups()),
+            {self.group, self.other_group},
+        )
+
+    def test_get_eligible_small_groups_cross_branch_has_no_duplicates(self):
+        series = self._make_unit_series(self.cm_unit, self.other_group_unit)
+
+        groups = list(series.get_eligible_small_groups())
+
+        self.assertEqual(len(groups), len({group.id for group in groups}))
+        self.assertEqual(
+            set(groups),
+            {self.group, self.same_group, self.other_group},
+        )
+
+    def test_get_eligible_small_groups_excludes_inactive_for_units(self):
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive North Unit Group",
+            district=self.north,
+            is_active=False,
+        )
+        series = self._make_unit_series(self.north_unit)
+
+        self.assertNotIn(inactive_group, list(series.get_eligible_small_groups()))
+
+    def test_get_eligible_small_groups_uses_legacy_when_no_audience_rows(self):
+        series = BibleStudySeries.objects.create(
+            title="传统范围安排",
+            scope_type=BibleStudySeries.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        self.assertFalse(series.audience_scope_links.exists())
+        self.assertEqual(
+            set(series.get_eligible_small_groups()),
+            {self.group, self.same_group},
+        )
+
+    def test_audience_unit_without_legacy_mapping_resolves_empty(self):
+        custom_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="CUSTOMUNIT",
+            name="Custom Unit",
+        )
+        series = self._make_unit_series(custom_unit)
+
+        self.assertEqual(list(series.get_eligible_small_groups()), [])
+
+    def test_schedule_form_saves_multiple_audience_units(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(
+                title="多单元安排",
+                title_en="Multi Unit Schedule",
+                audience_units=[self.north_unit.id, self.south_unit.id],
+            ),
+        )
+
+        schedule = BibleStudySeries.objects.get(title="多单元安排")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            set(schedule.get_audience_scope_units()),
+            {self.north_unit, self.south_unit},
+        )
+        self.assertEqual(
+            set(schedule.get_eligible_small_groups()),
+            {self.group, self.same_group, self.other_group},
+        )
+
+    def test_editing_schedule_replaces_audience_units(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.south_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+            self.schedule_post_data(
+                title=self.series.title,
+                title_en=self.series.title_en,
+                audience_units=[self.group_unit.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(
+            list(self.series.get_audience_scope_units()),
+            [self.group_unit],
+        )
+        self.assertEqual(self.series.audience_scope_links.count(), 1)
+
+    def test_schedule_form_rejects_ancestor_descendant_selection(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(
+                title="冲突安排",
+                audience_units=[self.cm_unit.id, self.group_unit.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BibleStudySeries.objects.filter(title="冲突安排").exists())
+        self.assertIn("audience_units", response.context["form"].errors)
+
+    def test_schedule_form_requires_audience_unit_for_new_schedule(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_schedule"),
+            self.schedule_post_data(title="缺范围安排", audience_units=[]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(BibleStudySeries.objects.filter(title="缺范围安排").exists())
+        self.assertIn("audience_units", response.context["form"].errors)
+
+    def test_schedule_pages_display_unit_scope_label(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_schedule_manage_list"))
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(
+            list_response,
+            "Whole Church &gt; Chinese Ministry &gt; North",
+        )
+        self.assertContains(
+            detail_response,
+            "Whole Church &gt; Chinese Ministry &gt; North",
+        )
+
+    def test_schedule_label_shows_whole_church_for_root_unit(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.root_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        detail_response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(detail_response, "Whole Church")
+
+    def test_lesson_pages_show_inherited_schedule_scope(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        lesson = self.create_lesson(series=self.series)
+        self.client.login(username="study_staff", password="testpass123")
+
+        list_response = self.client.get(reverse("bible_study_lesson_manage_list"))
+        detail_response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        self.assertContains(list_response, "Scope from Schedule")
+        self.assertContains(detail_response, "Scope from Schedule")
+        self.assertContains(
+            detail_response,
+            "Whole Church &gt; Chinese Ministry &gt; North",
+        )
+
+    def test_chinese_lesson_detail_shows_inherited_scope_wording(self):
+        self.set_language("zh")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        lesson = self.create_lesson(series=self.series)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        self.assertContains(response, "适用范围（来自查经安排）")
+
+    def test_lesson_form_has_no_independent_scope_fields(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_lesson"))
+
+        form = response.context["form"]
+        for field_name in (
+            "scope_type",
+            "ministry_context",
+            "district",
+            "small_group",
+            "audience_units",
+        ):
+            self.assertNotIn(field_name, form.fields)
+
+    def test_generate_meetings_uses_audience_scope_units(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.south_unit,
+        )
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(
+            set(meetings.values_list("small_group", flat=True)),
+            {self.group.id, self.same_group.id, self.other_group.id},
+        )
+        for meeting in meetings:
+            self.assertIn(
+                meeting.small_group,
+                [self.group, self.same_group, self.other_group],
+            )
+
+    def test_generate_meetings_with_audience_scope_is_idempotent(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 2)
+        self.assertEqual(
+            set(meetings.values_list("small_group", flat=True)),
+            {self.group.id, self.same_group.id},
+        )
+
+    def test_audience_scope_does_not_change_member_visibility(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.root_unit,
+        )
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        # Visibility stays anchored to Profile.small_group even though the
+        # whole-church audience scope resolves to every active small group.
+        self.assertTrue(meeting.can_be_seen_by(self.user))
+        self.assertFalse(meeting.can_be_seen_by(self.other_user))

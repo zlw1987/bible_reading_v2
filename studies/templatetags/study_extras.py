@@ -41,6 +41,14 @@ def study_series_scope_label(series, language):
     if not series:
         return ""
 
+    # Prefer the BS-AS.1 ChurchStructureUnit audience scope when present. Uses
+    # the prefetched audience_scope_links to avoid extra queries in list views.
+    audience_units = [link.unit for link in series.audience_scope_links.all()]
+    if audience_units:
+        if any(unit.unit_type == "root" for unit in audience_units):
+            return "全教会" if language == "zh" else "Whole Church"
+        return ", ".join(unit.path_label(language) for unit in audience_units)
+
     def ministry_context_label():
         if not series.ministry_context_id:
             return "-"

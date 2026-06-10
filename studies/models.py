@@ -1,14 +1,83 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
-from accounts.models import District, MinistryContext, SmallGroup
+from accounts.models import (
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    SmallGroup,
+)
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
     has_capability,
 )
+
+
+def _collect_unit_and_descendant_ids(units):
+    """Return the ids of the given ChurchStructureUnit rows plus all descendants.
+
+    Traversal is breadth-first over the ``children`` relation. The model already
+    rejects parent cycles, but the ``exclude`` guard keeps this safe even if a
+    cycle ever slipped through.
+    """
+    unit_ids = set()
+    frontier = [unit.id for unit in units if unit.id is not None]
+
+    while frontier:
+        unit_ids.update(frontier)
+        frontier = list(
+            ChurchStructureUnit.objects.filter(parent_id__in=frontier)
+            .exclude(id__in=unit_ids)
+            .values_list("id", flat=True)
+        )
+
+    return unit_ids
+
+
+def resolve_units_to_small_groups(units):
+    """Resolve selected ChurchStructureUnit rows to eligible active SmallGroups.
+
+    Bible Study audience scope selects ChurchStructureUnit rows, but meeting
+    generation still targets legacy ``SmallGroup`` rows. This resolver bridges
+    the two using the optional ``church_structure_unit`` mapping fields on the
+    legacy ``MinistryContext`` / ``District`` / ``SmallGroup`` models. It never
+    consults ``ChurchStructureMembership`` and never drives ordinary-member
+    visibility.
+    """
+    groups = SmallGroup.objects.filter(is_active=True)
+    units = list(units)
+    if not units:
+        return groups.none()
+
+    # Root / whole church selection covers every active small group.
+    if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
+        return groups
+
+    target_unit_ids = _collect_unit_and_descendant_ids(units)
+    if not target_unit_ids:
+        return groups.none()
+
+    context_ids = list(
+        MinistryContext.objects.filter(
+            church_structure_unit_id__in=target_unit_ids,
+        ).values_list("id", flat=True)
+    )
+    district_ids = list(
+        District.objects.filter(
+            church_structure_unit_id__in=target_unit_ids,
+        ).values_list("id", flat=True)
+    )
+
+    match = models.Q(church_structure_unit_id__in=target_unit_ids)
+    if context_ids:
+        match |= models.Q(district__ministry_context_id__in=context_ids)
+    if district_ids:
+        match |= models.Q(district_id__in=district_ids)
+
+    return groups.filter(match).distinct()
 
 
 class BibleStudySeries(models.Model):
@@ -171,7 +240,76 @@ class BibleStudySeries(models.Model):
         self.full_clean()
         return super().save(*args, **kwargs)
 
+    def get_audience_scope_units(self):
+        """Return selected ChurchStructureUnit rows for a saved schedule."""
+        if not self.pk:
+            return ChurchStructureUnit.objects.none()
+        return ChurchStructureUnit.objects.filter(
+            bible_study_series_audience_scopes__series_id=self.pk,
+        ).distinct()
+
+    def apply_audience_legacy_fallback(self, units):
+        """Best-effort mirror of selected units into legacy scope fields.
+
+        Audience scope rows (``BibleStudySeriesAudienceScope``) drive runtime
+        eligibility. The legacy ``scope_type`` / ``ministry_context`` /
+        ``district`` / ``small_group`` fields are kept only as a coexistence
+        fallback. A single cleanly mappable unit is represented precisely;
+        multi-unit or unmappable selections fall back to the narrowest available
+        legacy value so that, if audience rows were ever removed, the legacy
+        fallback never silently over-exposes meetings to the whole church.
+        """
+        units = list(units)
+        self.ministry_context = None
+        self.district = None
+        self.small_group = None
+
+        if not units:
+            self.scope_type = self.SCOPE_GLOBAL
+            return
+
+        if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
+            self.scope_type = self.SCOPE_GLOBAL
+            return
+
+        if len(units) == 1:
+            unit = units[0]
+            group = (
+                unit.legacy_small_groups.filter(is_active=True).first()
+                or unit.legacy_small_groups.first()
+            )
+            district = unit.legacy_districts.first()
+            context = unit.legacy_ministry_contexts.first()
+            if group is not None:
+                self.scope_type = self.SCOPE_SMALL_GROUP
+                self.small_group = group
+                return
+            if district is not None:
+                self.scope_type = self.SCOPE_DISTRICT
+                self.district = district
+                return
+            if context is not None:
+                self.scope_type = self.SCOPE_MINISTRY_CONTEXT
+                self.ministry_context = context
+                return
+
+        # Multi-unit or unmappable single unit: prefer a narrow small-group
+        # fallback rather than a broad whole-church one.
+        fallback_group = resolve_units_to_small_groups(units).order_by("name").first()
+        if fallback_group is not None:
+            self.scope_type = self.SCOPE_SMALL_GROUP
+            self.small_group = fallback_group
+            return
+
+        # Nothing resolves to an active legacy group; audience rows still drive
+        # eligibility, so the legacy fallback resolves to no meetings.
+        self.scope_type = self.SCOPE_GLOBAL
+
     def get_eligible_small_groups(self):
+        units = list(self.get_audience_scope_units())
+        if units:
+            return resolve_units_to_small_groups(units)
+
         groups = SmallGroup.objects.filter(is_active=True)
 
         if self.scope_type == self.SCOPE_GLOBAL:
@@ -193,6 +331,110 @@ class BibleStudySeries(models.Model):
             return groups.filter(id=self.small_group_id)
 
         return groups.none()
+
+
+class BibleStudySeriesAudienceScope(models.Model):
+    """App-specific audience-scope join from a schedule to ChurchStructureUnit.
+
+    Selected units are the BS-AS.1 audience-scope foundation for Bible Study
+    Schedule. They resolve to legacy ``SmallGroup`` rows for meeting generation;
+    they do not change ordinary-member visibility, which still uses
+    ``Profile.small_group``.
+    """
+
+    series = models.ForeignKey(
+        BibleStudySeries,
+        on_delete=models.CASCADE,
+        related_name="audience_scope_links",
+    )
+    unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.PROTECT,
+        related_name="bible_study_series_audience_scopes",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = [
+            "series__title",
+            "unit__parent_id",
+            "unit__sort_order",
+            "unit__code",
+            "unit__name",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["series", "unit"],
+                name="unique_bible_study_series_audience_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["series"]),
+            models.Index(fields=["unit"]),
+        ]
+
+    def __str__(self):
+        return f"{self.unit} audience scope for {self.series}"
+
+    def clean(self):
+        errors = {}
+
+        if self.unit_id and not self.unit.is_active:
+            errors["unit"] = "Audience scope must use an active church structure unit."
+
+        if self.series_id and self.unit_id and "unit" not in errors:
+            selected_units = ChurchStructureUnit.objects.filter(
+                bible_study_series_audience_scopes__series_id=self.series_id,
+            )
+            if self.pk:
+                selected_units = selected_units.exclude(
+                    bible_study_series_audience_scopes__pk=self.pk,
+                )
+
+            selected_unit_ids = set(selected_units.values_list("id", flat=True))
+
+            if selected_unit_ids and (
+                self.unit.unit_type == ChurchStructureUnit.UNIT_ROOT
+                or selected_units.filter(
+                    unit_type=ChurchStructureUnit.UNIT_ROOT,
+                ).exists()
+            ):
+                errors["unit"] = (
+                    "Whole-church audience scope cannot be combined with other "
+                    "units for the same schedule."
+                )
+            else:
+                ancestor_ids = {
+                    ancestor.id
+                    for ancestor in self.unit.get_ancestors()
+                    if ancestor.id is not None
+                }
+
+                if ancestor_ids & selected_unit_ids:
+                    errors["unit"] = (
+                        "Audience scope cannot include both an ancestor and "
+                        "descendant unit for the same schedule."
+                    )
+                else:
+                    for selected_unit in selected_units:
+                        selected_ancestor_ids = {
+                            ancestor.id
+                            for ancestor in selected_unit.get_ancestors()
+                            if ancestor.id is not None
+                        }
+                        if self.unit_id in selected_ancestor_ids:
+                            errors["unit"] = (
+                                "Audience scope cannot include both an ancestor "
+                                "and descendant unit for the same schedule."
+                            )
+                            break
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class BibleStudySession(models.Model):

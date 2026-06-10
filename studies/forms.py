@@ -1,8 +1,9 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 
-from accounts.models import District, MinistryContext, SmallGroup
+from accounts.models import ChurchStructureUnit
 
 from .models import (
     BibleStudyGuide,
@@ -11,9 +12,21 @@ from .models import (
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
+    BibleStudySeriesAudienceScope,
     BibleStudySession,
     BibleStudyWorshipSong,
 )
+
+
+class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
+    """Multi-select that labels units by their readable bilingual path."""
+
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        return obj.path_label(self.language)
 
 
 FORM_TEXT = {
@@ -30,6 +43,19 @@ FORM_TEXT = {
         "schedule_ministry_context": "Ministry Context",
         "schedule_district": "District",
         "schedule_small_group": "Small Group",
+        "audience_scope": "Audience Scope",
+        "audience_scope_help": (
+            "Select one or more church structure units. The selected units "
+            "determine which small groups receive generated Bible Study meetings."
+        ),
+        "audience_scope_required": "Select at least one audience unit.",
+        "audience_scope_root_combo": (
+            "Whole Church cannot be combined with other units."
+        ),
+        "audience_scope_ancestor_combo": (
+            "Do not select both a unit and one of its parent or child units."
+        ),
+        "audience_scope_whole_church": "Whole Church",
         "ministry_context": "Ministry Context",
         "ministry_context_help": (
             "Select a ministry context such as Chinese Ministry or English Ministry."
@@ -78,6 +104,14 @@ FORM_TEXT = {
         "schedule_global": "全教会",
         "schedule_district": "区",
         "schedule_small_group": "小组",
+        "audience_scope": "适用范围",
+        "audience_scope_help": (
+            "选择一个或多个教会结构单元。所选单元决定哪些小组会生成查经聚会。"
+        ),
+        "audience_scope_required": "请至少选择一个适用范围单元。",
+        "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
+        "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
+        "audience_scope_whole_church": "全教会",
         "is_active": "启用",
         "series": "系列",
         "title": "标题",
@@ -174,10 +208,6 @@ class BibleStudySeriesForm(forms.ModelForm):
             "start_date",
             "end_date",
             "status",
-            "scope_type",
-            "ministry_context",
-            "district",
-            "small_group",
             "is_active",
         ]
         widgets = {
@@ -195,6 +225,7 @@ class BibleStudySeriesForm(forms.ModelForm):
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.language = language
         text = form_text(language)
         self.fields["title"].label = text["series_title"]
         self.fields["title_en"].label = text["series_title_en"]
@@ -203,21 +234,6 @@ class BibleStudySeriesForm(forms.ModelForm):
         self.fields["start_date"].label = text["start_date"]
         self.fields["end_date"].label = text["end_date"]
         self.fields["status"].label = text["status"]
-        self.fields["scope_type"].label = text["schedule_scope_type"]
-        self.fields["ministry_context"].label = text.get(
-            "ministry_context",
-            "事工范围" if language == "zh" else "Ministry Context",
-        )
-        self.fields["ministry_context"].help_text = text.get(
-            "ministry_context_help",
-            (
-                "选择事工范围，例如中文事工或英文事工。"
-                if language == "zh"
-                else "Select a ministry context such as Chinese Ministry or English Ministry."
-            ),
-        )
-        self.fields["district"].label = text["schedule_district"]
-        self.fields["small_group"].label = text["schedule_small_group"]
         self.fields["is_active"].label = text["is_active"]
         self.fields["status"].choices = [
             (BibleStudySeries.STATUS_DRAFT, text["draft"]),
@@ -225,38 +241,125 @@ class BibleStudySeriesForm(forms.ModelForm):
             (BibleStudySeries.STATUS_COMPLETED, text["completed"]),
             (BibleStudySeries.STATUS_CANCELLED, text["cancelled"]),
         ]
-        self.fields["scope_type"].choices = [
-            (BibleStudySeries.SCOPE_GLOBAL, text["schedule_global"]),
-            (
-                BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-                text.get(
-                    "schedule_ministry_context",
-                    "事工范围" if language == "zh" else "Ministry Context",
-                ),
-            ),
-            (BibleStudySeries.SCOPE_DISTRICT, text["schedule_district"]),
-            (BibleStudySeries.SCOPE_SMALL_GROUP, text["schedule_small_group"]),
-        ]
-        ministry_context_filter = Q(is_active=True)
-        if self.instance.ministry_context_id:
-            ministry_context_filter |= Q(id=self.instance.ministry_context_id)
-        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
-            ministry_context_filter,
-        ).distinct().order_by("sort_order", "code")
-        district_filter = Q(is_active=True)
-        if self.instance.district_id:
-            district_filter |= Q(id=self.instance.district_id)
-        self.fields["district"].queryset = District.objects.filter(
-            district_filter,
-        ).distinct().order_by("name")
-        small_group_filter = Q(is_active=True)
-        if self.instance.small_group_id:
-            small_group_filter |= Q(id=self.instance.small_group_id)
-        self.fields["small_group"].queryset = SmallGroup.objects.filter(
-            small_group_filter,
-        ).distinct().order_by("name")
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
+
+        self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
+            language=language,
+            queryset=ChurchStructureUnit.objects.filter(is_active=True).order_by(
+                "parent_id",
+                "sort_order",
+                "code",
+                "name",
+            ),
+            required=False,
+            label=text["audience_scope"],
+            help_text=text["audience_scope_help"],
+        )
+        self.fields["audience_units"].initial = self._initial_audience_unit_ids()
+
+    def _initial_audience_unit_ids(self):
+        if not self.instance.pk:
+            return []
+
+        existing = list(
+            self.instance.get_audience_scope_units().values_list("id", flat=True)
+        )
+        if existing:
+            return existing
+
+        # Fall back to the legacy single scope so editing a pre-BS-AS.1 schedule
+        # pre-fills the equivalent unit when a mapping exists.
+        scope_type = self.instance.scope_type
+        unit = None
+        if scope_type == BibleStudySeries.SCOPE_GLOBAL:
+            unit = ChurchStructureUnit.objects.filter(
+                unit_type=ChurchStructureUnit.UNIT_ROOT,
+                is_active=True,
+            ).first()
+        elif scope_type == BibleStudySeries.SCOPE_MINISTRY_CONTEXT and (
+            self.instance.ministry_context_id
+        ):
+            unit_id = self.instance.ministry_context.church_structure_unit_id
+            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
+        elif scope_type == BibleStudySeries.SCOPE_DISTRICT and self.instance.district_id:
+            unit_id = self.instance.district.church_structure_unit_id
+            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
+        elif scope_type == BibleStudySeries.SCOPE_SMALL_GROUP and (
+            self.instance.small_group_id
+        ):
+            unit_id = self.instance.small_group.church_structure_unit_id
+            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
+
+        if unit is not None and unit.is_active:
+            return [unit.id]
+        return []
+
+    def clean(self):
+        cleaned = super().clean()
+        text = form_text(self.language)
+        units = list(cleaned.get("audience_units") or [])
+
+        had_audience_rows = bool(
+            self.instance.pk and self.instance.audience_scope_links.exists()
+        )
+
+        if not units:
+            # New unit-based schedules require an audience unit. An existing
+            # legacy-only schedule with no mapping may stay legacy-only.
+            if not self.instance.pk or had_audience_rows:
+                self.add_error("audience_units", text["audience_scope_required"])
+            return cleaned
+
+        self._validate_unit_combination(units, text)
+        return cleaned
+
+    def _validate_unit_combination(self, units, text):
+        if any(
+            unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units
+        ) and len(units) > 1:
+            self.add_error("audience_units", text["audience_scope_root_combo"])
+            return
+
+        unit_ids = {unit.id for unit in units}
+        for unit in units:
+            ancestor_ids = {
+                ancestor.id
+                for ancestor in unit.get_ancestors()
+                if ancestor.id is not None
+            }
+            if ancestor_ids & unit_ids:
+                self.add_error(
+                    "audience_units",
+                    text["audience_scope_ancestor_combo"],
+                )
+                return
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        self._selected_audience_units = list(
+            self.cleaned_data.get("audience_units") or []
+        )
+        if self._selected_audience_units:
+            instance.apply_audience_legacy_fallback(self._selected_audience_units)
+        if commit:
+            instance.save()
+            self.save_audience_units(instance)
+        return instance
+
+    def save_audience_units(self, series):
+        units = getattr(self, "_selected_audience_units", None)
+        if units is None:
+            units = list(self.cleaned_data.get("audience_units") or [])
+        if not units:
+            return
+        with transaction.atomic():
+            series.audience_scope_links.all().delete()
+            for unit in units:
+                BibleStudySeriesAudienceScope.objects.create(
+                    series=series,
+                    unit=unit,
+                )
 
 
 class BibleStudySessionForm(forms.ModelForm):

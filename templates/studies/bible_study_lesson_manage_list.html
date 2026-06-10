@@ -10,7 +10,7 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}管理每周全教会查经指引与预查材料{% else %}Manage weekly church-wide Bible Study guides and pre-study material{% endif %}
+        {% if language == "zh" %}管理每周查经指引与预查材料。{% else %}Manage weekly Bible Study guides and pre-study material.{% endif %}
     </p>
 </div>
 
@@ -100,7 +100,7 @@
                 <dd>{{ lesson|study_status_label:language }}</dd>
             </div>
             <div class="schedule-meta-item">
-                <dt>{% if language == "zh" %}范围{% else %}Scope{% endif %}</dt>
+                <dt>{% if language == "zh" %}适用范围（来自查经安排）{% else %}Scope from Schedule{% endif %}</dt>
                 <dd>{{ lesson.series|study_series_scope_label:language }}</dd>
             </div>
             <div class="schedule-meta-item">

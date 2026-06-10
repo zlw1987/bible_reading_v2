@@ -184,6 +184,8 @@ def bible_study_schedule_manage_list(request):
         "ministry_context",
         "district",
         "small_group",
+    ).prefetch_related(
+        "audience_scope_links__unit",
     ).annotate(
         guide_count=Count("lessons"),
     ).order_by("title")
@@ -207,6 +209,8 @@ def bible_study_schedule_detail(request, series_id):
             "ministry_context",
             "district",
             "small_group",
+        ).prefetch_related(
+            "audience_scope_links__unit",
         ).annotate(guide_count=Count("lessons")),
         id=series_id,
     )
@@ -237,6 +241,7 @@ def create_bible_study_schedule(request):
             schedule = form.save(commit=False)
             schedule.created_by = request.user
             schedule.save()
+            form.save_audience_units(schedule)
             messages.success(request, study_ui_text(language, "schedule_saved"))
             return redirect("bible_study_schedule_detail", series_id=schedule.id)
     else:
@@ -287,7 +292,10 @@ def bible_study_lesson_manage_list(request):
 
     status = (request.GET.get("status") or "").strip()
     series_id = (request.GET.get("series") or "").strip()
-    lessons = BibleStudyLesson.objects.select_related("series", "created_by")
+    lessons = BibleStudyLesson.objects.select_related(
+        "series",
+        "created_by",
+    ).prefetch_related("series__audience_scope_links__unit")
 
     if status:
         lessons = lessons.filter(status=status)
@@ -321,7 +329,7 @@ def bible_study_lesson_detail(request, lesson_id):
             "series",
             "series__ministry_context",
             "created_by",
-        ),
+        ).prefetch_related("series__audience_scope_links__unit"),
         id=lesson_id,
     )
 

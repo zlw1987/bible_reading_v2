@@ -15,7 +15,7 @@ The current short-term bridge served pilot needs:
 - `BibleStudySeries.ministry_context` schedule scope
 - optional `ServiceEvent.ministry_context` label
 
-Pilot validation passed on `v0.9-pilot-rc1`, and these current structures are acceptable for the pilot baseline. Future needs require a flexible hierarchy and multi-select audience scope, but this document is for future implementation planning only. It does not authorize immediate model, migration, view, form, template, filtering, or permission changes.
+Pilot validation passed on `v0.9-pilot-rc1`, and these current structures are acceptable for the pilot baseline. This document remains the planning record for flexible hierarchy and audience scope. Some foundation and one narrow Bible Study audience-scope consumer are now implemented, but this document still does not authorize additional model, migration, view, form, template, filtering, permission, or consumer-migration changes without a separate approved milestone.
 
 The project remains a lightweight Church Life workflow system. It should support spiritual practices, Bible Study, service operations, and focused community workflows without becoming a full church ERP.
 
@@ -463,7 +463,7 @@ Mitigation direction:
 
 ## 13. Non-Goals
 
-CS-H.1 does not include:
+The original CS-H.1 planning milestone did not include:
 - implementation
 - models
 - migrations

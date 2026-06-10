@@ -185,7 +185,8 @@ CS-H.2 implementation note:
 - CS-H.2A rejects indirect parent cycles and makes ancestor/path display safe against corrupted cycles.
 - No root, CM, EM, district, or small-group rows are created automatically by migrations or app startup.
 - Existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of current behavior.
-- No audience selection or filtering uses `ChurchStructureUnit` yet.
+- At the CS-H.2 stage, no audience selection or filtering used ChurchStructureUnit yet. Later, BS-AS.1 / BS-AS.2 / BS-AS.2A implemented Bible Study Schedule as the first narrow runtime consumer while keeping ordinary visibility on Profile.small_group.
+
 - One active Whole Church root is the intended future system shape, but root uniqueness enforcement is deferred until root seeding/mapping policy is decided.
 
 CS-H.3 strategy note:
@@ -524,7 +525,7 @@ Open decisions:
 
 Current recommendation:
 
- Continue to prefer app-specific through models first.
+- Continue to prefer app-specific through models first.
 - Continue to prefer include-only V1 unless real use proves exclusion is necessary.
 - Continue to avoid destructive migration.
 - Bible Study Schedule has now proven the first narrow runtime consumer through BS-AS.1 / BS-AS.2 / BS-AS.2A.

@@ -4,7 +4,7 @@
 
 This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models, CS-H.6 through CS-H.7E add requested-unit capture and staff approval/sync slices, CS-H.8 records the integrated request-flow checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint.
 
-DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is now selected as the first narrow runtime consumer candidate, because it can safely resolve selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation while keeping ordinary member visibility on `Profile.small_group`. ServiceEvent / Church Gatherings and future Community Activities should follow the same `ChurchStructureUnit` audience-scope foundation in later milestones. This is not a migration of ordinary user visibility to `ChurchStructureMembership`; that runtime visibility migration remains deferred.
+DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is now implemented as the first narrow runtime consumer (BS-AS.1, with BS-AS.2 picker/display/cancelled-cleanup and BS-AS.2A accessibility polish): the `BibleStudySeriesAudienceScope` join resolves selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation while keeping ordinary member visibility on `Profile.small_group`. ServiceEvent / Church Gatherings and future Community Activities should follow the same `ChurchStructureUnit` audience-scope foundation in later milestones, and both remain deferred and separately approved. This is not a migration of ordinary user visibility to `ChurchStructureMembership`; that runtime visibility migration remains deferred.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -378,14 +378,13 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - CS-H.9 membership request UX hardening completed.
 - CS-H.10 CMS hardening checkpoint completed. Mobile nav polish remains deferred/accepted for now, and root `AGENTS.md` verification policy has been added.
 
-### Later Phase: First Audience Consumer
+### First Audience Consumer (Implemented: BS-AS.1 / BS-AS.2 / BS-AS.2A)
 
-- DOCS-AS.1 decision: Bible Study Schedule is the first narrow runtime consumer candidate for `ChurchStructureUnit` audience selection.
+- DOCS-AS.1 decision, now implemented: Bible Study Schedule is the first narrow runtime consumer for `ChurchStructureUnit` audience selection.
 - Bible Study Schedule is first because it can safely resolve selected structure units into legacy `SmallGroup` rows for meeting generation while keeping member visibility on `Profile.small_group`.
-- Use an app-specific join model such as `BibleStudySeriesAudienceScope` to select `ChurchStructureUnit` rows; do not add more legacy-only multi-select scope fields.
-- Keep behavior narrow.
-- Do not add broad filtering until the data model and UI are tested.
-- Keep existing fixed fields available during coexistence.
+- Implemented with the app-specific join model `BibleStudySeriesAudienceScope` selecting `ChurchStructureUnit` rows; no legacy-only multi-select scope fields were added.
+- BS-AS.2 added a reusable searchable/tree audience picker (with no-JS fallback and backend validation as source of truth), compact list/card and wrapped/chip detail scope display with the root prefix omitted, and active-list cancelled cleanup; meeting generation still treats cancelled meetings as existing/skipped. BS-AS.2A added picker accessibility polish.
+- Behavior stays narrow: no broad audience filtering, and the legacy fixed fields remain available as compatibility/fallback during coexistence.
 
 ### Later Phase: ServiceEvent and Community Activities Audience Scope
 
@@ -405,7 +404,7 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 
 ### A. Bible Study
 
-Existing `BibleStudySeries` scope currently works. Under DOCS-AS.1, Bible Study Schedule is the first narrow `ChurchStructureUnit` audience-scope runtime consumer candidate, via a future app-specific join model such as `BibleStudySeriesAudienceScope`. Selected `ChurchStructureUnit` rows should resolve to eligible legacy `SmallGroup` rows for meeting generation; generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`.
+Under DOCS-AS.1, Bible Study Schedule is the first narrow `ChurchStructureUnit` audience-scope runtime consumer, implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A) via the app-specific join model `BibleStudySeriesAudienceScope`. Selected `ChurchStructureUnit` rows resolve to eligible legacy `SmallGroup` rows for meeting generation; generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`. The legacy `BibleStudySeries` scope fields remain as compatibility/fallback when a schedule has no audience-scope rows.
 
 Future audience selection may support richer schedules, but `BibleStudyMeeting` visibility must remain safe. Ordinary member visibility continues to use `Profile.small_group`, and normal users should not gain cross-small-group visibility because of a structure migration.
 
@@ -501,13 +500,14 @@ Possible next planning or implementation steps:
 - CS-H.8 integrated membership request flow checkpoint. Completed.
 - CS-H.9 membership request UX hardening. Completed.
 - CS-H.10 CMS hardening checkpoint. Completed.
-- Later audience selection model design for one consumer.
-- CA-V1.1 Community Activities planning refinement.
-- PP-SA.1 Staff Admin Surface Expansion Plan.
-
-Choose based on real post-pilot feedback. Do not implement all of these at once.
-
-Recommended immediate next step after CS-H.1: choose whether the first concrete follow-up should be CS-H.2 model-only foundation or PP-SA.1 Staff Admin Surface Expansion Plan based on the strongest post-pilot pain.
+- BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit`. Completed.
+- BS-AS.2 audience picker UX, compact scope display, and active-list cancelled cleanup. Completed.
+- BS-AS.2A audience picker accessibility polish. Completed.
+- Immediate next step: manual/browser QA of the BS-AS flow after deployment or local migration, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- Later ServiceEvent / Church Gatherings staff audience UI, runtime audience filtering, and visibility/consumer migration. Deferred and requires separate approval.
+- Later Community Activities V1 planning refinement using the shared `ChurchStructureUnit` audience-scope foundation through its own app-specific join model. Deferred and requires separate approval.
+- Later Checklist V1 re-evaluation only if pilot feedback proves a checklist need separately from required-team coverage.
+- PP-SA.1 Staff Admin Surface Expansion Plan. Completed.
 
 ## 15. Decision Checklist
 
@@ -515,7 +515,7 @@ Open decisions:
 - Generic audience model vs app-specific through models.
 - Whether root is persisted or virtual.
 - Whether old `MinistryContext`, `District`, and `SmallGroup` remain source of truth long-term.
-- First narrow runtime consumer (DOCS-AS.1 decision): Bible Study Schedule (`BibleStudySeries`) audience scope, resolving selected `ChurchStructureUnit` rows to legacy `SmallGroup` while member visibility stays on `Profile.small_group`. ServiceEvent and Community Activities follow the same foundation later.
+- First narrow runtime consumer (DOCS-AS.1 decision, implemented as BS-AS.1 / BS-AS.2 / BS-AS.2A): Bible Study Schedule (`BibleStudySeries`) audience scope via `BibleStudySeriesAudienceScope`, resolving selected `ChurchStructureUnit` rows to legacy `SmallGroup` while member visibility stays on `Profile.small_group`. ServiceEvent and Community Activities follow the same foundation later and remain deferred.
 - How to expose structure admin UI.
 - How much membership history is needed.
 - Whether selection rows should store display snapshots for historical labels.
@@ -523,8 +523,11 @@ Open decisions:
 - How to handle moved or merged units in historical reports.
 
 Current recommendation:
-- Prefer app-specific through models first.
-- Prefer include-only V1.
-- Prefer no destructive migration.
-- Prefer one consumer before broad adoption.
-- Preserve the validated pilot baseline.
+
+ Continue to prefer app-specific through models first.
+- Continue to prefer include-only V1 unless real use proves exclusion is necessary.
+- Continue to avoid destructive migration.
+- Bible Study Schedule has now proven the first narrow runtime consumer through BS-AS.1 / BS-AS.2 / BS-AS.2A.
+- ServiceEvent / Church Gatherings and Community Activities should reuse the same shared foundation later, but both remain deferred and require separate approval.
+- Preserve the validated pilot baseline and keep ordinary member visibility on `Profile.small_group` until a separate consumer migration is approved.
+

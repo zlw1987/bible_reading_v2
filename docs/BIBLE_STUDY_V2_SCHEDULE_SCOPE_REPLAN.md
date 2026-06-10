@@ -255,11 +255,11 @@ The new direction is:
 - Meeting generation should resolve the selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows.
 - Generated `BibleStudyMeeting` rows should still point to legacy `SmallGroup`.
 - Ordinary member visibility should continue to use `Profile.small_group`.
-- This is the first narrow runtime consumer candidate for `ChurchStructureUnit` audience scope; it does not migrate ordinary user visibility to `ChurchStructureMembership`.
+- This is the first narrow runtime consumer implemented for `ChurchStructureUnit` audience scope; it does not migrate ordinary user visibility to `ChurchStructureMembership`.
 
-Do not implement this now beyond the BS-AS.1 milestone scope below.
+Status: implemented. BS-AS.1, BS-AS.2, and BS-AS.2A are complete (see the milestone entries in section 15). Bible Study Schedule is now the first narrow `ChurchStructureUnit` audience-scope runtime consumer. Later consumers (ServiceEvent / Church Gatherings runtime migration, Community Activities) remain deferred and separately approved.
 
-See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md` for the shared `ChurchStructureUnit` audience-scope direction and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the flexible hierarchy background. Until BS-AS.1 is implemented, Bible Study V2 continues with the current whole church / ministry context / district / small group scope and current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
+See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md` for the shared `ChurchStructureUnit` audience-scope direction and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the flexible hierarchy background. The legacy `BibleStudySeries.scope_type` / `ministry_context` / `district` / `small_group` fields remain as compatibility/fallback when a schedule has no audience-scope rows, with the current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
 
 ## 6. Meeting Generation From Schedule / Guide Scope
 
@@ -524,15 +524,31 @@ Do not build:
 
 ### BS-AS.1 - Bible Study Schedule audience scope using ChurchStructureUnit
 
-- Not yet implemented. Supersedes the earlier legacy-only future scope plan.
-- Add an app-specific join model, e.g. `BibleStudySeriesAudienceScope`, selecting `ChurchStructureUnit` rows for `BibleStudySeries / 查经安排`.
-- `BibleStudySeries` owns the audience scope; `BibleStudyLesson / 查经指引` continues to inherit/display schedule scope. Do not add independent lesson-level scope in BS-AS.1.
+- Completed. Supersedes the earlier legacy-only future scope plan.
+- Added `BibleStudySeriesAudienceScope`, the app-specific join model selecting `ChurchStructureUnit` rows for `BibleStudySeries / 查经安排`.
+- `BibleStudySeries` owns the audience scope; `BibleStudyLesson / 查经指引` inherits/displays the schedule scope. No independent lesson-level scope was added.
 - Meeting generation resolves selected `ChurchStructureUnit` rows to eligible legacy `SmallGroup` rows.
 - Generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`.
 - Ordinary member visibility continues to use `Profile.small_group`.
-- This is the first narrow runtime consumer candidate for `ChurchStructureUnit` audience scope. It does not migrate ordinary user visibility to `ChurchStructureMembership`.
+- This is the first narrow runtime consumer implemented for `ChurchStructureUnit` audience scope. It does not migrate ordinary user visibility to `ChurchStructureMembership`.
+- Legacy `scope_type` / `ministry_context` / `district` / `small_group` remain compatibility/fallback fields.
 - A future lesson-level override may be considered later, but it is out of scope now.
-- Do not reuse the already-used `BS-V2.6.5` milestone name for this work.
+- The already-used `BS-V2.6.5` milestone name was not reused for this work.
+
+### BS-AS.2 - Audience picker UX, compact scope display, active-list cancelled cleanup
+
+- Completed.
+- Replaced the raw flat audience multi-select with a reusable server-rendered `ChurchStructureUnit` audience picker partial: searchable list, selected chips, tree/grouped ordering, no-JS checkbox fallback, and vanilla-JS root/ancestor/descendant convenience clearing. Backend validation remains the source of truth.
+- Scope display now uses compact labels on list/card surfaces and wrapped/chip labels on detail surfaces; the Whole Church root prefix is omitted from non-root labels.
+- Normal active management lists hide cancelled schedules/guides/meetings by default, and schedule/lesson detail related lists hide cancelled guides/meetings.
+- Meeting generation still treats cancelled meetings as existing/skipped so they are not regenerated or reactivated.
+
+### BS-AS.2A - Audience picker accessibility polish
+
+- Completed.
+- Audience picker search input has a bilingual `aria-label`.
+- Selected chip remove buttons include the selected unit label in the `aria-label`.
+- No behavior, schema, or visibility changes.
 
 ### BS-V2.7 - Later Role-Aware Editing Permissions
 
@@ -547,8 +563,10 @@ Current recommended sequence:
 - CS-F.1 MinistryContext bridge foundation completed.
 - CS-F.2 MinistryContext Bible Study Schedule scope completed.
 - DOCS-AS.1 records the shared `ChurchStructureUnit` audience-scope direction.
-- BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit` is the next implementation candidate, as the first narrow runtime audience-scope consumer; it resolves selected units to legacy `SmallGroup` for meeting generation and keeps member visibility on `Profile.small_group`.
-- ServiceEvent / Church Gatherings and future Community Activities should reuse the same `ChurchStructureUnit` audience-scope foundation in later milestones.
+- BS-AS.1 Bible Study Schedule audience scope using `ChurchStructureUnit` is complete, as the first narrow runtime audience-scope consumer; it resolves selected units to legacy `SmallGroup` for meeting generation and keeps member visibility on `Profile.small_group`.
+- BS-AS.2 (audience picker UX, compact scope display, active-list cancelled cleanup) and BS-AS.2A (audience picker accessibility polish) are complete.
+- Immediate next step: manual/browser QA of the BS-AS flow after deployment/local migrate, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
+- ServiceEvent / Church Gatherings and future Community Activities should reuse the same `ChurchStructureUnit` audience-scope foundation in later milestones; both remain deferred and require separate approval before implementation.
 - Later role-aware editing permissions only if needed.
 
 Checklist V1 remains deferred.

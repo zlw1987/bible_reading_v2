@@ -86,7 +86,7 @@ Original early-concept fields (superseded):
 - district nullable
 - small_group nullable
 
-Bible Study Schedule audience scope is the first narrow runtime consumer candidate for `ChurchStructureUnit`; ServiceEvent / Church Gatherings and Community Activities should reuse the same foundation later. See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+Bible Study Schedule audience scope is the first narrow runtime consumer for `ChurchStructureUnit`, now implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A); ServiceEvent / Church Gatherings and Community Activities should reuse the same foundation later and remain deferred (Community Activities is not implemented now). See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 ### ActivitySignup
 
@@ -242,7 +242,7 @@ Community Activities V1 should be planned as a separate future module after:
 - Lighting Pilot preflight validation is complete
 - Church Structure Foundation is planned enough to support mixed CM/EM, district, small-group, and future arbitrary unit audiences
 
-Per DOCS-AS.1, Community Activities audience scope should reuse the shared `ChurchStructureUnit` audience-scope foundation (an app-specific join model selecting `ChurchStructureUnit` rows), following Bible Study Schedule as the first narrow runtime consumer and alongside ServiceEvent / Church Gatherings. It should not introduce a separate legacy-only audience segment system as the final direction.
+Per DOCS-AS.1, Community Activities audience scope should reuse the shared `ChurchStructureUnit` audience-scope foundation (its own app-specific join model selecting `ChurchStructureUnit` rows), following Bible Study Schedule — the first narrow runtime consumer, now implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A) — and alongside ServiceEvent / Church Gatherings. It should not introduce a separate legacy-only audience segment system as the final direction. Community Activities is not implemented now and requires a separately approved plan before implementation.
 
 It should not change the current pre-pilot priority order.
 

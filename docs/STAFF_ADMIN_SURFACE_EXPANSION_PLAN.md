@@ -69,7 +69,7 @@ Current state:
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
-- Current ServiceEvent scope remains legacy-field based and is the runtime source of truth even though the SE-AS.2 `ServiceEventAudienceScope` model now exists. It must not be silently replaced with `ChurchStructureMembership`, the SE-AS.2 audience-scope model, the SE-AS.3 staff UI selector, audience filtering, ServiceEvent visibility migration, or consumer migration from `Profile.small_group`.
+- Current ServiceEvent scope remains legacy-field based and is the runtime source of truth even though the SE-AS.2 `ServiceEventAudienceScope` model now exists. It must not be silently replaced with `ChurchStructureMembership`, the SE-AS.2 audience-scope model, the future SE-AS.5 staff UI selector, audience filtering, the SE-AS.4 ServiceEvent visibility migration, or consumer migration from `Profile.small_group` (numbering per `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
 - ServiceEvent should not become Community Activities, full event management, or scheduling automation without separate planning.
 
 ### MinistryTeam / TeamAssignment / My Serving Support
@@ -286,5 +286,5 @@ Root `AGENTS.md` now includes safe QA data seeding guidance: avoid long inline P
 
 Recommended next safe slice:
 - MO-S.5A rotation anchor foundation and MO-S.5B limited copy-forward suggestion helper are complete. The helper is preview/edit-first: it pre-fills the existing team schedule form from anchor-based or team-history prior assignments and writes only when the user explicitly saves.
-- SE-AS.1 audience-scope redesign planning and SE-AS.2 model-only `ServiceEventAudienceScope` foundation are complete; the foundation is model-only and not the runtime source of truth, and `ServiceEvent.can_be_seen_by` is unchanged. Do not add the SE-AS.3 staff UI selector, ServiceEvent visibility migration, SE-AS.5 consumer migration, or audience filtering without separate approval.
+- SE-AS.1 audience-scope redesign planning and SE-AS.2 model-only `ServiceEventAudienceScope` foundation are complete; the foundation is model-only and not the runtime source of truth, and `ServiceEvent.can_be_seen_by` is unchanged. SE-AS.3 is complete as the docs-only runtime migration plan (`docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`). Do not add the SE-AS.5 staff UI selector, the SE-AS.4 ServiceEvent visibility migration, consumer migration, or audience filtering without separate approval.
 - Do not add automatic scheduling, availability, swaps, reminders, notifications, checklist, consumer migration, audience filtering, Community Activities, attendance, announcements, care workflows, file center, permission matrix expansion, ChurchStructureMembership serving inference, or a LightingTeam-specific model from MO-S.5 alone.

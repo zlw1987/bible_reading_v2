@@ -132,6 +132,8 @@ Use Option A. Add a separate future audience-scope foundation first, keep legacy
 
 ## 5. Phased Implementation Proposal
 
+Renumbering note: SE-AS.3 has been re-scoped as the docs-only ServiceEvent Audience Runtime Migration Plan, completed in `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`. That plan supersedes the SE-AS.3 through SE-AS.6 numbering below: runtime visibility rule with legacy fallback is SE-AS.4, staff selector UI and display is SE-AS.5, and backfill/compatibility/cleanup planning is SE-AS.6. The phase content below remains valid as design background.
+
 ### SE-AS.1 Docs Plan Only
 
 Status: completed by this planning document.
@@ -162,7 +164,7 @@ Explicitly not included (still future):
 - No audience filtering, visibility migration, or consumer migration.
 - No `ServiceEvent.can_be_seen_by` change; requested `ChurchStructureMembership` still does not grant event visibility.
 - Legacy `scope_type`, `district`, and `small_group` fields are not deprecated.
-- SE-AS.3 staff UI selector and SE-AS.5 visibility/filtering consumer migration remain future and require separate approval.
+- The staff UI selector and the visibility/filtering consumer migration remain future and require separate approval (SE-AS.5 and SE-AS.4 under the renumbering in `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
 
 ### SE-AS.3 Staff Create/Edit UI
 
@@ -212,7 +214,8 @@ Likely scope:
 - Current global/district/small_group scope must continue to drive runtime visibility until a separately approved migration.
 - Where legacy records already map to `ChurchStructureUnit`, they can inform future scope backfill or preview.
 - Missing or ambiguous mapping must not break event detail, event lists, staff workflows, or normal-user visibility.
-- No `ServiceEvent` visibility behavior should change during SE-AS.1 through SE-AS.4.
+- No observable `ServiceEvent` visibility behavior should change through SE-AS.3.
+- Under the renumbered plan, SE-AS.4 may add the runtime audience-row visibility rule, but it must preserve exact legacy fallback behavior for events with no audience rows and requires a preflight check for any existing `ServiceEventAudienceScope` rows.
 - No consumer migration is authorized by this plan.
 - Requested memberships must not grant event visibility.
 - Only approved active memberships may eventually count when a future consumer migration is explicitly approved.

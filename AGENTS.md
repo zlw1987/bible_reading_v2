@@ -14,11 +14,11 @@ Coding agents may notice related bugs, UX issues, missing tests, technical debt,
 
 Use this rule:
 
-* Do not expand implementation scope just because a related improvement was discovered.
-* Fix a discovered issue only when it is necessary to complete the approved task safely, or when it is clearly part of the approved scope.
-* Otherwise, leave the implementation unchanged and report the item as a follow-up.
-* Do not implement discovery items without explicit user approval.
-* Do not use discovery items to justify schema changes, permission changes, source-of-truth changes, cross-app workflow changes, or broad redesign unless the current task explicitly authorizes that scope.
+- Do not expand implementation scope just because a related improvement was discovered.
+- Fix a discovered issue only when it is necessary to complete the approved task safely, or when it is clearly part of the approved scope.
+- Otherwise, leave the implementation unchanged and report the item as a follow-up.
+- Do not implement discovery items without explicit user approval.
+- Do not use discovery items to justify schema changes, permission changes, source-of-truth changes, cross-app workflow changes, or broad redesign unless the current task explicitly authorizes that scope.
 
 When any such items are found, include a final report section named:
 
@@ -26,16 +26,51 @@ When any such items are found, include a final report section named:
 
 For each item, include:
 
-* short title
-* file/page/module observed
-* why it matters
-* classification:
-
+- short title
+- file/page/module observed
+- why it matters
+- classification:
   * `must-fix before commit`
   * `safe follow-up`
   * `larger future milestone`
-* suggested next action
+- suggested next action
 
+## Task-Fit Review and Prompt Challenge
+
+Coding agents should follow the approved prompt, but they are allowed and expected to flag concerns before implementation when the prompt appears unsafe, incomplete, inefficient, inconsistent with current code/docs, or likely to cause scope or architecture problems.
+
+Use this rule:
+
+- Do not silently implement a materially different approach from the approved prompt.
+- Do not expand implementation scope just because a better or broader solution is possible.
+- If the requested approach is questionable, pause before making broad changes and report a task-fit concern.
+- ChatGPT and the user will review the concern and may issue a revised prompt.
+- Small in-scope adjustments are allowed when necessary to complete the approved task safely, but they must be reported clearly in the final report.
+
+A task-fit concern should be reported before implementation when the agent believes:
+
+- the prompt conflicts with current code, docs, or product boundaries;
+- the requested order is risky, such as implementation before a needed docs/design checkpoint;
+- the task may require schema/model/migration changes not explicitly authorized;
+- the task may change permissions, visibility, source of truth, or cross-app behavior;
+- the task may affect ServiceEvent, My Serving, TeamAssignment, Bible Study, ChurchStructureMembership, Community Activities, or other bounded modules beyond the approved scope;
+- the task may require a new dependency, framework, browser QA setup, data seeding approach, or deployment change not explicitly authorized;
+- a smaller or safer implementation sequence is clearly preferable;
+- the issue looks small but is actually a business-rule or product-direction decision.
+
+When pausing for a task-fit concern, report:
+
+- concern summary;
+- why the current prompt may be suboptimal;
+- recommended alternative;
+- classification:
+  * `small in-scope adjustment`
+  * `scope-change requiring approval`
+  * `larger future milestone`
+- likely files/modules affected;
+- risk if continuing with the original prompt.
+
+Do not implement the alternative until the user explicitly approves it or provides a revised prompt.
 
 ## ChatGPT / Implementer Workflow Discipline
 
@@ -337,6 +372,7 @@ Keep reports compact. Include:
 - confirmation of no commits/staging;
 - confirmation of no schema/migration/business-logic/deployment changes unless explicitly approved.
 - Discovery Log / Proposed Follow-ups, when related issues or improvement opportunities were discovered but not implemented;
+- Task-fit concerns or prompt-challenge recommendations, when the agent found the approved prompt unsafe, incomplete, inefficient, inconsistent with current code/docs, or better handled as a revised prompt;
 
 
 Do not claim browser/mobile QA passed if it was blocked or only partially completed.

@@ -82,7 +82,7 @@ Supported schedule scope:
 - district
 - small group
 
-`BibleStudySeries.get_eligible_small_groups()` uses the current bridge to resolve active groups for generated small-group meetings. This works for the pilot baseline and should not be rushed into the flexible model before another consumer proves the design.
+`BibleStudySeries.get_eligible_small_groups()` now prefers `BibleStudySeriesAudienceScope` rows when present: selected `ChurchStructureUnit` rows resolve to eligible legacy `SmallGroup` rows for generated small-group meetings. When a schedule has no audience-scope rows, it falls back to the legacy `scope_type` / `ministry_context` / `district` / `small_group` fields. This keeps the current pilot bridge safe while allowing Bible Study Schedule to serve as the first narrow runtime consumer of the shared audience-scope foundation.
 
 ### `ServiceEvent` Scope Fields
 
@@ -256,7 +256,7 @@ Possible generic name:
 Possible app-specific through models:
 - `ServiceEventAudienceSelection`
 - `CommunityActivityAudienceSelection`
-- `BibleStudySeriesAudienceSelection`
+- `BibleStudySeriesAudienceScope` (implemented for Bible Study Schedule)
 
 Each row should link:
 - target object
@@ -318,7 +318,7 @@ Examples:
 - Selected `CM > District A`, `CM > District A > Rainbow 1` -> effective `Rainbow 1`.
 - Selected root plus anything else -> effective root only.
 
-No code is implemented in this phase.
+This section remains the generic conceptual algorithm. Bible Study Schedule has implemented a narrow version for meeting generation through BS-AS.1 / BS-AS.2 / BS-AS.2A; broader ServiceEvent and Community Activities runtime filtering remain future work.
 
 ## 9. UI Design
 
@@ -531,4 +531,3 @@ Current recommendation:
 - Bible Study Schedule has now proven the first narrow runtime consumer through BS-AS.1 / BS-AS.2 / BS-AS.2A.
 - ServiceEvent / Church Gatherings and Community Activities should reuse the same shared foundation later, but both remain deferred and require separate approval.
 - Preserve the validated pilot baseline and keep ordinary member visibility on `Profile.small_group` until a separate consumer migration is approved.
-

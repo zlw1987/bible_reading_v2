@@ -5,6 +5,8 @@ from django.db.models import Q
 
 from accounts.models import ChurchStructureUnit
 
+from .templatetags.study_extras import compact_unit_label
+
 from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -56,6 +58,11 @@ FORM_TEXT = {
             "Do not select both a unit and one of its parent or child units."
         ),
         "audience_scope_whole_church": "Whole Church",
+        "audience_search_placeholder": "Search audience scope...",
+        "audience_no_results": "No matching units.",
+        "audience_selected_heading": "Selected",
+        "audience_remove": "Remove",
+        "audience_unassigned": "Unassigned",
         "ministry_context": "Ministry Context",
         "ministry_context_help": (
             "Select a ministry context such as Chinese Ministry or English Ministry."
@@ -112,6 +119,11 @@ FORM_TEXT = {
         "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
         "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
         "audience_scope_whole_church": "全教会",
+        "audience_search_placeholder": "搜索适用范围...",
+        "audience_no_results": "没有匹配的单元。",
+        "audience_selected_heading": "已选择",
+        "audience_remove": "移除",
+        "audience_unassigned": "未归类",
         "is_active": "启用",
         "series": "系列",
         "title": "标题",
@@ -360,6 +372,82 @@ class BibleStudySeriesForm(forms.ModelForm):
                     series=series,
                     unit=unit,
                 )
+
+    def audience_selected_ids(self):
+        """Currently selected unit ids (submitted data when bound, else initial)."""
+        raw = self["audience_units"].value() or []
+        selected = set()
+        for value in raw:
+            try:
+                selected.add(int(value))
+            except (TypeError, ValueError):
+                continue
+        return selected
+
+    def _audience_option(self, unit, depth, ancestor_ids, selected, orphan=False):
+        compact = compact_unit_label(unit, self.language)
+        return {
+            "id": unit.id,
+            "label": unit.display_name(self.language),
+            "path_label": compact,
+            "search": f"{compact} {unit.code}".lower(),
+            "depth": depth,
+            "unit_type": unit.unit_type,
+            "ancestor_ids": ancestor_ids,
+            "selected": unit.id in selected,
+            "orphan": orphan,
+        }
+
+    def audience_unit_options(self):
+        """Active units in tree (DFS) order for the audience picker partial.
+
+        Each option carries id, label, search text, depth, unit type, active
+        ancestor ids, and selected state. Orphans (active units whose parent is
+        inactive/missing) are appended at the end so they stay visible.
+        """
+        selected = self.audience_selected_ids()
+        units = list(
+            ChurchStructureUnit.objects.filter(is_active=True).order_by(
+                "sort_order",
+                "code",
+                "name",
+            )
+        )
+
+        children = {}
+        for unit in units:
+            children.setdefault(unit.parent_id, []).append(unit)
+        for group in children.values():
+            group.sort(key=lambda u: (u.sort_order, u.code, u.name))
+
+        options = []
+        visited = set()
+
+        def walk(unit, depth, ancestor_ids):
+            if unit.id in visited:
+                return
+            visited.add(unit.id)
+            options.append(
+                self._audience_option(unit, depth, ancestor_ids, selected)
+            )
+            for child in children.get(unit.id, []):
+                walk(child, depth + 1, ancestor_ids + [unit.id])
+
+        roots = [unit for unit in units if unit.parent_id is None]
+        roots.sort(
+            key=lambda u: (u.unit_type != ChurchStructureUnit.UNIT_ROOT, u.sort_order, u.code, u.name)
+        )
+        for root in roots:
+            walk(root, 0, [])
+
+        for unit in units:
+            if unit.id not in visited:
+                visited.add(unit.id)
+                options.append(
+                    self._audience_option(unit, 0, [], selected, orphan=True)
+                )
+
+        return options
 
 
 class BibleStudySessionForm(forms.ModelForm):

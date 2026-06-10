@@ -101,7 +101,7 @@
             </div>
             <div class="schedule-meta-item">
                 <dt>{% if language == "zh" %}适用范围（来自查经安排）{% else %}Scope from Schedule{% endif %}</dt>
-                <dd>{{ lesson.series|study_series_scope_label:language }}</dd>
+                <dd>{{ lesson.series|study_series_scope_compact:language }}</dd>
             </div>
             <div class="schedule-meta-item">
                 <dt>{% if language == "zh" %}发布时间{% else %}Published{% endif %}</dt>

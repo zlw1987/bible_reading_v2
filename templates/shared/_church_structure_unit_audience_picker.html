@@ -1,0 +1,143 @@
+{% comment %}
+Reusable ChurchStructureUnit audience picker.
+
+Context:
+  field    - bound ModelMultipleChoiceField (submits unit ids under field.html_name)
+  options  - list of dicts from a form helper (e.g. form.audience_unit_options):
+             id, label, path_label, search, depth, unit_type, ancestor_ids,
+             selected, orphan
+  language - "zh" or "en"
+
+Server-rendered checkboxes are the no-JS fallback. The vanilla JS adds chips,
+search filtering, and convenience selection rules. Backend validation remains
+the source of truth.
+{% endcomment %}
+<div class="audience-picker" data-audience-picker>
+    <div class="audience-picker-chips" data-audience-chips aria-live="polite"></div>
+
+    <input type="search"
+           class="audience-picker-search"
+           data-audience-search
+           autocomplete="off"
+           placeholder="{% if language == 'zh' %}搜索适用范围...{% else %}Search audience scope...{% endif %}">
+
+    <div class="audience-picker-list" data-audience-list role="group">
+        {% for opt in options %}
+        {% if opt.orphan %}{% ifchanged %}<p class="audience-picker-group-label">{% if language == "zh" %}未归类{% else %}Unassigned{% endif %}</p>{% endifchanged %}{% endif %}
+        <label class="audience-picker-row{% if opt.orphan %} audience-picker-row-orphan{% endif %}"
+               data-audience-option
+               data-search="{{ opt.search }}"
+               data-unit-type="{{ opt.unit_type }}"
+               data-ancestors="{% for aid in opt.ancestor_ids %}{{ aid }}{% if not forloop.last %} {% endif %}{% endfor %}"
+               style="--audience-depth: {{ opt.depth }};">
+            <input type="checkbox"
+                   name="{{ field.html_name }}"
+                   value="{{ opt.id }}"
+                   data-audience-checkbox
+                   data-unit-id="{{ opt.id }}"
+                   data-chip-label="{{ opt.path_label }}"
+                   {% if opt.selected %}checked{% endif %}>
+            <span class="audience-picker-row-label" title="{{ opt.path_label }}">{{ opt.label }}</span>
+        </label>
+        {% endfor %}
+        <p class="audience-picker-empty" data-audience-empty hidden>
+            {% if language == "zh" %}没有匹配的单元。{% else %}No matching units.{% endif %}
+        </p>
+    </div>
+</div>
+
+<script>
+(function () {
+    var REMOVE_LABEL = "{% if language == 'zh' %}移除{% else %}Remove{% endif %}";
+
+    function optionEl(checkbox) {
+        return checkbox.closest("[data-audience-option]");
+    }
+    function ancestorsOf(checkbox) {
+        var raw = optionEl(checkbox).getAttribute("data-ancestors") || "";
+        return raw.split(/\s+/).filter(Boolean);
+    }
+    function unitTypeOf(checkbox) {
+        return optionEl(checkbox).getAttribute("data-unit-type");
+    }
+
+    function initPicker(root) {
+        if (root.dataset.audienceReady) { return; }
+        root.dataset.audienceReady = "1";
+
+        var chips = root.querySelector("[data-audience-chips]");
+        var search = root.querySelector("[data-audience-search]");
+        var empty = root.querySelector("[data-audience-empty]");
+        var checkboxes = Array.prototype.slice.call(
+            root.querySelectorAll("[data-audience-checkbox]")
+        );
+
+        function enforceSelectionRules(changed) {
+            if (!changed.checked) { return; }
+            var changedId = changed.getAttribute("data-unit-id");
+            var changedType = unitTypeOf(changed);
+            var changedAncestors = ancestorsOf(changed);
+            checkboxes.forEach(function (other) {
+                if (other === changed || !other.checked) { return; }
+                if (changedType === "root") { other.checked = false; return; }
+                if (unitTypeOf(other) === "root") { other.checked = false; return; }
+                if (ancestorsOf(other).indexOf(changedId) !== -1) { other.checked = false; return; }
+                if (changedAncestors.indexOf(other.getAttribute("data-unit-id")) !== -1) {
+                    other.checked = false;
+                }
+            });
+        }
+
+        function renderChips() {
+            chips.innerHTML = "";
+            checkboxes.forEach(function (checkbox) {
+                if (!checkbox.checked) { return; }
+                var chip = document.createElement("span");
+                chip.className = "audience-chip";
+
+                var text = document.createElement("span");
+                text.className = "audience-chip-label";
+                text.textContent = checkbox.getAttribute("data-chip-label");
+
+                var remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "audience-chip-remove";
+                remove.setAttribute("aria-label", REMOVE_LABEL);
+                remove.textContent = "×";
+                remove.addEventListener("click", function () {
+                    checkbox.checked = false;
+                    renderChips();
+                });
+
+                chip.appendChild(text);
+                chip.appendChild(remove);
+                chips.appendChild(chip);
+            });
+        }
+
+        checkboxes.forEach(function (checkbox) {
+            checkbox.addEventListener("change", function () {
+                enforceSelectionRules(checkbox);
+                renderChips();
+            });
+        });
+
+        if (search) {
+            search.addEventListener("input", function () {
+                var query = search.value.trim().toLowerCase();
+                var anyVisible = false;
+                root.querySelectorAll("[data-audience-option]").forEach(function (row) {
+                    var match = !query || (row.getAttribute("data-search") || "").indexOf(query) !== -1;
+                    row.hidden = !match;
+                    if (match) { anyVisible = true; }
+                });
+                if (empty) { empty.hidden = anyVisible; }
+            });
+        }
+
+        renderChips();
+    }
+
+    document.querySelectorAll("[data-audience-picker]").forEach(initPicker);
+})();
+</script>

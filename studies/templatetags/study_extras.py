@@ -36,19 +36,28 @@ def study_series_status_label(series, language):
     return labels.get(language, labels["en"]).get(series.status, series.status)
 
 
-@register.filter
-def study_series_scope_label(series, language):
-    if not series:
-        return ""
+def _whole_church_label(language):
+    return "全教会" if language == "zh" else "Whole Church"
 
-    # Prefer the BS-AS.1 ChurchStructureUnit audience scope when present. Uses
-    # the prefetched audience_scope_links to avoid extra queries in list views.
-    audience_units = [link.unit for link in series.audience_scope_links.all()]
-    if audience_units:
-        if any(unit.unit_type == "root" for unit in audience_units):
-            return "全教会" if language == "zh" else "Whole Church"
-        return ", ".join(unit.path_label(language) for unit in audience_units)
 
+def compact_unit_label(unit, language):
+    """Readable unit label with the Whole Church root prefix removed.
+
+    Example: ``Chinese Ministry > North`` instead of
+    ``Whole Church > Chinese Ministry > North``.
+    """
+    if unit.unit_type == "root":
+        return _whole_church_label(language)
+    chain = [
+        ancestor
+        for ancestor in unit.get_ancestors()
+        if ancestor.unit_type != "root"
+    ]
+    chain.append(unit)
+    return " > ".join(node.display_name(language) for node in chain)
+
+
+def _legacy_scope_label(series, language):
     def ministry_context_label():
         if not series.ministry_context_id:
             return "-"
@@ -80,6 +89,55 @@ def study_series_scope_label(series, language):
         name = series.small_group.name if series.small_group_id else "-"
         return f"Small Group: {name}"
     return series.scope_type
+
+
+def _scope_unit_labels(series, language):
+    """Compact, root-stripped labels for a schedule's audience scope.
+
+    Prefers BS-AS.1 ChurchStructureUnit audience rows (via the prefetched
+    ``audience_scope_links``) and falls back to the legacy single scope when no
+    audience rows exist.
+    """
+    audience_units = [link.unit for link in series.audience_scope_links.all()]
+    if audience_units:
+        if any(unit.unit_type == "root" for unit in audience_units):
+            return [_whole_church_label(language)]
+        return [compact_unit_label(unit, language) for unit in audience_units]
+    return [_legacy_scope_label(series, language)]
+
+
+@register.filter
+def study_series_scope_unit_labels(series, language):
+    """List of compact audience-scope labels, for chip/wrapped detail display."""
+    if not series:
+        return []
+    return _scope_unit_labels(series, language)
+
+
+@register.filter
+def study_series_scope_compact(series, language):
+    """Compact audience-scope label for list/card surfaces.
+
+    Shows at most three labels and appends ``+ N more`` / ``另 N 个``.
+    """
+    if not series:
+        return ""
+    labels = _scope_unit_labels(series, language)
+    limit = 3
+    if len(labels) <= limit:
+        return ", ".join(labels)
+    shown = ", ".join(labels[:limit])
+    remaining = len(labels) - limit
+    more = f"另 {remaining} 个" if language == "zh" else f"+ {remaining} more"
+    return f"{shown}, {more}"
+
+
+@register.filter
+def study_series_scope_label(series, language):
+    """Full audience-scope label (all units, root prefix removed)."""
+    if not series:
+        return ""
+    return ", ".join(_scope_unit_labels(series, language))
 
 
 @register.filter

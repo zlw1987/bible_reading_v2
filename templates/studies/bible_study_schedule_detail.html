@@ -31,8 +31,12 @@
     </p>
     <p>
         <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
-        {{ schedule|study_series_scope_label:language }}
     </p>
+    <div class="scope-chip-list">
+        {% for unit_label in schedule|study_series_scope_unit_labels:language %}
+        <span class="scope-chip">{{ unit_label }}</span>
+        {% endfor %}
+    </div>
     <p>
         <strong>{% if language == "zh" %}启用{% else %}Active{% endif %}:</strong>
         {% if schedule.is_active %}

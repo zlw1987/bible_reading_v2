@@ -3676,14 +3676,38 @@ class BibleStudyModuleTests(TestCase):
             reverse("bible_study_schedule_detail", args=[self.series.id]),
         )
 
-        self.assertContains(
+        # Compact/full labels omit the Whole Church root prefix.
+        self.assertContains(list_response, "Chinese Ministry &gt; North")
+        self.assertContains(detail_response, "Chinese Ministry &gt; North")
+        self.assertNotContains(
             list_response,
             "Whole Church &gt; Chinese Ministry &gt; North",
         )
-        self.assertContains(
-            detail_response,
-            "Whole Church &gt; Chinese Ministry &gt; North",
-        )
+
+    def test_schedule_list_compact_label_truncates_many_units(self):
+        self.set_language("en")
+        # Four sibling small-group units (no ancestor/descendant conflict).
+        extra_units = [self.group_unit, self.same_group_unit]
+        for code in ("RAINBOW6", "RAINBOW7"):
+            extra_units.append(
+                ChurchStructureUnit.objects.create(
+                    parent=self.north_unit,
+                    unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+                    code=code,
+                    name=code.title(),
+                    name_en=code.title(),
+                )
+            )
+        for unit in extra_units:
+            BibleStudySeriesAudienceScope.objects.create(
+                series=self.series, unit=unit
+            )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_schedule_manage_list"))
+
+        # 4 units selected -> compact shows 3 then "+ 1 more".
+        self.assertContains(response, "+ 1 more")
 
     def test_schedule_label_shows_whole_church_for_root_unit(self):
         self.set_language("en")
@@ -3715,10 +3739,7 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertContains(list_response, "Scope from Schedule")
         self.assertContains(detail_response, "Scope from Schedule")
-        self.assertContains(
-            detail_response,
-            "Whole Church &gt; Chinese Ministry &gt; North",
-        )
+        self.assertContains(detail_response, "Chinese Ministry &gt; North")
 
     def test_chinese_lesson_detail_shows_inherited_scope_wording(self):
         self.set_language("zh")
@@ -3825,3 +3846,241 @@ class BibleStudyModuleTests(TestCase):
         # whole-church audience scope resolves to every active small group.
         self.assertTrue(meeting.can_be_seen_by(self.user))
         self.assertFalse(meeting.can_be_seen_by(self.other_user))
+
+    # ------------------------------------------------------------------
+    # BS-AS.2: audience picker UX, compact display, cancelled list cleanup
+    # ------------------------------------------------------------------
+
+    def test_audience_picker_renders_english_search_placeholder(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        self.assertContains(response, "data-audience-picker")
+        self.assertContains(response, "Search audience scope...")
+
+    def test_audience_picker_renders_chinese_search_placeholder(self):
+        self.set_language("zh")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        self.assertContains(response, "data-audience-picker")
+        self.assertContains(response, "搜索适用范围...")
+
+    def test_audience_picker_renders_tree_readable_labels(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_schedule"))
+
+        # Rows are checkboxes named audience_units, depth-indented, with readable
+        # path labels (root prefix removed) on the chip/title attributes.
+        self.assertContains(response, 'name="audience_units"')
+        self.assertContains(response, "--audience-depth:")
+        self.assertContains(response, 'data-chip-label="Chinese Ministry &gt; North"')
+        self.assertNotContains(
+            response,
+            'data-chip-label="Whole Church &gt; Chinese Ministry &gt; North"',
+        )
+
+    def test_audience_picker_marks_existing_units_selected_on_edit(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+        )
+
+        options = response.context["form"].audience_unit_options()
+        selected = [opt for opt in options if opt["selected"]]
+        self.assertEqual([opt["id"] for opt in selected], [self.north_unit.id])
+        self.assertContains(response, "checked")
+
+    def test_schedule_detail_renders_scope_chips(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        self.assertContains(response, "scope-chip")
+        self.assertContains(response, "Chinese Ministry &gt; North")
+
+    def test_lesson_list_shows_compact_inherited_scope(self):
+        self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.north_unit,
+        )
+        self.create_lesson(series=self.series)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        self.assertContains(response, "Scope from Schedule")
+        self.assertContains(response, "Chinese Ministry &gt; North")
+
+    def test_schedule_manage_list_hides_cancelled_schedules(self):
+        self.set_language("en")
+        active = BibleStudySeries.objects.create(
+            title="Active Schedule",
+            title_en="Active Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        cancelled = BibleStudySeries.objects.create(
+            title="Cancelled Schedule",
+            title_en="Cancelled Schedule",
+            status=BibleStudySeries.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_schedule_manage_list"))
+
+        listed = list(response.context["schedules"])
+        self.assertIn(active, listed)
+        self.assertNotIn(cancelled, listed)
+        self.assertNotContains(response, "Cancelled Schedule")
+
+    def test_schedule_manage_list_guide_count_ignores_cancelled_lessons(self):
+        self.set_language("en")
+        schedule = BibleStudySeries.objects.create(
+            title="Count Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        self.create_lesson(series=schedule, status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_lesson(
+            series=schedule,
+            status=BibleStudyLesson.STATUS_CANCELLED,
+            lesson_date=timezone.localdate() + timezone.timedelta(days=20),
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_schedule_manage_list"))
+
+        listed = {item.id: item for item in response.context["schedules"]}
+        self.assertEqual(listed[schedule.id].guide_count, 1)
+
+    def test_lesson_manage_list_hides_cancelled_lessons(self):
+        self.set_language("en")
+        active = self.create_lesson(
+            series=self.series,
+            title_en="Active Guide",
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        cancelled = self.create_lesson(
+            series=self.series,
+            title_en="Cancelled Guide",
+            status=BibleStudyLesson.STATUS_CANCELLED,
+            lesson_date=timezone.localdate() + timezone.timedelta(days=21),
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        listed = list(response.context["lessons"])
+        self.assertIn(active, listed)
+        self.assertNotIn(cancelled, listed)
+
+    def test_lesson_manage_list_filter_choices_exclude_cancelled(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_lesson_manage_list"))
+
+        choice_values = [value for value, _ in response.context["status_choices"]]
+        self.assertNotIn(BibleStudyLesson.STATUS_CANCELLED, choice_values)
+
+    def test_schedule_detail_hides_cancelled_lessons(self):
+        self.set_language("en")
+        active = self.create_lesson(
+            series=self.series,
+            title_en="Active Detail Guide",
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        cancelled = self.create_lesson(
+            series=self.series,
+            title_en="Cancelled Detail Guide",
+            status=BibleStudyLesson.STATUS_CANCELLED,
+            lesson_date=timezone.localdate() + timezone.timedelta(days=22),
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_schedule_detail", args=[self.series.id]),
+        )
+
+        listed = list(response.context["lessons"])
+        self.assertIn(active, listed)
+        self.assertNotIn(cancelled, listed)
+
+    def test_meeting_manage_list_hides_cancelled_meetings(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        active = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        cancelled = self.create_meeting(
+            lesson=lesson,
+            small_group=self.same_group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_meeting_manage_list"))
+
+        listed = list(response.context["meetings"])
+        self.assertIn(active, listed)
+        self.assertNotIn(cancelled, listed)
+
+    def test_meeting_manage_list_filter_choices_exclude_cancelled(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_meeting_manage_list"))
+
+        choice_values = [value for value, _ in response.context["status_choices"]]
+        self.assertNotIn(BibleStudyMeeting.STATUS_CANCELLED, choice_values)
+
+    def test_lesson_detail_hides_cancelled_meetings(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        active = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        cancelled = self.create_meeting(
+            lesson=lesson,
+            small_group=self.same_group,
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_lesson_detail", args=[lesson.id]),
+        )
+
+        listed = list(response.context["meetings"])
+        self.assertIn(active, listed)
+        self.assertNotIn(cancelled, listed)
+        # Generation preview still treats the cancelled meeting as existing.
+        self.assertEqual(response.context["generation_preview"]["existing_count"], 2)

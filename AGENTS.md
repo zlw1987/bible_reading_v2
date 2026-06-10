@@ -8,6 +8,35 @@ Work compactly. Keep changes scoped to the user's request. Optimize for token an
 
 Do not commit, push, or stage files unless explicitly instructed.
 
+## Discovery and Follow-up Reporting
+
+Coding agents may notice related bugs, UX issues, missing tests, technical debt, or architecture risks while implementing the approved task.
+
+Use this rule:
+
+* Do not expand implementation scope just because a related improvement was discovered.
+* Fix a discovered issue only when it is necessary to complete the approved task safely, or when it is clearly part of the approved scope.
+* Otherwise, leave the implementation unchanged and report the item as a follow-up.
+* Do not implement discovery items without explicit user approval.
+* Do not use discovery items to justify schema changes, permission changes, source-of-truth changes, cross-app workflow changes, or broad redesign unless the current task explicitly authorizes that scope.
+
+When any such items are found, include a final report section named:
+
+`Discovery Log / Proposed Follow-ups`
+
+For each item, include:
+
+* short title
+* file/page/module observed
+* why it matters
+* classification:
+
+  * `must-fix before commit`
+  * `safe follow-up`
+  * `larger future milestone`
+* suggested next action
+
+
 ## ChatGPT / Implementer Workflow Discipline
 
 - ChatGPT and the user are the planner/reviewer/scope controller.
@@ -307,6 +336,8 @@ Keep reports compact. Include:
 - whether runtime behavior changed;
 - confirmation of no commits/staging;
 - confirmation of no schema/migration/business-logic/deployment changes unless explicitly approved.
+- Discovery Log / Proposed Follow-ups, when related issues or improvement opportunities were discovered but not implemented;
+
 
 Do not claim browser/mobile QA passed if it was blocked or only partially completed.
 Do not claim a full app suite or full regression passed unless it was actually run to completion.

@@ -31,6 +31,7 @@
     {{ form.non_field_errors }}
 
     {% for field in form %}
+    {% if field.name != "audience_units" %}
     <div class="form-row">
         {{ field.label_tag }}
         {{ field }}
@@ -39,7 +40,19 @@
         {% endif %}
         {{ field.errors }}
     </div>
+    {% endif %}
     {% endfor %}
+
+    {% with audience_field=form.audience_units %}
+    <div class="form-row">
+        <label class="form-label">{{ audience_field.label }}</label>
+        {% if audience_field.help_text %}
+        <div class="form-help">{{ audience_field.help_text }}</div>
+        {% endif %}
+        {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
+        {{ audience_field.errors }}
+    </div>
+    {% endwith %}
 
     <div class="actions">
         <button type="submit">

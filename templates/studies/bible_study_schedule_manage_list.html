@@ -85,7 +85,7 @@
             </div>
             <div class="schedule-meta-item">
                 <dt>{% if language == "zh" %}范围{% else %}Scope{% endif %}</dt>
-                <dd>{{ schedule|study_series_scope_label:language }}</dd>
+                <dd>{{ schedule|study_series_scope_compact:language }}</dd>
             </div>
             <div class="schedule-meta-item">
                 <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>

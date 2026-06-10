@@ -3,7 +3,7 @@ from datetime import datetime, time
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -180,14 +180,19 @@ def bible_study_schedule_manage_list(request):
         messages.error(request, study_ui_text(language, "no_permission"))
         return redirect("study_session_list")
 
-    schedules = BibleStudySeries.objects.select_related(
+    schedules = BibleStudySeries.objects.exclude(
+        status=BibleStudySeries.STATUS_CANCELLED,
+    ).select_related(
         "ministry_context",
         "district",
         "small_group",
     ).prefetch_related(
         "audience_scope_links__unit",
     ).annotate(
-        guide_count=Count("lessons"),
+        guide_count=Count(
+            "lessons",
+            filter=~Q(lessons__status=BibleStudyLesson.STATUS_CANCELLED),
+        ),
     ).order_by("title")
 
     return render(
@@ -211,7 +216,12 @@ def bible_study_schedule_detail(request, series_id):
             "small_group",
         ).prefetch_related(
             "audience_scope_links__unit",
-        ).annotate(guide_count=Count("lessons")),
+        ).annotate(
+            guide_count=Count(
+                "lessons",
+                filter=~Q(lessons__status=BibleStudyLesson.STATUS_CANCELLED),
+            ),
+        ),
         id=series_id,
     )
 
@@ -220,7 +230,9 @@ def bible_study_schedule_detail(request, series_id):
         "studies/bible_study_schedule_detail.html",
         {
             "schedule": schedule,
-            "lessons": schedule.lessons.select_related(
+            "lessons": schedule.lessons.exclude(
+                status=BibleStudyLesson.STATUS_CANCELLED,
+            ).select_related(
                 "series",
                 "created_by",
             ),
@@ -292,8 +304,13 @@ def bible_study_lesson_manage_list(request):
 
     status = (request.GET.get("status") or "").strip()
     series_id = (request.GET.get("series") or "").strip()
-    lessons = BibleStudyLesson.objects.select_related(
+    lessons = BibleStudyLesson.objects.exclude(
+        status=BibleStudyLesson.STATUS_CANCELLED,
+    ).select_related(
         "series",
+        "series__ministry_context",
+        "series__district",
+        "series__small_group",
         "created_by",
     ).prefetch_related("series__audience_scope_links__unit")
 
@@ -301,6 +318,12 @@ def bible_study_lesson_manage_list(request):
         lessons = lessons.filter(status=status)
     if series_id:
         lessons = lessons.filter(series_id=series_id)
+
+    status_choices = [
+        choice
+        for choice in BibleStudyLesson.STATUS_CHOICES
+        if choice[0] != BibleStudyLesson.STATUS_CANCELLED
+    ]
 
     return render(
         request,
@@ -312,7 +335,7 @@ def bible_study_lesson_manage_list(request):
             ).order_by("title"),
             "status": status,
             "series_id": series_id,
-            "status_choices": BibleStudyLesson.STATUS_CHOICES,
+            "status_choices": status_choices,
         },
     )
 
@@ -328,6 +351,8 @@ def bible_study_lesson_detail(request, lesson_id):
         BibleStudyLesson.objects.select_related(
             "series",
             "series__ministry_context",
+            "series__district",
+            "series__small_group",
             "created_by",
         ).prefetch_related("series__audience_scope_links__unit"),
         id=lesson_id,
@@ -338,10 +363,14 @@ def bible_study_lesson_detail(request, lesson_id):
         "studies/bible_study_lesson_detail.html",
         {
             "lesson": lesson,
-            "meetings": lesson.meetings.select_related(
+            "meetings": lesson.meetings.exclude(
+                status=BibleStudyMeeting.STATUS_CANCELLED,
+            ).select_related(
                 "small_group",
                 "discussion_leader_user",
             ),
+            # Generation preview deliberately keeps counting cancelled meetings
+            # as existing so they are skipped, not regenerated.
             "generation_preview": get_bible_study_meeting_generation_preview(lesson),
         },
     )
@@ -508,7 +537,9 @@ def bible_study_meeting_manage_list(request):
     status = (request.GET.get("status") or "").strip()
     lesson_id = (request.GET.get("lesson") or "").strip()
     small_group_id = (request.GET.get("small_group") or "").strip()
-    meetings = BibleStudyMeeting.objects.select_related(
+    meetings = BibleStudyMeeting.objects.exclude(
+        status=BibleStudyMeeting.STATUS_CANCELLED,
+    ).select_related(
         "lesson",
         "small_group",
         "created_by",
@@ -521,6 +552,12 @@ def bible_study_meeting_manage_list(request):
     if small_group_id:
         meetings = meetings.filter(small_group_id=small_group_id)
 
+    status_choices = [
+        choice
+        for choice in BibleStudyMeeting.STATUS_CHOICES
+        if choice[0] != BibleStudyMeeting.STATUS_CANCELLED
+    ]
+
     small_group_model = BibleStudyMeeting._meta.get_field(
         "small_group"
     ).remote_field.model
@@ -529,7 +566,9 @@ def bible_study_meeting_manage_list(request):
         "studies/bible_study_meeting_manage_list.html",
         {
             "meetings": meetings,
-            "lesson_options": BibleStudyLesson.objects.order_by(
+            "lesson_options": BibleStudyLesson.objects.exclude(
+                status=BibleStudyLesson.STATUS_CANCELLED,
+            ).order_by(
                 "-lesson_date",
                 "title",
             ),
@@ -539,7 +578,7 @@ def bible_study_meeting_manage_list(request):
             "status": status,
             "lesson_id": lesson_id,
             "small_group_id": small_group_id,
-            "status_choices": BibleStudyMeeting.STATUS_CHOICES,
+            "status_choices": status_choices,
         },
     )
 

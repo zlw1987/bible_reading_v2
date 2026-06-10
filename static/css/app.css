@@ -1715,3 +1715,136 @@ th {
         min-width: 680px;
     }
 }
+/* ChurchStructureUnit audience picker (BS-AS.2) */
+.audience-picker {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-soft);
+    padding: 10px;
+}
+
+.audience-picker-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.audience-picker-chips:empty {
+    display: none;
+}
+
+.audience-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    padding: 3px 6px 3px 10px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.3;
+}
+
+.audience-chip-label {
+    overflow-wrap: anywhere;
+}
+
+.audience-chip-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.audience-chip-remove:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+.audience-picker-search {
+    width: 100%;
+    margin: 10px 0 8px;
+    box-sizing: border-box;
+}
+
+.audience-picker-list {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 4px;
+}
+
+.audience-picker-group-label {
+    margin: 6px 4px 2px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.audience-picker-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 6px 8px;
+    padding-left: calc(8px + var(--audience-depth, 0) * 18px);
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.audience-picker-row:hover {
+    background: var(--surface-soft);
+}
+
+.audience-picker-row input {
+    margin-top: 3px;
+    flex: 0 0 auto;
+}
+
+.audience-picker-row-label {
+    overflow-wrap: anywhere;
+}
+
+.audience-picker-row-orphan .audience-picker-row-label {
+    color: var(--muted);
+}
+
+.audience-picker-empty {
+    margin: 8px;
+    color: var(--muted);
+}
+
+/* Wrapped read-only audience scope chips for detail surfaces */
+.scope-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 4px 0 0;
+}
+
+.scope-chip {
+    display: inline-flex;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+    .audience-picker-list {
+        max-height: 220px;
+    }
+}

@@ -19,14 +19,16 @@ from accounts.permissions import (
 )
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
+from events.models import ServiceEvent
+from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
 from ministry.views import my_serving_assignments
+from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
 from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
-from studies.models import BibleStudySession
 
 def get_user_small_group(user):
     return getattr(getattr(user, "profile", None), "small_group", None)
@@ -550,43 +552,83 @@ def delete_reading_guide_post(request, guide_id):
     return redirect("active_plan_guides", active_plan_id=active_plan_id)
 
 
-def today_serving_summary(user):
-    now = timezone.now()
-    upcoming_assignments = my_serving_assignments(user, tab="upcoming").exclude(
+THIS_WEEK_DAYS = 7
+THIS_WEEK_STAFF_EVENT_CAP = 5
+NEEDS_ATTENTION_CAP = 5
+
+
+def _user_serving_members(user):
+    """Personal, non-cancelled upcoming serving rows (My Serving semantics)."""
+    return my_serving_assignments(user, tab="upcoming").exclude(
         assignment__status__in=[
             TeamAssignment.STATUS_CANCELLED,
             TeamAssignment.STATUS_COMPLETED,
         ],
     )
 
-    pending_assignments = upcoming_assignments.filter(confirmed_at__isnull=True)
-    pending_count = pending_assignments.count()
-    serving_item = pending_assignments.first()
 
-    if serving_item:
-        return {
-            "serving_item": serving_item,
-            "pending_count": pending_count,
-            "is_pending": True,
-        }
+def get_today_needs_attention(user, limit=NEEDS_ATTENTION_CAP):
+    """Pending ministry-team assignment confirmations for the signed-in user.
 
-    near_term_serving_item = (
-        upcoming_assignments
-        .filter(
-            confirmed_at__isnull=False,
-            assignment__service_event__start_datetime__lte=now + timedelta(days=30),
+    Reuses My Serving's personal-assignment selector and keeps only upcoming,
+    non-cancelled assignments still awaiting confirmation. An empty list means
+    the "Needs your attention" section is hidden entirely on Today.
+    """
+    pending = _user_serving_members(user).filter(confirmed_at__isnull=True)
+    return list(pending[:limit])
+
+
+def get_week_serving_notes(user):
+    """Map service_event_id -> 'pending'/'confirmed' for the user's serving.
+
+    Used to attach a compact serving note to a Church Gathering row instead of
+    rendering a second full assignment row (Today deduplication rule).
+    """
+    notes = {}
+    for member in _user_serving_members(user):
+        event_id = member.assignment.service_event_id
+        if event_id in notes:
+            continue
+        notes[event_id] = "confirmed" if member.confirmed_at else "pending"
+    return notes
+
+
+def get_this_week_gatherings(user):
+    """Visible upcoming Church Gatherings in the next 7 days, with serving notes.
+
+    Draft and cancelled events are excluded for everyone, including staff, so
+    Today never becomes a staff manage queue. Ordinary users see all of their
+    visible gatherings this week; event managers are capped and offered a link
+    to the full Church Gatherings list.
+    """
+    now = timezone.now()
+    week_end = now + timedelta(days=THIS_WEEK_DAYS)
+    events = list(
+        get_visible_service_events(user)
+        .exclude(
+            status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ],
         )
-        .first()
+        .filter(
+            start_datetime__gte=now,
+            start_datetime__lte=week_end,
+        )
+        .order_by("start_datetime")
     )
 
-    if near_term_serving_item:
-        return {
-            "serving_item": near_term_serving_item,
-            "pending_count": 0,
-            "is_pending": False,
-        }
+    show_all_events_link = False
+    if can_manage_service_events(user) and len(events) > THIS_WEEK_STAFF_EVENT_CAP:
+        events = events[:THIS_WEEK_STAFF_EVENT_CAP]
+        show_all_events_link = True
 
-    return None
+    serving_notes = get_week_serving_notes(user)
+    gatherings = [
+        {"event": event, "serving_note": serving_notes.get(event.id)}
+        for event in events
+    ]
+    return gatherings, show_all_events_link
 
 
 @login_required
@@ -679,21 +721,7 @@ def home(request):
             }
         )
 
-    upcoming_study_candidates = (
-        BibleStudySession.objects
-        .select_related("series", "district", "small_group")
-        .filter(study_datetime__gte=timezone.now())
-        .exclude(status__in=[
-            BibleStudySession.STATUS_DRAFT,
-            BibleStudySession.STATUS_CANCELLED,
-        ])
-        .order_by("study_datetime")[:10]
-    )
-    upcoming_study_sessions = [
-        session
-        for session in upcoming_study_candidates
-        if session.can_be_seen_by(request.user)
-    ][:3]
+    week_gatherings, show_all_gatherings_link = get_this_week_gatherings(request.user)
 
     return render(
         request,
@@ -701,8 +729,10 @@ def home(request):
         {
             "today_items": today_items,
             "ended_plan_count": ended_plan_count,
-            "upcoming_study_sessions": upcoming_study_sessions,
-            "serving_summary": today_serving_summary(request.user),
+            "needs_attention": get_today_needs_attention(request.user),
+            "week_gatherings": week_gatherings,
+            "show_all_gatherings_link": show_all_gatherings_link,
+            "study_meeting_context": get_v2_landing_context(request.user),
         },
     )
 

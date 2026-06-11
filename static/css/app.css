@@ -843,6 +843,17 @@ th {
     margin: 28px 0 14px;
 }
 
+.dashboard-attention-row,
+.dashboard-week-row {
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+}
+
+.dashboard-attention-row:first-child,
+.dashboard-week-list .dashboard-week-row:first-child {
+    border-top: none;
+}
+
 .dashboard-actions-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }

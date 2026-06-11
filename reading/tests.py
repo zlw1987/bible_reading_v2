@@ -1,7 +1,7 @@
 import os
 import re
 import tempfile
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 from django.core.management import call_command
@@ -31,6 +31,7 @@ from reading.models import (
     ReadingPlan,
     ReadingPlanDay,
 )
+from reading.templatetags.datetime_extras import member_datetime
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -38,6 +39,22 @@ from studies.models import (
     BibleStudySeries,
     BibleStudySession,
 )
+
+
+class MemberDatetimeFilterTests(TestCase):
+    def test_member_datetime_formats_aware_datetime_in_english(self):
+        value = datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
+
+        self.assertEqual(member_datetime(value, "en"), "Fri, Jun 12, 7:30 PM")
+
+    def test_member_datetime_formats_aware_datetime_in_chinese(self):
+        value = datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
+
+        self.assertEqual(member_datetime(value, "zh"), "6月12日（周五）晚上7:30")
+
+    def test_member_datetime_handles_none_safely(self):
+        self.assertEqual(member_datetime(None, "en"), "")
+
 
 class StructuredPassageModelTests(TestCase):
     def setUp(self):
@@ -3710,12 +3727,12 @@ class TodayActionCenterTests(TestCase):
         session.save()
 
     def make_event(self, *, title_en, days_from_now=1, scope=None, small_group=None,
-                   status=None):
+                   status=None, start_datetime=None):
         return ServiceEvent.objects.create(
             title=title_en,
             title_en=title_en,
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timedelta(days=days_from_now),
+            start_datetime=start_datetime or timezone.now() + timedelta(days=days_from_now),
             scope_type=scope or ServiceEvent.SCOPE_GLOBAL,
             small_group=small_group,
             status=status or ServiceEvent.STATUS_PUBLISHED,
@@ -3738,7 +3755,7 @@ class TodayActionCenterTests(TestCase):
         return member
 
     def make_meeting(self, *, small_group, days_from_now=2,
-                     lesson_title_en="Lesson One"):
+                     lesson_title_en="Lesson One", meeting_datetime=None):
         series = BibleStudySeries.objects.create(
             title="查经系列",
             title_en="Study Series",
@@ -3756,7 +3773,7 @@ class TodayActionCenterTests(TestCase):
         return BibleStudyMeeting.objects.create(
             lesson=lesson,
             small_group=small_group,
-            meeting_datetime=timezone.now() + timedelta(days=days_from_now),
+            meeting_datetime=meeting_datetime or timezone.now() + timedelta(days=days_from_now),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
 
@@ -3805,6 +3822,18 @@ class TodayActionCenterTests(TestCase):
 
         self.assertContains(response, "Church Gatherings this week")
         self.assertContains(response, "Midweek Prayer Gathering")
+
+    def test_church_gathering_datetime_is_member_formatted(self):
+        self.make_event(
+            title_en="Formatted Gathering",
+            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Formatted Gathering")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
 
     def test_draft_and_cancelled_gatherings_excluded_for_staff(self):
         self.make_event(
@@ -3855,6 +3884,19 @@ class TodayActionCenterTests(TestCase):
 
         self.assertContains(response, "Small group Bible study")
         self.assertContains(response, "My Group Lesson")
+
+    def test_v2_meeting_datetime_is_member_formatted(self):
+        self.make_meeting(
+            small_group=self.group,
+            lesson_title_en="Formatted Group Lesson",
+            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Formatted Group Lesson")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
 
     def test_other_group_meeting_not_shown(self):
         self.make_meeting(

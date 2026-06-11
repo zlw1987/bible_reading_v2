@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone as datetime_timezone
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -2086,7 +2087,9 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_list_shows_visible_event_with_type_time_and_detail_link(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_event(
+            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
+        )
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(reverse("service_event_list"))
@@ -2094,6 +2097,8 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Event Type")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
         self.assertContains(response, "View details")
         detail_url = reverse("service_event_detail", args=[event.id])
         self.assertContains(response, 'href="%s"' % detail_url)
@@ -2138,7 +2143,10 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_detail_shows_details_and_back_link(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_event(
+            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            end_datetime=datetime(2026, 6, 12, 21, 0, tzinfo=datetime_timezone.utc),
+        )
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(
@@ -2148,6 +2156,9 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Start Time")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertContains(response, "Fri, Jun 12, 9:00 PM")
+        self.assertNotContains(response, "June 12, 2026")
         self.assertContains(response, "Worship together.")
         self.assertContains(response, "Back to Church Gatherings")
         list_url = reverse("service_event_list")

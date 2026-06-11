@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load event_extras %}
+{% load datetime_extras %}
 {% load ministry_extras %}
 {% load reading_extras %}
 {% load study_extras %}
@@ -30,7 +31,7 @@
             <span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span>
         </p>
         <p class="muted">
-            {{ item.assignment.service_event.start_datetime }} ·
+            {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
             {{ item.assignment.ministry_team|ministry_team_name:language }}
         </p>
     </div>
@@ -252,7 +253,7 @@
                     {{ row.event|event_title:language }}
                 </a>
             </p>
-            <p class="muted">{{ row.event.start_datetime }}</p>
+            <p class="muted">{{ row.event.start_datetime|member_datetime:language }}</p>
             {% if row.serving_note == "pending" %}
             <p><span class="status status-warning">{% if language == "zh" %}你有服事 · 等待确认{% else %}You are serving — pending confirmation{% endif %}</span></p>
             {% elif row.serving_note == "confirmed" %}
@@ -290,7 +291,7 @@
         </a>
     </p>
     <p class="muted">{{ meeting.lesson.series|study_series_title:language }}</p>
-    <p class="muted">{{ meeting.meeting_datetime }}</p>
+    <p class="muted">{{ meeting.meeting_datetime|member_datetime:language }}</p>
     {% if my_study_roles %}
     <p class="study-role-line">
         <span class="study-role-label">{% if my_study_roles|length > 1 %}{% if language == "zh" %}我的角色：{% else %}My roles:{% endif %}{% else %}{% if language == "zh" %}我的角色：{% else %}My role:{% endif %}{% endif %}</span>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load event_extras %}
+{% load datetime_extras %}
 
 {% block title %}
     {{ event|event_title:language }} | {{ ui.site_title }}
@@ -27,13 +28,13 @@
 
     <p>
         <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
-        {{ event.start_datetime }}
+        {{ event.start_datetime|member_datetime:language }}
     </p>
 
     {% if event.end_datetime %}
     <p>
         <strong>{% if language == "zh" %}结束时间{% else %}End Time{% endif %}:</strong>
-        {{ event.end_datetime }}
+        {{ event.end_datetime|member_datetime:language }}
     </p>
     {% endif %}
 

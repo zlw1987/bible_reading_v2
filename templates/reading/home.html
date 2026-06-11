@@ -291,6 +291,12 @@
     </p>
     <p class="muted">{{ meeting.lesson.series|study_series_title:language }}</p>
     <p class="muted">{{ meeting.meeting_datetime }}</p>
+    {% if my_study_roles %}
+    <p class="study-role-line">
+        {% if my_study_roles|length > 1 %}{% if language == "zh" %}我的角色：{% else %}My roles:{% endif %}{% else %}{% if language == "zh" %}我的角色：{% else %}My role:{% endif %}{% endif %}
+        {% for role in my_study_roles %}{% if not forloop.first %} · {% endif %}{{ role|meeting_role_label:language }}{% endfor %}
+    </p>
+    {% endif %}
     <a class="button button-secondary" href="{% url 'bible_study_meeting_detail' meeting.id %}">
         {% if language == "zh" %}查看详情{% else %}View details{% endif %}
     </a>

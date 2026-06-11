@@ -308,6 +308,23 @@ Staff/admin UI:
 - Clearly distinguish current active group data from approval/membership records when both appear together.
 - Notes and admin copy must avoid sensitive pastoral, medical, financial, or counseling details unless explicitly authorized.
 
+## Church Structure / Audience Scope UI Rules
+
+- Any staff-facing `ChurchStructureUnit` audience selector must use the shared hierarchical tree picker pattern.
+- Do not collapse the entire audience picker section by default. The picker label, help text, search box, selected chips, and root-level tree rows should remain visible.
+- Collapse and expand tree nodes by hierarchy level:
+
+  * root-level unit(s), normally Whole Church / 全教会, are visible by default;
+  * descendants are hidden until their parent node is expanded;
+  * selected descendant paths should be expanded on edit or validation re-render so staff can see what is selected.
+- Use the same tree mental model for read-only church structure displays such as `/staff/structure/`.
+- For audience picker rows, keep the expand/collapse control and unit name on the left, and place the checkbox on the right when practical.
+- `ChurchStructureUnit` audience selectors should be reused across modules through the shared picker partial instead of each module inventing a separate audience UI.
+- This applies to Bible Study Schedule, ServiceEvent / Church Gatherings, and future modules such as Community Activities.
+- Backend validation remains authoritative. JavaScript may improve search, chips, and expand/collapse behavior, but must not be the only enforcement for allowed selections.
+- Do not use `ChurchStructureMembership` as a runtime visibility source unless a separately approved migration milestone explicitly changes that rule.
+
+
 ## Project Constraints
 
 Do not migrate these consumers from `Profile.small_group` to `ChurchStructureMembership` unless explicitly authorized:

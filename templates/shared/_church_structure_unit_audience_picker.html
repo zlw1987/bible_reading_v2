@@ -45,14 +45,14 @@ the source of truth.
             <span class="tree-toggle-spacer" aria-hidden="true"></span>
             {% endif %}
             <label class="audience-picker-row-control">
-                <input type="checkbox"
-                       name="{{ field.html_name }}"
-                       value="{{ opt.id }}"
-                       data-audience-checkbox
-                       data-unit-id="{{ opt.id }}"
-                       data-chip-label="{{ opt.path_label }}"
-                       {% if opt.selected %}checked{% endif %}>
                 <span class="audience-picker-row-label" title="{{ opt.path_label }}">{{ opt.label }}</span>
+                <input type="checkbox"
+                    name="{{ field.html_name }}"
+                    value="{{ opt.id }}"
+                    data-audience-checkbox
+                    data-unit-id="{{ opt.id }}"
+                    data-chip-label="{{ opt.path_label }}"
+                    {% if opt.selected %}checked{% endif %}>
             </label>
         </div>
         {% endfor %}

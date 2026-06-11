@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load datetime_extras %}
 {% load study_extras %}
 
 {% block title %}
@@ -44,7 +45,7 @@
     {% endif %}
     <p>
         <strong>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}:</strong>
-        {{ meeting.meeting_datetime }}
+        {{ meeting.meeting_datetime|member_datetime:language }}
     </p>
     <p>
         <strong>{% if language == "zh" %}小组{% else %}Small Group{% endif %}:</strong>

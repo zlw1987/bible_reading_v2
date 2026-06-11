@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone as datetime_timezone
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -2577,7 +2577,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_normal_user_can_view_own_published_group_meeting(self):
         self.set_language("en")
-        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        meeting = self.create_meeting(
+            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
         self.client.login(username="regular", password="testpass123")
 
         response = self.client.get(
@@ -2586,6 +2589,8 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Small Group Bible Study Meeting")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
         self.assertContains(response, "Pastor study guide")
         self.assertContains(response, "Group direction")
         self.assertContains(response, "Group Discussion Questions")
@@ -2731,6 +2736,7 @@ class BibleStudyModuleTests(TestCase):
         )
         meeting = self.create_meeting(
             lesson=lesson,
+            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
         v1_session = self.create_session(title_en="Fallback V1 Session")
@@ -2746,6 +2752,8 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Weekly Bible Study Guide")
         self.assertContains(response, "Weekly Guide")
         self.assertContains(response, "John 15:1-17")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
         self.assertContains(response, "Rainbow 4")
         self.assertContains(response, "Small group home")
         self.assertContains(response, "Open My Group Meeting")

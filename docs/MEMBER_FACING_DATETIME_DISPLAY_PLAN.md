@@ -1,10 +1,17 @@
 # DATETIME-UX.1A Member-Facing Datetime Display Consistency Plan
 
+## Status
+
+- DATETIME-UX.1A docs-only plan is complete.
+- DATETIME-UX.1B is complete: the shared `member_datetime` filter is applied to Today, Church Gatherings, Bible Study member surfaces, and My Serving member surfaces.
+- DATETIME-UX.1C staff/report/table formatting remains future.
+- DATETIME-UX.1D user timezone preference remains far-future only.
+
 ## 1. Current-State Audit
 
 ### Member-facing raw datetime output
 
-The current member-facing surfaces often render Django datetime objects directly, which produces raw or locale-agnostic output instead of ordinary EN/ZH reading copy.
+This audit describes the pre-DATETIME-UX.1B baseline, when member-facing surfaces often rendered Django datetime objects directly and produced raw or locale-agnostic output instead of ordinary EN/ZH reading copy.
 
 - Today / home (`templates/reading/home.html`)
   - Pending serving confirmation rows render `item.assignment.service_event.start_datetime` directly.
@@ -90,7 +97,7 @@ Suggested output rules:
 
 ## 4. Scope Recommendation
 
-DATETIME-UX.1B should update member-facing surfaces only:
+DATETIME-UX.1B updated member-facing surfaces only:
 
 - Today page:
   - pending serving confirmation rows;
@@ -136,32 +143,33 @@ Do not attempt broad staff report/table cleanup in the first slice unless it is 
 
 ## 7. Implementation Milestones
 
-- DATETIME-UX.1B: Add the shared filter/helper and update Today, Church Gatherings, Bible Study member surfaces, and My Serving member surfaces.
+- DATETIME-UX.1B: Complete; added the shared filter/helper and updated Today, Church Gatherings, Bible Study member surfaces, and My Serving member surfaces.
 - DATETIME-UX.1C: Optional staff/report/table formatting pass for operational surfaces after member-facing behavior is settled.
 - DATETIME-UX.1D: Optional user timezone preference, far future only and only after a separate product/design decision.
 
-## 8. Tests To Add Later
+## 8. Regression Coverage and Future Tests
 
-DATETIME-UX.1B should include focused tests for:
+DATETIME-UX.1B added focused regression coverage for:
 
 - EN datetime output.
 - ZH datetime output.
-- Timezone-aware input conversion.
-- Today event datetime display.
+- None-safe helper behavior.
+- Today Church Gathering datetime display.
 - Today Bible Study datetime display.
-- ServiceEvent list/detail datetime display.
+- ServiceEvent detail/list datetime display.
 - BibleStudyMeeting detail datetime display.
-- My Serving card datetime display.
-- Assignment detail datetime display if included.
+- My Serving card/detail datetime display.
 - No sorting/filtering behavior change.
 
-## 9. Verification Recommendation For DATETIME-UX.1B
+Future DATETIME-UX.1C / 1D work should add targeted coverage for any staff/report/table formatting or user-timezone behavior it changes.
 
-Run the normal code-change checks for the implementation slice:
+## 9. Verification Recommendation For Future Datetime Work
+
+For future datetime work or regression checks, run the normal code-change checks for the affected slice:
 
 - `E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py makemigrations --check`
 - `E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py check`
-- Targeted tests for the new helper and changed member views/templates.
+- Targeted tests for the helper and changed datetime display surfaces.
 - `git diff --check`
 
-Browser/mobile QA should be narrow: Today, Church Gathering detail, Bible Study meeting detail, and My Serving cards in both EN and ZH where practical.
+Browser/mobile QA should stay narrow: the changed datetime display surfaces in both EN and ZH where practical.

@@ -1,4 +1,5 @@
 from io import StringIO
+from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -1081,6 +1082,10 @@ class TeamAssignmentV1Tests(TestCase):
 
     def test_assigned_member_can_view_assignment_detail(self):
         self.set_language("en")
+        self.event.start_datetime = datetime(
+            2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc
+        )
+        self.event.save()
         assignment = self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
 
@@ -1088,6 +1093,8 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Team Assignment")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
 
     def test_assignment_detail_shows_back_to_my_serving_for_member(self):
         self.set_language("en")
@@ -1346,6 +1353,10 @@ class TeamAssignmentV1Tests(TestCase):
 
     def test_assigned_user_sees_own_upcoming_assignment_on_my_serving(self):
         self.set_language("en")
+        self.event.start_datetime = datetime(
+            2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc
+        )
+        self.event.save()
         self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
 
@@ -1354,6 +1365,8 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My Serving")
         self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertNotContains(response, "June 12, 2026")
         self.assertContains(response, "Lighting Team")
         self.assertContains(response, "Operational note.")
         self.assertContains(response, "https://example.com/playbook")

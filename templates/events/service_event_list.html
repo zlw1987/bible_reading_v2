@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load event_extras %}
+{% load datetime_extras %}
 
 {% block title %}
     {% if language == "zh" %}教会聚会{% else %}Church Gatherings{% endif %}
@@ -59,7 +60,7 @@
         </p>
         <p>
             <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
-            {{ event.start_datetime }}
+            {{ event.start_datetime|member_datetime:language }}
         </p>
         {% if event.ministry_context_id %}
         <p>

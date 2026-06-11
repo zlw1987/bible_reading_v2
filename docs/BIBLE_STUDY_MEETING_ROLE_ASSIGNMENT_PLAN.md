@@ -1,8 +1,8 @@
 # Bible Study Meeting Role Assignment Plan
 
-Status: BS-ROLE.1A docs-only planning.
+Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete.
 
-Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for future Today-page surfacing and clearer Friday Bible Study preparation UX. This plan does not approve code, schema, migration, permission, Today-page, notification, or confirmation-workflow changes.
+Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for Today-page surfacing and clearer Friday Bible Study preparation UX. BS-ROLE.1B and TODAY-HOME.1D are now complete; this plan still does not approve any further code, schema, migration, permission, notification, or confirmation-workflow changes.
 
 ## 1. Current-State Audit
 
@@ -22,7 +22,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for f
 - Key fields: `meeting`, `role`, nullable `user`, free-text `display_name`, `notes`, `notes_en`, timestamps.
 - `get_display_name()` prefers `display_name`, then falls back to the linked user's full name or username, then blank.
 - There is no confirmation/status/accepted/declined field.
-- There is no model-level requirement that either `user` or `display_name` be present.
+- There is no model-level requirement that either `user` or `display_name` be present; BS-ROLE.1B enforces the nonblank assignee requirement at the form layer.
 
 `BibleStudyMeetingWorshipSong`
 
@@ -34,7 +34,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for f
 
 - `BibleStudyMeetingRoleForm` exposes `role`, `user`, `display_name`, `notes`, and `notes_en`.
 - When the form receives a meeting, the `user` queryset is limited to active users whose `profile.small_group` matches the meeting's small group, plus the already-selected user when editing.
-- The placeholder already frames `display_name` as a fallback when no user is selected.
+- The placeholder/help text frames `display_name` as a fallback when no user is selected, and BS-ROLE.1B form validation requires either a linked `user` or non-empty `display_name`.
 - Staff/authorized users create roles through `manage_bible_study_meeting_roles`.
 - Staff/authorized users edit roles through `edit_bible_study_meeting_role`.
 - Staff/authorized users delete roles through `delete_bible_study_meeting_role`.
@@ -60,7 +60,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for f
 - A role row with `user == request.user` is reliable.
 - A role row with only `display_name` is not reliable for identity; multiple people can share names, names can be entered inconsistently, and display names are not account identities.
 - A role row with both `user` and `display_name` is identity-reliable through `user`, but display may currently prefer the manual `display_name`.
-- Blank `user` plus blank `display_name` is possible at the model/form level and is not useful for Today surfacing.
+- Blank `user` plus blank `display_name` is still possible only below the form layer; BS-ROLE.1B rejects it in the management form and it is not useful for Today surfacing.
 - The older `BibleStudyMeeting.discussion_leader_user/name` fields duplicate part of the role concept and should not be used for new Today role-chip identity logic.
 
 ### Current Test Coverage Observed
@@ -78,12 +78,12 @@ Existing tests cover:
 - Worship-management context and worship-song form user filtering.
 - Model validation for allowed/invalid role choices.
 
-Coverage gaps for a future Today slice:
+Pre-TODAY-HOME.1D coverage gaps now addressed by Claude's reported tests:
 
-- No test currently proves Today only surfaces `BibleStudyMeetingRole.user == request.user`.
-- No test distinguishes linked-user roles from display-name-only roles on Today.
+- Today role-chip tests now cover linked-user-only surfacing.
+- Today role-chip tests now distinguish linked-user roles from display-name-only roles.
 - No test asserts blank-assignee role rows are prevented or ignored.
-- No test covers "both user and display_name present" display/identity behavior for a personalized surface.
+- TODAY-HOME.1D covered personalized Today identity behavior for linked-user roles; broader display behavior remains owned by meeting-detail/form tests.
 
 ## 2. Product Goal
 
@@ -93,7 +93,7 @@ The desired direction is:
 
 - Staff or authorized Bible Study managers can record who is responsible for discussion leading, worship leading, piano, support, or hosting.
 - Ordinary users can see meeting preparation details according to the current small-group visibility rules.
-- A future Today page can show "your Bible Study role this week" only when the role row is reliably linked to the signed-in user.
+- Today can show "your Bible Study role this week" only when the role row is reliably linked to the signed-in user.
 - Small groups can still record guest or one-off names when no account exists.
 
 ## 3. Recommended Design Direction
@@ -113,7 +113,7 @@ Recommendation: no confirmation workflow for now.
 Use display-only responsibility surfacing first:
 
 - Managers record the role.
-- The linked user can see the responsibility on meeting detail today and, after a later Today slice, on Today.
+- The linked user can see the responsibility on meeting detail and now on Today for linked-user roles.
 - No accept/decline state is added in this slice.
 
 Why this fits now:
@@ -132,13 +132,15 @@ Tradeoffs:
 
 ### BS-ROLE.1B - Management UI Polish
 
+Status: complete.
+
 Goal: encourage reliable user linking where possible while preserving a fallback path.
 
-Likely work:
+Completed scope:
 
 - Clarify `BibleStudyMeetingRoleForm` help text so managers choose a user when the person has an account.
 - Require at least one assignee signal: linked `user` or `display_name`.
-- Consider warning/help copy when a role is display-name-only: it will show on meeting detail but cannot appear as "my role" on Today.
+- Warn/help managers that a display-name-only role can show on meeting detail but cannot appear as "my role" on Today.
 - Keep the `user` queryset limited to active users in the meeting small group, with the existing selected-user exception on edit.
 - Keep role management restricted to current Bible Study managers.
 
@@ -149,7 +151,7 @@ Likely affected files later:
 - `templates/studies/bible_study_meeting_role_form.html`
 - `studies/tests.py`
 
-Schema expectation: likely no schema change is required for this first slice if the system only adds form validation and clearer UI copy. A schema change would become necessary only if product requires database-level nonblank assignee enforcement, confirmation status, audit history, or richer role assignment metadata.
+Schema result: no schema change was added. A schema change would become necessary only if product requires database-level nonblank assignee enforcement, confirmation status, audit history, or richer role assignment metadata.
 
 ### BS-ROLE.1C - Meeting Detail Display Cleanup
 
@@ -170,20 +172,25 @@ Likely affected files later:
 
 ### TODAY-HOME.1D - Today Role Chips
 
-Goal: show future Today-page Bible Study role chips only when role identity is reliable.
+Status: complete.
 
-Likely work:
+Goal: show Today-page Bible Study role chips only when role identity is reliable.
 
-- Find the user's visible upcoming/current Bible Study meeting using the same ordinary-user small-group visibility contract.
+Completed scope:
+
+- Use the already-visible `primary_meeting` from the existing v2 Bible Study meeting context.
 - Query role rows where `role.user == request.user`.
 - Ignore display-name-only roles for personalized chips.
 - Keep Today lightweight: show a concise chip/list and link to meeting detail, not a role management workflow.
 
 Likely affected files later:
 
-- Today/home view and template files for the current Today surface.
-- `studies/models.py` or a small query helper only if reuse makes the visibility query safer.
-- `accounts/tests.py` or the relevant Today tests.
+Completed boundaries:
+
+- No identity inference from `display_name`, username/full-name matching, old discussion-leader names, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
+- No role confirmation/status/accept/decline/reminder/notification workflow.
+- No schema/migration/URL/runtime-visibility change.
+- No `ChurchStructureMembership` runtime visibility.
 
 ### Optional Future Confirmation Milestone
 
@@ -203,7 +210,7 @@ This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
 ## 6. Data and Visibility Contract
 
 - Ordinary users see only their own visible small-group Bible Study meeting according to current meeting visibility rules.
-- A future Today role chip should show only roles linked to the signed-in user through `BibleStudyMeetingRole.user`.
+- Today role chips show only roles linked to the signed-in user through `BibleStudyMeetingRole.user`.
 - Today must not show another person's role for the user's group unless the product explicitly designs a group-wide preparation summary.
 - Meeting detail can continue showing the existing role list according to the current meeting visibility rules.
 - Display-name-only roles may appear on meeting detail but must not be treated as "my role."
@@ -226,22 +233,22 @@ This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
 
 ## 8. Recommended First Implementation Slice
 
-Recommended first slice: BS-ROLE.1B, no schema if possible.
+Recommended first slice: BS-ROLE.1B. Completed without schema changes.
 
 Make the existing role management workflow safer and clearer:
 
 - Add form-level validation requiring either `user` or `display_name`.
-- Add manager-facing help text explaining that linked users are required for future Today "my role" surfacing, while display names are fallback-only.
+- Add manager-facing help text explaining that linked users are required for Today "my role" surfacing, while display names are fallback-only.
 - Preserve the current group-limited user picker.
 - Preserve current meeting detail display and permissions.
 - Do not add confirmation/status fields.
-- Do not change Today yet.
+- BS-ROLE.1B itself did not change Today.
 
-This gives the future Today slice a cleaner data contract without changing runtime visibility or creating a heavier workflow.
+This gave TODAY-HOME.1D a cleaner data contract without changing runtime visibility or creating a heavier workflow. BS-ROLE.1B did not change Today/Home files; TODAY-HOME.1D later completed the read-only Today surfacing separately.
 
-## 9. Tests to Add Later
+## 9. Regression Coverage and Future Tests
 
-For BS-ROLE.1B:
+Completed BS-ROLE.1B coverage:
 
 - Linked-user role saves and displays.
 - Display-name fallback role saves and displays.
@@ -249,17 +256,23 @@ For BS-ROLE.1B:
 - User picker remains limited to the meeting small group, while preserving the currently selected user on edit.
 - Ordinary users still cannot manage roles.
 
-For BS-ROLE.1C:
+Completed TODAY-HOME.1D coverage:
+
+- Today shows role chips only for roles with `role.user == request.user`.
+- Today ignores display-name-only roles even when the name matches the signed-in user.
+- Today hides other users' and other groups' roles.
+- Today hides roles when the meeting is not visible.
+- Chinese role label rendering is covered.
+- Today does not expose role-management controls.
+- Today does not render a role confirmation form.
+
+Future-only coverage for BS-ROLE.1C, if approved:
 
 - Meeting detail shows linked-user roles and display-name fallback roles.
 - Meeting detail does not expose management controls to ordinary users.
 - Other-group users cannot see another group's meeting roles.
 - Chinese and English labels remain natural.
 
-For TODAY-HOME.1D:
+Future-only coverage for optional confirmation, only if real use later justifies it:
 
-- Today shows role chips only for roles with `role.user == request.user`.
-- Today ignores display-name-only roles even when the name matches the signed-in user.
-- Today does not show another small group's roles.
-- Today respects meeting, lesson, and schedule publication/visibility rules.
-- Staff/admin Today behavior does not leak ordinary-user personalized role assumptions unless separately designed.
+- Confirmation status, accept/decline permissions, reassignment/override behavior, notification/reminder behavior if approved, and audit expectations.

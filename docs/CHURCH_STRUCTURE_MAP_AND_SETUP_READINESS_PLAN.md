@@ -253,6 +253,8 @@ What was implemented on `/staff/structure/mappings/` (`staff_structure_mapping_r
 - A link from `/staff/structure/` (near the setup-readiness / mapping-health actions) points to this page.
 - No POST handler, no form, no inline edit, no save action, and no schema/migration. It changes no mappings, units, memberships, or audience rows, and alters no runtime visibility behavior; `ChurchStructureMembership` is not used as a visibility source and ordinary-user matching still resolves through `Profile.small_group` / legacy mappings.
 
+CS-SETUP.1C.2 is a follow-up **read-only usability** slice on the same page. It adds a summary count area (all rows, mapped to active unit, unmapped, mapped to inactive unit, mapped under holding/unassigned node, and a needs-review total = unmapped + mapped inactive + mapped holding) and `?status=` GET filter links (`all`, `needs_review`, `mapped_active`, `unmapped`, `mapped_inactive`, `mapped_holding`) so a long mapping list can be narrowed to the rows that need attention. The page still defaults to all rows; the filter only shows/hides already-loaded rows and, when a section has no matching rows, shows a clear empty state. CS-SETUP.1C.2 adds no POST, no form, no inline edit, no save, no mapping/unit/membership/audience write, and no schema/migration. It **does not** implement mapping edit (CS-SETUP.1C edit), and changes no runtime visibility behavior; `ChurchStructureMembership` is still not a visibility source and ordinary-user matching is untouched.
+
 All Section 12.5 CS-SETUP.1A non-goals remain in force.
 
 ## 13. Related Documents

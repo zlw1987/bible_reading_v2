@@ -4015,6 +4015,180 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.url)
 
+    # --- CS-SETUP.1C.2: summary counts + status filters --------------------
+
+    def _seed_one_of_each_status(self):
+        """Create exactly one SmallGroup per mapping status for filter tests."""
+        holding = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="UNASSIGNED-GROUPS",
+            name="未分配小组",
+            name_en="Unassigned Groups",
+        )
+        return {
+            "mapped_active": SmallGroup.objects.create(
+                name="Filter Active",
+                church_structure_unit=self.active_unit,
+            ),
+            "unmapped": SmallGroup.objects.create(name="Filter Unmapped"),
+            "mapped_inactive": SmallGroup.objects.create(
+                name="Filter Inactive",
+                church_structure_unit=self.inactive_unit,
+            ),
+            "mapped_holding": SmallGroup.objects.create(
+                name="Filter Holding",
+                church_structure_unit=holding,
+            ),
+        }
+
+    def test_summary_counts_render(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        counts = response.context["counts"]
+        self.assertEqual(counts["all"], 4)
+        self.assertEqual(counts["mapped_active"], 1)
+        self.assertEqual(counts["unmapped"], 1)
+        self.assertEqual(counts["mapped_inactive"], 1)
+        self.assertEqual(counts["mapped_holding"], 1)
+        # needs_review = unmapped + mapped_inactive + mapped_holding.
+        self.assertEqual(counts["needs_review"], 3)
+        self.assertContains(response, "Mapping status overview")
+
+    def test_default_page_shows_all_rows(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "all")
+        for name in (
+            "Filter Active",
+            "Filter Unmapped",
+            "Filter Inactive",
+            "Filter Holding",
+        ):
+            self.assertContains(response, name)
+
+    def test_needs_review_filter_hides_mapped_active(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "needs_review"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "needs_review")
+        # Attention rows are shown.
+        self.assertContains(response, "Filter Unmapped")
+        self.assertContains(response, "Filter Inactive")
+        self.assertContains(response, "Filter Holding")
+        # Mapped-active row is hidden.
+        self.assertNotContains(response, "Filter Active")
+
+    def test_individual_status_filters(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        cases = {
+            "mapped_active": (
+                "Filter Active",
+                ["Filter Unmapped", "Filter Inactive", "Filter Holding"],
+            ),
+            "unmapped": (
+                "Filter Unmapped",
+                ["Filter Active", "Filter Inactive", "Filter Holding"],
+            ),
+            "mapped_inactive": (
+                "Filter Inactive",
+                ["Filter Active", "Filter Unmapped", "Filter Holding"],
+            ),
+            "mapped_holding": (
+                "Filter Holding",
+                ["Filter Active", "Filter Unmapped", "Filter Inactive"],
+            ),
+        }
+        for status, (shown, hidden_rows) in cases.items():
+            with self.subTest(status=status):
+                response = self.client.get(self.url, {"status": status})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["status"], status)
+                self.assertContains(response, shown)
+                for name in hidden_rows:
+                    self.assertNotContains(response, name)
+
+    def test_unknown_status_falls_back_to_all(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "bogus"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "all")
+        self.assertContains(response, "Filter Active")
+
+    def test_filter_links_present_and_read_only(self):
+        self.set_language("en")
+        self._seed_one_of_each_status()
+        self.login_admin()
+
+        response = self.client.get(self.url, {"status": "needs_review"})
+
+        self.assertEqual(response.status_code, 200)
+        # GET-only filter links are present.
+        for href in (
+            "?status=all",
+            "?status=needs_review",
+            "?status=mapped_active",
+            "?status=unmapped",
+            "?status=mapped_inactive",
+            "?status=mapped_holding",
+        ):
+            self.assertContains(response, href)
+        # Filtering exposes no write affordances even for a full admin.
+        self.assertNotContains(response, 'name="name_en"')
+        self.assertNotContains(response, "保存")
+
+    def test_filtered_section_shows_empty_state(self):
+        # Only an unmapped District exists; filtering to mapped_active leaves
+        # every section empty and must show the filter empty state.
+        self.set_language("en")
+        District.objects.create(name="Filter Empty District")
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "mapped_active"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Filter Empty District")
+        self.assertContains(response, "No records match this filter.")
+
+    def test_filtered_post_remains_405(self):
+        self.login_admin()
+
+        response = self.client.post(self.url, {"status": "needs_review"})
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_bilingual_status_filter_labels(self):
+        self.set_language("zh")
+        self._seed_one_of_each_status()
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "对应状态总览")
+        self.assertContains(response, "需要检查")
+
 
 class StaffModerationQueueTests(TestCase):
     def setUp(self):

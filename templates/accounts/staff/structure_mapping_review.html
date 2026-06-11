@@ -32,6 +32,65 @@
     </a>
 </div>
 
+<section class="card mapping-summary">
+    <h2 class="card-title">
+        {% if language == "zh" %}对应状态总览{% else %}Mapping status overview{% endif %}
+    </h2>
+    <div class="mapping-summary-grid">
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}全部记录{% else %}All rows{% endif %}</span>
+            <strong>{{ counts.all }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}需要检查（合计）{% else %}Needs review (total){% endif %}</span>
+            <strong>{{ counts.needs_review }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}已对应到启用单元{% else %}Mapped to active unit{% endif %}</span>
+            <strong>{{ counts.mapped_active }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}未对应{% else %}Unmapped{% endif %}</span>
+            <strong>{{ counts.unmapped }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}已对应到停用单元{% else %}Mapped to inactive unit{% endif %}</span>
+            <strong>{{ counts.mapped_inactive }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %}</span>
+            <strong>{{ counts.mapped_holding }}</strong>
+        </div>
+    </div>
+
+    <nav class="mapping-filters" aria-label="{% if language == 'zh' %}对应状态筛选{% else %}Mapping status filter{% endif %}">
+        <a class="button-secondary button mapping-filter{% if status == 'all' %} is-active{% endif %}"
+           href="?status=all"{% if status == 'all' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}全部{% else %}All{% endif %} ({{ counts.all }})
+        </a>
+        <a class="button-secondary button mapping-filter{% if status == 'needs_review' %} is-active{% endif %}"
+           href="?status=needs_review"{% if status == 'needs_review' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}需要检查{% else %}Needs review{% endif %} ({{ counts.needs_review }})
+        </a>
+        <a class="button-secondary button mapping-filter{% if status == 'mapped_active' %} is-active{% endif %}"
+           href="?status=mapped_active"{% if status == 'mapped_active' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}已对应到启用单元{% else %}Mapped to active unit{% endif %} ({{ counts.mapped_active }})
+        </a>
+        <a class="button-secondary button mapping-filter{% if status == 'unmapped' %} is-active{% endif %}"
+           href="?status=unmapped"{% if status == 'unmapped' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}未对应{% else %}Unmapped{% endif %} ({{ counts.unmapped }})
+        </a>
+        <a class="button-secondary button mapping-filter{% if status == 'mapped_inactive' %} is-active{% endif %}"
+           href="?status=mapped_inactive"{% if status == 'mapped_inactive' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}已对应到停用单元{% else %}Mapped to inactive unit{% endif %} ({{ counts.mapped_inactive }})
+        </a>
+        <a class="button-secondary button mapping-filter{% if status == 'mapped_holding' %} is-active{% endif %}"
+           href="?status=mapped_holding"{% if status == 'mapped_holding' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %} ({{ counts.mapped_holding }})
+        </a>
+    </nav>
+</section>
+
 {% for section in sections %}
 <section class="card">
     <h2 class="card-title">
@@ -110,7 +169,11 @@
                 {% empty %}
                 <tr>
                     <td colspan="6" class="muted">
+                        {% if status == "all" %}
                         {% if language == "zh" %}暂无记录。{% else %}No records yet.{% endif %}
+                        {% else %}
+                        {% if language == "zh" %}此筛选条件下没有符合的记录。{% else %}No records match this filter.{% endif %}
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

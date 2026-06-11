@@ -516,27 +516,55 @@ def staff_structure_unit_rename(request, unit_id):
 @staff_member_required
 @require_GET
 def staff_structure_mapping_review(request):
-    """Read-only legacy -> structure mapping review (CS-SETUP.1C.1).
+    """Read-only legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2).
 
     Staff-only page that lists every legacy MinistryContext / District /
     SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
-    simple mapping-status label. It is review-only: there is no POST handler,
-    no form, and it changes no mappings, units, memberships, audience rows, or
-    visibility. Admin edit links appear only when the viewer holds the matching
-    Django Admin change permission. Like /staff/structure/, this page never
-    uses ChurchStructureMembership as a runtime visibility source and does not
-    alter ordinary-user matching (Profile.small_group / legacy mappings) or
-    module audience scope.
+    simple mapping-status label. CS-SETUP.1C.2 adds read-only summary counts
+    and ``?status=`` filter links so a long mapping list can be narrowed to the
+    rows that need review. It remains review-only: there is no POST handler, no
+    form, and it changes no mappings, units, memberships, audience rows, or
+    visibility. The ``status`` filter only hides/shows already-loaded rows.
+    Admin edit links appear only when the viewer holds the matching Django Admin
+    change permission. Like /staff/structure/, this page never uses
+    ChurchStructureMembership as a runtime visibility source and does not alter
+    ordinary-user matching (Profile.small_group / legacy mappings) or module
+    audience scope.
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
+
+    # Read-only status filter. "needs_review" is the union of the three
+    # attention statuses; an unknown value falls back to showing all rows.
+    needs_review_keys = ("unmapped", "mapped_inactive", "mapped_holding")
+    valid_statuses = ("all", "needs_review", "mapped_active") + needs_review_keys
+    status = request.GET.get("status", "all")
+    if status not in valid_statuses:
+        status = "all"
+
+    def row_matches(status_key):
+        if status == "all":
+            return True
+        if status == "needs_review":
+            return status_key in needs_review_keys
+        return status_key == status
+
+    # Counts are tallied across every loaded row, independent of the active
+    # filter, so the summary always shows true totals for the filter links.
+    counts = {
+        "all": 0,
+        "mapped_active": 0,
+        "unmapped": 0,
+        "mapped_inactive": 0,
+        "mapped_holding": 0,
+    }
 
     can_change_unit = request.user.has_perm(
         "accounts.change_churchstructureunit"
     )
 
     def build_rows(queryset, legacy_admin_viewname, can_change_legacy):
-        rows = []
+        all_rows = []
         for obj in queryset:
             unit = obj.church_structure_unit
             if unit is None:
@@ -558,7 +586,9 @@ def staff_structure_mapping_review(request):
                     status_key = "mapped_holding"
                 else:
                     status_key = "mapped_active"
-            rows.append(
+            counts["all"] += 1
+            counts[status_key] += 1
+            all_rows.append(
                 {
                     "label": str(obj),
                     "is_active": obj.is_active,
@@ -581,7 +611,8 @@ def staff_structure_mapping_review(request):
                     ),
                 }
             )
-        return rows
+        # Tally happens on every row above; only matching rows are rendered.
+        return [row for row in all_rows if row_matches(row["status_key"])]
 
     sections = [
         {
@@ -616,12 +647,18 @@ def staff_structure_mapping_review(request):
         },
     ]
 
+    counts["needs_review"] = (
+        counts["unmapped"] + counts["mapped_inactive"] + counts["mapped_holding"]
+    )
+
     return render(
         request,
         "accounts/staff/structure_mapping_review.html",
         {
             "active_nav": "staff",
             "sections": sections,
+            "counts": counts,
+            "status": status,
         },
     )
 

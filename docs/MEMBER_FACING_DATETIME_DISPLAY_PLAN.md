@@ -4,7 +4,7 @@
 
 - DATETIME-UX.1A docs-only plan is complete.
 - DATETIME-UX.1B is complete: the shared `member_datetime` filter is applied to Today, Church Gatherings, Bible Study member surfaces, and My Serving member surfaces.
-- DATETIME-UX.1C staff/report/table formatting remains future.
+- DATETIME-UX.1C docs-only staff/report/table formatting audit and plan is complete; implementation remains future and separately approvable.
 - DATETIME-UX.1D user timezone preference remains far-future only.
 
 ## 1. Current-State Audit
@@ -141,13 +141,111 @@ Do not attempt broad staff report/table cleanup in the first slice unless it is 
 - Be careful with staff/manage pages that intentionally use compact operational formats like `Y-m-d H:i`; changing those may be a separate workflow decision.
 - Confirm timezone expectations before adding any future user-level timezone support. Current settings are app-wide, not per user.
 
-## 7. Implementation Milestones
+## 7. DATETIME-UX.1C Staff / Report / Table Audit Plan
+
+Status: docs-only audit and plan complete. This section does not authorize code, template, test, model, migration, timezone, query, sorting, filtering, or business-rule changes.
+
+### Why this is separate from member-facing display
+
+DATETIME-UX.1B intentionally optimized ordinary member reading copy. `member_datetime` is appropriate for pastoral, human-readable surfaces such as Today, Church Gatherings detail/list, Bible Study member pages, and My Serving.
+
+Staff/admin/report/table surfaces have different needs:
+
+- Dense tables often need compact, scan-friendly values such as `Y-m-d H:i`.
+- Operational lists may need date-first ordering cues that align with existing filters and table sorting.
+- Audit/moderation timestamps may be acceptable as compact internal timestamps, especially when staff compare records quickly.
+- Some raw Django datetime output is acceptable only when it is truly internal/debug-like or Django Admin-owned. Raw datetime output in user-visible staff pages should be reviewed because it can be inconsistent and harder to scan.
+
+Do not automatically apply `member_datetime` to staff tables. The future implementation should choose either an existing explicit compact format or a small staff-facing display helper only where that improves operational clarity without changing data behavior.
+
+### Future audit targets
+
+Target surfaces to review later:
+
+- Staff membership request pages:
+  - `templates/accounts/staff/membership_request_list.html`
+  - `templates/accounts/staff/membership_request_detail.html`
+  - Current compact `date:"Y-m-d H:i"` usage may already be acceptable.
+- Staff moderation/report pages:
+  - `templates/accounts/staff/moderation_queue.html`
+  - `templates/prayers/staff/prayer_reports.html`
+  - `templates/comments/staff/reflection_reports.html`
+  - Prefer compact audit timestamps where the page is staff-only; do not introduce pastoral/member phrasing into operational moderation tables.
+- Ministry operations staff/table pages:
+  - `templates/ministry/assignment_list.html`
+  - `templates/ministry/team_schedule.html`
+  - `templates/ministry/assignment_detail.html` when viewed by staff/assignment managers
+  - Existing `Y-m-d H:i` table formatting should be treated as an intentional baseline unless the future slice finds inconsistent raw output on the same surface.
+- Bible Study staff/manage pages:
+  - `templates/studies/bible_study_schedule_detail.html`
+  - `templates/studies/bible_study_lesson_detail.html`
+  - `templates/studies/bible_study_lesson_manage_list.html`
+  - `templates/studies/bible_study_meeting_manage_list.html`
+  - These include likely raw datetime candidates such as `published_at`, `prestudy_datetime`, and `meeting_datetime`.
+- Staff overview/report-style surfaces:
+  - `/staff/` overview templates under `templates/accounts/staff/`
+  - any future report/export pages that surface event, meeting, confirmation, report, hidden, created, updated, or published timestamps.
+
+Likely view areas to inspect during implementation, only to understand context and targeted tests:
+
+- `accounts.views` staff overview, membership request, and moderation queue views.
+- `ministry.views` assignment list, assignment detail, and team schedule views.
+- `studies.views` Bible Study schedule/guide/meeting management views.
+- `events.views` only if a staff-only event table/report surface is touched later.
+
+### Explicit non-goals for 1C implementation
+
+- No changes to datetime storage.
+- No timezone setting changes.
+- No user timezone preference.
+- No query, ordering, filtering, or sorting behavior changes.
+- No form widget, input format, or parsing changes.
+- No event generation, recurrence, Bible Study meeting generation, or scheduling behavior changes.
+- No permission, visibility, audience, or source-of-truth changes.
+- No model or migration changes.
+- No Community Activities work except a future/out-of-scope note if a later report page needs the same convention.
+- No broad staff UI redesign.
+
+### Recommended implementation strategy
+
+1. Keep the future slice display-only and staff-surface-only.
+2. Inventory raw staff-visible datetime outputs first, then group them by surface type:
+   - operational schedule/table values;
+   - audit/moderation/report timestamps;
+   - detail-page labels;
+   - Django Admin or internal-only values.
+3. Preserve existing compact `date:"Y-m-d H:i"` table formats unless there is a clear inconsistency on the same surface.
+4. For raw staff-visible values, prefer explicit compact formatting before introducing a new helper. Add a helper only if repeated staff/report formatting rules become duplicated across several templates.
+5. Keep member-facing surfaces on `member_datetime`; do not replace them with staff/table formatting.
+6. Keep sorting/filtering tied to stored datetimes and existing querysets. Formatting must not become a sorting or filtering mechanism.
+7. Update only the templates and tests directly needed for the selected future slice.
+
+### Recommended targeted tests for future implementation
+
+Run only focused tests for surfaces changed in the future implementation:
+
+- For membership request timestamps: targeted `accounts` tests covering staff request list/detail rendered timestamp text.
+- For moderation/report timestamps: targeted `accounts`, `prayers`, or `comments` staff queue/report tests for the changed page.
+- For ministry assignment/team schedule tables: targeted `ministry` tests for assignment list, assignment detail, or team schedule timestamp rendering.
+- For Bible Study manage pages: targeted `studies` tests for schedule detail, lesson detail/manage list, or meeting manage list timestamp rendering.
+- For any new staff helper, add helper-level tests for aware datetime, `None`, and expected compact output.
+
+The future implementation should still run the standard short code-change checks:
+
+- `E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py makemigrations --check`
+- `E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py check`
+- the exact targeted test methods/classes touched by the slice
+- `git diff --check`
+
+Browser/mobile QA should be narrow and only for pages whose visible formatting changes. Staff tables should be checked for wrapping/scanability on mobile only when the changed surface has a meaningful mobile staff path.
+
+## 8. Implementation Milestones
 
 - DATETIME-UX.1B: Complete; added the shared filter/helper and updated Today, Church Gatherings, Bible Study member surfaces, and My Serving member surfaces.
-- DATETIME-UX.1C: Optional staff/report/table formatting pass for operational surfaces after member-facing behavior is settled.
+- DATETIME-UX.1C: Docs-only audit and plan complete; future implementation remains optional and separately approvable.
 - DATETIME-UX.1D: Optional user timezone preference, far future only and only after a separate product/design decision.
 
-## 8. Regression Coverage and Future Tests
+## 9. Regression Coverage and Future Tests
 
 DATETIME-UX.1B added focused regression coverage for:
 
@@ -161,9 +259,9 @@ DATETIME-UX.1B added focused regression coverage for:
 - My Serving card/detail datetime display.
 - No sorting/filtering behavior change.
 
-Future DATETIME-UX.1C / 1D work should add targeted coverage for any staff/report/table formatting or user-timezone behavior it changes.
+Future DATETIME-UX.1C implementation work should add targeted coverage for each staff/report/table surface it changes. Future DATETIME-UX.1D work should add targeted coverage for any user-timezone behavior it changes.
 
-## 9. Verification Recommendation For Future Datetime Work
+## 10. Verification Recommendation For Future Datetime Work
 
 For future datetime work or regression checks, run the normal code-change checks for the affected slice:
 

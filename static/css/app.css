@@ -1811,25 +1811,27 @@ th {
     background: var(--surface-soft);
 }
 
+/* Shared ChurchStructureUnit audience picker: keep checkbox close to the label,
+   not pushed to the far right edge of the picker row. */
 .audience-picker-row-control {
     align-items: center;
-    display: flex;
-    flex: 1 1 auto;
+    display: inline-flex;
+    flex: 0 1 auto;
     gap: 8px;
     min-width: 0;
+    width: auto;
 }
 
 .audience-picker-row-label {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
     overflow-wrap: anywhere;
 }
 
 .audience-picker-row-control input[type="checkbox"] {
     flex: 0 0 auto;
-    margin-left: auto;
+    margin: 0;
     max-width: none;
-    order: 2;
     width: auto;
 }
 .audience-picker-row input {
@@ -1943,3 +1945,4 @@ th {
         max-height: 220px;
     }
 }
+

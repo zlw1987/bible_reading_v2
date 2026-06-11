@@ -9,9 +9,9 @@
     <h1 class="page-title">{% if language == "zh" %}教会结构对应检查{% else %}Structure Mapping Review{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        只读页面：在一处查看现有事工范围、区、小组与教会结构单元之间的对应关系。
+        在一处查看现有事工范围、区、小组与教会结构单元之间的对应关系；有权限时可逐条编辑设置对应关系。
         {% else %}
-        Read-only page: review how current ministry contexts, districts, and small groups map to church structure units, all in one place.
+        Review current ministry contexts, districts, and small groups and, when permitted, edit one setup mapping at a time.
         {% endif %}
     </p>
 </section>
@@ -19,9 +19,9 @@
 <section class="notice-panel">
     <p>
         {% if language == "zh" %}
-        此页面只用于检查当前资料对应关系，不会改变成员、活动适用范围、查经适用范围、服事安排或权限。
+        编辑对应关系只会更新设置对应关系；不会移动成员，也不会改变活动适用范围、查经适用范围、服事安排或权限。
         {% else %}
-        This page reviews the current data mapping only. It does not change membership, event audience, Bible Study audience, serving assignments, or permissions.
+        Mapping edits update setup mapping only. They do not move members, change event audience, Bible Study audience, serving assignments, or permissions.
         {% endif %}
     </p>
 </section>
@@ -111,7 +111,7 @@
                     <th>{% if language == "zh" %}对应结构单元{% else %}Mapped structure unit{% endif %}</th>
                     <th>{% if language == "zh" %}单元状态{% else %}Unit status{% endif %}</th>
                     <th>{% if language == "zh" %}对应状态{% else %}Mapping status{% endif %}</th>
-                    <th>{% if language == "zh" %}后台链接{% else %}Admin links{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -151,6 +151,11 @@
                         {% endif %}
                     </td>
                     <td>
+                        {% if row.mapping_edit_url %}
+                        <a class="button" href="{{ row.mapping_edit_url }}?status={{ status }}">
+                            {% if language == "zh" %}编辑对应关系{% else %}Edit Mapping{% endif %}
+                        </a>
+                        {% endif %}
                         {% if row.legacy_admin_url %}
                         <a class="button-secondary button" href="{{ row.legacy_admin_url }}">
                             {% if language == "zh" %}编辑记录{% else %}Edit record{% endif %}
@@ -161,7 +166,7 @@
                             {% if language == "zh" %}单元详细资料{% else %}Unit details{% endif %}
                         </a>
                         {% endif %}
-                        {% if not row.legacy_admin_url and not row.unit_admin_url %}
+                        {% if not row.mapping_edit_url and not row.legacy_admin_url and not row.unit_admin_url %}
                         <span class="muted">—</span>
                         {% endif %}
                     </td>

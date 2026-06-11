@@ -2061,7 +2061,29 @@ th {
     margin: 0;
 }
 
+.mapping-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 480px;
+}
+
+.mapping-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+}
+
+.mapping-edit-field select {
+    padding: 6px 8px;
+}
+
 @media (max-width: 640px) {
+    .mapping-edit-form {
+        max-width: 100%;
+    }
+
     .audience-picker-list {
         max-height: 220px;
     }

@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}编辑对应关系{% else %}Edit Mapping{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}编辑对应关系{% else %}Edit Mapping{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        为这条现有记录设置或更改对应的教会结构单元。
+        {% else %}
+        Set or change which church structure unit this existing record maps to.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel">
+    <p>
+        {% if language == "zh" %}
+        这里只更新设置对应关系，供后续检查和辅助选择使用；不会移动成员，也不会改变谁可以看到聚会或查经。
+        {% else %}
+        This only updates the setup mapping for future checks and helpers. It does not move members or change who can see events or Bible Study.
+        {% endif %}
+    </p>
+</section>
+
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}当前记录{% else %}Current record{% endif %}
+    </h2>
+    <dl class="detail-list">
+        <div>
+            <dt>{% if language == "zh" %}记录名称{% else %}Record name{% endif %}</dt>
+            <dd>{{ legacy_label }}</dd>
+        </div>
+        <div>
+            <dt>{% if language == "zh" %}记录类型{% else %}Record type{% endif %}</dt>
+            <dd>{{ legacy_type_label }}</dd>
+        </div>
+        <div>
+            <dt>{% if language == "zh" %}记录状态{% else %}Record status{% endif %}</dt>
+            <dd>
+                {% if legacy_is_active %}
+                <span class="status status-good">{% if language == "zh" %}启用{% else %}Active{% endif %}</span>
+                {% else %}
+                <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+                {% endif %}
+            </dd>
+        </div>
+        <div>
+            <dt>{% if language == "zh" %}当前对应结构单元{% else %}Current mapped structure unit{% endif %}</dt>
+            <dd>
+                {% if current_unit %}
+                {{ current_unit_path }}
+                {% if current_unit_is_active %}
+                <span class="status status-good">{% if language == "zh" %}启用{% else %}Active{% endif %}</span>
+                {% else %}
+                <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+                {% endif %}
+                {% else %}
+                <span class="muted">{% if language == "zh" %}尚未对应教会结构单位{% else %}No mapped structure unit yet{% endif %}</span>
+                {% endif %}
+            </dd>
+        </div>
+    </dl>
+</section>
+
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}选择对应结构单元{% else %}Choose mapped structure unit{% endif %}
+    </h2>
+    <form method="post" class="mapping-edit-form">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="{{ status }}">
+        <label class="mapping-edit-field">
+            <span>{% if language == "zh" %}对应结构单元{% else %}Mapped structure unit{% endif %}</span>
+            <select name="church_structure_unit" required>
+                <option value="">
+                    {% if language == "zh" %}— 请选择启用的结构单元 —{% else %}— Choose an active structure unit —{% endif %}
+                </option>
+                {% for option in unit_options %}
+                <option value="{{ option.id }}"{% if option.id == selected_unit_id %} selected{% endif %}>
+                    {{ option.label }}
+                </option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if not unit_options %}
+        <p class="muted">
+            {% if language == "zh" %}
+            没有可选的同类型启用结构单元。请先在后台创建或启用对应类型的结构单元。
+            {% else %}
+            No active structure units of the matching type are available. Create or activate a matching-type unit first.
+            {% endif %}
+        </p>
+        {% endif %}
+        <div class="actions">
+            <button type="submit" class="button">
+                {% if language == "zh" %}保存对应关系{% else %}Save mapping{% endif %}
+            </button>
+            <a class="button-secondary button" href="{{ redirect_url }}">
+                {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+            </a>
+        </div>
+    </form>
+</section>
+{% endblock %}

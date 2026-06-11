@@ -6,7 +6,7 @@ from django.contrib.auth.views import PasswordChangeView
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Q
-from django.http import HttpResponseForbidden
+from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -513,6 +513,41 @@ def staff_structure_unit_rename(request, unit_id):
     return redirect(edit_url)
 
 
+# CS-SETUP.1D.1: supported legacy -> structure mapping types. Each legacy model
+# maps to exactly one ChurchStructureUnit type and is gated by the matching
+# Django Admin change permission. The edit dropdown is filtered to active units
+# of the matching type for convenience, but the POST handler re-validates
+# required / exists / active / type-match / duplicate-active authoritatively.
+LEGACY_MAPPING_TYPES = {
+    "ministry-context": {
+        "model": MinistryContext,
+        "unit_type": ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        "perm": "accounts.change_ministrycontext",
+    },
+    "district": {
+        "model": District,
+        "unit_type": ChurchStructureUnit.UNIT_DISTRICT,
+        "perm": "accounts.change_district",
+    },
+    "small-group": {
+        "model": SmallGroup,
+        "unit_type": ChurchStructureUnit.UNIT_SMALL_GROUP,
+        "perm": "accounts.change_smallgroup",
+    },
+}
+
+# Status filter keys accepted by the mapping review page; reused when an edit
+# action round-trips the prior filter back to the review list.
+MAPPING_REVIEW_STATUSES = {
+    "all",
+    "needs_review",
+    "mapped_active",
+    "unmapped",
+    "mapped_inactive",
+    "mapped_holding",
+}
+
+
 @staff_member_required
 @require_GET
 def staff_structure_mapping_review(request):
@@ -563,7 +598,9 @@ def staff_structure_mapping_review(request):
         "accounts.change_churchstructureunit"
     )
 
-    def build_rows(queryset, legacy_admin_viewname, can_change_legacy):
+    def build_rows(
+        queryset, legacy_admin_viewname, can_change_legacy, legacy_type_slug
+    ):
         all_rows = []
         for obj in queryset:
             unit = obj.church_structure_unit
@@ -609,6 +646,17 @@ def staff_structure_mapping_review(request):
                         if unit is not None and can_change_unit
                         else None
                     ),
+                    # In-app mapping edit (CS-SETUP.1D.1). Offered only to staff
+                    # holding the matching legacy change permission; read-only
+                    # staff see no edit action.
+                    "mapping_edit_url": (
+                        reverse(
+                            "staff_structure_mapping_edit",
+                            args=[legacy_type_slug, obj.pk],
+                        )
+                        if can_change_legacy
+                        else None
+                    ),
                 }
             )
         # Tally happens on every row above; only matching rows are rendered.
@@ -623,6 +671,7 @@ def staff_structure_mapping_review(request):
                 ).order_by("sort_order", "code", "name"),
                 "admin:accounts_ministrycontext_change",
                 request.user.has_perm("accounts.change_ministrycontext"),
+                "ministry-context",
             ),
         },
         {
@@ -633,6 +682,7 @@ def staff_structure_mapping_review(request):
                 ).order_by("name"),
                 "admin:accounts_district_change",
                 request.user.has_perm("accounts.change_district"),
+                "district",
             ),
         },
         {
@@ -643,6 +693,7 @@ def staff_structure_mapping_review(request):
                 ).order_by("name"),
                 "admin:accounts_smallgroup_change",
                 request.user.has_perm("accounts.change_smallgroup"),
+                "small-group",
             ),
         },
     ]
@@ -659,6 +710,188 @@ def staff_structure_mapping_review(request):
             "sections": sections,
             "counts": counts,
             "status": status,
+        },
+    )
+
+
+@staff_member_required
+def staff_structure_mapping_edit(request, legacy_type, legacy_id):
+    """Edit one legacy row's church_structure_unit mapping (CS-SETUP.1D.1).
+
+    Narrow staff workflow that sets or changes a single MinistryContext /
+    District / SmallGroup row's ``church_structure_unit`` to one existing
+    *active* ChurchStructureUnit of the matching unit type. GET renders a
+    review/edit form; the save is an explicit POST only (no inline autosave).
+    Backend validation is authoritative (required / exists / active /
+    type-match / duplicate-active); the filtered dropdown is convenience only.
+
+    It writes nothing else: no unit lifecycle, no membership, no audience-scope
+    rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope), no
+    TeamAssignment, no Profile.small_group, and no runtime visibility change.
+    Each successful update is audited via a Django admin ``LogEntry`` CHANGE
+    record carrying the before/after mapped-unit context.
+    """
+    language = get_user_language(request)
+
+    config = LEGACY_MAPPING_TYPES.get(legacy_type)
+    if config is None:
+        raise Http404("Unknown legacy mapping type.")
+
+    # Write access is strictly the matching Django Admin change permission for
+    # the legacy model; read-only staff structure access is not write access.
+    if not request.user.has_perm(config["perm"]):
+        return HttpResponseForbidden("Not allowed to edit this mapping.")
+
+    model = config["model"]
+    unit_type = config["unit_type"]
+    obj = get_object_or_404(model, pk=legacy_id)
+
+    review_url = reverse("staff_structure_mapping_review")
+    # Preserve the prior status filter only when the review page accepts it.
+    status = request.POST.get("status") or request.GET.get("status") or ""
+    if status not in MAPPING_REVIEW_STATUSES:
+        status = ""
+    redirect_url = f"{review_url}?status={status}" if status else review_url
+
+    target_units = list(
+        ChurchStructureUnit.objects.filter(
+            is_active=True, unit_type=unit_type
+        ).order_by("sort_order", "code", "name")
+    )
+
+    current_unit = obj.church_structure_unit
+    # Default selection echoes the current mapping. If the current unit is
+    # inactive or the wrong type it is not among target_units, so the dropdown
+    # falls back to the placeholder until staff pick an active matching unit.
+    selected_unit_id = current_unit.pk if current_unit else None
+    error = None
+
+    if request.method == "POST":
+        raw = (request.POST.get("church_structure_unit") or "").strip()
+        selected_unit_id = None
+        if raw:
+            try:
+                selected_unit_id = int(raw)
+            except (TypeError, ValueError):
+                selected_unit_id = None
+
+        target = None
+        if not raw:
+            error = (
+                "请选择一个结构单元。" if language == "zh"
+                else "Please choose a structure unit."
+            )
+        else:
+            target = (
+                ChurchStructureUnit.objects.filter(pk=selected_unit_id).first()
+                if selected_unit_id is not None
+                else None
+            )
+            if target is None:
+                error = (
+                    "所选结构单元不存在。" if language == "zh"
+                    else "The selected structure unit does not exist."
+                )
+            elif not target.is_active:
+                error = (
+                    "所选结构单元已停用，无法对应。" if language == "zh"
+                    else "The selected structure unit is inactive."
+                )
+            elif target.unit_type != unit_type:
+                error = (
+                    "所选结构单元类型不匹配。" if language == "zh"
+                    else "The selected structure unit type does not match "
+                    "this record."
+                )
+            else:
+                # Duplicate guard: do not let two active legacy rows of the
+                # same type map to the same unit. Keeping the current row's
+                # existing mapping is always allowed (no change to enforce).
+                is_change = (
+                    current_unit is None or current_unit.pk != target.pk
+                )
+                if is_change and obj.is_active:
+                    conflict = (
+                        model.objects.filter(
+                            is_active=True, church_structure_unit=target
+                        )
+                        .exclude(pk=obj.pk)
+                        .exists()
+                    )
+                    if conflict:
+                        error = (
+                            "已有另一条启用记录对应到该结构单元。"
+                            if language == "zh"
+                            else "Another active record is already mapped to "
+                            "this structure unit."
+                        )
+
+        if error is None:
+            old_unit = current_unit
+            obj.church_structure_unit = target
+            obj.save(update_fields=["church_structure_unit"])
+
+            old_repr = (
+                f"{old_unit} (id={old_unit.pk})" if old_unit else "None"
+            )
+            new_repr = f"{target} (id={target.pk})"
+            LogEntry.objects.log_action(
+                user_id=request.user.pk,
+                content_type_id=ContentType.objects.get_for_model(model).pk,
+                object_id=obj.pk,
+                object_repr=str(obj),
+                action_flag=CHANGE,
+                change_message=(
+                    "Updated legacy structure mapping via staff mapping "
+                    "maintenance (CS-SETUP.1D.1). "
+                    f"church_structure_unit: {old_repr} -> {new_repr}."
+                ),
+            )
+            messages.success(
+                request,
+                "已更新对应关系。" if language == "zh"
+                else "Mapping updated.",
+            )
+            return redirect(redirect_url)
+
+        messages.error(request, error)
+
+    type_labels = {
+        ChurchStructureUnit.UNIT_MINISTRY_CONTEXT: (
+            "事工范围" if language == "zh" else "Ministry Context"
+        ),
+        ChurchStructureUnit.UNIT_DISTRICT: (
+            "区" if language == "zh" else "District"
+        ),
+        ChurchStructureUnit.UNIT_SMALL_GROUP: (
+            "小组" if language == "zh" else "Small Group"
+        ),
+    }
+    unit_options = [
+        {"id": unit.pk, "label": unit.path_label(language)}
+        for unit in target_units
+    ]
+
+    return render(
+        request,
+        "accounts/staff/structure_mapping_edit.html",
+        {
+            "active_nav": "staff",
+            "legacy_label": str(obj),
+            "legacy_type_label": type_labels.get(unit_type, ""),
+            "legacy_is_active": obj.is_active,
+            "current_unit": current_unit,
+            "current_unit_path": (
+                current_unit.path_label(language) if current_unit else ""
+            ),
+            "current_unit_is_active": (
+                current_unit.is_active if current_unit else None
+            ),
+            "unit_options": unit_options,
+            "selected_unit_id": selected_unit_id,
+            "status": status,
+            "redirect_url": redirect_url,
+            "error": error,
         },
     )
 

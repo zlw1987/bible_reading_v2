@@ -11,7 +11,7 @@ This plan responds to two June 2026 demo feedback items:
 
 This plan defines a docs-first response: record the modular adoption principle, then propose a read-only staff structure map with mapping-health indicators (CS-MAP.2) before any setup/edit UI is considered. Later milestones each require separate explicit approval; nothing beyond this document is authorized by CS-MAP.1.
 
-Status update: CS-MAP.2 is now complete (see Section 7 for the completion note), SE-AS.5B post-commit cleanup clarified the visible wording and count semantics on the shipped read-only map, and CS-MAP.2B updates the map tree to use the same hierarchical node-level expand/collapse mental model as the ServiceEvent audience picker. CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6; CS-SETUP.1A is a docs-only risk/design pass that defines the design contract a future setup/edit UI must satisfy and splits CS-SETUP.1 into separately approvable sub-milestones (see Section 12). CS-SETUP.1A changes no code, schema, migration, template, view, or runtime behavior. CS-SETUP.1B is now implemented as the lowest-risk slice only: an opt-in edit mode on `/staff/structure/` with a per-row action menu offering Rename (display name + bilingual name) and a Details (Django Admin) link; it adds no schema/migration and changes no runtime visibility (see Section 12.6). CS-SETUP.1C.1 is now implemented as a read-only mapping review page at `/staff/structure/mappings/` that lists the legacy-to-structure mappings with simple status labels; it adds no schema/migration and changes no runtime visibility (see Section 12.7). Full mapping edit (CS-SETUP.1C edit), CS-SETUP.1D, and CS-SETUP.1E remain unapproved and gated.
+Status update: CS-MAP.2 is now complete (see Section 7 for the completion note), SE-AS.5B post-commit cleanup clarified the visible wording and count semantics on the shipped read-only map, and CS-MAP.2B updates the map tree to use the same hierarchical node-level expand/collapse mental model as the ServiceEvent audience picker. CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6; CS-SETUP.1A is a docs-only risk/design pass that defines the design contract a future setup/edit UI must satisfy and splits CS-SETUP.1 into separately approvable sub-milestones (see Section 12). CS-SETUP.1A changes no code, schema, migration, template, view, or runtime behavior. CS-SETUP.1B is now implemented as the lowest-risk slice only: an opt-in edit mode on `/staff/structure/` with a per-row action menu offering Rename (display name + bilingual name) and a Details (Django Admin) link; it adds no schema/migration and changes no runtime visibility (see Section 12.6). CS-SETUP.1C.1 is now implemented as a read-only mapping review page at `/staff/structure/mappings/` that lists the legacy-to-structure mappings with simple status labels; CS-SETUP.1C.2 adds read-only summary counts and filters; both add no schema/migration and change no runtime visibility (see Section 12.7). CS-SETUP.1D.0 is a docs-only plan for the next safe mapping-maintenance slice: edit one existing legacy row's mapping to one existing active structure unit, with no unit lifecycle, membership, audience-row, or runtime visibility change (see Section 12.8). Implementation remains unapproved until CS-SETUP.1D.1 is explicitly approved; CS-SETUP.1E future structure unit lifecycle design remains unapproved.
 
 ## 2. Current Foundation Summary
 
@@ -43,7 +43,7 @@ The church structure foundation is the coexistence enabler, not a competitor to 
 
 Leadership needs to see and trust the church structure: a visible hierarchy map, who-belongs-where counts, and confidence that setup data is healthy. Before CS-MAP.2 the unit tree was invisible outside Django Admin, and the only mapping-health reporting was CLI command dry-run output. CS-MAP.2/2B now provide `/staff/structure/` as a permission-gated hierarchy map with mapping-health indicators, and CS-SETUP.1B adds only an opt-in display-name rename / Details affordance there for admin-capable staff; broader structure setup remains in Django Admin.
 
-"Setup support" must not be read as "build edit UI now." Editing `ChurchStructureUnit` is no longer merely cosmetic: ServiceEvent audience rows (`ServiceEventAudienceScope`) and Bible Study Schedule audience rows (`BibleStudySeriesAudienceScope`) can depend on the unit tree and its legacy mappings, so unit moves, deactivation, or mapping drift can change resolved audiences for events and schedules that already have rows. A higher-risk staff edit UI would therefore have real runtime consequences while exposing none of the rules needed to make those changes safe — the same staff-confusion failure mode that `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md` Section 4 rejected for the audience selector. The broader CS-SETUP.1C/1D/1E surfaces therefore remain unapproved: before a mapping, create/move/deactivate, or membership edit UI is safe it needs explicit rules for unit moves, unit deactivation, legacy-mapping drift, and the effect of each on stored audience rows and legacy fallback behavior. Only CS-SETUP.1B — the separately approved low-risk slice that renames display labels and links to Details — is implemented; rename changes display names only and cannot move units, change mappings, or alter any audience rows. Django Admin remains the structure write surface for everything beyond that rename/detail slice: it already distinguishes legacy runtime models from future foundation models (CS-H.5E), and model `full_clean()` validation enforces tree integrity there.
+"Setup support" must not be read as "build edit UI now." Editing `ChurchStructureUnit` is no longer merely cosmetic: ServiceEvent audience rows (`ServiceEventAudienceScope`) and Bible Study Schedule audience rows (`BibleStudySeriesAudienceScope`) can depend on the unit tree and its legacy mappings, so unit moves, deactivation, or mapping drift can change resolved audiences for events and schedules that already have rows. A higher-risk staff edit UI would therefore have real runtime consequences while exposing none of the rules needed to make those changes safe — the same staff-confusion failure mode that `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md` Section 4 rejected for the audience selector. The broader CS-SETUP.1D.1/1D.2/1E/1F surfaces therefore remain unapproved: before a mapping, create/move/deactivate, or membership edit UI is safe it needs explicit rules for unit moves, unit deactivation, legacy-mapping drift, and the effect of each on stored audience rows and legacy fallback behavior. Only CS-SETUP.1B — the separately approved low-risk slice that renames display labels and links to Details — is implemented; rename changes display names only and cannot move units, change mappings, or alter any audience rows. CS-SETUP.1D.0 is planning only. Django Admin remains the structure write surface for everything beyond approved narrow slices: it already distinguishes legacy runtime models from future foundation models (CS-H.5E), and model `full_clean()` validation enforces tree integrity there.
 
 The safe path is staged:
 
@@ -82,18 +82,21 @@ The structure map must display structure and membership concepts only. It must n
 | SE-AS.6C | ServiceEvent audience optional apply mode, after dry-run review | Future; separate approval |
 | CS-MAP.3 | Optional setup readiness checklist on the structure map page | Optional; separate approval |
 | CA V1 | Community Activities planning, then implementation | Later; separate plan; not pulled forward by this feedback |
-| CS-SETUP.1 | Limited structure setup/edit UI (umbrella; now split into CS-SETUP.1A–1E) | Not approved; gated (see below and Section 12) |
+| CS-SETUP.1 | Limited structure setup/edit UI (umbrella; now split into CS-SETUP.1A–1F) | Not approved; gated (see below and Section 12) |
 | CS-SETUP.1A | Docs-only setup/edit UI risk/design plan and design contract | Complete with this task (Section 12); docs-only, no implementation |
 | CS-SETUP.1B | Label / bilingual-name / sort-order-only staff edit UI | Implemented as edit mode + rename/detail only (display name + bilingual name); sort-order edit deferred. See Section 12.6 |
-| CS-SETUP.1C | Legacy-to-unit mapping review/edit UI | Review-only slice CS-SETUP.1C.1 implemented (read-only mapping review page, Section 12.7); mapping **edit** (CS-SETUP.1C) remains not approved; gated on separate approval (Section 12) |
-| CS-SETUP.1D | Create / move / deactivate unit UI | Not approved; gated on stronger audit + audience-impact design (Section 12) |
-| CS-SETUP.1E | Membership / belonging management UI | Not approved; separate from structure editing, separate approval (Section 12) |
+| CS-SETUP.1C.1 / 1C.2 | Legacy-to-unit mapping review UI | Implemented read-only: mapping review page plus summary counts and filters (Section 12.7); no write UI |
+| CS-SETUP.1D.0 | Legacy Mapping Maintenance Next-Slice Plan | Complete with this docs-only pass (Section 12.8); no implementation |
+| CS-SETUP.1D.1 | Legacy mapping maintenance implementation | Future; separate approval; edit one existing legacy row mapping at a time |
+| CS-SETUP.1D.2 | Optional mapping warning polish / conflict indicators | Future; separate approval after 1D.1 |
+| CS-SETUP.1E | Future structure unit lifecycle design | Future design only; create/move/delete/deactivate requires separate plan and approval |
+| CS-SETUP.1F | Membership / belonging management UI | Not approved; separate from structure editing, separate approval (Section 12) |
 
 Sequencing rules:
 
 - CS-MAP.2 landed before SE-AS.4/SE-AS.5, as originally recommended from a product-risk perspective: the SE-AS.5 selector's biggest operational risk is staff selecting units that match no current members, and the mapping-health surface mitigates that before the selector exists. SE-AS.4 and SE-AS.5 are now complete. Future ServiceEvent audience apply/backfill work must proceed through review of SE-AS.6B dry-run output first, not direct apply/backfill, and must never be bundled with CS-MAP work.
 - Community Activities must not be pulled forward by this feedback. Its position (after the audience foundation is proven through Bible Study and ServiceEvent) is unchanged per `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
-- CS-SETUP.1 is explicitly not approved. It is gated on: (a) CS-MAP.2 shipped and used, with evidence that read-only visibility plus Django Admin is insufficient for a recurring staff task; (b) a separate design doc resolving unit↔legacy sync direction (today only seeding writes units from legacy; two-way sync is undesigned), edit permissions/capabilities, and the effect of unit moves/deactivation on stored audience rows; (c) separate explicit approval. CS-SETUP.1A (Section 12) is the docs-only response to gate (b): it records the risk analysis and the design contract, and splits the umbrella CS-SETUP.1 into CS-SETUP.1B–1E so that the lowest-risk surfaces can be approved independently of the high-risk create/move/deactivate surface. CS-SETUP.1A does not approve any of CS-SETUP.1B–1E.
+- CS-SETUP.1 is explicitly not approved as an umbrella edit surface. It is gated on: (a) CS-MAP.2 shipped and used, with evidence that read-only visibility plus Django Admin is insufficient for a recurring staff task; (b) a separate design doc resolving unit↔legacy sync direction (today only seeding writes units from legacy; two-way sync is undesigned), edit permissions/capabilities, and the effect of unit moves/deactivation on stored audience rows; (c) separate explicit approval. CS-SETUP.1A (Section 12) is the docs-only response to gate (b): it records the risk analysis and the design contract, and splits the umbrella CS-SETUP.1 into separately approvable sub-slices so that the lowest-risk surfaces can be approved independently of the high-risk create/move/deactivate surface. CS-SETUP.1D.0 plans the next narrow mapping-maintenance slice only; it does not approve implementation.
 - Do not bundle ServiceEvent runtime visibility migration, Community Activities, and `ChurchStructureMembership` runtime migration with each other or with CS-MAP work.
 
 ## 7. CS-MAP.2 Implementation Contract
@@ -169,7 +172,7 @@ These criteria were the CS-MAP.2 implementation contract; the completed slice wa
 
 ## 12. CS-SETUP.1A — Setup/Edit UI Risk Design and Design Contract (docs-only)
 
-CS-SETUP.1A is a docs-only risk/design pass. It implements nothing and approves nothing. Its job is to explain why a staff structure setup/edit UI cannot be built safely today, to separate the candidate edit surfaces rather than bundle them, to define the safety rules any implementation must satisfy first, and to split CS-SETUP.1 into independently approvable sub-milestones. No CS-SETUP.1B–1E work is authorized by this section.
+CS-SETUP.1A is a docs-only risk/design pass. It implements nothing and approves nothing. Its job is to explain why a staff structure setup/edit UI cannot be built safely today, to separate the candidate edit surfaces rather than bundle them, to define the safety rules any implementation must satisfy first, and to split CS-SETUP.1 into independently approvable sub-milestones. No CS-SETUP.1B–1F work is authorized by this section.
 
 ### 12.1 Why a setup/edit UI is risky now
 
@@ -191,7 +194,7 @@ These are listed in roughly increasing blast radius. Each is a candidate only; n
 
 ### 12.3 Required safety rules before any implementation
 
-Any CS-SETUP.1B–1E implementation must satisfy all of the following before it is approved:
+Any CS-SETUP.1B–1F implementation must satisfy all of the following before it is approved:
 
 - **Explicit permission/capability boundary.** Define exactly which staff capability may edit each surface; do not reuse the read-only map's view gate as a write gate. Higher-blast-radius surfaces (move/deactivate, mapping edits) should require a stricter capability than label/sort-order edits. No new capability is created by CS-SETUP.1A.
 - **Audit/logging expectation.** Every write records who changed what, when, and the before/after value. Structure, mapping, and membership edits are auditable separately. No silent edits.
@@ -207,9 +210,12 @@ Any CS-SETUP.1B–1E implementation must satisfy all of the following before it 
 
 - **CS-SETUP.1A** — this docs-only risk/design plan and design contract. Complete with this task.
 - **CS-SETUP.1B** — label / bilingual-name / sort-order-only staff edit UI, if approved. Lowest blast radius; must still meet the Section 12.3 permission, audit, and wording rules.
-- **CS-SETUP.1C** — legacy-to-unit mapping review/edit UI, if approved. Must surface audience impact and drift before saving.
-- **CS-SETUP.1D** — create / move / deactivate unit UI, only after stronger audit and explicit audience-impact design (stored-row warnings, inactive-reference rules, move-with-descendants rules).
-- **CS-SETUP.1E** — membership / belonging management UI, separate from structure editing and only after its own approval; must not be read as a runtime visibility control.
+- **CS-SETUP.1C.1 / 1C.2** — legacy-to-unit mapping review UI. Complete as read-only review, summary counts, and filters. No write action.
+- **CS-SETUP.1D.0** — legacy mapping maintenance next-slice plan. Complete with this docs-only pass. It narrows the next possible implementation to editing one existing legacy row's mapping to one existing active unit.
+- **CS-SETUP.1D.1** — docs-reviewed mapping maintenance implementation, if explicitly approved. Must edit one mapping at a time and satisfy Section 12.8.
+- **CS-SETUP.1D.2** — optional warning polish / conflict indicators, if explicitly approved after 1D.1.
+- **CS-SETUP.1E** — future structure unit lifecycle design only. Create, move, delete, merge/split, or deactivate structure units remains too risky for implementation without a separate design.
+- **CS-SETUP.1F** — membership / belonging management UI, separate from structure editing and only after its own approval; must not be read as a runtime visibility control.
 
 Each sub-milestone requires its own explicit approval. Approving one does not approve the next. They must not be bundled with each other, with SE-AS.6C apply/backfill, with `ChurchStructureMembership` runtime migration, or with Community Activities.
 
@@ -217,7 +223,7 @@ Each sub-milestone requires its own explicit approval. Approving one does not ap
 
 CS-SETUP.1A does not include and does not authorize (as of the CS-SETUP.1A docs-only pass, no edit/setup UI was authorized):
 
-- No implementation of any edit/setup UI at CS-SETUP.1A time. (Later, CS-SETUP.1B was separately approved and implements rename/detail only — see Section 12.6; CS-SETUP.1C/1D/1E remain unapproved.)
+- No implementation of any edit/setup UI at CS-SETUP.1A time. (Later, CS-SETUP.1B was separately approved and implements rename/detail only — see Section 12.6; CS-SETUP.1C.1/1C.2 were separately approved and implement read-only mapping review only — see Section 12.7; CS-SETUP.1D.0 is docs-only planning; CS-SETUP.1D.1/1D.2/1E/1F remain unapproved.)
 - No schema changes or migrations of any kind.
 - No runtime visibility change anywhere (event/study/reading visibility untouched).
 - No automatic unit↔legacy sync (one-way or two-way).
@@ -228,7 +234,7 @@ CS-SETUP.1A does not include and does not authorize (as of the CS-SETUP.1A docs-
 
 ### 12.6 CS-SETUP.1B — implemented slice (edit mode + rename/detail only)
 
-CS-SETUP.1B is implemented as the lowest-risk first slice only. It does **not** implement the full "label / sort-order" surface described in Section 12.4; sort-order editing, add-child, deactivate, delete, move, mapping, and membership actions are intentionally excluded and remain unapproved (CS-SETUP.1C/1D/1E unchanged).
+CS-SETUP.1B is implemented as the lowest-risk first slice only. It does **not** implement the full "label / sort-order" surface described in Section 12.4; sort-order editing, add-child, deactivate, delete, move, mapping, and membership actions are intentionally excluded and remain unapproved (CS-SETUP.1D.1/1D.2/1E/1F unchanged).
 
 What was implemented on `/staff/structure/`:
 
@@ -242,7 +248,7 @@ This satisfies the Section 12.3 permission, audit, and wording rules for the ren
 
 ### 12.7 CS-SETUP.1C.1 — implemented slice (read-only mapping review only)
 
-CS-SETUP.1C.1 is a **read-only** review slice of CS-SETUP.1C. It does **not** implement any mapping edit. Mapping edit (CS-SETUP.1C), create/move/deactivate (CS-SETUP.1D), and membership management (CS-SETUP.1E) remain unapproved and unimplemented.
+CS-SETUP.1C.1 is a **read-only** review slice of CS-SETUP.1C. It does **not** implement any mapping edit. Mapping edit (CS-SETUP.1D.1), create/move/deactivate (CS-SETUP.1E), and membership management (CS-SETUP.1F) remain unapproved and unimplemented.
 
 What was implemented on `/staff/structure/mappings/` (`staff_structure_mapping_review`):
 
@@ -253,9 +259,114 @@ What was implemented on `/staff/structure/mappings/` (`staff_structure_mapping_r
 - A link from `/staff/structure/` (near the setup-readiness / mapping-health actions) points to this page.
 - No POST handler, no form, no inline edit, no save action, and no schema/migration. It changes no mappings, units, memberships, or audience rows, and alters no runtime visibility behavior; `ChurchStructureMembership` is not used as a visibility source and ordinary-user matching still resolves through `Profile.small_group` / legacy mappings.
 
-CS-SETUP.1C.2 is a follow-up **read-only usability** slice on the same page. It adds a summary count area (all rows, mapped to active unit, unmapped, mapped to inactive unit, mapped under holding/unassigned node, and a needs-review total = unmapped + mapped inactive + mapped holding) and `?status=` GET filter links (`all`, `needs_review`, `mapped_active`, `unmapped`, `mapped_inactive`, `mapped_holding`) so a long mapping list can be narrowed to the rows that need attention. The page still defaults to all rows; the filter only shows/hides already-loaded rows and, when a section has no matching rows, shows a clear empty state. CS-SETUP.1C.2 adds no POST, no form, no inline edit, no save, no mapping/unit/membership/audience write, and no schema/migration. It **does not** implement mapping edit (CS-SETUP.1C edit), and changes no runtime visibility behavior; `ChurchStructureMembership` is still not a visibility source and ordinary-user matching is untouched.
+CS-SETUP.1C.2 is a follow-up **read-only usability** slice on the same page. It adds a summary count area (all rows, mapped to active unit, unmapped, mapped to inactive unit, mapped under holding/unassigned node, and a needs-review total = unmapped + mapped inactive + mapped holding) and `?status=` GET filter links (`all`, `needs_review`, `mapped_active`, `unmapped`, `mapped_inactive`, `mapped_holding`) so a long mapping list can be narrowed to the rows that need attention. The page still defaults to all rows; the filter only shows/hides already-loaded rows and, when a section has no matching rows, shows a clear empty state. CS-SETUP.1C.2 adds no POST, no form, no inline edit, no save, no mapping/unit/membership/audience write, and no schema/migration. It **does not** implement mapping edit (future CS-SETUP.1D.1), and changes no runtime visibility behavior; `ChurchStructureMembership` is still not a visibility source and ordinary-user matching is untouched.
 
 All Section 12.5 CS-SETUP.1A non-goals remain in force.
+
+### 12.8 CS-SETUP.1D.0 — Legacy Mapping Maintenance Next-Slice Plan
+
+CS-SETUP.1D.0 is a docs-only plan for the safest next Church Structure setup/edit slice after the read-only mapping review. It authorizes no code, schema, migration, template, view, test, data, or runtime behavior change.
+
+Current state:
+
+- `/staff/structure/` exists as the read-only structure map with setup-readiness / mapping-health context.
+- CS-SETUP.1B exists as opt-in rename-only edit for `ChurchStructureUnit` display names; it cannot move units, change mappings, or affect audience rows.
+- `/staff/structure/mappings/` exists as read-only legacy mapping review for `MinistryContext`, `District`, and `SmallGroup`.
+- CS-SETUP.1C.2 adds summary counts and filters so staff can find unmapped, mapped-inactive, and holding-node mappings.
+- No staff mapping write UI exists yet. Django Admin remains the only write surface for legacy-to-structure mapping fields.
+
+Problem:
+
+- Staff can now see unmapped rows, rows mapped to inactive units, and rows under holding/unassigned nodes.
+- Staff cannot correct the `MinistryContext` / `District` / `SmallGroup` to `ChurchStructureUnit` mapping from staff UI yet.
+- Django Admin can still make these changes, but it is a technical backstop rather than a guided staff workflow.
+- The fix must not blur mapping maintenance with unit lifecycle editing, membership editing, or audience editing.
+
+Recommended next implementation slice:
+
+- Build a narrow mapping-maintenance UI for existing legacy rows only.
+- Support only setting or changing one existing `MinistryContext`, `District`, or `SmallGroup` row's `church_structure_unit` to an existing active `ChurchStructureUnit`.
+- Do not create, delete, activate, deactivate, move, merge, or split legacy rows.
+- Do not create, delete, activate, deactivate, move, merge, split, or rename structure units in this slice.
+- Do not edit `ChurchStructureMembership` rows or member rosters.
+- Do not migrate runtime visibility, backfill audience rows, apply ServiceEvent audience scopes, remove legacy fields, or change consumer matching rules.
+
+Safety rules for CS-SETUP.1D.1:
+
+- Access is limited to staff with an explicit authorized structure setup/mapping capability; do not treat read-only map access as write access.
+- Start from the read-only `/staff/structure/mappings/` page. Show an `Edit Mapping` / `编辑对应关系` action only to authorized staff.
+- Use GET review plus explicit POST update. No inline auto-save.
+- Require a selected target unit to be active.
+- Require the target unit type to match the legacy object type:
+  - `MinistryContext` -> `ministry_context` unit.
+  - `District` -> `district` unit.
+  - `SmallGroup` -> `small_group` unit.
+- Prevent assigning the same active structure unit to multiple active legacy rows of the same type unless implementation review confirms the existing model rules allow it and the implementation plan explicitly justifies the exception.
+- Do not alter `ServiceEventAudienceScope`, `BibleStudySeriesAudienceScope`, `TeamAssignment`, `Profile.small_group`, or `ChurchStructureMembership` rows when a mapping changes.
+- Do not alter ServiceEvent visibility, Bible Study visibility, reading visibility, My Serving behavior, or ordinary-user matching.
+- Write an audit record through Django `LogEntry` or the existing project audit pattern, including before/after mapped unit values and the acting user.
+- Backend validation remains authoritative; UI filtering is only a convenience.
+
+UX proposal:
+
+- Entry point: `/staff/structure/mappings/`.
+- Each eligible row has an `Edit Mapping` / `编辑对应关系` action.
+- The edit page or card shows the legacy object name, legacy type, and active/inactive status.
+- It shows the current mapped unit path and status, including clear empty state copy when unmapped.
+- It offers a target-unit dropdown filtered to active units of the matching type.
+- It shows a warning: `This only updates the setup mapping for future checks and helpers. It does not move members or change who can see events or Bible Study.` / `这里只更新设置对应关系，供后续检查和辅助选择使用；不会移动成员，也不会改变谁可以看到聚会或查经。`
+- Buttons: `Save mapping` / `保存对应关系` and `Cancel` / `取消`.
+- Empty/unmapped states should be plain and actionable: `No mapped structure unit yet` / `尚未对应教会结构单位`.
+- Staff wording should name the action as mapping maintenance, not structure editing, membership editing, or audience editing.
+
+Data contract:
+
+- Mapping changes affect setup readiness indicators and future generation/selection helpers that depend on the legacy-to-unit bridge.
+- Mapping changes do not automatically change existing `ServiceEventAudienceScope` rows.
+- Mapping changes do not automatically change existing `BibleStudySeriesAudienceScope` rows.
+- Mapping changes do not change existing `TeamAssignment` or `TeamAssignmentMember` rows.
+- Mapping changes do not change `Profile.small_group`.
+- Mapping changes do not create, update, end, approve, reject, or cancel `ChurchStructureMembership` rows.
+- Mapping changes do not make `ChurchStructureMembership` a runtime visibility source.
+
+Non-goals:
+
+- No hierarchy create/move/delete/deactivate.
+- No unit merge/split.
+- No member roster management.
+- No membership approval workflow changes.
+- No audience-scope backfill/apply.
+- No consumer migration.
+- No Community Activities.
+- No broad drag-and-drop hierarchy editing.
+- No legacy field removal or deprecation.
+
+Implementation milestone split:
+
+- **CS-SETUP.1D.1 docs-reviewed implementation** — one mapping at a time, with permission, type/active validation, duplicate protection, explicit POST, audit, warnings, and targeted tests.
+- **CS-SETUP.1D.2 optional warning polish / conflict indicators** — add richer conflict indicators after 1D.1 proves useful, such as clearer duplicate-risk, inactive-target, or holding-node cues.
+- **CS-SETUP.1E future structure unit lifecycle design** — design only for create/move/delete/deactivate/merge/split. No implementation until separately approved.
+
+Future implementation tests:
+
+- Permission required: unauthorized users cannot see edit actions, GET the edit page, or POST updates.
+- GET edit page renders the legacy object, current mapping, filtered active matching-type target choices, warning copy, Save, and Cancel.
+- Valid mapping update changes only the selected legacy row's `church_structure_unit`.
+- Reject inactive target unit.
+- Reject wrong unit type.
+- Reject duplicate active mapping when duplicate prevention applies.
+- Audit log is created with before/after mapping context.
+- No changes to `ServiceEventAudienceScope`.
+- No changes to `BibleStudySeriesAudienceScope`.
+- No changes to `ChurchStructureMembership`.
+- No changes to `Profile.small_group`.
+- Bilingual EN/ZH copy renders for warning, empty state, action, save, and cancel labels.
+
+Risks:
+
+- Mapping edits can affect future helpers, setup-readiness indicators, and staff interpretation even when runtime visibility is unchanged.
+- Staff may misunderstand mapping maintenance as moving members, changing group membership, or changing who can see events/studies.
+- Therefore CS-SETUP.1D.1 needs warning copy, a narrow edit surface, strict type/active validation, audit, and explicit non-goals before implementation.
 
 ## 13. Related Documents
 

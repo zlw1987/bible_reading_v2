@@ -27,7 +27,7 @@ FORM_TEXT = {
         "audience_units": "Audience Scope",
         "audience_units_help": (
             "Selected units control which ordinary users can see this gathering. "
-            "Leave this empty to use the fallback audience settings below."
+            "Leave this empty to use the Whole Church / District / Small Group settings below."
         ),
         "audience_scope_root_combo": "Whole Church cannot be combined with other units.",
         "audience_scope_ancestor_combo": (
@@ -90,7 +90,7 @@ FORM_TEXT = {
         "audience_units": "适用范围",
         "audience_units_help": (
             "选择的教会结构单元会决定普通用户能否看到这个聚会。"
-            "留空则使用下方的备用适用范围设置。"
+            "留空则使用下方的全教会 / 区 / 小组设置。"
         ),
         "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
         "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
@@ -235,6 +235,16 @@ class AudienceUnitOptionsMixin:
             except (TypeError, ValueError):
                 continue
         return selected
+
+    def audience_summary(self):
+        count = len(self.audience_selected_ids())
+        if self.language == "zh":
+            if count:
+                return f"适用范围：已选择 {count} 个"
+            return "适用范围：未选择"
+        if count:
+            return f"Audience Scope: {count} selected"
+        return "Audience Scope: none selected"
 
     def _audience_option(self, unit, depth, ancestor_ids, selected, orphan=False):
         compact = compact_unit_label(unit, self.language)

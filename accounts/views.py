@@ -267,23 +267,41 @@ def staff_structure_map(request):
         status=ChurchStructureMembership.STATUS_ACTIVE,
         start_date__lte=today,
     ).filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
-    membership_counts = {
-        row["unit_id"]: row["total"]
-        for row in active_memberships.values("unit_id").annotate(total=Count("id"))
-    }
+    primary_memberships = list(
+        active_memberships.filter(is_primary=True).select_related(
+            "user__profile__small_group",
+        )
+    )
+    direct_primary_user_ids_by_unit = {}
+    for membership in primary_memberships:
+        direct_primary_user_ids_by_unit.setdefault(membership.unit_id, set()).add(
+            membership.user_id
+        )
 
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
     structure_rows = []
     visited = set()
-    counters = {"under_holding": 0, "without_linked_records": 0}
+    counters = {
+        "under_holding": 0,
+        "without_linked_records": 0,
+        "direct_parent_memberships": 0,
+    }
 
     def walk(unit, depth, under_holding):
         visited.add(unit.id)
+        direct_primary_user_ids = set(
+            direct_primary_user_ids_by_unit.get(unit.id, set())
+        )
+        active_children = children.get(unit.id, [])
+        direct_parent_membership_count = (
+            len(direct_primary_user_ids) if active_children else 0
+        )
         row = {
             "unit": unit,
             "name": unit.display_name(language),
             "depth": depth,
-            "membership_count": membership_counts.get(unit.id, 0),
+            "membership_count": 0,
+            "direct_parent_membership_count": direct_parent_membership_count,
             "legacy_names": legacy_names_by_unit.get(unit.id, []),
             "under_holding": under_holding,
             "without_linked_records": False,
@@ -291,15 +309,26 @@ def staff_structure_map(request):
         structure_rows.append(row)
         if under_holding:
             counters["under_holding"] += 1
+        if direct_parent_membership_count:
+            counters["direct_parent_memberships"] += direct_parent_membership_count
         subtree_mapped = unit.id in mapped_unit_ids
+        covered_user_ids = set(direct_primary_user_ids)
         child_under_holding = under_holding or unit.code in holding_codes
-        for child in children.get(unit.id, []):
-            if child.id not in visited and walk(child, depth + 1, child_under_holding):
-                subtree_mapped = True
+        for child in active_children:
+            if child.id not in visited:
+                child_mapped, child_user_ids = walk(
+                    child,
+                    depth + 1,
+                    child_under_holding,
+                )
+                if child_mapped:
+                    subtree_mapped = True
+                covered_user_ids.update(child_user_ids)
         if not subtree_mapped and unit.unit_type != ChurchStructureUnit.UNIT_ROOT:
             row["without_linked_records"] = True
             counters["without_linked_records"] += 1
-        return subtree_mapped
+        row["membership_count"] = len(covered_user_ids)
+        return subtree_mapped, covered_user_ids
 
     roots = [unit for unit in units if unit.parent_id is None]
     roots.sort(
@@ -324,9 +353,6 @@ def staff_structure_map(request):
     membership_without_group = 0
     membership_group_mismatch = 0
     primary_user_ids = set()
-    primary_memberships = active_memberships.filter(is_primary=True).select_related(
-        "user__profile__small_group",
-    )
     for membership in primary_memberships:
         primary_user_ids.add(membership.user_id)
         profile = getattr(membership.user, "profile", None)
@@ -356,6 +382,7 @@ def staff_structure_map(request):
         ).count(),
         "units_without_linked_records": counters["without_linked_records"],
         "units_under_holding": counters["under_holding"],
+        "direct_parent_memberships": counters["direct_parent_memberships"],
         "users_in_unmapped_group": Profile.objects.filter(
             small_group__isnull=False,
             small_group__church_structure_unit__isnull=True,

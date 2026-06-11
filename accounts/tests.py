@@ -3184,7 +3184,7 @@ class StaffStructureMapTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Church Structure Map")
+        self.assertContains(response, "Church Structure & Setup Check")
         self.assertContains(response, "Current Runtime Boundary")
         root_index = content.index("Whole Church")
         cm_index = content.index("Chinese Ministry")
@@ -3225,9 +3225,13 @@ class StaffStructureMapTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "教会架构图")
+        self.assertContains(response, "教会结构与设置检查")
         self.assertContains(response, "当前运行边界")
         self.assertContains(response, "设置就绪指标")
+        self.assertContains(response, "教会结构树")
+        self.assertContains(response, "覆盖成员")
+        self.assertContains(response, "当前资料对应")
+        self.assertNotContains(response, "现有记录")
         self.assertContains(response, "全教会")
         self.assertContains(response, "中文部")
 
@@ -3359,6 +3363,56 @@ class StaffStructureMapTests(TestCase):
         self.assertEqual(group_row["membership_count"], 1)
         self.assertNotContains(response, "counted_member_name")
 
+    def test_structure_map_parent_count_includes_descendant_primary_members(self):
+        self.build_tree()
+        first_member = User.objects.create_user(
+            username="covered_child_one",
+            password="MemberPass123!",
+        )
+        second_member = User.objects.create_user(
+            username="covered_child_two",
+            password="MemberPass123!",
+        )
+        self.create_active_primary_membership(first_member, self.group_unit)
+        self.create_active_primary_membership(second_member, self.group_unit)
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        rows_by_code = {
+            row["unit"].code: row for row in response.context["structure_rows"]
+        }
+        self.assertEqual(rows_by_code["R4"]["membership_count"], 2)
+        self.assertEqual(rows_by_code["D2"]["membership_count"], 2)
+        self.assertEqual(rows_by_code["CM"]["membership_count"], 2)
+        self.assertContains(response, "Covered members: 2")
+
+    def test_structure_map_flags_direct_primary_memberships_on_parent_units(self):
+        self.build_tree()
+        parent_member = User.objects.create_user(
+            username="parent_level_member",
+            password="MemberPass123!",
+        )
+        self.create_active_primary_membership(parent_member, self.cm_unit)
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["indicators"]["direct_parent_memberships"], 1)
+        cm_row = next(
+            row
+            for row in response.context["structure_rows"]
+            if row["unit"].id == self.cm_unit.id
+        )
+        self.assertEqual(cm_row["membership_count"], 1)
+        self.assertEqual(cm_row["direct_parent_membership_count"], 1)
+        self.assertContains(response, "Direct member records on parent units")
+        self.assertNotContains(response, "parent_level_member")
+
     def test_active_root_unit_count_flags_zero_and_multiple_roots(self):
         self.build_tree()
         self.login_staff()
@@ -3408,7 +3462,7 @@ class StaffStructureMapTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.url)
-        self.assertContains(response, "Structure Map")
+        self.assertContains(response, "Structure & Setup Check")
 
 
 class StaffModerationQueueTests(TestCase):

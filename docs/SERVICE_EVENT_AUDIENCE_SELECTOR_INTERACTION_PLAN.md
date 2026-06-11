@@ -4,7 +4,7 @@
 
 SE-AS.5A is the docs-only interaction plan for the SE-AS.5 staff audience selector UI. SE-AS.5 is now implemented against this contract.
 
-Status: SE-AS.5A planning is complete, and SE-AS.5 implementation is complete. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker, staff detail shows effective audience source and readable labels, and empty selections keep legacy fallback behavior. No schema/model field change, migration, data backfill, Community Activities, CS-MAP.3, CS-SETUP.1, `ChurchStructureMembership` visibility migration, or ministry scheduling behavior change was added.
+Status: SE-AS.5A planning is complete, SE-AS.5 implementation is complete, and SE-AS.5B post-commit UI/wording cleanup is complete. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker collapsed by default with selected-count summary copy; staff detail shows effective audience source and readable labels; empty selections keep legacy fallback behavior. No schema/model field change, migration, data backfill, Community Activities, CS-MAP.3, CS-SETUP.1, `ChurchStructureMembership` visibility migration, or ministry scheduling behavior change was added.
 
 Current local baseline:
 
@@ -62,7 +62,7 @@ The new picker and legacy fields are not combined filters.
 Recommended legacy-field decision for SE-AS.5:
 
 - Keep `scope_type`, `district`, and `small_group` editable.
-- Visually group and label them as `Fallback audience settings` / `备用适用范围设置`.
+- Visually group and label them as `Used when no structure audience is selected` / `未选择上方范围时使用（旧版）`.
 - Do not delete, deprecate, hide permanently, migrate away from, or make schema changes to these fields in SE-AS.5.
 - Do not run data migration or automatic backfill as part of SE-AS.5.
 
@@ -71,9 +71,9 @@ Recommended legacy-field decision for SE-AS.5:
 The staff UI should use direct operational wording:
 
 - Picker label: `Audience Scope` / `适用范围`.
-- Picker help text: `Selected units control which ordinary users can see this gathering. Leave this empty to use the fallback audience settings below.` / `选择的教会结构单元会决定普通用户能否看到这个聚会。留空则使用下方的备用适用范围设置。`
-- Fallback group heading: `Fallback audience settings` / `备用适用范围设置`.
-- Fallback group help text: `Used only when no structure audience is selected. These fields are not an extra filter when structure audience units are selected.` / `仅在没有选择教会结构适用范围时使用。选择了教会结构单元后，这些字段不会再作为额外筛选条件。`
+- Picker help text after SE-AS.5B: `Selected units control which ordinary users can see this gathering. Leave this empty to use the Whole Church / District / Small Group settings below.` / `选择的教会结构单元会决定普通用户能否看到这个聚会。留空则使用下方的全教会 / 区 / 小组设置。`
+- Fallback group heading after SE-AS.5B: `Used when no structure audience is selected` / `未选择上方范围时使用（旧版）`.
+- Fallback group help text after SE-AS.5B: `If no structure unit is selected above, the event uses these Whole Church / District / Small Group settings. Once structure units are selected, these fields are kept only as fallback records and are not an extra filter.` / `如果上方没有选择任何教会结构单元，系统会使用这里的全教会 / 区 / 小组设置。上方一旦有选择，这里只作为备用记录，不会再额外筛选。`
 - Effective audience source, structure-governed: `Visibility source: Structure audience` / `可见范围来源：教会结构适用范围`.
 - Effective audience source, fallback-governed: `Visibility source: Legacy fallback audience` / `可见范围来源：备用适用范围`.
 
@@ -138,6 +138,7 @@ Recurring create should behave as one shared event template:
 Implemented shape:
 
 - Reuse `templates/shared/_church_structure_unit_audience_picker.html`.
+- SE-AS.5B wraps the ServiceEvent create/edit and recurring create picker in a native collapsed-by-default `<details>` control. The summary shows `Audience Scope: none selected` / `Audience Scope: N selected` or `适用范围：未选择` / `适用范围：已选择 N 个`; validation errors auto-open the picker.
 - Add a ServiceEvent-specific optional `audience_units` field/helper pattern parallel to `BibleStudySeriesForm`; unlike Bible Study Schedule, ServiceEvent keeps empty-picker fallback behavior instead of requiring the picker.
 - Save selected units through `ServiceEventAudienceScope` rows in the same transaction as the event save. Edit replaces rows atomically; clearing all units deletes rows and restores fallback.
 - Prefetch `audience_scope_links__unit` for detail/list surfaces that display effective audience.
@@ -171,6 +172,7 @@ SE-AS.5A and the later SE-AS.5 selector implementation must not include:
 SE-AS.5 is complete using this interaction contract:
 
 - Picker appears on single create, single edit, and recurring create.
+- The picker is collapsed by default on those forms after SE-AS.5B, with validation errors exposed by auto-opening the section.
 - Staff detail shows effective audience source and readable labels.
 - Ordinary detail either omits audience display or shows only simple readable labels.
 - Legacy fields remain editable as fallback settings.

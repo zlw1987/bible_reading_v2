@@ -610,15 +610,37 @@ class ServiceEventFoundationTests(TestCase):
         self.assertFalse(english_form.fields["audience_units"].required)
         self.assertEqual(english_form.fields["audience_units"].label, "Audience Scope")
         self.assertIn(
-            "Leave this empty to use the fallback audience settings below",
+            "Leave this empty to use the Whole Church / District / Small Group settings below",
             english_form.fields["audience_units"].help_text,
         )
         self.assertIn("audience_units", chinese_form.fields)
         self.assertEqual(chinese_form.fields["audience_units"].label, "适用范围")
         self.assertIn(
-            "留空则使用下方的备用适用范围设置",
+            "留空则使用下方的全教会 / 区 / 小组设置",
             chinese_form.fields["audience_units"].help_text,
         )
+
+    def test_service_event_create_form_collapses_audience_picker_by_default(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_service_event"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<details class="audience-picker-shell" >', content)
+        self.assertContains(response, "Audience Scope: none selected")
+
+    def test_recurring_create_form_collapses_audience_picker_by_default(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("create_recurring_service_events"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('<details class="audience-picker-shell" >', content)
+        self.assertContains(response, "Audience Scope: none selected")
 
     def test_service_event_edit_form_preselects_existing_audience_rows(self):
         event = self.create_event()
@@ -628,6 +650,44 @@ class ServiceEventFoundationTests(TestCase):
         form = ServiceEventForm(instance=event, language="en")
 
         self.assertEqual(form.audience_selected_ids(), {unit.id})
+
+    def test_service_event_edit_form_summary_counts_selected_audience_rows(self):
+        self.set_language("en")
+        event = self.create_event()
+        first_unit = self.create_structure_unit("YOUTH", "Youth Fellowship")
+        second_unit = self.create_structure_unit("R4", "Rainbow 4")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=first_unit)
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=second_unit)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.get(reverse("edit_service_event", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Audience Scope: 2 selected")
+
+    def test_service_event_form_uses_clearer_fallback_wording_in_both_languages(self):
+        self.client.login(username="pastor_event", password="testpass123")
+        self.set_language("en")
+
+        english_response = self.client.get(reverse("create_service_event"))
+
+        self.assertContains(
+            english_response,
+            "Used when no structure audience is selected",
+        )
+        self.assertContains(
+            english_response,
+            "If no structure unit is selected above, the event uses these Whole Church / District / Small Group settings.",
+        )
+        self.set_language("zh")
+
+        chinese_response = self.client.get(reverse("create_service_event"))
+
+        self.assertContains(chinese_response, "未选择上方范围时使用（旧版）")
+        self.assertContains(
+            chinese_response,
+            "如果上方没有选择任何教会结构单元，系统会使用这里的全教会 / 区 / 小组设置。",
+        )
 
     def test_service_event_form_hides_cancelled_status_for_active_event(self):
         event = self.create_event(status=ServiceEvent.STATUS_PUBLISHED)
@@ -858,6 +918,7 @@ class ServiceEventFoundationTests(TestCase):
             response,
             "Do not select both a unit and one of its parent or child units.",
         )
+        self.assertContains(response, '<details class="audience-picker-shell" open>')
         self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
@@ -2523,4 +2584,4 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-audience-picker")
-        self.assertContains(response, "Fallback audience settings")
+        self.assertContains(response, "Used when no structure audience is selected")

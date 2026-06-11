@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 
 {% block title %}
-{% if language == "zh" %}教会架构图{% else %}Church Structure Map{% endif %}
+{% if language == "zh" %}教会结构与设置检查{% else %}Church Structure & Setup Check{% endif %}
 {% endblock %}
 
 {% block content %}
 <section class="page-header">
-    <h1 class="page-title">{% if language == "zh" %}教会架构图{% else %}Church Structure Map{% endif %}</h1>
+    <h1 class="page-title">{% if language == "zh" %}教会结构与设置检查{% else %}Church Structure & Setup Check{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        只读页面：查看教会架构与设置就绪情况；如需修改请使用 Django 后台。
+        只读页面。这里显示教会结构、当前系统资料的对应关系，以及设置检查提醒；不显示成员名单。
         {% else %}
-        Read-only page: review the church structure and setup readiness; use Django Admin to make changes.
+        Read-only page. This shows the church structure, current data mappings, and setup check reminders; member names are not shown.
         {% endif %}
     </p>
 </section>
@@ -44,12 +44,13 @@
         <li>{% if language == "zh" %}未关联结构单元的现有事工范围{% else %}Current ministry contexts without a linked unit{% endif %}: <strong>{{ indicators.unmapped_ministry_contexts }}</strong></li>
         <li>{% if language == "zh" %}未关联结构单元的现有区{% else %}Current districts without a linked unit{% endif %}: <strong>{{ indicators.unmapped_districts }}</strong></li>
         <li>{% if language == "zh" %}未关联结构单元的现有小组{% else %}Current small groups without a linked unit{% endif %}: <strong>{{ indicators.unmapped_small_groups }}</strong></li>
-        <li>{% if language == "zh" %}本级及下级都未关联现有记录的单元{% else %}Units with no linked current records at or below them{% endif %}: <strong>{{ indicators.units_without_linked_records }}</strong></li>
+        <li>{% if language == "zh" %}本级及下级都未关联当前资料的单元{% else %}Units with no linked current data mapping at or below them{% endif %}: <strong>{{ indicators.units_without_linked_records }}</strong></li>
         <li>{% if language == "zh" %}位于未分配暂存节点下的单元{% else %}Units under the unassigned holding nodes{% endif %}: <strong>{{ indicators.units_under_holding }}</strong></li>
         <li>{% if language == "zh" %}所在小组未关联结构单元的用户{% else %}Users whose current group has no linked unit{% endif %}: <strong>{{ indicators.users_in_unmapped_group }}</strong></li>
-        <li>{% if language == "zh" %}有已确认成员记录但没有现有小组的用户{% else %}Users with an approved membership but no current group{% endif %}: <strong>{{ indicators.membership_without_group }}</strong></li>
-        <li>{% if language == "zh" %}有现有小组但没有已确认成员记录的用户{% else %}Users with a current group but no approved membership{% endif %}: <strong>{{ indicators.group_without_membership }}</strong></li>
-        <li>{% if language == "zh" %}现有小组与成员记录单元不一致的用户{% else %}Users whose current group and membership point to different units{% endif %}: <strong>{{ indicators.membership_group_mismatch }}</strong></li>
+        <li>{% if language == "zh" %}有已确认归属但没有现有小组的用户{% else %}Users with an approved membership but no current group{% endif %}: <strong>{{ indicators.membership_without_group }}</strong></li>
+        <li>{% if language == "zh" %}有现有小组但没有已确认归属的用户{% else %}Users with a current group but no approved membership{% endif %}: <strong>{{ indicators.group_without_membership }}</strong></li>
+        <li>{% if language == "zh" %}现有小组与归属单元不一致的用户{% else %}Users whose current group and membership point to different units{% endif %}: <strong>{{ indicators.membership_group_mismatch }}</strong></li>
+        <li>{% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: <strong>{{ indicators.direct_parent_memberships }}</strong></li>
         <li>
             {% if language == "zh" %}启用的全教会根单元（应为 1）{% else %}Active whole-church root units (expected: 1){% endif %}: <strong>{{ indicators.active_root_units }}</strong>
             {% if indicators.active_root_units != 1 %}
@@ -73,13 +74,13 @@
 
 <section class="card">
     <h2 class="card-title">
-        {% if language == "zh" %}架构树{% else %}Structure Tree{% endif %}
+        {% if language == "zh" %}教会结构树{% else %}Church Structure Tree{% endif %}
     </h2>
     <p class="muted">
         {% if language == "zh" %}
-        仅显示启用的单元；数字为已确认成员记录数，不显示成员名单。
+        仅显示启用的单元；数字为本级及下级覆盖成员数，不显示成员名单。
         {% else %}
-        Active units only; numbers are approved membership counts, with no member name lists.
+        Active units only; numbers are descendant-inclusive covered member counts, with no member name lists.
         {% endif %}
     </p>
     <div class="structure-map-tree">
@@ -87,16 +88,21 @@
         <div class="structure-map-row" style="--structure-depth: {{ row.depth }};">
             <span class="structure-map-unit-name">{{ row.name }}</span>
             <span class="structure-map-meta">
-                {% if language == "zh" %}成员记录{% else %}Memberships{% endif %}: {{ row.membership_count }}
+                {% if language == "zh" %}覆盖成员{% else %}Covered members{% endif %}: {{ row.membership_count }}
             </span>
             {% if row.legacy_names %}
             <span class="structure-map-meta">
-                {% if language == "zh" %}现有记录{% else %}Current records{% endif %}: {{ row.legacy_names|join:", " }}
+                {% if language == "zh" %}当前资料对应{% else %}Current data mapping{% endif %}: {{ row.legacy_names|join:", " }}
+            </span>
+            {% endif %}
+            {% if row.direct_parent_membership_count %}
+            <span class="status status-warning">
+                {% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: {{ row.direct_parent_membership_count }}
             </span>
             {% endif %}
             {% if row.without_linked_records %}
             <span class="status status-warning">
-                {% if language == "zh" %}未关联现有记录{% else %}No linked current records{% endif %}
+                {% if language == "zh" %}未关联当前资料{% else %}No linked current data mapping{% endif %}
             </span>
             {% endif %}
             {% if row.under_holding %}

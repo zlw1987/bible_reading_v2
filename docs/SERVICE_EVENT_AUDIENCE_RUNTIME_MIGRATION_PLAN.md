@@ -245,6 +245,6 @@ SE-AS.3 (this task) does NOT implement, and this plan by itself does not authori
 
 ## 12. Open Decisions for Later Milestones
 
-- Final bilingual wording for SE-AS.5 is implemented as Audience Scope / 适用范围 for the new picker and Fallback audience settings / 备用适用范围设置 for legacy fields.
-- Legacy scope field editability for SE-AS.5 is answered and implemented: keep `scope_type`, `district`, and `small_group` editable, but group/label them as fallback audience settings; no deletion, deprecation, schema change, or data migration.
+- Final bilingual wording for SE-AS.5B is implemented as Audience Scope / 适用范围 for the new picker and Used when no structure audience is selected / 未选择上方范围时使用（旧版） for legacy fallback fields.
+- Legacy scope field editability for SE-AS.5 is answered and implemented: keep `scope_type`, `district`, and `small_group` editable, but group/label them as legacy fallback fields used when no structure audience is selected; no deletion, deprecation, schema change, or data migration.
 - Whether/when to run the SE-AS.6 backfill at all, and whether to include global events in it.

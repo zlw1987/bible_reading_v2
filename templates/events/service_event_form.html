@@ -43,19 +43,24 @@
 
     {% with audience_field=form.audience_units %}
     <div class="form-row" data-field="audience_units">
-        <label class="form-label">{{ audience_field.label }}</label>
-        {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
-        {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
+        <details class="audience-picker-shell" {% if audience_field.errors %}open{% endif %}>
+            <summary>{{ form.audience_summary }}</summary>
+            <div class="audience-picker-shell-body">
+                <label class="form-label">{{ audience_field.label }}</label>
+                {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
+                {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
+            </div>
+        </details>
         {{ audience_field.errors }}
     </div>
     {% endwith %}
 
     <div class="form-row">
         <h2 class="card-title">
-            {% if language == "zh" %}备用适用范围设置{% else %}Fallback audience settings{% endif %}
+            {% if language == "zh" %}未选择上方范围时使用（旧版）{% else %}Used when no structure audience is selected{% endif %}
         </h2>
         <p class="muted">
-            {% if language == "zh" %}仅在没有选择教会结构适用范围时使用。选择了教会结构单元后，这些字段不会再作为额外筛选条件。{% else %}Used only when no structure audience is selected. These fields are not an extra filter when structure audience units are selected.{% endif %}
+            {% if language == "zh" %}如果上方没有选择任何教会结构单元，系统会使用这里的全教会 / 区 / 小组设置。上方一旦有选择，这里只作为备用记录，不会再额外筛选。{% else %}If no structure unit is selected above, the event uses these Whole Church / District / Small Group settings. Once structure units are selected, these fields are kept only as fallback records and are not an extra filter.{% endif %}
         </p>
     </div>
 

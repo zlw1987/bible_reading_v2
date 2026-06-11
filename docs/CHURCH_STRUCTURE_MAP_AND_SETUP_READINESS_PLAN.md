@@ -11,7 +11,7 @@ This plan responds to two June 2026 demo feedback items:
 
 This plan defines a docs-first response: record the modular adoption principle, then propose a read-only staff structure map with mapping-health indicators (CS-MAP.2) before any setup/edit UI is considered. Later milestones each require separate explicit approval; nothing beyond this document is authorized by CS-MAP.1.
 
-Status update: CS-MAP.2 is now complete (see Section 7 for the completion note). CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6.
+Status update: CS-MAP.2 is now complete (see Section 7 for the completion note), and SE-AS.5B post-commit cleanup clarified the visible wording and count semantics on the shipped read-only map. CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6.
 
 ## 2. Current Foundation Summary
 
@@ -90,12 +90,12 @@ Sequencing rules:
 
 ## 7. CS-MAP.2 Implementation Contract
 
-Status: completed. CS-MAP.2 is implemented as the read-only staff Church Structure Map at `/staff/structure/`: it renders the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and the Section 8 setup-readiness indicators; it has no write actions (GET-only), no schema/migration changes, no runtime visibility changes, and no setup/edit UI. Django Admin remains the structure write surface. The contract below was the implementation basis and matches the shipped page.
+Status: completed. CS-MAP.2 is implemented as the read-only staff Church Structure Map at `/staff/structure/`: it renders the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and the Section 8 setup-readiness indicators; it has no write actions (GET-only), no schema/migration changes, no runtime visibility changes, and no setup/edit UI. SE-AS.5B clarified the page as `Church Structure & Setup Check` / `教会结构与设置检查`, renamed per-row mappings to `Current data mapping` / `当前资料对应`, and changed the main per-row member number to descendant-inclusive `Covered members` / `覆盖成员`. Django Admin remains the structure write surface.
 
 - Route: suggested `/staff/structure/`, linked from the existing `/staff/` overview.
 - Access: permission-protected, matching the existing staff overview gating pattern (staff/superuser or existing staff capability); ordinary users denied. No new capability unless implementation review proves a real gap.
 - Renders the active `ChurchStructureUnit` hierarchy with indentation/path context, using `display_name(language)` for bilingual names where available; inactive units visually distinct or behind a toggle.
-- Per-unit context is counts only: active `ChurchStructureMembership` count, and which legacy `MinistryContext` / `District` / `SmallGroup` rows map to the unit. No member name rosters.
+- Per-unit context is counts only: descendant-inclusive active primary `ChurchStructureMembership` covered-member count, and which active legacy `MinistryContext` / `District` / `SmallGroup` rows map to the unit as current data mapping. No member name rosters.
 - Shows the mapping-health / setup-readiness indicators defined in Section 8, each linking to the existing Django Admin or staff workflow where the issue can be reviewed — no fix actions on the page itself.
 - Zero write actions. Zero schema changes. Zero runtime behavior changes anywhere else: event/study/reading visibility untouched, no new queries on non-staff paths.
 - Staff wording follows `docs/UI_UX_GUARDRAILS.md` staff rules: transition state explicit (current runtime small group vs future foundation membership), no "runtime source of truth" / "legacy sync target" architecture jargon in visible UI, EN/ZH copy paired.
@@ -111,7 +111,8 @@ These are health indicators / setup readiness indicators, following the PP-SA.5 
 4. Users whose current group is unmapped: users with `Profile.small_group` set where that `SmallGroup` has no `church_structure_unit`. Unique user count.
 5. Runtime/foundation belonging drift: users with an active primary `ChurchStructureMembership` whose membership unit differs from `Profile.small_group.church_structure_unit`, including cases where either side is missing (active primary membership but no runtime group, or runtime group but no active primary membership). Unique user count per drift category; categories should be displayed separately, not summed into one number.
 6. Active root units: the count of active units with `unit_type = root`. Exactly one is expected; zero or more than one is flagged. (The database does not enforce a single root; seeding creates one `CHURCH` root.)
-7. Optional, if cheap at implementation time — inactive units still referenced: inactive units referenced by legacy mapping fields or by stored audience rows (`BibleStudySeriesAudienceScope`, `ServiceEventAudienceScope`). Display-only context: stored audience rows on later-inactivated units are not automatically an error (see the SE-AS plan's parity note), but staff should be able to see them. Unique unit count.
+7. Direct member records on parent units: active primary `ChurchStructureMembership` users assigned directly to a non-leaf active unit. This is a setup warning only; it does not block model saves or approval workflow.
+8. Optional, if cheap at implementation time — inactive units still referenced: inactive units referenced by legacy mapping fields or by stored audience rows (`BibleStudySeriesAudienceScope`, `ServiceEventAudienceScope`). Display-only context: stored audience rows on later-inactivated units are not automatically an error (see the SE-AS plan's parity note), but staff should be able to see them. Unique unit count.
 
 Each indicator's exact queryset is part of the CS-MAP.2 implementation contract and must have a targeted test against constructed fixture data.
 

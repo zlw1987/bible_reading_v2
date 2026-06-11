@@ -1716,6 +1716,23 @@ th {
     }
 }
 /* ChurchStructureUnit audience picker (BS-AS.2) */
+.audience-picker-shell {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-soft);
+}
+
+.audience-picker-shell summary {
+    padding: 10px 12px;
+    font-weight: 700;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.audience-picker-shell-body {
+    padding: 0 10px 10px;
+}
+
 .audience-picker {
     border: 1px solid var(--border);
     border-radius: 12px;

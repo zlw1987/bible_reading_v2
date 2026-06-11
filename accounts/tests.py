@@ -3865,10 +3865,16 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "Ministry Contexts")
         self.assertContains(response, "Districts")
         self.assertContains(response, "Small Groups")
-        # The read-only safety note is present.
+        # The page is no longer labelled read-only now that authorized staff
+        # can edit one mapping at a time; the safety note scopes mapping edits.
+        self.assertNotContains(response, "Read-only page")
         self.assertContains(
             response,
-            "This page reviews the current data mapping only.",
+            "Mapping edits update setup mapping only.",
+        )
+        self.assertContains(
+            response,
+            "edit one setup mapping at a time",
         )
 
     def test_bilingual_labels_in_chinese(self):
@@ -3882,9 +3888,14 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "事工范围")
         self.assertContains(response, "区")
         self.assertContains(response, "小组")
+        self.assertNotContains(response, "只读页面")
         self.assertContains(
             response,
-            "此页面只用于检查当前资料对应关系",
+            "编辑对应关系只会更新设置对应关系",
+        )
+        self.assertContains(
+            response,
+            "有权限时可逐条编辑设置对应关系",
         )
 
     def test_mapped_active_row_display(self):
@@ -4188,6 +4199,399 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "对应状态总览")
         self.assertContains(response, "需要检查")
+
+
+class StaffStructureMappingEditTests(TestCase):
+    """CS-SETUP.1D.1: one-row-at-a-time legacy -> structure mapping edit."""
+
+    def setUp(self):
+        # Superuser holds every change permission implicitly.
+        self.admin = User.objects.create_user(
+            username="map_edit_admin",
+            password="AdminPass123!",
+            is_staff=True,
+            is_superuser=True,
+        )
+        # Staff who can view structure pages but hold no model change perms.
+        self.viewer = User.objects.create_user(
+            username="map_edit_viewer",
+            password="ViewerPass123!",
+            is_staff=True,
+        )
+        # Staff authorized for SmallGroup mappings only.
+        self.sg_staff = User.objects.create_user(
+            username="map_edit_sg",
+            password="SgPass123!",
+            is_staff=True,
+        )
+        from django.contrib.auth.models import Permission
+
+        self.sg_staff.user_permissions.add(
+            Permission.objects.get(
+                codename="change_smallgroup",
+                content_type__app_label="accounts",
+            )
+        )
+        self.normal_user = User.objects.create_user(
+            username="map_edit_plain",
+            password="PlainPass123!",
+        )
+
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.sg_unit_1 = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SGU1",
+            name="彩虹单元",
+            name_en="Rainbow Unit",
+        )
+        self.sg_unit_2 = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SGU2",
+            name="日出单元",
+            name_en="Sunrise Unit",
+        )
+        self.sg_unit_inactive = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SGU9",
+            name="旧单元",
+            name_en="Old Unit",
+            is_active=False,
+        )
+        self.district_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="DU1",
+            name="北区",
+            name_en="North District",
+        )
+
+        self.group = SmallGroup.objects.create(name="Editable Group")
+
+        self.review_url = reverse("staff_structure_mapping_review")
+
+    def edit_url(self, legacy_type, pk):
+        return reverse(
+            "staff_structure_mapping_edit", args=[legacy_type, pk]
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def login_admin(self):
+        self.client.login(username="map_edit_admin", password="AdminPass123!")
+
+    def login_viewer(self):
+        self.client.login(
+            username="map_edit_viewer", password="ViewerPass123!"
+        )
+
+    def login_sg_staff(self):
+        self.client.login(username="map_edit_sg", password="SgPass123!")
+
+    # --- entry point / action visibility ------------------------------------
+
+    def test_unauthorized_staff_sees_no_edit_action(self):
+        self.set_language("en")
+        self.login_viewer()
+
+        response = self.client.get(self.review_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Edit Mapping")
+        self.assertNotContains(
+            response, self.edit_url("small-group", self.group.pk)
+        )
+
+    def test_authorized_staff_sees_edit_action_for_permitted_rows(self):
+        self.set_language("en")
+        District.objects.create(name="No-Perm District")
+        self.login_sg_staff()
+
+        response = self.client.get(self.review_url)
+
+        self.assertEqual(response.status_code, 200)
+        # SmallGroup rows expose the in-app edit action.
+        self.assertContains(response, "Edit Mapping")
+        self.assertContains(
+            response, self.edit_url("small-group", self.group.pk)
+        )
+        # District rows do not, because this staff lacks change_district.
+        self.assertNotContains(response, "/district/")
+
+    # --- permission gating on the edit view ---------------------------------
+
+    def test_normal_user_redirected(self):
+        self.client.login(username="map_edit_plain", password="PlainPass123!")
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk)
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_view_only_staff_cannot_get_or_post(self):
+        self.login_viewer()
+        url = self.edit_url("small-group", self.group.pk)
+
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 403)
+
+        post_response = self.client.post(
+            url, {"church_structure_unit": self.sg_unit_1.pk}
+        )
+        self.assertEqual(post_response.status_code, 403)
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_unknown_legacy_type_is_404(self):
+        self.login_admin()
+
+        response = self.client.get(self.edit_url("widget", self.group.pk))
+
+        self.assertEqual(response.status_code, 404)
+
+    # --- GET render ---------------------------------------------------------
+
+    def test_get_edit_page_renders_expected_content(self):
+        self.set_language("en")
+        self.group.church_structure_unit = self.sg_unit_1
+        self.group.save(update_fields=["church_structure_unit"])
+        self.login_sg_staff()
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Legacy object info + current mapping.
+        self.assertContains(response, "Editable Group")
+        self.assertContains(response, "Small Group")
+        self.assertContains(response, "Whole Church &gt; Rainbow Unit")
+        # Active matching-type choices, but not inactive / wrong-type units.
+        self.assertContains(response, "Sunrise Unit")
+        self.assertNotContains(response, "Old Unit")
+        self.assertNotContains(response, "North District")
+        # Warning copy + Save / Cancel.
+        self.assertContains(
+            response,
+            "This only updates the setup mapping for future checks and "
+            "helpers.",
+        )
+        self.assertContains(response, "Save mapping")
+        self.assertContains(response, "Cancel")
+
+    def test_get_edit_page_unmapped_empty_state(self):
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No mapped structure unit yet")
+
+    def test_bilingual_copy_renders(self):
+        self.set_language("zh")
+        self.login_sg_staff()
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk)
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "编辑对应关系")
+        self.assertContains(response, "保存对应关系")
+        self.assertContains(response, "取消")
+        self.assertContains(
+            response,
+            "这里只更新设置对应关系，供后续检查和辅助选择使用",
+        )
+        self.assertContains(response, "尚未对应教会结构单位")
+
+    # --- valid update -------------------------------------------------------
+
+    def test_valid_update_changes_only_this_row(self):
+        other = SmallGroup.objects.create(
+            name="Untouched Group",
+            church_structure_unit=self.sg_unit_2,
+        )
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk, "status": "unmapped"},
+        )
+
+        self.assertRedirects(
+            response, f"{self.review_url}?status=unmapped"
+        )
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.church_structure_unit_id, self.sg_unit_1.id)
+        # The other row is untouched.
+        other.refresh_from_db()
+        self.assertEqual(other.church_structure_unit_id, self.sg_unit_2.id)
+
+    def test_valid_update_writes_logentry(self):
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        self.login_sg_staff()
+        self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        ct = ContentType.objects.get_for_model(SmallGroup)
+        entry = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.group.id),
+            user=self.sg_staff,
+        ).first()
+        self.assertIsNotNone(entry)
+        # Before/after mapped-unit context is recorded.
+        self.assertIn("None", entry.change_message)
+        self.assertIn(str(self.sg_unit_1.pk), entry.change_message)
+
+    def test_keeping_same_mapping_is_allowed(self):
+        # Legacy drift: two active rows already map to the same unit. Editing
+        # one row but keeping its current mapping must still be allowed.
+        self.group.church_structure_unit = self.sg_unit_1
+        self.group.save(update_fields=["church_structure_unit"])
+        SmallGroup.objects.create(
+            name="Drift Twin",
+            church_structure_unit=self.sg_unit_1,
+        )
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        self.assertRedirects(response, self.review_url)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.church_structure_unit_id, self.sg_unit_1.id)
+
+    # --- validation rejections ---------------------------------------------
+
+    def test_inactive_target_rejected(self):
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_inactive.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "inactive")
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_wrong_unit_type_rejected(self):
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.district_unit.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "does not match")
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_missing_target_rejected(self):
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": ""},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please choose a structure unit.")
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_duplicate_active_mapping_rejected(self):
+        self.set_language("en")
+        SmallGroup.objects.create(
+            name="Existing Active",
+            church_structure_unit=self.sg_unit_1,
+        )
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Another active record is already mapped")
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    # --- POST-only / GET does not save -------------------------------------
+
+    def test_get_with_query_does_not_save(self):
+        self.login_sg_staff()
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    # --- safety: no side effects on other systems --------------------------
+
+    def test_update_does_not_change_audience_membership_or_profile(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import BibleStudySeriesAudienceScope
+
+        # A profile whose legacy small group is the row being remapped: its
+        # Profile.small_group link must be untouched by a mapping edit.
+        profile = self.normal_user.profile
+        profile.small_group = self.group
+        profile.save(update_fields=["small_group"])
+
+        before = (
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchStructureMembership.objects.count(),
+        )
+        self.login_sg_staff()
+
+        self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        after = (
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchStructureMembership.objects.count(),
+        )
+        self.assertEqual(before, after)
+        profile.refresh_from_db()
+        self.assertEqual(profile.small_group_id, self.group.id)
 
 
 class StaffModerationQueueTests(TestCase):

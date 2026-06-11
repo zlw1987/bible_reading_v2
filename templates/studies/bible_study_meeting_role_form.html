@@ -31,6 +31,9 @@
     <div class="form-row">
         {{ field.label_tag }}
         {{ field }}
+        {% if field.help_text %}
+        <p class="muted">{{ field.help_text }}</p>
+        {% endif %}
         {{ field.errors }}
     </div>
     {% endfor %}

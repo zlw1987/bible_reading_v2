@@ -816,6 +816,15 @@ MEETING_ROLE_FORM_TEXT = {
         "support": "Support",
         "host": "Host",
         "display_name_placeholder": "Fallback name if no user is selected",
+        "user_help": (
+            "Choose a linked user when this person has an account. Linked users "
+            'can be recognized later for personalized Today "my role" display.'
+        ),
+        "display_name_help": (
+            "Use only for guests or people without accounts. Display-name-only "
+            'roles still show on meeting detail, but cannot be treated as "my role".'
+        ),
+        "assignee_required": "Choose a user or enter a display name for this role.",
         "notes_placeholder": "Preparation notes for this role.",
         "notes_en_placeholder": "Optional English notes.",
     },
@@ -831,6 +840,15 @@ MEETING_ROLE_FORM_TEXT = {
         "support": "配搭",
         "host": "接待",
         "display_name_placeholder": "未选择用户时显示的姓名",
+        "user_help": (
+            "如果这位同工已有账号，请选择用户。已连接用户以后可以用于 Today "
+            "页面的“我的分工”显示。"
+        ),
+        "display_name_help": (
+            "仅用于访客或没有账号的人。只填写显示姓名的分工仍会显示在聚会详情，"
+            "但不能作为“我的分工”识别。"
+        ),
+        "assignee_required": "请为这个分工选择用户，或填写显示姓名。",
         "notes_placeholder": "这个分工的预备备注。",
         "notes_en_placeholder": "可选英文备注。",
     },
@@ -858,6 +876,7 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
 
     def __init__(self, *args, language="en", meeting=None, **kwargs):
         self.meeting = meeting
+        self.language = language
         super().__init__(*args, **kwargs)
         text = meeting_role_form_text(language)
 
@@ -880,6 +899,8 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
                 user_filter |= Q(id=self.instance.user_id)
             users = users.filter(user_filter)
         self.fields["user"].queryset = users.distinct().order_by("username")
+        self.fields["user"].help_text = text["user_help"]
+        self.fields["display_name"].help_text = text["display_name_help"]
 
         self.fields["display_name"].widget.attrs.update(
             {"placeholder": text["display_name_placeholder"]}
@@ -890,6 +911,18 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
         self.fields["notes_en"].widget.attrs.update(
             {"placeholder": text["notes_en_placeholder"]}
         )
+
+    def clean(self):
+        cleaned = super().clean()
+        user = cleaned.get("user")
+        display_name = (cleaned.get("display_name") or "").strip()
+
+        if not user and not display_name:
+            text = meeting_role_form_text(self.language)
+            self.add_error("display_name", text["assignee_required"])
+
+        cleaned["display_name"] = display_name
+        return cleaned
 
 
 MEETING_WORSHIP_FORM_TEXT = {

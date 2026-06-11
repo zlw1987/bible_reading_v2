@@ -514,6 +514,119 @@ def staff_structure_unit_rename(request, unit_id):
 
 
 @staff_member_required
+@require_GET
+def staff_structure_mapping_review(request):
+    """Read-only legacy -> structure mapping review (CS-SETUP.1C.1).
+
+    Staff-only page that lists every legacy MinistryContext / District /
+    SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
+    simple mapping-status label. It is review-only: there is no POST handler,
+    no form, and it changes no mappings, units, memberships, audience rows, or
+    visibility. Admin edit links appear only when the viewer holds the matching
+    Django Admin change permission. Like /staff/structure/, this page never
+    uses ChurchStructureMembership as a runtime visibility source and does not
+    alter ordinary-user matching (Profile.small_group / legacy mappings) or
+    module audience scope.
+    """
+    language = get_user_language(request)
+    holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
+
+    can_change_unit = request.user.has_perm(
+        "accounts.change_churchstructureunit"
+    )
+
+    def build_rows(queryset, legacy_admin_viewname, can_change_legacy):
+        rows = []
+        for obj in queryset:
+            unit = obj.church_structure_unit
+            if unit is None:
+                status_key = "unmapped"
+                unit_path = ""
+                unit_is_active = None
+            else:
+                # Reuse a single ancestor walk for both the path label and the
+                # cheap holding-node check, rather than calling path_label()
+                # and re-walking parents separately.
+                chain = unit.get_ancestors() + [unit]
+                unit_path = " > ".join(
+                    node.display_name(language) for node in chain
+                )
+                unit_is_active = unit.is_active
+                if not unit.is_active:
+                    status_key = "mapped_inactive"
+                elif any(node.code in holding_codes for node in chain):
+                    status_key = "mapped_holding"
+                else:
+                    status_key = "mapped_active"
+            rows.append(
+                {
+                    "label": str(obj),
+                    "is_active": obj.is_active,
+                    "unit": unit,
+                    "unit_path": unit_path,
+                    "unit_is_active": unit_is_active,
+                    "status_key": status_key,
+                    "legacy_admin_url": (
+                        reverse(legacy_admin_viewname, args=[obj.pk])
+                        if can_change_legacy
+                        else None
+                    ),
+                    "unit_admin_url": (
+                        reverse(
+                            "admin:accounts_churchstructureunit_change",
+                            args=[unit.pk],
+                        )
+                        if unit is not None and can_change_unit
+                        else None
+                    ),
+                }
+            )
+        return rows
+
+    sections = [
+        {
+            "key": "ministry_contexts",
+            "rows": build_rows(
+                MinistryContext.objects.select_related(
+                    "church_structure_unit"
+                ).order_by("sort_order", "code", "name"),
+                "admin:accounts_ministrycontext_change",
+                request.user.has_perm("accounts.change_ministrycontext"),
+            ),
+        },
+        {
+            "key": "districts",
+            "rows": build_rows(
+                District.objects.select_related(
+                    "church_structure_unit"
+                ).order_by("name"),
+                "admin:accounts_district_change",
+                request.user.has_perm("accounts.change_district"),
+            ),
+        },
+        {
+            "key": "small_groups",
+            "rows": build_rows(
+                SmallGroup.objects.select_related(
+                    "church_structure_unit"
+                ).order_by("name"),
+                "admin:accounts_smallgroup_change",
+                request.user.has_perm("accounts.change_smallgroup"),
+            ),
+        },
+    ]
+
+    return render(
+        request,
+        "accounts/staff/structure_mapping_review.html",
+        {
+            "active_nav": "staff",
+            "sections": sections,
+        },
+    )
+
+
+@staff_member_required
 def staff_moderation_queue(request):
     from comments.models import ReflectionComment, ReflectionReport
     from prayers.models import PrayerReport, PrayerRequest

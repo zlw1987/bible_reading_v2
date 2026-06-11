@@ -68,7 +68,10 @@
         <li>{% if language == "zh" %}仍被引用的已停用单元{% else %}Inactive units still referenced{% endif %}: <strong>{{ indicators.inactive_units_still_referenced }}</strong></li>
     </ul>
     <div class="actions">
-        <a class="button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
+        <a class="button" href="{% url 'staff_structure_mapping_review' %}">
+            {% if language == "zh" %}查看资料对应检查{% else %}Review Data Mappings{% endif %}
+        </a>
+        <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
             {% if language == "zh" %}结构单元（后台）{% else %}Structure Units (Admin){% endif %}
         </a>
         <a class="button-secondary button" href="{% url 'staff_membership_request_list' %}">

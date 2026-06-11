@@ -3773,6 +3773,249 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class StaffStructureMappingReviewTests(TestCase):
+    """CS-SETUP.1C.1: read-only legacy -> structure mapping review page."""
+
+    def setUp(self):
+        # Superuser holds every change permission implicitly.
+        self.admin = User.objects.create_user(
+            username="mapping_admin",
+            password="AdminPass123!",
+            is_staff=True,
+            is_superuser=True,
+        )
+        # Staff who can view the page but hold no model change permissions.
+        self.viewer = User.objects.create_user(
+            username="mapping_viewer",
+            password="ViewerPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="mapping_plain",
+            password="PlainPass123!",
+        )
+        self.url = reverse("staff_structure_mapping_review")
+
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.active_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D2",
+            name="二区",
+            name_en="District 2",
+        )
+        self.inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D9",
+            name="旧区",
+            name_en="Old District",
+            is_active=False,
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def login_admin(self):
+        self.client.login(username="mapping_admin", password="AdminPass123!")
+
+    def login_viewer(self):
+        self.client.login(username="mapping_viewer", password="ViewerPass123!")
+
+    # --- access control -----------------------------------------------------
+
+    def test_anonymous_user_redirected_to_login(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_normal_user_denied(self):
+        self.client.login(username="mapping_plain", password="PlainPass123!")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_user_allowed(self):
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+
+    # --- sections / content -------------------------------------------------
+
+    def test_page_renders_three_mapping_sections(self):
+        self.set_language("en")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Structure Mapping Review")
+        self.assertContains(response, "Ministry Contexts")
+        self.assertContains(response, "Districts")
+        self.assertContains(response, "Small Groups")
+        # The read-only safety note is present.
+        self.assertContains(
+            response,
+            "This page reviews the current data mapping only.",
+        )
+
+    def test_bilingual_labels_in_chinese(self):
+        self.set_language("zh")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "教会结构对应检查")
+        self.assertContains(response, "事工范围")
+        self.assertContains(response, "区")
+        self.assertContains(response, "小组")
+        self.assertContains(
+            response,
+            "此页面只用于检查当前资料对应关系",
+        )
+
+    def test_mapped_active_row_display(self):
+        self.set_language("en")
+        SmallGroup.objects.create(
+            name="Rainbow Active",
+            church_structure_unit=self.active_unit,
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rainbow Active")
+        # Path label of the mapped unit is shown.
+        self.assertContains(response, "Whole Church &gt; District 2")
+        self.assertContains(response, "Mapped to active unit")
+
+    def test_unmapped_row_display(self):
+        self.set_language("en")
+        District.objects.create(name="Lonely District")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lonely District")
+        self.assertContains(response, "Unmapped")
+
+    def test_mapped_to_inactive_unit_display(self):
+        self.set_language("en")
+        SmallGroup.objects.create(
+            name="Rainbow Stale",
+            church_structure_unit=self.inactive_unit,
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rainbow Stale")
+        self.assertContains(response, "Mapped to inactive unit")
+
+    # --- admin link permission gating --------------------------------------
+
+    def test_admin_links_visible_for_admin(self):
+        self.set_language("en")
+        group = SmallGroup.objects.create(
+            name="Rainbow Linked",
+            church_structure_unit=self.active_unit,
+        )
+        legacy_change_url = reverse(
+            "admin:accounts_smallgroup_change", args=[group.id]
+        )
+        unit_change_url = reverse(
+            "admin:accounts_churchstructureunit_change",
+            args=[self.active_unit.id],
+        )
+        self.login_admin()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, legacy_change_url)
+        self.assertContains(response, unit_change_url)
+
+    def test_admin_links_hidden_for_view_only_staff(self):
+        self.set_language("en")
+        group = SmallGroup.objects.create(
+            name="Rainbow Linked",
+            church_structure_unit=self.active_unit,
+        )
+        legacy_change_url = reverse(
+            "admin:accounts_smallgroup_change", args=[group.id]
+        )
+        unit_change_url = reverse(
+            "admin:accounts_churchstructureunit_change",
+            args=[self.active_unit.id],
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, legacy_change_url)
+        self.assertNotContains(response, unit_change_url)
+
+    # --- read-only enforcement ---------------------------------------------
+
+    def test_page_rejects_post(self):
+        self.login_admin()
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_page_has_no_inline_edit_affordances(self):
+        # Review-only: the page exposes no inline editing affordances. The
+        # base chrome legitimately has language/logout forms, so we assert the
+        # absence of mapping/rename edit controls rather than any <form> tag.
+        self.set_language("en")
+        SmallGroup.objects.create(
+            name="Rainbow Linked",
+            church_structure_unit=self.active_unit,
+        )
+        self.login_admin()
+
+        response = self.client.get(self.url)
+
+        # No rename form fields from the CS-SETUP.1B edit mode leak in here.
+        self.assertNotContains(response, 'name="name_en"')
+        # No in-app rename/write endpoint is targeted by this page.
+        self.assertNotContains(
+            response,
+            reverse(
+                "staff_structure_unit_rename", args=[self.active_unit.id]
+            ),
+        )
+        # No Save control on this review page.
+        self.assertNotContains(response, "保存")
+
+    # --- link from structure map -------------------------------------------
+
+    def test_structure_map_links_to_mapping_review(self):
+        self.login_viewer()
+
+        response = self.client.get(reverse("staff_structure_map"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.url)
+
+
 class StaffModerationQueueTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(

@@ -1785,6 +1785,11 @@ th {
     padding: 4px;
 }
 
+.audience-picker-row[hidden],
+.structure-map-row[hidden] {
+    display: none !important;
+}
+
 .audience-picker-group-label {
     margin: 6px 4px 2px;
     color: var(--muted);

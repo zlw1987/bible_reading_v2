@@ -209,12 +209,12 @@ Boundaries:
 - No schema changes, write actions, new states, availability, swaps, reminders, attendance, checklist, scheduling automation, notifications, Community Activities, audience filtering, consumer migration, file center, care workflows, announcements, or permission expansion.
 - Do not infer ministry team assignment or serving permissions from church structure membership.
 
-### Future: CS-MAP.2 Read-Only Church Structure Map / Mapping Health
+### CS-MAP.2 Read-Only Church Structure Map / Mapping Health
 
-Status: planned, not approved by this document. See `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`.
+Status: completed. See `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`.
 
-Goal:
-- A permission-protected read-only staff page (suggested `/staff/structure/`), linked from `/staff/`, rendering the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and mapping-health / setup-readiness indicators.
+Completed scope:
+- A permission-protected read-only staff page at `/staff/structure/`, linked from `/staff/`, rendering the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and mapping-health / setup-readiness indicators.
 
 Boundaries:
 - Follows the PP-SA.2/PP-SA.4/PP-SA.5 read-only staff surface pattern: zero write actions, no schema changes, no new states, links only to existing Django Admin and staff workflows.

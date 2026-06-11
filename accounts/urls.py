@@ -23,6 +23,11 @@ urlpatterns = [
 
     path("staff/", views.staff_overview, name="staff_overview"),
     path(
+        "staff/structure/",
+        views.staff_structure_map,
+        name="staff_structure_map",
+    ),
+    path(
         "staff/moderation/",
         views.staff_moderation_queue,
         name="staff_moderation_queue",

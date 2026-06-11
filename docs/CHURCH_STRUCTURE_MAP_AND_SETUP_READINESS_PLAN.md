@@ -9,7 +9,9 @@ This plan responds to two June 2026 demo feedback items:
 1. IM team lead: the app cannot realistically replace every existing church app at once; it should be modular, adopted module by module, and able to coexist/integrate with existing tools (for example 微读圣经 for small-group reading/study content).
 2. Pastor/elder/deacon: leadership wants a clear church structure architecture, setup support, and a visible structure map / hierarchy map; structure setup currently happens mainly through Django Admin, which is not convenient for them; they see church structure as a foundation for many future modules.
 
-This plan defines a docs-first response: record the modular adoption principle, then propose a read-only staff structure map with mapping-health indicators (CS-MAP.2) before any setup/edit UI is considered. Later milestones (CS-MAP.2, CS-MAP.3, CS-SETUP.1) each require separate explicit approval; nothing beyond this document is authorized by CS-MAP.1.
+This plan defines a docs-first response: record the modular adoption principle, then propose a read-only staff structure map with mapping-health indicators (CS-MAP.2) before any setup/edit UI is considered. Later milestones each require separate explicit approval; nothing beyond this document is authorized by CS-MAP.1.
+
+Status update: CS-MAP.2 is now complete (see Section 7 for the completion note). CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6.
 
 ## 2. Current Foundation Summary
 
@@ -72,7 +74,7 @@ The structure map must display structure and membership concepts only. It must n
 | Milestone | Scope | Status |
 | --- | --- | --- |
 | CS-MAP.1 | Docs-only Church Structure Map / Setup Readiness Plan (this document) | Complete with this task |
-| CS-MAP.2 | Read-only Staff Structure Map + Mapping Health at `/staff/structure/` | Proposed; requires separate approval |
+| CS-MAP.2 | Read-only Staff Structure Map + Mapping Health at `/staff/structure/` | Completed; implemented read-only (see Section 7) |
 | SE-AS.4 | ServiceEvent audience runtime visibility rule with legacy fallback | Planned in `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`; separate approval |
 | SE-AS.5 | ServiceEvent staff audience selector UI/display | Planned; separate approval |
 | CS-MAP.3 | Optional setup readiness checklist on the structure map page | Optional; separate approval |
@@ -81,14 +83,14 @@ The structure map must display structure and membership concepts only. It must n
 
 Sequencing rules:
 
-- CS-MAP.2 should land before SE-AS.4/SE-AS.5 from a product-risk perspective: the SE-AS.5 selector's biggest operational risk is staff selecting units that match no current members, and a mapping-health surface mitigates that before the selector exists. SE-AS.4 is technically independent of CS-MAP.2 (no shared data or code path) and may proceed in parallel as a separately approved task, but the two must never be bundled into one implementation slice.
+- CS-MAP.2 landed before SE-AS.4/SE-AS.5, as recommended from a product-risk perspective: the SE-AS.5 selector's biggest operational risk is staff selecting units that match no current members, and the mapping-health surface mitigates that before the selector exists. SE-AS.4 is technically independent of CS-MAP.2 (no shared data or code path) and is the next candidate slice, but it still requires its own separate approval and must never be bundled with CS-MAP work.
 - Community Activities must not be pulled forward by this feedback. Its position (after the audience foundation is proven through Bible Study and ServiceEvent) is unchanged per `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - CS-SETUP.1 is explicitly not approved. It is gated on: (a) CS-MAP.2 shipped and used, with evidence that read-only visibility plus Django Admin is insufficient for a recurring staff task; (b) a separate design doc resolving unit↔legacy sync direction (today only seeding writes units from legacy; two-way sync is undesigned), edit permissions/capabilities, and the effect of unit moves/deactivation on stored audience rows; (c) separate explicit approval.
 - Do not bundle ServiceEvent runtime visibility migration, Community Activities, and `ChurchStructureMembership` runtime migration with each other or with CS-MAP work.
 
-## 7. CS-MAP.2 Proposed Implementation Contract
+## 7. CS-MAP.2 Implementation Contract
 
-Future read-only staff page. Do not implement from this document; CS-MAP.2 requires its own approved task.
+Status: completed. CS-MAP.2 is implemented as the read-only staff Church Structure Map at `/staff/structure/`: it renders the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and the Section 8 setup-readiness indicators; it has no write actions (GET-only), no schema/migration changes, no runtime visibility changes, and no setup/edit UI. Django Admin remains the structure write surface. The contract below was the implementation basis and matches the shipped page.
 
 - Route: suggested `/staff/structure/`, linked from the existing `/staff/` overview.
 - Access: permission-protected, matching the existing staff overview gating pattern (staff/superuser or existing staff capability); ordinary users denied. No new capability unless implementation review proves a real gap.
@@ -143,7 +145,7 @@ CS-MAP.1 and CS-MAP.2 do not include:
 
 ## 11. CS-MAP.2 Acceptance Criteria
 
-Future acceptance criteria for the CS-MAP.2 slice, when separately approved. Do not implement now.
+These criteria were the CS-MAP.2 implementation contract; the completed slice was verified against them with targeted tests and browser/mobile QA.
 
 1. Access control: page requires the agreed staff gating; ordinary authenticated users and anonymous users are denied; tested for allowed and denied cases.
 2. Tree rendering: active units render in hierarchy order with bilingual names via `display_name(language)`; inactive units distinct or toggled; tested against fixture trees including at least one multi-depth branch.

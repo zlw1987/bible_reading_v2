@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}教会架构图{% else %}Church Structure Map{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}教会架构图{% else %}Church Structure Map{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        只读页面：查看教会架构与设置就绪情况；如需修改请使用 Django 后台。
+        {% else %}
+        Read-only page: review the church structure and setup readiness; use Django Admin to make changes.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel">
+    <strong>
+        {% if language == "zh" %}当前运行边界{% else %}Current Runtime Boundary{% endif %}
+    </strong>
+    <p>
+        {% if language == "zh" %}
+        查经、读经进度、聚会事件和我的服事目前仍按现有小组资料运行。本页展示的是未来教会架构基础与设置就绪情况，仅供查看，不会改变成员现在能看到的内容。
+        {% else %}
+        Bible Study, reading progress, Service Events, and My Serving still run on the current small-group profile data. This page shows the future church-structure foundation and setup readiness for review only; it does not change what members can see today.
+        {% endif %}
+    </p>
+</section>
+
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}设置就绪指标{% else %}Setup Readiness Indicators{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        各指标分别统计；同一条记录可能出现在多个指标中。
+        {% else %}
+        Each indicator is counted separately; the same record may appear in more than one indicator.
+        {% endif %}
+    </p>
+    <ul class="staff-count-list">
+        <li>{% if language == "zh" %}未关联结构单元的现有事工范围{% else %}Current ministry contexts without a linked unit{% endif %}: <strong>{{ indicators.unmapped_ministry_contexts }}</strong></li>
+        <li>{% if language == "zh" %}未关联结构单元的现有区{% else %}Current districts without a linked unit{% endif %}: <strong>{{ indicators.unmapped_districts }}</strong></li>
+        <li>{% if language == "zh" %}未关联结构单元的现有小组{% else %}Current small groups without a linked unit{% endif %}: <strong>{{ indicators.unmapped_small_groups }}</strong></li>
+        <li>{% if language == "zh" %}本级及下级都未关联现有记录的单元{% else %}Units with no linked current records at or below them{% endif %}: <strong>{{ indicators.units_without_linked_records }}</strong></li>
+        <li>{% if language == "zh" %}位于未分配暂存节点下的单元{% else %}Units under the unassigned holding nodes{% endif %}: <strong>{{ indicators.units_under_holding }}</strong></li>
+        <li>{% if language == "zh" %}所在小组未关联结构单元的用户{% else %}Users whose current group has no linked unit{% endif %}: <strong>{{ indicators.users_in_unmapped_group }}</strong></li>
+        <li>{% if language == "zh" %}有已确认成员记录但没有现有小组的用户{% else %}Users with an approved membership but no current group{% endif %}: <strong>{{ indicators.membership_without_group }}</strong></li>
+        <li>{% if language == "zh" %}有现有小组但没有已确认成员记录的用户{% else %}Users with a current group but no approved membership{% endif %}: <strong>{{ indicators.group_without_membership }}</strong></li>
+        <li>{% if language == "zh" %}现有小组与成员记录单元不一致的用户{% else %}Users whose current group and membership point to different units{% endif %}: <strong>{{ indicators.membership_group_mismatch }}</strong></li>
+        <li>
+            {% if language == "zh" %}启用的全教会根单元（应为 1）{% else %}Active whole-church root units (expected: 1){% endif %}: <strong>{{ indicators.active_root_units }}</strong>
+            {% if indicators.active_root_units != 1 %}
+            <span class="status status-warning">{% if language == "zh" %}需要检查{% else %}Needs review{% endif %}</span>
+            {% endif %}
+        </li>
+        <li>{% if language == "zh" %}仍被引用的已停用单元{% else %}Inactive units still referenced{% endif %}: <strong>{{ indicators.inactive_units_still_referenced }}</strong></li>
+    </ul>
+    <div class="actions">
+        <a class="button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
+            {% if language == "zh" %}结构单元（后台）{% else %}Structure Units (Admin){% endif %}
+        </a>
+        <a class="button-secondary button" href="{% url 'staff_membership_request_list' %}">
+            {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
+        </a>
+        <a class="button-secondary button" href="{% url 'admin:index' %}">
+            {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
+        </a>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}架构树{% else %}Structure Tree{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        仅显示启用的单元；数字为已确认成员记录数，不显示成员名单。
+        {% else %}
+        Active units only; numbers are approved membership counts, with no member name lists.
+        {% endif %}
+    </p>
+    <div class="structure-map-tree">
+        {% for row in structure_rows %}
+        <div class="structure-map-row" style="--structure-depth: {{ row.depth }};">
+            <span class="structure-map-unit-name">{{ row.name }}</span>
+            <span class="structure-map-meta">
+                {% if language == "zh" %}成员记录{% else %}Memberships{% endif %}: {{ row.membership_count }}
+            </span>
+            {% if row.legacy_names %}
+            <span class="structure-map-meta">
+                {% if language == "zh" %}现有记录{% else %}Current records{% endif %}: {{ row.legacy_names|join:", " }}
+            </span>
+            {% endif %}
+            {% if row.without_linked_records %}
+            <span class="status status-warning">
+                {% if language == "zh" %}未关联现有记录{% else %}No linked current records{% endif %}
+            </span>
+            {% endif %}
+            {% if row.under_holding %}
+            <span class="status status-warning">
+                {% if language == "zh" %}未分配暂存{% else %}Unassigned holding{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p class="muted">
+            {% if language == "zh" %}还没有启用的结构单元。{% else %}No active structure units yet.{% endif %}
+        </p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

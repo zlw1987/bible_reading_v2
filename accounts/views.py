@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_GET
 
 
 from .forms import (
@@ -18,7 +19,14 @@ from .forms import (
 )
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
-from .models import ChurchStructureMembership, Profile, SmallGroup
+from .models import (
+    ChurchStructureMembership,
+    ChurchStructureUnit,
+    District,
+    MinistryContext,
+    Profile,
+    SmallGroup,
+)
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 
 
@@ -207,6 +215,179 @@ def staff_overview(request):
             ),
             "upcoming_required_team_gaps": upcoming_required_team_gaps,
             "ministry_ops_warning_indicator_count": ministry_ops_warning_indicator_count,
+        },
+    )
+
+
+@staff_member_required
+@require_GET
+def staff_structure_map(request):
+    """Read-only Church Structure Map with setup-readiness indicators (CS-MAP.2).
+
+    Counts only; no member rosters and no write actions. The unit tree and
+    membership rows shown here are the future structure foundation. Runtime
+    visibility still uses the legacy structure models and Profile.small_group.
+    """
+    language = get_user_language(request)
+    today = timezone.localdate()
+
+    units = list(
+        ChurchStructureUnit.objects.filter(is_active=True).order_by(
+            "sort_order",
+            "code",
+            "name",
+        )
+    )
+    children = {}
+    for unit in units:
+        children.setdefault(unit.parent_id, []).append(unit)
+
+    # Active legacy rows that reference a unit: display context per row, and
+    # the reference set for the "no linked current records" indicator.
+    legacy_rows = [
+        *MinistryContext.objects.filter(
+            is_active=True, church_structure_unit__isnull=False
+        ),
+        *District.objects.filter(
+            is_active=True, church_structure_unit__isnull=False
+        ),
+        *SmallGroup.objects.filter(
+            is_active=True, church_structure_unit__isnull=False
+        ),
+    ]
+    legacy_names_by_unit = {}
+    mapped_unit_ids = set()
+    for legacy_row in legacy_rows:
+        mapped_unit_ids.add(legacy_row.church_structure_unit_id)
+        legacy_names_by_unit.setdefault(
+            legacy_row.church_structure_unit_id, []
+        ).append(str(legacy_row))
+
+    active_memberships = ChurchStructureMembership.objects.filter(
+        status=ChurchStructureMembership.STATUS_ACTIVE,
+        start_date__lte=today,
+    ).filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+    membership_counts = {
+        row["unit_id"]: row["total"]
+        for row in active_memberships.values("unit_id").annotate(total=Count("id"))
+    }
+
+    holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
+    structure_rows = []
+    visited = set()
+    counters = {"under_holding": 0, "without_linked_records": 0}
+
+    def walk(unit, depth, under_holding):
+        visited.add(unit.id)
+        row = {
+            "unit": unit,
+            "name": unit.display_name(language),
+            "depth": depth,
+            "membership_count": membership_counts.get(unit.id, 0),
+            "legacy_names": legacy_names_by_unit.get(unit.id, []),
+            "under_holding": under_holding,
+            "without_linked_records": False,
+        }
+        structure_rows.append(row)
+        if under_holding:
+            counters["under_holding"] += 1
+        subtree_mapped = unit.id in mapped_unit_ids
+        child_under_holding = under_holding or unit.code in holding_codes
+        for child in children.get(unit.id, []):
+            if child.id not in visited and walk(child, depth + 1, child_under_holding):
+                subtree_mapped = True
+        if not subtree_mapped and unit.unit_type != ChurchStructureUnit.UNIT_ROOT:
+            row["without_linked_records"] = True
+            counters["without_linked_records"] += 1
+        return subtree_mapped
+
+    roots = [unit for unit in units if unit.parent_id is None]
+    roots.sort(
+        key=lambda u: (
+            u.unit_type != ChurchStructureUnit.UNIT_ROOT,
+            u.sort_order,
+            u.code,
+            u.name,
+        )
+    )
+    for root in roots:
+        walk(root, 0, False)
+    # Active units whose parent is inactive or missing stay visible at the end.
+    for unit in units:
+        if unit.id not in visited:
+            walk(unit, 0, False)
+
+    # Drift between the current runtime group and the approved active primary
+    # membership. Categories are reported separately and may overlap with the
+    # unmapped-group indicator; an unmapped current group counts as a mismatch
+    # because it cannot agree with any membership unit.
+    membership_without_group = 0
+    membership_group_mismatch = 0
+    primary_user_ids = set()
+    primary_memberships = active_memberships.filter(is_primary=True).select_related(
+        "user__profile__small_group",
+    )
+    for membership in primary_memberships:
+        primary_user_ids.add(membership.user_id)
+        profile = getattr(membership.user, "profile", None)
+        group = getattr(profile, "small_group", None)
+        if group is None:
+            membership_without_group += 1
+        elif group.church_structure_unit_id != membership.unit_id:
+            membership_group_mismatch += 1
+    group_without_membership = (
+        Profile.objects.filter(small_group__isnull=False)
+        .exclude(user_id__in=primary_user_ids)
+        .count()
+    )
+
+    indicators = {
+        "unmapped_ministry_contexts": MinistryContext.objects.filter(
+            is_active=True,
+            church_structure_unit__isnull=True,
+        ).count(),
+        "unmapped_districts": District.objects.filter(
+            is_active=True,
+            church_structure_unit__isnull=True,
+        ).count(),
+        "unmapped_small_groups": SmallGroup.objects.filter(
+            is_active=True,
+            church_structure_unit__isnull=True,
+        ).count(),
+        "units_without_linked_records": counters["without_linked_records"],
+        "units_under_holding": counters["under_holding"],
+        "users_in_unmapped_group": Profile.objects.filter(
+            small_group__isnull=False,
+            small_group__church_structure_unit__isnull=True,
+        ).count(),
+        "membership_without_group": membership_without_group,
+        "group_without_membership": group_without_membership,
+        "membership_group_mismatch": membership_group_mismatch,
+        "active_root_units": ChurchStructureUnit.objects.filter(
+            is_active=True,
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+        ).count(),
+        "inactive_units_still_referenced": ChurchStructureUnit.objects.filter(
+            is_active=False,
+        )
+        .filter(
+            Q(legacy_ministry_contexts__isnull=False)
+            | Q(legacy_districts__isnull=False)
+            | Q(legacy_small_groups__isnull=False)
+            | Q(bible_study_series_audience_scopes__isnull=False)
+            | Q(service_event_audience_scope_links__isnull=False)
+        )
+        .distinct()
+        .count(),
+    }
+
+    return render(
+        request,
+        "accounts/staff/structure_map.html",
+        {
+            "active_nav": "staff",
+            "structure_rows": structure_rows,
+            "indicators": indicators,
         },
     )
 

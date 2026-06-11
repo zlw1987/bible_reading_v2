@@ -17,6 +17,7 @@ from accounts.models import (
     ChurchStructureUnit,
     District,
     MinistryContext,
+    Profile,
     SmallGroup,
 )
 from accounts.permissions import (
@@ -3089,6 +3090,325 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "事工运作提醒指标")
         self.assertContains(response, "目前没有可由现有资料看出的事工设置提醒指标")
         self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
+
+
+class StaffStructureMapTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="structure_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="structure_user",
+            password="UserPass123!",
+        )
+        self.url = reverse("staff_structure_map")
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def login_staff(self):
+        self.client.login(username="structure_staff", password="StaffPass123!")
+
+    def build_tree(self):
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文部",
+            name_en="Chinese Ministry",
+        )
+        self.district_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D2",
+            name="二区",
+            name_en="District 2",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.district_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+        )
+        self.group = SmallGroup.objects.create(
+            name="Structure Rainbow 4",
+            church_structure_unit=self.group_unit,
+        )
+
+    def create_active_primary_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timedelta(days=1),
+        )
+
+    def test_structure_map_requires_staff_access(self):
+        self.client.login(username="structure_user", password="UserPass123!")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_structure_map_anonymous_user_redirects_to_login(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_structure_map_rejects_post(self):
+        self.login_staff()
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 405)
+
+    def test_structure_map_renders_tree_in_hierarchy_order(self):
+        self.build_tree()
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Structure Map")
+        self.assertContains(response, "Current Runtime Boundary")
+        root_index = content.index("Whole Church")
+        cm_index = content.index("Chinese Ministry")
+        district_index = content.index("District 2")
+        group_index = content.index("Rainbow 4")
+        self.assertLess(root_index, cm_index)
+        self.assertLess(cm_index, district_index)
+        self.assertLess(district_index, group_index)
+        self.assertContains(response, "Structure Rainbow 4")
+        self.assertContains(
+            response,
+            reverse("admin:accounts_churchstructureunit_changelist"),
+        )
+        self.assertContains(response, reverse("staff_membership_request_list"))
+
+    def test_structure_map_hides_inactive_units(self):
+        self.build_tree()
+        ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="OLD-D",
+            name="Old District Unit",
+            is_active=False,
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Old District Unit")
+
+    def test_structure_map_renders_chinese_labels(self):
+        self.build_tree()
+        self.set_language("zh")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "教会架构图")
+        self.assertContains(response, "当前运行边界")
+        self.assertContains(response, "设置就绪指标")
+        self.assertContains(response, "全教会")
+        self.assertContains(response, "中文部")
+
+    def test_unmapped_active_legacy_rows_are_counted(self):
+        self.build_tree()
+        MinistryContext.objects.create(code="EMX", name="Unmapped Context")
+        District.objects.create(name="Unmapped District")
+        SmallGroup.objects.create(name="Unmapped Group")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        self.assertEqual(indicators["unmapped_ministry_contexts"], 1)
+        self.assertEqual(indicators["unmapped_districts"], 1)
+        # The mapped group from build_tree is not counted.
+        self.assertEqual(indicators["unmapped_small_groups"], 1)
+
+    def test_units_without_linked_records_at_or_beneath(self):
+        self.build_tree()
+        ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="NEWMIN",
+            name="New Ministry Unit",
+        )
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        # Only the custom unit is flagged: cm/district units have a mapped
+        # descendant, the group unit is mapped itself, and the root is excluded.
+        self.assertEqual(indicators["units_without_linked_records"], 1)
+        flagged = [
+            row["unit"].code
+            for row in response.context["structure_rows"]
+            if row["without_linked_records"]
+        ]
+        self.assertEqual(flagged, ["NEWMIN"])
+
+    def test_units_under_holding_nodes_are_counted(self):
+        self.build_tree()
+        holding = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="UNASSIGNED-GROUPS",
+            name="Unassigned Groups",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=holding,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="LOST-GROUP",
+            name="Lost Group Unit",
+        )
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        # The holding node itself is not "under" a holding node; its child is.
+        self.assertEqual(indicators["units_under_holding"], 1)
+
+    def test_users_in_unmapped_group_are_counted(self):
+        self.build_tree()
+        unmapped_group = SmallGroup.objects.create(name="Unmapped Member Group")
+        profile = self.normal_user.profile
+        profile.small_group = unmapped_group
+        profile.save()
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        self.assertEqual(indicators["users_in_unmapped_group"], 1)
+
+    def test_membership_and_group_drift_categories_are_counted_separately(self):
+        self.build_tree()
+        member_only = User.objects.create_user(
+            username="drift_member_only",
+            password="DriftPass123!",
+        )
+        self.create_active_primary_membership(member_only, self.group_unit)
+
+        group_only = User.objects.create_user(
+            username="drift_group_only",
+            password="DriftPass123!",
+        )
+        group_only_profile = group_only.profile
+        group_only_profile.small_group = self.group
+        group_only_profile.save()
+
+        mismatch_user = User.objects.create_user(
+            username="drift_mismatch",
+            password="DriftPass123!",
+        )
+        mismatch_profile = mismatch_user.profile
+        mismatch_profile.small_group = self.group
+        mismatch_profile.save()
+        self.create_active_primary_membership(mismatch_user, self.cm_unit)
+
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        self.assertEqual(indicators["membership_without_group"], 1)
+        self.assertEqual(indicators["group_without_membership"], 1)
+        self.assertEqual(indicators["membership_group_mismatch"], 1)
+
+    def test_structure_map_shows_counts_without_member_names(self):
+        self.build_tree()
+        counted_member = User.objects.create_user(
+            username="counted_member_name",
+            password="MemberPass123!",
+        )
+        self.create_active_primary_membership(counted_member, self.group_unit)
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        group_row = next(
+            row
+            for row in response.context["structure_rows"]
+            if row["unit"].id == self.group_unit.id
+        )
+        self.assertEqual(group_row["membership_count"], 1)
+        self.assertNotContains(response, "counted_member_name")
+
+    def test_active_root_unit_count_flags_zero_and_multiple_roots(self):
+        self.build_tree()
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["indicators"]["active_root_units"], 1)
+
+        ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH2",
+            name="Second Root",
+        )
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["indicators"]["active_root_units"], 2)
+
+        ChurchStructureUnit.objects.filter(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+        ).update(is_active=False)
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["indicators"]["active_root_units"], 0)
+
+    def test_inactive_units_still_referenced_are_counted(self):
+        self.build_tree()
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RETIRED",
+            name="Retired Unit",
+            is_active=False,
+        )
+        SmallGroup.objects.create(
+            name="Group Mapped To Retired Unit",
+            church_structure_unit=inactive_unit,
+        )
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        indicators = response.context["indicators"]
+
+        self.assertEqual(indicators["inactive_units_still_referenced"], 1)
+
+    def test_staff_overview_links_to_structure_map(self):
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.url)
+        self.assertContains(response, "Structure Map")
 
 
 class StaffModerationQueueTests(TestCase):

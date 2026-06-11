@@ -299,6 +299,58 @@ SE-AS.6B.1 does not approve apply/backfill. SE-AS.6C remains unapproved and requ
 - **SE-AS.6C** — optional apply mode, unapproved and separate; only after SE-AS.6B dry-run output has been captured and reviewed in staging/production; creates rows only for parity-safe events behind an explicit `--apply`.
 - **Later** — legacy fallback deprecation planning, only after audience rows have proven stable in production. No destructive change before then.
 
+## 8B. SE-AS.6C.0 Optional Apply-Mode Preflight Design (docs-only)
+
+SE-AS.6C.0 is **design-only**. It does not approve SE-AS.6C, does not add apply behavior, and does not change the audit command. The current command remains dry-run/audit-only: no `--apply` exists, so no one should run apply. SE-AS.6C remains a future, separately approved milestone.
+
+### 8B.1 Preconditions before SE-AS.6C can be approved
+
+Before any implementation prompt may approve SE-AS.6C apply mode:
+
+1. Staging or production dry-run output has been captured with `--verbose-events`.
+2. The captured dry-run output has been reviewed by staff/development reviewers who understand the target data.
+3. A current recoverable database backup exists, or the backup process has been confirmed before any future apply discussion.
+4. Root ambiguity, unmapped rows, inactive mappings, and parity-mismatch rows have been reviewed event by event.
+5. Expected skipped rows are documented, including why each category is safe to leave on legacy fallback.
+6. Any unexpected parity mismatch blocks apply until the data, mapping, or implementation plan is corrected and reviewed through another dry-run.
+
+### 8B.2 Future apply-mode guardrails
+
+If SE-AS.6C is later approved, apply mode must satisfy all of these guardrails:
+
+- Dry-run remains the default behavior.
+- `--apply` must be explicit; there must be no implicit apply through environment, deployment target, or confirmation prompt alone.
+- Apply is additive only.
+- Apply may create only `ServiceEventAudienceScope` rows.
+- Apply must never mutate `ServiceEvent.scope_type`, `ServiceEvent.district`, or `ServiceEvent.small_group`.
+- Apply must never mutate `ChurchStructureUnit`, `ChurchStructureMembership`, `Profile`, `SmallGroup`, `District`, or `MinistryContext`.
+- Apply must skip events that already have one or more audience rows.
+- Apply may create rows only for events the dry-run classifies as parity-safe.
+- Apply must run in an atomic transaction scope appropriate to the approved implementation, so partial creation is not silently treated as success.
+- Apply must be idempotent: rerunning it must not duplicate rows or change events already governed by audience rows.
+- Apply must report created and skipped counts after it completes, including the same skip categories used by the dry-run review.
+
+### 8B.3 Rollback / recovery design
+
+Legacy fields remain preserved throughout SE-AS.6. Because an event with zero `ServiceEventAudienceScope` rows falls back to legacy `scope_type` / `district` / `small_group`, deleting the created audience rows for a specific event returns that event to legacy fallback behavior.
+
+Rollback must be manual and explicit, not automatic in SE-AS.6C. Any rollback command, bulk deletion helper, or production recovery procedure would require separate approval and its own review guardrails.
+
+### 8B.4 Stop conditions
+
+Do not proceed with apply approval or execution if any of these appear in dry-run review:
+
+- any unexpected parity mismatch;
+- active root count is not exactly one for a global apply candidate;
+- suspicious proposed unit path, label, or hierarchy placement;
+- unexpected inactive mapping;
+- any staging or production dry-run count that staff/development reviewers cannot explain;
+- any non-zero legacy-field mutation indicator.
+
+### 8B.5 Parity invariant
+
+The parity invariant is binding on any future apply mode: post-backfill ordinary-user visibility must equal pre-backfill legacy visibility for each proposed event. If parity cannot be proven for an event, apply must skip that event and report it; it must not create audience rows.
+
 ## 9. Staff UI Strategy (for SE-AS.5)
 
 - Reuse the shared BS-AS.2 `ChurchStructureUnit` audience picker partial (search, chips, tree order, no-JS fallback, vanilla-JS convenience clearing, backend validation authoritative, bilingual aria labels).

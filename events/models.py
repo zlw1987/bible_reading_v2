@@ -200,6 +200,14 @@ class ServiceEvent(models.Model):
         if self.status not in {self.STATUS_PUBLISHED, self.STATUS_COMPLETED}:
             return False
 
+        # SE-AS.4: when audience scope rows exist, they are the audience
+        # source for ordinary users. Events with no rows fall through to the
+        # legacy scope behavior below unchanged, so there is no flag day and
+        # removing an event's rows restores its legacy behavior.
+        audience_units = [link.unit for link in self.audience_scope_links.all()]
+        if audience_units:
+            return self._audience_scope_allows(user, audience_units)
+
         if self.scope_type == self.SCOPE_GLOBAL:
             return True
 
@@ -219,6 +227,43 @@ class ServiceEvent(models.Model):
             return bool(self.small_group_id and self.small_group_id == user_group.id)
 
         return False
+
+    def _audience_scope_allows(self, user, units):
+        """SE-AS.4 ordinary-user matching for selected audience units.
+
+        A root (whole-church) unit behaves like the legacy global scope and
+        matches every authenticated user, including users without a current
+        small group. Any other selection matches a user only when their
+        current ``Profile.small_group`` is in the resolved active legacy
+        ``SmallGroup`` set for the selected units plus descendants, reusing
+        the Bible Study Schedule resolver so both consumers keep identical
+        unit-to-small-group semantics. ``ChurchStructureMembership`` is never
+        consulted; requested or active membership grants nothing here. A
+        stored selection whose unit later becomes inactive keeps matching,
+        mirroring the legacy district/small-group checks, which do not test
+        ``is_active`` either. A selected unit with no active mapped legacy
+        small groups beneath it matches no ordinary users.
+        """
+        if any(
+            unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units
+        ):
+            return True
+
+        profile = getattr(user, "profile", None)
+        user_group = getattr(profile, "small_group", None)
+        if not user_group:
+            return False
+
+        # Imported lazily so the events app does not load studies models at
+        # module import time; studies has no module-level events import, but
+        # the runtime dependency stays one-directional and explicit here.
+        from studies.models import resolve_units_to_small_groups
+
+        return (
+            resolve_units_to_small_groups(units)
+            .filter(id=user_group.id)
+            .exists()
+        )
 
 
 class ServiceEventRequiredTeam(models.Model):

@@ -488,7 +488,11 @@ class ServiceEventFoundationTests(TestCase):
                 unit=inactive_unit,
             )
 
-    def test_audience_scope_rows_do_not_change_legacy_visibility(self):
+    def test_audience_scope_rows_govern_visibility_over_legacy_fields(self):
+        # SE-AS.4: audience rows, when present, replace the legacy scope as
+        # the ordinary-user audience source. This unmapped custom unit
+        # matches no ordinary users, so the legacy district match no longer
+        # applies; managers keep access.
         event = self.create_event(
             scope_type=ServiceEvent.SCOPE_DISTRICT,
             district=self.north,
@@ -496,8 +500,9 @@ class ServiceEventFoundationTests(TestCase):
         unit = self.create_structure_unit("CM", "Chinese Ministry")
         ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
 
-        self.assertTrue(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.same_district_user))
         self.assertFalse(event.can_be_seen_by(self.other_user))
+        self.assertTrue(event.can_be_seen_by(self.staff))
 
     def test_requested_membership_does_not_grant_event_visibility(self):
         event = self.create_event(
@@ -1871,3 +1876,357 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Management details")
         self.assertContains(response, "Required Ministry Teams")
         self.assertContains(response, "Rotation Anchor Team")
+
+
+class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
+    """SE-AS.4 runtime visibility rule.
+
+    Events with ServiceEventAudienceScope rows use those rows as the
+    ordinary-user audience source; events with no rows keep the legacy
+    scope_type / district / small_group behavior exactly. Matching uses
+    Profile.small_group only; ChurchStructureMembership grants nothing.
+    """
+
+    def setUp(self):
+        # Structure tree mirroring the seeded layout:
+        # CHURCH root -> CM/EM contexts -> districts -> small groups.
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="Chinese Ministry",
+        )
+        self.em_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="EM",
+            name="English Ministry",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North District",
+        )
+        self.south_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="SOUTH",
+            name="South District",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+        )
+        self.group_b_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4B",
+            name="Rainbow 4B",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.south_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R5",
+            name="Rainbow 5",
+        )
+        self.em_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.em_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="EA1",
+            name="English Adult 1",
+        )
+        self.unmapped_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="NEWMIN",
+            name="New Ministry Unit",
+        )
+
+        self.cm = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            church_structure_unit=self.cm_unit,
+        )
+        self.em = MinistryContext.objects.create(
+            code="EM",
+            name="English Ministry",
+            church_structure_unit=self.em_unit,
+        )
+        self.north = District.objects.create(
+            name="North",
+            ministry_context=self.cm,
+            church_structure_unit=self.north_unit,
+        )
+        self.south = District.objects.create(
+            name="South",
+            ministry_context=self.cm,
+            church_structure_unit=self.south_unit,
+        )
+        # EM district stays unmapped on purpose; its group maps directly.
+        self.em_district = District.objects.create(
+            name="EM Adults",
+            ministry_context=self.em,
+        )
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            district=self.north,
+            church_structure_unit=self.group_unit,
+        )
+        self.group_b = SmallGroup.objects.create(
+            name="Rainbow 4B",
+            district=self.north,
+            church_structure_unit=self.group_b_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            district=self.south,
+            church_structure_unit=self.other_group_unit,
+        )
+        self.em_group = SmallGroup.objects.create(
+            name="English Adult 1",
+            district=self.em_district,
+            church_structure_unit=self.em_group_unit,
+        )
+
+        self.group_user = self.create_member("audience_r4", self.group)
+        self.group_b_user = self.create_member("audience_r4b", self.group_b)
+        self.other_user = self.create_member("audience_r5", self.other_group)
+        self.em_user = self.create_member("audience_em", self.em_group)
+        self.no_group_user = self.create_member("audience_nogroup", None)
+        self.staff = User.objects.create_user(
+            username="audience_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+
+        self.future_time = timezone.now() + timezone.timedelta(days=3)
+
+    def create_member(self, username, small_group):
+        user = User.objects.create_user(username=username, password="testpass123")
+        if small_group is not None:
+            user.profile.small_group = small_group
+            user.profile.save()
+        return user
+
+    def create_event(self, **overrides):
+        data = {
+            "title": "聚会",
+            "title_en": "Audience Event",
+            "event_type": ServiceEvent.EVENT_SPECIAL_MEETING,
+            "start_datetime": self.future_time,
+            "scope_type": ServiceEvent.SCOPE_GLOBAL,
+            "status": ServiceEvent.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return ServiceEvent.objects.create(**data)
+
+    def add_audience(self, event, *units):
+        for unit in units:
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_no_audience_rows_keeps_legacy_behavior_exactly(self):
+        global_event = self.create_event()
+        self.assertTrue(global_event.can_be_seen_by(self.group_user))
+        self.assertTrue(global_event.can_be_seen_by(self.no_group_user))
+
+        district_event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+        self.assertTrue(district_event.can_be_seen_by(self.group_user))
+        self.assertTrue(district_event.can_be_seen_by(self.group_b_user))
+        self.assertFalse(district_event.can_be_seen_by(self.other_user))
+        self.assertFalse(district_event.can_be_seen_by(self.no_group_user))
+
+        group_event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        self.assertTrue(group_event.can_be_seen_by(self.group_user))
+        self.assertFalse(group_event.can_be_seen_by(self.group_b_user))
+        self.assertFalse(group_event.can_be_seen_by(self.no_group_user))
+
+    def test_audience_rows_override_legacy_scope_fields(self):
+        # Legacy says global, audience rows narrow it to one group.
+        narrowed = self.create_event()
+        self.add_audience(narrowed, self.group_unit)
+        self.assertTrue(narrowed.can_be_seen_by(self.group_user))
+        self.assertFalse(narrowed.can_be_seen_by(self.group_b_user))
+        self.assertFalse(narrowed.can_be_seen_by(self.other_user))
+
+        # Legacy says one small group, audience rows widen to whole church.
+        widened = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.other_group,
+        )
+        self.add_audience(widened, self.root_unit)
+        self.assertTrue(widened.can_be_seen_by(self.group_user))
+        self.assertTrue(widened.can_be_seen_by(self.em_user))
+
+    def test_small_group_unit_audience_matches_only_that_groups_members(self):
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+
+        self.assertTrue(event.can_be_seen_by(self.group_user))
+        self.assertFalse(event.can_be_seen_by(self.group_b_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+        self.assertFalse(event.can_be_seen_by(self.em_user))
+
+    def test_district_unit_audience_matches_descendant_group_members(self):
+        event = self.create_event()
+        self.add_audience(event, self.north_unit)
+
+        self.assertTrue(event.can_be_seen_by(self.group_user))
+        self.assertTrue(event.can_be_seen_by(self.group_b_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+        self.assertFalse(event.can_be_seen_by(self.em_user))
+        self.assertFalse(event.can_be_seen_by(self.no_group_user))
+
+    def test_ministry_context_unit_audience_matches_context_groups(self):
+        event = self.create_event()
+        self.add_audience(event, self.cm_unit)
+
+        self.assertTrue(event.can_be_seen_by(self.group_user))
+        self.assertTrue(event.can_be_seen_by(self.other_user))
+        self.assertFalse(event.can_be_seen_by(self.em_user))
+
+    def test_multi_unit_selection_is_a_union(self):
+        event = self.create_event()
+        self.add_audience(event, self.group_b_unit, self.em_unit)
+
+        self.assertTrue(event.can_be_seen_by(self.group_b_user))
+        self.assertTrue(event.can_be_seen_by(self.em_user))
+        self.assertFalse(event.can_be_seen_by(self.group_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_root_unit_audience_behaves_like_whole_church(self):
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        self.add_audience(event, self.root_unit)
+
+        self.assertTrue(event.can_be_seen_by(self.group_user))
+        self.assertTrue(event.can_be_seen_by(self.em_user))
+        self.assertTrue(event.can_be_seen_by(self.no_group_user))
+
+    def test_unmapped_unit_audience_matches_no_ordinary_users(self):
+        event = self.create_event()
+        self.add_audience(event, self.unmapped_unit)
+
+        self.assertFalse(event.can_be_seen_by(self.group_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+        self.assertFalse(event.can_be_seen_by(self.em_user))
+        self.assertFalse(event.can_be_seen_by(self.no_group_user))
+        self.assertTrue(event.can_be_seen_by(self.staff))
+
+    def test_user_without_small_group_matches_only_root_audience(self):
+        group_event = self.create_event()
+        self.add_audience(group_event, self.group_unit)
+        self.assertFalse(group_event.can_be_seen_by(self.no_group_user))
+
+        root_event = self.create_event()
+        self.add_audience(root_event, self.root_unit)
+        self.assertTrue(root_event.can_be_seen_by(self.no_group_user))
+
+    def test_church_structure_membership_does_not_grant_audience_visibility(self):
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+        yesterday = timezone.localdate() - timezone.timedelta(days=1)
+
+        # Active membership in the selected unit, but the runtime group is
+        # another group: still hidden.
+        ChurchStructureMembership.objects.create(
+            user=self.other_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=yesterday,
+        )
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+        # Active membership in the selected unit with no runtime group at
+        # all: still hidden.
+        ChurchStructureMembership.objects.create(
+            user=self.no_group_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=yesterday,
+        )
+        self.assertFalse(event.can_be_seen_by(self.no_group_user))
+
+        # Requested membership grants nothing.
+        ChurchStructureMembership.objects.create(
+            user=self.em_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+        self.assertFalse(event.can_be_seen_by(self.em_user))
+
+    def test_status_and_staff_behavior_preserved_with_audience_rows(self):
+        draft = self.create_event(status=ServiceEvent.STATUS_DRAFT)
+        self.add_audience(draft, self.root_unit)
+        self.assertFalse(draft.can_be_seen_by(self.group_user))
+        self.assertTrue(draft.can_be_seen_by(self.staff))
+
+        cancelled = self.create_event(status=ServiceEvent.STATUS_CANCELLED)
+        self.add_audience(cancelled, self.root_unit)
+        self.assertFalse(cancelled.can_be_seen_by(self.group_user))
+        self.assertTrue(cancelled.can_be_seen_by(self.staff))
+
+    def test_audience_row_on_later_inactivated_unit_keeps_matching(self):
+        # Parity decision per the SE-AS runtime migration plan: stored
+        # selections keep matching when the unit is later deactivated, just
+        # as legacy district/small-group checks never test is_active.
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+
+        self.group_unit.is_active = False
+        self.group_unit.save()
+
+        self.assertTrue(event.can_be_seen_by(self.group_user))
+        self.assertFalse(event.can_be_seen_by(self.group_b_user))
+
+    def test_event_list_and_detail_agree_with_audience_visibility(self):
+        self.set_language("en")
+        event = self.create_event(title_en="Audience Scoped Gathering")
+        self.add_audience(event, self.group_unit)
+        detail_url = reverse("service_event_detail", args=[event.id])
+
+        self.client.login(username="audience_r4", password="testpass123")
+        visible_list = self.client.get(reverse("service_event_list"))
+        self.assertContains(visible_list, "Audience Scoped Gathering")
+        visible_detail = self.client.get(detail_url)
+        self.assertEqual(visible_detail.status_code, 200)
+
+        self.client.login(username="audience_r5", password="testpass123")
+        hidden_list = self.client.get(reverse("service_event_list"))
+        self.assertNotContains(hidden_list, "Audience Scoped Gathering")
+        hidden_detail = self.client.get(detail_url)
+        self.assertEqual(hidden_detail.status_code, 302)
+        self.assertEqual(hidden_detail.url, reverse("service_event_list"))
+
+    def test_no_audience_selector_ui_is_introduced(self):
+        form = ServiceEventForm(language="en")
+        self.assertNotIn("audience_units", form.fields)
+
+        self.set_language("en")
+        self.client.login(username="audience_staff", password="testpass123")
+        response = self.client.get(reverse("create_service_event"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "data-audience-picker")

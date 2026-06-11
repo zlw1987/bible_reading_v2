@@ -2,13 +2,13 @@
 
 ## 1. Purpose and Status
 
-SE-AS.3 is a docs-only implementation plan for migrating ServiceEvent / Church Gatherings audience scope from the legacy `scope_type` / `district` / `small_group` fields toward the `ChurchStructureUnit` audience-scope foundation (`ServiceEventAudienceScope`).
+SE-AS.3 recorded the implementation plan for migrating ServiceEvent / Church Gatherings audience scope from the legacy `scope_type` / `district` / `small_group` fields toward the `ChurchStructureUnit` audience-scope foundation (`ServiceEventAudienceScope`).
 
-Status: SE-AS.3 is complete as docs-only planning. No code, schema, migration, UI, or runtime behavior changed.
+Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the runtime visibility rule with legacy fallback: events with one or more `ServiceEventAudienceScope` rows use those audience rows for ordinary-user visibility; events with zero rows keep the existing legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` behavior. `ChurchStructureMembership` still does not grant ServiceEvent visibility, and legacy scope fields remain preserved as fallback. No staff selector UI, ServiceEvent form/template audience picker, setup/edit UI, CS-MAP.3, CS-SETUP.1, Community Activities, schema change, or migration was added.
 
-Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers the future implementation milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
+Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers later milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
 
-This plan does not authorize implementation. Each later milestone (SE-AS.4 through SE-AS.6) requires separate explicit approval.
+SE-AS.5 and SE-AS.6 remain future milestones and require separate explicit approval.
 
 ## 2. Current State Audit
 
@@ -111,11 +111,15 @@ Docs-only. Complete. No code changes.
 
 ### SE-AS.4 — Runtime Visibility Rule with Legacy Fallback
 
-- Before implementing or deploying SE-AS.4, run a preflight data check in staging/production to confirm whether any `ServiceEventAudienceScope` rows already exist. If rows exist, review and explicitly approve whether to keep, delete, or migrate them before enabling the runtime rule, because SE-AS.4 will make existing rows affect visibility.
-- Implement the future `can_be_seen_by` rule (Section 6) including the unit-to-user resolution (Section 7).
-- No UI, no admin surface, no backfill, no way for staff to create audience rows yet — behavior-inert at ship time.
-- Full targeted test matrix (Section 10), including proof that events without audience rows behave byte-for-byte like today.
-- Includes a shared resolution helper, preferring reuse of the `resolve_units_to_small_groups` pattern (decide at implementation whether to share one helper or keep a ServiceEvent-local copy; do not change Bible Study behavior either way).
+Completed. `ServiceEvent.can_be_seen_by` now applies the Section 6 rule: staff/superuser/service-event managers keep the existing override; draft/cancelled and non-published statuses stay hidden from ordinary users; events with `ServiceEventAudienceScope` rows use those rows for ordinary-user visibility; events with no rows fall back to legacy `scope_type` / `district` / `small_group` and `Profile.small_group` behavior exactly.
+
+Implementation notes:
+
+- Unit matching reuses `studies.models.resolve_units_to_small_groups()` so ServiceEvent and Bible Study Schedule share the same `ChurchStructureUnit` to legacy `SmallGroup` resolution semantics.
+- Root unit rows behave like legacy global scope and match all authenticated ordinary users, including users without a current small group.
+- Non-root rows match only through the user's current `Profile.small_group`; `ChurchStructureMembership` is not consulted.
+- Stored rows whose units are later deactivated keep matching per the Section 7 parity decision.
+- No SE-AS.5 selector UI, no ServiceEvent form/template audience picker, no backfill command, no Community Activities, no CS-MAP.3, and no CS-SETUP.1 work was added.
 
 ### SE-AS.5 — Staff Audience Selector UI and Display
 
@@ -133,7 +137,7 @@ Docs-only. Complete. No code changes.
 
 ## 6. Recommended Future `ServiceEvent.can_be_seen_by` Rule
 
-Do not implement now. The recommended rule, in order:
+Implemented by SE-AS.4. The runtime rule, in order:
 
 1. Unauthenticated users: denied (unchanged).
 2. `can_be_managed_by` (staff, superuser, `CAP_MANAGE_SERVICE_EVENTS`): allowed, including drafts (unchanged — managers keep broader access).
@@ -226,7 +230,6 @@ Backfill command (SE-AS.6, if approved):
 
 SE-AS.3 (this task) does NOT implement, and this plan by itself does not authorize:
 
-- ServiceEvent runtime visibility migration or any `can_be_seen_by` change.
 - Staff audience selector UI or any form/template/admin change.
 - Automatic notifications, attendance, availability, swap requests, reminders, automatic scheduling, or checklist.
 - Community Activities (still unimplemented; future module reuses the same foundation via its own join model).
@@ -237,8 +240,6 @@ SE-AS.3 (this task) does NOT implement, and this plan by itself does not authori
 
 ## 12. Open Decisions for Later Milestones
 
-- Shared resolver vs ServiceEvent-local copy of the unit→small-group resolution (SE-AS.4).
-- Whether stored selections on later-inactivated units keep matching (recommended yes for parity; confirm at SE-AS.4).
 - Final bilingual wording: Audience Scope / 适用范围 here vs Coverage Scope / 覆盖对象 in SE-AS.1 — unify at SE-AS.5.
 - Whether legacy scope fields stay staff-editable after SE-AS.5 or become read-only fallback display.
 - Whether/when to run the SE-AS.6 backfill at all, and whether to include global events in it.

@@ -65,6 +65,10 @@ def get_visible_service_events(user):
         "rotation_anchor_team",
         "small_group",
         "created_by",
+    ).prefetch_related(
+        # SE-AS.4: can_be_seen_by reads audience scope rows per event; the
+        # prefetch keeps the per-user visibility pass to a fixed query count.
+        "audience_scope_links__unit",
     ).order_by("-start_datetime")
 
     if can_manage_service_events(user):

@@ -2046,6 +2046,55 @@ class BibleStudyModuleTests(TestCase):
             ["role", "user", "display_name", "notes", "notes_en"],
         )
 
+    def test_meeting_role_form_keeps_selected_user_available_on_edit(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        role = self.create_meeting_role(meeting, user=self.other_user)
+
+        form = BibleStudyMeetingRoleForm(instance=role, meeting=meeting)
+
+        users = form.fields["user"].queryset
+        self.assertIn(self.user, users)
+        self.assertIn(self.other_user, users)
+
+    def test_meeting_role_form_rejects_blank_assignee(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        form = BibleStudyMeetingRoleForm(
+            data=self.meeting_role_post_data(user="", display_name=""),
+            meeting=meeting,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("display_name", form.errors)
+        self.assertIn(
+            "Choose a user or enter a display name for this role.",
+            form.errors["display_name"],
+        )
+
+    def test_meeting_role_form_accepts_linked_user_without_display_name(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        form = BibleStudyMeetingRoleForm(
+            data=self.meeting_role_post_data(user=self.user.id, display_name=""),
+            meeting=meeting,
+        )
+
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["user"], self.user)
+        self.assertEqual(form.cleaned_data["display_name"], "")
+
+    def test_meeting_role_form_accepts_display_name_fallback_without_user(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        form = BibleStudyMeetingRoleForm(
+            data=self.meeting_role_post_data(
+                user="",
+                display_name="Guest Leader",
+            ),
+            meeting=meeting,
+        )
+
+        self.assertTrue(form.is_valid())
+        self.assertIsNone(form.cleaned_data["user"])
+        self.assertEqual(form.cleaned_data["display_name"], "Guest Leader")
+
     def test_staff_can_access_meeting_role_management_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
@@ -2060,6 +2109,27 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Manage Meeting Roles")
         self.assertContains(response, "Add Meeting Role")
         self.assertContains(response, "Worship Lead")
+        self.assertContains(
+            response,
+            'personalized Today &quot;my role&quot; display',
+        )
+        self.assertContains(
+            response,
+            'cannot be treated as &quot;my role&quot;',
+        )
+
+    def test_chinese_meeting_role_management_help_text_renders(self):
+        self.set_language("zh")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "如果这位同工已有账号，请选择用户")
+        self.assertContains(response, "只填写显示姓名的分工仍会显示在聚会详情")
 
     def test_regular_user_cannot_access_meeting_role_management_page(self):
         self.set_language("en")
@@ -2091,6 +2161,21 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(role.role, BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER)
         self.assertEqual(role.user, self.user)
         self.assertEqual(role.notes_en, "Discussion leader notes")
+
+    def test_staff_can_add_display_name_fallback_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+            self.meeting_role_post_data(user="", display_name="Guest Host"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        role = BibleStudyMeetingRole.objects.get(meeting=meeting)
+        self.assertEqual(role.display_name, "Guest Host")
+        self.assertIsNone(role.user)
 
     def test_staff_can_edit_meeting_role(self):
         self.set_language("en")
@@ -2148,6 +2233,23 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertEqual(delete_response.status_code, 302)
         self.assertTrue(BibleStudyMeetingRole.objects.filter(id=role.id).exists())
+
+    def test_regular_user_cannot_post_meeting_role(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.post(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+            self.meeting_role_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+        self.assertFalse(BibleStudyMeetingRole.objects.filter(meeting=meeting).exists())
 
     def test_meeting_detail_displays_roles_to_own_group_user(self):
         self.set_language("en")

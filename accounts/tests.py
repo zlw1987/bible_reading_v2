@@ -3200,6 +3200,23 @@ class StaffStructureMapTests(TestCase):
         )
         self.assertContains(response, reverse("staff_membership_request_list"))
 
+    def test_structure_map_renders_collapsible_tree_controls(self):
+        self.build_tree()
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-structure-tree")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "data-structure-toggle")
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'data-depth="1"')
+        self.assertIn(f'data-parent-id="{self.root.id}"', content)
+        self.assertContains(response, "function updateVisibility()")
+
     def test_structure_map_hides_inactive_units(self):
         self.build_tree()
         ChurchStructureUnit.objects.create(
@@ -3388,6 +3405,17 @@ class StaffStructureMapTests(TestCase):
         self.assertEqual(rows_by_code["D2"]["membership_count"], 2)
         self.assertEqual(rows_by_code["CM"]["membership_count"], 2)
         self.assertContains(response, "Covered members: 2")
+
+    def test_structure_map_shows_current_data_mapping_label(self):
+        self.build_tree()
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Current data mapping")
+        self.assertContains(response, "Structure Rainbow 4")
 
     def test_structure_map_flags_direct_primary_memberships_on_parent_units(self):
         self.build_tree()

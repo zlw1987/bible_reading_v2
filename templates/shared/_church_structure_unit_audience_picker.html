@@ -25,21 +25,36 @@ the source of truth.
     <div class="audience-picker-list" data-audience-list role="group">
         {% for opt in options %}
         {% if opt.orphan %}{% ifchanged %}<p class="audience-picker-group-label">{% if language == "zh" %}未归类{% else %}Unassigned{% endif %}</p>{% endifchanged %}{% endif %}
-        <label class="audience-picker-row{% if opt.orphan %} audience-picker-row-orphan{% endif %}"
-               data-audience-option
-               data-search="{{ opt.search }}"
-               data-unit-type="{{ opt.unit_type }}"
-               data-ancestors="{% for aid in opt.ancestor_ids %}{{ aid }}{% if not forloop.last %} {% endif %}{% endfor %}"
-               style="--audience-depth: {{ opt.depth }};">
-            <input type="checkbox"
-                   name="{{ field.html_name }}"
-                   value="{{ opt.id }}"
-                   data-audience-checkbox
-                   data-unit-id="{{ opt.id }}"
-                   data-chip-label="{{ opt.path_label }}"
-                   {% if opt.selected %}checked{% endif %}>
-            <span class="audience-picker-row-label" title="{{ opt.path_label }}">{{ opt.label }}</span>
-        </label>
+        <div class="audience-picker-row{% if opt.orphan %} audience-picker-row-orphan{% endif %}"
+             data-audience-option
+             data-unit-id="{{ opt.id }}"
+             data-parent-id="{% if opt.parent_id %}{{ opt.parent_id }}{% endif %}"
+             data-search="{{ opt.search }}"
+             data-unit-type="{{ opt.unit_type }}"
+             data-ancestors="{% for aid in opt.ancestor_ids %}{{ aid }}{% if not forloop.last %} {% endif %}{% endfor %}"
+             data-depth="{{ opt.depth }}"
+             data-has-children="{% if opt.has_children %}1{% else %}0{% endif %}"
+             style="--audience-depth: {{ opt.depth }};">
+            {% if opt.has_children %}
+            <button type="button"
+                    class="tree-toggle audience-tree-toggle"
+                    data-audience-toggle
+                    aria-expanded="false"
+                    aria-label="{% if language == 'zh' %}展开{% else %}Expand{% endif %} {{ opt.label }}">▶</button>
+            {% else %}
+            <span class="tree-toggle-spacer" aria-hidden="true"></span>
+            {% endif %}
+            <label class="audience-picker-row-control">
+                <input type="checkbox"
+                       name="{{ field.html_name }}"
+                       value="{{ opt.id }}"
+                       data-audience-checkbox
+                       data-unit-id="{{ opt.id }}"
+                       data-chip-label="{{ opt.path_label }}"
+                       {% if opt.selected %}checked{% endif %}>
+                <span class="audience-picker-row-label" title="{{ opt.path_label }}">{{ opt.label }}</span>
+            </label>
+        </div>
         {% endfor %}
         <p class="audience-picker-empty" data-audience-empty hidden>
             {% if language == "zh" %}没有匹配的单元。{% else %}No matching units.{% endif %}
@@ -69,9 +84,9 @@ the source of truth.
         var chips = root.querySelector("[data-audience-chips]");
         var search = root.querySelector("[data-audience-search]");
         var empty = root.querySelector("[data-audience-empty]");
-        var checkboxes = Array.prototype.slice.call(
-            root.querySelectorAll("[data-audience-checkbox]")
-        );
+        var rows = Array.prototype.slice.call(root.querySelectorAll("[data-audience-option]"));
+        var checkboxes = Array.prototype.slice.call(root.querySelectorAll("[data-audience-checkbox]"));
+        var expanded = {};
 
         function enforceSelectionRules(changed) {
             if (!changed.checked) { return; }
@@ -87,6 +102,64 @@ the source of truth.
                     other.checked = false;
                 }
             });
+        }
+
+        function expandAncestors(row) {
+            var raw = row.getAttribute("data-ancestors") || "";
+            raw.split(/\s+/).filter(Boolean).forEach(function (ancestorId) {
+                expanded[ancestorId] = true;
+            });
+        }
+
+        function hasMatchingDescendant(row, query) {
+            var rowId = row.getAttribute("data-unit-id");
+            return rows.some(function (candidate) {
+                var ancestors = (candidate.getAttribute("data-ancestors") || "").split(/\s+/);
+                return ancestors.indexOf(rowId) !== -1 &&
+                    (candidate.getAttribute("data-search") || "").indexOf(query) !== -1;
+            });
+        }
+
+        function rowIsVisible(row) {
+            var parentId = row.getAttribute("data-parent-id");
+            if (!parentId) { return true; }
+            var ancestorIds = (row.getAttribute("data-ancestors") || "").split(/\s+/).filter(Boolean);
+            return ancestorIds.every(function (ancestorId) {
+                return !!expanded[ancestorId];
+            });
+        }
+
+        function updateToggle(row, forceExpanded) {
+            var toggle = row.querySelector("[data-audience-toggle]");
+            if (!toggle) { return; }
+            var rowId = row.getAttribute("data-unit-id");
+            var isExpanded = forceExpanded || !!expanded[rowId];
+            var label = row.querySelector("[data-chip-label]");
+            var name = label ? label.getAttribute("data-chip-label") : "";
+            toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            toggle.setAttribute(
+                "aria-label",
+                (isExpanded ? "{% if language == 'zh' %}收起{% else %}Collapse{% endif %} " : "{% if language == 'zh' %}展开{% else %}Expand{% endif %} ") + name
+            );
+            toggle.textContent = isExpanded ? "▼" : "▶";
+        }
+
+        function updateVisibility() {
+            var query = search ? search.value.trim().toLowerCase() : "";
+            var anyVisible = false;
+            rows.forEach(function (row) {
+                var visible;
+                if (query) {
+                    visible = (row.getAttribute("data-search") || "").indexOf(query) !== -1 ||
+                        hasMatchingDescendant(row, query);
+                } else {
+                    visible = rowIsVisible(row);
+                }
+                row.hidden = !visible;
+                if (visible) { anyVisible = true; }
+                updateToggle(row, !!query && hasMatchingDescendant(row, query));
+            });
+            if (empty) { empty.hidden = anyVisible; }
         }
 
         function renderChips() {
@@ -109,6 +182,7 @@ the source of truth.
                 remove.addEventListener("click", function () {
                     checkbox.checked = false;
                     renderChips();
+                    updateVisibility();
                 });
 
                 chip.appendChild(text);
@@ -118,26 +192,36 @@ the source of truth.
         }
 
         checkboxes.forEach(function (checkbox) {
+            if (checkbox.checked) {
+                expandAncestors(optionEl(checkbox));
+            }
             checkbox.addEventListener("change", function () {
                 enforceSelectionRules(checkbox);
                 renderChips();
+                if (checkbox.checked) {
+                    expandAncestors(optionEl(checkbox));
+                }
+                updateVisibility();
+            });
+        });
+
+        root.querySelectorAll("[data-audience-toggle]").forEach(function (toggle) {
+            toggle.addEventListener("click", function () {
+                var row = toggle.closest("[data-audience-option]");
+                var rowId = row.getAttribute("data-unit-id");
+                expanded[rowId] = !expanded[rowId];
+                updateVisibility();
             });
         });
 
         if (search) {
             search.addEventListener("input", function () {
-                var query = search.value.trim().toLowerCase();
-                var anyVisible = false;
-                root.querySelectorAll("[data-audience-option]").forEach(function (row) {
-                    var match = !query || (row.getAttribute("data-search") || "").indexOf(query) !== -1;
-                    row.hidden = !match;
-                    if (match) { anyVisible = true; }
-                });
-                if (empty) { empty.hidden = anyVisible; }
+                updateVisibility();
             });
         }
 
         renderChips();
+        updateVisibility();
     }
 
     document.querySelectorAll("[data-audience-picker]").forEach(initPicker);

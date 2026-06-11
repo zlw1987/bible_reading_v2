@@ -4,7 +4,7 @@
 
 SE-AS.5A is the docs-only interaction plan for the SE-AS.5 staff audience selector UI. SE-AS.5 is now implemented against this contract.
 
-Status: SE-AS.5A planning is complete, SE-AS.5 implementation is complete, and SE-AS.5B post-commit UI/wording cleanup is complete. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker collapsed by default with selected-count summary copy; staff detail shows effective audience source and readable labels; empty selections keep legacy fallback behavior. No schema/model field change, migration, data backfill, Community Activities, CS-MAP.3, CS-SETUP.1, `ChurchStructureMembership` visibility migration, or ministry scheduling behavior change was added.
+Status: SE-AS.5A planning is complete, SE-AS.5 implementation is complete, SE-AS.5B post-commit UI/wording cleanup is complete, and SE-AS.5C corrects the picker interaction model. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker as a visible section; the tree nodes inside the picker expand/collapse by hierarchy level. Staff detail shows effective audience source and readable labels; empty selections keep legacy fallback behavior. No schema/model field change, migration, data backfill, Community Activities, CS-MAP.3, CS-SETUP.1, `ChurchStructureMembership` visibility migration, or ministry scheduling behavior change was added.
 
 Current local baseline:
 
@@ -138,7 +138,8 @@ Recurring create should behave as one shared event template:
 Implemented shape:
 
 - Reuse `templates/shared/_church_structure_unit_audience_picker.html`.
-- SE-AS.5B wraps the ServiceEvent create/edit and recurring create picker in a native collapsed-by-default `<details>` control. The summary shows `Audience Scope: none selected` / `Audience Scope: N selected` or `适用范围：未选择` / `适用范围：已选择 N 个`; validation errors auto-open the picker.
+- SE-AS.5C removes the collapsed outer picker shell from ServiceEvent create/edit and recurring create. The `Audience Scope` / `适用范围` label, help text, search input, selected chips, and root-level tree rows are visible immediately.
+- The picker tree uses node-level hierarchy controls: root-level units show by default; child levels are revealed by expanding their parent; selected descendant paths expand on edit or validation re-render; search shows matching rows and their ancestor path. Without JavaScript, the server-rendered checkbox tree remains visible and usable.
 - Add a ServiceEvent-specific optional `audience_units` field/helper pattern parallel to `BibleStudySeriesForm`; unlike Bible Study Schedule, ServiceEvent keeps empty-picker fallback behavior instead of requiring the picker.
 - Save selected units through `ServiceEventAudienceScope` rows in the same transaction as the event save. Edit replaces rows atomically; clearing all units deletes rows and restores fallback.
 - Prefetch `audience_scope_links__unit` for detail/list surfaces that display effective audience.
@@ -172,7 +173,7 @@ SE-AS.5A and the later SE-AS.5 selector implementation must not include:
 SE-AS.5 is complete using this interaction contract:
 
 - Picker appears on single create, single edit, and recurring create.
-- The picker is collapsed by default on those forms after SE-AS.5B, with validation errors exposed by auto-opening the section.
+- The picker section stays visible on those forms; hierarchy tree nodes collapse/expand by level, with root rows visible by default and selected ancestor paths expanded on edit.
 - Staff detail shows effective audience source and readable labels.
 - Ordinary detail either omits audience display or shows only simple readable labels.
 - Legacy fields remain editable as fallback settings.

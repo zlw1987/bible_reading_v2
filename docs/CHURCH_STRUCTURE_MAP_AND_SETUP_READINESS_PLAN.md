@@ -11,7 +11,7 @@ This plan responds to two June 2026 demo feedback items:
 
 This plan defines a docs-first response: record the modular adoption principle, then propose a read-only staff structure map with mapping-health indicators (CS-MAP.2) before any setup/edit UI is considered. Later milestones each require separate explicit approval; nothing beyond this document is authorized by CS-MAP.1.
 
-Status update: CS-MAP.2 is now complete (see Section 7 for the completion note), and SE-AS.5B post-commit cleanup clarified the visible wording and count semantics on the shipped read-only map. CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6.
+Status update: CS-MAP.2 is now complete (see Section 7 for the completion note), SE-AS.5B post-commit cleanup clarified the visible wording and count semantics on the shipped read-only map, and CS-MAP.2B updates the map tree to use the same hierarchical node-level expand/collapse mental model as the ServiceEvent audience picker. CS-MAP.3 remains optional and unapproved. CS-SETUP.1 remains explicitly unapproved and gated per Section 6.
 
 ## 2. Current Foundation Summary
 
@@ -90,11 +90,11 @@ Sequencing rules:
 
 ## 7. CS-MAP.2 Implementation Contract
 
-Status: completed. CS-MAP.2 is implemented as the read-only staff Church Structure Map at `/staff/structure/`: it renders the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and the Section 8 setup-readiness indicators; it has no write actions (GET-only), no schema/migration changes, no runtime visibility changes, and no setup/edit UI. SE-AS.5B clarified the page as `Church Structure & Setup Check` / `教会结构与设置检查`, renamed per-row mappings to `Current data mapping` / `当前资料对应`, and changed the main per-row member number to descendant-inclusive `Covered members` / `覆盖成员`. Django Admin remains the structure write surface.
+Status: completed. CS-MAP.2 is implemented as the read-only staff Church Structure Map at `/staff/structure/`: it renders the active `ChurchStructureUnit` hierarchy with bilingual names, counts-only membership/mapping context, and the Section 8 setup-readiness indicators; it has no write actions (GET-only), no schema/migration changes, no runtime visibility changes, and no setup/edit UI. SE-AS.5B clarified the page as `Church Structure & Setup Check` / `教会结构与设置检查`, renamed per-row mappings to `Current data mapping` / `当前资料对应`, and changed the main per-row member number to descendant-inclusive `Covered members` / `覆盖成员`. CS-MAP.2B keeps root-level units visible by default and lets staff expand descendants one level at a time; parent covered-member counts remain descendant-inclusive. Django Admin remains the structure write surface.
 
 - Route: suggested `/staff/structure/`, linked from the existing `/staff/` overview.
 - Access: permission-protected, matching the existing staff overview gating pattern (staff/superuser or existing staff capability); ordinary users denied. No new capability unless implementation review proves a real gap.
-- Renders the active `ChurchStructureUnit` hierarchy with indentation/path context, using `display_name(language)` for bilingual names where available; inactive units visually distinct or behind a toggle.
+- Renders the active `ChurchStructureUnit` hierarchy with indentation/path context and node-level expand/collapse controls, using `display_name(language)` for bilingual names where available; inactive units remain hidden from the active tree.
 - Per-unit context is counts only: descendant-inclusive active primary `ChurchStructureMembership` covered-member count, and which active legacy `MinistryContext` / `District` / `SmallGroup` rows map to the unit as current data mapping. No member name rosters.
 - Shows the mapping-health / setup-readiness indicators defined in Section 8, each linking to the existing Django Admin or staff workflow where the issue can be reviewed — no fix actions on the page itself.
 - Zero write actions. Zero schema changes. Zero runtime behavior changes anywhere else: event/study/reading visibility untouched, no new queries on non-staff paths.

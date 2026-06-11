@@ -620,7 +620,20 @@ class ServiceEventFoundationTests(TestCase):
             chinese_form.fields["audience_units"].help_text,
         )
 
-    def test_service_event_create_form_collapses_audience_picker_by_default(self):
+    def test_service_event_create_form_keeps_audience_picker_section_visible(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文部",
+            name_en="Chinese Ministry",
+        )
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -628,10 +641,29 @@ class ServiceEventFoundationTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('<details class="audience-picker-shell" >', content)
-        self.assertContains(response, "Audience Scope: none selected")
+        self.assertNotIn("audience-picker-shell", content)
+        self.assertContains(response, '<label class="form-label">Audience Scope</label>')
+        self.assertContains(response, "data-audience-picker")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "data-audience-toggle")
+        self.assertContains(response, 'aria-expanded="false"')
+        self.assertContains(response, 'data-depth="1"')
+        self.assertContains(response, "function updateVisibility()")
 
-    def test_recurring_create_form_collapses_audience_picker_by_default(self):
+    def test_recurring_create_form_keeps_audience_picker_section_visible(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文部",
+            name_en="Chinese Ministry",
+        )
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -639,8 +671,12 @@ class ServiceEventFoundationTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('<details class="audience-picker-shell" >', content)
-        self.assertContains(response, "Audience Scope: none selected")
+        self.assertNotIn("audience-picker-shell", content)
+        self.assertContains(response, '<label class="form-label">Audience Scope</label>')
+        self.assertContains(response, "data-audience-picker")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "data-audience-toggle")
+        self.assertContains(response, 'aria-expanded="false"')
 
     def test_service_event_edit_form_preselects_existing_audience_rows(self):
         event = self.create_event()
@@ -651,19 +687,40 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertEqual(form.audience_selected_ids(), {unit.id})
 
-    def test_service_event_edit_form_summary_counts_selected_audience_rows(self):
+    def test_service_event_edit_form_expands_selected_descendant_path(self):
         self.set_language("en")
         event = self.create_event()
-        first_unit = self.create_structure_unit("YOUTH", "Youth Fellowship")
-        second_unit = self.create_structure_unit("R4", "Rainbow 4")
-        ServiceEventAudienceScope.objects.create(service_event=event, unit=first_unit)
-        ServiceEventAudienceScope.objects.create(service_event=event, unit=second_unit)
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        parent = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文部",
+            name_en="Chinese Ministry",
+        )
+        selected = ChurchStructureUnit.objects.create(
+            parent=parent,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+        )
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=selected)
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.get(reverse("edit_service_event", args=[event.id]))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Audience Scope: 2 selected")
+        self.assertContains(response, "Rainbow 4")
+        self.assertIn(f'data-ancestors="{root.id} {parent.id}"', content)
+        self.assertIn(f'value="{selected.id}"', content)
+        self.assertIn("checked", content)
+        self.assertContains(response, "expandAncestors(optionEl(checkbox))")
 
     def test_service_event_form_uses_clearer_fallback_wording_in_both_languages(self):
         self.client.login(username="pastor_event", password="testpass123")
@@ -918,7 +975,10 @@ class ServiceEventFoundationTests(TestCase):
             response,
             "Do not select both a unit and one of its parent or child units.",
         )
-        self.assertContains(response, '<details class="audience-picker-shell" open>')
+        self.assertNotContains(response, "audience-picker-shell")
+        content = response.content.decode()
+        self.assertIn(f'value="{parent.id}"', content)
+        self.assertIn(f'value="{child.id}"', content)
         self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 

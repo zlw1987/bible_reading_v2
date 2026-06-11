@@ -246,16 +246,26 @@ class AudienceUnitOptionsMixin:
             return f"Audience Scope: {count} selected"
         return "Audience Scope: none selected"
 
-    def _audience_option(self, unit, depth, ancestor_ids, selected, orphan=False):
+    def _audience_option(
+        self,
+        unit,
+        depth,
+        ancestor_ids,
+        selected,
+        has_children=False,
+        orphan=False,
+    ):
         compact = compact_unit_label(unit, self.language)
         return {
             "id": unit.id,
+            "parent_id": unit.parent_id,
             "label": unit.display_name(self.language),
             "path_label": compact,
             "search": f"{compact} {unit.code}".lower(),
             "depth": depth,
             "unit_type": unit.unit_type,
             "ancestor_ids": ancestor_ids,
+            "has_children": has_children,
             "selected": unit.id in selected,
             "orphan": orphan,
         }
@@ -284,7 +294,13 @@ class AudienceUnitOptionsMixin:
                 return
             visited.add(unit.id)
             options.append(
-                self._audience_option(unit, depth, ancestor_ids, selected)
+                self._audience_option(
+                    unit,
+                    depth,
+                    ancestor_ids,
+                    selected,
+                    has_children=bool(children.get(unit.id)),
+                )
             )
             for child in children.get(unit.id, []):
                 walk(child, depth + 1, ancestor_ids + [unit.id])
@@ -305,7 +321,14 @@ class AudienceUnitOptionsMixin:
             if unit.id not in visited:
                 visited.add(unit.id)
                 options.append(
-                    self._audience_option(unit, 0, [], selected, orphan=True)
+                    self._audience_option(
+                        unit,
+                        0,
+                        [],
+                        selected,
+                        has_children=bool(children.get(unit.id)),
+                        orphan=True,
+                    )
                 )
 
         return options

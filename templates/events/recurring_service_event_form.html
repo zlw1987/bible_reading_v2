@@ -36,14 +36,9 @@
 
     {% with audience_field=form.audience_units %}
     <div class="form-row" data-field="audience_units">
-        <details class="audience-picker-shell" {% if audience_field.errors %}open{% endif %}>
-            <summary>{{ form.audience_summary }}</summary>
-            <div class="audience-picker-shell-body">
-                <label class="form-label">{{ audience_field.label }}</label>
-                {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
-                {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
-            </div>
-        </details>
+        <label class="form-label">{{ audience_field.label }}</label>
+        {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
+        {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
         {{ audience_field.errors }}
     </div>
     {% endwith %}

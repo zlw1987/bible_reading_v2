@@ -83,33 +83,51 @@
         Active units only; numbers are descendant-inclusive covered member counts, with no member name lists.
         {% endif %}
     </p>
-    <div class="structure-map-tree">
+    <div class="structure-map-tree" data-structure-tree>
         {% for row in structure_rows %}
-        <div class="structure-map-row" style="--structure-depth: {{ row.depth }};">
-            <span class="structure-map-unit-name">{{ row.name }}</span>
-            <span class="structure-map-meta">
-                {% if language == "zh" %}覆盖成员{% else %}Covered members{% endif %}: {{ row.membership_count }}
-            </span>
-            {% if row.legacy_names %}
-            <span class="structure-map-meta">
-                {% if language == "zh" %}当前资料对应{% else %}Current data mapping{% endif %}: {{ row.legacy_names|join:", " }}
-            </span>
+        <div class="structure-map-row"
+             data-structure-row
+             data-unit-id="{{ row.unit.id }}"
+             data-parent-id="{% if row.parent_id %}{{ row.parent_id }}{% endif %}"
+             data-ancestors="{% for aid in row.ancestor_ids %}{{ aid }}{% if not forloop.last %} {% endif %}{% endfor %}"
+             data-depth="{{ row.depth }}"
+             data-has-children="{% if row.has_children %}1{% else %}0{% endif %}"
+             style="--structure-depth: {{ row.depth }};">
+            {% if row.has_children %}
+            <button type="button"
+                    class="tree-toggle structure-tree-toggle"
+                    data-structure-toggle
+                    aria-expanded="false"
+                    aria-label="{% if language == 'zh' %}展开{% else %}Expand{% endif %} {{ row.name }}">▶</button>
+            {% else %}
+            <span class="tree-toggle-spacer" aria-hidden="true"></span>
             {% endif %}
-            {% if row.direct_parent_membership_count %}
-            <span class="status status-warning">
-                {% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: {{ row.direct_parent_membership_count }}
-            </span>
-            {% endif %}
-            {% if row.without_linked_records %}
-            <span class="status status-warning">
-                {% if language == "zh" %}未关联当前资料{% else %}No linked current data mapping{% endif %}
-            </span>
-            {% endif %}
-            {% if row.under_holding %}
-            <span class="status status-warning">
-                {% if language == "zh" %}未分配暂存{% else %}Unassigned holding{% endif %}
-            </span>
-            {% endif %}
+            <div class="structure-map-row-content">
+                <span class="structure-map-unit-name">{{ row.name }}</span>
+                <span class="structure-map-meta">
+                    {% if language == "zh" %}覆盖成员{% else %}Covered members{% endif %}: {{ row.membership_count }}
+                </span>
+                {% if row.legacy_names %}
+                <span class="structure-map-meta">
+                    {% if language == "zh" %}当前资料对应{% else %}Current data mapping{% endif %}: {{ row.legacy_names|join:", " }}
+                </span>
+                {% endif %}
+                {% if row.direct_parent_membership_count %}
+                <span class="status status-warning">
+                    {% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: {{ row.direct_parent_membership_count }}
+                </span>
+                {% endif %}
+                {% if row.without_linked_records %}
+                <span class="status status-warning">
+                    {% if language == "zh" %}未关联当前资料{% else %}No linked current data mapping{% endif %}
+                </span>
+                {% endif %}
+                {% if row.under_holding %}
+                <span class="status status-warning">
+                    {% if language == "zh" %}未分配暂存{% else %}Unassigned holding{% endif %}
+                </span>
+                {% endif %}
+            </div>
         </div>
         {% empty %}
         <p class="muted">
@@ -118,4 +136,57 @@
         {% endfor %}
     </div>
 </section>
+<script>
+(function () {
+    function initStructureTree(root) {
+        if (root.dataset.structureReady) { return; }
+        root.dataset.structureReady = "1";
+        var rows = Array.prototype.slice.call(root.querySelectorAll("[data-structure-row]"));
+        var expanded = {};
+
+        function rowIsVisible(row) {
+            var parentId = row.getAttribute("data-parent-id");
+            if (!parentId) { return true; }
+            var ancestorIds = (row.getAttribute("data-ancestors") || "").split(/\s+/).filter(Boolean);
+            return ancestorIds.every(function (ancestorId) {
+                return !!expanded[ancestorId];
+            });
+        }
+
+        function updateToggle(row) {
+            var toggle = row.querySelector("[data-structure-toggle]");
+            if (!toggle) { return; }
+            var rowId = row.getAttribute("data-unit-id");
+            var isExpanded = !!expanded[rowId];
+            var name = row.querySelector(".structure-map-unit-name");
+            toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            toggle.setAttribute(
+                "aria-label",
+                (isExpanded ? "{% if language == 'zh' %}收起{% else %}Collapse{% endif %} " : "{% if language == 'zh' %}展开{% else %}Expand{% endif %} ") + (name ? name.textContent : "")
+            );
+            toggle.textContent = isExpanded ? "▼" : "▶";
+        }
+
+        function updateVisibility() {
+            rows.forEach(function (row) {
+                row.hidden = !rowIsVisible(row);
+                updateToggle(row);
+            });
+        }
+
+        root.querySelectorAll("[data-structure-toggle]").forEach(function (toggle) {
+            toggle.addEventListener("click", function () {
+                var row = toggle.closest("[data-structure-row]");
+                var rowId = row.getAttribute("data-unit-id");
+                expanded[rowId] = !expanded[rowId];
+                updateVisibility();
+            });
+        });
+
+        updateVisibility();
+    }
+
+    document.querySelectorAll("[data-structure-tree]").forEach(initStructureTree);
+})();
+</script>
 {% endblock %}

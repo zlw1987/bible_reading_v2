@@ -1716,23 +1716,6 @@ th {
     }
 }
 /* ChurchStructureUnit audience picker (BS-AS.2) */
-.audience-picker-shell {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface-soft);
-}
-
-.audience-picker-shell summary {
-    padding: 10px 12px;
-    font-weight: 700;
-    cursor: pointer;
-    overflow-wrap: anywhere;
-}
-
-.audience-picker-shell-body {
-    padding: 0 10px 10px;
-}
-
 .audience-picker {
     border: 1px solid var(--border);
     border-radius: 12px;
@@ -1823,6 +1806,14 @@ th {
     background: var(--surface-soft);
 }
 
+.audience-picker-row-control {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+    cursor: pointer;
+}
+
 .audience-picker-row input {
     width: auto;
     max-width: none;
@@ -1862,6 +1853,33 @@ th {
     overflow-wrap: anywhere;
 }
 
+.tree-toggle,
+.tree-toggle-spacer {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    min-width: 22px;
+    height: 22px;
+    margin-top: 1px;
+}
+
+.tree-toggle {
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tree-toggle:hover,
+.tree-toggle:focus {
+    background: var(--surface-soft);
+}
+
 /* Read-only staff church structure map */
 .structure-map-tree {
     border: 1px solid var(--border);
@@ -1872,9 +1890,8 @@ th {
 
 .structure-map-row {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 10px;
+    align-items: flex-start;
+    gap: 8px;
     padding: 6px 8px;
     padding-left: calc(8px + var(--structure-depth, 0) * 18px);
     border-radius: 8px;
@@ -1882,6 +1899,14 @@ th {
 
 .structure-map-row:hover {
     background: var(--surface-soft);
+}
+
+.structure-map-row-content {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    min-width: 0;
 }
 
 .structure-map-unit-name {

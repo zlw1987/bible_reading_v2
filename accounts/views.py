@@ -287,7 +287,7 @@ def staff_structure_map(request):
         "direct_parent_memberships": 0,
     }
 
-    def walk(unit, depth, under_holding):
+    def walk(unit, depth, under_holding, ancestor_ids):
         visited.add(unit.id)
         direct_primary_user_ids = set(
             direct_primary_user_ids_by_unit.get(unit.id, set())
@@ -300,6 +300,9 @@ def staff_structure_map(request):
             "unit": unit,
             "name": unit.display_name(language),
             "depth": depth,
+            "parent_id": unit.parent_id,
+            "ancestor_ids": ancestor_ids,
+            "has_children": bool(active_children),
             "membership_count": 0,
             "direct_parent_membership_count": direct_parent_membership_count,
             "legacy_names": legacy_names_by_unit.get(unit.id, []),
@@ -320,6 +323,7 @@ def staff_structure_map(request):
                     child,
                     depth + 1,
                     child_under_holding,
+                    ancestor_ids + [unit.id],
                 )
                 if child_mapped:
                     subtree_mapped = True
@@ -340,11 +344,11 @@ def staff_structure_map(request):
         )
     )
     for root in roots:
-        walk(root, 0, False)
+        walk(root, 0, False, [])
     # Active units whose parent is inactive or missing stay visible at the end.
     for unit in units:
         if unit.id not in visited:
-            walk(unit, 0, False)
+            walk(unit, 0, False, [])
 
     # Drift between the current runtime group and the approved active primary
     # membership. Categories are reported separately and may overlap with the

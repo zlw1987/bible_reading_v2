@@ -41,7 +41,7 @@
 - TODAY-HOME.1A / 1A.1 Today Page Action Center planning is complete as docs-only planning.
 - TODAY-HOME.1B Read-Only Today IA Restructure is complete.
 - TODAY-HOME.1D linked Bible Study role chips on Today is complete.
-- DATETIME-UX.1A Member-Facing Datetime Display Consistency Plan is complete as docs-only planning in `docs/MEMBER_FACING_DATETIME_DISPLAY_PLAN.md`; implementation remains future.
+- DATETIME-UX.1A Member-Facing Datetime Display Consistency Plan is complete as docs-only planning in `docs/MEMBER_FACING_DATETIME_DISPLAY_PLAN.md`; DATETIME-UX.1B member-facing datetime display helper + first implementation slice is complete with no model, migration, timezone setting, query, sorting/filtering, or business-rule change.
 - BS-ROLE.1A Bible Study Meeting Role Assignment Plan is complete as docs-only planning.
 - BS-ROLE.1B Bible Study meeting role form/UI polish is complete.
 - CS-SETUP.1D.0 Legacy Mapping Maintenance Next-Slice Plan is complete as docs-only planning.

@@ -545,20 +545,31 @@ MAPPING_REVIEW_STATUSES = {
     "unmapped",
     "mapped_inactive",
     "mapped_holding",
+    # Display-only conflict/warning overlay filters (CS-SETUP.1D.3). They narrow
+    # the list by overlay flag rather than primary status_key and write nothing.
+    "conflicts",
+    "type_mismatch",
+    "duplicate_active",
 }
 
 
 @staff_member_required
 @require_GET
 def staff_structure_mapping_review(request):
-    """Legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2 / .1D.1 / .1D.2).
+    """Legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2 / .1D.1 /
+    .1D.2 / .1D.3).
 
     Staff-only page that lists every legacy MinistryContext / District /
     SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
     mapping-status label and (CS-SETUP.1D.2) display-only type-mismatch /
     duplicate-active conflict badges. CS-SETUP.1C.2 adds summary counts and
-    ``?status=`` filter links so a long mapping list can be narrowed to the rows
-    that need review. This view itself is GET-only and writes nothing: the
+    primary ``?status=`` filter links so a long mapping list can be narrowed to
+    the rows that need review. CS-SETUP.1D.3 adds three more display-only
+    overlay filters (``?status=conflicts`` / ``type_mismatch`` /
+    ``duplicate_active``) that narrow the same list by conflict-badge flag
+    instead of primary status; like the primary filters they are GET-only
+    navigation, leave the badges and all counts as true totals, and write
+    nothing. This view itself is GET-only and writes nothing: the
     ``status`` filter only hides/shows already-loaded rows. When the viewer
     holds the matching Django Admin change permission, each permitted row offers
     a one-row mapping edit link (CS-SETUP.1D.1) to the separate
@@ -574,18 +585,35 @@ def staff_structure_mapping_review(request):
 
     # Read-only status filter. "needs_review" is the union of the three
     # attention statuses; an unknown value falls back to showing all rows.
+    # The overlay filters (CS-SETUP.1D.3) narrow by display-only conflict flag
+    # instead of the primary status_key, so they sit alongside the primary
+    # status filters without changing what status_key a row carries.
     needs_review_keys = ("unmapped", "mapped_inactive", "mapped_holding")
-    valid_statuses = ("all", "needs_review", "mapped_active") + needs_review_keys
+    overlay_statuses = ("conflicts", "type_mismatch", "duplicate_active")
+    valid_statuses = (
+        ("all", "needs_review", "mapped_active")
+        + needs_review_keys
+        + overlay_statuses
+    )
     status = request.GET.get("status", "all")
     if status not in valid_statuses:
         status = "all"
 
-    def row_matches(status_key):
+    def row_matches(row):
         if status == "all":
             return True
         if status == "needs_review":
-            return status_key in needs_review_keys
-        return status_key == status
+            return row["status_key"] in needs_review_keys
+        # Overlay filters inspect the display-only conflict flags on the full
+        # row rather than the primary status_key, so a mapped_active row can
+        # still surface under a conflict filter.
+        if status == "conflicts":
+            return row["is_type_mismatch"] or row["is_duplicate_active"]
+        if status == "type_mismatch":
+            return row["is_type_mismatch"]
+        if status == "duplicate_active":
+            return row["is_duplicate_active"]
+        return row["status_key"] == status
 
     # Counts are tallied across every loaded row, independent of the active
     # filter, so the summary always shows true totals for the filter links.
@@ -707,7 +735,7 @@ def staff_structure_mapping_review(request):
                 }
             )
         # Tally happens on every row above; only matching rows are rendered.
-        return [row for row in all_rows if row_matches(row["status_key"])]
+        return [row for row in all_rows if row_matches(row)]
 
     sections = [
         {

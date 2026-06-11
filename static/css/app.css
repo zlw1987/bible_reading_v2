@@ -1812,13 +1812,26 @@ th {
 }
 
 .audience-picker-row-control {
-    display: inline-flex;
-    align-items: flex-start;
+    align-items: center;
+    display: flex;
+    flex: 1 1 auto;
     gap: 8px;
     min-width: 0;
-    cursor: pointer;
 }
 
+.audience-picker-row-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.audience-picker-row-control input[type="checkbox"] {
+    flex: 0 0 auto;
+    margin-left: auto;
+    max-width: none;
+    order: 2;
+    width: auto;
+}
 .audience-picker-row input {
     width: auto;
     max-width: none;

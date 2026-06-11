@@ -1902,10 +1902,15 @@ th {
     color: var(--muted);
 }
 
-/* Read-only "my role" line under the Today small-group Bible study card */
+/* Read-only "my role" line under the Today small-group Bible study card.
+   Kept visually quiet (muted label, regular weight) so it stays clear
+   without out-weighing the meeting title above it. */
 .study-role-line {
-    margin: 4px 0 0;
-    font-weight: 600;
+    margin: 6px 0 0;
+}
+
+.study-role-label {
+    color: var(--muted);
 }
 
 /* Wrapped read-only audience scope chips for detail surfaces */

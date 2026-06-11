@@ -22,7 +22,11 @@ so the proposed-row audience matches the live runtime rule exactly. Events that
 cannot be proven parity-safe are skipped and reported, never silently dropped.
 """
 
+from datetime import datetime
+
+from django.core.exceptions import FieldDoesNotExist
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit, SmallGroup
 from studies.models import resolve_units_to_small_groups
@@ -89,6 +93,81 @@ def _proposed_signature(unit):
     )
 
 
+def _model_has_field(model, field_name):
+    try:
+        model._meta.get_field(field_name)
+    except FieldDoesNotExist:
+        return False
+    return True
+
+
+def _event_label(event):
+    for field_name in ("title", "name", "title_en"):
+        if not _model_has_field(ServiceEvent, field_name):
+            continue
+        value = getattr(event, field_name, "")
+        if value:
+            value = str(value).strip()
+            if value:
+                return value
+    return ""
+
+
+def _event_start_label(event):
+    for field_name in ("start_datetime", "start_date", "event_date", "date"):
+        if not _model_has_field(ServiceEvent, field_name):
+            continue
+        value = getattr(event, field_name, None)
+        if not value:
+            continue
+        if hasattr(value, "strftime"):
+            if isinstance(value, datetime) and timezone.is_aware(value):
+                value = timezone.localtime(value)
+            return value.strftime("%Y-%m-%d %H:%M %Z").strip()
+        return str(value).strip()
+    return ""
+
+
+def _unit_label(unit):
+    if unit is None:
+        return ""
+
+    if hasattr(unit, "path_label"):
+        label = unit.path_label()
+    else:
+        label = str(unit)
+
+    if getattr(unit, "code", ""):
+        return f"{label} ({unit.code})"
+    return label
+
+
+def _format_event_line(event, category, reason, proposed_unit=None):
+    parts = [f"event #{event.id}"]
+
+    label = _event_label(event)
+    if label:
+        parts.append(f"title: {label}")
+
+    start_label = _event_start_label(event)
+    if start_label:
+        parts.append(f"starts: {start_label}")
+
+    parts.extend(
+        [
+            f"legacy: {event.scope_type}/{event.status}",
+            f"category: {category}",
+        ]
+    )
+
+    proposed_label = _unit_label(proposed_unit)
+    if proposed_label:
+        parts.append(f"proposed unit: {proposed_label}")
+
+    parts.append(f"reason: {reason}")
+    return "  " + " | ".join(parts)
+
+
 def _classify_mapped(
     *,
     related,
@@ -100,43 +179,54 @@ def _classify_mapped(
     unsafe_bucket,
 ):
     if related is None:
-        return ("skipped", missing_reason, unsafe_bucket)
+        return ("skipped-unmapped", missing_reason, unsafe_bucket, None)
 
     unit = related.church_structure_unit
     if unit is None:
-        return ("skipped", unmapped_reason, unsafe_bucket)
+        return ("skipped-unmapped", unmapped_reason, unsafe_bucket, None)
     if not unit.is_active:
-        return ("skipped", inactive_reason, unsafe_bucket)
+        return ("skipped-inactive-or-unsafe", inactive_reason, unsafe_bucket, unit)
 
     if _proposed_signature(unit) == legacy_signature:
-        return ("would-create", "legacy audience matches proposed unit row", safe_bucket)
+        return (
+            "would-create",
+            "legacy audience matches proposed unit row",
+            safe_bucket,
+            unit,
+        )
 
     return (
-        "skipped",
+        "skipped-parity-mismatch",
         "parity mismatch: proposed unit audience differs from legacy audience",
         "parity_mismatch_skipped",
+        unit,
     )
 
 
 def _classify_event(event, single_active_root):
-    """Return ``(decision, reason, stats_bucket)`` for one event.
+    """Return ``(category, reason, stats_bucket, proposed_unit)`` for one event.
 
-    ``decision`` is ``"would-create"`` or ``"skipped"``. Pure inspection; never
-    writes anything.
+    Pure inspection; never writes anything.
     """
     scope = event.scope_type
 
     if scope == ServiceEvent.SCOPE_GLOBAL:
         if single_active_root is None:
             return (
-                "skipped",
+                "skipped-root-missing-or-ambiguous",
                 "global root missing or ambiguous (need exactly one active root unit)",
                 "global_skipped_root",
+                None,
             )
         # Root unit is global-equivalent by construction (both resolve to every
         # authenticated ordinary user), so global backfill is pure convergence
         # and inherently parity-safe.
-        return ("would-create", "global -> active root unit", "global_mappable")
+        return (
+            "would-create",
+            "global -> active root unit",
+            "global_mappable",
+            single_active_root,
+        )
 
     if scope == ServiceEvent.SCOPE_DISTRICT:
         return _classify_mapped(
@@ -160,7 +250,12 @@ def _classify_event(event, single_active_root):
             unsafe_bucket="small_group_skipped_unsafe",
         )
 
-    return ("skipped", f"unrecognized scope_type {scope!r}", "other_skipped")
+    return (
+        "skipped-unmapped",
+        f"unrecognized scope_type {scope!r}",
+        "other_skipped",
+        None,
+    )
 
 
 def _count_status(event, stats):
@@ -185,7 +280,12 @@ def run_audit():
 
     events = (
         ServiceEvent.objects.all()
-        .select_related("district", "small_group")
+        .select_related(
+            "district",
+            "district__church_structure_unit",
+            "small_group",
+            "small_group__church_structure_unit",
+        )
         .order_by("id")
     )
 
@@ -206,19 +306,21 @@ def run_audit():
         if event.audience_scope_links.exists():
             stats["skipped_existing_rows"] += 1
             event_lines.append(
-                f"  event #{event.id} [{event.scope_type}/{event.status}] "
-                f"skipped: already has audience rows"
+                _format_event_line(
+                    event,
+                    "skipped-existing-rows",
+                    "already has audience rows",
+                )
             )
             continue
 
-        decision, reason, bucket = _classify_event(event, single_active_root)
-        stats[bucket] += 1
-        if decision == "would-create":
-            stats["would_create_rows"] += 1
-        event_lines.append(
-            f"  event #{event.id} [{event.scope_type}/{event.status}] "
-            f"{decision}: {reason}"
+        category, reason, bucket, proposed_unit = _classify_event(
+            event, single_active_root
         )
+        stats[bucket] += 1
+        if category == "would-create":
+            stats["would_create_rows"] += 1
+        event_lines.append(_format_event_line(event, category, reason, proposed_unit))
 
     return stats, event_lines
 

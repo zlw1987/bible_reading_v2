@@ -7,7 +7,7 @@ creates no `ServiceEventAudienceScope` rows and mutates no legacy fields.
 
 from io import StringIO
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
 
@@ -61,6 +61,79 @@ class BackfillServiceEventAudienceAuditTests(TestCase):
     def audit(self):
         stats, _lines = run_audit()
         return stats
+
+    # -- command output contract ---------------------------------------
+
+    def test_default_summary_output_keeps_existing_categories(self):
+        self.make_root()
+        self.make_event(scope_type=ServiceEvent.SCOPE_GLOBAL)
+
+        out = StringIO()
+        call_command("backfill_service_event_audience_scopes", stdout=out)
+
+        output = out.getvalue()
+        self.assertIn("skipped (already has audience rows)", output)
+        self.assertIn("global:", output)
+        self.assertIn("district:", output)
+        self.assertIn("small group:", output)
+        self.assertIn("parity-mismatch skipped", output)
+        self.assertIn("events by status:", output)
+        self.assertIn("would-create audience rows", output)
+        self.assertIn("legacy-fields-mutated (must be 0)", output)
+        self.assertNotIn("per-event decisions:", output)
+
+    def test_verbose_events_include_event_context_category_and_reason(self):
+        root = self.make_root()
+        event = self.make_event(
+            title="Youth Worship",
+            scope_type=ServiceEvent.SCOPE_GLOBAL,
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        expected_start = timezone.localtime(event.start_datetime).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        out = StringIO()
+        call_command(
+            "backfill_service_event_audience_scopes",
+            "--verbose-events",
+            stdout=out,
+        )
+
+        output = out.getvalue()
+        self.assertIn("per-event decisions:", output)
+        self.assertIn(f"event #{event.id}", output)
+        self.assertIn("title: Youth Worship", output)
+        self.assertIn(f"starts: {expected_start}", output)
+        self.assertIn("legacy: global/published", output)
+        self.assertIn("category: would-create", output)
+        self.assertIn(f"proposed unit: 全教会 ({root.code})", output)
+        self.assertIn("reason: global -> active root unit", output)
+
+    def test_verbose_events_include_skipped_category_and_reason(self):
+        event = self.make_event(scope_type=ServiceEvent.SCOPE_GLOBAL)
+
+        out = StringIO()
+        call_command(
+            "backfill_service_event_audience_scopes",
+            "--verbose-events",
+            stdout=out,
+        )
+
+        output = out.getvalue()
+        self.assertIn(f"event #{event.id}", output)
+        self.assertIn("category: skipped-root-missing-or-ambiguous", output)
+        self.assertIn("reason: global root missing or ambiguous", output)
+
+    def test_apply_option_does_not_exist(self):
+        out = StringIO()
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "backfill_service_event_audience_scopes",
+                "--apply",
+                stdout=out,
+            )
 
     # -- 1. global mappable --------------------------------------------
 

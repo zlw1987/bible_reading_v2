@@ -43,6 +43,7 @@
 - TODAY-HOME.1D linked Bible Study role chips on Today is complete.
 - BS-ROLE.1A Bible Study Meeting Role Assignment Plan is complete as docs-only planning.
 - BS-ROLE.1B Bible Study meeting role form/UI polish is complete.
+- CS-SETUP.1D.0 Legacy Mapping Maintenance Next-Slice Plan is complete as docs-only planning.
 - Mobile nav polish is deferred and the current mobile header behavior is accepted for now.
 - Root `AGENTS.md` verification policy has been added.
 
@@ -147,7 +148,8 @@ Likely candidates:
 - MO-S.5A Rotation Anchor Foundation. Completed.
 - MO-S.5B Copy-Forward Suggestion Helper. Completed.
 - CS-MAP.1 Church Structure Map / Setup Readiness Plan. Completed as docs-only planning in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`, recording the June 2026 demo feedback and proposing CS-MAP.2 (read-only staff structure map + mapping health) as the next safe slice.
-- CS-MAP.2 Read-Only Staff Structure Map + Mapping Health. Completed at `/staff/structure/` as a permission-protected read-only staff page: active `ChurchStructureUnit` hierarchy, descendant-inclusive covered-member counts, current data mapping context from active legacy rows, setup-readiness indicators including direct active primary memberships on parent units, no member rosters, no write actions, no schema/migration/runtime visibility changes, no setup/edit UI. CS-MAP.3 remains optional/unapproved; CS-SETUP.1 setup/edit UI is explicitly not approved.
+- CS-MAP.2 Read-Only Staff Structure Map + Mapping Health. Completed at `/staff/structure/` as a permission-protected read-only staff page: active `ChurchStructureUnit` hierarchy, descendant-inclusive covered-member counts, current data mapping context from active legacy rows, setup-readiness indicators including direct active primary memberships on parent units, no member rosters, no write actions, no schema/migration/runtime visibility changes, no setup/edit UI. CS-MAP.3 remains optional/unapproved; broad CS-SETUP.1 setup/edit UI remains gated, with only CS-SETUP.1B rename-only edit, CS-SETUP.1C.1/1C.2 read-only mapping review, and CS-SETUP.1D.0 docs-only planning complete.
+- CS-SETUP.1D.0 Legacy Mapping Maintenance Next-Slice Plan. Completed as docs-only planning in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`; recommends a future one-row-at-a-time mapping-maintenance UI for existing legacy rows only, with no runtime visibility, membership, audience-row, unit lifecycle, schema, or Community Activities change.
 - Deployment/operations hardening plan.
 
 These are planning deliverables. They should precede implementation when the proposed work changes schema, permissions, audience scope, or module boundaries.
@@ -320,7 +322,7 @@ Include these as planning options only. Do not start them from this triage docum
 - BS-AS.2A Audience Picker Accessibility Polish. Completed.
 - CS-MAP.1 Church Structure Map / Setup Readiness Plan. Completed as docs-only planning.
 - CS-MAP.2 Read-Only Staff Structure Map + Mapping Health. Completed at `/staff/structure/` as a read-only staff page with descendant-inclusive covered-member counts, current data mapping context, setup-readiness indicators, and CS-MAP.2B hierarchical node-level expand/collapse.
-- CS-SETUP.1A Structure Setup/Edit UI Risk Design. Completed as docs-only risk/design in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md` Section 13: explains why a setup/edit UI is unsafe today (stored audience-row impact, legacy matching bridge, membership-vs-visibility confusion), defines the required safety contract, and splits CS-SETUP.1 into separately approvable CS-SETUP.1B–1E sub-milestones. No implementation, schema, or runtime change; none of 1B–1E approved.
+- CS-SETUP.1A Structure Setup/Edit UI Risk Design. Completed as docs-only risk/design in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md` Section 12: explains why a setup/edit UI is unsafe today (stored audience-row impact, legacy matching bridge, membership-vs-visibility confusion), defines the required safety contract, and splits CS-SETUP.1 into separately approvable sub-milestones. No implementation, schema, or runtime change was added by CS-SETUP.1A.
 - SE-AS.6 ServiceEvent Audience Backfill / Compatibility Cleanup. SE-AS.6A planning and SE-AS.6B dry-run audit command (no `--apply`) are complete; SE-AS.6C apply remains a future, separately approved milestone; do not bundle with CS-MAP work or Community Activities.
 - TODAY-HOME.1A Today Page Action Center Plan. Completed as docs-only planning in `docs/TODAY_PAGE_ACTION_CENTER_PLAN.md`, refined by TODAY-HOME.1A.1: three-zone personal Today IA (Needs your attention / Today / This week); the week strip shows visible upcoming Church Gatherings (no `event_type` guessing, draft/cancelled excluded); Bible-study role confirmation is not planned unless real usage shows need; no schema or runtime visibility change authorized.
 - TODAY-HOME.1B Read-Only Today IA Restructure. Completed. Today now uses the three-zone read-only IA: Needs your attention for pending ministry confirmations, Today with the existing reading hero, and This Week with visible Church Gatherings plus the v2 small-group Bible Study meeting; the legacy `BibleStudySession` block was removed from Today. No inline confirm, Community Activities, schema, or runtime visibility change was added.

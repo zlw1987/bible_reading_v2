@@ -34,6 +34,7 @@ from reading.models import (
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingRole,
     BibleStudySeries,
     BibleStudySession,
 )
@@ -3922,3 +3923,166 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(chinese, "今日读经")
         self.assertContains(chinese, "本周")
         self.assertContains(chinese, "本周教会聚会")
+
+    # --- TODAY-HOME.1D: linked Bible Study role chips --------------------
+
+    def add_role(self, meeting, role, *, user=None, display_name=""):
+        return BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=role,
+            user=user,
+            display_name=display_name,
+        )
+
+    def test_my_linked_role_shown_on_visible_meeting(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "My role:")
+        self.assertContains(response, "Discussion Leader")
+
+    def test_multiple_linked_roles_shown(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "My roles:")
+        self.assertContains(response, "Discussion Leader")
+        self.assertContains(response, "Worship Lead")
+
+    def test_display_name_only_role_not_shown_as_mine(self):
+        self.user.first_name = "Grace"
+        self.user.last_name = "Lee"
+        self.user.save()
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            display_name="Grace Lee",
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "My roles:")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_other_users_linked_role_not_shown(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.staff,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_other_group_meeting_role_not_shown(self):
+        self.other_user = User.objects.create_user(
+            username="other_member",
+            password="TestPass123!",
+        )
+        self.other_user.profile.small_group = self.other_group
+        self.other_user.profile.save()
+        other_meeting = self.make_meeting(small_group=self.other_group)
+        self.add_role(
+            other_meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_role_line_hidden_when_no_linked_role(self):
+        self.make_meeting(small_group=self.group)
+
+        response = self.get_home()
+
+        self.assertContains(response, "Small group Bible study")
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "My roles:")
+
+    def test_cancelled_meeting_role_not_shown(self):
+        meeting = self.make_meeting(small_group=self.group)
+        meeting.status = BibleStudyMeeting.STATUS_CANCELLED
+        meeting.save()
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_chinese_role_label_renders(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home(language="zh")
+
+        self.assertContains(response, "我的角色：")
+        self.assertContains(response, "查经带领")
+
+    def test_no_role_management_control_on_today(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        manage_url = reverse(
+            "manage_bible_study_meeting_roles",
+            args=[meeting.id],
+        )
+        self.assertNotIn(manage_url, content)
+
+    def test_no_role_confirmation_form_on_today(self):
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        # Role chips are read-only: no POST form to studies and no
+        # accept/decline/confirm role controls on Today.
+        self.assertContains(response, "My role:")
+        self.assertNotIn('action="/studies', content)
+        self.assertNotContains(response, "Accept role")
+        self.assertNotContains(response, "Decline role")

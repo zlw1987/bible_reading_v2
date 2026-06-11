@@ -1902,6 +1902,12 @@ th {
     color: var(--muted);
 }
 
+/* Read-only "my role" line under the Today small-group Bible study card */
+.study-role-line {
+    margin: 4px 0 0;
+    font-weight: 600;
+}
+
 /* Wrapped read-only audience scope chips for detail surfaces */
 .scope-chip-list {
     display: flex;

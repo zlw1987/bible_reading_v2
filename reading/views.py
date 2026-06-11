@@ -23,6 +23,7 @@ from events.models import ServiceEvent
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
 from ministry.views import my_serving_assignments
+from studies.models import BibleStudyMeetingRole
 from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
@@ -631,6 +632,24 @@ def get_this_week_gatherings(user):
     return gatherings, show_all_events_link
 
 
+def get_my_study_meeting_roles(user, meeting):
+    """The signed-in user's linked roles for an already-visible meeting.
+
+    Identity is recognised only via ``BibleStudyMeetingRole.user == user``. The
+    meeting must already have passed the existing visible-meeting logic (this
+    helper is only called with ``study_meeting_context["primary_meeting"]``).
+    Display-name-only rows, other people's roles, and other groups' meetings are
+    never matched, so Today never guesses role ownership from free-text names.
+    """
+    if meeting is None:
+        return []
+    return list(
+        BibleStudyMeetingRole.objects.filter(meeting=meeting, user=user)
+        .select_related("user")
+        .order_by("role", "id")
+    )
+
+
 @login_required
 def home(request):
     enrollments = (
@@ -723,6 +742,12 @@ def home(request):
 
     week_gatherings, show_all_gatherings_link = get_this_week_gatherings(request.user)
 
+    study_meeting_context = get_v2_landing_context(request.user)
+    my_study_roles = get_my_study_meeting_roles(
+        request.user,
+        study_meeting_context.get("primary_meeting"),
+    )
+
     return render(
         request,
         "reading/home.html",
@@ -732,7 +757,8 @@ def home(request):
             "needs_attention": get_today_needs_attention(request.user),
             "week_gatherings": week_gatherings,
             "show_all_gatherings_link": show_all_gatherings_link,
-            "study_meeting_context": get_v2_landing_context(request.user),
+            "study_meeting_context": study_meeting_context,
+            "my_study_roles": my_study_roles,
         },
     )
 

@@ -24,4 +24,6 @@ Root `AGENTS.md` is the canonical AI/project instruction source. Read it first. 
 ## Project-specific caution
 
 - Do not conflate Audience Scope, Host / Language Label, Required Ministry Teams, Rotation Anchor Team, and TeamAssignment — they are separate concepts.
-- Do not treat `ServiceEventAudienceScope` as the runtime visibility source until a future approved migration. Runtime visibility still uses legacy scope fields and `Profile.small_group`.
+- `ServiceEventAudienceScope` is now the ServiceEvent runtime visibility source when a `ServiceEvent` has audience rows.
+- `ServiceEvent` rows with zero audience rows still fall back to legacy `scope_type` / `district` / `small_group`, and ordinary-user matching still depends on legacy `Profile.small_group`.
+- Do not use `ChurchStructureMembership` as a ServiceEvent visibility source unless a separately approved migration explicitly changes that rule.

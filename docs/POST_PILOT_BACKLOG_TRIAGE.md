@@ -315,6 +315,7 @@ Include these as planning options only. Do not start them from this triage docum
 - BS-AS.2A Audience Picker Accessibility Polish. Completed.
 - CS-MAP.1 Church Structure Map / Setup Readiness Plan. Completed as docs-only planning.
 - CS-MAP.2 Read-Only Staff Structure Map + Mapping Health. Completed at `/staff/structure/` as a read-only staff page with descendant-inclusive covered-member counts, current data mapping context, setup-readiness indicators, and CS-MAP.2B hierarchical node-level expand/collapse.
+- CS-SETUP.1A Structure Setup/Edit UI Risk Design. Completed as docs-only risk/design in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md` Section 13: explains why a setup/edit UI is unsafe today (stored audience-row impact, legacy matching bridge, membership-vs-visibility confusion), defines the required safety contract, and splits CS-SETUP.1 into separately approvable CS-SETUP.1B–1E sub-milestones. No implementation, schema, or runtime change; none of 1B–1E approved.
 - SE-AS.6 ServiceEvent Audience Backfill / Compatibility Cleanup. SE-AS.6A planning and SE-AS.6B dry-run audit command (no `--apply`) are complete; SE-AS.6C apply remains a future, separately approved milestone; do not bundle with CS-MAP work or Community Activities.
 - CA-V1.1 Community Activities Planning Refinement.
 - CL-V1.1 Checklist V1 Re-evaluation.

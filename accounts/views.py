@@ -3,12 +3,15 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Q
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 
 from .forms import (
@@ -222,11 +225,17 @@ def staff_overview(request):
 @staff_member_required
 @require_GET
 def staff_structure_map(request):
-    """Read-only Church Structure Map with setup-readiness indicators (CS-MAP.2).
+    """Church Structure Map with setup-readiness indicators (CS-MAP.2).
 
-    Counts only; no member rosters and no write actions. The unit tree and
-    membership rows shown here are the future structure foundation. Runtime
-    visibility still uses the legacy structure models and Profile.small_group.
+    The default map view is review-first: counts only, no member rosters. On
+    top of that, CS-SETUP.1B adds an opt-in display-name-only edit mode for
+    admin-capable staff (per-row rename + Details link); no other structure
+    edits happen here. The unit tree and membership rows shown are the future
+    structure foundation. Ordinary-user matching still resolves through
+    Profile.small_group / legacy mappings; module-specific audience rows (e.g.
+    ServiceEventAudienceScope, BibleStudySeriesAudienceScope) stay scoped to
+    their own approved modules, and ChurchStructureMembership is not a runtime
+    visibility source.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -303,6 +312,7 @@ def staff_structure_map(request):
             "parent_id": unit.parent_id,
             "ancestor_ids": ancestor_ids,
             "has_children": bool(active_children),
+            "is_root": unit.unit_type == ChurchStructureUnit.UNIT_ROOT,
             "membership_count": 0,
             "direct_parent_membership_count": direct_parent_membership_count,
             "legacy_names": legacy_names_by_unit.get(unit.id, []),
@@ -412,6 +422,16 @@ def staff_structure_map(request):
         .count(),
     }
 
+    # Edit mode is a lightweight read/write affordance layer (CS-SETUP.1B).
+    # The default view stays clean and read-only; entering edit mode only
+    # exposes display-name rename and a Details link, gated to staff who can
+    # change ChurchStructureUnit in Django Admin. It does not change mappings,
+    # membership, audience rows, tree shape, active status, or visibility.
+    can_admin_units = request.user.has_perm(
+        "accounts.change_churchstructureunit"
+    )
+    edit_mode = can_admin_units and request.GET.get("edit") == "1"
+
     return render(
         request,
         "accounts/staff/structure_map.html",
@@ -419,8 +439,78 @@ def staff_structure_map(request):
             "active_nav": "staff",
             "structure_rows": structure_rows,
             "indicators": indicators,
+            "can_admin_units": can_admin_units,
+            "edit_mode": edit_mode,
         },
     )
+
+
+@staff_member_required
+@require_POST
+def staff_structure_unit_rename(request, unit_id):
+    """Rename only the display labels of a ChurchStructureUnit (CS-SETUP.1B).
+
+    Low-risk slice: updates only ``name`` and ``name_en``. It must not touch
+    parent, unit_type, code, is_active, sort_order, legacy mappings,
+    memberships, or any ServiceEvent / Bible Study audience scope rows.
+    """
+    language = get_user_language(request)
+
+    # Write access is at least as strict as the Django Admin change pattern
+    # for structure units; staff who cannot change units there cannot rename.
+    if not request.user.has_perm("accounts.change_churchstructureunit"):
+        return HttpResponseForbidden("Not allowed to rename structure units.")
+
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+
+    if unit.unit_type == ChurchStructureUnit.UNIT_ROOT:
+        return HttpResponseForbidden("Root units cannot be renamed.")
+
+    name = (request.POST.get("name") or "").strip()
+    name_en = (request.POST.get("name_en") or "").strip()
+
+    edit_url = f"{reverse('staff_structure_map')}?edit=1"
+
+    if not name:
+        messages.error(
+            request,
+            "请填写显示名称。" if language == "zh"
+            else "Please enter a display name.",
+        )
+        return redirect(edit_url)
+
+    old_name = unit.name
+    old_name_en = unit.name_en
+
+    unit.name = name
+    unit.name_en = name_en
+    unit.save(update_fields=["name", "name_en"])
+
+    # Audit via Django admin LogEntry (no new model/migration in this slice).
+    # Record old/new values for both display-name fields so a mistaken rename
+    # can be reconstructed without a separate audit model.
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureUnit
+        ).pk,
+        object_id=unit.pk,
+        object_repr=str(unit),
+        action_flag=CHANGE,
+        change_message=(
+            "Renamed display name only via staff structure map "
+            "(CS-SETUP.1B). "
+            f"name: {old_name!r} -> {name!r}; "
+            f"name_en: {old_name_en!r} -> {name_en!r}."
+        ),
+    )
+
+    messages.success(
+        request,
+        "已更新显示名称。" if language == "zh"
+        else "Display name updated.",
+    )
+    return redirect(edit_url)
 
 
 @staff_member_required

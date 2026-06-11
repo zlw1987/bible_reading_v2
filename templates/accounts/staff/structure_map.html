@@ -8,10 +8,18 @@
 <section class="page-header">
     <h1 class="page-title">{% if language == "zh" %}教会结构与设置检查{% else %}Church Structure & Setup Check{% endif %}</h1>
     <p class="page-subtitle">
+        {% if edit_mode %}
+        {% if language == "zh" %}
+        编辑模式：这里只能修改显示名称，不会改变成员、对应关系、活动适用范围、服事安排、权限或可见范围。仍然显示教会结构与设置检查提醒；不显示成员名单。
+        {% else %}
+        Edit mode: this page can only change display names; it does not change membership, mappings, event audience, serving assignments, permissions, or visibility. It still shows the church structure and setup check reminders; member names are not shown.
+        {% endif %}
+        {% else %}
         {% if language == "zh" %}
         只读页面。这里显示教会结构、当前系统资料的对应关系，以及设置检查提醒；不显示成员名单。
         {% else %}
         Read-only page. This shows the church structure, current data mappings, and setup check reminders; member names are not shown.
+        {% endif %}
         {% endif %}
     </p>
 </section>
@@ -22,9 +30,9 @@
     </strong>
     <p>
         {% if language == "zh" %}
-        查经、读经进度、聚会事件和我的服事目前仍按现有小组资料运行。本页展示的是未来教会架构基础与设置就绪情况，仅供查看，不会改变成员现在能看到的内容。
+        普通成员的归属仍按现有小组资料与对应关系判断。只有已批准使用结构适用范围的模块（如聚会事件和查经计划）才在各自已批准的范围内参考本页的结构树；归属审批记录不会成为成员可见范围的依据。本页主要供查看与设置检查。
         {% else %}
-        Bible Study, reading progress, Service Events, and My Serving still run on the current small-group profile data. This page shows the future church-structure foundation and setup readiness for review only; it does not change what members can see today.
+        Ordinary-member matching still resolves through the current small-group profile data and legacy mappings. Only modules that explicitly use structure audience scope — such as Service Events and Bible Study Schedule — depend on this unit tree, and only within their own approved module scope. Approved-membership records are not used to decide what members can see. This page is mainly for review and setup checks.
         {% endif %}
     </p>
 </section>
@@ -83,6 +91,34 @@
         Active units only; numbers are descendant-inclusive covered member counts, with no member name lists.
         {% endif %}
     </p>
+
+    {% if can_admin_units %}
+    <div class="actions structure-edit-controls">
+        {% if edit_mode %}
+        <a class="button-secondary button" href="{% url 'staff_structure_map' %}">
+            {% if language == "zh" %}退出编辑模式{% else %}Exit edit mode{% endif %}
+        </a>
+        {% else %}
+        <a class="button" href="?edit=1">
+            {% if language == "zh" %}编辑结构{% else %}Edit structure{% endif %}
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if edit_mode %}
+    <div class="notice-panel structure-edit-banner">
+        <strong>{% if language == "zh" %}编辑模式{% else %}Edit mode{% endif %}</strong>
+        <p>
+            {% if language == "zh" %}
+            编辑模式：这里只能修改显示名称。不会改变成员、对应关系、活动适用范围、服事安排或权限。
+            {% else %}
+            Edit mode: this page can only change display names. It does not change membership, mappings, event audience, serving assignments, or permissions.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
     <div class="structure-map-tree" data-structure-tree>
         {% for row in structure_rows %}
         <div class="structure-map-row"
@@ -126,6 +162,52 @@
                 <span class="status status-warning">
                     {% if language == "zh" %}未分配暂存{% else %}Unassigned holding{% endif %}
                 </span>
+                {% endif %}
+
+                {% if edit_mode %}
+                <details class="structure-row-actions">
+                    <summary class="button-secondary button structure-row-actions-summary">
+                        {% if language == "zh" %}操作{% else %}Actions{% endif %}
+                    </summary>
+                    <div class="structure-row-actions-menu">
+                        {% if not row.is_root %}
+                        <details class="structure-rename">
+                            <summary class="structure-rename-summary">
+                                {% if language == "zh" %}重命名{% else %}Rename{% endif %}
+                            </summary>
+                            <form method="post"
+                                  action="{% url 'staff_structure_unit_rename' row.unit.id %}"
+                                  class="structure-rename-form">
+                                {% csrf_token %}
+                                <p class="muted structure-rename-warning">
+                                    {% if language == "zh" %}
+                                    只修改显示名称，不改变成员、对应关系、活动适用范围或权限。
+                                    {% else %}
+                                    Only display names change. Membership, mappings, audience scope, and permissions do not change.
+                                    {% endif %}
+                                </p>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}名称{% else %}Name{% endif %}
+                                    <input type="text" name="name" value="{{ row.unit.name }}" maxlength="120" required>
+                                </label>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}英文名称{% else %}English name{% endif %}
+                                    <input type="text" name="name_en" value="{{ row.unit.name_en }}" maxlength="120">
+                                </label>
+                                <button type="submit" class="button">
+                                    {% if language == "zh" %}保存{% else %}Save{% endif %}
+                                </button>
+                            </form>
+                        </details>
+                        {% endif %}
+                        {% if can_admin_units %}
+                        <a class="button-secondary button structure-row-details-link"
+                           href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
+                            {% if language == "zh" %}详细资料{% else %}Details{% endif %}
+                        </a>
+                        {% endif %}
+                    </div>
+                </details>
                 {% endif %}
             </div>
         </div>

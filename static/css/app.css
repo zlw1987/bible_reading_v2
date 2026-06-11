@@ -1940,9 +1940,75 @@ th {
     overflow-wrap: anywhere;
 }
 
+.structure-edit-controls {
+    margin-bottom: 12px;
+}
+
+.structure-edit-banner {
+    margin-bottom: 12px;
+}
+
+.structure-row-actions {
+    flex-basis: 100%;
+    margin-top: 2px;
+}
+
+.structure-row-actions-summary {
+    display: inline-block;
+    cursor: pointer;
+    padding: 2px 10px;
+    font-size: 13px;
+    list-style: none;
+}
+
+.structure-row-actions-summary::-webkit-details-marker {
+    display: none;
+}
+
+.structure-row-actions-menu {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface-soft);
+}
+
+.structure-rename-summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.structure-rename-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    max-width: 320px;
+}
+
+.structure-rename-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.structure-rename-warning {
+    margin: 0;
+}
+
 @media (max-width: 640px) {
     .audience-picker-list {
         max-height: 220px;
+    }
+
+    .structure-rename-form {
+        max-width: 100%;
     }
 }
 

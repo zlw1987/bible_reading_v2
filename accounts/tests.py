@@ -3493,6 +3493,286 @@ class StaffStructureMapTests(TestCase):
         self.assertContains(response, "Structure & Setup Check")
 
 
+class StaffStructureMapEditModeTests(TestCase):
+    """CS-SETUP.1B: edit mode + rename/detail only on /staff/structure/."""
+
+    def setUp(self):
+        # Superuser has the change_churchstructureunit permission implicitly.
+        self.admin = User.objects.create_user(
+            username="structure_admin",
+            password="AdminPass123!",
+            is_staff=True,
+            is_superuser=True,
+        )
+        # Staff who can view the page but cannot change structure units.
+        self.viewer = User.objects.create_user(
+            username="structure_viewer",
+            password="ViewerPass123!",
+            is_staff=True,
+        )
+        self.normal_user = User.objects.create_user(
+            username="structure_plain",
+            password="PlainPass123!",
+        )
+        self.url = reverse("staff_structure_map")
+
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.child = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D2",
+            name="二区",
+            name_en="District 2",
+            sort_order=3,
+        )
+        self.rename_root_url = reverse(
+            "staff_structure_unit_rename", args=[self.root.id]
+        )
+        self.rename_child_url = reverse(
+            "staff_structure_unit_rename", args=[self.child.id]
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def login_admin(self):
+        self.client.login(username="structure_admin", password="AdminPass123!")
+
+    def login_viewer(self):
+        self.client.login(
+            username="structure_viewer", password="ViewerPass123!"
+        )
+
+    # --- view / edit mode ---------------------------------------------------
+
+    def test_default_view_has_no_action_menus(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["edit_mode"])
+        self.assertNotContains(response, "structure-row-actions")
+        self.assertNotContains(response, "Edit mode:")
+        # The entry point into edit mode is offered to admin users.
+        self.assertContains(response, "Edit structure")
+
+    def test_edit_mode_shows_banner_and_action_menus(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["edit_mode"])
+        self.assertContains(response, "Edit mode:")
+        self.assertContains(response, "structure-row-actions")
+        self.assertContains(response, "Exit edit mode")
+
+    def test_edit_mode_root_has_no_rename_but_child_does(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+        content = response.content.decode()
+
+        # Root cannot be renamed; its rename endpoint must not be in the page.
+        self.assertNotIn(f'action="{self.rename_root_url}"', content)
+        # Non-root unit exposes a rename form in edit mode.
+        self.assertIn(f'action="{self.rename_child_url}"', content)
+
+    def test_view_only_staff_sees_no_edit_controls(self):
+        self.set_language("en")
+        self.login_viewer()
+
+        plain = self.client.get(self.url)
+        self.assertEqual(plain.status_code, 200)
+        self.assertFalse(plain.context["can_admin_units"])
+        self.assertNotContains(plain, "Edit structure")
+
+        # Even forcing ?edit=1 must not enable edit mode for view-only staff.
+        forced = self.client.get(self.url, {"edit": "1"})
+        self.assertFalse(forced.context["edit_mode"])
+        self.assertNotContains(forced, "Edit mode:")
+        self.assertNotContains(forced, "structure-row-actions")
+
+    def test_details_link_visible_only_for_admin(self):
+        self.set_language("en")
+        admin_change_url = reverse(
+            "admin:accounts_churchstructureunit_change", args=[self.child.id]
+        )
+
+        self.login_admin()
+        admin_resp = self.client.get(self.url, {"edit": "1"})
+        self.assertContains(admin_resp, admin_change_url)
+
+        self.client.logout()
+        self.login_viewer()
+        viewer_resp = self.client.get(self.url, {"edit": "1"})
+        self.assertNotContains(viewer_resp, admin_change_url)
+
+    # --- rename POST --------------------------------------------------------
+
+    def test_rename_updates_only_name_and_name_en(self):
+        self.login_admin()
+        before_units = ChurchStructureUnit.objects.count()
+
+        response = self.client.post(
+            self.rename_child_url,
+            {"name": "第二区", "name_en": "Second District"},
+        )
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.name, "第二区")
+        self.assertEqual(self.child.name_en, "Second District")
+        # Nothing structural changed.
+        self.assertEqual(self.child.parent_id, self.root.id)
+        self.assertEqual(
+            self.child.unit_type, ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.assertEqual(self.child.code, "D2")
+        self.assertTrue(self.child.is_active)
+        self.assertEqual(self.child.sort_order, 3)
+        self.assertEqual(ChurchStructureUnit.objects.count(), before_units)
+
+    def test_rename_shows_success_message(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.post(
+            self.rename_child_url,
+            {"name": "二区", "name_en": "District Two"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Display name updated.")
+
+    def test_rename_does_not_create_audience_or_membership_rows(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import BibleStudySeriesAudienceScope
+
+        self.login_admin()
+        before = (
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchStructureMembership.objects.count(),
+        )
+
+        self.client.post(
+            self.rename_child_url,
+            {"name": "二区改", "name_en": "District 2b"},
+        )
+
+        after = (
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchStructureMembership.objects.count(),
+        )
+        self.assertEqual(before, after)
+
+    def test_rename_writes_logentry_audit(self):
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        self.login_admin()
+        # Rename to new values so old != new for both fields.
+        self.client.post(
+            self.rename_child_url,
+            {"name": "第二区", "name_en": "Second District"},
+        )
+
+        ct = ContentType.objects.get_for_model(ChurchStructureUnit)
+        entry = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.child.id),
+            user=self.admin,
+        ).first()
+        self.assertIsNotNone(entry)
+        # The audit message records old and new values for both fields.
+        # Use repr() (quoted) forms so the old value "二区" is not matched as a
+        # substring of the new value "第二区".
+        self.assertIn(repr("二区"), entry.change_message)
+        self.assertIn(repr("第二区"), entry.change_message)
+        self.assertIn(repr("District 2"), entry.change_message)
+        self.assertIn(repr("Second District"), entry.change_message)
+
+    def test_rename_root_is_forbidden(self):
+        self.login_admin()
+
+        response = self.client.post(
+            self.rename_root_url,
+            {"name": "改名", "name_en": "Renamed Root"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.root.refresh_from_db()
+        self.assertEqual(self.root.name, "全教会")
+        self.assertEqual(self.root.name_en, "Whole Church")
+
+    def test_rename_blank_name_does_not_change_data(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.post(
+            self.rename_child_url,
+            {"name": "   ", "name_en": "District 2"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please enter a display name.")
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.name, "二区")
+        self.assertEqual(self.child.name_en, "District 2")
+
+    def test_view_only_staff_cannot_rename(self):
+        self.login_viewer()
+
+        response = self.client.post(
+            self.rename_child_url,
+            {"name": "Hacked", "name_en": "Hacked"},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.name, "二区")
+        self.assertEqual(self.child.name_en, "District 2")
+
+    def test_normal_user_cannot_rename(self):
+        self.client.login(
+            username="structure_plain", password="PlainPass123!"
+        )
+
+        response = self.client.post(
+            self.rename_child_url,
+            {"name": "Hacked", "name_en": "Hacked"},
+        )
+
+        # staff_member_required redirects non-staff to the admin login.
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.name, "二区")
+
+    def test_rename_rejects_get(self):
+        self.login_admin()
+
+        response = self.client.get(self.rename_child_url)
+
+        self.assertEqual(response.status_code, 405)
+
+
 class StaffModerationQueueTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(

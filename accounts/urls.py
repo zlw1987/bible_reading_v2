@@ -28,6 +28,11 @@ urlpatterns = [
         name="staff_structure_map",
     ),
     path(
+        "staff/structure/<int:unit_id>/rename/",
+        views.staff_structure_unit_rename,
+        name="staff_structure_unit_rename",
+    ),
+    path(
         "staff/moderation/",
         views.staff_moderation_queue,
         name="staff_moderation_queue",

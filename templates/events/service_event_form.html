@@ -31,13 +31,51 @@
     {{ form.non_field_errors }}
 
     {% for field in form %}
+    {% if field.name != "audience_units" and field.name != "scope_type" and field.name != "district" and field.name != "small_group" and field.name != "status" %}
     <div class="form-row" data-field="{{ field.name }}">
         {{ field.label_tag }}
         {{ field }}
         {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
         {{ field.errors }}
     </div>
+    {% endif %}
     {% endfor %}
+
+    {% with audience_field=form.audience_units %}
+    <div class="form-row" data-field="audience_units">
+        <label class="form-label">{{ audience_field.label }}</label>
+        {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
+        {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
+        {{ audience_field.errors }}
+    </div>
+    {% endwith %}
+
+    <div class="form-row">
+        <h2 class="card-title">
+            {% if language == "zh" %}备用适用范围设置{% else %}Fallback audience settings{% endif %}
+        </h2>
+        <p class="muted">
+            {% if language == "zh" %}仅在没有选择教会结构适用范围时使用。选择了教会结构单元后，这些字段不会再作为额外筛选条件。{% else %}Used only when no structure audience is selected. These fields are not an extra filter when structure audience units are selected.{% endif %}
+        </p>
+    </div>
+
+    {% for field in form %}
+    {% if field.name == "scope_type" or field.name == "district" or field.name == "small_group" %}
+    <div class="form-row" data-field="{{ field.name }}">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <div class="form-row" data-field="{{ form.status.name }}">
+        {{ form.status.label_tag }}
+        {{ form.status }}
+        {% if form.status.help_text %}<p class="muted">{{ form.status.help_text }}</p>{% endif %}
+        {{ form.status.errors }}
+    </div>
 
     <div class="actions">
         <button type="submit">

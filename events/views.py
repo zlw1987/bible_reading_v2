@@ -116,7 +116,10 @@ def service_event_list(request):
 @login_required
 def service_event_detail(request, event_id):
     event = get_object_or_404(
-        events_with_coverage_queryset().prefetch_related("required_teams"),
+        events_with_coverage_queryset().prefetch_related(
+            "required_teams",
+            "audience_scope_links__unit",
+        ),
         id=event_id,
     )
 
@@ -161,10 +164,12 @@ def create_service_event(request):
     if request.method == "POST":
         form = ServiceEventForm(request.POST, language=language)
         if form.is_valid():
-            event = form.save(commit=False)
-            event.created_by = request.user
-            event.save()
-            event.required_teams.set(form.cleaned_data["required_teams"])
+            with transaction.atomic():
+                event = form.save(commit=False)
+                event.created_by = request.user
+                event.save()
+                event.required_teams.set(form.cleaned_data["required_teams"])
+                form.save_audience_units(event)
             messages.success(request, event_ui_text(language, "saved"))
             return redirect("service_event_detail", event_id=event.id)
     else:
@@ -220,38 +225,43 @@ def create_recurring_events(cleaned_data, user):
     required_teams = cleaned_data.get("required_teams")
     rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
     ministry_context = cleaned_data.get("ministry_context")
+    audience_units = list(cleaned_data.get("audience_units") or [])
 
-    for event_date in dates_to_create:
-        start_datetime = timezone.make_aware(
-            timezone.datetime.combine(event_date, cleaned_data["start_time"]),
-            timezone.get_current_timezone(),
-        )
-        end_datetime = None
-        if cleaned_data.get("end_time"):
-            end_datetime = timezone.make_aware(
-                timezone.datetime.combine(event_date, cleaned_data["end_time"]),
+    with transaction.atomic():
+        for event_date in dates_to_create:
+            start_datetime = timezone.make_aware(
+                timezone.datetime.combine(event_date, cleaned_data["start_time"]),
                 timezone.get_current_timezone(),
             )
-        event = ServiceEvent.objects.create(
-            title=cleaned_data["title"],
-            title_en=cleaned_data.get("title_en") or "",
-            description=cleaned_data.get("description") or "",
-            description_en=cleaned_data.get("description_en") or "",
-            event_type=cleaned_data["event_type"],
-            start_datetime=start_datetime,
-            end_datetime=end_datetime,
-            location=cleaned_data.get("location") or "",
-            meeting_link=cleaned_data.get("meeting_link") or "",
-            ministry_context=ministry_context,
-            rotation_anchor_team=rotation_anchor_team,
-            scope_type=cleaned_data["scope_type"],
-            district=cleaned_data.get("district"),
-            small_group=cleaned_data.get("small_group"),
-            status=cleaned_data["status"],
-            created_by=user,
-        )
-        event.required_teams.set(required_teams)
-        created_count += 1
+            end_datetime = None
+            if cleaned_data.get("end_time"):
+                end_datetime = timezone.make_aware(
+                    timezone.datetime.combine(event_date, cleaned_data["end_time"]),
+                    timezone.get_current_timezone(),
+                )
+            event = ServiceEvent.objects.create(
+                title=cleaned_data["title"],
+                title_en=cleaned_data.get("title_en") or "",
+                description=cleaned_data.get("description") or "",
+                description_en=cleaned_data.get("description_en") or "",
+                event_type=cleaned_data["event_type"],
+                start_datetime=start_datetime,
+                end_datetime=end_datetime,
+                location=cleaned_data.get("location") or "",
+                meeting_link=cleaned_data.get("meeting_link") or "",
+                ministry_context=ministry_context,
+                rotation_anchor_team=rotation_anchor_team,
+                scope_type=cleaned_data["scope_type"],
+                district=cleaned_data.get("district"),
+                small_group=cleaned_data.get("small_group"),
+                status=cleaned_data["status"],
+                created_by=user,
+            )
+            event.required_teams.set(required_teams)
+            if audience_units:
+                for unit in audience_units:
+                    event.audience_scope_links.create(unit=unit)
+            created_count += 1
 
     return created_count, len(dates_to_skip), dates_to_create, dates_to_skip
 
@@ -314,9 +324,11 @@ def edit_service_event(request, event_id):
     if request.method == "POST":
         form = ServiceEventForm(request.POST, instance=event, language=language)
         if form.is_valid():
-            event = form.save(commit=False)
-            event.save()
-            event.required_teams.set(form.cleaned_data["required_teams"])
+            with transaction.atomic():
+                event = form.save(commit=False)
+                event.save()
+                event.required_teams.set(form.cleaned_data["required_teams"])
+                form.save_audience_units(event)
             messages.success(request, event_ui_text(language, "saved"))
             return redirect("service_event_detail", event_id=event.id)
     else:

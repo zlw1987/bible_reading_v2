@@ -87,9 +87,28 @@
     </p>
 
     <p>
-        <strong>{% if language == "zh" %}范围{% else %}Scope{% endif %}:</strong>
-        {{ event|event_scope_label:language }}
+        <strong>{{ event|event_visibility_source_label:language }}</strong>
     </p>
+
+    <div class="scope-chip-list">
+        {% for audience_label in event|event_effective_audience_labels:language %}
+        <span class="scope-chip">{{ audience_label }}</span>
+        {% endfor %}
+    </div>
+
+    <p class="muted">
+        {% if event|event_uses_structure_audience %}
+            {% if language == "zh" %}已选择教会结构适用范围；备用设置不会作为额外筛选条件。{% else %}Structure audience is selected; fallback settings are not an extra filter.{% endif %}
+        {% else %}
+            {% if language == "zh" %}没有选择教会结构适用范围；此聚会使用备用适用范围设置。{% else %}No structure audience is selected; this gathering uses fallback audience settings.{% endif %}
+        {% endif %}
+    </p>
+
+    {% if event|event_structure_audience_has_no_legacy_groups %}
+    <p class="muted">
+        {% if language == "zh" %}此选择目前没有匹配到普通用户，因为它尚未映射到启用的小组。{% else %}This selection currently matches no ordinary users because it is not mapped to active legacy groups.{% endif %}
+    </p>
+    {% endif %}
 
     {% if event.rotation_anchor_team_id %}
     <p>

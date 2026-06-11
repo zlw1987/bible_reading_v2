@@ -78,6 +78,98 @@ def event_scope_label(event, language):
     return labels.get(language, labels["en"]).get(event.scope_type, event.scope_type)
 
 
+def _whole_church_label(language):
+    return "全教会" if language == "zh" else "Whole Church"
+
+
+def _compact_unit_label(unit, language):
+    if unit.unit_type == "root":
+        return _whole_church_label(language)
+    chain = [
+        ancestor
+        for ancestor in unit.get_ancestors()
+        if ancestor.unit_type != "root"
+    ]
+    chain.append(unit)
+    return " > ".join(node.display_name(language) for node in chain)
+
+
+def _fallback_audience_label(event, language):
+    if language == "zh":
+        if event.scope_type == "global":
+            return "全教会"
+        if event.scope_type == "district":
+            name = event.district.name if event.district_id else "-"
+            return f"区：{name}"
+        if event.scope_type == "small_group":
+            name = event.small_group.name if event.small_group_id else "-"
+            return f"小组：{name}"
+        return event.scope_type
+
+    if event.scope_type == "global":
+        return "Whole Church"
+    if event.scope_type == "district":
+        name = event.district.name if event.district_id else "-"
+        return f"District: {name}"
+    if event.scope_type == "small_group":
+        name = event.small_group.name if event.small_group_id else "-"
+        return f"Small Group: {name}"
+    return event.scope_type
+
+
+def _audience_units(event):
+    return [link.unit for link in event.audience_scope_links.all()]
+
+
+@register.filter
+def event_uses_structure_audience(event):
+    return bool(event and _audience_units(event))
+
+
+@register.filter
+def event_visibility_source_label(event, language):
+    if event_uses_structure_audience(event):
+        return (
+            "可见范围来源：教会结构适用范围"
+            if language == "zh"
+            else "Visibility source: Structure audience"
+        )
+    return (
+        "可见范围来源：备用适用范围"
+        if language == "zh"
+        else "Visibility source: Legacy fallback audience"
+    )
+
+
+@register.filter
+def event_effective_audience_labels(event, language):
+    if not event:
+        return []
+
+    units = _audience_units(event)
+    if units:
+        if any(unit.unit_type == "root" for unit in units):
+            return [_whole_church_label(language)]
+        return [_compact_unit_label(unit, language) for unit in units]
+    return [_fallback_audience_label(event, language)]
+
+
+@register.filter
+def event_structure_audience_has_no_legacy_groups(event):
+    if not event:
+        return False
+
+    units = _audience_units(event)
+    if not units:
+        return False
+    if any(unit.unit_type == "root" for unit in units):
+        return False
+
+    from studies.models import resolve_units_to_small_groups
+
+    return not resolve_units_to_small_groups(units).exists()
+
+
 @register.filter
 def event_ministry_context_label(event, language):
     if not event or not event.ministry_context_id:

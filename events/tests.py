@@ -602,6 +602,33 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIn(self.inactive_required_team.id, team_ids)
 
+    def test_service_event_form_includes_optional_audience_units(self):
+        english_form = ServiceEventForm(language="en")
+        chinese_form = ServiceEventForm(language="zh")
+
+        self.assertIn("audience_units", english_form.fields)
+        self.assertFalse(english_form.fields["audience_units"].required)
+        self.assertEqual(english_form.fields["audience_units"].label, "Audience Scope")
+        self.assertIn(
+            "Leave this empty to use the fallback audience settings below",
+            english_form.fields["audience_units"].help_text,
+        )
+        self.assertIn("audience_units", chinese_form.fields)
+        self.assertEqual(chinese_form.fields["audience_units"].label, "适用范围")
+        self.assertIn(
+            "留空则使用下方的备用适用范围设置",
+            chinese_form.fields["audience_units"].help_text,
+        )
+
+    def test_service_event_edit_form_preselects_existing_audience_rows(self):
+        event = self.create_event()
+        unit = self.create_structure_unit("YOUTH", "Youth Fellowship")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        form = ServiceEventForm(instance=event, language="en")
+
+        self.assertEqual(form.audience_selected_ids(), {unit.id})
+
     def test_service_event_form_hides_cancelled_status_for_active_event(self):
         event = self.create_event(status=ServiceEvent.STATUS_PUBLISHED)
 
@@ -657,6 +684,70 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_manager_create_with_empty_audience_uses_legacy_fallback(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                scope_type=ServiceEvent.SCOPE_DISTRICT,
+                district=self.north.id,
+                small_group="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertTrue(event.can_be_seen_by(self.user))
+        self.assertTrue(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_manager_create_with_audience_units_saves_rows_and_controls_visibility(self):
+        self.set_language("en")
+        unit = self.create_structure_unit("R4", "Rainbow 4")
+        self.group.church_structure_unit = unit
+        self.group.save(update_fields=["church_structure_unit"])
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(audience_units=[unit.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(list(event.get_audience_scope_units()), [unit])
+        self.assertTrue(event.can_be_seen_by(self.user))
+        self.assertFalse(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_manager_create_with_audience_preserves_scheduling_fields_only(self):
+        self.set_language("en")
+        unit = self.create_structure_unit("R4", "Rainbow 4")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                audience_units=[unit.id],
+                required_teams=[self.required_team.id],
+                rotation_anchor_team=self.other_required_team.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(list(event.get_audience_scope_units()), [unit])
+        self.assertEqual(
+            set(event.required_teams.values_list("id", flat=True)),
+            {self.required_team.id},
+        )
+        self.assertEqual(event.rotation_anchor_team, self.other_required_team)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_manager_can_edit_event(self):
         self.set_language("en")
         event = self.create_event(status=ServiceEvent.STATUS_DRAFT)
@@ -700,6 +791,75 @@ class ServiceEventFoundationTests(TestCase):
         )
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_manager_edit_replaces_audience_rows(self):
+        self.set_language("en")
+        event = self.create_event()
+        first_unit = self.create_structure_unit("R4", "Rainbow 4")
+        second_unit = self.create_structure_unit("R5", "Rainbow 5")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=first_unit)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                audience_units=[second_unit.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(list(event.get_audience_scope_units()), [second_unit])
+
+    def test_manager_edit_clears_audience_rows_and_restores_legacy_fallback(self):
+        self.set_language("en")
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        unit = self.create_structure_unit("R4", "Rainbow 4")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新后的聚会",
+                title_en="Updated Event",
+                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+                district="",
+                small_group=self.group.id,
+                audience_units=[],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertTrue(event.can_be_seen_by(self.user))
+        self.assertFalse(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.other_user))
+
+    def test_ancestor_descendant_audience_selection_is_rejected_without_partial_save(self):
+        self.set_language("en")
+        parent = self.create_structure_unit("CM", "Chinese Ministry")
+        child = self.create_structure_unit("CM-R4", "Rainbow 4", parent=parent)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(audience_units=[parent.id, child.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Do not select both a unit and one of its parent or child units.",
+        )
+        self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
     def test_manager_cannot_cancel_event_through_edit_form_post(self):
         self.set_language("en")
@@ -1197,6 +1357,67 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Rotation Anchor Team")
         self.assertContains(response, "Lighting Team")
 
+    def test_staff_detail_shows_structure_audience_source_and_unit_labels(self):
+        self.set_language("en")
+        event = self.create_event()
+        unit = self.create_structure_unit("YF", "Youth Fellowship")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visibility source: Structure audience")
+        self.assertContains(response, "Youth Fellowship")
+        self.assertContains(
+            response,
+            "Structure audience is selected; fallback settings are not an extra filter.",
+        )
+        self.assertContains(
+            response,
+            "This selection currently matches no ordinary users because it is not mapped to active legacy groups.",
+        )
+        self.assertNotContains(response, "YF")
+        self.assertNotContains(response, "ServiceEventAudienceScope")
+
+    def test_staff_detail_shows_legacy_fallback_source_and_readable_label(self):
+        self.set_language("en")
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+
+        self.client.login(username="event_staff", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visibility source: Legacy fallback audience")
+        self.assertContains(response, "District: North")
+        self.assertContains(
+            response,
+            "No structure audience is selected; this gathering uses fallback audience settings.",
+        )
+
+    def test_ordinary_detail_does_not_expose_audience_architecture_terms(self):
+        self.set_language("en")
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+        event = self.create_event()
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=root)
+
+        self.client.login(username="regular", password="testpass123")
+        response = self.client.get(reverse("service_event_detail", args=[event.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Visibility source")
+        self.assertNotContains(response, "Structure audience")
+        self.assertNotContains(response, "Legacy fallback")
+        self.assertNotContains(response, "ServiceEventAudienceScope")
+        self.assertNotContains(response, "CHURCH")
+
     def test_team_assignment_manager_sees_rotation_anchor_metadata(self):
         self.set_language("en")
         event = self.create_event(rotation_anchor_team=self.required_team)
@@ -1318,12 +1539,14 @@ class ServiceEventFoundationTests(TestCase):
     def test_recurring_preview_creates_no_service_event(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
+        unit = self.create_structure_unit("R4", "Rainbow 4")
 
         response = self.client.post(
             reverse("create_recurring_service_events"),
             self.recurring_post_data(
                 preview="1",
                 required_teams=[self.required_team.id],
+                audience_units=[unit.id],
             ),
         )
 
@@ -1331,6 +1554,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Events to Create")
         self.assertEqual(ServiceEvent.objects.count(), 0)
         self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
     def test_recurring_create_creates_weekly_sunday_events_in_range(self):
         self.set_language("en")
@@ -1391,6 +1615,45 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_recurring_create_applies_same_audience_units_to_each_event(self):
+        self.set_language("en")
+        unit = self.create_structure_unit("R4", "Rainbow 4")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(create="1", audience_units=[unit.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(list(event.get_audience_scope_units()), [unit])
+
+    def test_recurring_create_with_empty_audience_uses_legacy_fallback_fields(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(
+                create="1",
+                scope_type=ServiceEvent.SCOPE_DISTRICT,
+                district=self.north.id,
+                small_group="",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(event.audience_scope_links.count(), 0)
+            self.assertTrue(event.can_be_seen_by(self.user))
+            self.assertTrue(event.can_be_seen_by(self.same_district_user))
+            self.assertFalse(event.can_be_seen_by(self.other_user))
+
     def test_recurring_create_skips_existing_events(self):
         self.set_language("en")
         start_date = self.next_sunday()
@@ -1417,6 +1680,35 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(existing_event.required_teams.count(), 0)
         existing_event.refresh_from_db()
         self.assertIsNone(existing_event.rotation_anchor_team)
+
+    def test_recurring_create_does_not_backfill_skipped_duplicate_audience(self):
+        self.set_language("en")
+        start_date = self.next_sunday()
+        start_datetime = self.matching_recurring_start_datetime(start_date)
+        existing_event = self.create_event(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            start_datetime=start_datetime,
+            end_datetime=start_datetime + timezone.timedelta(hours=1, minutes=30),
+        )
+        unit = self.create_structure_unit("R4", "Rainbow 4")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_recurring_service_events"),
+            self.recurring_post_data(create="1", audience_units=[unit.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "skipped: 1")
+        existing_event.refresh_from_db()
+        self.assertEqual(existing_event.audience_scope_links.count(), 0)
+        new_events = ServiceEvent.objects.filter(title_en="Sunday Service").exclude(
+            id=existing_event.id,
+        )
+        self.assertEqual(new_events.count(), 2)
+        for event in new_events:
+            self.assertEqual(list(event.get_audience_scope_units()), [unit])
 
     def test_recurring_create_ignores_matching_cancelled_event(self):
         self.set_language("en")
@@ -2220,13 +2512,15 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.assertEqual(hidden_detail.status_code, 302)
         self.assertEqual(hidden_detail.url, reverse("service_event_list"))
 
-    def test_no_audience_selector_ui_is_introduced(self):
+    def test_audience_selector_ui_is_available_after_runtime_migration(self):
         form = ServiceEventForm(language="en")
-        self.assertNotIn("audience_units", form.fields)
+        self.assertIn("audience_units", form.fields)
+        self.assertFalse(form.fields["audience_units"].required)
 
         self.set_language("en")
         self.client.login(username="audience_staff", password="testpass123")
         response = self.client.get(reverse("create_service_event"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "data-audience-picker")
+        self.assertContains(response, "data-audience-picker")
+        self.assertContains(response, "Fallback audience settings")

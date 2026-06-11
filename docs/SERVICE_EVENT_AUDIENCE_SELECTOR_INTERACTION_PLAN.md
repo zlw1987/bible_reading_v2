@@ -2,16 +2,16 @@
 
 ## 1. Purpose and Status
 
-SE-AS.5A is a docs-only interaction plan for the future SE-AS.5 staff audience selector UI.
+SE-AS.5A is the docs-only interaction plan for the SE-AS.5 staff audience selector UI. SE-AS.5 is now implemented against this contract.
 
-Status: complete as planning only. This document does not implement forms, views, templates, models, tests, migrations, CSS, JavaScript, backfill, setup UI, or runtime behavior changes.
+Status: SE-AS.5A planning is complete, and SE-AS.5 implementation is complete. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker, staff detail shows effective audience source and readable labels, and empty selections keep legacy fallback behavior. No schema/model field change, migration, data backfill, Community Activities, CS-MAP.3, CS-SETUP.1, `ChurchStructureMembership` visibility migration, or ministry scheduling behavior change was added.
 
 Current local baseline:
 
 - SE-AS.4 is complete: if a `ServiceEvent` has one or more `ServiceEventAudienceScope` rows, those rows govern ordinary-user visibility.
 - If a `ServiceEvent` has zero audience rows, ordinary-user visibility falls back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`.
 - `ChurchStructureMembership` does not grant ServiceEvent visibility.
-- No SE-AS.5 staff selector UI exists yet.
+- The SE-AS.5 staff selector UI/display now exists; SE-AS.6 backfill remains future.
 
 ## 2. Current Surfaces to Extend in SE-AS.5
 
@@ -120,7 +120,7 @@ Custom or unmapped unit selected:
 - A selected active custom/unmapped `ChurchStructureUnit` is valid.
 - It may match no ordinary users because SE-AS.4 still resolves selected units through legacy `SmallGroup` mapping and `Profile.small_group`.
 - Staff should get a clear warning or preview in SE-AS.5 implementation, such as `This selection currently matches no ordinary users because it is not mapped to active legacy groups.` / `此选择目前没有匹配到普通用户，因为它尚未映射到启用的小组。`
-- This warning/preview is not implemented by SE-AS.5A.
+- SE-AS.5 implements this as a staff detail warning when selected units currently resolve to no active legacy groups.
 
 ## 7. Recurring/Batch Create
 
@@ -133,18 +133,19 @@ Recurring create should behave as one shared event template:
 - Existing skipped duplicate events are not backfilled or modified.
 - No automatic backfill from legacy fields into audience rows is included.
 
-## 8. Implementation Notes for Later SE-AS.5
+## 8. SE-AS.5 Implementation Notes
 
-Likely implementation shape, for a future approved code task:
+Implemented shape:
 
 - Reuse `templates/shared/_church_structure_unit_audience_picker.html`.
-- Add a ServiceEvent-specific `audience_units` field/helper pattern parallel to `BibleStudySeriesForm`, but keep ServiceEvent's empty-picker fallback behavior instead of making the picker required.
-- Save selected units through `ServiceEventAudienceScope` rows in the same transaction as the event save.
+- Add a ServiceEvent-specific optional `audience_units` field/helper pattern parallel to `BibleStudySeriesForm`; unlike Bible Study Schedule, ServiceEvent keeps empty-picker fallback behavior instead of requiring the picker.
+- Save selected units through `ServiceEventAudienceScope` rows in the same transaction as the event save. Edit replaces rows atomically; clearing all units deletes rows and restores fallback.
 - Prefetch `audience_scope_links__unit` for detail/list surfaces that display effective audience.
-- Add template filters/helpers for compact structure audience labels and fallback labels; normal-facing labels should avoid codes/IDs.
-- Add targeted tests for create, edit, clear-to-fallback, recurring create, effective display source, and the boundary that ministry scheduling concepts are unchanged.
+- Add template filters/helpers for compact structure audience labels and fallback labels; ordinary-facing detail still does not show audience architecture details.
+- Add a staff detail warning when selected structure units currently resolve to no active legacy small groups.
+- Add targeted tests for create, edit, clear-to-fallback, recurring create, effective display source, ordinary detail non-exposure, runtime visibility, and the boundary that ministry scheduling concepts are unchanged.
 
-These notes are not implementation approval.
+SE-AS.6 backfill remains future and separately approved.
 
 ## 9. Explicit Non-Goals
 
@@ -165,9 +166,9 @@ SE-AS.5A and the later SE-AS.5 selector implementation must not include:
 - New permission matrix work.
 - New notifications, attendance, availability, swaps, reminders, checklist, or automatic scheduling.
 
-## 10. SE-AS.5 Readiness Decision
+## 10. SE-AS.5 Completion Decision
 
-SE-AS.5 may proceed as a separately approved implementation slice using this interaction contract:
+SE-AS.5 is complete using this interaction contract:
 
 - Picker appears on single create, single edit, and recurring create.
 - Staff detail shows effective audience source and readable labels.

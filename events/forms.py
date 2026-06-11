@@ -1,12 +1,13 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import MinistryContext
+from accounts.models import ChurchStructureUnit, MinistryContext
 from ministry.models import MinistryTeam
 
-from .models import ServiceEvent
+from .models import ServiceEvent, ServiceEventAudienceScope
 
 
 FORM_TEXT = {
@@ -23,6 +24,15 @@ FORM_TEXT = {
         "ministry_context": "Host / Language Label",
         "rotation_anchor_team": "Rotation Anchor Team",
         "required_teams": "Required Ministry Teams",
+        "audience_units": "Audience Scope",
+        "audience_units_help": (
+            "Selected units control which ordinary users can see this gathering. "
+            "Leave this empty to use the fallback audience settings below."
+        ),
+        "audience_scope_root_combo": "Whole Church cannot be combined with other units.",
+        "audience_scope_ancestor_combo": (
+            "Do not select both a unit and one of its parent or child units."
+        ),
         "scope_type": "Audience Scope",
         "district": "District",
         "small_group": "Small Group",
@@ -77,6 +87,13 @@ FORM_TEXT = {
         "location": "地点",
         "meeting_link": "会议链接",
         "rotation_anchor_team": "配搭参考团队",
+        "audience_units": "适用范围",
+        "audience_units_help": (
+            "选择的教会结构单元会决定普通用户能否看到这个聚会。"
+            "留空则使用下方的备用适用范围设置。"
+        ),
+        "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
+        "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
         "scope_type": "范围",
         "required_teams": "需要的事工团队",
         "district": "区",
@@ -126,7 +143,165 @@ class MinistryTeamChoiceField(forms.ModelChoiceField):
         return team.get_name(self.language)
 
 
-class ServiceEventForm(forms.ModelForm):
+class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, unit):
+        return unit.path_label(self.language)
+
+
+def compact_unit_label(unit, language):
+    if unit.unit_type == ChurchStructureUnit.UNIT_ROOT:
+        return "全教会" if language == "zh" else "Whole Church"
+    chain = [
+        ancestor
+        for ancestor in unit.get_ancestors()
+        if ancestor.unit_type != ChurchStructureUnit.UNIT_ROOT
+    ]
+    chain.append(unit)
+    return " > ".join(node.display_name(language) for node in chain)
+
+
+def validate_audience_unit_combination(form, units, text):
+    if any(
+        unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units
+    ) and len(units) > 1:
+        form.add_error("audience_units", text["audience_scope_root_combo"])
+        return
+
+    unit_ids = {unit.id for unit in units}
+    for unit in units:
+        ancestor_ids = {
+            ancestor.id for ancestor in unit.get_ancestors() if ancestor.id is not None
+        }
+        if ancestor_ids & unit_ids:
+            form.add_error("audience_units", text["audience_scope_ancestor_combo"])
+            return
+
+
+def save_service_event_audience_units(event, units):
+    units = list(units or [])
+    with transaction.atomic():
+        event.audience_scope_links.all().delete()
+        for unit in units:
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+
+class AudienceUnitOptionsMixin:
+    language = "en"
+
+    def add_audience_units_field(self, text):
+        self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
+            language=self.language,
+            queryset=ChurchStructureUnit.objects.filter(is_active=True).order_by(
+                "parent_id",
+                "sort_order",
+                "code",
+                "name",
+            ),
+            required=False,
+            label=text["audience_units"],
+            help_text=text["audience_units_help"],
+        )
+        self.fields["audience_units"].initial = self._initial_audience_unit_ids()
+
+    def _initial_audience_unit_ids(self):
+        instance = getattr(self, "instance", None)
+        if not instance or not instance.pk:
+            return []
+        return list(instance.get_audience_scope_units().values_list("id", flat=True))
+
+    def clean_audience_units_combination(self, cleaned_data, text):
+        validate_audience_unit_combination(
+            self,
+            list(cleaned_data.get("audience_units") or []),
+            text,
+        )
+
+    def save_audience_units(self, event):
+        save_service_event_audience_units(
+            event,
+            list(self.cleaned_data.get("audience_units") or []),
+        )
+
+    def audience_selected_ids(self):
+        raw = self["audience_units"].value() or []
+        selected = set()
+        for value in raw:
+            try:
+                selected.add(int(value))
+            except (TypeError, ValueError):
+                continue
+        return selected
+
+    def _audience_option(self, unit, depth, ancestor_ids, selected, orphan=False):
+        compact = compact_unit_label(unit, self.language)
+        return {
+            "id": unit.id,
+            "label": unit.display_name(self.language),
+            "path_label": compact,
+            "search": f"{compact} {unit.code}".lower(),
+            "depth": depth,
+            "unit_type": unit.unit_type,
+            "ancestor_ids": ancestor_ids,
+            "selected": unit.id in selected,
+            "orphan": orphan,
+        }
+
+    def audience_unit_options(self):
+        selected = self.audience_selected_ids()
+        units = list(
+            ChurchStructureUnit.objects.filter(is_active=True).order_by(
+                "sort_order",
+                "code",
+                "name",
+            )
+        )
+
+        children = {}
+        for unit in units:
+            children.setdefault(unit.parent_id, []).append(unit)
+        for group in children.values():
+            group.sort(key=lambda u: (u.sort_order, u.code, u.name))
+
+        options = []
+        visited = set()
+
+        def walk(unit, depth, ancestor_ids):
+            if unit.id in visited:
+                return
+            visited.add(unit.id)
+            options.append(
+                self._audience_option(unit, depth, ancestor_ids, selected)
+            )
+            for child in children.get(unit.id, []):
+                walk(child, depth + 1, ancestor_ids + [unit.id])
+
+        roots = [unit for unit in units if unit.parent_id is None]
+        roots.sort(
+            key=lambda u: (
+                u.unit_type != ChurchStructureUnit.UNIT_ROOT,
+                u.sort_order,
+                u.code,
+                u.name,
+            )
+        )
+        for root in roots:
+            walk(root, 0, [])
+
+        for unit in units:
+            if unit.id not in visited:
+                visited.add(unit.id)
+                options.append(
+                    self._audience_option(unit, 0, [], selected, orphan=True)
+                )
+
+        return options
+
+
+class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
     rotation_anchor_team = MinistryTeamChoiceField(
         queryset=MinistryTeam.objects.none(),
         required=False,
@@ -172,6 +347,7 @@ class ServiceEventForm(forms.ModelForm):
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.language = language
         text = form_text(language)
         if language == "zh":
             text = {
@@ -203,6 +379,8 @@ class ServiceEventForm(forms.ModelForm):
                 "district_help": "仅在覆盖对象为“区”时使用。",
                 "small_group_help": "仅在覆盖对象为“小组”时使用。",
             }
+
+        self.add_audience_units_field(text)
 
         for field_name in self.fields:
             self.fields[field_name].label = text.get(
@@ -278,6 +456,11 @@ class ServiceEventForm(forms.ModelForm):
         self.fields["start_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["end_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
+    def clean(self):
+        cleaned_data = super().clean()
+        self.clean_audience_units_combination(cleaned_data, form_text(self.language))
+        return cleaned_data
+
     def clean_status(self):
         status = self.cleaned_data["status"]
         if (
@@ -297,7 +480,7 @@ class ServiceEventForm(forms.ModelForm):
         return status
 
 
-class RecurringServiceEventForm(forms.Form):
+class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
     WEEKDAY_CHOICES = [
         (0, "Monday"),
         (1, "Tuesday"),
@@ -353,6 +536,7 @@ class RecurringServiceEventForm(forms.Form):
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.language = language
         text = form_text(language)
         recurring_labels = {
             "en": {
@@ -434,6 +618,7 @@ class RecurringServiceEventForm(forms.Form):
         self.fields["required_teams"].queryset = MinistryTeam.objects.filter(
             is_active=True,
         ).order_by("name")
+        self.add_audience_units_field(text)
         self.fields["weekday"].choices = weekday_choices(language)
 
         if not self.is_bound:
@@ -480,6 +665,7 @@ class RecurringServiceEventForm(forms.Form):
             for field, errors in exc.message_dict.items():
                 self.add_error(field if field in self.fields else None, errors)
 
+        self.clean_audience_units_combination(cleaned_data, form_text(self.language))
         return cleaned_data
 
 

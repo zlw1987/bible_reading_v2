@@ -489,6 +489,11 @@ textarea {
     font-size: 26px;
 }
 
+.mapping-conflict-help {
+    font-size: 13px;
+    margin: 0 0 16px;
+}
+
 .mapping-filters {
     display: flex;
     flex-wrap: wrap;

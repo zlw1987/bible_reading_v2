@@ -551,20 +551,23 @@ MAPPING_REVIEW_STATUSES = {
 @staff_member_required
 @require_GET
 def staff_structure_mapping_review(request):
-    """Read-only legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2).
+    """Legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2 / .1D.1 / .1D.2).
 
     Staff-only page that lists every legacy MinistryContext / District /
     SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
-    simple mapping-status label. CS-SETUP.1C.2 adds read-only summary counts
-    and ``?status=`` filter links so a long mapping list can be narrowed to the
-    rows that need review. It remains review-only: there is no POST handler, no
-    form, and it changes no mappings, units, memberships, audience rows, or
-    visibility. The ``status`` filter only hides/shows already-loaded rows.
-    Admin edit links appear only when the viewer holds the matching Django Admin
-    change permission. Like /staff/structure/, this page never uses
-    ChurchStructureMembership as a runtime visibility source and does not alter
-    ordinary-user matching (Profile.small_group / legacy mappings) or module
-    audience scope.
+    mapping-status label and (CS-SETUP.1D.2) display-only type-mismatch /
+    duplicate-active conflict badges. CS-SETUP.1C.2 adds summary counts and
+    ``?status=`` filter links so a long mapping list can be narrowed to the rows
+    that need review. This view itself is GET-only and writes nothing: the
+    ``status`` filter only hides/shows already-loaded rows. When the viewer
+    holds the matching Django Admin change permission, each permitted row offers
+    a one-row mapping edit link (CS-SETUP.1D.1) to the separate
+    ``staff_structure_mapping_edit`` view; Django Admin edit links appear under
+    the same permission. Those edits change the legacy -> structure mapping
+    only. Like /staff/structure/, this page never uses ChurchStructureMembership
+    as a runtime visibility source and changes no memberships, visibility,
+    module audience scope (ServiceEvent / Bible Study), serving schedules, or
+    ordinary-user matching (Profile.small_group / legacy mappings).
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
@@ -586,12 +589,20 @@ def staff_structure_mapping_review(request):
 
     # Counts are tallied across every loaded row, independent of the active
     # filter, so the summary always shows true totals for the filter links.
+    # ``type_mismatch`` / ``duplicate_active`` are display-only conflict
+    # overlays (CS-SETUP.1D.2): they sit on top of the primary status_key
+    # rather than replacing it, so a row can be both ``mapped_active`` and a
+    # duplicate-conflict at once. ``conflicts`` counts rows carrying either
+    # overlay (a row with both is counted once).
     counts = {
         "all": 0,
         "mapped_active": 0,
         "unmapped": 0,
         "mapped_inactive": 0,
         "mapped_holding": 0,
+        "type_mismatch": 0,
+        "duplicate_active": 0,
+        "conflicts": 0,
     }
 
     can_change_unit = request.user.has_perm(
@@ -601,6 +612,24 @@ def staff_structure_mapping_review(request):
     def build_rows(
         queryset, legacy_admin_viewname, can_change_legacy, legacy_type_slug
     ):
+        # The mapping config drives the two conflict overlays: ``unit_type``
+        # is the type a row of this legacy kind is expected to map to, and the
+        # duplicate set lists units that more than one *active* row of this
+        # same kind point at (the exact condition the edit POST handler
+        # blocks). Both are display-only here; nothing is written.
+        config = LEGACY_MAPPING_TYPES[legacy_type_slug]
+        expected_unit_type = config["unit_type"]
+        legacy_model = config["model"]
+        duplicate_unit_ids = set(
+            legacy_model.objects.filter(
+                is_active=True, church_structure_unit__isnull=False
+            )
+            .values("church_structure_unit")
+            .annotate(n=Count("church_structure_unit"))
+            .filter(n__gt=1)
+            .values_list("church_structure_unit", flat=True)
+        )
+
         all_rows = []
         for obj in queryset:
             unit = obj.church_structure_unit
@@ -608,6 +637,8 @@ def staff_structure_mapping_review(request):
                 status_key = "unmapped"
                 unit_path = ""
                 unit_is_active = None
+                is_type_mismatch = False
+                is_duplicate_active = False
             else:
                 # Reuse a single ancestor walk for both the path label and the
                 # cheap holding-node check, rather than calling path_label()
@@ -623,8 +654,22 @@ def staff_structure_mapping_review(request):
                     status_key = "mapped_holding"
                 else:
                     status_key = "mapped_active"
+                # Conflict overlays. Wrong-type mappings cannot be produced by
+                # the in-app edit (it re-validates type), but legacy data or a
+                # direct Admin edit can leave one, so it is surfaced. Duplicate
+                # only flags active rows, matching the active-only edit guard.
+                is_type_mismatch = unit.unit_type != expected_unit_type
+                is_duplicate_active = (
+                    obj.is_active and unit.pk in duplicate_unit_ids
+                )
             counts["all"] += 1
             counts[status_key] += 1
+            if is_type_mismatch:
+                counts["type_mismatch"] += 1
+            if is_duplicate_active:
+                counts["duplicate_active"] += 1
+            if is_type_mismatch or is_duplicate_active:
+                counts["conflicts"] += 1
             all_rows.append(
                 {
                     "label": str(obj),
@@ -633,6 +678,8 @@ def staff_structure_mapping_review(request):
                     "unit_path": unit_path,
                     "unit_is_active": unit_is_active,
                     "status_key": status_key,
+                    "is_type_mismatch": is_type_mismatch,
+                    "is_duplicate_active": is_duplicate_active,
                     "legacy_admin_url": (
                         reverse(legacy_admin_viewname, args=[obj.pk])
                         if can_change_legacy

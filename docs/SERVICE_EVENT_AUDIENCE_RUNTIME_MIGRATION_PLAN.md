@@ -8,11 +8,11 @@ Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the ru
 
 Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers later milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
 
-SE-AS.5 and SE-AS.6 remain future milestones and require separate explicit approval.
+SE-AS.5A is complete as the docs-only staff audience selector interaction plan in `docs/SERVICE_EVENT_AUDIENCE_SELECTOR_INTERACTION_PLAN.md`. SE-AS.5 implementation and SE-AS.6 remain future milestones and require separate explicit approval.
 
 ## 2. Current State Audit
 
-Audited from docs plus light code reading. No code was changed.
+Originally audited from docs plus light code reading during SE-AS.3 planning. SE-AS.4 has since implemented the runtime visibility rule described below.
 
 ### 2.1 Runtime visibility (legacy, unchanged)
 
@@ -123,11 +123,12 @@ Implementation notes:
 
 ### SE-AS.5 — Staff Audience Selector UI and Display
 
+- Planning preflight: SE-AS.5A is complete in `docs/SERVICE_EVENT_AUDIENCE_SELECTOR_INTERACTION_PLAN.md`.
 - Reuse the BS-AS.2 audience picker partial on ServiceEvent single create/edit and recurring batch-create.
 - Read-only audience display on event detail/admin surfaces for staff; readable labels (no unit codes/IDs) for ordinary users where appropriate.
 - Bilingual wording per Section 9; clearly separated from Host / Language Label.
 - Backend validation remains authoritative (active unit, no ancestor/descendant redundancy).
-- Legacy scope fields remain editable or are bridged; an event with audience rows is governed by them, an event without rows keeps legacy behavior.
+- Legacy scope fields remain editable and should be visually grouped/labeled as fallback audience settings during the transition; an event with audience rows is governed by those rows, and an event without rows keeps legacy behavior.
 
 ### SE-AS.6 — Backfill, Compatibility Monitoring, and Cleanup Planning
 
@@ -160,7 +161,7 @@ Selected `ChurchStructureUnit` rows map to current users through the legacy mapp
 - Equivalently: the user matches iff their current small group is in the resolved eligible-group set for the selected units. Reusing one resolver keeps Bible Study and ServiceEvent semantics identical.
 - Custom or unmapped units (no legacy mapping anywhere beneath them) match no ordinary users until separately mapped. They are not an error; staff display should make the empty ordinary-audience consequence visible.
 - Multi-unit selections are a union: sibling and cross-branch selections each contribute their matched users.
-- Inactive units: validation prevents selecting inactive units, but a stored selection whose unit later becomes inactive should keep matching for parity and historical continuity (legacy district/small-group checks do not test `is_active` either). Confirm this at SE-AS.4 with an explicit test; if product wants inactive units to stop matching, that is a deliberate behavior choice to record, not an accident.
+- Inactive units: validation prevents selecting inactive units, but a stored selection whose unit later becomes inactive should keep matching for parity and historical continuity (legacy district/small-group checks do not test `is_active` either). SE-AS.4 confirmed this with an explicit test; if product later wants inactive units to stop matching, that is a deliberate behavior choice to record, not an accident.
 
 ## 8. Migration / Backfill Strategy
 
@@ -241,5 +242,5 @@ SE-AS.3 (this task) does NOT implement, and this plan by itself does not authori
 ## 12. Open Decisions for Later Milestones
 
 - Final bilingual wording: Audience Scope / 适用范围 here vs Coverage Scope / 覆盖对象 in SE-AS.1 — unify at SE-AS.5.
-- Whether legacy scope fields stay staff-editable after SE-AS.5 or become read-only fallback display.
+- Legacy scope field editability for SE-AS.5 is now answered by SE-AS.5A: keep `scope_type`, `district`, and `small_group` editable, but group/label them as fallback audience settings; no deletion, deprecation, schema change, or data migration.
 - Whether/when to run the SE-AS.6 backfill at all, and whether to include global events in it.

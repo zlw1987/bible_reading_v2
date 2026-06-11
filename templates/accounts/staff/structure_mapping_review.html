@@ -108,6 +108,18 @@
            href="?status=mapped_holding"{% if status == 'mapped_holding' %} aria-current="true"{% endif %}>
             {% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %} ({{ counts.mapped_holding }})
         </a>
+        <a class="button-secondary button mapping-filter mapping-filter-conflict{% if status == 'conflicts' %} is-active{% endif %}"
+           href="?status=conflicts"{% if status == 'conflicts' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}冲突／警告{% else %}Conflicts / warnings{% endif %} ({{ counts.conflicts }})
+        </a>
+        <a class="button-secondary button mapping-filter mapping-filter-conflict{% if status == 'type_mismatch' %} is-active{% endif %}"
+           href="?status=type_mismatch"{% if status == 'type_mismatch' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}类型不匹配{% else %}Type mismatch{% endif %} ({{ counts.type_mismatch }})
+        </a>
+        <a class="button-secondary button mapping-filter mapping-filter-conflict{% if status == 'duplicate_active' %} is-active{% endif %}"
+           href="?status=duplicate_active"{% if status == 'duplicate_active' %} aria-current="true"{% endif %}>
+            {% if language == "zh" %}重复的启用对应{% else %}Duplicate active mapping{% endif %} ({{ counts.duplicate_active }})
+        </a>
     </nav>
 </section>
 

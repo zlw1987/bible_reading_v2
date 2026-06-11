@@ -505,6 +505,17 @@ textarea {
     font-weight: 600;
 }
 
+/* Overlay (conflict/warning) filters read as a distinct group from the
+   primary status filters; they remain display-only navigation. */
+.mapping-filter-conflict {
+    border-color: #efb4b4;
+    color: var(--danger);
+}
+
+.mapping-filter-conflict.is-active {
+    border-color: var(--danger);
+}
+
 .moderation-queue-grid {
     display: grid;
     gap: 18px;

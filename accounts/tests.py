@@ -4317,6 +4317,164 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertEqual(counts["mapped_active"], 2)
         self.assertEqual(counts["duplicate_active"], 2)
 
+    # --- CS-SETUP.1D.3: display-only overlay (conflict) filters -------------
+
+    def _seed_conflict_mix(self):
+        """Seed one type-mismatch, two duplicate-active, and one clean row.
+
+        Every row is primary status ``mapped_active``; the overlay filters must
+        narrow by conflict flag, not by primary status_key. Returns the row
+        labels keyed by intent so assertions stay readable.
+        """
+        clean_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D3",
+            name="三区",
+            name_en="District 3",
+        )
+        # SmallGroup mapped to a District-type unit -> type mismatch only.
+        SmallGroup.objects.create(
+            name="TM Mismatch Group",
+            church_structure_unit=self.active_unit,
+        )
+        # Two active Districts on the same unit -> duplicate-active (no
+        # type mismatch, since District rows expect a District unit).
+        District.objects.create(
+            name="Dup Alpha District", church_structure_unit=self.active_unit
+        )
+        District.objects.create(
+            name="Dup Beta District", church_structure_unit=self.active_unit
+        )
+        # A lone District on its own active unit -> clean, no overlay.
+        District.objects.create(
+            name="Clean Solo District", church_structure_unit=clean_unit
+        )
+        return {
+            "type_mismatch": "TM Mismatch Group",
+            "duplicate_active": ["Dup Alpha District", "Dup Beta District"],
+            "clean": "Clean Solo District",
+        }
+
+    def test_overlay_filter_links_render_with_counts(self):
+        self.set_language("en")
+        self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        # The three overlay filter links are present alongside the primary set.
+        for href in (
+            "?status=conflicts",
+            "?status=type_mismatch",
+            "?status=duplicate_active",
+        ):
+            self.assertContains(response, href)
+        counts = response.context["counts"]
+        self.assertEqual(counts["type_mismatch"], 1)
+        self.assertEqual(counts["duplicate_active"], 2)
+        self.assertEqual(counts["conflicts"], 3)
+        # Primary status totals stay true totals (all four rows mapped_active).
+        self.assertEqual(counts["all"], 4)
+        self.assertEqual(counts["mapped_active"], 4)
+
+    def test_conflicts_filter_shows_either_overlay(self):
+        self.set_language("en")
+        labels = self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "conflicts"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "conflicts")
+        # Both overlay kinds are shown.
+        self.assertContains(response, labels["type_mismatch"])
+        for name in labels["duplicate_active"]:
+            self.assertContains(response, name)
+        # The clean mapped_active row is hidden.
+        self.assertNotContains(response, labels["clean"])
+
+    def test_type_mismatch_filter_shows_only_type_mismatch(self):
+        self.set_language("en")
+        labels = self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "type_mismatch"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "type_mismatch")
+        self.assertContains(response, labels["type_mismatch"])
+        for name in labels["duplicate_active"]:
+            self.assertNotContains(response, name)
+        self.assertNotContains(response, labels["clean"])
+
+    def test_duplicate_active_filter_shows_only_duplicates(self):
+        self.set_language("en")
+        labels = self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "duplicate_active"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "duplicate_active")
+        for name in labels["duplicate_active"]:
+            self.assertContains(response, name)
+        self.assertNotContains(response, labels["type_mismatch"])
+        self.assertNotContains(response, labels["clean"])
+
+    def test_primary_filter_keeps_overlay_badges(self):
+        # Filtering by a primary status must not strip the display-only overlay
+        # badges from rows that carry them.
+        self.set_language("en")
+        self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "mapped_active"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "mapped_active")
+        # Overlay badges survive a primary-status filter.
+        self.assertContains(response, 'status-danger">Type mismatch')
+        self.assertContains(response, 'status-danger">Duplicate active mapping')
+        # Overlay counts remain true totals under a primary filter.
+        counts = response.context["counts"]
+        self.assertEqual(counts["type_mismatch"], 1)
+        self.assertEqual(counts["duplicate_active"], 2)
+        self.assertEqual(counts["conflicts"], 3)
+
+    def test_unknown_status_with_conflicts_falls_back_to_all(self):
+        self.set_language("en")
+        labels = self._seed_conflict_mix()
+        self.login_viewer()
+
+        response = self.client.get(self.url, {"status": "not_a_status"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["status"], "all")
+        # Every row is shown under the safe fallback.
+        self.assertContains(response, labels["clean"])
+        self.assertContains(response, labels["type_mismatch"])
+
+    def test_overlay_filter_edit_links_preserve_status(self):
+        # Edit links must round-trip the overlay status value so the return URL
+        # lands back on the same filter.
+        self.set_language("en")
+        group = SmallGroup.objects.create(
+            name="TM Mismatch Group",
+            church_structure_unit=self.active_unit,
+        )
+        edit_url = reverse(
+            "staff_structure_mapping_edit", args=["small-group", group.pk]
+        )
+        self.login_admin()
+
+        response = self.client.get(self.url, {"status": "type_mismatch"})
+
+        self.assertEqual(response.status_code, 200)
+        # The per-row edit action carries the overlay status onward.
+        self.assertContains(response, f"{edit_url}?status=type_mismatch")
+
 
 class StaffStructureMappingEditTests(TestCase):
     """CS-SETUP.1D.1: one-row-at-a-time legacy -> structure mapping edit."""
@@ -4559,6 +4717,36 @@ class StaffStructureMappingEditTests(TestCase):
         # The other row is untouched.
         other.refresh_from_db()
         self.assertEqual(other.church_structure_unit_id, self.sg_unit_2.id)
+
+    def test_valid_update_preserves_overlay_filter_status(self):
+        # CS-SETUP.1D.3: posting from an overlay filter round-trips that status
+        # value back to the review list on a successful save.
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "status": "type_mismatch",
+            },
+        )
+
+        self.assertRedirects(
+            response, f"{self.review_url}?status=type_mismatch"
+        )
+
+    def test_get_edit_page_carries_overlay_status_in_form(self):
+        # The edit form must echo the overlay status so the return/save path
+        # keeps the staff on their conflict filter.
+        self.login_sg_staff()
+
+        response = self.client.get(
+            self.edit_url("small-group", self.group.pk),
+            {"status": "duplicate_active"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "duplicate_active")
 
     def test_valid_update_writes_logentry(self):
         from django.contrib.admin.models import LogEntry

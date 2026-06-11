@@ -4,7 +4,7 @@
 
 This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models, CS-H.6 through CS-H.7E add requested-unit capture and staff approval/sync slices, CS-H.8 records the integrated request-flow checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint.
 
-DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is now implemented as the first narrow runtime consumer (BS-AS.1, with BS-AS.2 picker/display/cancelled-cleanup and BS-AS.2A accessibility polish): the `BibleStudySeriesAudienceScope` join resolves selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation while keeping ordinary member visibility on `Profile.small_group`. ServiceEvent / Church Gatherings and future Community Activities should follow the same `ChurchStructureUnit` audience-scope foundation in later milestones, and both remain deferred and separately approved. This is not a migration of ordinary user visibility to `ChurchStructureMembership`; that runtime visibility migration remains deferred.
+DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is now implemented as the first narrow runtime consumer (BS-AS.1, with BS-AS.2 picker/display/cancelled-cleanup and BS-AS.2A accessibility polish): the `BibleStudySeriesAudienceScope` join resolves selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation while keeping ordinary member visibility on `Profile.small_group`. ServiceEvent / Church Gatherings now follows the same `ChurchStructureUnit` audience-scope foundation as a runtime consumer: SE-AS.4 makes `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, and SE-AS.5 adds the staff audience picker; events with zero audience rows fall back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`. Future Community Activities should reuse the same foundation in a later milestone and remains deferred and separately approved. This is not a migration of ordinary user visibility to `ChurchStructureMembership`; that runtime visibility migration remains deferred, and `ChurchStructureMembership` still grants no ServiceEvent visibility.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -64,7 +64,7 @@ Current fields:
 
 `Profile.small_group` stores the user's current primary small group.
 
-This is a short-term current-state field, not membership history. It is still the baseline for current Bible Study meeting visibility and ServiceEvent district/small-group visibility.
+This is a short-term current-state field, not membership history. It is still the baseline for current Bible Study meeting visibility, and for ServiceEvent it remains the legacy-fallback basis used only for events with no `ServiceEventAudienceScope` rows; events that have audience rows use those rows for ordinary-user visibility (SE-AS.4).
 
 ### `BibleStudySeries` Scope Fields
 
@@ -94,7 +94,7 @@ Current scope fields:
 - `small_group`
 - `ministry_context`
 
-Current audience scope supports only:
+These legacy fields are now the fallback audience only: SE-AS.4 makes `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them (supporting multiple `ChurchStructureUnit` targets), and only events with zero audience rows use the legacy whole-church / one-district / one-small-group fields plus `Profile.small_group`. SE-AS.5 adds the staff picker that writes those rows. The legacy fields below remain editable fallback fields:
 - whole church
 - one district
 - one small group
@@ -255,7 +255,7 @@ Possible generic name:
 Possible app-specific through models:
 
 - `BibleStudySeriesAudienceScope` — implemented for Bible Study Schedule.
-- `ServiceEventAudienceScope` — model-only foundation already exists for ServiceEvent; runtime visibility is not migrated.
+- `ServiceEventAudienceScope` — implemented for ServiceEvent; SE-AS.4 uses its rows as the ordinary-user visibility source when an event has them, with zero-row events falling back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`. SE-AS.5 adds the staff picker.
 - `CommunityActivityAudienceScope` — future suggested direction for Community Activities if/when that module is approved.
 
 
@@ -403,8 +403,8 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 
 ### Later Phase: ServiceEvent and Community Activities Audience Scope
 
-- ServiceEvent / Church Gatherings and future Community Activities should follow the same `ChurchStructureUnit` audience-scope foundation in later milestones.
-- `ServiceEventAudienceScope` already exists as a model-only foundation (SE-AS.2); it does not yet drive runtime visibility. Runtime ServiceEvent visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`.
+- ServiceEvent / Church Gatherings now uses the same `ChurchStructureUnit` audience-scope foundation as a runtime consumer (SE-AS.4 visibility rule, SE-AS.5 staff picker); future Community Activities should follow the same foundation in a later milestone.
+- `ServiceEventAudienceScope` (SE-AS.2 model foundation) now drives ordinary-user ServiceEvent visibility when an event has rows (SE-AS.4); events with no rows fall back to legacy `scope_type` / `district` / `small_group` and `Profile.small_group`, which remain editable fallback fields.
 - Future Community Activities should use a `ChurchStructureUnit`-based audience-scope design rather than inventing a separate legacy-only audience segment system.
 - Preserve safe `BibleStudyMeeting` visibility.
 - Avoid breaking generated meeting workflows.
@@ -427,7 +427,7 @@ Future audience selection may support richer schedules, but `BibleStudyMeeting` 
 
 Current `ServiceEvent.ministry_context` remains label-only.
 
-Future audience selection may replace or augment `scope_type`, `district`, and `small_group`. Filtering must be a later explicit design and should not be bundled into the structure model foundation.
+ServiceEvent audience selection is now implemented: `ServiceEventAudienceScope` rows are the ordinary-user visibility source when an event has them (SE-AS.4), the staff picker writes them (SE-AS.5), and `scope_type` / `district` / `small_group` remain editable fallback fields used only when an event has no audience rows.
 
 ### C. Community Activities
 
@@ -519,7 +519,7 @@ Possible next planning or implementation steps:
 - BS-AS.2 audience picker UX, compact scope display, and active-list cancelled cleanup. Completed.
 - BS-AS.2A audience picker accessibility polish. Completed.
 - Immediate next step: manual/browser QA of the BS-AS flow after deployment or local migration, using `docs/BIBLE_STUDY_V2_FLOW_QA_CHECKLIST.md`.
-- Later ServiceEvent / Church Gatherings staff audience UI, runtime audience filtering, and visibility/consumer migration. Deferred and requires separate approval.
+- ServiceEvent / Church Gatherings staff audience UI and runtime audience visibility are now implemented (SE-AS.5 selector, SE-AS.4 visibility rule). SE-AS.6 backfill/compatibility cleanup (SE-AS.6A planning and SE-AS.6B dry-run audit command complete; SE-AS.6C apply future) and `ChurchStructureMembership` consumer/visibility migration remain deferred and require separate approval.
 - Later Community Activities V1 planning refinement using the shared `ChurchStructureUnit` audience-scope foundation through its own app-specific join model. Deferred and requires separate approval.
 - Later Checklist V1 re-evaluation only if pilot feedback proves a checklist need separately from required-team coverage.
 - PP-SA.1 Staff Admin Surface Expansion Plan. Completed.
@@ -530,7 +530,7 @@ Open decisions:
 - Generic audience model vs app-specific through models.
 - Whether root is persisted or virtual.
 - Whether old `MinistryContext`, `District`, and `SmallGroup` remain source of truth long-term.
-- First narrow runtime consumer (DOCS-AS.1 decision, implemented as BS-AS.1 / BS-AS.2 / BS-AS.2A): Bible Study Schedule (`BibleStudySeries`) audience scope via `BibleStudySeriesAudienceScope`, resolving selected `ChurchStructureUnit` rows to legacy `SmallGroup` while member visibility stays on `Profile.small_group`. ServiceEvent and Community Activities follow the same foundation later and remain deferred.
+- First narrow runtime consumer (DOCS-AS.1 decision, implemented as BS-AS.1 / BS-AS.2 / BS-AS.2A): Bible Study Schedule (`BibleStudySeries`) audience scope via `BibleStudySeriesAudienceScope`, resolving selected `ChurchStructureUnit` rows to legacy `SmallGroup` while member visibility stays on `Profile.small_group`. ServiceEvent now follows the same foundation as a runtime consumer (SE-AS.4 / SE-AS.5); Community Activities follows the same foundation later and remains deferred.
 - How to expose structure admin UI.
 - How much membership history is needed.
 - Whether selection rows should store display snapshots for historical labels.
@@ -543,5 +543,5 @@ Current recommendation:
 - Continue to prefer include-only V1 unless real use proves exclusion is necessary.
 - Continue to avoid destructive migration.
 - Bible Study Schedule has now proven the first narrow runtime consumer through BS-AS.1 / BS-AS.2 / BS-AS.2A.
-- ServiceEvent / Church Gatherings and Community Activities should reuse the same shared foundation later, but both remain deferred and require separate approval.
+- ServiceEvent / Church Gatherings now reuses the shared foundation as a runtime consumer (SE-AS.4 / SE-AS.5); Community Activities should reuse the same shared foundation later and remains deferred and requires separate approval.
 - Preserve the validated pilot baseline and keep ordinary member visibility on `Profile.small_group` until a separate consumer migration is approved.

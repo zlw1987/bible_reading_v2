@@ -22,10 +22,10 @@ Audited from the current working tree:
 - Legacy bridge mappings: nullable `church_structure_unit` fields on `MinistryContext`, `District`, and `SmallGroup` (`accounts/models.py`), explicitly non-runtime.
 - Commands: `seed_church_structure_units` (mirrors legacy structure into the unit tree under a `CHURCH` root with `UNASSIGNED-DISTRICTS` / `UNASSIGNED-GROUPS` holding nodes) and `backfill_church_structure_memberships` (creates active primary memberships from mapped `Profile.small_group`). Both default to dry-run with explicit `--apply`; production/staging runs are verified (CS-H.3D/3E, CS-H.5D).
 - Bible Study Schedule is the first narrow runtime consumer: `BibleStudySeriesAudienceScope` (`studies/models.py`) resolves selected units to eligible legacy `SmallGroup` rows for meeting generation; ordinary member visibility still uses `Profile.small_group`.
-- `ServiceEventAudienceScope` (`events/models.py`) is model-only and not a runtime source; ServiceEvent visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group` (see `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
+- `ServiceEventAudienceScope` (`events/models.py`) is now a runtime visibility source for ServiceEvent (SE-AS.4/SE-AS.5 complete): an event with one or more audience rows uses those rows for ordinary-user visibility, and an event with zero rows falls back to legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. Ordinary-user matching still resolves through `Profile.small_group`; `ChurchStructureMembership` is not consulted (see `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
 - Staff surfaces: read-only overview at `/staff/`, membership request review/approve/reject at `/staff/membership-requests/`, moderation queue at `/staff/moderation/`. There is no staff page that renders the structure hierarchy; the shared audience picker (`templates/shared/_church_structure_unit_audience_picker.html`) renders the tree only as a form selector. Structure setup (units, districts, groups) happens only in Django Admin.
 
-Runtime visibility sources remain the legacy scope fields and `Profile.small_group` across all consumers except the narrow Bible Study meeting-generation eligibility described above.
+Ordinary-user matching still depends on legacy `Profile.small_group` across consumers. On top of that: ServiceEvent now uses `ServiceEventAudienceScope` as the event-level audience source when an event has rows, while zero-row ServiceEvents fall back to legacy `scope_type` / `district` / `small_group`; Bible Study Schedule uses structure audience rows for meeting-generation eligibility, with ordinary member visibility still resolved through `Profile.small_group`.
 
 ## 3. Product Principle: Modular Adoption and Coexistence
 
@@ -43,7 +43,7 @@ The church structure foundation is the coexistence enabler, not a competitor to 
 
 Leadership needs to see and trust the church structure: a visible hierarchy map, who-belongs-where counts, and confidence that setup data is healthy. Today the unit tree is invisible outside Django Admin, and the only mapping-health reporting is CLI command dry-run output.
 
-"Setup support" must not be read as "build edit UI now." Editing `ChurchStructureUnit` today has no runtime effect, because runtime visibility still uses legacy fields and `Profile.small_group`. A staff edit UI would therefore look authoritative while being inert — the same staff-confusion failure mode that `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md` Section 4 rejected for the audience selector. Django Admin remains the structure write surface for now: it already distinguishes legacy runtime models from future foundation models (CS-H.5E), and model `full_clean()` validation enforces tree integrity there.
+"Setup support" must not be read as "build edit UI now." Editing `ChurchStructureUnit` is no longer merely cosmetic: ServiceEvent audience rows (`ServiceEventAudienceScope`) and Bible Study Schedule audience rows (`BibleStudySeriesAudienceScope`) can depend on the unit tree and its legacy mappings, so unit moves, deactivation, or mapping drift can change resolved audiences for events and schedules that already have rows. A staff edit UI would therefore have real runtime consequences while exposing none of the rules needed to make those changes safe — the same staff-confusion failure mode that `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md` Section 4 rejected for the audience selector. CS-SETUP.1 therefore remains unapproved: before an edit UI is safe it needs explicit rules for unit moves, unit deactivation, legacy-mapping drift, and the effect of each on stored audience rows and legacy fallback behavior. Django Admin remains the structure write surface for now: it already distinguishes legacy runtime models from future foundation models (CS-H.5E), and model `full_clean()` validation enforces tree integrity there.
 
 The safe path is staged:
 
@@ -58,7 +58,7 @@ The safe path is staged:
 | --- | --- | --- |
 | Church Structure Unit | `ChurchStructureUnit` | Future flexible structure foundation (tree of church/ministry/district/group units). Not a runtime visibility source. |
 | Church Structure Membership | `ChurchStructureMembership` | Future belonging foundation plus current staff request/approval workflow data. Not a runtime visibility source; requested/rejected/ended/cancelled rows grant nothing. |
-| Audience Scope / 适用范围 | `BibleStudySeriesAudienceScope` (runtime for meeting generation), `ServiceEventAudienceScope` (model-only); legacy scope fields elsewhere | Who an event/schedule is for. Per-module join models selecting units. |
+| Audience Scope / 适用范围 | `BibleStudySeriesAudienceScope` (runtime for meeting generation), `ServiceEventAudienceScope` (runtime for ServiceEvent visibility when rows exist, else legacy fallback); legacy scope fields elsewhere | Who an event/schedule is for. Per-module join models selecting units. |
 | Host / Language Label / 主办/语言标签 | `ServiceEvent.ministry_context` | Display label only. Never visibility, serving, or permissions. |
 | Required Ministry Teams / 需要的事工团队 | `ServiceEventRequiredTeam` | Which teams need coverage on an event. Not audience, not structure. |
 | Rotation Anchor Team / 配搭参考团队 | `ServiceEvent.rotation_anchor_team` | Scheduling suggestion anchor only. |
@@ -75,15 +75,18 @@ The structure map must display structure and membership concepts only. It must n
 | --- | --- | --- |
 | CS-MAP.1 | Docs-only Church Structure Map / Setup Readiness Plan (this document) | Complete with this task |
 | CS-MAP.2 | Read-only Staff Structure Map + Mapping Health at `/staff/structure/` | Completed; implemented read-only (see Section 7) |
-| SE-AS.4 | ServiceEvent audience runtime visibility rule with legacy fallback | Planned in `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`; separate approval |
-| SE-AS.5 | ServiceEvent staff audience selector UI/display | Planned; separate approval |
+| SE-AS.4 | ServiceEvent audience runtime visibility rule with legacy fallback | Completed (see `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`) |
+| SE-AS.5 | ServiceEvent staff audience selector UI/display | Completed |
+| SE-AS.6A | Docs-only backfill / compatibility planning checkpoint | Completed docs-only (see migration plan Section 8A) |
+| SE-AS.6B | ServiceEvent audience dry-run audit command only | Completed; audit-only command implemented |
+| SE-AS.6C | ServiceEvent audience optional apply mode, after dry-run review | Future; separate approval |
 | CS-MAP.3 | Optional setup readiness checklist on the structure map page | Optional; separate approval |
 | CA V1 | Community Activities planning, then implementation | Later; separate plan; not pulled forward by this feedback |
 | CS-SETUP.1 | Limited structure setup/edit UI | Not approved; gated (see below) |
 
 Sequencing rules:
 
-- CS-MAP.2 landed before SE-AS.4/SE-AS.5, as recommended from a product-risk perspective: the SE-AS.5 selector's biggest operational risk is staff selecting units that match no current members, and the mapping-health surface mitigates that before the selector exists. SE-AS.4 is technically independent of CS-MAP.2 (no shared data or code path) and is the next candidate slice, but it still requires its own separate approval and must never be bundled with CS-MAP work.
+- CS-MAP.2 landed before SE-AS.4/SE-AS.5, as originally recommended from a product-risk perspective: the SE-AS.5 selector's biggest operational risk is staff selecting units that match no current members, and the mapping-health surface mitigates that before the selector exists. SE-AS.4 and SE-AS.5 are now complete. Future ServiceEvent audience apply/backfill work must proceed through review of SE-AS.6B dry-run output first, not direct apply/backfill, and must never be bundled with CS-MAP work.
 - Community Activities must not be pulled forward by this feedback. Its position (after the audience foundation is proven through Bible Study and ServiceEvent) is unchanged per `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`.
 - CS-SETUP.1 is explicitly not approved. It is gated on: (a) CS-MAP.2 shipped and used, with evidence that read-only visibility plus Django Admin is insufficient for a recurring staff task; (b) a separate design doc resolving unit↔legacy sync direction (today only seeding writes units from legacy; two-way sync is undesigned), edit permissions/capabilities, and the effect of unit moves/deactivation on stored audience rows; (c) separate explicit approval.
 - Do not bundle ServiceEvent runtime visibility migration, Community Activities, and `ChurchStructureMembership` runtime migration with each other or with CS-MAP work.
@@ -136,7 +139,7 @@ CS-MAP.1 and CS-MAP.2 do not include:
 
 | Risk | Mitigation |
 | --- | --- |
-| The map implies the unit tree is already the runtime source of truth; staff edit units in Django Admin expecting runtime change | Reuse the existing `/staff/` transition-banner pattern; staff wording per `docs/UI_UX_GUARDRAILS.md` makes explicit that current visibility still runs on existing small-group data. |
+| The map makes the unit tree look like a universal runtime source of truth; staff edit units or mappings in Django Admin without understanding module-specific effects | Staff wording must stay explicit: ordinary-user matching still resolves through legacy `Profile.small_group` and legacy mappings, while per-module audience rows such as `ServiceEventAudienceScope` and `BibleStudySeriesAudienceScope` can depend on the unit tree. CS-SETUP.1 remains gated until unit moves, deactivation, mapping drift, and stored audience-row effects are explicitly designed. |
 | Staff expect an edit UI because the map exists | The page states that setup changes happen in Django Admin and links there; CS-SETUP.1 stays gated on evidence and separate approval. |
 | Health counts mislead (double counting, aggregate read as unique problems) | Section 8 wording rules: per-indicator unique-count definitions, drift categories displayed separately, aggregates labeled as bucket sums (PP-SA.5 precedent). |
 | Mapping drift between legacy structure and future foundation grows silently | That is precisely what indicators 1, 4, and 5 surface; the page makes drift visible instead of CLI-only. |

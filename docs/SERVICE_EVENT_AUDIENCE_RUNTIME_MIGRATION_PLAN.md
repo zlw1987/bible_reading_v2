@@ -8,13 +8,17 @@ Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the ru
 
 Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers later milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
 
-SE-AS.5A is complete as the docs-only staff audience selector interaction plan in `docs/SERVICE_EVENT_AUDIENCE_SELECTOR_INTERACTION_PLAN.md`. SE-AS.5 implementation is complete. SE-AS.6 remains a future milestone and requires separate explicit approval.
+SE-AS.5A is complete as the docs-only staff audience selector interaction plan in `docs/SERVICE_EVENT_AUDIENCE_SELECTOR_INTERACTION_PLAN.md`. SE-AS.5 implementation is complete.
 
-## 2. Current State Audit
+SE-AS.6A is complete as a docs-only planning checkpoint. It records the backfill / compatibility contract, hard invariants, parity requirement, and report categories in Section 8A, and recommends splitting any future backfill work into SE-AS.6B (dry-run audit command only) and SE-AS.6C (optional apply after dry-run review). SE-AS.6A adds no management command, test, schema, migration, or runtime change.
 
-Originally audited from docs plus light code reading during SE-AS.3 planning. SE-AS.4 has since implemented the runtime visibility rule described below.
+SE-AS.6B is complete as the dry-run audit command only. The `backfill_service_event_audience_scopes` management command (in the `events` app) scans `ServiceEvent` rows read-only and reports the Section 8A.5 categories; it has no `--apply`, creates no `ServiceEventAudienceScope` rows, and mutates no legacy field, unit, membership, profile, or group. SE-AS.6C (optional apply) remains a future milestone and requires separate explicit approval.
 
-### 2.1 Runtime visibility (legacy, unchanged)
+## 2. Historical State Audit at SE-AS.3 Planning Time
+
+This section is preserved as historical context: it records the state originally audited from docs plus light code reading during SE-AS.3 planning, before SE-AS.4/SE-AS.5 shipped. It does not describe current behavior. Current implemented status is in Section 1 and Sections 5–7.
+
+### 2.1 Legacy runtime visibility at original audit time
 
 - `ServiceEvent.can_be_seen_by` (`events/models.py`):
   - unauthenticated users: denied.
@@ -27,7 +31,7 @@ Originally audited from docs plus light code reading during SE-AS.3 planning. SE
 - List/detail views (`events/views.py`): `get_visible_service_events` filters the queryset by calling `can_be_seen_by` per event; event detail checks `can_be_seen_by` directly. There is no separate query-level filter to keep in sync — `can_be_seen_by` is the single visibility gate.
 - `ServiceEvent.clean()` enforces legacy scope consistency (global has no district/small_group; district requires district only; small_group requires small_group only).
 
-### 2.2 ServiceEventAudienceScope (model-only foundation, SE-AS.2)
+### 2.2 ServiceEventAudienceScope model-only foundation at original audit time (SE-AS.2)
 
 - Links `ServiceEvent` to `ChurchStructureUnit` (`unit`), CASCADE on event delete, PROTECT on unit delete, unique event+unit constraint.
 - Validation: unit must be active at save; redundant ancestor/descendant combinations for the same event are rejected; siblings and cross-branch selections are allowed.
@@ -55,7 +59,7 @@ Originally audited from docs plus light code reading during SE-AS.3 planning. SE
 
 | Concept | Source | Role |
 | --- | --- | --- |
-| Audience Scope / 适用范围 | future: `ServiceEventAudienceScope` units; current: legacy `scope_type`/`district`/`small_group` | Who the event/gathering is for. The only concept this plan migrates. |
+| Audience Scope / 适用范围 | `ServiceEventAudienceScope` units when rows exist; otherwise legacy `scope_type`/`district`/`small_group` fallback | Who the event/gathering is for. The only concept this plan migrates. |
 | Host / Language Label / 主办/语言标签 | `ServiceEvent.ministry_context` | Display label only. Never visibility. |
 | Required Ministry Teams / 需要的事工团队 | `ServiceEventRequiredTeam` | Which teams need coverage. Not audience. |
 | Rotation Anchor Team / 配搭参考团队 | `ServiceEvent.rotation_anchor_team` | Scheduling suggestion anchor only. |
@@ -136,9 +140,14 @@ Completed. Planning preflight SE-AS.5A is complete in `docs/SERVICE_EVENT_AUDIEN
 
 ### SE-AS.6 — Backfill, Compatibility Monitoring, and Cleanup Planning
 
-- Optional management command backfilling audience rows for legacy events (Section 8); dry-run default, explicit apply.
-- Staff/admin clarity for which source governs each event (audience rows vs legacy fallback).
-- Plan-only evaluation of eventual legacy field deprecation (the old SE-AS.6 scope from SE-AS.1); no destructive change until audience rows have proven stable in production.
+Backfill is optional and is not a prerequisite for ServiceEvent correctness (see Section 8A). It is now split into a docs-only checkpoint plus two narrow future implementation slices:
+
+- **SE-AS.6A — docs-only planning checkpoint (complete with this task).** Records the future backfill / compatibility contract, hard invariants, parity requirement, dry-run report categories, and risk areas in Section 8A. No command, test, schema, migration, or runtime change.
+- **SE-AS.6B — dry-run audit command only (complete).** Implements `backfill_service_event_audience_scopes` (in the `events` app) as a read-only audit that scans events and reports the Section 8A categories. It creates nothing and has no `--apply` path. An optional `--verbose-events` flag prints a per-event decision line.
+- **SE-AS.6C — optional apply mode (future, separate approval, only after SE-AS.6B dry-run output is reviewed in production).** Adds an explicit `--apply` that creates audience rows only for events proven parity-safe by the dry-run rules.
+- **Later — legacy fallback deprecation planning (future, separate approval).** Plan-only evaluation of eventual legacy `scope_type` / `district` / `small_group` field deprecation (the old SE-AS.6 scope from SE-AS.1); no destructive change until audience rows have proven stable in production.
+
+Staff/admin clarity for which source governs each event (audience rows vs legacy fallback) already shipped with SE-AS.5 staff detail display.
 
 ## 6. Recommended Future `ServiceEvent.can_be_seen_by` Rule
 
@@ -184,6 +193,72 @@ If/when a management command is approved (suggested name `backfill_service_event
 - Acceptance check: for every backfilled event, the new rule's ordinary-user audience equals the legacy rule's audience (tested at the command level before any production apply, then verified by production dry-run output review).
 
 Note that backfilling `global` events is pure convergence with no behavior difference (root ≡ global), so a conservative first apply may backfill district/small_group events only, or nothing at all.
+
+## 8A. SE-AS.6A Backfill / Compatibility Planning Checkpoint (docs-only)
+
+SE-AS.6A is a **docs-only planning checkpoint, not implementation**. It defines the contract that any future backfill work (SE-AS.6B audit, SE-AS.6C apply) must satisfy. It adds no management command, test, schema, migration, or runtime change. Section 8 above remains the high-level strategy; this section is the binding contract that supersedes it where they differ.
+
+### 8A.1 Backfill is optional, not required for correctness
+
+- The SE-AS.4 fallback rule makes a ServiceEvent with **zero `ServiceEventAudienceScope` rows** behave exactly as it did under the legacy `scope_type` / `district` / `small_group` + `Profile.small_group` rule. Zero audience rows are therefore always safe.
+- Backfill is a **convergence / operational cleanup** step (moving legacy events onto explicit structure rows), not a prerequisite for ServiceEvent visibility correctness. The product is correct with no backfill ever run.
+- Nothing depends on backfill having been run. It can be deferred indefinitely, run partially (for example district/small-group events only), or skipped entirely.
+
+### 8A.2 Future command contract (`backfill_service_event_audience_scopes`)
+
+- **Dry-run / audit first.** The first implementation slice (SE-AS.6B) is a read-only audit that scans events and reports the Section 8A.5 categories. It creates, edits, or deletes nothing.
+- **No automatic apply in SE-AS.6A**, and no apply in SE-AS.6B. SE-AS.6A is docs-only; SE-AS.6B is audit-only.
+- **Apply is a separate, later slice (SE-AS.6C)** behind an explicit `--apply` flag, approved only after SE-AS.6B dry-run output has been reviewed against real production data. Apply creates rows only for events the dry-run rules proved parity-safe (8A.4).
+- The command is idempotent: re-running the dry-run reports the same categories; re-running apply changes nothing for events that already have rows.
+
+### 8A.3 Hard invariants (binding on SE-AS.6B and SE-AS.6C)
+
+A future command must **never**:
+
+- Mutate, clear, or rewrite `scope_type`, `district`, or `small_group` on any event. Backfill is additive (it only creates `ServiceEventAudienceScope` rows) and non-destructive to legacy fields.
+- Create, edit, deactivate, move, or otherwise modify `ChurchStructureUnit` rows. Unit seeding stays exclusively in `seed_church_structure_units`.
+- Use `ChurchStructureMembership` as a ServiceEvent visibility source or as a backfill mapping input. Membership grants no ServiceEvent visibility.
+- Backfill an event that already has one or more audience rows (skip it; it is already governed by its rows).
+- Change My Serving, `TeamAssignment` / `TeamAssignmentMember`, required-team coverage, rotation anchor / copy-forward, `ministry_context` (Host / Language Label), or any other ministry-scheduling behavior.
+- Remove, hide, deprecate, or disable the legacy fallback fields. They remain editable fallback fields throughout SE-AS.6.
+
+### 8A.4 Parity requirement (binding)
+
+- For every event a future command proposes to backfill, the ordinary-user visibility **after** creating audience rows must equal the ordinary-user visibility under the **pre-backfill legacy rule**, for every ordinary user. Backfill must be visibility-neutral.
+- Parity is computed using the same unit-to-user resolution as the runtime rule (Section 7), so the comparison is: legacy-rule audience set vs. resolved-unit audience set.
+- If parity cannot be proven for an event (unmapped/inactive/ambiguous mapping, or any resolution that would add or drop even one user), the command must **skip** that event, leave zero audience rows on it, and report it.
+- The dry-run report must explicitly include **parity-mismatch** and **skipped-for-safety** categories so a reviewer sees exactly which events were not backfilled and why. Silent skips are not acceptable.
+
+### 8A.5 Recommended dry-run report categories (for SE-AS.6B)
+
+The audit report should include at least:
+
+- total events scanned;
+- skipped because the event already has audience rows;
+- global events mappable to exactly one active root unit;
+- global events skipped because the root is missing or ambiguous (zero or multiple active roots);
+- district events mapped and parity-safe;
+- district events skipped because unmapped, mapped-but-inactive, or otherwise unsafe;
+- small-group events mapped and parity-safe;
+- small-group events skipped because unmapped, mapped-but-inactive, or otherwise unsafe;
+- parity-mismatch skipped (resolved audience would differ from legacy audience);
+- events by status if cheap to compute: draft / published / completed / cancelled;
+- would-create audience-row count;
+- legacy-fields-mutated count, which must always be `0` (a non-zero value is a bug and an apply must abort).
+
+### 8A.6 Risk areas to keep visible
+
+- **Active/inactive mapping assumptions must not silently change visibility.** Validation forbids selecting inactive units at create time, but the runtime rule keeps matching a stored row whose unit later went inactive (Section 7 parity decision). Backfill must not exploit or contradict this: it maps only through currently-active mappings and skips when the mapping is inactive, so a backfilled row never changes who can see an event versus the legacy rule.
+- **Custom / unmapped units may match no ordinary users.** A unit with no legacy `SmallGroup` mapping at or beneath it resolves to an empty ordinary audience. Backfill must not point a legacy event at such a unit when the legacy rule matched real users — that would fail parity and must be skipped.
+- **Root maps to all authenticated users, including users without `Profile.small_group`.** This is the only mapping that reaches users with no current small group, and it is the correct parity target for legacy `global` events.
+- **Non-root unit matching still depends on each user's current `Profile.small_group`.** District/small-group backfilled rows match exactly the users the legacy district/small-group rule matched, because both resolve through `Profile.small_group`; this is what makes district/small-group backfill parity-safe when the mapping exists and is active.
+
+### 8A.7 Recommended future milestone split
+
+- **SE-AS.6A** — docs-only planning checkpoint (this task).
+- **SE-AS.6B** — dry-run audit command only, no apply. Reports the 8A.5 categories; creates nothing.
+- **SE-AS.6C** — optional apply mode, only after SE-AS.6B dry-run output has been reviewed in production; creates rows only for parity-safe events behind an explicit `--apply`.
+- **Later** — legacy fallback deprecation planning, only after audience rows have proven stable in production. No destructive change before then.
 
 ## 9. Staff UI Strategy (for SE-AS.5)
 

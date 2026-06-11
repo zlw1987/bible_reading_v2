@@ -19,9 +19,9 @@
 <section class="notice-panel">
     <p>
         {% if language == "zh" %}
-        编辑对应关系只会更新设置对应关系；不会移动成员，也不会改变活动适用范围、查经适用范围、服事安排或权限。
+        本页只查看与编辑“现有记录 → 教会结构单元”的设置对应关系。编辑对应关系只会更新设置对应关系；不会改变成员归属、谁能看到内容（可见范围）、活动适用范围、查经适用范围、服事安排或权限。
         {% else %}
-        Mapping edits update setup mapping only. They do not move members, change event audience, Bible Study audience, serving assignments, or permissions.
+        This page reviews and edits the legacy-record → structure-unit setup mapping only. Mapping edits update setup mapping only. They do not change memberships, who can see content (visibility), event audience, Bible Study audience rules, serving schedules, or permissions.
         {% endif %}
     </p>
 </section>
@@ -61,7 +61,27 @@
             <span class="mapping-summary-label">{% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %}</span>
             <strong>{{ counts.mapped_holding }}</strong>
         </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}冲突／警告（合计）{% else %}Conflicts / warnings (total){% endif %}</span>
+            <strong>{{ counts.conflicts }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}类型不匹配{% else %}Type mismatch{% endif %}</span>
+            <strong>{{ counts.type_mismatch }}</strong>
+        </div>
+        <div class="mapping-summary-card">
+            <span class="mapping-summary-label">{% if language == "zh" %}重复的启用对应{% else %}Duplicate active mapping{% endif %}</span>
+            <strong>{{ counts.duplicate_active }}</strong>
+        </div>
     </div>
+
+    <p class="mapping-conflict-help muted">
+        {% if language == "zh" %}
+        冲突／警告是数据检查提示，不会自行更改任何对应关系：<strong>类型不匹配</strong>指记录对应到了类型不符的结构单元；<strong>重复的启用对应</strong>指有多条启用记录对应到同一个结构单元。请逐条检查并在需要时编辑更正。
+        {% else %}
+        Conflicts / warnings are data checks only and change nothing on their own: <strong>type mismatch</strong> means a record is mapped to a structure unit of the wrong type, and <strong>duplicate active mapping</strong> means more than one active record points at the same structure unit. Review and, where needed, edit each row to resolve it.
+        {% endif %}
+    </p>
 
     <nav class="mapping-filters" aria-label="{% if language == 'zh' %}对应状态筛选{% else %}Mapping status filter{% endif %}">
         <a class="button-secondary button mapping-filter{% if status == 'all' %} is-active{% endif %}"
@@ -148,6 +168,12 @@
                         <span class="status status-danger">{% if language == "zh" %}已对应到停用单元{% else %}Mapped to inactive unit{% endif %}</span>
                         {% elif row.status_key == "mapped_holding" %}
                         <span class="status status-warning">{% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %}</span>
+                        {% endif %}
+                        {% if row.is_type_mismatch %}
+                        <span class="status status-danger">{% if language == "zh" %}类型不匹配{% else %}Type mismatch{% endif %}</span>
+                        {% endif %}
+                        {% if row.is_duplicate_active %}
+                        <span class="status status-danger">{% if language == "zh" %}重复的启用对应{% else %}Duplicate active mapping{% endif %}</span>
                         {% endif %}
                     </td>
                     <td>

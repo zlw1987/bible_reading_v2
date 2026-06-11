@@ -4200,6 +4200,123 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "对应状态总览")
         self.assertContains(response, "需要检查")
 
+    # --- CS-SETUP.1D.2: conflict overlays + scope copy ---------------------
+
+    def test_scope_copy_names_memberships_and_visibility(self):
+        # The page must make clear it edits legacy->structure mapping only and
+        # does not touch memberships, visibility, schedules, or study rules.
+        self.set_language("en")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "This page reviews and edits the legacy-record"
+        )
+        self.assertContains(response, "structure-unit setup mapping only.")
+        self.assertContains(response, "memberships")
+        self.assertContains(response, "visibility")
+        self.assertContains(response, "Bible Study audience rules")
+
+    def test_conflict_summary_cards_render(self):
+        self.set_language("en")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Conflicts / warnings (total)")
+        self.assertContains(response, "Type mismatch")
+        self.assertContains(response, "Duplicate active mapping")
+        # The help text explains the conflict checks are display-only.
+        self.assertContains(
+            response, "Conflicts / warnings are data checks only"
+        )
+
+    def test_duplicate_active_mapping_flagged_and_counted(self):
+        self.set_language("en")
+        # Two active districts mapped to the same active district unit: a
+        # detectable duplicate-active conflict (same legacy kind, same unit).
+        District.objects.create(
+            name="Dup District A", church_structure_unit=self.active_unit
+        )
+        District.objects.create(
+            name="Dup District B", church_structure_unit=self.active_unit
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        counts = response.context["counts"]
+        self.assertEqual(counts["duplicate_active"], 2)
+        self.assertEqual(counts["type_mismatch"], 0)
+        self.assertEqual(counts["conflicts"], 2)
+        self.assertContains(response, "Duplicate active mapping")
+
+    def test_inactive_twin_is_not_a_duplicate_conflict(self):
+        self.set_language("en")
+        # Only one *active* row maps to the unit; an inactive twin must not
+        # turn it into a duplicate-active conflict, matching the edit guard.
+        District.objects.create(
+            name="Active Solo", church_structure_unit=self.active_unit
+        )
+        District.objects.create(
+            name="Inactive Twin",
+            church_structure_unit=self.active_unit,
+            is_active=False,
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        counts = response.context["counts"]
+        self.assertEqual(counts["duplicate_active"], 0)
+        self.assertEqual(counts["conflicts"], 0)
+        # No per-row conflict badge is rendered (summary-card labels still
+        # mention the term, so target the danger-badge form specifically).
+        self.assertNotContains(
+            response, 'status-danger">Duplicate active mapping'
+        )
+
+    def test_type_mismatch_flagged_and_counted(self):
+        self.set_language("en")
+        # A SmallGroup mapped to a District-type unit is a detectable type
+        # mismatch (constructible from current data / a direct Admin edit).
+        SmallGroup.objects.create(
+            name="Mistyped Group", church_structure_unit=self.active_unit
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        counts = response.context["counts"]
+        self.assertEqual(counts["type_mismatch"], 1)
+        self.assertEqual(counts["duplicate_active"], 0)
+        self.assertEqual(counts["conflicts"], 1)
+        self.assertContains(response, "Type mismatch")
+
+    def test_conflict_overlay_keeps_primary_status(self):
+        # A duplicate active mapping is still counted under its primary
+        # status_key (mapped_active); the overlay is additive, not replacing.
+        self.set_language("en")
+        District.objects.create(
+            name="Dual A", church_structure_unit=self.active_unit
+        )
+        District.objects.create(
+            name="Dual B", church_structure_unit=self.active_unit
+        )
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        counts = response.context["counts"]
+        self.assertEqual(counts["mapped_active"], 2)
+        self.assertEqual(counts["duplicate_active"], 2)
+
 
 class StaffStructureMappingEditTests(TestCase):
     """CS-SETUP.1D.1: one-row-at-a-time legacy -> structure mapping edit."""

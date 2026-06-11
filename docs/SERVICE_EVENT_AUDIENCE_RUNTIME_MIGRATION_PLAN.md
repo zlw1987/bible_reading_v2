@@ -4,7 +4,7 @@
 
 SE-AS.3 recorded the implementation plan for migrating ServiceEvent / Church Gatherings audience scope from the legacy `scope_type` / `district` / `small_group` fields toward the `ChurchStructureUnit` audience-scope foundation (`ServiceEventAudienceScope`).
 
-Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the runtime visibility rule with legacy fallback: events with one or more `ServiceEventAudienceScope` rows use those audience rows for ordinary-user visibility; events with zero rows keep the existing legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` behavior. SE-AS.5 is complete as the staff selector UI/display: staff can select optional `ChurchStructureUnit` audience rows on single create/edit and recurring create; staff detail shows effective audience source and readable labels. `ChurchStructureMembership` still does not grant ServiceEvent visibility, and legacy scope fields remain preserved/editable as fallback. No SE-AS.6 backfill, setup/edit UI, CS-MAP.3, CS-SETUP.1, Community Activities, schema change, or migration was added.
+Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the runtime visibility rule with legacy fallback: events with one or more `ServiceEventAudienceScope` rows use those audience rows for ordinary-user visibility; events with zero rows keep the existing legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` behavior. SE-AS.5 is complete as the staff selector UI/display: staff can select optional `ChurchStructureUnit` audience rows on single create/edit and recurring create; staff detail shows effective audience source and readable labels. `ChurchStructureMembership` still does not grant ServiceEvent visibility, and legacy scope fields remain preserved/editable as fallback. SE-AS.6B is complete as an audit-only dry-run command, including SE-AS.6B.1 verbose output polish; no SE-AS.6C apply/backfill, setup/edit UI, CS-MAP.3, CS-SETUP.1, Community Activities, schema change, or migration was added.
 
 Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers later milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
 
@@ -12,7 +12,7 @@ SE-AS.5A is complete as the docs-only staff audience selector interaction plan i
 
 SE-AS.6A is complete as a docs-only planning checkpoint. It records the backfill / compatibility contract, hard invariants, parity requirement, and report categories in Section 8A, and recommends splitting any future backfill work into SE-AS.6B (dry-run audit command only) and SE-AS.6C (optional apply after dry-run review). SE-AS.6A adds no management command, test, schema, migration, or runtime change.
 
-SE-AS.6B is complete as the dry-run audit command only. The `backfill_service_event_audience_scopes` management command (in the `events` app) scans `ServiceEvent` rows read-only and reports the Section 8A.5 categories; it has no `--apply`, creates no `ServiceEventAudienceScope` rows, and mutates no legacy field, unit, membership, profile, or group. SE-AS.6C (optional apply) remains a future milestone and requires separate explicit approval.
+SE-AS.6B is complete as the dry-run audit command only. The `backfill_service_event_audience_scopes` management command (in the `events` app) scans `ServiceEvent` rows read-only and reports the Section 8A.5 categories; it has no `--apply`, creates no `ServiceEventAudienceScope` rows, and mutates no legacy field, unit, membership, profile, or group. SE-AS.6B.1 is complete as verbose-output polish: `--verbose-events` now prints event id, title/date when available, legacy scope/status, decision category, proposed unit label/path when available, and reason text while staying audit-only. SE-AS.6C (optional apply) remains a future milestone and requires separate explicit approval after dry-run output review.
 
 ## 2. Historical State Audit at SE-AS.3 Planning Time
 
@@ -143,7 +143,7 @@ Completed. Planning preflight SE-AS.5A is complete in `docs/SERVICE_EVENT_AUDIEN
 Backfill is optional and is not a prerequisite for ServiceEvent correctness (see Section 8A). It is now split into a docs-only checkpoint plus two narrow future implementation slices:
 
 - **SE-AS.6A — docs-only planning checkpoint (complete with this task).** Records the future backfill / compatibility contract, hard invariants, parity requirement, dry-run report categories, and risk areas in Section 8A. No command, test, schema, migration, or runtime change.
-- **SE-AS.6B — dry-run audit command only (complete).** Implements `backfill_service_event_audience_scopes` (in the `events` app) as a read-only audit that scans events and reports the Section 8A categories. It creates nothing and has no `--apply` path. An optional `--verbose-events` flag prints a per-event decision line.
+- **SE-AS.6B — dry-run audit command only (complete).** Implements `backfill_service_event_audience_scopes` (in the `events` app) as a read-only audit that scans events and reports the Section 8A categories. It creates nothing and has no `--apply` path. SE-AS.6B.1 verbose-output polish is complete: `--verbose-events` prints event id, title/date when available, legacy scope/status, decision category, proposed unit label/path when available, and reason text.
 - **SE-AS.6C — optional apply mode (future, separate approval, only after SE-AS.6B dry-run output is reviewed in production).** Adds an explicit `--apply` that creates audience rows only for events proven parity-safe by the dry-run rules.
 - **Later — legacy fallback deprecation planning (future, separate approval).** Plan-only evaluation of eventual legacy `scope_type` / `district` / `small_group` field deprecation (the old SE-AS.6 scope from SE-AS.1); no destructive change until audience rows have proven stable in production.
 
@@ -246,18 +246,57 @@ The audit report should include at least:
 - would-create audience-row count;
 - legacy-fields-mutated count, which must always be `0` (a non-zero value is a bug and an apply must abort).
 
-### 8A.6 Risk areas to keep visible
+### 8A.6 Staging / production dry-run review checklist
+
+This checklist is a procedure for future staging/production review. It does **not** record that a production or staging dry-run has already been performed.
+
+Before considering SE-AS.6C:
+
+1. Confirm the current branch, deployment target, and database target are the intended staging or production environment.
+2. Run a database backup or confirm a current recoverable backup exists before any future apply/backfill discussion.
+3. Run the audit command with verbose event output:
+
+   ```bash
+   python manage.py backfill_service_event_audience_scopes --verbose-events
+   ```
+
+4. Capture the full command output in the deployment/release notes for review.
+5. Review the summary totals:
+   - total events scanned;
+   - skipped because the event already has audience rows;
+   - global mappable to a single active root unit;
+   - global skipped because the root is missing or ambiguous;
+   - district mapped and parity-safe;
+   - district skipped because unmapped, mapped-but-inactive, or otherwise unsafe;
+   - small-group mapped and parity-safe;
+   - small-group skipped because unmapped, mapped-but-inactive, or otherwise unsafe;
+   - parity-mismatch skipped;
+   - would-create audience-row count;
+   - legacy-fields-mutated, which must be `0`.
+6. Review every verbose per-event decision line for suspicious mappings, surprising labels, unexpected dates, or unexpected proposed unit paths.
+7. Specifically investigate any event categorized as:
+   - `skipped-root-missing-or-ambiguous`;
+   - `skipped-unmapped`;
+   - `skipped-inactive-or-unsafe`;
+   - `skipped-parity-mismatch`.
+8. Do not proceed to SE-AS.6C if any unexpected mismatch, suspicious mapping, non-zero `legacy-fields-mutated`, or unreviewed skip category appears.
+
+The parity invariant remains binding: for every event proposed as `would-create`, post-backfill ordinary-user visibility must equal pre-backfill legacy visibility. If parity cannot be proven, the event must be skipped and reported; the command must not create rows for that event.
+
+SE-AS.6B.1 does not approve apply/backfill. SE-AS.6C remains unapproved and requires a separate explicit approval after real dry-run output has been captured and reviewed.
+
+### 8A.7 Risk areas to keep visible
 
 - **Active/inactive mapping assumptions must not silently change visibility.** Validation forbids selecting inactive units at create time, but the runtime rule keeps matching a stored row whose unit later went inactive (Section 7 parity decision). Backfill must not exploit or contradict this: it maps only through currently-active mappings and skips when the mapping is inactive, so a backfilled row never changes who can see an event versus the legacy rule.
 - **Custom / unmapped units may match no ordinary users.** A unit with no legacy `SmallGroup` mapping at or beneath it resolves to an empty ordinary audience. Backfill must not point a legacy event at such a unit when the legacy rule matched real users — that would fail parity and must be skipped.
 - **Root maps to all authenticated users, including users without `Profile.small_group`.** This is the only mapping that reaches users with no current small group, and it is the correct parity target for legacy `global` events.
 - **Non-root unit matching still depends on each user's current `Profile.small_group`.** District/small-group backfilled rows match exactly the users the legacy district/small-group rule matched, because both resolve through `Profile.small_group`; this is what makes district/small-group backfill parity-safe when the mapping exists and is active.
 
-### 8A.7 Recommended future milestone split
+### 8A.8 Recommended future milestone split
 
 - **SE-AS.6A** — docs-only planning checkpoint (this task).
-- **SE-AS.6B** — dry-run audit command only, no apply. Reports the 8A.5 categories; creates nothing.
-- **SE-AS.6C** — optional apply mode, only after SE-AS.6B dry-run output has been reviewed in production; creates rows only for parity-safe events behind an explicit `--apply`.
+- **SE-AS.6B** — dry-run audit command only, no apply. Reports the 8A.5 categories; creates nothing. SE-AS.6B.1 verbose output polish is complete.
+- **SE-AS.6C** — optional apply mode, unapproved and separate; only after SE-AS.6B dry-run output has been captured and reviewed in staging/production; creates rows only for parity-safe events behind an explicit `--apply`.
 - **Later** — legacy fallback deprecation planning, only after audience rows have proven stable in production. No destructive change before then.
 
 ## 9. Staff UI Strategy (for SE-AS.5)

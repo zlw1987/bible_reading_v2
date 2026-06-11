@@ -1,6 +1,7 @@
 import os
 import re
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.management import call_command
@@ -29,6 +30,12 @@ from reading.models import (
     ReadingGuidePost,
     ReadingPlan,
     ReadingPlanDay,
+)
+from studies.models import (
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudySeries,
+    BibleStudySession,
 )
 
 class StructuredPassageModelTests(TestCase):
@@ -2660,7 +2667,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "打开代祷墙")
         self.assertContains(response, "打开我的服事")
 
-    def test_home_shows_pending_serving_summary_for_current_user(self):
+    def test_home_shows_pending_confirmation_in_needs_attention(self):
         team = MinistryTeam.objects.create(name="Lighting Team", name_en="Lighting Team")
         membership = TeamMembership.objects.create(team=team, user=self.user)
         event = ServiceEvent.objects.create(
@@ -2684,11 +2691,11 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "My Serving")
-        self.assertContains(response, "You have 1 serving assignment waiting for confirmation.")
+        self.assertContains(response, "Needs your attention")
         self.assertContains(response, "Pending confirmation")
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Confirm in My Serving")
         self.assertContains(response, reverse("my_serving"))
         self.assertContains(response, "Today&#x27;s reading")
 
@@ -3659,3 +3666,259 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Parent reflection.")
         self.assertContains(response, "Child reply.")
+
+
+class TodayActionCenterTests(TestCase):
+    """TODAY-HOME.1B: read-only Today action center (three zones)."""
+
+    def setUp(self):
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+
+        self.user = User.objects.create_user(
+            username="member",
+            password="TestPass123!",
+        )
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.staff = User.objects.create_user(
+            username="staff_member",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+        self.manager = User.objects.create_user(
+            username="assignment_manager",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+        self.team = MinistryTeam.objects.create(name="灯光团队", name_en="Lighting Team")
+        self.membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+
+    # --- helpers ---------------------------------------------------------
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def make_event(self, *, title_en, days_from_now=1, scope=None, small_group=None,
+                   status=None):
+        return ServiceEvent.objects.create(
+            title=title_en,
+            title_en=title_en,
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=days_from_now),
+            scope_type=scope or ServiceEvent.SCOPE_GLOBAL,
+            small_group=small_group,
+            status=status or ServiceEvent.STATUS_PUBLISHED,
+        )
+
+    def make_assignment(self, event, *, confirmed=False):
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            created_by=self.manager,
+        )
+        member = TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=self.membership,
+        )
+        if confirmed:
+            member.confirmed_at = timezone.now()
+            member.save()
+        return member
+
+    def make_meeting(self, *, small_group, days_from_now=2,
+                     lesson_title_en="Lesson One"):
+        series = BibleStudySeries.objects.create(
+            title="查经系列",
+            title_en="Study Series",
+            scope_type=BibleStudySeries.SCOPE_GLOBAL,
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=True,
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="查经一",
+            title_en=lesson_title_en,
+            lesson_date=timezone.localdate(),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        return BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            small_group=small_group,
+            meeting_datetime=timezone.now() + timedelta(days=days_from_now),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+    def get_home(self, user=None, language="en"):
+        self.client.force_login(user or self.user)
+        self.set_language(language)
+        return self.client.get(reverse("home"))
+
+    # --- tests -----------------------------------------------------------
+
+    def test_needs_attention_shows_pending_confirmation(self):
+        event = self.make_event(title_en="Sunday Service Alpha")
+        self.make_assignment(event, confirmed=False)
+
+        response = self.get_home()
+
+        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Sunday Service Alpha")
+        self.assertContains(response, "Confirm in My Serving")
+
+    def test_needs_attention_hidden_when_no_pending(self):
+        event = self.make_event(title_en="Sunday Service Beta")
+        self.make_assignment(event, confirmed=True)
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Confirm in My Serving")
+
+    def test_pending_assignment_not_duplicated_as_full_row_in_week(self):
+        event = self.make_event(title_en="Sunday Service Gamma")
+        self.make_assignment(event, confirmed=False)
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        # Pending item is a full row in "Needs your attention" (one confirm link),
+        # and the same gathering shows only a compact serving note in This Week.
+        self.assertEqual(content.count("Confirm in My Serving"), 1)
+        self.assertContains(response, "You are serving — pending confirmation")
+
+    def test_church_gatherings_shows_visible_upcoming(self):
+        self.make_event(title_en="Midweek Prayer Gathering")
+
+        response = self.get_home()
+
+        self.assertContains(response, "Church Gatherings this week")
+        self.assertContains(response, "Midweek Prayer Gathering")
+
+    def test_draft_and_cancelled_gatherings_excluded_for_staff(self):
+        self.make_event(
+            title_en="Draft Conference",
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        self.make_event(
+            title_en="Cancelled Retreat",
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+
+        response = self.get_home(user=self.staff)
+
+        self.assertNotContains(response, "Draft Conference")
+        self.assertNotContains(response, "Cancelled Retreat")
+
+    def test_ordinary_user_does_not_see_out_of_scope_gathering(self):
+        self.make_event(
+            title_en="Other Group Only Meeting",
+            scope=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.other_group,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Other Group Only Meeting")
+
+    def test_staff_gatherings_capped_with_view_all_link(self):
+        for index in range(6):
+            self.make_event(
+                title_en=f"Staff Gathering {index}",
+                days_from_now=index + 1,
+            )
+
+        response = self.get_home(user=self.staff)
+        content = response.content.decode()
+
+        rendered = sum(
+            1 for index in range(6) if f"Staff Gathering {index}" in content
+        )
+        self.assertEqual(rendered, 5)
+        self.assertContains(response, "View all Church Gatherings")
+
+    def test_v2_meeting_appears_for_user_group(self):
+        self.make_meeting(small_group=self.group, lesson_title_en="My Group Lesson")
+
+        response = self.get_home()
+
+        self.assertContains(response, "Small group Bible study")
+        self.assertContains(response, "My Group Lesson")
+
+    def test_other_group_meeting_not_shown(self):
+        self.make_meeting(
+            small_group=self.other_group,
+            lesson_title_en="Other Group Lesson",
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Other Group Lesson")
+
+    def test_no_small_group_empty_state(self):
+        self.user.profile.small_group = None
+        self.user.profile.save()
+
+        response = self.get_home()
+
+        self.assertContains(
+            response,
+            "You're not in a small group yet, so group Bible study won't appear here.",
+        )
+
+    def test_legacy_session_block_not_shown(self):
+        series = BibleStudySeries.objects.create(
+            title="旧查经系列",
+            title_en="Legacy Series",
+            scope_type=BibleStudySeries.SCOPE_GLOBAL,
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=True,
+        )
+        BibleStudySession.objects.create(
+            series=series,
+            title="旧查经场次",
+            title_en="Legacy Session Title",
+            study_datetime=timezone.now() + timedelta(days=1),
+            scope_type=BibleStudySession.SCOPE_GLOBAL,
+            status=BibleStudySession.STATUS_PUBLISHED,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Legacy Session Title")
+
+    def test_no_inline_confirm_form_on_today(self):
+        event = self.make_event(title_en="Sunday Service Delta")
+        member = self.make_assignment(event, confirmed=False)
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        confirm_url = reverse(
+            "confirm_team_assignment",
+            args=[member.assignment_id],
+        )
+        self.assertNotIn(confirm_url, content)
+
+    def test_bilingual_section_titles_render(self):
+        self.make_event(title_en="Bilingual Gathering")
+
+        english = self.get_home(language="en")
+        self.assertContains(english, "Today's Reading")
+        self.assertContains(english, "This Week")
+        self.assertContains(english, "Church Gatherings this week")
+
+        chinese = self.get_home(language="zh")
+        self.assertContains(chinese, "今日读经")
+        self.assertContains(chinese, "本周")
+        self.assertContains(chinese, "本周教会聚会")

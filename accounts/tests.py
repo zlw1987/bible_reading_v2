@@ -3330,6 +3330,50 @@ class StaffStructureMapTests(TestCase):
         # The holding node itself is not "under" a holding node; its child is.
         self.assertEqual(indicators["units_under_holding"], 1)
 
+    def _build_tree_with_holding_child(self):
+        self.build_tree()
+        holding = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="UNASSIGNED-GROUPS",
+            name="Unassigned Groups",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=holding,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="LOST-GROUP",
+            name="Lost Group Unit",
+        )
+
+    def test_structure_map_uses_awaiting_placement_wording_en(self):
+        # CS-UX.1B: staff-facing "holding/unassigned" wording is replaced with
+        # clearer "awaiting placement" language. Internal codes are unchanged.
+        self._build_tree_with_holding_child()
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        content = response.content.decode()
+
+        self.assertIn("Units in awaiting-placement area", content)
+        self.assertIn("Awaiting placement", content)
+        self.assertNotIn("Unassigned holding", content)
+        self.assertNotIn("unassigned holding nodes", content)
+        self.assertNotIn("holding/unassigned", content)
+
+    def test_structure_map_uses_awaiting_placement_wording_zh(self):
+        self._build_tree_with_holding_child()
+        self.set_language("zh")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        content = response.content.decode()
+
+        self.assertIn("待安排", content)
+        self.assertIn("待安排区域", content)
+        self.assertNotIn("未分配暂存", content)
+        self.assertNotIn("未分配暂存节点", content)
+
     def test_users_in_unmapped_group_are_counted(self):
         self.build_tree()
         unmapped_group = SmallGroup.objects.create(name="Unmapped Member Group")
@@ -3925,6 +3969,31 @@ class StaffStructureMappingReviewTests(TestCase):
             response,
             "有权限时可逐条编辑设置对应关系",
         )
+
+    def test_mapping_review_uses_awaiting_placement_wording_en(self):
+        # CS-UX.1B: replace "Mapped under holding/unassigned node" with the
+        # clearer "Linked to awaiting-placement area" label. The internal
+        # ?status=mapped_holding key is intentionally unchanged.
+        self.set_language("en")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "Linked to awaiting-placement area")
+        self.assertNotContains(response, "Mapped under holding/unassigned node")
+        self.assertNotContains(response, "holding/unassigned")
+        # Status key must keep working unchanged.
+        self.assertContains(response, "?status=mapped_holding")
+
+    def test_mapping_review_uses_awaiting_placement_wording_zh(self):
+        self.set_language("zh")
+        self.login_viewer()
+
+        response = self.client.get(self.url)
+
+        self.assertContains(response, "已对应到待安排区域")
+        self.assertNotContains(response, "已对应到未分配暂存节点")
+        self.assertNotContains(response, "未分配暂存")
 
     def test_mapped_active_row_display(self):
         self.set_language("en")

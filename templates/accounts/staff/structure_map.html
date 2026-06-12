@@ -53,7 +53,7 @@
         <li>{% if language == "zh" %}未关联结构单元的现有区{% else %}Current districts without a linked unit{% endif %}: <strong>{{ indicators.unmapped_districts }}</strong></li>
         <li>{% if language == "zh" %}未关联结构单元的现有小组{% else %}Current small groups without a linked unit{% endif %}: <strong>{{ indicators.unmapped_small_groups }}</strong></li>
         <li>{% if language == "zh" %}本级及下级都未关联当前资料的单元{% else %}Units with no linked current data mapping at or below them{% endif %}: <strong>{{ indicators.units_without_linked_records }}</strong></li>
-        <li>{% if language == "zh" %}位于未分配暂存节点下的单元{% else %}Units under the unassigned holding nodes{% endif %}: <strong>{{ indicators.units_under_holding }}</strong></li>
+        <li>{% if language == "zh" %}位于待安排区域下的单元{% else %}Units in awaiting-placement area{% endif %}: <strong>{{ indicators.units_under_holding }}</strong></li>
         <li>{% if language == "zh" %}所在小组未关联结构单元的用户{% else %}Users whose current group has no linked unit{% endif %}: <strong>{{ indicators.users_in_unmapped_group }}</strong></li>
         <li>{% if language == "zh" %}有已确认归属但没有现有小组的用户{% else %}Users with an approved membership but no current group{% endif %}: <strong>{{ indicators.membership_without_group }}</strong></li>
         <li>{% if language == "zh" %}有现有小组但没有已确认归属的用户{% else %}Users with a current group but no approved membership{% endif %}: <strong>{{ indicators.group_without_membership }}</strong></li>
@@ -163,7 +163,7 @@
                 {% endif %}
                 {% if row.under_holding %}
                 <span class="status status-warning">
-                    {% if language == "zh" %}未分配暂存{% else %}Unassigned holding{% endif %}
+                    {% if language == "zh" %}待安排{% else %}Awaiting placement{% endif %}
                 </span>
                 {% endif %}
 

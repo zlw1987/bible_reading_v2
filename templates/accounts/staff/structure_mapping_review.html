@@ -58,7 +58,7 @@
             <strong>{{ counts.mapped_inactive }}</strong>
         </div>
         <div class="mapping-summary-card">
-            <span class="mapping-summary-label">{% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %}</span>
+            <span class="mapping-summary-label">{% if language == "zh" %}已对应到待安排区域{% else %}Linked to awaiting-placement area{% endif %}</span>
             <strong>{{ counts.mapped_holding }}</strong>
         </div>
         <div class="mapping-summary-card">
@@ -106,7 +106,7 @@
         </a>
         <a class="button-secondary button mapping-filter{% if status == 'mapped_holding' %} is-active{% endif %}"
            href="?status=mapped_holding"{% if status == 'mapped_holding' %} aria-current="true"{% endif %}>
-            {% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %} ({{ counts.mapped_holding }})
+            {% if language == "zh" %}已对应到待安排区域{% else %}Linked to awaiting-placement area{% endif %} ({{ counts.mapped_holding }})
         </a>
         <a class="button-secondary button mapping-filter mapping-filter-conflict{% if status == 'conflicts' %} is-active{% endif %}"
            href="?status=conflicts"{% if status == 'conflicts' %} aria-current="true"{% endif %}>
@@ -179,7 +179,7 @@
                         {% elif row.status_key == "mapped_inactive" %}
                         <span class="status status-danger">{% if language == "zh" %}已对应到停用单元{% else %}Mapped to inactive unit{% endif %}</span>
                         {% elif row.status_key == "mapped_holding" %}
-                        <span class="status status-warning">{% if language == "zh" %}已对应到未分配暂存节点{% else %}Mapped under holding/unassigned node{% endif %}</span>
+                        <span class="status status-warning">{% if language == "zh" %}已对应到待安排区域{% else %}Linked to awaiting-placement area{% endif %}</span>
                         {% endif %}
                         {% if row.is_type_mismatch %}
                         <span class="status status-danger">{% if language == "zh" %}类型不匹配{% else %}Type mismatch{% endif %}</span>

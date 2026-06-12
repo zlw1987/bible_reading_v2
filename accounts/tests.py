@@ -3,10 +3,12 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 
-from django.core.management import call_command, CommandError
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command, CommandError
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -1945,6 +1947,302 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
     def test_dry_run_and_apply_flags_cannot_be_combined(self):
         with self.assertRaises(CommandError):
             self.run_backfill_command("--dry-run", "--apply")
+
+
+class ChurchStructureBelongingAuditCommandTests(TestCase):
+    def run_audit_command(self, *args):
+        output = StringIO()
+        call_command("audit_structure_belonging", *args, stdout=output)
+        return output.getvalue()
+
+    def create_unit(self, code, name=None, unit_type=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=name or code,
+        )
+
+    def create_mapped_group(self, name, unit=None):
+        unit = unit or self.create_unit(name.upper().replace(" ", ""))
+        group = SmallGroup.objects.create(name=name, church_structure_unit=unit)
+        return group, unit
+
+    def assign_group(self, user, group):
+        user.profile.small_group = group
+        user.profile.save()
+
+    def create_active_primary(self, user, unit, **kwargs):
+        defaults = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate(),
+        }
+        defaults.update(kwargs)
+        return ChurchStructureMembership.objects.create(**defaults)
+
+    def assert_summary_count(self, output, category, count):
+        self.assertIn(f"{category}: {count}", output)
+
+    def test_summary_classifies_each_required_category(self):
+        in_sync_group, in_sync_unit = self.create_mapped_group("Audit In Sync")
+        _membership_without_group, membership_without_group_unit = (
+            self.create_mapped_group("Audit Membership Only")
+        )
+        group_only_group, _group_only_unit = self.create_mapped_group(
+            "Audit Group Only"
+        )
+        mismatch_group, _mismatch_group_unit = self.create_mapped_group(
+            "Audit Mismatch Group"
+        )
+        mismatch_membership_unit = self.create_unit("AUDIT-MISMATCH-MEMBER")
+        unmapped_group = SmallGroup.objects.create(name="Audit Unmapped Group")
+        parent_unit = self.create_unit(
+            "AUDIT-PARENT",
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+        )
+        multi_unit = self.create_unit("AUDIT-MULTI")
+        SmallGroup.objects.create(
+            name="Audit Multi 1",
+            church_structure_unit=multi_unit,
+        )
+        SmallGroup.objects.create(
+            name="Audit Multi 2",
+            church_structure_unit=multi_unit,
+        )
+
+        in_sync = User.objects.create_user(
+            username="audit_in_sync",
+            first_name="In",
+            last_name="Sync",
+        )
+        self.assign_group(in_sync, in_sync_group)
+        self.create_active_primary(in_sync, in_sync_unit)
+
+        membership_without_group = User.objects.create_user(
+            username="audit_membership_without_group"
+        )
+        self.create_active_primary(
+            membership_without_group,
+            membership_without_group_unit,
+        )
+
+        group_without_membership = User.objects.create_user(
+            username="audit_group_without_membership"
+        )
+        self.assign_group(group_without_membership, group_only_group)
+
+        mismatch = User.objects.create_user(username="audit_mismatch")
+        self.assign_group(mismatch, mismatch_group)
+        self.create_active_primary(mismatch, mismatch_membership_unit)
+
+        unmapped = User.objects.create_user(username="audit_unmapped_group")
+        self.assign_group(unmapped, unmapped_group)
+
+        parent_only = User.objects.create_user(username="audit_parent_only")
+        self.create_active_primary(parent_only, parent_unit)
+
+        multi_group = User.objects.create_user(username="audit_multi_group")
+        self.create_active_primary(multi_group, multi_unit)
+
+        User.objects.create_user(username="audit_no_group_no_membership")
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "in_sync", 1)
+        self.assert_summary_count(output, "membership_without_group", 1)
+        self.assert_summary_count(output, "group_without_membership", 1)
+        self.assert_summary_count(output, "mismatch", 1)
+        self.assert_summary_count(output, "unmapped_group", 1)
+        self.assert_summary_count(output, "parent_or_fellowship_only_membership", 2)
+        self.assert_summary_count(output, "no_group_no_membership", 1)
+        self.assert_summary_count(
+            output,
+            "multiple_active_primary_memberships",
+            0,
+        )
+        self.assertIn("Audit only:", output)
+
+    def test_inactive_membership_lifecycle_states_do_not_count(self):
+        group, unit = self.create_mapped_group("Audit Lifecycle Group")
+        today = timezone.localdate()
+        users = [
+            User.objects.create_user(username=f"audit_inactive_{index}")
+            for index in range(6)
+        ]
+        for user in users:
+            self.assign_group(user, group)
+
+        requested, rejected, cancelled, ended, future, expired = users
+        ChurchStructureMembership.objects.create(
+            user=requested,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=today,
+        )
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=rejected,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_REJECTED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=cancelled,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_CANCELLED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=expired,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                    end_date=today - timedelta(days=1),
+                ),
+            ]
+        )
+        ChurchStructureMembership.objects.create(
+            user=ended,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=True,
+            start_date=today - timedelta(days=10),
+            end_date=today - timedelta(days=1),
+        )
+        ChurchStructureMembership.objects.create(
+            user=future,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=today + timedelta(days=1),
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "group_without_membership", 6)
+        self.assertNotIn("in_sync: 1", output)
+        self.assert_summary_count(
+            output,
+            "multiple_active_primary_memberships",
+            0,
+        )
+
+    def test_verbose_output_has_details_but_excludes_private_notes(self):
+        group, unit = self.create_mapped_group("Audit Private Notes")
+        user = User.objects.create_user(
+            username="audit_verbose",
+            first_name="Verbose",
+            last_name="Member",
+        )
+        self.assign_group(user, group)
+        membership = self.create_active_primary(
+            user,
+            unit,
+            notes="PRIVATE PASTORAL NOTE SHOULD NOT PRINT",
+        )
+
+        output = self.run_audit_command("--verbose")
+
+        self.assertIn(f"user_id={user.id}", output)
+        self.assertIn("username=audit_verbose", output)
+        self.assertIn("display_name=Verbose Member", output)
+        self.assertIn(f"profile_small_group=#{group.id} Audit Private Notes", output)
+        self.assertIn(f"active_primary_membership_id={membership.id}", output)
+        self.assertIn("classification=in_sync", output)
+        self.assertNotIn("PRIVATE PASTORAL NOTE SHOULD NOT PRINT", output)
+
+    def test_command_performs_zero_writes(self):
+        group, unit = self.create_mapped_group("Audit Read Only")
+        user = User.objects.create_user(username="audit_read_only")
+        self.assign_group(user, group)
+        membership = self.create_active_primary(user, unit)
+        before_counts = {
+            "memberships": ChurchStructureMembership.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "profiles": Profile.objects.count(),
+            "contexts": MinistryContext.objects.count(),
+            "districts": District.objects.count(),
+            "roles": ChurchRoleAssignment.objects.count(),
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_audit_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("in_sync: 1", output)
+        self.assertEqual(
+            before_counts,
+            {
+                "memberships": ChurchStructureMembership.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "profiles": Profile.objects.count(),
+                "contexts": MinistryContext.objects.count(),
+                "districts": District.objects.count(),
+                "roles": ChurchRoleAssignment.objects.count(),
+            },
+        )
+        membership.refresh_from_db()
+        user.profile.refresh_from_db()
+        self.assertEqual(membership.unit, unit)
+        self.assertEqual(user.profile.small_group, group)
+
+    def test_multiple_active_primary_memberships_warns_without_silent_pick(self):
+        first_unit = self.create_unit("AUDIT-DUP-1")
+        second_unit = self.create_unit("AUDIT-DUP-2")
+        SmallGroup.objects.create(
+            name="Audit Duplicate 1",
+            church_structure_unit=first_unit,
+        )
+        SmallGroup.objects.create(
+            name="Audit Duplicate 2",
+            church_structure_unit=second_unit,
+        )
+        user = User.objects.create_user(username="audit_duplicate_primary")
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=first_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=second_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        output = self.run_audit_command("--verbose")
+
+        self.assert_summary_count(
+            output,
+            "multiple_active_primary_memberships",
+            1,
+        )
+        self.assertIn("WARNING: User audit_duplicate_primary", output)
+        self.assertIn("multiple_active_primary_membership_ids=", output)
 
 
 class ChurchStructureAdminClarityTests(TestCase):

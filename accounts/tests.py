@@ -3021,10 +3021,14 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Legacy Small Groups")
         self.assertContains(response, "旧小组")
-        self.assertContains(response, "Bible Study")
+        self.assertContains(response, "Bible Study generation and legacy BibleStudySession")
         self.assertContains(response, "ServiceEvent zero-row fallback")
         self.assertContains(response, "Profile.small_group")
-        self.assertContains(response, "ServiceEvent audience rows")
+        self.assertContains(
+            response,
+            "Bible Study v2 meeting visibility and role/worship pickers",
+        )
+        self.assertContains(response, "ServiceEvent audience rows also match")
         self.assertContains(response, "active primary ChurchStructureMembership")
         self.assertContains(response, "Bridge mapping status")
 
@@ -3097,20 +3101,20 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "教会结构归属")
         self.assertContains(
             response,
-            "runtime source for ServiceEvent audience-row matching after CS-CORE.2B-A",
+            "runtime source for ServiceEvent audience-row matching after CS-CORE.2B-A "
+            "and Bible Study v2 meeting member visibility after CS-CORE.2C-B",
         )
         self.assertContains(
             response,
-            "Profile.small_group still drives Bible Study member visibility",
+            "Profile.small_group still drives reading/progress/privacy",
         )
         self.assertContains(
             response,
-            "reading/progress/privacy, and ServiceEvent zero-row legacy fallback",
+            "ServiceEvent zero-row legacy fallback",
         )
         self.assertContains(
             response,
-            "Membership does not grant permissions, roles, TeamAssignment/My "
-            "Serving, or Bible Study visibility",
+            "Membership does not grant permissions, roles, or TeamAssignment/My Serving",
         )
         self.assertContains(response, "Notes must stay operational and non-sensitive")
 

@@ -33,7 +33,8 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 ### Where Roles Are Created or Edited
 
 - `BibleStudyMeetingRoleForm` exposes `role`, `user`, `display_name`, `notes`, and `notes_en`.
-- When the form receives a meeting, the `user` queryset is limited to active users whose `profile.small_group` matches the meeting's small group, plus the already-selected user when editing.
+- BS-ROLE.1B originally limited the `user` queryset to active users whose `profile.small_group` matched the meeting's small group, plus the already-selected user when editing.
+- Since CS-CORE.3B, `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` user pickers use membership-core matching for the meeting's legacy `SmallGroup`, while preserving the currently saved user on edit.
 - The placeholder/help text frames `display_name` as a fallback when no user is selected, and BS-ROLE.1B form validation requires either a linked `user` or non-empty `display_name`.
 - Staff/authorized users create roles through `manage_bible_study_meeting_roles`.
 - Staff/authorized users edit roles through `edit_bible_study_meeting_role`.
@@ -67,7 +68,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 
 Existing tests cover:
 
-- Role form filtering to the meeting small group.
+- Role form filtering to the meeting small group; after CS-CORE.3B this means membership-core matching for the meeting's legacy `SmallGroup`, not `Profile.small_group` alone.
 - Staff access to role management.
 - Ordinary-user denial for role management/edit/delete.
 - Staff add/edit/delete for roles.
@@ -98,7 +99,7 @@ The desired direction is:
 
 ## 3. Recommended Design Direction
 
-- Prefer linking roles to real `User` records whenever the responsible person has an active account in the meeting's small group.
+- Prefer linking roles to real `User` records whenever the responsible person has an active membership-core match for the meeting's legacy small group.
 - Keep `display_name` only as a fallback for people without accounts, guest names, or one-off cases.
 - Do not infer identity by matching `display_name` to a user's full name, username, preferred name, profile field, or translated display text.
 - For Today role chips, use only `BibleStudyMeetingRole.objects.filter(user=request.user, ...)` after applying the existing meeting visibility/date/status rules.
@@ -141,7 +142,7 @@ Completed scope:
 - Clarify `BibleStudyMeetingRoleForm` help text so managers choose a user when the person has an account.
 - Require at least one assignee signal: linked `user` or `display_name`.
 - Warn/help managers that a display-name-only role can show on meeting detail but cannot appear as "my role" on Today.
-- Keep the `user` queryset limited to active users in the meeting small group, with the existing selected-user exception on edit.
+- BS-ROLE.1B kept the `user` queryset limited to active users in the meeting small group, with the existing selected-user exception on edit; CS-CORE.3B later changed the role and worship user pickers to use membership-core matching for the meeting's legacy small group, preserving that saved-user exception.
 - Keep role management restricted to current Bible Study managers.
 
 Likely affected files later:
@@ -239,7 +240,7 @@ Make the existing role management workflow safer and clearer:
 
 - Add form-level validation requiring either `user` or `display_name`.
 - Add manager-facing help text explaining that linked users are required for Today "my role" surfacing, while display names are fallback-only.
-- Preserve the current group-limited user picker.
+- Preserve the group-limited user picker. Historical note: BS-ROLE.1B used profile-based meeting-small-group filtering; since CS-CORE.3B the role and worship pickers use membership-core matching for the meeting's legacy small group.
 - Preserve current meeting detail display and permissions.
 - Do not add confirmation/status fields.
 - BS-ROLE.1B itself did not change Today.
@@ -253,7 +254,7 @@ Completed BS-ROLE.1B coverage:
 - Linked-user role saves and displays.
 - Display-name fallback role saves and displays.
 - Blank `user` plus blank `display_name` is rejected by the form.
-- User picker remains limited to the meeting small group, while preserving the currently selected user on edit.
+- User picker remains limited to the meeting's legacy small group, while preserving the currently selected user on edit; since CS-CORE.3B, role and worship user pickers enforce this through membership-core matching.
 - Ordinary users still cannot manage roles.
 
 Completed TODAY-HOME.1D coverage:

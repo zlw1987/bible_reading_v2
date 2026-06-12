@@ -97,6 +97,33 @@ def user_matches_meeting_small_group_membership(user, small_group, target_date=N
     return membership_unit.id in _collect_unit_and_descendant_ids(unit)
 
 
+def filter_users_for_meeting_small_group_membership(users, small_group, target_date=None):
+    """Filter a user queryset to active-primary members of a meeting SmallGroup."""
+    unit = get_small_group_structure_unit(small_group)
+    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+        return users.none()
+
+    target_date = target_date or timezone.localdate()
+    active_primary_memberships = ChurchStructureMembership.objects.filter(
+        status=ChurchStructureMembership.STATUS_ACTIVE,
+        is_primary=True,
+        start_date__lte=target_date,
+    ).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date))
+    single_active_primary_user_ids = (
+        active_primary_memberships.values("user_id")
+        .annotate(active_primary_count=models.Count("id"))
+        .filter(active_primary_count=1)
+        .values("user_id")
+    )
+    matching_user_ids = active_primary_memberships.filter(
+        unit_id__in=_collect_unit_and_descendant_ids(unit),
+    ).values("user_id")
+
+    return users.filter(id__in=matching_user_ids).filter(
+        id__in=single_active_primary_user_ids,
+    )
+
+
 def get_membership_visible_small_groups(user, target_date=None):
     """Return legacy SmallGroups visible to a user through membership-core."""
     membership_unit = _get_single_active_primary_membership_unit(

@@ -11,11 +11,13 @@ from .models import (
 
 
 LEGACY_RUNTIME_NOTE = (
-    "Legacy current-runtime model / 旧模型（当前仍驱动系统）: Bible Study, "
-    "reading/progress/privacy consumers, and ServiceEvent zero-row fallback "
-    "still use this model and Profile.small_group. ServiceEvent audience rows "
-    "now match active primary ChurchStructureMembership. Do not delete until "
-    "migration is complete."
+    "Legacy current-runtime / bridge model / 旧模型（当前桥接）: Bible Study "
+    "generation and legacy BibleStudySession, reading/progress/privacy "
+    "consumers, and ServiceEvent zero-row fallback still use this model and/or "
+    "Profile.small_group. Bible Study v2 meeting visibility and role/worship "
+    "pickers now use active primary ChurchStructureMembership; ServiceEvent "
+    "audience rows also match active primary ChurchStructureMembership. Do not "
+    "delete until migration is complete."
 )
 
 MINISTRY_CONTEXT_NOTE = (
@@ -34,10 +36,10 @@ STRUCTURE_UNIT_NOTE = (
 
 MEMBERSHIP_NOTE = (
     "Church Structure Membership / 教会结构归属（归属基础）: runtime source for "
-    "ServiceEvent audience-row matching after CS-CORE.2B-A. Profile.small_group "
-    "still drives Bible Study member visibility, reading/progress/privacy, and "
-    "ServiceEvent zero-row legacy fallback. Membership does not grant "
-    "permissions, roles, TeamAssignment/My Serving, or Bible Study visibility. "
+    "ServiceEvent audience-row matching after CS-CORE.2B-A and Bible Study v2 "
+    "meeting member visibility after CS-CORE.2C-B. Profile.small_group still "
+    "drives reading/progress/privacy and ServiceEvent zero-row legacy fallback. "
+    "Membership does not grant permissions, roles, or TeamAssignment/My Serving. "
     "Notes must stay operational and non-sensitive."
 )
 

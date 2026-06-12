@@ -18,6 +18,7 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
+from .visibility import filter_users_for_meeting_small_group_membership
 
 
 class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
@@ -894,10 +895,12 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
         user_model = get_user_model()
         users = user_model.objects.filter(is_active=True)
         if meeting:
-            user_filter = Q(profile__small_group=meeting.small_group)
+            users = filter_users_for_meeting_small_group_membership(
+                users,
+                meeting.small_group,
+            )
             if self.instance.user_id:
-                user_filter |= Q(id=self.instance.user_id)
-            users = users.filter(user_filter)
+                users = users | user_model.objects.filter(id=self.instance.user_id)
         self.fields["user"].queryset = users.distinct().order_by("username")
         self.fields["user"].help_text = text["user_help"]
         self.fields["display_name"].help_text = text["display_name_help"]
@@ -1017,10 +1020,14 @@ class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
         user_model = get_user_model()
         users = user_model.objects.filter(is_active=True)
         if meeting:
-            user_filter = Q(profile__small_group=meeting.small_group)
+            users = filter_users_for_meeting_small_group_membership(
+                users,
+                meeting.small_group,
+            )
             if self.instance.worship_lead_user_id:
-                user_filter |= Q(id=self.instance.worship_lead_user_id)
-            users = users.filter(user_filter)
+                users = users | user_model.objects.filter(
+                    id=self.instance.worship_lead_user_id,
+                )
         self.fields["worship_lead_user"].queryset = users.distinct().order_by(
             "username"
         )

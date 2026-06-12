@@ -3,81 +3,20 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from accounts.models import (
-    ChurchStructureUnit,
-    District,
-    MinistryContext,
-    SmallGroup,
-)
+from accounts.models import ChurchStructureUnit, District, MinistryContext, SmallGroup
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
     has_capability,
 )
-
-
-def _collect_unit_and_descendant_ids(units):
-    """Return the ids of the given ChurchStructureUnit rows plus all descendants.
-
-    Traversal is breadth-first over the ``children`` relation. The model already
-    rejects parent cycles, but the ``exclude`` guard keeps this safe even if a
-    cycle ever slipped through.
-    """
-    unit_ids = set()
-    frontier = [unit.id for unit in units if unit.id is not None]
-
-    while frontier:
-        unit_ids.update(frontier)
-        frontier = list(
-            ChurchStructureUnit.objects.filter(parent_id__in=frontier)
-            .exclude(id__in=unit_ids)
-            .values_list("id", flat=True)
-        )
-
-    return unit_ids
+from accounts.structure_selectors import (
+    resolve_units_to_small_groups as resolve_structure_units_to_small_groups,
+)
 
 
 def resolve_units_to_small_groups(units):
-    """Resolve selected ChurchStructureUnit rows to eligible active SmallGroups.
-
-    Bible Study audience scope selects ChurchStructureUnit rows, but meeting
-    generation still targets legacy ``SmallGroup`` rows. This resolver bridges
-    the two using the optional ``church_structure_unit`` mapping fields on the
-    legacy ``MinistryContext`` / ``District`` / ``SmallGroup`` models. It never
-    consults ``ChurchStructureMembership`` and never drives ordinary-member
-    visibility.
-    """
-    groups = SmallGroup.objects.filter(is_active=True)
-    units = list(units)
-    if not units:
-        return groups.none()
-
-    # Root / whole church selection covers every active small group.
-    if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
-        return groups
-
-    target_unit_ids = _collect_unit_and_descendant_ids(units)
-    if not target_unit_ids:
-        return groups.none()
-
-    context_ids = list(
-        MinistryContext.objects.filter(
-            church_structure_unit_id__in=target_unit_ids,
-        ).values_list("id", flat=True)
-    )
-    district_ids = list(
-        District.objects.filter(
-            church_structure_unit_id__in=target_unit_ids,
-        ).values_list("id", flat=True)
-    )
-
-    match = models.Q(church_structure_unit_id__in=target_unit_ids)
-    if context_ids:
-        match |= models.Q(district__ministry_context_id__in=context_ids)
-    if district_ids:
-        match |= models.Q(district_id__in=district_ids)
-
-    return groups.filter(match).distinct()
+    """Compatibility wrapper for the shared church-structure resolver."""
+    return resolve_structure_units_to_small_groups(units)
 
 
 class BibleStudySeries(models.Model):

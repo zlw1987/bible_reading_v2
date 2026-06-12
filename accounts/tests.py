@@ -1685,6 +1685,28 @@ class ChurchStructureSelectorLayerTests(TestCase):
             user_matches_membership_structure_audience(member, [self.unmapped_unit])
         )
 
+    def test_membership_audience_unmapped_or_fellowship_unit_matches_by_membership(
+        self,
+    ):
+        from accounts.structure_selectors import (
+            resolve_units_to_small_groups,
+            user_matches_legacy_structure_audience,
+            user_matches_membership_structure_audience,
+            user_matches_structure_audience,
+        )
+
+        member = User.objects.create_user(username="selector_unmapped_member")
+        self.create_membership(member, self.unmapped_unit)
+
+        self.assertTrue(
+            user_matches_membership_structure_audience(member, [self.unmapped_unit])
+        )
+        self.assertTrue(user_matches_structure_audience(member, [self.unmapped_unit]))
+        self.assertFalse(
+            user_matches_legacy_structure_audience(member, [self.unmapped_unit])
+        )
+        self.assertEqual(list(resolve_units_to_small_groups([self.unmapped_unit])), [])
+
     def test_membership_audience_requested_membership_does_not_match(self):
         from accounts.structure_selectors import (
             user_matches_membership_structure_audience,

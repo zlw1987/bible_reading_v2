@@ -230,12 +230,12 @@ def staff_structure_map(request):
     The default map view is review-first: counts only, no member rosters. On
     top of that, CS-SETUP.1B adds an opt-in display-name-only edit mode for
     admin-capable staff (per-row rename + Details link); no other structure
-    edits happen here. The unit tree and membership rows shown are the future
-    structure foundation. Ordinary-user matching still resolves through
-    Profile.small_group / legacy mappings; module-specific audience rows (e.g.
-    ServiceEventAudienceScope, BibleStudySeriesAudienceScope) stay scoped to
-    their own approved modules, and ChurchStructureMembership is not a runtime
-    visibility source.
+    edits happen here. Ordinary-user matching remains consumer-specific during
+    the transition: ServiceEvent audience rows now match through active primary
+    ChurchStructureMembership, while zero-row ServiceEvents, Bible Study member
+    visibility/generation, reading/privacy/progress, permissions, and My
+    Serving remain legacy/consumer-specific as documented. The structure map is
+    counts/setup context only and does not itself grant visibility.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -577,11 +577,11 @@ def staff_structure_mapping_review(request):
     the same permission. Those edits change the legacy -> structure mapping
     only: they do not directly edit members, audience rows, serving schedules,
     or permissions. Like /staff/structure/, this page never uses
-    ChurchStructureMembership as a runtime visibility source. It does, however,
-    edit the same legacy-to-unit mapping fields that structure-based
-    ServiceEvent / Bible Study scopes resolve through, so a mapping edit can
-    change which current groups/members match an existing structure-based scope
-    (CS-SETUP.1D.4).
+    ChurchStructureMembership as a runtime visibility source. Since
+    CS-CORE.2B-A, ServiceEvent audience rows match by active primary membership
+    instead of these mapping fields; Bible Study schedule resolution/generation
+    still resolves through this bridge, so a mapping edit can still affect
+    generated legacy SmallGroup meetings (CS-CORE.2B-B).
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
@@ -806,13 +806,14 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     It writes nothing else directly: no unit lifecycle, no membership, no
     audience-scope rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope),
     no TeamAssignment, and no Profile.small_group. It does not edit members,
-    audience rows, serving schedules, or permissions. However, because
-    structure-based ServiceEvent and Bible Study scopes resolve their selected
-    units down to legacy groups through exactly these mapping fields, changing a
-    mapping can change which current groups/members match an existing
-    structure-based scope. To keep that effect explicit, the POST requires a
-    staff acknowledgement checkbox before it will save; without it the mapping is
-    left unchanged. Each successful update is audited via a Django admin
+    audience rows, serving schedules, or permissions. Since CS-CORE.2B-A,
+    ServiceEvent audience rows match by active primary ChurchStructureMembership
+    instead of this mapping bridge. Bible Study schedule resolution/generation
+    still resolves selected units through these mapping fields, so a mapping
+    change can still affect generated legacy SmallGroup meetings. To keep that
+    effect explicit, the POST requires a staff acknowledgement checkbox before it
+    will save; without it the mapping is left unchanged. Each successful update
+    is audited via a Django admin
     ``LogEntry`` CHANGE record carrying the before/after mapped-unit context.
     """
     language = get_user_language(request)
@@ -854,8 +855,8 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     if request.method == "POST":
         # Required impact acknowledgement (CS-SETUP.1D.4). A mapping edit does
         # not directly touch members/audience/schedule/permission rows, but it
-        # can change which current groups match an existing structure-based
-        # ServiceEvent / Bible Study scope, so staff must confirm they
+        # can still change Bible Study structure-audience resolution and
+        # generated legacy SmallGroup meetings, so staff must confirm they
         # understand that before any save.
         acknowledged = bool(request.POST.get("acknowledge_impact"))
         raw = (request.POST.get("church_structure_unit") or "").strip()
@@ -922,10 +923,11 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
         # type / duplicate) keep surfacing unchanged for an invalid target.
         if error is None and not acknowledged:
             error = (
-                "保存前请确认你了解此更改可能影响结构适用范围的匹配。"
+                "保存前请确认你了解此对应关系更改可能影响查经安排解析和生成的小组查经聚会。"
                 if language == "zh"
-                else "Please confirm that you understand the possible "
-                "structure-scope matching impact before saving."
+                else "Please confirm that you understand this mapping change "
+                "may affect Bible Study structure-audience resolution and "
+                "generated legacy SmallGroup meetings before saving."
             )
 
         if error is None:

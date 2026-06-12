@@ -3021,8 +3021,11 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Legacy Small Groups")
         self.assertContains(response, "旧小组")
-        self.assertContains(response, "current runtime still uses this model")
+        self.assertContains(response, "Bible Study")
+        self.assertContains(response, "ServiceEvent zero-row fallback")
         self.assertContains(response, "Profile.small_group")
+        self.assertContains(response, "ServiceEvent audience rows")
+        self.assertContains(response, "active primary ChurchStructureMembership")
         self.assertContains(response, "Bridge mapping status")
 
     def test_legacy_district_and_ministry_context_admin_labels_are_clear(self):
@@ -3039,12 +3042,14 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(context_response.status_code, 200)
         self.assertContains(context_response, "Ministry Contexts")
         self.assertContains(context_response, "事工范围")
-        self.assertContains(context_response, "current runtime still uses this")
+        self.assertContains(context_response, "Bible Study generation")
+        self.assertContains(context_response, "ServiceEvent audience rows")
 
         self.assertEqual(district_response.status_code, 200)
         self.assertContains(district_response, "Legacy Districts")
         self.assertContains(district_response, "旧区")
-        self.assertContains(district_response, "current runtime still uses this model")
+        self.assertContains(district_response, "Bible Study")
+        self.assertContains(district_response, "ServiceEvent zero-row fallback")
 
     def test_church_structure_unit_admin_explains_future_foundation_status(self):
         unit = ChurchStructureUnit.objects.create(
@@ -3060,8 +3065,9 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Church Structure Units")
         self.assertContains(response, "教会结构单元")
-        self.assertContains(response, "future flexible structure foundation")
-        self.assertContains(response, "does not drive runtime visibility yet")
+        self.assertContains(response, "flexible structure foundation")
+        self.assertContains(response, "ServiceEvent audience rows use selected units")
+        self.assertContains(response, "Bible Study still resolves selected units")
         self.assertContains(response, "Path label")
 
     def test_church_structure_membership_admin_explains_future_belonging_status(self):
@@ -3089,7 +3095,23 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Church Structure Memberships")
         self.assertContains(response, "教会结构归属")
-        self.assertContains(response, "Runtime still uses Profile.small_group")
+        self.assertContains(
+            response,
+            "runtime source for ServiceEvent audience-row matching after CS-CORE.2B-A",
+        )
+        self.assertContains(
+            response,
+            "Profile.small_group still drives Bible Study member visibility",
+        )
+        self.assertContains(
+            response,
+            "reading/progress/privacy, and ServiceEvent zero-row legacy fallback",
+        )
+        self.assertContains(
+            response,
+            "Membership does not grant permissions, roles, TeamAssignment/My "
+            "Serving, or Bible Study visibility",
+        )
         self.assertContains(response, "Notes must stay operational and non-sensitive")
 
 
@@ -5004,10 +5026,32 @@ class StaffStructureMappingReviewTests(TestCase):
             response,
             "A mapping edit does not directly edit members, audience rows, serving schedules, or permissions.",
         )
-        # ... but is honest that structure-based scope matching can be affected.
+        # ... and is honest about the post-CS-CORE.2B-A split: ServiceEvent
+        # audience-row matching moved to membership, while Bible Study still
+        # resolves through the mapping bridge.
         self.assertContains(
             response,
-            "Because structure-based ServiceEvent and Bible Study scopes use these links to match current groups, changing a mapping may affect who matches those structure-based scopes.",
+            "mapping edits no longer affect ServiceEvent structure-audience row matching",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvent audience rows match by active primary ChurchStructureMembership",
+        )
+        self.assertContains(
+            response,
+            "Mapping edits can still affect Bible Study structure-audience resolution and generated legacy SmallGroup meetings.",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvents with no audience rows still use legacy fallback via Profile.small_group",
+        )
+        self.assertNotContains(
+            response,
+            "Because structure-based ServiceEvent and Bible Study scopes use these links to match current groups",
+        )
+        self.assertNotContains(
+            response,
+            "may affect who matches those structure-based scopes",
         )
 
     def test_bilingual_labels_in_chinese(self):
@@ -5023,12 +5067,28 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "小组")
         self.assertContains(response, "现有记录")
         self.assertNotContains(response, "只读页面")
-        # CS-SETUP.1D.4: corrected, honest ZH safety copy.
+        # CS-CORE.2B-B: corrected, honest ZH safety copy.
         self.assertContains(
             response,
             "编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限",
         )
         self.assertContains(
+            response,
+            "ServiceEvent / 教会聚会中已经选择结构适用范围的记录，不再因为这里的对应关系改变而改变匹配",
+        )
+        self.assertContains(
+            response,
+            "按已生效的主要 ChurchStructureMembership / 教会结构归属来匹配",
+        )
+        self.assertContains(
+            response,
+            "对应关系改变仍可能影响查经安排解析和生成的小组查经聚会",
+        )
+        self.assertContains(
+            response,
+            "没有结构适用范围记录的旧版教会聚会仍按 Profile.small_group 的旧版 fallback 运作",
+        )
+        self.assertNotContains(
             response,
             "修改对应关系可能影响哪些人被匹配到这些结构适用范围",
         )
@@ -5367,9 +5427,9 @@ class StaffStructureMappingReviewTests(TestCase):
     # --- CS-SETUP.1D.2: conflict overlays + scope copy ---------------------
 
     def test_scope_copy_names_direct_non_effects_and_scope_impact(self):
-        # CS-SETUP.1D.4: the page must name the direct non-effects (members,
-        # audience rows, schedules, permissions) AND be honest that a mapping
-        # edit can affect structure-based scope matching.
+        # CS-CORE.2B-B: the page must name the direct non-effects (members,
+        # audience rows, schedules, permissions) AND distinguish ServiceEvent
+        # membership matching from Bible Study mapping-bridge resolution.
         self.set_language("en")
         self.login_viewer()
 
@@ -5386,8 +5446,31 @@ class StaffStructureMappingReviewTests(TestCase):
             "A mapping edit does not directly edit members, audience rows, "
             "serving schedules, or permissions.",
         )
-        self.assertContains(response, "structure-based ServiceEvent and Bible Study scopes")
         self.assertContains(
+            response,
+            "mapping edits no longer affect ServiceEvent structure-audience "
+            "row matching",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvent audience rows match by active primary "
+            "ChurchStructureMembership",
+        )
+        self.assertContains(
+            response,
+            "Mapping edits can still affect Bible Study structure-audience "
+            "resolution and generated legacy SmallGroup meetings.",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvents with no audience rows still use legacy fallback via "
+            "Profile.small_group",
+        )
+        self.assertNotContains(
+            response,
+            "structure-based ServiceEvent and Bible Study scopes",
+        )
+        self.assertNotContains(
             response,
             "may affect who matches those structure-based scopes",
         )
@@ -5831,17 +5914,37 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, "Sunrise Unit")
         self.assertNotContains(response, "Old Unit")
         self.assertNotContains(response, "North District")
-        # Warning copy (CS-SETUP.1D.4) + acknowledgement + Save / Cancel.
+        # Warning copy (CS-CORE.2B-B) + acknowledgement + Save / Cancel.
         self.assertContains(
             response,
-            "This updates the setup link for this current record.",
+            "This updates how this current record links to a church structure unit.",
         )
         self.assertContains(
             response,
-            "It does not directly edit members, event audience rows, Bible "
-            "Study audience rows, serving schedules, or permissions.",
+            "It does not directly edit members, audience rows, serving "
+            "schedules, or permissions.",
         )
         self.assertContains(
+            response,
+            "saving a mapping edit no longer affects ServiceEvent "
+            "structure-audience row matching",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvent audience rows match by active primary "
+            "ChurchStructureMembership",
+        )
+        self.assertContains(
+            response,
+            "Mapping edits can still affect Bible Study structure-audience "
+            "resolution and generated legacy SmallGroup meetings.",
+        )
+        self.assertContains(
+            response,
+            "ServiceEvents with no audience rows still use legacy fallback via "
+            "Profile.small_group",
+        )
+        self.assertNotContains(
             response,
             "saving this change may affect who matches existing "
             "structure-based event or Bible Study scopes",
@@ -5850,8 +5953,9 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, 'name="acknowledge_impact"')
         self.assertContains(
             response,
-            "I understand this mapping change may affect structure-based "
-            "event or Bible Study matching.",
+            "I understand this mapping change may affect Bible Study "
+            "structure-audience resolution and generated legacy SmallGroup "
+            "meetings.",
         )
         self.assertContains(response, "Save mapping")
         self.assertContains(response, "Cancel")
@@ -5879,18 +5983,30 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, "编辑对应关系")
         self.assertContains(response, "保存对应关系")
         self.assertContains(response, "取消")
-        # CS-SETUP.1D.4: corrected ZH warning + acknowledgement copy.
+        # CS-CORE.2B-B: corrected ZH warning + acknowledgement copy.
         self.assertContains(
             response,
-            "这里会更新这条现有记录的设置对应关系",
+            "这里会更新这条现有记录与教会结构单元的对应关系",
         )
         self.assertContains(
+            response,
+            "ServiceEvent / 教会聚会中已经选择结构适用范围的记录，不再因为这里的对应关系改变而改变匹配",
+        )
+        self.assertContains(
+            response,
+            "保存此更改仍可能影响查经安排解析和生成的小组查经聚会",
+        )
+        self.assertContains(
+            response,
+            "没有结构适用范围记录的旧版教会聚会仍按 Profile.small_group 的旧版 fallback 运作",
+        )
+        self.assertNotContains(
             response,
             "保存此更改可能影响哪些人被匹配到既有的结构适用范围",
         )
         self.assertContains(
             response,
-            "我了解此对应关系更改可能影响结构适用范围对聚会事件或查经安排的匹配。",
+            "我了解此对应关系更改仍可能影响查经安排解析和生成的小组查经聚会。",
         )
         self.assertContains(response, "尚未对应教会结构单元")
         self.assertNotContains(response, "尚未对应教会结构单位")
@@ -6128,8 +6244,9 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Please confirm that you understand the possible structure-scope "
-            "matching impact before saving.",
+            "Please confirm that you understand this mapping change may affect "
+            "Bible Study structure-audience resolution and generated legacy "
+            "SmallGroup meetings before saving.",
         )
         self.group.refresh_from_db()
         self.assertIsNone(self.group.church_structure_unit_id)
@@ -6146,7 +6263,7 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "保存前请确认你了解此更改可能影响结构适用范围的匹配。",
+            "保存前请确认你了解此对应关系更改可能影响查经安排解析和生成的小组查经聚会。",
         )
         self.group.refresh_from_db()
         self.assertIsNone(self.group.church_structure_unit_id)

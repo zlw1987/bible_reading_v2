@@ -19,9 +19,9 @@
 <section class="notice-panel">
     <p>
         {% if language == "zh" %}
-        本页查看与编辑现有记录和教会结构单元之间的设置对应关系。编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限；但由于使用教会结构适用范围的聚会事件和查经安排会参考这些对应关系来匹配现有小组，修改对应关系可能影响哪些人被匹配到这些结构适用范围。
+        本页用于检查和编辑现有资料与教会结构单元的对应关系。编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限。CS-CORE.2B-A 之后，ServiceEvent / 教会聚会中已经选择结构适用范围的记录，不再因为这里的对应关系改变而改变匹配；它们按已生效的主要 ChurchStructureMembership / 教会结构归属来匹配。查经安排仍然会透过这些对应关系解析到现有小组，因此对应关系改变仍可能影响查经安排解析和生成的小组查经聚会。没有结构适用范围记录的旧版教会聚会仍按 Profile.small_group 的旧版 fallback 运作，不由这里的对应关系控制。
         {% else %}
-        This page reviews and edits how current records link to church structure units. A mapping edit does not directly edit members, audience rows, serving schedules, or permissions. Because structure-based ServiceEvent and Bible Study scopes use these links to match current groups, changing a mapping may affect who matches those structure-based scopes.
+        This page reviews and edits how current records link to church structure units. A mapping edit does not directly edit members, audience rows, serving schedules, or permissions. After CS-CORE.2B-A, mapping edits no longer affect ServiceEvent structure-audience row matching; ServiceEvent audience rows match by active primary ChurchStructureMembership. Mapping edits can still affect Bible Study structure-audience resolution and generated legacy SmallGroup meetings. ServiceEvents with no audience rows still use legacy fallback via Profile.small_group and are not controlled by this mapping bridge.
         {% endif %}
     </p>
 </section>

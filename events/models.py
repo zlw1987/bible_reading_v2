@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit, District, SmallGroup
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
+from accounts.structure_selectors import user_matches_structure_audience
 
 
 class ServiceEvent(models.Model):
@@ -229,41 +230,8 @@ class ServiceEvent(models.Model):
         return False
 
     def _audience_scope_allows(self, user, units):
-        """SE-AS.4 ordinary-user matching for selected audience units.
-
-        A root (whole-church) unit behaves like the legacy global scope and
-        matches every authenticated user, including users without a current
-        small group. Any other selection matches a user only when their
-        current ``Profile.small_group`` is in the resolved active legacy
-        ``SmallGroup`` set for the selected units plus descendants, reusing
-        the Bible Study Schedule resolver so both consumers keep identical
-        unit-to-small-group semantics. ``ChurchStructureMembership`` is never
-        consulted; requested or active membership grants nothing here. A
-        stored selection whose unit later becomes inactive keeps matching,
-        mirroring the legacy district/small-group checks, which do not test
-        ``is_active`` either. A selected unit with no active mapped legacy
-        small groups beneath it matches no ordinary users.
-        """
-        if any(
-            unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units
-        ):
-            return True
-
-        profile = getattr(user, "profile", None)
-        user_group = getattr(profile, "small_group", None)
-        if not user_group:
-            return False
-
-        # Imported lazily so the events app does not load studies models at
-        # module import time; studies has no module-level events import, but
-        # the runtime dependency stays one-directional and explicit here.
-        from studies.models import resolve_units_to_small_groups
-
-        return (
-            resolve_units_to_small_groups(units)
-            .filter(id=user_group.id)
-            .exists()
-        )
+        """Delegate structure-audience matching to the shared selector layer."""
+        return user_matches_structure_audience(user, units)
 
 
 class ServiceEventRequiredTeam(models.Model):

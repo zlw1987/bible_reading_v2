@@ -19,9 +19,9 @@
 <section class="notice-panel">
     <p>
         {% if language == "zh" %}
-        这里只更新设置对应关系，供后续检查和辅助选择使用；不会移动成员，也不会改变谁可以看到聚会或查经。
+        这里会更新这条现有记录的设置对应关系。它不会直接编辑成员、聚会事件适用范围记录、查经适用范围记录、服事安排或权限；但使用教会结构适用范围的聚会事件和查经安排会参考这些对应关系来匹配现有小组，因此保存此更改可能影响哪些人被匹配到既有的结构适用范围。
         {% else %}
-        This only updates the setup mapping for future checks and helpers. It does not move members or change who can see events or Bible Study.
+        This updates the setup link for this current record. It does not directly edit members, event audience rows, Bible Study audience rows, serving schedules, or permissions. Because structure-based scopes use these links to match current groups, saving this change may affect who matches existing structure-based event or Bible Study scopes.
         {% endif %}
     </p>
 </section>
@@ -96,6 +96,16 @@
             {% endif %}
         </p>
         {% endif %}
+        <label class="mapping-edit-acknowledge">
+            <input type="checkbox" name="acknowledge_impact" value="1"{% if acknowledged %} checked{% endif %}>
+            <span>
+                {% if language == "zh" %}
+                我了解此对应关系更改可能影响结构适用范围对聚会事件或查经安排的匹配。
+                {% else %}
+                I understand this mapping change may affect structure-based event or Bible Study matching.
+                {% endif %}
+            </span>
+        </label>
         <div class="actions">
             <button type="submit" class="button">
                 {% if language == "zh" %}保存对应关系{% else %}Save mapping{% endif %}

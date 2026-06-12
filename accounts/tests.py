@@ -1359,6 +1359,17 @@ class ChurchStructureSelectorLayerTests(TestCase):
         user.profile.save(update_fields=["small_group"])
         return user
 
+    def create_membership(self, user, unit, **overrides):
+        data = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate() - timedelta(days=1),
+        }
+        data.update(overrides)
+        return ChurchStructureMembership.objects.create(**data)
+
     def assert_resolved_groups(self, units, expected_groups):
         from accounts.structure_selectors import resolve_units_to_small_groups
 
@@ -1481,22 +1492,365 @@ class ChurchStructureSelectorLayerTests(TestCase):
             {self.group, self.sibling_group, self.other_group, self.unmapped_group},
         )
 
-    def test_user_matches_structure_audience_preserves_service_event_parity(self):
+    def test_get_user_primary_membership_unit_returns_single_active_primary(self):
+        from accounts.structure_selectors import get_user_primary_membership_unit
+
+        self.create_membership(self.no_group_user, self.group_unit)
+
+        self.assertEqual(
+            get_user_primary_membership_unit(self.no_group_user),
+            self.group_unit,
+        )
+        # Profile.small_group alone is not a membership-core source.
+        self.assertIsNone(get_user_primary_membership_unit(self.group_user))
+        self.assertIsNone(get_user_primary_membership_unit(AnonymousUser()))
+        self.assertIsNone(get_user_primary_membership_unit(object()))
+        self.assertIsNone(
+            get_user_primary_membership_unit(User(username="selector_unsaved"))
+        )
+
+    def test_get_user_primary_membership_unit_ignores_inactive_lifecycle_states(self):
+        from accounts.structure_selectors import get_user_primary_membership_unit
+
+        today = timezone.localdate()
+        users = [
+            User.objects.create_user(username=f"selector_lifecycle_{index}")
+            for index in range(7)
+        ]
+        requested, rejected, cancelled, ended, future, expired, non_primary = users
+
+        self.create_membership(
+            requested,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            start_date=None,
+        )
+        self.create_membership(
+            ended,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=today - timedelta(days=10),
+            end_date=today - timedelta(days=1),
+        )
+        self.create_membership(
+            future,
+            self.group_unit,
+            start_date=today + timedelta(days=1),
+        )
+        self.create_membership(non_primary, self.group_unit, is_primary=False)
+        # Rejected/cancelled primary and active-expired rows fail model
+        # validation by design, so insert them directly like drifted data.
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=rejected,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_REJECTED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=cancelled,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_CANCELLED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=expired,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                    end_date=today - timedelta(days=1),
+                ),
+            ]
+        )
+
+        for user in users:
+            self.assertIsNone(
+                get_user_primary_membership_unit(user),
+                msg=f"{user.username} must not have a membership-core unit",
+            )
+
+    def test_get_user_primary_membership_unit_fails_closed_on_multiple(self):
+        from accounts.structure_selectors import get_user_primary_membership_unit
+
+        user = User.objects.create_user(username="selector_multi_primary")
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.sibling_group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        self.assertIsNone(get_user_primary_membership_unit(user))
+
+    def test_get_user_membership_structure_units_derives_from_membership_only(self):
+        from accounts.structure_selectors import get_user_membership_structure_units
+
+        self.create_membership(self.no_group_user, self.group_unit)
+
+        self.assertEqual(
+            get_user_membership_structure_units(self.no_group_user),
+            [self.group_unit],
+        )
+        self.assertEqual(
+            get_user_membership_structure_units(
+                self.no_group_user,
+                include_ancestors=True,
+            ),
+            [self.root_unit, self.cm_unit, self.north_unit, self.group_unit],
+        )
+        # Profile.small_group alone yields nothing from membership-core.
+        self.assertEqual(
+            get_user_membership_structure_units(
+                self.group_user,
+                include_ancestors=True,
+            ),
+            [],
+        )
+
+    def test_membership_audience_matches_own_unit_and_ancestor_units(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        member = User.objects.create_user(username="selector_member_match")
+        self.create_membership(member, self.group_unit)
+
+        self.assertTrue(
+            user_matches_membership_structure_audience(member, [self.group_unit])
+        )
+        self.assertTrue(
+            user_matches_membership_structure_audience(member, [self.north_unit])
+        )
+        self.assertTrue(
+            user_matches_membership_structure_audience(member, [self.cm_unit])
+        )
+        self.assertTrue(
+            user_matches_membership_structure_audience(member, [self.root_unit])
+        )
+
+    def test_membership_audience_root_matches_user_without_membership(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        self.assertTrue(
+            user_matches_membership_structure_audience(
+                self.no_group_user, [self.root_unit]
+            )
+        )
+        self.assertFalse(
+            user_matches_membership_structure_audience(
+                AnonymousUser(), [self.root_unit]
+            )
+        )
+
+    def test_membership_audience_sibling_branch_does_not_match(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        member = User.objects.create_user(username="selector_sibling_branch")
+        self.create_membership(member, self.group_unit)
+
+        self.assertFalse(
+            user_matches_membership_structure_audience(
+                member, [self.sibling_group_unit]
+            )
+        )
+        self.assertFalse(
+            user_matches_membership_structure_audience(member, [self.south_unit])
+        )
+        self.assertFalse(
+            user_matches_membership_structure_audience(member, [self.em_unit])
+        )
+        self.assertFalse(
+            user_matches_membership_structure_audience(member, [self.unmapped_unit])
+        )
+
+    def test_membership_audience_requested_membership_does_not_match(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        self.create_membership(
+            self.no_group_user,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            start_date=None,
+        )
+
+        self.assertFalse(
+            user_matches_membership_structure_audience(
+                self.no_group_user, [self.group_unit]
+            )
+        )
+
+    def test_membership_audience_inactive_lifecycle_states_do_not_match(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        today = timezone.localdate()
+        ended = User.objects.create_user(username="selector_audience_ended")
+        future = User.objects.create_user(username="selector_audience_future")
+        self.create_membership(
+            ended,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=today - timedelta(days=10),
+            end_date=today - timedelta(days=1),
+        )
+        self.create_membership(
+            future,
+            self.group_unit,
+            start_date=today + timedelta(days=1),
+        )
+        rejected = User.objects.create_user(username="selector_audience_rejected")
+        cancelled = User.objects.create_user(username="selector_audience_cancelled")
+        expired = User.objects.create_user(username="selector_audience_expired")
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=rejected,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_REJECTED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=cancelled,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_CANCELLED,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=expired,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timedelta(days=10),
+                    end_date=today - timedelta(days=1),
+                ),
+            ]
+        )
+
+        for user in (ended, future, rejected, cancelled, expired):
+            self.assertFalse(
+                user_matches_membership_structure_audience(user, [self.group_unit]),
+                msg=f"{user.username} must not match the structure audience",
+            )
+
+    def test_membership_audience_profile_small_group_alone_does_not_match(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        self.assertFalse(
+            user_matches_membership_structure_audience(
+                self.group_user, [self.group_unit]
+            )
+        )
+        self.assertFalse(
+            user_matches_membership_structure_audience(
+                self.group_user, [self.north_unit]
+            )
+        )
+
+    def test_membership_audience_multiple_active_primaries_fail_closed(self):
+        from accounts.structure_selectors import (
+            user_matches_membership_structure_audience,
+        )
+
+        user = User.objects.create_user(username="selector_audience_multi")
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.sibling_group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        # Both units sit under north, so either row alone would match; the
+        # ambiguous pair must still fail closed for non-root audiences.
+        self.assertFalse(
+            user_matches_membership_structure_audience(user, [self.north_unit])
+        )
+        self.assertTrue(
+            user_matches_membership_structure_audience(user, [self.root_unit])
+        )
+
+    def test_user_matches_legacy_structure_audience_uses_profile_small_group(self):
+        from accounts.structure_selectors import (
+            user_matches_legacy_structure_audience,
+        )
+
+        self.create_membership(self.no_group_user, self.group_unit)
+
+        self.assertFalse(
+            user_matches_legacy_structure_audience(AnonymousUser(), [self.root_unit])
+        )
+        self.assertTrue(
+            user_matches_legacy_structure_audience(self.no_group_user, [self.root_unit])
+        )
+        # Membership grants nothing through the legacy helper.
+        self.assertFalse(
+            user_matches_legacy_structure_audience(
+                self.no_group_user, [self.group_unit]
+            )
+        )
+        self.assertTrue(
+            user_matches_legacy_structure_audience(self.group_user, [self.group_unit])
+        )
+        self.assertTrue(
+            user_matches_legacy_structure_audience(self.group_user, [self.north_unit])
+        )
+        self.assertFalse(
+            user_matches_legacy_structure_audience(
+                self.sibling_user, [self.group_unit]
+            )
+        )
+        self.assertFalse(
+            user_matches_legacy_structure_audience(
+                self.group_user, [self.unmapped_unit]
+            )
+        )
+
+    def test_user_matches_structure_audience_is_membership_core(self):
         from accounts.structure_selectors import user_matches_structure_audience
 
-        yesterday = timezone.localdate() - timedelta(days=1)
-        ChurchStructureMembership.objects.create(
-            user=self.no_group_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=yesterday,
-        )
-        ChurchStructureMembership.objects.create(
-            user=self.sibling_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_REQUESTED,
-        )
+        self.create_membership(self.no_group_user, self.group_unit)
 
         self.assertFalse(
             user_matches_structure_audience(AnonymousUser(), [self.root_unit])
@@ -1504,20 +1858,19 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self.assertTrue(
             user_matches_structure_audience(self.no_group_user, [self.root_unit])
         )
-        self.assertFalse(
+        # The canonical matcher is membership-core as of CS-CORE.2B-A:
+        # active primary membership matches, Profile.small_group alone does not.
+        self.assertTrue(
             user_matches_structure_audience(self.no_group_user, [self.group_unit])
         )
         self.assertTrue(
+            user_matches_structure_audience(self.no_group_user, [self.north_unit])
+        )
+        self.assertFalse(
             user_matches_structure_audience(self.group_user, [self.group_unit])
         )
-        self.assertTrue(
-            user_matches_structure_audience(self.group_user, [self.north_unit])
-        )
         self.assertFalse(
-            user_matches_structure_audience(self.sibling_user, [self.group_unit])
-        )
-        self.assertFalse(
-            user_matches_structure_audience(self.group_user, [self.unmapped_unit])
+            user_matches_structure_audience(self.no_group_user, [self.unmapped_unit])
         )
 
     def test_studies_resolver_compatibility_wrapper_matches_selector(self):
@@ -2528,6 +2881,103 @@ class ChurchStructureBelongingAuditCommandTests(TestCase):
         )
         self.assertIn("WARNING: User audit_duplicate_primary", output)
         self.assertIn("multiple_active_primary_membership_ids=", output)
+
+    def test_fail_on_drift_passes_when_only_safe_categories_exist(self):
+        group, unit = self.create_mapped_group("Audit Drift Clean")
+        in_sync = User.objects.create_user(username="audit_drift_in_sync")
+        self.assign_group(in_sync, group)
+        self.create_active_primary(in_sync, unit)
+        # no_group_no_membership users are consistent, not drifted.
+        User.objects.create_user(username="audit_drift_nobody")
+
+        output = self.run_audit_command("--fail-on-drift")
+
+        self.assert_summary_count(output, "in_sync", 1)
+        self.assert_summary_count(output, "no_group_no_membership", 1)
+
+    def test_fail_on_drift_fails_on_mismatch(self):
+        group, _unit = self.create_mapped_group("Audit Drift Mismatch Group")
+        other_unit = self.create_unit("AUDIT-DRIFT-MISMATCH")
+        SmallGroup.objects.create(
+            name="Audit Drift Mismatch Other",
+            church_structure_unit=other_unit,
+        )
+        user = User.objects.create_user(username="audit_drift_mismatch")
+        self.assign_group(user, group)
+        self.create_active_primary(user, other_unit)
+
+        with self.assertRaisesMessage(CommandError, "mismatch=1"):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_fail_on_drift_fails_on_unmapped_group(self):
+        unmapped_group = SmallGroup.objects.create(name="Audit Drift Unmapped")
+        user = User.objects.create_user(username="audit_drift_unmapped")
+        self.assign_group(user, unmapped_group)
+
+        with self.assertRaisesMessage(CommandError, "unmapped_group=1"):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_fail_on_drift_fails_on_multiple_active_primary_memberships(self):
+        first_group, first_unit = self.create_mapped_group("Audit Drift Multi 1")
+        _second_group, second_unit = self.create_mapped_group("Audit Drift Multi 2")
+        user = User.objects.create_user(username="audit_drift_multi")
+        self.assign_group(user, first_group)
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=first_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=second_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        with self.assertRaisesMessage(
+            CommandError, "multiple_active_primary_memberships=1"
+        ):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_fail_on_drift_stays_read_only_and_default_run_still_passes(self):
+        unmapped_group = SmallGroup.objects.create(name="Audit Drift Read Only")
+        user = User.objects.create_user(username="audit_drift_read_only")
+        self.assign_group(user, unmapped_group)
+        before_memberships = ChurchStructureMembership.objects.count()
+        before_groups = SmallGroup.objects.count()
+
+        with CaptureQueriesContext(connection) as queries:
+            with self.assertRaises(CommandError):
+                self.run_audit_command("--fail-on-drift")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before_memberships
+        )
+        self.assertEqual(SmallGroup.objects.count(), before_groups)
+        user.profile.refresh_from_db()
+        self.assertEqual(user.profile.small_group, unmapped_group)
+
+        # Without the flag the same drifted data still reports and exits
+        # successfully, unchanged from CS-CORE.0B.1.
+        output = self.run_audit_command()
+        self.assert_summary_count(output, "unmapped_group", 1)
+        self.assertIn("Audit only:", output)
 
 
 class ChurchStructureAdminClarityTests(TestCase):
@@ -5722,18 +6172,25 @@ class StaffStructureMappingEditTests(TestCase):
 
     # --- CS-SETUP.1D.4: documented runtime impact (reason for the warning) --
 
-    def test_mapping_change_affects_service_event_structure_audience_match(self):
-        # Documents (does not change) the runtime impact the warning copy now
-        # discloses: structure-based ServiceEvent audience scopes resolve their
-        # selected unit down to legacy small groups through
-        # church_structure_unit, so remapping a SmallGroup changes which
-        # members an existing scope matches.
+    def test_mapping_change_no_longer_affects_service_event_audience_match(self):
+        # CS-CORE.2B-A updated the runtime impact this warning copy described:
+        # ServiceEvent structure-audience rows now match by active primary
+        # ChurchStructureMembership, so remapping a SmallGroup no longer
+        # changes who matches an event scope. Bible Study unit resolution
+        # (next test) still follows the mapping.
         from events.models import ServiceEvent, ServiceEventAudienceScope
 
         self.group.church_structure_unit = self.sg_unit_1
         self.group.save(update_fields=["church_structure_unit"])
         self.normal_user.profile.small_group = self.group
         self.normal_user.profile.save(update_fields=["small_group"])
+        ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.sg_unit_1,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timedelta(days=1),
+        )
 
         event = ServiceEvent.objects.create(
             title="Structure-Scoped Service",
@@ -5745,7 +6202,8 @@ class StaffStructureMappingEditTests(TestCase):
             service_event=event, unit=self.sg_unit_1
         )
 
-        # Before: the member's group maps to the scoped unit, so they match.
+        # Before: the member's active primary membership unit is the scoped
+        # unit, so they match.
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
         # Remap the group to a different unit via the staff edit workflow.
@@ -5760,9 +6218,9 @@ class StaffStructureMappingEditTests(TestCase):
         self.group.refresh_from_db()
         self.assertEqual(self.group.church_structure_unit_id, self.sg_unit_2.id)
 
-        # After: the same event scope no longer resolves to this member's
-        # group, so the mapping edit changed who matches the structure scope.
-        self.assertFalse(event.can_be_seen_by(self.normal_user))
+        # After: the membership did not move, so the member still matches;
+        # group mapping edits no longer change ServiceEvent audience results.
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
 
     def test_mapping_change_affects_bible_study_unit_group_resolution(self):
         # Documents that the Bible Study resolver used by future schedule

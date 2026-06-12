@@ -1,10 +1,14 @@
 from datetime import date, datetime, timezone as datetime_timezone
+from io import StringIO
 from unittest import mock
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
+from django.core.management import call_command, CommandError
+from django.db import connection
 from django.db.models import ProtectedError
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -38,6 +42,12 @@ from .models import (
     BibleStudyWorshipSong,
 )
 from .services import cancel_bible_study_lesson_with_meetings
+from .structure_readiness import (
+    compare_bible_study_meeting_visibility,
+    get_small_group_structure_unit,
+    user_matches_bible_study_meeting_legacy,
+    user_matches_bible_study_meeting_membership_core,
+)
 
 
 class BibleStudyModuleTests(TestCase):
@@ -3364,7 +3374,10 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(detail_response, "Study Guide")
         self.assertContains(detail_response, "Discussion Questions")
 
-    def test_home_page_shows_upcoming_visible_published_bible_study(self):
+    def test_home_page_no_longer_shows_legacy_study_sessions(self):
+        # TODAY-HOME.1B removed the legacy BibleStudySession block from Today.
+        # Legacy sessions stay reachable from /studies/, but never render on
+        # home (see reading.tests.TodayActionCenterTests for the Today IA).
         self.set_language("en")
         session = self.create_session(title_en="Home Visible Study")
 
@@ -3372,9 +3385,10 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bible Studies")
-        self.assertContains(response, "Home Visible Study")
-        self.assertContains(response, reverse("study_session_detail", args=[session.id]))
+        self.assertNotContains(response, "Home Visible Study")
+        self.assertNotContains(
+            response, reverse("study_session_detail", args=[session.id])
+        )
 
     def test_regular_user_can_see_worship_songs_on_visible_session(self):
         self.set_language("en")
@@ -4325,3 +4339,535 @@ class BibleStudyModuleTests(TestCase):
         self.assertNotIn(cancelled, listed)
         # Generation preview still treats the cancelled meeting as existing.
         self.assertEqual(response.context["generation_preview"]["existing_count"], 2)
+
+
+class BibleStudyMembershipReadinessFixtureMixin:
+    """Shared CS-CORE.2C-A fixtures: structure tree, mapped/unmapped groups,
+    and a member-visible published meeting chain. Shadow-audit tests only."""
+
+    def setUp(self):
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="READY-CHURCH",
+            name="Readiness Whole Church",
+        )
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="READY-CM",
+            name="Readiness Chinese Ministry",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="READY-NORTH",
+            name="Readiness North",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="READY-R4",
+            name="Readiness Rainbow 4",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="READY-R5",
+            name="Readiness Rainbow 5",
+        )
+
+        self.group = SmallGroup.objects.create(
+            name="Readiness Rainbow 4",
+            church_structure_unit=self.group_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Readiness Rainbow 5",
+            church_structure_unit=self.other_group_unit,
+        )
+        self.unmapped_group = SmallGroup.objects.create(
+            name="Readiness Unmapped Group",
+        )
+
+        self.series = BibleStudySeries.objects.create(
+            title="Readiness Series",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        self.lesson = BibleStudyLesson.objects.create(
+            series=self.series,
+            title="Readiness Lesson",
+            lesson_date=timezone.localdate() + timezone.timedelta(days=3),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        self.meeting = self.create_meeting()
+
+    def create_meeting(self, **overrides):
+        data = {
+            "lesson": self.lesson,
+            "small_group": self.group,
+            "meeting_datetime": timezone.now() + timezone.timedelta(days=3),
+            "status": BibleStudyMeeting.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return BibleStudyMeeting.objects.create(**data)
+
+    def create_member(self, username, small_group=None):
+        user = User.objects.create_user(username=username, password="testpass123")
+        if small_group is not None:
+            user.profile.small_group = small_group
+            user.profile.save(update_fields=["small_group"])
+        return user
+
+    def create_membership(self, user, unit, **overrides):
+        data = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate() - timezone.timedelta(days=1),
+        }
+        data.update(overrides)
+        return ChurchStructureMembership.objects.create(**data)
+
+    def create_duplicate_active_primaries(self, user, first_unit, second_unit):
+        # bulk_create bypasses the one-active-primary validation on purpose:
+        # the shadow layer must fail closed for dirty data too.
+        start_date = timezone.localdate() - timezone.timedelta(days=1)
+        return ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=start_date,
+                )
+                for unit in (first_unit, second_unit)
+            ]
+        )
+
+
+class BibleStudyMembershipCoreReadinessTests(
+    BibleStudyMembershipReadinessFixtureMixin, TestCase
+):
+    """CS-CORE.2C-A shadow helper tests. Runtime visibility must not change."""
+
+    def test_get_small_group_structure_unit_returns_mapped_unit(self):
+        self.assertEqual(
+            get_small_group_structure_unit(self.group),
+            self.group_unit,
+        )
+        self.assertIsNone(get_small_group_structure_unit(self.unmapped_group))
+        self.assertIsNone(get_small_group_structure_unit(None))
+
+    def test_get_small_group_structure_unit_returns_inactive_unit(self):
+        # Stored-inactive-unit parity: the bridge keeps resolving; audits,
+        # not silent drops, surface deactivated units.
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="READY-INACTIVE",
+            name="Readiness Inactive",
+            is_active=False,
+        )
+        inactive_mapped_group = SmallGroup.objects.create(
+            name="Readiness Inactive Mapped",
+            church_structure_unit=inactive_unit,
+        )
+
+        self.assertEqual(
+            get_small_group_structure_unit(inactive_mapped_group),
+            inactive_unit,
+        )
+
+    def test_legacy_helper_matches_can_be_seen_by_exactly(self):
+        legacy_member = self.create_member("ready_legacy", self.group)
+        other_member = self.create_member("ready_other", self.other_group)
+        membership_member = self.create_member("ready_membership")
+        self.create_membership(membership_member, self.group_unit)
+        staff = User.objects.create_user(
+            username="ready_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+
+        for user in (
+            legacy_member,
+            other_member,
+            membership_member,
+            staff,
+            AnonymousUser(),
+        ):
+            self.assertEqual(
+                user_matches_bible_study_meeting_legacy(user, self.meeting),
+                self.meeting.can_be_seen_by(user),
+            )
+
+        self.assertTrue(
+            user_matches_bible_study_meeting_legacy(legacy_member, self.meeting)
+        )
+        self.assertFalse(
+            user_matches_bible_study_meeting_legacy(other_member, self.meeting)
+        )
+
+    def test_membership_core_matches_active_primary_on_mapped_meeting(self):
+        membership_member = self.create_member("ready_membership_only")
+        self.create_membership(membership_member, self.group_unit)
+
+        self.assertTrue(
+            user_matches_bible_study_meeting_membership_core(
+                membership_member, self.meeting
+            )
+        )
+        # Current runtime stays legacy: no Profile.small_group, no visibility.
+        self.assertFalse(self.meeting.can_be_seen_by(membership_member))
+        self.assertFalse(
+            user_matches_bible_study_meeting_legacy(membership_member, self.meeting)
+        )
+
+    def test_membership_core_matches_descendant_unit(self):
+        # Same descendant semantics as ServiceEvent structure-audience
+        # matching: a membership on a child of the meeting's mapped unit
+        # matches.
+        child_unit = ChurchStructureUnit.objects.create(
+            parent=self.group_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="READY-R4-SUB",
+            name="Readiness Rainbow 4 Subteam",
+        )
+        member = self.create_member("ready_descendant")
+        self.create_membership(member, child_unit)
+
+        self.assertTrue(
+            user_matches_bible_study_meeting_membership_core(member, self.meeting)
+        )
+
+    def test_profile_small_group_alone_does_not_grant_membership_core(self):
+        legacy_member = self.create_member("ready_profile_only", self.group)
+
+        self.assertFalse(
+            user_matches_bible_study_meeting_membership_core(
+                legacy_member, self.meeting
+            )
+        )
+        self.assertTrue(self.meeting.can_be_seen_by(legacy_member))
+
+    def test_active_primary_membership_does_not_change_legacy_visibility(self):
+        member = self.create_member("ready_no_runtime_change")
+        self.create_membership(member, self.group_unit)
+
+        self.assertFalse(self.meeting.can_be_seen_by(member))
+
+        member.profile.small_group = self.group
+        member.profile.save(update_fields=["small_group"])
+        self.assertTrue(self.meeting.can_be_seen_by(member))
+
+    def test_inactive_membership_lifecycle_states_do_not_grant(self):
+        today = timezone.localdate()
+        lifecycle_overrides = {
+            "requested": {"status": ChurchStructureMembership.STATUS_REQUESTED},
+            "rejected": {"status": ChurchStructureMembership.STATUS_REJECTED},
+            "cancelled": {"status": ChurchStructureMembership.STATUS_CANCELLED},
+            "ended": {
+                "status": ChurchStructureMembership.STATUS_ENDED,
+                "end_date": today - timezone.timedelta(days=1),
+            },
+            "future": {"start_date": today + timezone.timedelta(days=1)},
+            "expired": {"end_date": today - timezone.timedelta(days=1)},
+        }
+
+        # bulk_create bypasses model validation on purpose: the shadow helper
+        # must fail closed even for rows validation would normally reject
+        # (same approach as the audit_structure_belonging tests).
+        users = {}
+        rows = []
+        for label, overrides in lifecycle_overrides.items():
+            user = self.create_member(f"ready_lifecycle_{label}")
+            users[label] = user
+            data = {
+                "user": user,
+                "unit": self.group_unit,
+                "status": ChurchStructureMembership.STATUS_ACTIVE,
+                "is_primary": True,
+                "start_date": today - timezone.timedelta(days=1),
+            }
+            data.update(overrides)
+            rows.append(ChurchStructureMembership(**data))
+        ChurchStructureMembership.objects.bulk_create(rows)
+
+        for label, user in users.items():
+            self.assertFalse(
+                user_matches_bible_study_meeting_membership_core(
+                    user, self.meeting
+                ),
+                msg=f"{label} membership must not grant membership-core visibility",
+            )
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        member = self.create_member("ready_multi_primary", self.group)
+        self.create_duplicate_active_primaries(
+            member, self.group_unit, self.other_group_unit
+        )
+
+        self.assertFalse(
+            user_matches_bible_study_meeting_membership_core(member, self.meeting)
+        )
+
+        result = compare_bible_study_meeting_visibility(member, self.meeting)
+        self.assertTrue(result["legacy_visible"])
+        self.assertFalse(result["membership_visible"])
+        self.assertEqual(result["classification"], "would_lose")
+        self.assertIn(
+            "multiple_active_primary_memberships", result["reason_codes"]
+        )
+
+    def test_unmapped_meeting_small_group_fails_closed_with_reason(self):
+        unmapped_meeting = self.create_meeting(small_group=self.unmapped_group)
+        member = self.create_member("ready_unmapped_member", self.unmapped_group)
+        self.create_membership(member, self.group_unit)
+
+        self.assertFalse(
+            user_matches_bible_study_meeting_membership_core(
+                member, unmapped_meeting
+            )
+        )
+
+        result = compare_bible_study_meeting_visibility(member, unmapped_meeting)
+        self.assertTrue(result["legacy_visible"])
+        self.assertFalse(result["membership_visible"])
+        self.assertEqual(result["classification"], "would_lose")
+        self.assertIn("meeting_unmapped_small_group", result["reason_codes"])
+
+    def test_compare_classifications_cover_all_four_outcomes(self):
+        synced = self.create_member("ready_synced", self.group)
+        self.create_membership(synced, self.group_unit)
+        legacy_only = self.create_member("ready_legacy_only", self.group)
+        membership_only = self.create_member("ready_membership_gain")
+        self.create_membership(membership_only, self.group_unit)
+        nobody = self.create_member("ready_nobody")
+
+        expectations = {
+            "same_visible": synced,
+            "would_lose": legacy_only,
+            "would_gain": membership_only,
+            "same_hidden": nobody,
+        }
+        for classification, user in expectations.items():
+            result = compare_bible_study_meeting_visibility(user, self.meeting)
+            self.assertEqual(result["classification"], classification)
+
+    def test_manager_override_is_same_visible_in_both_sources(self):
+        staff = User.objects.create_user(
+            username="ready_staff_override",
+            password="testpass123",
+            is_staff=True,
+        )
+
+        result = compare_bible_study_meeting_visibility(staff, self.meeting)
+        self.assertTrue(result["legacy_visible"])
+        self.assertTrue(result["membership_visible"])
+        self.assertEqual(result["classification"], "same_visible")
+        self.assertIn("staff_or_manager_override", result["reason_codes"])
+
+    def test_draft_meeting_is_same_hidden_in_both_sources(self):
+        draft_meeting = self.create_meeting(
+            small_group=self.other_group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        synced = self.create_member("ready_draft_member", self.other_group)
+        self.create_membership(synced, self.other_group_unit)
+
+        result = compare_bible_study_meeting_visibility(synced, draft_meeting)
+        self.assertFalse(result["legacy_visible"])
+        self.assertFalse(result["membership_visible"])
+        self.assertEqual(result["classification"], "same_hidden")
+        self.assertIn("meeting_not_member_visible", result["reason_codes"])
+
+
+class BibleStudyMembershipReadinessAuditCommandTests(
+    BibleStudyMembershipReadinessFixtureMixin, TestCase
+):
+    """CS-CORE.2C-A readiness audit command tests. The command is read-only."""
+
+    def run_audit_command(self, *args):
+        output = StringIO()
+        call_command(
+            "audit_bible_study_membership_readiness", *args, stdout=output
+        )
+        return output.getvalue()
+
+    def assert_summary_count(self, output, category, count):
+        self.assertIn(f"{category}: {count}", output)
+
+    def create_one_of_each_classification(self):
+        synced = self.create_member("audit_synced", self.group)
+        self.create_membership(synced, self.group_unit)
+        legacy_only = self.create_member("audit_legacy_only", self.group)
+        membership_only = self.create_member("audit_membership_only")
+        self.create_membership(membership_only, self.group_unit)
+        nobody = self.create_member("audit_nobody")
+        return synced, legacy_only, membership_only, nobody
+
+    def test_summary_includes_expected_categories(self):
+        self.create_one_of_each_classification()
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "meetings_audited", 1)
+        self.assert_summary_count(output, "users_audited", 4)
+        self.assert_summary_count(output, "same_visible", 1)
+        self.assert_summary_count(output, "same_hidden", 1)
+        self.assert_summary_count(output, "would_gain", 1)
+        self.assert_summary_count(output, "would_lose", 1)
+        self.assert_summary_count(output, "meeting_unmapped_small_group", 0)
+        self.assert_summary_count(
+            output, "user_group_without_active_primary_membership", 1
+        )
+        self.assert_summary_count(
+            output, "user_active_primary_without_profile_group", 1
+        )
+        self.assert_summary_count(output, "user_profile_membership_mismatch", 0)
+        self.assert_summary_count(output, "user_profile_group_unmapped", 0)
+        self.assert_summary_count(
+            output, "multiple_active_primary_memberships", 0
+        )
+        self.assertIn("Audit only:", output)
+
+    def test_summary_counts_mismatch_unmapped_and_multiple_primary(self):
+        mismatch = self.create_member("audit_mismatch", self.group)
+        self.create_membership(mismatch, self.other_group_unit)
+        unmapped_profile = self.create_member(
+            "audit_unmapped_profile", self.unmapped_group
+        )
+        multi = self.create_member("audit_multi")
+        self.create_duplicate_active_primaries(
+            multi, self.group_unit, self.other_group_unit
+        )
+        self.create_meeting(small_group=self.unmapped_group)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "meeting_unmapped_small_group", 1)
+        self.assert_summary_count(output, "user_profile_membership_mismatch", 1)
+        self.assert_summary_count(output, "user_profile_group_unmapped", 1)
+        self.assert_summary_count(
+            output, "multiple_active_primary_memberships", 1
+        )
+
+    def test_command_performs_zero_writes(self):
+        self.create_one_of_each_classification()
+        before_counts = {
+            "meetings": BibleStudyMeeting.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "users": User.objects.count(),
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_audit_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("Audit only:", output)
+        self.assertEqual(
+            before_counts,
+            {
+                "meetings": BibleStudyMeeting.objects.count(),
+                "memberships": ChurchStructureMembership.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "users": User.objects.count(),
+            },
+        )
+
+    def test_verbose_includes_details_but_excludes_private_notes(self):
+        membership_only = self.create_member("audit_verbose_gain")
+        self.create_membership(
+            membership_only,
+            self.group_unit,
+            notes="PRIVATE PASTORAL NOTE SHOULD NOT PRINT",
+        )
+
+        output = self.run_audit_command("--verbose")
+
+        self.assertIn("would_gain:", output)
+        self.assertIn(f"user_id={membership_only.id}", output)
+        self.assertIn("username=audit_verbose_gain", output)
+        self.assertIn(f"meeting_id={self.meeting.id}", output)
+        self.assertIn("classification=would_gain", output)
+        self.assertIn("user_no_profile_small_group", output)
+        self.assertNotIn("PRIVATE PASTORAL NOTE SHOULD NOT PRINT", output)
+
+    def test_verbose_limit_caps_detail_rows(self):
+        self.create_member("audit_limit_one", self.group)
+        self.create_member("audit_limit_two", self.group)
+
+        output = self.run_audit_command("--verbose", "--limit", "1")
+
+        self.assertIn("(verbose output stopped at --limit 1)", output)
+        self.assertEqual(output.count("classification=would_lose"), 1)
+
+    def test_fail_on_drift_passes_on_clean_data(self):
+        synced = self.create_member("audit_clean_synced", self.group)
+        self.create_membership(synced, self.group_unit)
+        # No belonging in either source is consistent, not drifted.
+        self.create_member("audit_clean_nobody")
+
+        output = self.run_audit_command("--fail-on-drift")
+
+        self.assert_summary_count(output, "same_visible", 1)
+        self.assert_summary_count(output, "same_hidden", 1)
+
+    def test_fail_on_drift_fails_on_would_lose(self):
+        self.create_member("audit_drift_legacy_only", self.group)
+
+        with self.assertRaisesMessage(CommandError, "would_lose=1"):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_fail_on_drift_fails_on_unmapped_meeting_small_group(self):
+        self.create_meeting(small_group=self.unmapped_group)
+
+        with self.assertRaisesMessage(
+            CommandError, "meeting_unmapped_small_group=1"
+        ):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_default_run_exits_successfully_even_with_drift(self):
+        self.create_member("audit_default_legacy_only", self.group)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "would_lose", 1)
+        self.assert_summary_count(
+            output, "user_group_without_active_primary_membership", 1
+        )
+
+    def test_default_scope_skips_past_meetings_unless_include_past(self):
+        self.meeting.meeting_datetime = timezone.now() - timezone.timedelta(days=7)
+        self.meeting.save()
+        synced = self.create_member("audit_past_synced", self.group)
+        self.create_membership(synced, self.group_unit)
+
+        default_output = self.run_audit_command()
+        self.assert_summary_count(default_output, "meetings_audited", 0)
+        self.assert_summary_count(default_output, "same_visible", 0)
+
+        past_output = self.run_audit_command("--include-past")
+        self.assert_summary_count(past_output, "meetings_audited", 1)
+        self.assert_summary_count(past_output, "same_visible", 1)
+
+    def test_command_does_not_change_runtime_visibility(self):
+        legacy_member = self.create_member("audit_runtime_legacy", self.group)
+        membership_member = self.create_member("audit_runtime_membership")
+        self.create_membership(membership_member, self.group_unit)
+
+        self.run_audit_command("--verbose")
+
+        self.assertTrue(self.meeting.can_be_seen_by(legacy_member))
+        self.assertFalse(self.meeting.can_be_seen_by(membership_member))

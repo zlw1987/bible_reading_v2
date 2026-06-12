@@ -3934,18 +3934,25 @@ class StaffStructureMappingReviewTests(TestCase):
         # The page is no longer labelled read-only now that authorized staff
         # can edit one mapping at a time; the safety note scopes mapping edits.
         self.assertNotContains(response, "Read-only page")
-        self.assertContains(
-            response,
-            "Mapping edits update setup mapping only.",
+        # CS-SETUP.1D.4: the safety copy no longer claims (too absolutely) that
+        # mapping edits never change who can see content / visibility.
+        self.assertNotContains(response, "who can see content (visibility)")
+        self.assertNotContains(
+            response, "Mapping edits update setup mapping only."
         )
         self.assertContains(
             response,
             "edit one setup mapping at a time",
         )
-        # The safety boundary still enumerates every non-effect.
+        # The boundary names the direct non-effects ...
         self.assertContains(
             response,
-            "They do not change memberships, who can see content (visibility), event audience, Bible Study audience rules, serving schedules, or permissions.",
+            "A mapping edit does not directly edit members, audience rows, serving schedules, or permissions.",
+        )
+        # ... but is honest that structure-based scope matching can be affected.
+        self.assertContains(
+            response,
+            "Because structure-based ServiceEvent and Bible Study scopes use these links to match current groups, changing a mapping may affect who matches those structure-based scopes.",
         )
 
     def test_bilingual_labels_in_chinese(self):
@@ -3961,9 +3968,14 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "小组")
         self.assertContains(response, "现有记录")
         self.assertNotContains(response, "只读页面")
+        # CS-SETUP.1D.4: corrected, honest ZH safety copy.
         self.assertContains(
             response,
-            "编辑对应关系只会更新设置对应关系",
+            "编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限",
+        )
+        self.assertContains(
+            response,
+            "修改对应关系可能影响哪些人被匹配到这些结构适用范围",
         )
         self.assertContains(
             response,
@@ -4299,9 +4311,10 @@ class StaffStructureMappingReviewTests(TestCase):
 
     # --- CS-SETUP.1D.2: conflict overlays + scope copy ---------------------
 
-    def test_scope_copy_names_memberships_and_visibility(self):
-        # The page must make clear it edits legacy->structure mapping only and
-        # does not touch memberships, visibility, schedules, or study rules.
+    def test_scope_copy_names_direct_non_effects_and_scope_impact(self):
+        # CS-SETUP.1D.4: the page must name the direct non-effects (members,
+        # audience rows, schedules, permissions) AND be honest that a mapping
+        # edit can affect structure-based scope matching.
         self.set_language("en")
         self.login_viewer()
 
@@ -4310,14 +4323,20 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "This page reviews and edits how each current record maps to a "
-            "church structure unit.",
+            "This page reviews and edits how current records link to church "
+            "structure units.",
         )
-        self.assertContains(response, "Mapping edits update setup mapping only.")
+        self.assertContains(
+            response,
+            "A mapping edit does not directly edit members, audience rows, "
+            "serving schedules, or permissions.",
+        )
+        self.assertContains(response, "structure-based ServiceEvent and Bible Study scopes")
+        self.assertContains(
+            response,
+            "may affect who matches those structure-based scopes",
+        )
         self.assertNotContains(response, "legacy-record")
-        self.assertContains(response, "memberships")
-        self.assertContains(response, "visibility")
-        self.assertContains(response, "Bible Study audience rules")
 
     def test_conflict_summary_cards_render(self):
         self.set_language("en")
@@ -4757,11 +4776,27 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, "Sunrise Unit")
         self.assertNotContains(response, "Old Unit")
         self.assertNotContains(response, "North District")
-        # Warning copy + Save / Cancel.
+        # Warning copy (CS-SETUP.1D.4) + acknowledgement + Save / Cancel.
         self.assertContains(
             response,
-            "This only updates the setup mapping for future checks and "
-            "helpers.",
+            "This updates the setup link for this current record.",
+        )
+        self.assertContains(
+            response,
+            "It does not directly edit members, event audience rows, Bible "
+            "Study audience rows, serving schedules, or permissions.",
+        )
+        self.assertContains(
+            response,
+            "saving this change may affect who matches existing "
+            "structure-based event or Bible Study scopes",
+        )
+        # Required acknowledgement checkbox is present.
+        self.assertContains(response, 'name="acknowledge_impact"')
+        self.assertContains(
+            response,
+            "I understand this mapping change may affect structure-based "
+            "event or Bible Study matching.",
         )
         self.assertContains(response, "Save mapping")
         self.assertContains(response, "Cancel")
@@ -4789,9 +4824,18 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, "编辑对应关系")
         self.assertContains(response, "保存对应关系")
         self.assertContains(response, "取消")
+        # CS-SETUP.1D.4: corrected ZH warning + acknowledgement copy.
         self.assertContains(
             response,
-            "这里只更新设置对应关系，供后续检查和辅助选择使用",
+            "这里会更新这条现有记录的设置对应关系",
+        )
+        self.assertContains(
+            response,
+            "保存此更改可能影响哪些人被匹配到既有的结构适用范围",
+        )
+        self.assertContains(
+            response,
+            "我了解此对应关系更改可能影响结构适用范围对聚会事件或查经安排的匹配。",
         )
         self.assertContains(response, "尚未对应教会结构单元")
         self.assertNotContains(response, "尚未对应教会结构单位")
@@ -4807,7 +4851,11 @@ class StaffStructureMappingEditTests(TestCase):
 
         response = self.client.post(
             self.edit_url("small-group", self.group.pk),
-            {"church_structure_unit": self.sg_unit_1.pk, "status": "unmapped"},
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "status": "unmapped",
+                "acknowledge_impact": "1",
+            },
         )
 
         self.assertRedirects(
@@ -4829,6 +4877,7 @@ class StaffStructureMappingEditTests(TestCase):
             {
                 "church_structure_unit": self.sg_unit_1.pk,
                 "status": "type_mismatch",
+                "acknowledge_impact": "1",
             },
         )
 
@@ -4856,7 +4905,10 @@ class StaffStructureMappingEditTests(TestCase):
         self.login_sg_staff()
         self.client.post(
             self.edit_url("small-group", self.group.pk),
-            {"church_structure_unit": self.sg_unit_1.pk},
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "acknowledge_impact": "1",
+            },
         )
 
         ct = ContentType.objects.get_for_model(SmallGroup)
@@ -4883,7 +4935,10 @@ class StaffStructureMappingEditTests(TestCase):
 
         response = self.client.post(
             self.edit_url("small-group", self.group.pk),
-            {"church_structure_unit": self.sg_unit_1.pk},
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "acknowledge_impact": "1",
+            },
         )
 
         self.assertRedirects(response, self.review_url)
@@ -4987,7 +5042,10 @@ class StaffStructureMappingEditTests(TestCase):
 
         self.client.post(
             self.edit_url("small-group", self.group.pk),
-            {"church_structure_unit": self.sg_unit_1.pk},
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "acknowledge_impact": "1",
+            },
         )
 
         after = (
@@ -4998,6 +5056,162 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertEqual(before, after)
         profile.refresh_from_db()
         self.assertEqual(profile.small_group_id, self.group.id)
+
+    # --- CS-SETUP.1D.4: required impact acknowledgement --------------------
+
+    def test_post_without_acknowledgement_does_not_update(self):
+        # A valid target but no acknowledgement must leave the mapping
+        # unchanged and surface the missing-acknowledgement error.
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Please confirm that you understand the possible structure-scope "
+            "matching impact before saving.",
+        )
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_post_without_acknowledgement_zh_error(self):
+        self.set_language("zh")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_1.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "保存前请确认你了解此更改可能影响结构适用范围的匹配。",
+        )
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_invalid_target_error_takes_precedence_over_acknowledgement(self):
+        # An invalid target keeps its own validation message even when the
+        # acknowledgement is also absent, so the surfaced error is predictable
+        # and existing target validations remain authoritative.
+        self.set_language("en")
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {"church_structure_unit": self.sg_unit_inactive.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "inactive")
+        self.assertNotContains(
+            response, "structure-scope matching impact before saving"
+        )
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.church_structure_unit_id)
+
+    def test_acknowledged_save_redirects_and_roundtrips_status(self):
+        # POST with acknowledgement performs the update and round-trips the
+        # prior status filter back to the review list (filter behavior
+        # unchanged by the new acknowledgement gate).
+        self.login_sg_staff()
+
+        response = self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {
+                "church_structure_unit": self.sg_unit_1.pk,
+                "status": "needs_review",
+                "acknowledge_impact": "1",
+            },
+        )
+
+        self.assertRedirects(
+            response, f"{self.review_url}?status=needs_review"
+        )
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.church_structure_unit_id, self.sg_unit_1.id)
+
+    # --- CS-SETUP.1D.4: documented runtime impact (reason for the warning) --
+
+    def test_mapping_change_affects_service_event_structure_audience_match(self):
+        # Documents (does not change) the runtime impact the warning copy now
+        # discloses: structure-based ServiceEvent audience scopes resolve their
+        # selected unit down to legacy small groups through
+        # church_structure_unit, so remapping a SmallGroup changes which
+        # members an existing scope matches.
+        from events.models import ServiceEvent, ServiceEventAudienceScope
+
+        self.group.church_structure_unit = self.sg_unit_1
+        self.group.save(update_fields=["church_structure_unit"])
+        self.normal_user.profile.small_group = self.group
+        self.normal_user.profile.save(update_fields=["small_group"])
+
+        event = ServiceEvent.objects.create(
+            title="Structure-Scoped Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now(),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=event, unit=self.sg_unit_1
+        )
+
+        # Before: the member's group maps to the scoped unit, so they match.
+        self.assertTrue(event.can_be_seen_by(self.normal_user))
+
+        # Remap the group to a different unit via the staff edit workflow.
+        self.login_sg_staff()
+        self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {
+                "church_structure_unit": self.sg_unit_2.pk,
+                "acknowledge_impact": "1",
+            },
+        )
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.church_structure_unit_id, self.sg_unit_2.id)
+
+        # After: the same event scope no longer resolves to this member's
+        # group, so the mapping edit changed who matches the structure scope.
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
+
+    def test_mapping_change_affects_bible_study_unit_group_resolution(self):
+        # Documents that the Bible Study resolver used by future schedule
+        # helpers/generation reads the same mapping fields, so a mapping edit
+        # changes which legacy groups a structure unit resolves to.
+        from studies.models import resolve_units_to_small_groups
+
+        self.group.church_structure_unit = self.sg_unit_1
+        self.group.save(update_fields=["church_structure_unit"])
+
+        self.assertIn(
+            self.group,
+            list(resolve_units_to_small_groups([self.sg_unit_1])),
+        )
+
+        self.login_sg_staff()
+        self.client.post(
+            self.edit_url("small-group", self.group.pk),
+            {
+                "church_structure_unit": self.sg_unit_2.pk,
+                "acknowledge_impact": "1",
+            },
+        )
+
+        self.assertNotIn(
+            self.group,
+            list(resolve_units_to_small_groups([self.sg_unit_1])),
+        )
+        self.assertIn(
+            self.group,
+            list(resolve_units_to_small_groups([self.sg_unit_2])),
+        )
 
 
 class StaffModerationQueueTests(TestCase):

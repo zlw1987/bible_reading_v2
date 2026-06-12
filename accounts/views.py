@@ -575,10 +575,13 @@ def staff_structure_mapping_review(request):
     a one-row mapping edit link (CS-SETUP.1D.1) to the separate
     ``staff_structure_mapping_edit`` view; Django Admin edit links appear under
     the same permission. Those edits change the legacy -> structure mapping
-    only. Like /staff/structure/, this page never uses ChurchStructureMembership
-    as a runtime visibility source and changes no memberships, visibility,
-    module audience scope (ServiceEvent / Bible Study), serving schedules, or
-    ordinary-user matching (Profile.small_group / legacy mappings).
+    only: they do not directly edit members, audience rows, serving schedules,
+    or permissions. Like /staff/structure/, this page never uses
+    ChurchStructureMembership as a runtime visibility source. It does, however,
+    edit the same legacy-to-unit mapping fields that structure-based
+    ServiceEvent / Bible Study scopes resolve through, so a mapping edit can
+    change which current groups/members match an existing structure-based scope
+    (CS-SETUP.1D.4).
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
@@ -800,11 +803,17 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     Backend validation is authoritative (required / exists / active /
     type-match / duplicate-active); the filtered dropdown is convenience only.
 
-    It writes nothing else: no unit lifecycle, no membership, no audience-scope
-    rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope), no
-    TeamAssignment, no Profile.small_group, and no runtime visibility change.
-    Each successful update is audited via a Django admin ``LogEntry`` CHANGE
-    record carrying the before/after mapped-unit context.
+    It writes nothing else directly: no unit lifecycle, no membership, no
+    audience-scope rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope),
+    no TeamAssignment, and no Profile.small_group. It does not edit members,
+    audience rows, serving schedules, or permissions. However, because
+    structure-based ServiceEvent and Bible Study scopes resolve their selected
+    units down to legacy groups through exactly these mapping fields, changing a
+    mapping can change which current groups/members match an existing
+    structure-based scope. To keep that effect explicit, the POST requires a
+    staff acknowledgement checkbox before it will save; without it the mapping is
+    left unchanged. Each successful update is audited via a Django admin
+    ``LogEntry`` CHANGE record carrying the before/after mapped-unit context.
     """
     language = get_user_language(request)
 
@@ -840,8 +849,15 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     # falls back to the placeholder until staff pick an active matching unit.
     selected_unit_id = current_unit.pk if current_unit else None
     error = None
+    acknowledged = False
 
     if request.method == "POST":
+        # Required impact acknowledgement (CS-SETUP.1D.4). A mapping edit does
+        # not directly touch members/audience/schedule/permission rows, but it
+        # can change which current groups match an existing structure-based
+        # ServiceEvent / Bible Study scope, so staff must confirm they
+        # understand that before any save.
+        acknowledged = bool(request.POST.get("acknowledge_impact"))
         raw = (request.POST.get("church_structure_unit") or "").strip()
         selected_unit_id = None
         if raw:
@@ -900,6 +916,17 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
                             else "Another active record is already mapped to "
                             "this structure unit."
                         )
+
+        # Acknowledgement is enforced only once the target itself is valid, so
+        # existing target validation messages (required / exists / active /
+        # type / duplicate) keep surfacing unchanged for an invalid target.
+        if error is None and not acknowledged:
+            error = (
+                "保存前请确认你了解此更改可能影响结构适用范围的匹配。"
+                if language == "zh"
+                else "Please confirm that you understand the possible "
+                "structure-scope matching impact before saving."
+            )
 
         if error is None:
             old_unit = current_unit
@@ -967,6 +994,7 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
             "status": status,
             "redirect_url": redirect_url,
             "error": error,
+            "acknowledged": acknowledged,
         },
     )
 

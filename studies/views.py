@@ -36,6 +36,7 @@ from .models import (
     BibleStudyWorshipSong,
 )
 from .services import cancel_bible_study_lesson_with_meetings
+from .visibility import get_membership_visible_small_groups
 
 
 def study_ui_text(language, key):
@@ -98,8 +99,8 @@ def get_visible_study_sessions(user):
 def get_v2_landing_context(user):
     show_staff_links = can_manage_bible_studies(user)
 
-    profile = getattr(user, "profile", None)
-    user_small_group = getattr(profile, "small_group", None)
+    visible_small_groups = get_membership_visible_small_groups(user)
+    user_small_group = visible_small_groups.order_by("name").first()
     if not user_small_group:
         return {
             "user_small_group": None,
@@ -118,7 +119,7 @@ def get_v2_landing_context(user):
         "lesson__series",
         "small_group",
     ).filter(
-        small_group=user_small_group,
+        small_group__in=visible_small_groups,
         meeting_datetime__gte=timezone.now(),
         status__in=visible_statuses,
         lesson__status__in=[

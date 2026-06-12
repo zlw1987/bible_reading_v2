@@ -1,15 +1,14 @@
-"""Read-only Bible Study membership-core readiness/shadow audit.
+"""Read-only Bible Study membership-core readiness audit.
 
-CS-CORE.2C-A diagnostic command. For every active user and every in-scope
-Bible Study meeting it compares the current runtime visibility source
-(``Profile.small_group`` via ``BibleStudyMeeting.can_be_seen_by``) against the
-future membership-core candidate source (active primary
-``ChurchStructureMembership`` against the meeting small group's mapped
-``ChurchStructureUnit``). It also reports per-meeting and per-user readiness
-problems that would make a future runtime switch unsafe.
+For every active user and every in-scope Bible Study v2 meeting it compares the
+old legacy visibility source (``Profile.small_group``) against the current
+membership-core visibility source (active primary ``ChurchStructureMembership``
+against the meeting small group's mapped small-group ``ChurchStructureUnit``).
+It also reports per-meeting and per-user readiness problems that still matter
+after CS-CORE.2C-B.
 
-It is shadow/readiness only: it writes nothing, has no ``--apply``, and does
-not change Bible Study, ServiceEvent, or any other runtime visibility.
+It writes nothing, has no ``--apply``, and does not change Bible Study,
+ServiceEvent, or any other runtime visibility.
 """
 
 from collections import OrderedDict
@@ -19,6 +18,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from accounts.models import ChurchStructureUnit
 from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 from studies.structure_readiness import (
     CLASSIFICATION_WOULD_GAIN,
@@ -35,7 +35,10 @@ PAIR_CATEGORY_KEYS = (
     "would_lose",
 )
 
-MEETING_CATEGORY_KEYS = ("meeting_unmapped_small_group",)
+MEETING_CATEGORY_KEYS = (
+    "meeting_unmapped_small_group",
+    "meeting_wrong_type_small_group_mapping",
+)
 
 USER_CATEGORY_KEYS = (
     "user_group_without_active_primary_membership",
@@ -45,15 +48,17 @@ USER_CATEGORY_KEYS = (
     "multiple_active_primary_memberships",
 )
 
-# Categories that make a future Bible Study visibility switch unsafe.
+# Categories that make Bible Study membership-core visibility readiness unsafe.
 #
 # - would_gain / would_lose: the two sources disagree for a real user/meeting
-#   pair, so flipping the source would change what someone sees today.
+#   pair.
 # - meeting_unmapped_small_group: the meeting's group cannot be matched by
-#   membership-core at all; after a switch only staff/managers would see it.
+#   membership-core at all; only staff/managers can see it after 2C-B.
+# - meeting_wrong_type_small_group_mapping: the meeting's group maps to a
+#   non-small-group unit; ordinary membership-core visibility fails closed.
 # - user_group_without_active_primary_membership: the user is visible via
-#   legacy today and would lose visibility on the next meeting of their group
-#   after a switch, even if no such meeting is currently in scope.
+#   legacy and would fail membership-core on the next meeting of their group,
+#   even if no such meeting is currently in scope.
 # - user_profile_membership_mismatch: the two sources point at different
 #   units, so the switch silently moves the user's Bible Study visibility.
 # - multiple_active_primary_memberships: ambiguous belonging fails closed in
@@ -70,6 +75,7 @@ DRIFT_FAIL_KEYS = (
     "would_gain",
     "would_lose",
     "meeting_unmapped_small_group",
+    "meeting_wrong_type_small_group_mapping",
     "user_group_without_active_primary_membership",
     "user_profile_membership_mismatch",
     "multiple_active_primary_memberships",
@@ -81,6 +87,7 @@ VERBOSE_DETAIL_KEYS = (
     "would_gain",
     "would_lose",
     "meeting_unmapped_small_group",
+    "meeting_wrong_type_small_group_mapping",
     "user_group_without_active_primary_membership",
     "user_active_primary_without_profile_group",
     "user_profile_membership_mismatch",
@@ -230,10 +237,20 @@ def run_audit(include_past=False, target_date=None):
 
     meetings = list(_audited_meetings(include_past))
     for meeting in meetings:
-        if meeting.small_group.church_structure_unit_id is None:
+        unit = meeting.small_group.church_structure_unit
+        if unit is None:
             stats["meeting_unmapped_small_group"] += 1
             details["meeting_unmapped_small_group"].append(
                 "  " + _meeting_label(meeting) + " | category=meeting_unmapped_small_group"
+            )
+        elif unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+            stats["meeting_wrong_type_small_group_mapping"] += 1
+            details["meeting_wrong_type_small_group_mapping"].append(
+                "  "
+                + _meeting_label(meeting)
+                + f" | mapped_unit={_unit_label(unit)}"
+                + f" | unit_type={unit.unit_type}"
+                + " | category=meeting_wrong_type_small_group_mapping"
             )
 
     User = get_user_model()
@@ -280,12 +297,12 @@ def run_audit(include_past=False, target_date=None):
 
 class Command(BaseCommand):
     help = (
-        "Audit Bible Study membership-core readiness (CS-CORE.2C-A). "
-        "Read-only shadow comparison of current Profile.small_group meeting "
-        "visibility vs the future active primary ChurchStructureMembership "
-        "source. Default scope: upcoming member-visible meetings (published/"
-        "completed meeting, lesson, and active series); --include-past widens "
-        "to past meetings. Writes nothing and changes no runtime visibility."
+        "Read-only audit comparing preserved old Profile.small_group Bible "
+        "Study v2 meeting visibility against current active primary "
+        "ChurchStructureMembership visibility after CS-CORE.2C-B. Default "
+        "scope: upcoming member-visible meetings (published/completed meeting, "
+        "lesson, and active series); --include-past widens to past meetings. "
+        "Writes nothing and reconciles nothing."
     )
 
     def add_arguments(self, parser):
@@ -319,6 +336,7 @@ class Command(BaseCommand):
                 "Exit with an error when any switch-unsafe category is "
                 "nonzero: would_gain, would_lose, "
                 "meeting_unmapped_small_group, "
+                "meeting_wrong_type_small_group_mapping, "
                 "user_group_without_active_primary_membership, "
                 "user_profile_membership_mismatch, "
                 "multiple_active_primary_memberships. Still read-only; "
@@ -355,7 +373,7 @@ class Command(BaseCommand):
 
         write(
             "Bible Study membership-core readiness audit "
-            "(CS-CORE.2C-A, read-only shadow)"
+            "(CS-CORE.2C-B, read-only)"
         )
         write("=" * 68)
         write(f"target_date: {audit['target_date'].isoformat()}")
@@ -381,9 +399,8 @@ class Command(BaseCommand):
             write(f"    {key}: {stats[key]}")
         write("")
         write(
-            "Audit only: Bible Study runtime visibility is unchanged; no "
-            "meeting, session, membership, profile, group, unit, mapping, or "
-            "audience row was changed."
+            "Audit only: no meeting, session, membership, profile, group, "
+            "unit, mapping, or audience row was changed."
         )
 
         if not verbose:

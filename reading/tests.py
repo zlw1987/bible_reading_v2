@@ -13,7 +13,13 @@ from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import User
 
-from accounts.models import ChurchRoleAssignment, District, SmallGroup
+from accounts.models import (
+    ChurchRoleAssignment,
+    ChurchStructureMembership,
+    ChurchStructureUnit,
+    District,
+    SmallGroup,
+)
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
 from ministry.models import (
@@ -3690,8 +3696,31 @@ class TodayActionCenterTests(TestCase):
     """TODAY-HOME.1B: read-only Today action center (three zones)."""
 
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="TODAY-CHURCH",
+            name="Today Whole Church",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="TODAY-R4",
+            name="Today Rainbow 4",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="TODAY-R5",
+            name="Today Rainbow 5",
+        )
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            church_structure_unit=self.group_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            church_structure_unit=self.other_group_unit,
+        )
 
         self.user = User.objects.create_user(
             username="member",
@@ -3718,6 +3747,7 @@ class TodayActionCenterTests(TestCase):
             user=self.user,
             role=TeamMembership.ROLE_MEMBER,
         )
+        self.create_structure_membership(self.user, self.group_unit)
 
     # --- helpers ---------------------------------------------------------
 
@@ -3753,6 +3783,17 @@ class TodayActionCenterTests(TestCase):
             member.confirmed_at = timezone.now()
             member.save()
         return member
+
+    def create_structure_membership(self, user, unit, **overrides):
+        data = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate() - timedelta(days=1),
+        }
+        data.update(overrides)
+        return ChurchStructureMembership.objects.create(**data)
 
     def make_meeting(self, *, small_group, days_from_now=2,
                      lesson_title_en="Lesson One", meeting_datetime=None):
@@ -3909,6 +3950,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Other Group Lesson")
 
     def test_no_small_group_empty_state(self):
+        self.user.church_structure_memberships.all().delete()
         self.user.profile.small_group = None
         self.user.profile.save()
 
@@ -3916,8 +3958,36 @@ class TodayActionCenterTests(TestCase):
 
         self.assertContains(
             response,
-            "You're not in a small group yet, so group Bible study won't appear here.",
+            "Your confirmed group membership is not ready yet, so no current Bible Study is available.",
         )
+
+    def test_membership_only_user_sees_v2_meeting(self):
+        self.user.profile.small_group = None
+        self.user.profile.save()
+        self.make_meeting(
+            small_group=self.group,
+            lesson_title_en="Membership Only Today Lesson",
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Small group Bible study")
+        self.assertContains(response, "Membership Only Today Lesson")
+
+    def test_profile_only_user_does_not_see_v2_meeting(self):
+        self.user.church_structure_memberships.all().delete()
+        self.make_meeting(
+            small_group=self.group,
+            lesson_title_en="Profile Only Today Hidden",
+        )
+
+        response = self.get_home()
+
+        self.assertContains(
+            response,
+            "Your confirmed group membership is not ready yet, so no current Bible Study is available.",
+        )
+        self.assertNotContains(response, "Profile Only Today Hidden")
 
     def test_legacy_session_block_not_shown(self):
         series = BibleStudySeries.objects.create(
@@ -4048,6 +4118,20 @@ class TodayActionCenterTests(TestCase):
         other_meeting = self.make_meeting(small_group=self.other_group)
         self.add_role(
             other_meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_profile_only_linked_role_not_shown_when_meeting_not_visible(self):
+        self.user.church_structure_memberships.all().delete()
+        meeting = self.make_meeting(small_group=self.group)
+        self.add_role(
+            meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
             user=self.user,
         )

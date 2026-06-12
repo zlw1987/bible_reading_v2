@@ -277,8 +277,10 @@ class BibleStudySeriesAudienceScope(models.Model):
 
     Selected units are the BS-AS.1 audience-scope foundation for Bible Study
     Schedule. They resolve to legacy ``SmallGroup`` rows for meeting generation;
-    they do not change ordinary-member visibility, which still uses
-    ``Profile.small_group``.
+    they do not directly grant ordinary-member visibility. Since CS-CORE.2C-B,
+    ordinary v2 ``BibleStudyMeeting`` visibility uses active primary
+    ``ChurchStructureMembership``. Legacy ``BibleStudySession`` visibility is
+    unchanged.
     """
 
     series = models.ForeignKey(
@@ -718,27 +720,22 @@ class BibleStudyMeeting(models.Model):
         return self.group_questions
 
     def can_be_seen_by(self, user):
+        from .visibility import (
+            meeting_is_member_visible,
+            user_has_bible_study_manager_override,
+            user_matches_meeting_small_group_membership,
+        )
+
         if not getattr(user, "is_authenticated", False):
             return False
 
-        if (
-            getattr(user, "is_staff", False)
-            or getattr(user, "is_superuser", False)
-            or has_capability(user, CAP_MANAGE_BIBLE_STUDIES)
-            or has_capability(user, CAP_PUBLISH_BIBLE_STUDY_GUIDES)
-        ):
+        if user_has_bible_study_manager_override(user):
             return True
 
-        if not self.is_published or not self.lesson.is_published:
+        if not meeting_is_member_visible(self):
             return False
 
-        series = self.lesson.series
-        if not series.is_active or not series.is_published:
-            return False
-
-        profile = getattr(user, "profile", None)
-        user_group = getattr(profile, "small_group", None)
-        return bool(user_group and user_group.id == self.small_group_id)
+        return user_matches_meeting_small_group_membership(user, self.small_group)
 
 
 class BibleStudyMeetingWorshipSong(models.Model):

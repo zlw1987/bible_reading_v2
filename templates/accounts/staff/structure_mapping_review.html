@@ -135,7 +135,7 @@
         {% endif %}
     </h2>
     <div class="table-wrap">
-        <table>
+        <table class="mapping-review-table">
             <thead>
                 <tr>
                     <th>{% if language == "zh" %}现有记录{% else %}Current record{% endif %}</th>
@@ -171,7 +171,7 @@
                         <span class="muted">—</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="mapping-status-cell">
                         {% if row.status_key == "mapped_active" %}
                         <span class="status status-good">{% if language == "zh" %}已对应到启用单元{% else %}Mapped to active unit{% endif %}</span>
                         {% elif row.status_key == "unmapped" %}
@@ -188,21 +188,25 @@
                         <span class="status status-danger">{% if language == "zh" %}重复的启用对应{% else %}Duplicate active mapping{% endif %}</span>
                         {% endif %}
                     </td>
-                    <td>
+                    <td class="mapping-actions-cell">
                         {% if row.mapping_edit_url %}
-                        <a class="button" href="{{ row.mapping_edit_url }}?status={{ status }}">
+                        <a class="button mapping-action-primary" href="{{ row.mapping_edit_url }}?status={{ status }}">
                             {% if language == "zh" %}编辑对应关系{% else %}Edit Mapping{% endif %}
                         </a>
                         {% endif %}
-                        {% if row.legacy_admin_url %}
-                        <a class="button-secondary button" href="{{ row.legacy_admin_url }}">
-                            {% if language == "zh" %}编辑记录{% else %}Edit record{% endif %}
-                        </a>
-                        {% endif %}
-                        {% if row.unit_admin_url %}
-                        <a class="button-secondary button" href="{{ row.unit_admin_url }}">
-                            {% if language == "zh" %}单元详细资料{% else %}Unit details{% endif %}
-                        </a>
+                        {% if row.legacy_admin_url or row.unit_admin_url %}
+                        <div class="mapping-action-group">
+                            {% if row.legacy_admin_url %}
+                            <a class="mapping-action-link" href="{{ row.legacy_admin_url }}">
+                                {% if language == "zh" %}编辑记录{% else %}Edit record{% endif %}
+                            </a>
+                            {% endif %}
+                            {% if row.unit_admin_url %}
+                            <a class="mapping-action-link" href="{{ row.unit_admin_url }}">
+                                {% if language == "zh" %}单元详细资料{% else %}Unit details{% endif %}
+                            </a>
+                            {% endif %}
+                        </div>
                         {% endif %}
                         {% if not row.mapping_edit_url and not row.legacy_admin_url and not row.unit_admin_url %}
                         <span class="muted">—</span>

@@ -1,0 +1,121 @@
+# CS-CORE.3A Legacy Profile.small_group Consumer Inventory
+
+## Purpose and Status
+
+This is a post-CS-CORE.2B-A / post-CS-CORE.2C-B docs-only inventory of remaining runtime consumers that still use legacy `Profile.small_group`, `SmallGroup`, `District`, or legacy structure bridge fields after the completed membership-core switches.
+
+This inventory does not authorize migrations, source-of-truth changes, permission changes, schema changes, data changes, or runtime behavior changes. It is an audit snapshot to help plan small future slices.
+
+## Current Switched Consumers
+
+These consumers have already moved to active primary `ChurchStructureMembership` and should not be counted as remaining legacy visibility consumers:
+
+| Consumer | Current source | Notes |
+| --- | --- | --- |
+| ServiceEvent audience rows | Active primary `ChurchStructureMembership` | `events.models.ServiceEvent.can_be_seen_by()` delegates to `ServiceEvent._audience_scope_allows()` when `ServiceEventAudienceScope` rows exist, and the selector layer uses membership-core matching after CS-CORE.2B-A. |
+| Bible Study v2 `BibleStudyMeeting` ordinary-member visibility | Active primary `ChurchStructureMembership` | `studies.models.BibleStudyMeeting.can_be_seen_by()` uses `studies.visibility.user_matches_meeting_small_group_membership()` after CS-CORE.2C-B. `Profile.small_group` alone no longer grants v2 meeting visibility. |
+| `/studies/` and Today v2 meeting pre-filter | Active primary `ChurchStructureMembership` | `studies.views.get_v2_landing_context()` uses `studies.visibility.get_membership_visible_small_groups()` before the final `BibleStudyMeeting.can_be_seen_by()` gate. Today reuses this context through `reading.views`. |
+
+## Remaining Legacy Consumers by Category
+
+### Bible Study
+
+| Consumer | File / function / model | Current source | What it controls | Safe to leave legacy for now? | Migration risk | Recommended future milestone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Bible Study schedule audience resolution and meeting generation | `studies.models.BibleStudySeries.get_eligible_small_groups()`; `studies.models.resolve_units_to_small_groups()`; `accounts.structure_selectors.resolve_units_to_small_groups()` | Legacy `SmallGroup` rows plus optional `MinistryContext.church_structure_unit`, `District.church_structure_unit`, and `SmallGroup.church_structure_unit` bridge mappings; legacy `scope_type` / `ministry_context` / `district` / `small_group` fallback when no `BibleStudySeriesAudienceScope` rows exist | Determines which legacy `SmallGroup` rows get `BibleStudyMeeting` rows during generation and preview | Yes. This is the explicit coexistence bridge: schedules can select structure units, but generated meetings still attach to legacy `SmallGroup` rows | Medium | Plan a generation-source migration only after the v2 meeting model no longer needs one meeting per legacy `SmallGroup`, or after a replacement grouping model is approved |
+| Bible Study legacy session visibility | `studies.models.BibleStudySession.can_be_seen_by()`; `studies.views.get_visible_study_sessions()` | `Profile.small_group`, `District`, `SmallGroup`, and `BibleStudySession.scope_type` | Ordinary-member visibility for legacy `BibleStudySession` records | Yes if legacy sessions are being kept as fallback or historical content, but avoid promoting them as the primary path | Medium / high | Decide whether to retire, hide, or freeze legacy `BibleStudySession` before migrating its visibility source |
+| Bible Study role assignee filtering | `studies.forms.BibleStudyMeetingRoleForm.__init__()` | `Q(profile__small_group=meeting.small_group)` with an exception for the currently saved user | Which active users appear in the v2 meeting role form user picker | Safe short term, but this can drift from v2 meeting visibility when membership-core and `Profile.small_group` disagree | Medium | Small likely first implementation slice: update role assignee filtering to membership-core while preserving the currently saved user |
+| Bible Study worship lead filtering | `studies.forms.BibleStudyMeetingWorshipSongForm.__init__()` | `Q(profile__small_group=meeting.small_group)` with an exception for the currently saved worship lead | Which active users appear in the v2 meeting worship-lead picker | Safe short term, with the same drift risk as role assignee filtering | Medium | Pair with the role filtering slice so v2 meeting assignment pickers use the same membership-core source |
+| Bible Study readiness/audit comparison | `studies.structure_readiness`; `studies.management.commands.audit_bible_study_membership_readiness` | Compares old `Profile.small_group` visibility against membership-core visibility | Read-only readiness / drift diagnostics | Yes. This should remain audit-only unless a later slice changes the command contract | Low | Keep as diagnostic support for follow-up migrations |
+
+### Reading, Progress, and Reflection Privacy
+
+| Consumer | File / function / model | Current source | What it controls | Safe to leave legacy for now? | Migration risk | Recommended future milestone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Current user group helper | `reading.views.get_user_small_group()` | `user.profile.small_group` | Shared reading/reflection helper for the user's current legacy group | Yes as an explicit legacy helper | Low | Migrate only as part of a broader reading/privacy plan |
+| Group progress accessible group list | `accounts.permissions.get_accessible_progress_groups()` | `ChurchRoleAssignment` legacy `District` / `SmallGroup` scopes plus the user's own `Profile.small_group` | Which groups a user may select for group progress | Yes. This is tied to legacy role scopes and progress permissions | High | Reading progress migration planning; include permissions and role-scope decisions |
+| Group progress roster and default selected group | `reading.views.my_group_progress()` | Defaults to `Profile.small_group`; roster is `User.objects.filter(profile__small_group=selected_group)` | Member rows, enrollments, check-ins, and progress percentages for selected legacy groups | Yes, but do not migrate casually because this affects privacy-visible rosters | High | Reading progress migration plan with explicit privacy review and QA matrix |
+| Reflection visibility checks | `comments.models.ReflectionComment.can_be_seen_by()`; `reading.views.get_visible_reflection_filter()`; `reading.views.passage_wall()` | `Profile.small_group` compared to `ReflectionComment.small_group_at_post` | Visibility for "My Group" reflections and group tab filtering | Yes. It preserves current privacy semantics and uses a snapshot group on each comment | High | Reflection/privacy migration plan; decide whether old group-shared posts remain tied to the group at post time |
+| Reflection create/edit group binding | `comments.forms.ReflectionCommentForm`; `comments.forms.ReflectionCommentEditForm`; `comments.views.add_comment()`; `comments.views.edit_comment()` | `Profile.small_group` determines whether group sharing is offered and binds `small_group_at_post` | Whether users can choose group visibility and which group is stored on the post | Yes until reflection privacy is separately planned | High | Pair with reflection visibility migration; preserve old posts and reply inheritance semantics |
+
+### ServiceEvent / Church Gatherings
+
+| Consumer | File / function / model | Current source | What it controls | Safe to leave legacy for now? | Migration risk | Recommended future milestone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Zero-row ServiceEvent fallback visibility | `events.models.ServiceEvent.can_be_seen_by()` | If an event has no `ServiceEventAudienceScope` rows, visibility falls back to `scope_type` / `district` / `small_group` plus `Profile.small_group` | Ordinary-user visibility for events without structure audience rows | Yes. This is the intentional rollback/coexistence path after SE-AS.4 and CS-CORE.2B-A | Medium | Legacy fallback deprecation planning only after audience-row coverage and rollback requirements are accepted |
+| ServiceEvent legacy fallback form fields | `events.forms.ServiceEventForm`; `events.forms.RecurringServiceEventForm`; `templates/events/service_event_form.html`; `templates/events/recurring_service_event_form.html` | Legacy `scope_type`, `district`, `small_group` fields remain editable | Staff can configure fallback behavior when no structure audience is selected | Yes. Keeping these fields visible/editable is intentional until fallback deprecation is approved | Medium | Plan-only fallback deprecation slice; no field hiding/removal without approval |
+| ServiceEvent legacy labels/display | `events.templatetags.event_extras` | Legacy `scope_type`, `district`, `small_group` | Human-readable fallback scope display | Yes | Low | Update only if fallback fields are later retired |
+| ServiceEvent audience backfill audit | `events.management.commands.backfill_service_event_audience_scopes` | Compares legacy fallback scope behavior with structure rows; uses legacy fields for parity analysis | Dry-run/apply support for audience-row backfill and rollback clarity | Yes as support tooling | Low / medium | Keep as diagnostic until fallback rows are fully covered and deprecation is planned |
+
+### Profile, Membership Requests, and Staff Structure Health
+
+| Consumer | File / function / model | Current source | What it controls | Safe to leave legacy for now? | Migration risk | Recommended future milestone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Legacy profile field | `accounts.models.Profile.small_group`; `accounts.admin.ProfileAdmin` | `SmallGroup` FK | Stored compatibility group for remaining legacy consumers and staff display | Yes. It must stay until all listed consumers are migrated or retired | High | Remove/deprecate only after a full consumer migration plan and data rollback plan |
+| Normal profile display and request flow | `accounts.forms.ProfileForm`; `templates/accounts/profile.html` | Displays current `Profile.small_group`; new changes create `ChurchStructureMembership` requests instead of directly editing `Profile.small_group` | Normal users see current confirmed group and request changes | Yes. This is the transition behavior | Medium | Keep until staff approval sync and all legacy consumers no longer need the profile field |
+| Membership request approval sync | `accounts.views.staff_membership_request_approve()`; `_get_single_active_legacy_small_group_for_unit()` | Approved active primary `ChurchStructureMembership` unit maps back to exactly one active legacy `SmallGroup` | Compatibility sync from membership-core approval to `Profile.small_group` | Yes. This bridge keeps legacy consumers working after request approval | Medium | Retire only after remaining legacy consumers no longer read `Profile.small_group` |
+| Staff request detail/list current group display | `accounts.views.staff_membership_request_detail()`; `templates/accounts/staff/membership_request_detail.html`; `templates/accounts/staff/membership_request_list.html` | `membership.user.profile.small_group`; mapped legacy group for sync warning | Staff review context and transfer/sync warning | Yes. This is clarity-only and does not grant visibility | Low | Keep until the compatibility sync is removed |
+| Staff structure map health indicators | `accounts.views.staff_structure_map()`; `templates/accounts/staff/structure_map.html` | Counts legacy mappings, `Profile.small_group`, and active primary memberships side by side | Setup-readiness counts and mismatch indicators | Yes. It is diagnostic/counts-only | Low | Keep or adjust as migrations complete |
+| Structure mapping review/edit copy | `templates/accounts/staff/structure_mapping_review.html`; `templates/accounts/staff/structure_mapping_edit.html`; `accounts.admin` notes | Legacy mapping bridge plus membership-core switch notes | Staff warning text about what mapping edits affect | Yes. It prevents overgeneralizing membership-core migration | Low | Update wording only when another consumer switches |
+| Structure belonging audit | `accounts.management.commands.audit_structure_belonging` | Compares `Profile.small_group` and active primary `ChurchStructureMembership` | Read-only drift audit | Yes | Low | Keep as diagnostic until compatibility sync is retired |
+| Membership backfill command | `accounts.management.commands.backfill_church_structure_memberships` | Reads `Profile.small_group` to create active primary memberships when `--apply` is used | Historical/backfill bridge from legacy profile group to membership-core | Yes as migration tooling; do not run casually | Medium | Use only under explicit data-migration approval |
+
+### Permissions, Roles, Ministry, and Serving
+
+| Consumer | File / function / model | Current source | What it controls | Safe to leave legacy for now? | Migration risk | Recommended future milestone |
+| --- | --- | --- | --- | --- | --- | --- |
+| Legacy role assignments and capabilities | `accounts.models.ChurchRoleAssignment`; `accounts.permissions.has_capability()`; `accounts.permissions.get_user_active_role_assignments()` | Legacy role rows scoped by `District` / `SmallGroup`; not `ChurchStructureMembership` | Staff/coworker capabilities and scoped progress access | Yes. Do not fold this into membership migration | High | Separate permission/role model planning if ever needed |
+| Group progress permission scoping | `accounts.permissions.get_accessible_progress_groups()` | `ChurchRoleAssignment` district/small-group scopes plus own `Profile.small_group` | Which progress groups can be viewed | Yes | High | Same reading/progress migration plan as above |
+| Ministry teams and team memberships | `ministry.models.MinistryTeam`; `TeamMembership`; `ministry.permissions`; `ministry.views` | Ministry-specific `TeamMembership`, not `Profile.small_group` or `ChurchStructureMembership` | Serving team membership and leadership | Yes. This is a non-consumer of legacy profile group for runtime serving membership | Medium | Do not migrate to church-structure membership without a separate ministry model decision |
+| TeamAssignment / My Serving | `ministry.models.TeamAssignment`; `TeamAssignmentMember`; `ministry.views.my_serving`; `ministry.forms.TeamAssignmentForm` | `TeamMembership` and `ServiceEvent`; event query selects related legacy `small_group` only for event display/context | Serving assignments, assignment members, My Serving cards | Yes. It touches legacy ServiceEvent fields indirectly but does not infer serving from `Profile.small_group` | Medium | Keep generic; do not introduce group-based serving inference casually |
+| Assignment coverage | `ministry.services.assignment_coverage` | `TeamAssignmentMember` / `TeamMembership`; `ServiceEvent.small_group` selected for event context | Required-team coverage display | Yes | Low / medium | Adjust only if ServiceEvent fallback fields are later deprecated |
+| Lighting pilot import | `ministry.services.lighting_pilot_import` | Uses `Profile.small_group__isnull=True` when matching/importing people without current users | Import/matching helper for ministry pilot data | Yes as import-specific logic | Low / medium | Review only before future import automation changes |
+
+### Templates That Still Display Legacy Small Group Context
+
+These templates display legacy small-group context but do not by themselves grant runtime visibility:
+
+| Template | Legacy value displayed | Notes |
+| --- | --- | --- |
+| `templates/accounts/profile.html` | `form.profile.small_group.name` | Normal-user current confirmed group display. |
+| `templates/accounts/staff/user_list.html` | `member.profile.small_group.name` | Staff user list context. |
+| `templates/accounts/staff/password_reset.html` | `target_user.profile.small_group.name` | Staff account-management context. |
+| `templates/accounts/staff/membership_request_list.html` and `membership_request_detail.html` | Current runtime small group and mapped legacy group | Staff request-review context and compatibility sync warning. |
+| `templates/reading/group_progress.html` | Selected legacy `SmallGroup` | Progress page group selector/display. |
+| `templates/reading/passage_wall.html` | `reflection.small_group_at_post.name` | Snapshot group for group-shared reflections. |
+| `templates/studies/*meeting*.html` and `templates/studies/study_session_list.html` | `meeting.small_group` | V2 meetings still attach to a legacy `SmallGroup` row even though ordinary visibility is membership-core. |
+| `templates/events/service_event_form.html` and `templates/events/recurring_service_event_form.html` | Legacy fallback `scope_type` / `district` / `small_group` fields | Staff fallback fields remain editable when no structure audience is selected. |
+| `templates/accounts/staff/structure_mapping_review.html` and `structure_mapping_edit.html` | Text references to `Profile.small_group` / legacy `SmallGroup` | Staff transition warnings, not runtime logic. |
+
+## Non-Consumers / Do Not Migrate Casually
+
+Do not migrate these casually as part of small-group cleanup:
+
+- Permissions / capabilities: `ChurchRoleAssignment` and `accounts.permissions` are a role/capability system, not a membership-core visibility consumer.
+- TeamAssignment / My Serving: serving assignments use `TeamMembership` and `TeamAssignmentMember`; do not infer serving roles from `ChurchStructureMembership`.
+- MinistryTeam membership: ministry team membership remains a separate operational model.
+- `BibleStudyMeetingRole`: treat as meeting-specific assignment metadata, not a ministry serving assignment or permission model.
+- Reading progress and group progress: high privacy and permission risk; requires separate planning.
+- Reflection/comment privacy: high privacy risk, especially because `small_group_at_post` is a historical snapshot.
+- Legacy `BibleStudySession`: migrate only if the product decision is to keep it; otherwise plan retirement/hiding instead.
+- ServiceEvent zero-row fallback: keep until a separately approved fallback deprecation plan exists.
+- Legacy `Profile.small_group`: do not remove or hide until all consumers in this inventory are migrated or retired.
+
+## Recommended Next Slices
+
+1. **Small first implementation slice: Bible Study v2 role/worship user filtering.** Update `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` to use membership-core small-group matching for the meeting's legacy `SmallGroup`, while preserving the currently saved user as selectable. This aligns staff assignment pickers with CS-CORE.2C-B visibility without touching generation, reading, permissions, or ServiceEvent fallback.
+2. **Plan-only slice: legacy `BibleStudySession` retirement/hiding decision.** Audit whether legacy sessions are still promoted in normal UI. If not, plan hiding/retirement rather than migrating its visibility logic.
+3. **Plan-only slice: reading progress and reflection privacy migration.** Treat reading group progress, reflection group visibility, and `small_group_at_post` as one privacy-sensitive plan. Do not implement directly from this inventory.
+4. **Plan-only slice: ServiceEvent zero-row fallback deprecation.** Only after audience-row coverage is accepted, document rollback/deprecation criteria for legacy `scope_type` / `district` / `small_group`.
+5. **Diagnostic cleanup slice: update staff/admin notes after each switch.** Keep admin/help text consumer-specific so membership-core status is not generalized beyond the switched consumers.
+
+## Verification
+
+No Django tests are needed for this docs-only inventory.
+
+Run only:
+
+```powershell
+git diff --check
+git diff --stat
+```

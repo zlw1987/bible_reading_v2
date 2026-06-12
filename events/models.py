@@ -230,7 +230,11 @@ class ServiceEvent(models.Model):
         return False
 
     def _audience_scope_allows(self, user, units):
-        """Delegate structure-audience matching to the shared selector layer."""
+        """Delegate structure-audience matching to the shared selector layer.
+
+        As of CS-CORE.2B-A the selector matches by active primary
+        ChurchStructureMembership, not Profile.small_group.
+        """
         return user_matches_structure_audience(user, units)
 
 

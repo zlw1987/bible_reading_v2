@@ -28,6 +28,18 @@ CATEGORY_KEYS = (
 
 WARNING_KEYS = ("multiple_active_primary_memberships",)
 
+# Categories that block a membership-core consumer switch when nonzero.
+# no_group_no_membership is intentionally excluded: users with no belonging
+# in either source are consistent, not drifted.
+DRIFT_FAIL_KEYS = (
+    "membership_without_group",
+    "group_without_membership",
+    "mismatch",
+    "unmapped_group",
+    "parent_or_fellowship_only_membership",
+    "multiple_active_primary_memberships",
+)
+
 
 def _new_stats():
     stats = OrderedDict((key, 0) for key in CATEGORY_KEYS)
@@ -261,6 +273,14 @@ class Command(BaseCommand):
             default=None,
             help="Maximum number of verbose user detail rows to print.",
         )
+        parser.add_argument(
+            "--fail-on-drift",
+            action="store_true",
+            help=(
+                "Exit with an error when any risky drift category is nonzero. "
+                "Still read-only; no rows are changed or reconciled."
+            ),
+        )
 
     def handle(self, *args, **options):
         if options["limit"] is not None and options["limit"] < 0:
@@ -272,6 +292,18 @@ class Command(BaseCommand):
             verbose=options["verbose"],
             limit=options["limit"],
         )
+
+        if options["fail_on_drift"]:
+            drifted = [
+                f"{key}={audit['stats'][key]}"
+                for key in DRIFT_FAIL_KEYS
+                if audit["stats"][key]
+            ]
+            if drifted:
+                raise CommandError(
+                    "Belonging drift detected (--fail-on-drift): "
+                    + ", ".join(drifted)
+                )
 
     def _print_report(self, audit, *, verbose, limit):
         write = self.stdout.write

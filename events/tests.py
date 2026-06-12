@@ -827,6 +827,14 @@ class ServiceEventFoundationTests(TestCase):
         unit = self.create_structure_unit("R4", "Rainbow 4")
         self.group.church_structure_unit = unit
         self.group.save(update_fields=["church_structure_unit"])
+        # CS-CORE.2B-A: audience-row matching is membership-core.
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.post(
@@ -2303,12 +2311,13 @@ class ServiceEventFoundationTests(TestCase):
 
 
 class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
-    """SE-AS.4 runtime visibility rule.
+    """SE-AS.4 / CS-CORE.2B-A runtime visibility rules.
 
     Events with ServiceEventAudienceScope rows use those rows as the
-    ordinary-user audience source; events with no rows keep the legacy
-    scope_type / district / small_group behavior exactly. Matching uses
-    Profile.small_group only; ChurchStructureMembership grants nothing.
+    ordinary-user audience source, matched by active primary
+    ChurchStructureMembership (membership-core); Profile.small_group alone
+    grants nothing there. Events with no rows keep the legacy scope_type /
+    district / small_group behavior exactly, driven by Profile.small_group.
     """
 
     def setUp(self):
@@ -2434,11 +2443,24 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.future_time = timezone.now() + timezone.timedelta(days=3)
 
     def create_member(self, username, small_group):
+        """Create an in-sync member: legacy group plus matching membership."""
         user = User.objects.create_user(username=username, password="testpass123")
         if small_group is not None:
             user.profile.small_group = small_group
             user.profile.save()
+            self.create_membership(user, small_group.church_structure_unit)
         return user
+
+    def create_membership(self, user, unit, **overrides):
+        data = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate() - timezone.timedelta(days=1),
+        }
+        data.update(overrides)
+        return ChurchStructureMembership.objects.create(**data)
 
     def create_event(self, **overrides):
         data = {
@@ -2566,40 +2588,170 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.add_audience(root_event, self.root_unit)
         self.assertTrue(root_event.can_be_seen_by(self.no_group_user))
 
-    def test_church_structure_membership_does_not_grant_audience_visibility(self):
+    def test_active_primary_membership_grants_audience_visibility(self):
         event = self.create_event()
         self.add_audience(event, self.group_unit)
-        yesterday = timezone.localdate() - timezone.timedelta(days=1)
 
-        # Active membership in the selected unit, but the runtime group is
-        # another group: still hidden.
-        ChurchStructureMembership.objects.create(
-            user=self.other_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=yesterday,
+        # CS-CORE.2B-A: active primary membership in the selected unit grants
+        # visibility even when Profile.small_group is missing entirely.
+        self.create_membership(self.no_group_user, self.group_unit)
+        self.assertTrue(event.can_be_seen_by(self.no_group_user))
+
+        district_event = self.create_event()
+        self.add_audience(district_event, self.north_unit)
+        self.assertTrue(district_event.can_be_seen_by(self.no_group_user))
+
+    def test_profile_small_group_alone_no_longer_grants_audience_visibility(self):
+        profile_only = User.objects.create_user(
+            username="audience_profile_only",
+            password="testpass123",
         )
-        self.assertFalse(event.can_be_seen_by(self.other_user))
+        profile_only.profile.small_group = self.group
+        profile_only.profile.save()
 
-        # Active membership in the selected unit with no runtime group at
-        # all: still hidden.
-        ChurchStructureMembership.objects.create(
-            user=self.no_group_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=yesterday,
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+        self.assertFalse(event.can_be_seen_by(profile_only))
+
+        # Root audience rows still match any authenticated user.
+        root_event = self.create_event()
+        self.add_audience(root_event, self.root_unit)
+        self.assertTrue(root_event.can_be_seen_by(profile_only))
+
+        # Legacy fallback events (no audience rows) still see the profile
+        # group, so the same user keeps legacy small-group visibility.
+        legacy_event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        self.assertTrue(legacy_event.can_be_seen_by(profile_only))
+
+    def test_requested_membership_does_not_grant_audience_visibility(self):
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+
+        self.create_membership(
+            self.no_group_user,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            start_date=None,
         )
         self.assertFalse(event.can_be_seen_by(self.no_group_user))
 
-        # Requested membership grants nothing.
-        ChurchStructureMembership.objects.create(
-            user=self.em_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_REQUESTED,
+    def test_inactive_lifecycle_memberships_do_not_grant_audience_visibility(self):
+        event = self.create_event()
+        self.add_audience(event, self.group_unit)
+        today = timezone.localdate()
+
+        ended = self.create_member("audience_m_ended", None)
+        future = self.create_member("audience_m_future", None)
+        rejected = self.create_member("audience_m_rejected", None)
+        cancelled = self.create_member("audience_m_cancelled", None)
+        expired = self.create_member("audience_m_expired", None)
+
+        self.create_membership(
+            ended,
+            self.group_unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=today - timezone.timedelta(days=10),
+            end_date=today - timezone.timedelta(days=1),
         )
-        self.assertFalse(event.can_be_seen_by(self.em_user))
+        self.create_membership(
+            future,
+            self.group_unit,
+            start_date=today + timezone.timedelta(days=1),
+        )
+        # Rejected/cancelled primary and active-expired rows fail model
+        # validation by design, so insert them directly like drifted data.
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=rejected,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_REJECTED,
+                    is_primary=True,
+                    start_date=today - timezone.timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=cancelled,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_CANCELLED,
+                    is_primary=True,
+                    start_date=today - timezone.timedelta(days=10),
+                ),
+                ChurchStructureMembership(
+                    user=expired,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timezone.timedelta(days=10),
+                    end_date=today - timezone.timedelta(days=1),
+                ),
+            ]
+        )
+
+        for user in (ended, future, rejected, cancelled, expired):
+            self.assertFalse(
+                event.can_be_seen_by(user),
+                msg=f"{user.username} must not see the audience-scoped event",
+            )
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        user = self.create_member("audience_multi_primary", None)
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_b_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        # Both units sit under north, so either row alone would match; the
+        # ambiguous pair must still fail closed for non-root audiences.
+        event = self.create_event()
+        self.add_audience(event, self.north_unit)
+        self.assertFalse(event.can_be_seen_by(user))
+
+        root_event = self.create_event()
+        self.add_audience(root_event, self.root_unit)
+        self.assertTrue(root_event.can_be_seen_by(user))
+
+    def test_legacy_fallback_events_ignore_membership_rows(self):
+        membership_only = User.objects.create_user(
+            username="audience_membership_only",
+            password="testpass123",
+        )
+        self.create_membership(membership_only, self.group_unit)
+
+        # Legacy fallback (no audience rows) still reads Profile.small_group
+        # only, so the membership grants no district/group visibility.
+        district_event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_DISTRICT,
+            district=self.north,
+        )
+        self.assertFalse(district_event.can_be_seen_by(membership_only))
+
+        group_event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        self.assertFalse(group_event.can_be_seen_by(membership_only))
+
+        global_event = self.create_event()
+        self.assertTrue(global_event.can_be_seen_by(membership_only))
 
     def test_status_and_staff_behavior_preserved_with_audience_rows(self):
         draft = self.create_event(status=ServiceEvent.STATUS_DRAFT)

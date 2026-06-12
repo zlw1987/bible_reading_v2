@@ -5,8 +5,8 @@ Revised by TODAY-HOME.1A.1 after user product decisions and updated after TODAY-
 
 Scope guardrails inherited from AGENTS.md and the task prompt:
 
-- No runtime visibility change. ServiceEvent visibility stays SE-AS.4 behavior (audience rows when present, legacy `scope_type`/`district`/`small_group` fallback otherwise).
-- `ChurchStructureMembership` is never a runtime visibility source.
+- No runtime visibility change from Today itself. ServiceEvent visibility stays SE-AS.4 behavior (audience rows when present, legacy `scope_type`/`district`/`small_group` fallback otherwise), and Today uses the already-visible Bible Study v2 meeting selected by `BibleStudyMeeting.can_be_seen_by`.
+- Since CS-CORE.2C-B, `ChurchStructureMembership` is a runtime visibility source for Bible Study v2 `BibleStudyMeeting` ordinary-member visibility; Today must not add any separate visibility rule on top of that.
 - No Community Activities implementation, no notifications, no attendance, no care workflows.
 - Today remains a personal page for the signed-in user. It must not become a staff/admin dashboard; staff operational views live under `/staff/` and the module manage pages.
 - Ordinary users see only their own visible/personal items.
@@ -197,7 +197,7 @@ Wording rules: pastoral user-intent language only; no internal terms (no "assign
 - **TODAY-HOME.1A** — this planning doc (refined by TODAY-HOME.1A.1). Done when reviewed.
 - **TODAY-HOME.1B — Read-only Today IA restructure.** Completed. Full three-zone IA: "Needs your attention" (pending ministry confirmations); "Today" reading hero unchanged; "This week" with visible Church Gatherings (draft/cancelled excluded, serving status attached as compact notes per the deduplication rule) + next relevant v2 Bible study meeting; legacy `BibleStudySession` block removed from Today; bilingual copy; targeted `reading` tests. No role chips, inline confirm, Community Activities, new models, endpoints, or visibility changes.
 - **BS-ROLE.1B / former TODAY-HOME.1C — Bible Study role assignment / user-linking polish.** Completed in the Bible Study module. `BibleStudyMeetingRole` management now requires a linked user or display name, encourages linked users for Today "my role" surfacing, and preserves display-name-only roles as meeting-detail fallback. No Today change, confirmation workflow, schema/migration, or runtime visibility change.
-- **TODAY-HOME.1D — Bible-study role chips on Today.** Completed. Adds read-only Bible Study role chips/line under the small-group Bible Study card only for `BibleStudyMeetingRole.user == request.user` on the already-visible primary meeting. Display-name-only roles remain meeting-detail fallback only. No identity inference from names, old discussion-leader fields, worship-song leads, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`; no confirmation/status workflow, schema/migration, URL, runtime visibility, or `ChurchStructureMembership` visibility change.
+- **TODAY-HOME.1D — Bible-study role chips on Today.** Completed. Adds read-only Bible Study role chips/line under the small-group Bible Study card only for `BibleStudyMeetingRole.user == request.user` on the already-visible primary meeting. Display-name-only roles remain meeting-detail fallback only. No identity inference from names, old discussion-leader fields, worship-song leads, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`; no confirmation/status workflow, schema/migration, URL, or runtime visibility change from Today itself.
 - **TODAY-HOME.1E (optional) — One-tap confirm from Today.** Only if Q5 is separately approved; uses the existing confirm endpoint + `next`; no model change.
 - **TODAY-HOME.3x (deferred) — Invitations on Today.** Blocked on Community Activities V1; not planned here.
 

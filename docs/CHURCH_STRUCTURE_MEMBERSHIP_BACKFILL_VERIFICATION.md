@@ -6,7 +6,9 @@ This document records production/staging verification of `backfill_church_struct
 
 Verification is based on the user's attested GoDaddy execution. Exact command-output counts were not provided, so this document does not invent them.
 
-Runtime behavior remains unchanged. `Profile.small_group` remains the current runtime source for Bible Study visibility, reading group progress, and current group-scoped behavior.
+Historical note: at the time of this CS-H.5D backfill verification, runtime behavior remained unchanged and `Profile.small_group` was still the current runtime source for Bible Study visibility, reading group progress, and current group-scoped behavior. As of CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses active primary `ChurchStructureMembership`; legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged.
+
+Current state: membership is a runtime source only for explicitly switched consumers: ServiceEvent structure-audience row matching since CS-CORE.2B-A, and Bible Study v2 `BibleStudyMeeting` ordinary-member visibility plus the `/studies/` / Today v2 meeting pre-filter since CS-CORE.2C-B. Requested/rejected/cancelled/ended/future/expired memberships still grant nothing.
 
 Because exact output counts were not provided, this closure records the verification status as user-attested rather than command-output-transcribed.
 
@@ -54,12 +56,12 @@ CS-H.5E follow-up:
 
 ## 5. Runtime Behavior Confirmation
 
-CS-H.5D does not change:
+CS-H.5D did not change:
 - `Profile.small_group`
-- `/studies/` visibility, which still uses `Profile.small_group`
+- `/studies/` visibility at the time of CS-H.5D; historical note: `/studies/` v2 meeting visibility now uses active primary `ChurchStructureMembership` after CS-CORE.2C-B, while legacy `BibleStudySession` remains unchanged
 - Reading group progress, which still uses `Profile.small_group` / `SmallGroup`
 - `BibleStudySeries` scope behavior
-- `ServiceEvent` scope behavior, which still uses existing scope fields
+- `ServiceEvent` scope behavior at the time of CS-H.5D; historical note: ServiceEvent structure-audience rows now match by active primary `ChurchStructureMembership` after CS-CORE.2B-A, while zero-row events still use legacy fallback
 - My Serving / `TeamAssignment` behavior
 - signup/onboarding
 - admin approval workflow
@@ -67,7 +69,7 @@ CS-H.5D does not change:
 - filtering
 - permissions
 
-Membership is not yet the runtime source of truth.
+At the time of CS-H.5D, membership was not yet a runtime source. Current state: membership is now the runtime source only for the explicitly switched consumers — ServiceEvent structure-audience rows and Bible Study v2 `BibleStudyMeeting` visibility — while legacy `BibleStudySession`, reading progress/group progress/privacy, ServiceEvent zero-row legacy fallback, TeamAssignment / My Serving, permissions, roles, and legacy fields/tables remain legacy-driven.
 
 Requested membership still does not grant visibility.
 
@@ -79,11 +81,11 @@ CS-H.5E also does not change runtime behavior. It only clarifies Django Admin la
 
 CS-H.5D production/staging backfill verification: Go, based on user confirmation.
 
-Runtime source-of-truth switch: No-Go / not authorized.
+Runtime source-of-truth switch at CS-H.5D time: No-Go / not authorized. Current note: later CS-CORE slices explicitly switched only ServiceEvent structure-audience rows and Bible Study v2 `BibleStudyMeeting` visibility.
 
 Signup approval workflow: not started.
 
-Consumer migration: not started.
+Consumer migration at CS-H.5D time: not started. Current note: ServiceEvent structure-audience row matching and Bible Study v2 meeting visibility have since switched; additional consumers still require separate approval.
 
 Audience selection/filtering: not started.
 
@@ -103,16 +105,16 @@ Recommended next design step:
 
 Choose based on current product priority.
 
-Do not migrate `/studies/` or Reading progress to membership yet.
+Historical note: `/studies/` v2 meeting visibility has since migrated in CS-CORE.2C-B. Do not migrate additional consumers such as reading progress without a separately approved plan.
 
-Consumer migration from `Profile.small_group` should wait until signup/request/admin approval design is accepted, or until there is a deliberate fallback plan.
+Historical note: this CS-H.5D recommendation predated the later signup/request/admin approval slices and the CS-CORE consumer switches. Further migration from `Profile.small_group` should still wait for a separately approved consumer plan and explicit fallback or fail-closed behavior.
 
 ## 9. Deferred Items
 
 Deferred:
 - signup requested-unit flow
 - admin approval workflow
-- membership-driven visibility
+- membership-driven visibility beyond the explicitly switched ServiceEvent structure-audience and Bible Study v2 meeting-visibility consumers
 - audience selection
 - `ServiceEvent` filtering
 - Community Activities

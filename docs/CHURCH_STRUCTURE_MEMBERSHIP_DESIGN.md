@@ -1,5 +1,7 @@
 # Church Structure Membership Design
 
+> **Historical note (CS-CORE.2C-B):** this CS-H-era membership design predates the Bible Study v2 visibility source switch. As of CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility and the `/studies/` / Today meeting pre-filter use active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged unless separately migrated.
+
 ## 1. Purpose
 
 `ChurchStructureUnit` now represents the flexible church structure tree. It has been seeded and mapped from current `MinistryContext`, `District`, and `SmallGroup` data, but it is still mirror/mapped structure only.
@@ -12,10 +14,10 @@ The goal of CS-H.4 is to design membership without breaking the validated pilot 
 
 Current runtime belonging:
 - `Profile.small_group` stores a user's current primary small group.
-- `/studies/` visibility uses `Profile.small_group`.
+- `/studies/` v2 meeting visibility uses active primary `ChurchStructureMembership` after CS-CORE.2C-B; legacy `BibleStudySession` visibility remains unchanged.
 - Reading group progress uses `Profile.small_group` and `SmallGroup`.
-- `BibleStudySeries` scope behavior still uses the legacy schedule scope fields.
-- `ServiceEvent` scope behavior still uses its current `scope_type`, `district`, and `small_group` fields.
+- `BibleStudySeries` schedule audience resolution and meeting generation still resolve to legacy `SmallGroup` rows.
+- `ServiceEvent` structure-audience rows use membership-core matching when present; zero-row events still use legacy `scope_type`, `district`, and `small_group` fallback.
 
 Current structure state:
 - `ChurchStructureUnit` exists.
@@ -31,8 +33,8 @@ Current structure state:
 - CS-H.8 integration checkpoint is complete.
 - CS-H.9 membership request UX hardening is complete.
 - CS-H.10 CMS hardening checkpoint is complete, including deferred/accepted mobile nav polish and the root `AGENTS.md` verification policy.
-- No runtime consumer uses membership yet.
-- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers still primarily use legacy models and `Profile.small_group`.
+- Runtime membership use is now consumer-specific: ServiceEvent structure-audience rows switched in CS-CORE.2B-A, and Bible Study v2 `BibleStudyMeeting` visibility switched in CS-CORE.2C-B.
+- Reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers still primarily use legacy models and `Profile.small_group`.
 
 ## 3. Long-Term Target
 
@@ -115,7 +117,7 @@ CS-H.5D verification note:
 - GoDaddy production/staging dry-run/apply/second dry-run was completed by user confirmation.
 - Exact numeric command-output counts were not provided or recorded.
 - No unresolved warnings, errors, or data QA item was reported.
-- Runtime still uses `Profile.small_group`; membership is not yet the source of truth.
+- Historical note: this was true before the consumer switches. As of CS-CORE.2C-B, membership is the source for Bible Study v2 `BibleStudyMeeting` ordinary-member visibility; reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers still use legacy sources.
 
 CS-H.5E admin clarity note:
 - Legacy `SmallGroup`, `District`, and `MinistryContext` remain editable because they still drive current runtime behavior.
@@ -268,11 +270,11 @@ Recommended phases:
 - Phase M.3: backfill active primary membership from `Profile.small_group`.
 - Phase M.4: signup/Profile requested-unit flow stores requested membership/request, not active membership. Completed.
 - Phase M.5: admin approval updates membership and syncs `Profile.small_group` only for the narrow exactly-one active mapped legacy `SmallGroup` case. Completed.
-- Phase M.6: selected consumers may read membership with fallback to `Profile.small_group`.
+- Phase M.6: selected consumers may read membership with carefully tested fallback or fail-closed behavior. Partially complete: ServiceEvent structure-audience rows switched in CS-CORE.2B-A, and Bible Study v2 meeting visibility switched in CS-CORE.2C-B.
 - Phase M.7: `Profile.small_group` becomes cache/compatibility or is deprecated after safe migration.
 
 Important:
-- Do not switch `/studies/` immediately.
+- Historical note: `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; do not switch additional consumers without separate approval.
 - Do not remove `Profile.small_group` early.
 - Do not make membership the runtime source of truth until tests and rollback planning exist.
 
@@ -298,8 +300,8 @@ Backfill should report:
 
 ## 12. Visibility Migration Strategy
 
-Future consumers:
-- `/studies/`
+Future or partially migrated consumers:
+- `/studies/` v2 meeting visibility (switched in CS-CORE.2C-B)
 - Reading group progress
 - future Community Activities eligibility
 - future audience scope
@@ -309,9 +311,7 @@ Rules:
 - Visibility cannot use requested membership.
 - Visibility can only use approved active membership.
 - Each consumer migration should be explicit and tested.
-- During transition, use fallback:
-  - active primary membership if available
-  - else `Profile.small_group`
+- During transition, each consumer must define its own rollback/fallback behavior. CS-CORE.2C-B makes v2 meeting visibility fail closed when the active-primary membership or mapped small-group unit is not valid, instead of falling back to `Profile.small_group`.
 
 Do not migrate all consumers at once. Start with the lowest-risk consumer only after model, backfill, and approval flow behavior are proven.
 
@@ -407,7 +407,7 @@ Recommended sequence:
 - CS-H.10: CMS hardening checkpoint. Completed.
 - Later: consumer migration from `Profile.small_group` to membership.
 
-Do not implement audience filtering or consumer migration without a separate plan. Do not migrate `/studies/`, reading progress, `ServiceEvent`, My Serving, or other consumers from `Profile.small_group` until explicitly authorized.
+Do not implement audience filtering or additional consumer migration without a separate plan. `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; do not migrate reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, or other consumers from `Profile.small_group` until explicitly authorized.
 
 ## 18. Open Decisions
 

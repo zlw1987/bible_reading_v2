@@ -47,7 +47,7 @@ Gaps:
 Current state:
 - Bible Study V1/V2 flow includes schedule/series, sessions/guides, Thursday pre-study, Friday study schedule, generated small-group meetings, scope fields, lifecycle fields, and permission-controlled editing.
 - `BibleStudySeries` currently acts as the internal Bible Study Schedule model.
-- Existing scope behavior still uses current runtime fields and models.
+- Bible Study Schedule audience resolution and meeting generation still use legacy `SmallGroup` rows; since CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses active primary `ChurchStructureMembership`.
 
 Gaps:
 - Staff may need a clearer setup checklist or overview for schedules, guide publishing, generated meetings, and meeting-role coverage.
@@ -65,11 +65,11 @@ Current state:
 - MO-S.4/MO-S.4A is complete: authorized Lead and Coordinator role users can use a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/` for their own manageable team; staff, superusers, and global assignment managers can schedule any team; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions.
 - MO-S.5A/MO-S.5B is complete: ServiceEvent has an optional rotation anchor scheduling hint, and the team schedule workspace offers limited anchor-based and team-history copy-forward suggestions that prefill the editable form and write only on explicit save.
 - SE-AS.1 is complete as docs-only ServiceEvent audience-scope redesign planning.
-- SE-AS.2 is complete as a model-only `ServiceEventAudienceScope` data foundation. SE-AS.4 then made `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, with zero-row events falling back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`; SE-AS.5 added the staff audience picker that saves/replaces/clears those rows. `ChurchStructureMembership` still grants no ServiceEvent visibility, and ordinary-user matching still uses `Profile.small_group`.
+- SE-AS.2 is complete as a model-only `ServiceEventAudienceScope` data foundation. SE-AS.4 then made `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, with zero-row events falling back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`; SE-AS.5 added the staff audience picker that saves/replaces/clears those rows. CS-CORE.2B-A later switched ServiceEvent structure-audience row matching to active primary `ChurchStructureMembership`; zero-row events still use legacy fallback.
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
-- ServiceEvent visibility now uses `ServiceEventAudienceScope` rows when an event has them (SE-AS.4), and the SE-AS.5 staff picker writes those rows; events with no audience rows still fall back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`, which remain editable fallback fields. It must not be silently replaced with `ChurchStructureMembership`-based visibility or with consumer migration away from `Profile.small_group`; ordinary-user matching still uses `Profile.small_group` (numbering per `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
+- ServiceEvent visibility now uses `ServiceEventAudienceScope` rows when an event has them (SE-AS.4), and the SE-AS.5 staff picker writes those rows; events with no audience rows still fall back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`, which remain editable fallback fields. Structure-audience row matching has since switched to active primary `ChurchStructureMembership` in CS-CORE.2B-A, but that must not be generalized into zero-row fallback behavior or unrelated consumer migration (numbering per `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
 - ServiceEvent should not become Community Activities, full event management, or scheduling automation without separate planning.
 
 ### MinistryTeam / TeamAssignment / My Serving Support
@@ -164,7 +164,7 @@ Boundaries:
 - Preserved CS-H.7E exactly-one active mapped legacy `SmallGroup` sync for `Profile.small_group`.
 - No schema changes.
 - `ChurchStructureMembership` remains separate from permissions and serving assignment.
-- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers continue to use legacy runtime behavior until separately authorized.
+- `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B, and ServiceEvent structure-audience rows switched in CS-CORE.2B-A. Reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers continue to use legacy runtime behavior until separately authorized.
 - Do not treat requested membership as access-granting.
 - Did not add audience filtering, Community Activities, notifications, attendance, announcements, care workflows, file center, or permission matrix expansion.
 
@@ -219,7 +219,7 @@ Completed scope:
 Boundaries:
 - Follows the PP-SA.2/PP-SA.4/PP-SA.5 read-only staff surface pattern: zero write actions, no schema changes, no new states, links only to existing Django Admin and staff workflows.
 - Counts only; no member rosters.
-- No runtime visibility change was added by CS-MAP.2 itself. Current ordinary-user matching still resolves through legacy `Profile.small_group` and legacy mappings, while implemented per-module audience rows such as `ServiceEventAudienceScope` and `BibleStudySeriesAudienceScope` can now depend on the unit tree where those modules explicitly use them.
+- No runtime visibility change was added by CS-MAP.2 itself. Current ordinary-user matching is consumer-specific: ServiceEvent structure-audience rows and Bible Study v2 `BibleStudyMeeting` visibility use active primary `ChurchStructureMembership`, while legacy-fallback ServiceEvents, legacy `BibleStudySession`, reading progress, and other legacy consumers still resolve through legacy `Profile.small_group` and legacy mappings. Implemented per-module audience rows such as `ServiceEventAudienceScope` and `BibleStudySeriesAudienceScope` can depend on the unit tree where those modules explicitly use them.
 - No setup/edit UI; Django Admin remains the structure write surface during transition.
 
 ## 5. Permission and Capability Boundaries
@@ -244,19 +244,19 @@ Normal-user UI:
 
 Staff/admin UI:
 - Clearly distinguish current runtime structure from future foundation structure.
-- Current runtime structure includes `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- Future foundation structure includes `ChurchStructureUnit` and `ChurchStructureMembership`.
+- Current runtime structure is split by consumer. Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain active for legacy consumers and fallback paths; `ChurchStructureUnit` and `ChurchStructureMembership` are already runtime sources only for the separately switched ServiceEvent structure-audience and Bible Study v2 meeting-visibility consumers.
+- Future foundation structure still centers on `ChurchStructureUnit` and `ChurchStructureMembership`, but they are not universal runtime sources.
 - Use labels such as "Current runtime small group" and "Future foundation membership" when both appear together.
-- Do not imply `ChurchStructureMembership` or the unit tree is a universal runtime source of truth. Be precise: implemented per-module audience rows may affect their own module, while ordinary-user matching still resolves through legacy `Profile.small_group` / legacy mappings until a separately approved membership migration.
+- Do not imply `ChurchStructureMembership` or the unit tree is a universal runtime source of truth. Be precise: ServiceEvent structure-audience rows and Bible Study v2 meeting visibility are switched consumers; other ordinary-user matching still resolves through legacy `Profile.small_group` / legacy mappings until separately approved migration.
 
 ## 7. Runtime Source-of-Truth Boundary
 
-This plan does not migrate any consumer from `Profile.small_group` to `ChurchStructureMembership`.
+This plan itself did not migrate any consumer from `Profile.small_group` to `ChurchStructureMembership`. Later separately approved CS-CORE slices switched ServiceEvent structure-audience row matching (CS-CORE.2B-A) and Bible Study v2 meeting visibility (CS-CORE.2C-B).
 
 Current runtime boundaries:
 
-- `/studies/` visibility and reading group progress still use legacy models / `Profile.small_group` unless a later approved migration changes them.
-- `ServiceEvent` ordinary-user visibility uses `ServiceEventAudienceScope` rows when an event has them; zero-row events fall back to legacy `scope_type` / `district` / `small_group`. Matching still resolves through legacy `Profile.small_group`; `ChurchStructureMembership` is not consulted.
+- `/studies/` v2 meeting visibility now uses active primary `ChurchStructureMembership` after CS-CORE.2C-B; reading group progress still uses legacy models / `Profile.small_group`.
+- `ServiceEvent` ordinary-user visibility uses `ServiceEventAudienceScope` rows when an event has them; those rows match by active primary `ChurchStructureMembership` after CS-CORE.2B-A. Zero-row events fall back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`.
 - My Serving and `TeamAssignment` support remain independent of church-structure membership and audience scope.
 - Other consumers that currently use legacy models or `Profile.small_group` are not migrated by this plan.
 

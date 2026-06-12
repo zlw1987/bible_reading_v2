@@ -13,7 +13,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 - Anchors one small-group Friday meeting to a `BibleStudyLesson` and legacy `SmallGroup`.
 - Key fields: `lesson`, `small_group`, `meeting_datetime`, `location`, `location_en`, `meeting_link`, `group_direction`, `group_direction_en`, `group_questions`, `group_questions_en`, `status`, optional `service_event`, and audit fields.
 - Still has older discussion-leader fields: `discussion_leader_user` and `discussion_leader_name`.
-- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings for their current `Profile.small_group` when the parent lesson and schedule are published.
+- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings when the parent lesson and schedule are published and their single active primary `ChurchStructureMembership` matches the meeting legacy `SmallGroup`'s mapped small-group `ChurchStructureUnit` or a descendant. `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
 
 `BibleStudyMeetingRole`
 
@@ -104,7 +104,7 @@ The desired direction is:
 - For Today role chips, use only `BibleStudyMeetingRole.objects.filter(user=request.user, ...)` after applying the existing meeting visibility/date/status rules.
 - If both `user` and `display_name` are present, treat `user` as the identity contract. Display can remain a separate UX decision, but Today identity must not depend on the manual name.
 - Keep `BibleStudyMeetingRole` separate from `TeamAssignment`; Friday Bible Study meeting responsibilities are not Ministry Operations serving assignments.
-- Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()` and legacy `Profile.small_group`; do not use `ChurchStructureMembership` as runtime visibility.
+- Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()`; since CS-CORE.2C-B, that current v2 meeting visibility uses active primary `ChurchStructureMembership` and no longer grants access from `Profile.small_group` alone.
 
 ## 4. Confirmation Decision
 
@@ -189,8 +189,8 @@ Completed boundaries:
 
 - No identity inference from `display_name`, username/full-name matching, old discussion-leader names, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
 - No role confirmation/status/accept/decline/reminder/notification workflow.
-- No schema/migration/URL/runtime-visibility change.
-- No `ChurchStructureMembership` runtime visibility.
+- No schema/migration/URL/runtime-visibility change from the role-chip slice itself.
+- No additional visibility source beyond the already-visible `BibleStudyMeeting.can_be_seen_by()` result.
 
 ### Optional Future Confirmation Milestone
 
@@ -215,7 +215,7 @@ This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
 - Meeting detail can continue showing the existing role list according to the current meeting visibility rules.
 - Display-name-only roles may appear on meeting detail but must not be treated as "my role."
 - Staff/admin users keep current management access; no new staff/admin leakage is introduced.
-- Do not use `ChurchStructureMembership` as runtime visibility for Bible Study roles or Today role chips.
+- Bible Study roles and Today role chips must not add a separate visibility rule; they use the already-visible meeting selected by `BibleStudyMeeting.can_be_seen_by()`.
 - Do not infer Bible Study role ownership from `TeamAssignment`, `TeamMembership`, `ServiceEvent`, `MinistryTeam`, old `discussion_leader_name`, worship song free-text names, or display-name matching.
 
 ## 7. Non-Goals
@@ -227,7 +227,7 @@ This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
 - No automatic role assignment.
 - No role confirmation unless separately approved.
 - No swap requests, availability, checklist engine, or automation.
-- No migration from `Profile.small_group` to `ChurchStructureMembership` runtime visibility.
+- No role-slice migration or expansion of Bible Study meeting visibility beyond the separately completed CS-CORE.2C-B source switch.
 - No conversion of `BibleStudyMeetingRole` into `TeamAssignment`.
 - No ServiceEvent or My Serving behavior changes.
 

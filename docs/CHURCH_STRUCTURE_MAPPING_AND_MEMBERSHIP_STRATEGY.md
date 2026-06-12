@@ -1,6 +1,6 @@
 # Church Structure Mapping and Membership Strategy
 
-> **Status note (CS-CORE.0A):** this document is the CS-H-era strategy record and is preserved as written. Statements below that the legacy-to-`ChurchStructureUnit` mapping fields "do not drive runtime behavior" were true when written but are now historical: since BS-AS.1 and SE-AS.4, structure-based Bible Study Schedule and ServiceEvent audience scopes resolve through those mapping fields at runtime, so mapping edits can change structure-based resolution. Current architecture direction and the staged migration plan live in `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`.
+> **Status note (CS-CORE.0A / CS-CORE.2C-B):** this document is the CS-H-era strategy record and is preserved as historical background. Statements below that the legacy-to-`ChurchStructureUnit` mapping fields "do not drive runtime behavior" were true when written but are now historical: since BS-AS.1 and SE-AS.4, structure-based Bible Study Schedule and ServiceEvent audience scopes resolve through those mapping fields at runtime, so mapping edits can change structure-based resolution. Since CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility also uses active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged. Current architecture direction and the staged migration plan live in `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`.
 
 ## 1. Purpose
 
@@ -23,10 +23,11 @@ Short-term transition:
 - CS-H.3C can populate `ChurchStructureUnit` rows and fill those mapping fields through an explicit management command, but the mappings still do not drive runtime behavior.
 - No existing behavior should switch to `ChurchStructureUnit` until a specific consumer is planned, implemented, and tested.
 
-Current pilot behavior must remain stable:
-- Bible Study visibility continues to use `Profile.small_group` and `SmallGroup`.
-- Bible Study schedule scope continues to use `BibleStudySeries.scope_type`, `ministry_context`, `district`, and `small_group`.
-- ServiceEvent audience behavior continues to use `scope_type`, `district`, and `small_group`.
+Current behavior must remain explicit by consumer:
+- Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses active primary `ChurchStructureMembership` since CS-CORE.2C-B; `Profile.small_group` alone no longer grants v2 meeting visibility.
+- Bible Study schedule scope and meeting generation continue to resolve selected audience units to legacy `SmallGroup` rows.
+- Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, and roles remain unchanged by CS-CORE.2C-B.
+- ServiceEvent structure-audience behavior uses `ServiceEventAudienceScope` rows when present and legacy `scope_type`, `district`, and `small_group` fallback when no rows exist.
 - `ServiceEvent.ministry_context` remains label-only.
 
 ## 3. SmallGroup Absorption Strategy
@@ -314,9 +315,9 @@ See `docs/CHURCH_STRUCTURE_MEMBERSHIP_APPROVAL_WORKFLOW_DESIGN.md` for the CS-H.
 
 ### Bible Study
 
-Current `/studies/` visibility uses `Profile.small_group`.
+Current `/studies/` v2 meeting visibility uses active primary `ChurchStructureMembership` after CS-CORE.2C-B. `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
 
-Future membership may replace this only after tests prove no cross-group visibility leaks. Do not switch now.
+Historical note: this CS-H-era section originally said `/studies/` visibility used `Profile.small_group`; that was true before CS-CORE.2C-B. Legacy `BibleStudySession` visibility remains unchanged.
 
 ### Reading Group Progress
 
@@ -353,7 +354,7 @@ Checkpoint result:
 - approving a mapped request activates membership and syncs `Profile.small_group` only when the approved active primary unit maps to exactly one active legacy `SmallGroup`
 - reject and requested/pending states do not sync `Profile.small_group`
 - requested memberships do not grant access, permissions, serving assignments, audience eligibility, or runtime visibility before approval
-- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other consumers remain legacy `Profile.small_group` based until separate consumer migration work
+- `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers remain legacy `Profile.small_group` based until separate consumer migration work
 
 No signup/profile feature expansion, consumer migration, audience filtering, or Community Activities work was added in CS-H.8.
 

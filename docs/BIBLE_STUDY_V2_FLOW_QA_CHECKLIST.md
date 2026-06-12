@@ -142,13 +142,15 @@ Verify generation eligibility:
 
 ## 5A. MinistryContext Scope Browser QA
 
-This section is the focused CS-F.2A closure path for MinistryContext-scoped Bible Study Schedules. It verifies only the short-term bridge:
+This section is the focused CS-F.2A closure path for MinistryContext-scoped Bible Study Schedules. It verifies the legacy schedule-generation bridge:
 
 ```text
-MinistryContext -> District -> SmallGroup -> Profile.small_group
+MinistryContext -> District -> SmallGroup
 ```
 
-It must not expand scope into `ChurchStructureUnit`, Community Activities, ServiceEvent audience filtering, Checklist V1, scheduling, reminders, attendance, availability, swaps, or role-aware permissions.
+Historical note: this checklist section predates CS-CORE.2C-B. As of CS-CORE.2C-B, generation still resolves schedules to legacy `SmallGroup` rows, but ordinary `/studies/` and v2 `BibleStudyMeeting` visibility use active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession` visibility remains unchanged.
+
+It must not expand scope into Community Activities, ServiceEvent audience filtering, Checklist V1, scheduling, reminders, attendance, availability, swaps, or role-aware permissions.
 
 ### 5A.1 Test Data Setup
 
@@ -161,9 +163,9 @@ Prepare or confirm:
 - At least two active SmallGroups under CM districts.
 - At least one active SmallGroup under an EM district.
 - At least one inactive SmallGroup under CM or EM.
-- Normal user in a CM small group.
-- Normal user in an EM small group.
-- Normal user with no small group.
+- Normal user with an active primary membership matching a CM meeting's mapped small-group unit.
+- Normal user with an active primary membership matching an EM meeting's mapped small-group unit.
+- Normal user with no active primary membership.
 - Staff or Bible Study manager user.
 
 Record the exact data used:
@@ -250,15 +252,15 @@ Repeat equivalent steps for EM:
 
 Manual steps:
 
-- Log in as the CM small group user.
+- Log in as the CM member user.
 - Visit `/studies/`.
 - Open the user's own visible meeting, if one is published/completed.
 - Log out.
-- Log in as the EM small group user.
+- Log in as the EM member user.
 - Visit `/studies/`.
 - Open the user's own visible meeting, if one is published/completed.
 - Log out.
-- Log in as the user with no small group.
+- Log in as the user with no active primary membership.
 - Visit `/studies/`.
 
 Expected:
@@ -266,7 +268,7 @@ Expected:
 - CM user sees only their own small group's published/completed current meeting where applicable.
 - EM user does not see CM meetings.
 - CM user does not see EM meetings.
-- User with no small group sees a safe empty state.
+- User with no active primary membership sees a safe empty state.
 - No cross-small-group leakage.
 - No cross-MinistryContext leakage.
 - Direct URL access to another group's meeting redirects or is denied safely.
@@ -380,9 +382,9 @@ Notes:
 - Desktop viewport tested:
 - Mobile viewport tested:
 - Language(s) tested:
-- CM user:
-- EM user:
-- User without small group:
+- CM member user:
+- EM member user:
+- User without active primary membership:
 - Staff/manager user:
 - Scope cases tested:
 - Blocking issues:
@@ -559,10 +561,9 @@ Verify Small Group B user:
 - Does not see Small Group A meeting on `/studies/`.
 - Cannot access Small Group A meeting detail by direct URL.
 
-Verify user without small group:
+Verify user without active primary membership:
 
-- Sees the safe empty state: Your profile is not linked to a small group yet.
-- Sees the Chinese equivalent in Chinese mode: 你的个人资料还没有关联小组。
+- Sees the safe empty state for no visible current Bible Study meeting.
 - Does not see any group-scoped meeting content.
 - Does not see preparation, roles, or worship set for any group.
 - Direct URL access to a group meeting is denied or redirected safely.
@@ -751,7 +752,7 @@ Required sign-off notes:
 - Staff account used:
 - Small Group A user:
 - Small Group B user:
-- User without small group:
+- User without active primary membership:
 - Data set used:
 - Scope cases tested:
 - Blocking issues:

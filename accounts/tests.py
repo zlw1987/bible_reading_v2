@@ -648,11 +648,20 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Team Assignments")
         self.assertContains(response, "Lighting Pilot Import")
+        self.assertContains(response, "Church Structure")
+        self.assertContains(response, "Structure & Setup Check")
+        self.assertContains(response, reverse("staff_structure_map"))
         self.assertContains(response, "Users and Review")
         self.assertContains(response, "User Admin")
         self.assertContains(response, "Reflection Reports")
         self.assertContains(response, "Prayer Reports")
         self.assertContains(response, "Django Admin")
+        # Staff Overview is a dashboard entry point, not Content Management;
+        # it renders ahead of the first group heading.
+        self.assertLess(
+            content.index("Staff Overview"),
+            content.index("Content Management"),
+        )
 
     def test_mobile_staff_menu_css_uses_viewport_overlay_height(self):
         css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
@@ -800,10 +809,15 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "事工团队")
         self.assertContains(response, "服事排班")
         self.assertContains(response, "灯光试点导入")
+        self.assertContains(response, "教会结构")
+        self.assertContains(response, "教会结构与设置检查")
+        self.assertContains(response, reverse("staff_structure_map"))
         self.assertContains(response, "用户与审核")
         self.assertContains(response, "用户管理")
         self.assertContains(response, "默想举报")
         self.assertContains(response, "代祷举报")
+        # 同工总览 is a dashboard entry, rendered ahead of 内容管理.
+        self.assertLess(content.index("同工总览"), content.index("内容管理"))
 
     def test_core_logged_in_pages_still_render(self):
         self.set_language("en")
@@ -2990,7 +3004,8 @@ class StaffOverviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Staff Overview")
         self.assertContains(response, "Read-only summary")
-        self.assertContains(response, "Current Runtime Boundary")
+        self.assertContains(response, "How visibility works today")
+        self.assertNotContains(response, "Current Runtime Boundary")
         self.assertContains(response, "existing one-mapped-group rule")
         self.assertContains(response, reverse("staff_membership_request_list"))
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
@@ -3086,7 +3101,8 @@ class StaffOverviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "同工总览")
         self.assertContains(response, "只读摘要")
-        self.assertContains(response, "当前运行边界")
+        self.assertContains(response, "目前的运作方式")
+        self.assertNotContains(response, "当前运行边界")
         self.assertContains(response, "事工运作提醒指标")
         self.assertContains(response, "目前没有可由现有资料看出的事工设置提醒指标")
         self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
@@ -3185,7 +3201,8 @@ class StaffStructureMapTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Church Structure & Setup Check")
-        self.assertContains(response, "Current Runtime Boundary")
+        self.assertContains(response, "How visibility works today")
+        self.assertNotContains(response, "Current Runtime Boundary")
         root_index = content.index("Whole Church")
         cm_index = content.index("Chinese Ministry")
         district_index = content.index("District 2")
@@ -3243,7 +3260,8 @@ class StaffStructureMapTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "教会结构与设置检查")
-        self.assertContains(response, "当前运行边界")
+        self.assertContains(response, "目前的运作方式")
+        self.assertNotContains(response, "当前运行边界")
         self.assertContains(response, "设置就绪指标")
         self.assertContains(response, "教会结构树")
         self.assertContains(response, "覆盖成员")
@@ -3865,6 +3883,10 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "Ministry Contexts")
         self.assertContains(response, "Districts")
         self.assertContains(response, "Small Groups")
+        # Staff-facing column wording: "Current record" replaces the internal
+        # "Legacy record" architecture label.
+        self.assertContains(response, "Current record")
+        self.assertNotContains(response, "Legacy record")
         # The page is no longer labelled read-only now that authorized staff
         # can edit one mapping at a time; the safety note scopes mapping edits.
         self.assertNotContains(response, "Read-only page")
@@ -3875,6 +3897,11 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(
             response,
             "edit one setup mapping at a time",
+        )
+        # The safety boundary still enumerates every non-effect.
+        self.assertContains(
+            response,
+            "They do not change memberships, who can see content (visibility), event audience, Bible Study audience rules, serving schedules, or permissions.",
         )
 
     def test_bilingual_labels_in_chinese(self):
@@ -3888,6 +3915,7 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertContains(response, "事工范围")
         self.assertContains(response, "区")
         self.assertContains(response, "小组")
+        self.assertContains(response, "现有记录")
         self.assertNotContains(response, "只读页面")
         self.assertContains(
             response,
@@ -4212,9 +4240,12 @@ class StaffStructureMappingReviewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(
-            response, "This page reviews and edits the legacy-record"
+            response,
+            "This page reviews and edits how each current record maps to a "
+            "church structure unit.",
         )
-        self.assertContains(response, "structure-unit setup mapping only.")
+        self.assertContains(response, "Mapping edits update setup mapping only.")
+        self.assertNotContains(response, "legacy-record")
         self.assertContains(response, "memberships")
         self.assertContains(response, "visibility")
         self.assertContains(response, "Bible Study audience rules")
@@ -4693,7 +4724,8 @@ class StaffStructureMappingEditTests(TestCase):
             response,
             "这里只更新设置对应关系，供后续检查和辅助选择使用",
         )
-        self.assertContains(response, "尚未对应教会结构单位")
+        self.assertContains(response, "尚未对应教会结构单元")
+        self.assertNotContains(response, "尚未对应教会结构单位")
 
     # --- valid update -------------------------------------------------------
 

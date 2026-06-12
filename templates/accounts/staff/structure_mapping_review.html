@@ -21,7 +21,7 @@
         {% if language == "zh" %}
         本页只查看与编辑“现有记录 → 教会结构单元”的设置对应关系。编辑对应关系只会更新设置对应关系；不会改变成员归属、谁能看到内容（可见范围）、活动适用范围、查经适用范围、服事安排或权限。
         {% else %}
-        This page reviews and edits the legacy-record → structure-unit setup mapping only. Mapping edits update setup mapping only. They do not change memberships, who can see content (visibility), event audience, Bible Study audience rules, serving schedules, or permissions.
+        This page reviews and edits how each current record maps to a church structure unit. Mapping edits update setup mapping only. They do not change memberships, who can see content (visibility), event audience, Bible Study audience rules, serving schedules, or permissions.
         {% endif %}
     </p>
 </section>
@@ -138,7 +138,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>{% if language == "zh" %}现有记录{% else %}Legacy record{% endif %}</th>
+                    <th>{% if language == "zh" %}现有记录{% else %}Current record{% endif %}</th>
                     <th>{% if language == "zh" %}记录状态{% else %}Record status{% endif %}</th>
                     <th>{% if language == "zh" %}对应结构单元{% else %}Mapped structure unit{% endif %}</th>
                     <th>{% if language == "zh" %}单元状态{% else %}Unit status{% endif %}</th>

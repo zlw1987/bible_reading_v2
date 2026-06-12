@@ -53,12 +53,13 @@
                         {% if language == "zh" %}同工管理{% else %}Staff{% endif %}
                     </summary>
                     <div class="nav-staff-menu-panel nav-dropdown-panel">
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
-                        </span>
                         <a href="{% url 'staff_overview' %}">
                             {% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
                         </a>
+
+                        <span class="nav-staff-menu-heading">
+                            {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
+                        </span>
                         <a href="{% url 'staff_reading_plan_list' %}">
                             {% if language == "zh" %}读经计划管理{% else %}Reading Plan Admin{% endif %}
                         </a>
@@ -86,6 +87,13 @@
                         </a>
                         <a href="{% url 'lighting_pilot_import' %}">
                             {% if language == "zh" %}灯光试点导入{% else %}Lighting Pilot Import{% endif %}
+                        </a>
+
+                        <span class="nav-staff-menu-heading">
+                            {% if language == "zh" %}教会结构{% else %}Church Structure{% endif %}
+                        </span>
+                        <a href="{% url 'staff_structure_map' %}">
+                            {% if language == "zh" %}教会结构与设置检查{% else %}Structure & Setup Check{% endif %}
                         </a>
 
                         <span class="nav-staff-menu-heading">

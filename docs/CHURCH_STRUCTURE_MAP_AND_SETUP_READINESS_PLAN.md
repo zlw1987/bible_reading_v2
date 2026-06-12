@@ -323,7 +323,7 @@ UX proposal:
 - It offers a target-unit dropdown filtered to active units of the matching type.
 - It shows a warning: `This only updates the setup mapping for future checks and helpers. It does not move members or change who can see events or Bible Study.` / `这里只更新设置对应关系，供后续检查和辅助选择使用；不会移动成员，也不会改变谁可以看到聚会或查经。`
 - Buttons: `Save mapping` / `保存对应关系` and `Cancel` / `取消`.
-- Empty/unmapped states should be plain and actionable: `No mapped structure unit yet` / `尚未对应教会结构单位`.
+- Empty/unmapped states should be plain and actionable: `No mapped structure unit yet` / `尚未对应教会结构单元`.
 - Staff wording should name the action as mapping maintenance, not structure editing, membership editing, or audience editing.
 
 Data contract:

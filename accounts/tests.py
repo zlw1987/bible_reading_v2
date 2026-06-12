@@ -3,7 +3,7 @@ from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command, CommandError
 from django.db import connection
@@ -1246,6 +1246,291 @@ class ChurchStructureUnitFoundationTests(TestCase):
         self.assertEqual(
             district.path_label("en"),
             "Whole Church > Chinese Ministry > District 1",
+        )
+
+
+class ChurchStructureSelectorLayerTests(TestCase):
+    def setUp(self):
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="Chinese Ministry",
+        )
+        self.em_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="EM",
+            name="English Ministry",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North",
+        )
+        self.south_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="SOUTH",
+            name="South",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+        )
+        self.sibling_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4B",
+            name="Rainbow 4B",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.south_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R5",
+            name="Rainbow 5",
+        )
+        self.unmapped_unit = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="UNMAPPED",
+            name="Unmapped Unit",
+        )
+
+        self.cm = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            church_structure_unit=self.cm_unit,
+        )
+        self.em = MinistryContext.objects.create(
+            code="EM",
+            name="English Ministry",
+            church_structure_unit=self.em_unit,
+        )
+        self.north = District.objects.create(
+            name="North",
+            ministry_context=self.cm,
+            church_structure_unit=self.north_unit,
+        )
+        self.south = District.objects.create(
+            name="South",
+            ministry_context=self.cm,
+            church_structure_unit=self.south_unit,
+        )
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            district=self.north,
+            church_structure_unit=self.group_unit,
+        )
+        self.sibling_group = SmallGroup.objects.create(
+            name="Rainbow 4B",
+            district=self.north,
+            church_structure_unit=self.sibling_group_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            district=self.south,
+            church_structure_unit=self.other_group_unit,
+        )
+        self.unmapped_group = SmallGroup.objects.create(
+            name="Unmapped Legacy Group",
+            district=self.south,
+        )
+
+        self.group_user = self.create_user("selector_group", self.group)
+        self.sibling_user = self.create_user("selector_sibling", self.sibling_group)
+        self.no_group_user = self.create_user("selector_no_group", None)
+        self.unmapped_group_user = self.create_user(
+            "selector_unmapped_group",
+            self.unmapped_group,
+        )
+
+    def create_user(self, username, small_group):
+        user = User.objects.create_user(username=username, password="testpass123")
+        user.profile.small_group = small_group
+        user.profile.save(update_fields=["small_group"])
+        return user
+
+    def assert_resolved_groups(self, units, expected_groups):
+        from accounts.structure_selectors import resolve_units_to_small_groups
+
+        self.assertEqual(
+            set(resolve_units_to_small_groups(units)),
+            set(expected_groups),
+        )
+
+    def test_get_user_legacy_small_group_uses_profile_small_group_only(self):
+        from accounts.structure_selectors import get_user_legacy_small_group
+
+        missing_profile_user = User.objects.create_user(
+            username="selector_missing_profile",
+            password="testpass123",
+        )
+        missing_profile_user.profile.delete()
+
+        self.assertEqual(get_user_legacy_small_group(self.group_user), self.group)
+        self.assertIsNone(get_user_legacy_small_group(self.no_group_user))
+        self.assertIsNone(get_user_legacy_small_group(missing_profile_user))
+        self.assertIsNone(get_user_legacy_small_group(AnonymousUser()))
+        self.assertIsNone(get_user_legacy_small_group(object()))
+
+    def test_get_user_legacy_structure_unit_uses_mapped_profile_group_only(self):
+        from accounts.structure_selectors import get_user_legacy_structure_unit
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+        ChurchStructureMembership.objects.create(
+            user=self.unmapped_group_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=yesterday,
+        )
+
+        self.assertEqual(
+            get_user_legacy_structure_unit(self.group_user),
+            self.group_unit,
+        )
+        self.assertIsNone(get_user_legacy_structure_unit(self.unmapped_group_user))
+        self.assertIsNone(get_user_legacy_structure_unit(self.no_group_user))
+
+    def test_get_user_legacy_structure_units_can_include_ancestors(self):
+        from accounts.structure_selectors import get_user_legacy_structure_units
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+        ChurchStructureMembership.objects.create(
+            user=self.no_group_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=yesterday,
+        )
+
+        self.assertEqual(
+            get_user_legacy_structure_units(self.group_user),
+            [self.group_unit],
+        )
+        self.assertEqual(
+            get_user_legacy_structure_units(
+                self.group_user,
+                include_ancestors=True,
+            ),
+            [self.root_unit, self.cm_unit, self.north_unit, self.group_unit],
+        )
+        self.assertEqual(
+            get_user_legacy_structure_units(
+                self.unmapped_group_user,
+                include_ancestors=True,
+            ),
+            [],
+        )
+        self.assertEqual(
+            get_user_legacy_structure_units(
+                self.no_group_user,
+                include_ancestors=True,
+            ),
+            [],
+        )
+
+    def test_resolve_units_to_small_groups_preserves_legacy_semantics(self):
+        from accounts.structure_selectors import resolve_units_to_small_groups
+
+        inactive_group = SmallGroup.objects.create(
+            name="Inactive Group",
+            district=self.north,
+            is_active=False,
+        )
+
+        self.assert_resolved_groups(
+            [self.root_unit],
+            [self.group, self.sibling_group, self.other_group, self.unmapped_group],
+        )
+        self.assert_resolved_groups([self.group_unit], [self.group])
+        self.assert_resolved_groups(
+            [self.north_unit],
+            [self.group, self.sibling_group],
+        )
+        self.assert_resolved_groups(
+            [self.cm_unit],
+            [self.group, self.sibling_group, self.other_group, self.unmapped_group],
+        )
+        self.assert_resolved_groups([self.unmapped_unit], [])
+
+        self.group_unit.is_active = False
+        self.group_unit.save(update_fields=["is_active"])
+        self.assert_resolved_groups([self.group_unit], [self.group])
+        root_groups = list(resolve_units_to_small_groups([self.root_unit]))
+        self.assertIn(self.group, root_groups)
+        self.assertNotIn(inactive_group, root_groups)
+
+    def test_resolve_units_to_small_groups_does_not_duplicate_groups(self):
+        from accounts.structure_selectors import resolve_units_to_small_groups
+
+        groups = list(resolve_units_to_small_groups([self.cm_unit, self.north_unit]))
+
+        self.assertEqual(len(groups), len({group.id for group in groups}))
+        self.assertEqual(
+            set(groups),
+            {self.group, self.sibling_group, self.other_group, self.unmapped_group},
+        )
+
+    def test_user_matches_structure_audience_preserves_service_event_parity(self):
+        from accounts.structure_selectors import user_matches_structure_audience
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+        ChurchStructureMembership.objects.create(
+            user=self.no_group_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=yesterday,
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.sibling_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+
+        self.assertFalse(
+            user_matches_structure_audience(AnonymousUser(), [self.root_unit])
+        )
+        self.assertTrue(
+            user_matches_structure_audience(self.no_group_user, [self.root_unit])
+        )
+        self.assertFalse(
+            user_matches_structure_audience(self.no_group_user, [self.group_unit])
+        )
+        self.assertTrue(
+            user_matches_structure_audience(self.group_user, [self.group_unit])
+        )
+        self.assertTrue(
+            user_matches_structure_audience(self.group_user, [self.north_unit])
+        )
+        self.assertFalse(
+            user_matches_structure_audience(self.sibling_user, [self.group_unit])
+        )
+        self.assertFalse(
+            user_matches_structure_audience(self.group_user, [self.unmapped_unit])
+        )
+
+    def test_studies_resolver_compatibility_wrapper_matches_selector(self):
+        from accounts.structure_selectors import resolve_units_to_small_groups
+        from studies.models import (
+            resolve_units_to_small_groups as studies_resolve_units_to_small_groups,
+        )
+
+        units = [self.cm_unit, self.other_group_unit]
+
+        self.assertEqual(
+            set(studies_resolve_units_to_small_groups(units)),
+            set(resolve_units_to_small_groups(units)),
         )
 
 

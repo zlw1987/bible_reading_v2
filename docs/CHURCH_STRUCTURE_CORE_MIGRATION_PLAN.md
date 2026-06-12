@@ -4,7 +4,7 @@
 
 CS-CORE.0A is the docs-only architecture decision record (ADR) and staged migration plan for promoting Church Structure from a transitional foundation to the core model of the CMS.
 
-Status: CS-CORE.0A is complete with this document. It is planning only. It authorizes no code, schema, migration, permission, visibility, UI, or data change. Every later CS-CORE milestone requires its own separate approval.
+Status: CS-CORE.0A is complete with this document. CS-CORE.0B.1, CS-CORE.1A, CS-CORE.1B, and CS-CORE.1C are also complete as narrow, separately approved slices. CS-CORE.1C closes the Bible Study resolver re-home/parity milestone: Bible Study compatibility imports now delegate to the shared selector layer, meeting generation remains unchanged, and ordinary member visibility still uses `Profile.small_group`. Later CS-CORE milestones still require their own separate approval.
 
 This document is the primary CS-CORE plan. It builds on, and where noted supersedes, the transitional-era statements in:
 
@@ -28,8 +28,8 @@ Where older docs say mapping fields or `ChurchStructureUnit` have "no runtime be
 ### 3.1 Already structure-driven
 
 - ServiceEvent ordinary-user visibility (SE-AS.4/SE-AS.5): events with `ServiceEventAudienceScope` rows use those rows; events with zero rows fall back to legacy `scope_type` / `district` / `small_group` (`events/models.py`, `ServiceEvent.can_be_seen_by`).
-- Bible Study Schedule eligibility and meeting generation (BS-AS.1/BS-AS.2): schedules with `BibleStudySeriesAudienceScope` rows resolve selected units to eligible active legacy `SmallGroup` rows through `resolve_units_to_small_groups` (`studies/models.py`); schedules with zero rows use legacy scope fields.
-- Both consumers share one resolver and the shared hierarchical audience picker partial.
+- Bible Study Schedule eligibility and meeting generation (BS-AS.1/BS-AS.2, CS-CORE.1C): schedules with `BibleStudySeriesAudienceScope` rows resolve selected units to eligible active legacy `SmallGroup` rows through the shared selector-layer resolver (`accounts/structure_selectors.py`, with the `studies.models.resolve_units_to_small_groups` compatibility wrapper); schedules with zero rows use legacy scope fields.
+- ServiceEvent and Bible Study now share the selector-layer unit-to-legacy-group resolver. Their staff audience selectors reuse the shared hierarchical picker pattern.
 - Signup/Profile capture `ChurchStructureMembership(status=requested)` rows; staff approval activates membership and conditionally syncs `Profile.small_group` (CS-H.6 through CS-H.9).
 - Read-only diagnostics exist: `/staff/structure/` map with drift indicators, `/staff/structure/mappings/` review/edit with conflict overlays and impact acknowledgement, plus `seed_church_structure_units`, `backfill_church_structure_memberships`, and the audit-only `backfill_service_event_audience_scopes` commands.
 
@@ -87,10 +87,10 @@ Each milestone is separately approved, intentionally narrow, and never bundled w
 
 - **CS-CORE.0A — Docs-only ADR / architecture plan.** This document. Complete.
 - **CS-CORE.0B — Read-only dependency audit.** Performed as an AI architecture review of the current worktree (consumers, call sites, drift paths, retirement blockers); its findings are folded into Sections 3 and 12. No standing artifact beyond this plan is required unless a later milestone wants one.
-- **CS-CORE.0B.1 — Read-only belonging drift audit command.** `audit_structure_belonging` (see Section 9). Reports, writes nothing.
-- **CS-CORE.1A — Selector/service layer, no behavior change.** A new `accounts/selectors.py` (final name at implementation) centralizing: get user's legacy small group, get user's legacy-derived structure unit(s) with ancestors, resolve units to legacy small groups, match user against a structure audience. Legacy-parity only; all existing call sites route through it; semantics frozen by tests. `ChurchStructureMembership` is not consulted by any runtime path in this slice.
-- **CS-CORE.1B — ServiceEvent matching through the selector layer, parity only.** Mechanical refactor of `ServiceEvent._audience_scope_allows` onto the shared selector. SE-AS.4 already did the semantic migration; this slice changes no behavior.
-- **CS-CORE.1C — Bible Study resolver re-home / parity migration.** `resolve_units_to_small_groups` moves to its canonical home in the selector layer (with a compatibility re-export from `studies.models`); Bible Study eligibility reads through it. No behavior change.
+- **CS-CORE.0B.1 — Read-only belonging drift audit command.** Complete. `audit_structure_belonging` (see Section 9). Reports, writes nothing.
+- **CS-CORE.1A — Selector/service layer, no behavior change.** Complete. `accounts/structure_selectors.py` centralizes: get user's legacy small group, get user's legacy-derived structure unit(s) with ancestors, resolve units to legacy small groups, match user against a structure audience. Legacy-parity only; semantics frozen by tests. `ChurchStructureMembership` is not consulted by any runtime path in this slice.
+- **CS-CORE.1B — ServiceEvent matching through the selector layer, parity only.** Complete. Mechanical refactor of ServiceEvent structure-audience matching onto the shared selector. SE-AS.4 already did the semantic migration; this slice changed no behavior.
+- **CS-CORE.1C — Bible Study resolver re-home / parity migration.** Complete. `resolve_units_to_small_groups` lives in the selector layer with a compatibility wrapper from `studies.models`; Bible Study eligibility and meeting generation read through it. No behavior change.
 - **CS-CORE.2A — Staff structure setup UI as the primary setup surface.** Unit lifecycle (create/rename/move/deactivate) with per-action impact preview of referencing audience rows, mappings, and memberships. Mapping review stays a separate diagnostics page. Single-active-root enforcement lands here at the latest.
 - **CS-CORE.2B — Belonging migration, shadow-first and consumer-by-consumer.** Sub-slices: (2B.1) shadow mode — selectors compute legacy and membership answers, report divergence, runtime stays legacy; (2B.2) sync/drift hardening until the 0B.1 audit shows sustained near-zero drift; (2B.3) per-consumer source switch, one consumer per release, each with targeted tests and instant rollback (flip the source back).
 - **CS-CORE.2C — Membership roster UI.** Per-unit member listing, transfers, end dates. Separate from structure setup by Section 5.
@@ -117,7 +117,7 @@ Never, in any phase: a big-bang migration that switches multiple consumers, or b
 
 ## 9. First Implementation Slice After This Document
 
-Recommended next slice: **CS-CORE.0B.1 — `audit_structure_belonging` management command** (suggested home: `accounts/management/commands/`, modeled on the audit-only `backfill_service_event_audience_scopes`).
+Completed first slice: **CS-CORE.0B.1 — `audit_structure_belonging` management command** (`accounts/management/commands/`, modeled on the audit-only `backfill_service_event_audience_scopes`).
 
 - Read-only. It writes nothing — no membership, profile, group, unit, mapping, or audience row. Any future reconcile/apply behavior is a separate command and a separate approval with dry-run/apply discipline.
 - Per-user classification, with summary counts and an optional verbose per-user mode:
@@ -150,7 +150,7 @@ Recommended next slice: **CS-CORE.0B.1 — `audit_structure_belonging` managemen
 Detailed test matrices belong to each implementation milestone; the binding categories are:
 
 - **ServiceEvent visibility:** root row matches all authenticated users including no-group users; ministry-context/district/small-group rows match exactly their resolved groups with no sibling leakage; multi-unit and cross-branch unions; unmapped unit matches no ordinary user; stored inactive unit keeps matching; legacy-fallback events unchanged; draft/cancelled hidden; manager override intact; requested and active `ChurchStructureMembership` grant nothing (explicit non-granting tests); list and detail agree.
-- **Bible Study:** resolver group sets identical before/after any re-home (audience-row, legacy-scope, root, unmapped, inactive-mapped cases); meeting generation targets the same groups; member visibility stays `Profile.small_group`-anchored until its own 2B slice; cancelled meetings still count as existing for generation.
+- **Bible Study:** CS-CORE.1C parity is closed by selector-layer and Bible Study tests: resolver group sets remain identical after the re-home (audience-row, legacy-scope, root, ministry-context, district, small-group, unmapped, inactive-mapped, duplicate/multi-unit cases); meeting generation targets the same groups; active/requested `ChurchStructureMembership` rows do not grant schedule eligibility or member meeting visibility; member visibility stays `Profile.small_group`-anchored until its own 2B slice; cancelled meetings still count as existing for generation.
 - **Membership approval sync:** approval syncs `Profile.small_group` only when the approved active primary unit maps to exactly one active legacy `SmallGroup`; all other cases warn and leave the profile unchanged; reject/requested never sync.
 - **Drift audit:** every Section 9 category produced by fixtures; zero writes.
 - **Belonging switch (2B.3, per consumer):** mismatch fixtures (membership unit ≠ profile group) asserting which source wins before and after; full membership lifecycle matrix (requested/active/ended/rejected/cancelled, future start, past end) with only currently-active granting; no-membership users keep safe empty states.

@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.models import (
     ChurchRoleAssignment,
+    ChurchStructureMembership,
     ChurchStructureUnit,
     District,
     MinistryContext,
@@ -4013,6 +4014,45 @@ class BibleStudyModuleTests(TestCase):
         # whole-church audience scope resolves to every active small group.
         self.assertTrue(meeting.can_be_seen_by(self.user))
         self.assertFalse(meeting.can_be_seen_by(self.other_user))
+
+    def test_membership_rows_do_not_change_member_visibility(self):
+        active_member = User.objects.create_user(
+            username="study_active_membership",
+            password="testpass123",
+        )
+        requested_member = User.objects.create_user(
+            username="study_requested_membership",
+            password="testpass123",
+        )
+        ChurchStructureMembership.objects.create(
+            user=active_member,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        ChurchStructureMembership.objects.create(
+            user=requested_member,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+        )
+        lesson = self.create_lesson(
+            series=self.series,
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        self.assertFalse(meeting.can_be_seen_by(active_member))
+        self.assertFalse(meeting.can_be_seen_by(requested_member))
+
+        active_member.profile.small_group = self.group
+        active_member.profile.save(update_fields=["small_group"])
+
+        self.assertTrue(meeting.can_be_seen_by(active_member))
 
     # ------------------------------------------------------------------
     # BS-AS.2: audience picker UX, compact display, cancelled list cleanup

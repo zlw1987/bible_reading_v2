@@ -2,7 +2,7 @@
 
 ## Purpose and Status
 
-This is a post-CS-CORE.2B-A / post-CS-CORE.2C-B docs-only inventory of remaining runtime consumers that still use legacy `Profile.small_group`, `SmallGroup`, `District`, or legacy structure bridge fields after the completed membership-core switches.
+This is a post-CS-CORE.2B-A / post-CS-CORE.2C-B docs-only inventory of remaining runtime consumers that still use legacy `Profile.small_group`, `SmallGroup`, `District`, or legacy structure bridge fields after the completed membership-core switches. CS-CORE.3B later moved Bible Study v2 role and worship user pickers to membership-core filtering; rows below mark that slice as complete.
 
 This inventory does not authorize migrations, source-of-truth changes, permission changes, schema changes, data changes, or runtime behavior changes. It is an audit snapshot to help plan small future slices.
 
@@ -15,6 +15,7 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | ServiceEvent audience rows | Active primary `ChurchStructureMembership` | `events.models.ServiceEvent.can_be_seen_by()` delegates to `ServiceEvent._audience_scope_allows()` when `ServiceEventAudienceScope` rows exist, and the selector layer uses membership-core matching after CS-CORE.2B-A. |
 | Bible Study v2 `BibleStudyMeeting` ordinary-member visibility | Active primary `ChurchStructureMembership` | `studies.models.BibleStudyMeeting.can_be_seen_by()` uses `studies.visibility.user_matches_meeting_small_group_membership()` after CS-CORE.2C-B. `Profile.small_group` alone no longer grants v2 meeting visibility. |
 | `/studies/` and Today v2 meeting pre-filter | Active primary `ChurchStructureMembership` | `studies.views.get_v2_landing_context()` uses `studies.visibility.get_membership_visible_small_groups()` before the final `BibleStudyMeeting.can_be_seen_by()` gate. Today reuses this context through `reading.views`. |
+| Bible Study v2 role and worship user pickers | Active primary `ChurchStructureMembership` | `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` use membership-core matching for the meeting's legacy `SmallGroup` after CS-CORE.3B, while preserving the currently saved user on edit. |
 
 ## Remaining Legacy Consumers by Category
 
@@ -24,8 +25,6 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | --- | --- | --- | --- | --- | --- | --- |
 | Bible Study schedule audience resolution and meeting generation | `studies.models.BibleStudySeries.get_eligible_small_groups()`; `studies.models.resolve_units_to_small_groups()`; `accounts.structure_selectors.resolve_units_to_small_groups()` | Legacy `SmallGroup` rows plus optional `MinistryContext.church_structure_unit`, `District.church_structure_unit`, and `SmallGroup.church_structure_unit` bridge mappings; legacy `scope_type` / `ministry_context` / `district` / `small_group` fallback when no `BibleStudySeriesAudienceScope` rows exist | Determines which legacy `SmallGroup` rows get `BibleStudyMeeting` rows during generation and preview | Yes. This is the explicit coexistence bridge: schedules can select structure units, but generated meetings still attach to legacy `SmallGroup` rows | Medium | Plan a generation-source migration only after the v2 meeting model no longer needs one meeting per legacy `SmallGroup`, or after a replacement grouping model is approved |
 | Bible Study legacy session visibility | `studies.models.BibleStudySession.can_be_seen_by()`; `studies.views.get_visible_study_sessions()` | `Profile.small_group`, `District`, `SmallGroup`, and `BibleStudySession.scope_type` | Ordinary-member visibility for legacy `BibleStudySession` records | Yes if legacy sessions are being kept as fallback or historical content, but avoid promoting them as the primary path | Medium / high | Decide whether to retire, hide, or freeze legacy `BibleStudySession` before migrating its visibility source |
-| Bible Study role assignee filtering | `studies.forms.BibleStudyMeetingRoleForm.__init__()` | `Q(profile__small_group=meeting.small_group)` with an exception for the currently saved user | Which active users appear in the v2 meeting role form user picker | Safe short term, but this can drift from v2 meeting visibility when membership-core and `Profile.small_group` disagree | Medium | Small likely first implementation slice: update role assignee filtering to membership-core while preserving the currently saved user |
-| Bible Study worship lead filtering | `studies.forms.BibleStudyMeetingWorshipSongForm.__init__()` | `Q(profile__small_group=meeting.small_group)` with an exception for the currently saved worship lead | Which active users appear in the v2 meeting worship-lead picker | Safe short term, with the same drift risk as role assignee filtering | Medium | Pair with the role filtering slice so v2 meeting assignment pickers use the same membership-core source |
 | Bible Study readiness/audit comparison | `studies.structure_readiness`; `studies.management.commands.audit_bible_study_membership_readiness` | Compares old `Profile.small_group` visibility against membership-core visibility | Read-only readiness / drift diagnostics | Yes. This should remain audit-only unless a later slice changes the command contract | Low | Keep as diagnostic support for follow-up migrations |
 
 ### Reading, Progress, and Reflection Privacy
@@ -103,11 +102,12 @@ Do not migrate these casually as part of small-group cleanup:
 
 ## Recommended Next Slices
 
-1. **Small first implementation slice: Bible Study v2 role/worship user filtering.** Update `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` to use membership-core small-group matching for the meeting's legacy `SmallGroup`, while preserving the currently saved user as selectable. This aligns staff assignment pickers with CS-CORE.2C-B visibility without touching generation, reading, permissions, or ServiceEvent fallback.
-2. **Plan-only slice: legacy `BibleStudySession` retirement/hiding decision.** Audit whether legacy sessions are still promoted in normal UI. If not, plan hiding/retirement rather than migrating its visibility logic.
-3. **Plan-only slice: reading progress and reflection privacy migration.** Treat reading group progress, reflection group visibility, and `small_group_at_post` as one privacy-sensitive plan. Do not implement directly from this inventory.
-4. **Plan-only slice: ServiceEvent zero-row fallback deprecation.** Only after audience-row coverage is accepted, document rollback/deprecation criteria for legacy `scope_type` / `district` / `small_group`.
-5. **Diagnostic cleanup slice: update staff/admin notes after each switch.** Keep admin/help text consumer-specific so membership-core status is not generalized beyond the switched consumers.
+Completed after this inventory baseline: CS-CORE.3B moved Bible Study v2 role/worship user filtering to membership-core matching while preserving the saved-user edit exception.
+
+1. **Plan-only slice: legacy `BibleStudySession` retirement/hiding decision.** Audit whether legacy sessions are still promoted in normal UI. If not, plan hiding/retirement rather than migrating its visibility logic.
+2. **Plan-only slice: reading progress and reflection privacy migration.** Treat reading group progress, reflection group visibility, and `small_group_at_post` as one privacy-sensitive plan. Do not implement directly from this inventory.
+3. **Plan-only slice: ServiceEvent zero-row fallback deprecation.** Only after audience-row coverage is accepted, document rollback/deprecation criteria for legacy `scope_type` / `district` / `small_group`.
+4. **Diagnostic cleanup slice: update staff/admin notes after each switch.** Keep admin/help text consumer-specific so membership-core status is not generalized beyond the switched consumers.
 
 ## Verification
 

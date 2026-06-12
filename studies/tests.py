@@ -2056,13 +2056,28 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(member_response.status_code, 200)
         self.assertNotContains(member_response, "Edit Group Preparation")
 
-    def test_meeting_role_form_filters_users_to_meeting_small_group(self):
+    def test_meeting_role_form_filters_users_to_meeting_membership_core(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        membership_user = User.objects.create_user(
+            username="role_membership_match",
+            password="testpass123",
+        )
+        membership_user.profile.small_group = self.other_group
+        membership_user.profile.save(update_fields=["small_group"])
+        self.create_membership(membership_user, self.group_unit)
+        profile_only_user = User.objects.create_user(
+            username="role_profile_only_match",
+            password="testpass123",
+        )
+        profile_only_user.profile.small_group = self.group
+        profile_only_user.profile.save(update_fields=["small_group"])
 
         form = BibleStudyMeetingRoleForm(meeting=meeting)
 
-        self.assertIn(self.user, form.fields["user"].queryset)
-        self.assertNotIn(self.other_user, form.fields["user"].queryset)
+        users = form.fields["user"].queryset
+        self.assertIn(membership_user, users)
+        self.assertNotIn(profile_only_user, users)
+        self.assertNotIn(self.user, users)
         self.assertEqual(
             list(form.fields),
             ["role", "user", "display_name", "notes", "notes_en"],
@@ -2070,6 +2085,7 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_role_form_keeps_selected_user_available_on_edit(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_membership(self.user, self.group_unit)
         role = self.create_meeting_role(meeting, user=self.other_user)
 
         form = BibleStudyMeetingRoleForm(instance=role, meeting=meeting)
@@ -2094,6 +2110,7 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_role_form_accepts_linked_user_without_display_name(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_membership(self.user, self.group_unit)
         form = BibleStudyMeetingRoleForm(
             data=self.meeting_role_post_data(user=self.user.id, display_name=""),
             meeting=meeting,
@@ -2172,6 +2189,7 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_add_meeting_role(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.post(
@@ -2427,6 +2445,7 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_add_meeting_worship_song(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.post(
@@ -2439,20 +2458,49 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(song.title_en, "Group Worship Song")
         self.assertEqual(song.worship_lead_user, self.user)
 
-    def test_meeting_worship_song_form_filters_worship_lead_to_meeting_group(self):
+    def test_meeting_worship_song_form_filters_worship_lead_to_membership_core(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        membership_user = User.objects.create_user(
+            username="worship_membership_match",
+            password="testpass123",
+        )
+        membership_user.profile.small_group = self.other_group
+        membership_user.profile.save(update_fields=["small_group"])
+        self.create_membership(membership_user, self.group_unit)
+        profile_only_user = User.objects.create_user(
+            username="worship_profile_only_match",
+            password="testpass123",
+        )
+        profile_only_user.profile.small_group = self.group
+        profile_only_user.profile.save(update_fields=["small_group"])
 
         form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
 
         users = list(form.fields["worship_lead_user"].queryset)
-        self.assertIn(self.user, users)
-        self.assertNotIn(self.other_user, users)
+        self.assertIn(membership_user, users)
+        self.assertNotIn(profile_only_user, users)
+        self.assertNotIn(self.user, users)
         self.assertNotIn("meeting", form.fields)
+
+    def test_meeting_worship_song_form_keeps_selected_lead_available_on_edit(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        self.create_membership(self.user, self.group_unit)
+        song = self.create_meeting_worship_song(
+            meeting,
+            worship_lead_user=self.other_user,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(instance=song, meeting=meeting)
+
+        users = form.fields["worship_lead_user"].queryset
+        self.assertIn(self.user, users)
+        self.assertIn(self.other_user, users)
 
     def test_staff_can_edit_meeting_worship_song(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
         song = self.create_meeting_worship_song(meeting)
+        self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.post(
@@ -2490,6 +2538,7 @@ class BibleStudyModuleTests(TestCase):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
         self.create_meeting_worship_song(meeting, sort_order=1)
+        self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.post(

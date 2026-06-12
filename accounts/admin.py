@@ -11,27 +11,34 @@ from .models import (
 
 
 LEGACY_RUNTIME_NOTE = (
-    "Legacy current-runtime model / 旧模型（当前仍驱动系统）: current runtime "
-    "still uses this model and Profile.small_group. Do not delete until "
-    "migration is complete. ChurchStructureUnit is a bridge/future mapping only."
+    "Legacy current-runtime model / 旧模型（当前仍驱动系统）: Bible Study, "
+    "reading/progress/privacy consumers, and ServiceEvent zero-row fallback "
+    "still use this model and Profile.small_group. ServiceEvent audience rows "
+    "now match active primary ChurchStructureMembership. Do not delete until "
+    "migration is complete."
 )
 
 MINISTRY_CONTEXT_NOTE = (
-    "Ministry Context / 事工范围（当前桥接）: current runtime still uses this "
-    "short-term bridge. Do not delete until migration is complete. "
-    "ChurchStructureUnit is a bridge/future mapping only."
+    "Ministry Context / 事工范围（当前桥接）: Bible Study generation still uses "
+    "this short-term bridge. ServiceEvent audience rows now match active "
+    "primary ChurchStructureMembership instead of this mapping bridge. Do not "
+    "delete until migration is complete."
 )
 
 STRUCTURE_UNIT_NOTE = (
-    "Church Structure Unit / 教会结构单元（未来结构基础）: future flexible "
-    "structure foundation. Currently mirror/mapped; does not drive runtime "
-    "visibility yet."
+    "Church Structure Unit / 教会结构单元（结构基础）: flexible structure "
+    "foundation. ServiceEvent audience rows use selected units with active "
+    "primary ChurchStructureMembership after CS-CORE.2B-A; Bible Study still "
+    "resolves selected units through legacy mappings."
 )
 
 MEMBERSHIP_NOTE = (
-    "Church Structure Membership / 教会结构归属（未来归属基础）: future "
-    "membership/belonging foundation. Runtime still uses Profile.small_group "
-    "until consumer migration. Notes must stay operational and non-sensitive."
+    "Church Structure Membership / 教会结构归属（归属基础）: runtime source for "
+    "ServiceEvent audience-row matching after CS-CORE.2B-A. Profile.small_group "
+    "still drives Bible Study member visibility, reading/progress/privacy, and "
+    "ServiceEvent zero-row legacy fallback. Membership does not grant "
+    "permissions, roles, TeamAssignment/My Serving, or Bible Study visibility. "
+    "Notes must stay operational and non-sensitive."
 )
 
 

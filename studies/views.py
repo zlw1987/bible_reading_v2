@@ -15,18 +15,14 @@ from accounts.permissions import (
 )
 
 from .forms import (
-    BibleStudyGuideForm,
     BibleStudyLessonForm,
     BibleStudyMeetingForm,
     BibleStudyMeetingPreparationForm,
     BibleStudyMeetingRoleForm,
     BibleStudyMeetingWorshipSongForm,
     BibleStudySeriesForm,
-    BibleStudySessionForm,
-    BibleStudyWorshipSongForm,
 )
 from .models import (
-    BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudyMeetingRole,
@@ -60,6 +56,10 @@ def study_ui_text(language, key):
                 "Legacy Bible Study sessions are retired. Please use the Bible "
                 "Study V2 schedule and meeting flow."
             ),
+            "legacy_mutation_frozen": (
+                "Legacy Bible Study sessions are archived. App-level editing is "
+                "frozen. Please use the Bible Study V2 schedule and meeting flow."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理查经安排的权限。",
@@ -68,6 +68,7 @@ def study_ui_text(language, key):
             "cancelled": "查经安排已取消。",
             "schedule_saved": "查经安排已保存。",
             "legacy_create_retired": "旧版查经安排已停止创建，请使用新版查经排期与聚会流程。",
+            "legacy_mutation_frozen": "旧版查经安排已归档，应用内编辑已冻结。请使用新版查经排期与聚会流程。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -80,6 +81,12 @@ def can_manage_bible_studies(user):
         or has_capability(user, CAP_MANAGE_BIBLE_STUDIES)
         or has_capability(user, CAP_PUBLISH_BIBLE_STUDY_GUIDES)
     )
+
+
+def redirect_legacy_session_archive(request, session):
+    if session.can_be_seen_by(request.user):
+        return redirect("study_session_detail", session_id=session.id)
+    return redirect("study_session_list")
 
 
 def can_edit_bible_study_meeting_preparation(user, meeting):
@@ -1132,40 +1139,9 @@ def edit_study_session(request, session_id):
 
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_list")
-
-    guide, _created = BibleStudyGuide.objects.get_or_create(session=session)
-
-    if request.method == "POST":
-        session_form = BibleStudySessionForm(
-            request.POST,
-            instance=session,
-            language=language,
-        )
-        guide_form = BibleStudyGuideForm(
-            request.POST,
-            instance=guide,
-            language=language,
-        )
-        if session_form.is_valid() and guide_form.is_valid():
-            session = session_form.save()
-            guide_form.save()
-            messages.success(request, study_ui_text(language, "saved"))
-            return redirect("study_session_detail", session_id=session.id)
     else:
-        session_form = BibleStudySessionForm(instance=session, language=language)
-        guide_form = BibleStudyGuideForm(instance=guide, language=language)
-
-    return render(
-        request,
-        "studies/study_session_form.html",
-        {
-            "session_obj": session,
-            "session_form": session_form,
-            "guide_form": guide_form,
-            "is_edit": True,
-        },
-    )
+        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
+    return redirect_legacy_session_archive(request, session)
 
 
 @login_required
@@ -1175,15 +1151,9 @@ def delete_study_session(request, session_id):
 
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_list")
-
-    if request.method != "POST":
-        return redirect("study_session_detail", session_id=session.id)
-
-    session.status = BibleStudySession.STATUS_CANCELLED
-    session.save()
-    messages.success(request, study_ui_text(language, "cancelled"))
-    return redirect("study_session_list")
+    else:
+        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
+    return redirect_legacy_session_archive(request, session)
 
 
 @login_required
@@ -1196,35 +1166,9 @@ def manage_worship_songs(request, session_id):
 
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_detail", session_id=session.id)
-
-    if request.method == "POST":
-        form = BibleStudyWorshipSongForm(request.POST, language=language)
-        if form.is_valid():
-            song = form.save(commit=False)
-            song.session = session
-            song.save()
-            messages.success(
-                request,
-                "敬拜诗歌已保存。" if language == "zh" else "Worship song saved.",
-            )
-            return redirect("manage_worship_songs", session_id=session.id)
     else:
-        next_order = (session.worship_songs.count() or 0) + 1
-        form = BibleStudyWorshipSongForm(
-            initial={"sort_order": next_order},
-            language=language,
-        )
-
-    return render(
-        request,
-        "studies/manage_worship_songs.html",
-        {
-            "session_obj": session,
-            "worship_songs": session.worship_songs.all(),
-            "form": form,
-        },
-    )
+        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
+    return redirect_legacy_session_archive(request, session)
 
 
 @login_required
@@ -1237,51 +1181,18 @@ def edit_worship_song(request, song_id):
 
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_detail", session_id=song.session_id)
-
-    if request.method == "POST":
-        form = BibleStudyWorshipSongForm(
-            request.POST,
-            instance=song,
-            language=language,
-        )
-        if form.is_valid():
-            form.save()
-            messages.success(
-                request,
-                "敬拜诗歌已保存。" if language == "zh" else "Worship song saved.",
-            )
-            return redirect("manage_worship_songs", session_id=song.session_id)
     else:
-        form = BibleStudyWorshipSongForm(instance=song, language=language)
-
-    return render(
-        request,
-        "studies/worship_song_form.html",
-        {
-            "session_obj": song.session,
-            "song": song,
-            "form": form,
-        },
-    )
+        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
+    return redirect_legacy_session_archive(request, song.session)
 
 
 @login_required
 def delete_worship_song(request, song_id):
     language = get_user_language(request)
     song = get_object_or_404(BibleStudyWorshipSong, id=song_id)
-    session_id = song.session_id
 
     if not can_manage_bible_studies(request.user):
         messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_detail", session_id=session_id)
-
-    if request.method != "POST":
-        return redirect("manage_worship_songs", session_id=session_id)
-
-    song.delete()
-    messages.success(
-        request,
-        "敬拜诗歌已删除。" if language == "zh" else "Worship song deleted.",
-    )
-    return redirect("manage_worship_songs", session_id=session_id)
+    else:
+        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
+    return redirect_legacy_session_archive(request, song.session)

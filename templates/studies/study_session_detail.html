@@ -58,31 +58,18 @@
     {% endif %}
 
     {% if can_manage %}
-    <div class="actions">
-        <a class="button button-secondary"
-           href="{% url 'edit_study_session' session_obj.id %}">
-            {% if language == "zh" %}编辑查经{% else %}Edit Bible Study Session{% endif %}
-        </a>
-        <form method="post" action="{% url 'delete_study_session' session_obj.id %}">
-            {% csrf_token %}
-            <button type="submit" class="button-secondary">
-                {% if language == "zh" %}已取消{% else %}Cancel Session{% endif %}
-            </button>
-        </form>
-    </div>
+    <p class="muted">
+        {% if language == "zh" %}
+            这是旧版查经归档记录，应用内编辑已冻结。请使用新版查经安排、每周指引和小组聚会。
+        {% else %}
+            This is an archived legacy Bible Study session. App-level editing is frozen. Use Bible Study V2 for active schedules, guides, and meetings.
+        {% endif %}
+    </p>
     {% endif %}
 </div>
 
 <div class="card">
-    <div class="actions" style="justify-content: space-between;">
-        <h2>{% if language == "zh" %}查经前敬拜诗歌{% else %}Worship Songs{% endif %}</h2>
-        {% if can_manage %}
-        <a class="button button-secondary"
-           href="{% url 'manage_worship_songs' session_obj.id %}">
-            {% if language == "zh" %}管理敬拜诗歌{% else %}Manage Worship Songs{% endif %}
-        </a>
-        {% endif %}
-    </div>
+    <h2>{% if language == "zh" %}查经前敬拜诗歌{% else %}Worship Songs{% endif %}</h2>
 
     {% if worship_songs %}
         {% for song in worship_songs %}

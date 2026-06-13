@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Status
 
-This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths.
+This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior.
 
 CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
@@ -76,9 +76,36 @@ CS-CORE.3D freezes new legacy V1 `BibleStudySession` creation through the app ro
 - V1 visibility is still legacy-driven by `Profile.small_group` / legacy scope semantics.
 - V1 is not fully retired yet; no V1 data, model, table, or migration was removed by this slice.
 
+## 5B. CS-CORE.3E Archive Mutation Policy Audit
+
+CS-CORE.3E is a docs-only audit of the remaining legacy V1 mutation surfaces. It does not implement the freeze; it records the current state and the recommended next runtime slice.
+
+Audit findings from the worktree on 2026-06-12:
+
+- Direct V1 routes still exist for readable detail and app-level mutation: `study_session_detail`, `edit_study_session`, `delete_study_session`, `manage_worship_songs`, `edit_worship_song`, and `delete_worship_song` in `studies/urls.py`.
+- Direct detail remains readable when `BibleStudySession.can_be_seen_by()` allows the user. Visibility is still legacy-driven and should not be migrated to membership-core.
+- Direct manager mutation routes are still active in `studies/views.py`: `edit_study_session` can update the session and its `BibleStudyGuide`; `delete_study_session` cancels the session on `POST`; `manage_worship_songs` can create `BibleStudyWorshipSong` child rows; `edit_worship_song` and `delete_worship_song` can mutate or delete existing V1 worship rows.
+- Promoted normal and staff UI surfaces checked do not link to V1 mutation routes. `/studies/` renders the V2 landing and V2 staff links only; Today links to the V2 meeting detail or `/studies/`; the staff overview and staff navigation link to V2 schedule/guide/meeting management pages. The ordinary top nav still links to `study_session_list`, which is now the V2 landing surface.
+- The V1 detail page itself still exposes app-level management controls to users with Bible Study management capability: edit session, cancel session, and manage worship songs. The worship management page exposes add/edit/delete controls for V1 worship songs.
+- Tests still protect current V1 direct-route behavior in `studies/tests.py`: direct legacy detail visibility, no-promoted-V1 landing behavior, frozen create route behavior, manager edit/cancel behavior, V1 worship management access, V1 worship add/edit/delete, and worship visibility on readable V1 details.
+
+Policy recommendation for the next runtime slice:
+
+- Existing V1 records should remain readable through direct allowed detail paths.
+- Django Admin may remain available as the temporary emergency archival maintenance path until a formal archive policy exists.
+- App-level V1 mutation routes should be frozen: the edit route should redirect to the V1 detail page or `/studies/` with archive messaging; the delete/cancel route should not mutate V1 records from the app route; V1 worship add/edit/delete routes should not create, mutate, or delete V1 worship rows from app routes; and the V1 detail page should show an archive notice instead of active management controls.
+- No V1 data should be deleted, and no V1 visibility migration should be attempted as part of that freeze.
+
+Explicit non-goals for CS-CORE.3E:
+
+- no runtime, route, redirect, template, form, admin, model, migration, test-behavior, or data change;
+- no V1 data deletion and no V1 table/model removal;
+- no `BibleStudySession.can_be_seen_by()` migration to `ChurchStructureMembership`;
+- no reading/progress/privacy, ServiceEvent fallback, permissions, roles, ministry, TeamAssignment, My Serving, or `Profile.small_group` change.
+
 ## 6. Non-Goals
 
-CS-CORE.3C did not include or authorize, and CS-CORE.3D still does not include or authorize:
+CS-CORE.3C did not include or authorize, and CS-CORE.3D/3E still do not include or authorize:
 
 - any template, URL, form, model, schema, or migration change;
 - deletion of any V1 data;

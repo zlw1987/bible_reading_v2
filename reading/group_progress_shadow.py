@@ -1,0 +1,268 @@
+"""Group progress membership-core shadow comparison (CS-CORE.4E).
+
+This module computes a **shadow** membership-core candidate answer for the group
+progress default group and roster, alongside the current legacy answer, so that
+divergence can be observed without changing any runtime behavior.
+
+Hard rules (binding, see
+``docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md`` Section 4 and the
+no-go rules):
+
+- This is a **comparison-only** layer. It must never grant or deny access and must
+  never change the user-visible roster, default selected group, or permissions.
+- The actual group progress page keeps using legacy ``Profile.small_group``, legacy
+  ``SmallGroup``, ``accounts.permissions.get_accessible_progress_groups()``, and
+  ``accounts.permissions.can_view_group_progress_for()``.
+- The membership-core candidate here is a *roster/default* comparison only. Ordinary
+  ``ChurchStructureMembership`` must never be used to infer group-progress permission
+  (privacy invariant 5).
+
+The candidate fails closed on ambiguity (no active primary membership, multiple
+active primary memberships, an unmapped selected legacy group, or a membership unit
+that is not a mapped small-group unit), mirroring the conservatism of the existing
+membership-core selectors in ``accounts/structure_selectors.py`` and the
+``audit_reading_privacy_membership_readiness`` command.
+"""
+
+from collections import defaultdict
+from dataclasses import dataclass, field
+from typing import FrozenSet, List, Optional, Tuple
+
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+from django.utils import timezone
+
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+
+
+# Reason codes describe which conditions held when the shadow was computed. They are
+# boring, additive labels: presence means the condition applied. They never gate
+# anything; they are observation only.
+REASON_LEGACY_NO_SELECTED_GROUP = "legacy_no_selected_group"
+REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY = "membership_no_active_primary"
+REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY = "membership_multiple_active_primary"
+REASON_MEMBERSHIP_UNIT_UNMAPPED = "membership_unit_unmapped"
+REASON_SELECTED_GROUP_UNMAPPED = "selected_group_unmapped"
+REASON_PROFILE_MEMBERSHIP_MISMATCH = "profile_membership_mismatch"
+REASON_DEFAULT_SAME = "default_same"
+REASON_DEFAULT_WOULD_CHANGE = "default_would_change"
+REASON_ROSTER_SAME = "roster_same"
+REASON_ROSTER_WOULD_GAIN = "roster_would_gain"
+REASON_ROSTER_WOULD_LOSE = "roster_would_lose"
+
+
+@dataclass(frozen=True)
+class GroupProgressShadow:
+    """Read-only comparison between the legacy and membership-core candidates.
+
+    None of these fields drive runtime behavior. ``legacy_selected_group_id`` and
+    ``legacy_roster_user_ids`` reflect what the page actually shows today;
+    everything prefixed ``membership_`` / ``would_`` is the shadow candidate only.
+    """
+
+    legacy_selected_group_id: Optional[int]
+    membership_candidate_group_id: Optional[int]
+    legacy_roster_user_ids: FrozenSet[int]
+    membership_roster_user_ids: FrozenSet[int]
+    same_default: bool
+    same_roster: bool
+    would_gain_user_ids: FrozenSet[int]
+    would_lose_user_ids: FrozenSet[int]
+    reason_codes: Tuple[str, ...] = field(default_factory=tuple)
+
+
+def _profile_small_group(user):
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "small_group", None)
+
+
+def _active_primary_memberships(user, target_date):
+    """Return up to two active primary memberships for ``user`` (fail-closed probe).
+
+    Capping at two is enough to distinguish the zero / one / many cases the
+    candidate needs to fail closed on, matching ``get_user_primary_membership_unit``.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return []
+
+    user_id = getattr(user, "pk", None)
+    if user_id is None:
+        return []
+
+    return list(
+        ChurchStructureMembership.objects.filter(
+            user_id=user_id,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date__lte=target_date,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+        .select_related("unit")[:2]
+    )
+
+
+def _candidate_group_for_unit(unit):
+    """Map a membership unit to its single active legacy SmallGroup, or None.
+
+    Fails closed when the unit is not a small-group-type unit, or when it does not
+    map to exactly one active legacy ``SmallGroup``.
+    """
+    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+        return None
+
+    groups = list(
+        SmallGroup.objects.filter(is_active=True, church_structure_unit=unit)[:2]
+    )
+    if len(groups) != 1:
+        return None
+    return groups[0]
+
+
+def _unit_and_descendant_ids(unit):
+    """Return the id set of ``unit`` plus all of its descendant units."""
+    unit_ids = set()
+    frontier = [unit.id]
+    while frontier:
+        unit_ids.update(frontier)
+        frontier = list(
+            ChurchStructureUnit.objects.filter(parent_id__in=frontier)
+            .exclude(id__in=unit_ids)
+            .values_list("id", flat=True)
+        )
+    return unit_ids
+
+
+def _legacy_roster_user_ids(selected_group):
+    User = get_user_model()
+    return set(
+        User.objects.filter(profile__small_group=selected_group).values_list(
+            "id", flat=True
+        )
+    )
+
+
+def _membership_roster_user_ids(selected_group, target_date):
+    """Membership-core candidate roster for ``selected_group``.
+
+    A user is in the candidate roster when they have exactly one active primary
+    membership whose unit is the selected group's mapped ``ChurchStructureUnit`` or
+    a descendant of it. Users with multiple active primary memberships fail closed
+    (ambiguous) and are excluded.
+    """
+    unit = getattr(selected_group, "church_structure_unit", None)
+    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+        return set(), True  # unmapped
+
+    target_unit_ids = _unit_and_descendant_ids(unit)
+
+    units_by_user = defaultdict(list)
+    rows = (
+        ChurchStructureMembership.objects.filter(
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date__lte=target_date,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+        .values_list("user_id", "unit_id")
+    )
+    for user_id, unit_id in rows:
+        units_by_user[user_id].append(unit_id)
+
+    roster = set()
+    for user_id, unit_ids in units_by_user.items():
+        if len(unit_ids) == 1 and unit_ids[0] in target_unit_ids:
+            roster.add(user_id)
+    return roster, False
+
+
+def compute_group_progress_shadow(
+    user,
+    selected_group,
+    *,
+    legacy_roster_user_ids=None,
+    target_date=None,
+):
+    """Compute the legacy-vs-membership-core shadow comparison.
+
+    ``selected_group`` is the legacy ``SmallGroup`` the page actually selected (or
+    ``None`` when the page had no selectable group). ``legacy_roster_user_ids`` may
+    be supplied by the caller to avoid recomputing the roster the view already has;
+    when omitted it is derived from ``Profile.small_group`` exactly as the page does.
+
+    This function only reads. It returns a :class:`GroupProgressShadow` and changes
+    nothing.
+    """
+    target_date = target_date or timezone.localdate()
+    reasons: List[str] = []
+
+    legacy_selected_group_id = selected_group.id if selected_group is not None else None
+    if selected_group is None:
+        reasons.append(REASON_LEGACY_NO_SELECTED_GROUP)
+
+    # Membership-core candidate default group (fail closed on ambiguity).
+    memberships = _active_primary_memberships(user, target_date)
+    candidate_group = None
+    if not memberships:
+        reasons.append(REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY)
+    elif len(memberships) > 1:
+        reasons.append(REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY)
+    else:
+        candidate_group = _candidate_group_for_unit(memberships[0].unit)
+        if candidate_group is None:
+            reasons.append(REASON_MEMBERSHIP_UNIT_UNMAPPED)
+
+    membership_candidate_group_id = (
+        candidate_group.id if candidate_group is not None else None
+    )
+
+    same_default = legacy_selected_group_id == membership_candidate_group_id
+    reasons.append(REASON_DEFAULT_SAME if same_default else REASON_DEFAULT_WOULD_CHANGE)
+
+    # Profile/membership mismatch is observed against the viewer's own legacy group.
+    profile_group = _profile_small_group(user)
+    if (
+        profile_group is not None
+        and candidate_group is not None
+        and profile_group.id != candidate_group.id
+    ):
+        reasons.append(REASON_PROFILE_MEMBERSHIP_MISMATCH)
+
+    # Roster comparison for the selected legacy group only.
+    if selected_group is None:
+        legacy_roster = set()
+        membership_roster = set()
+    else:
+        if legacy_roster_user_ids is None:
+            legacy_roster = _legacy_roster_user_ids(selected_group)
+        else:
+            legacy_roster = set(legacy_roster_user_ids)
+
+        membership_roster, unmapped = _membership_roster_user_ids(
+            selected_group, target_date
+        )
+        if unmapped:
+            reasons.append(REASON_SELECTED_GROUP_UNMAPPED)
+
+    would_gain = membership_roster - legacy_roster
+    would_lose = legacy_roster - membership_roster
+    same_roster = legacy_roster == membership_roster
+
+    if selected_group is not None:
+        reasons.append(REASON_ROSTER_SAME if same_roster else None)
+        if would_gain:
+            reasons.append(REASON_ROSTER_WOULD_GAIN)
+        if would_lose:
+            reasons.append(REASON_ROSTER_WOULD_LOSE)
+    reasons = [reason for reason in reasons if reason is not None]
+
+    return GroupProgressShadow(
+        legacy_selected_group_id=legacy_selected_group_id,
+        membership_candidate_group_id=membership_candidate_group_id,
+        legacy_roster_user_ids=frozenset(legacy_roster),
+        membership_roster_user_ids=frozenset(membership_roster),
+        same_default=same_default,
+        same_roster=same_roster,
+        would_gain_user_ids=frozenset(would_gain),
+        would_lose_user_ids=frozenset(would_lose),
+        reason_codes=tuple(reasons),
+    )

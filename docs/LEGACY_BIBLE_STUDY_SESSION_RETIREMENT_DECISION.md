@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Status
 
-This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior.
+This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior. CS-CORE.3F later froze the remaining V1 app-level edit/delete/worship mutation routes while preserving readable direct detail access.
 
 CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
@@ -103,13 +103,27 @@ Explicit non-goals for CS-CORE.3E:
 - no `BibleStudySession.can_be_seen_by()` migration to `ChurchStructureMembership`;
 - no reading/progress/privacy, ServiceEvent fallback, permissions, roles, ministry, TeamAssignment, My Serving, or `Profile.small_group` change.
 
+## 5C. CS-CORE.3F App Mutation Freeze Status
+
+CS-CORE.3F freezes the remaining legacy V1 `BibleStudySession` app-level mutation routes while preserving archive readability.
+
+- `GET` and `POST` to the V1 edit route redirect to the V1 detail page when the session is visible to the user, otherwise to `/studies/`; they no longer render or process the V1 edit form.
+- `GET` and `POST` to the V1 delete/cancel route redirect to the V1 detail page when visible, otherwise to `/studies/`; they no longer cancel or mutate the `BibleStudySession`.
+- `GET` and `POST` to the V1 worship management, worship edit, and worship delete routes redirect to the parent V1 detail page when visible, otherwise to `/studies/`; they no longer create, update, or delete `BibleStudyWorshipSong` rows.
+- Existing V1 records remain readable through direct allowed detail paths, and existing V1 worship rows remain visible on readable V1 detail pages.
+- The V1 detail page no longer exposes app-level edit, delete/cancel, or worship management controls; managers see an archive notice instead.
+- Django Admin remains the temporary emergency archival maintenance path.
+- No V1 data, model, table, route, form, template, admin, or migration was removed by this slice.
+- V1 visibility remains legacy-driven by `BibleStudySession.can_be_seen_by()`; it was not migrated to membership-core.
+- V1 is still not fully retired.
+
 ## 6. Non-Goals
 
-CS-CORE.3C did not include or authorize, and CS-CORE.3D/3E still do not include or authorize:
+CS-CORE.3C did not include or authorize, and CS-CORE.3D/3E/3F still do not include or authorize:
 
-- any template, URL, form, model, schema, or migration change;
+- any URL, form, model, schema, or migration change;
 - deletion of any V1 data;
-- removing V1 detail/edit/delete/worship routes, forms, admin, model behavior, or legacy visibility;
+- removing V1 detail/edit/delete/worship routes, forms, templates, admin, model behavior, or legacy visibility;
 - reading/progress/privacy migration;
 - ServiceEvent fallback migration;
 - permissions/roles/ministry/team assignment migration;

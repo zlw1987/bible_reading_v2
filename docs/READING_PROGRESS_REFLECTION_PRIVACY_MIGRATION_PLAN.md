@@ -41,15 +41,20 @@ CS-CORE.4A flagged and CS-CORE.4C locked in a test: see
 — preserve the original `small_group_at_post` snapshot when editing an existing
 group-shared post (so an edit after a group transfer no longer re-homes the post),
 while still stamping the editor's current group when a private/church post is newly
-changed to group visibility, and never re-homing replies independently — to be
-implemented **only in a future runtime slice**. CS-CORE.4C.1 itself changes no runtime,
-view, form, model, template, URL, admin, static, migration, source of truth,
-management-command, or test behavior. The current edit re-bind behavior described in
-Sections 3.4 and 4.1 below remains unchanged after this docs-only slice, and the
-CS-CORE.4C test that locks it
-(`reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group`)
-is unchanged. Any future runtime change adopting Policy C must intentionally update
-that 4C test together with the runtime change.
+changed to group visibility, and never re-homing replies independently. CS-CORE.4C.1
+itself changed no runtime, view, form, model, template, URL, admin, static, migration,
+source of truth, management-command, or test behavior. At that point, the current
+edit re-bind behavior and its CS-CORE.4C lock test were intentionally unchanged;
+CS-CORE.4C.2 below is the later runtime slice that intentionally updates both.
+
+CS-CORE.4C.2 is complete as the narrow runtime slice that implements Policy C. Editing
+an existing top-level group-shared reflection that remains group-shared now preserves
+the existing `small_group_at_post` snapshot; changing a private/church reflection to
+group visibility stamps the editor's current `Profile.small_group`; replies continue
+to inherit the parent snapshot and never independently re-home. Existing already
+re-bound posts were not mass-rewritten. Reading/progress/reflection runtime otherwise
+remains legacy-driven: no membership-core switch, no `structure_unit_at_post`, no
+group-progress change, and no model/migration/form/template/admin/URL/CSS change.
 
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
@@ -153,11 +158,14 @@ diverge (a list/detail leak).
   `small_group_at_post`. Replies never compute their own group; they ride the parent snapshot.
 - `comments.views.edit_comment()`:
   - replies re-inherit the parent's `visibility` / `small_group_at_post` on save;
-  - for a top-level post, **if the edited visibility is `VISIBILITY_GROUP`, `small_group_at_post`
-    is re-bound to the editor's _current_ `Profile.small_group`.** This is a behavior worth flagging:
-    editing an old group post **moves it to the editor's current group**. After a group transfer, an
-    edit silently re-homes the historical post. Any migration must decide this case deliberately
-    rather than inherit it by accident.
+  - for a top-level post, CS-CORE.4C.2 implements Policy C: if a post was already
+    `VISIBILITY_GROUP` and remains group-shared, the existing `small_group_at_post`
+    snapshot is preserved; if a private/church post is newly changed to
+    `VISIBILITY_GROUP`, `small_group_at_post` is stamped from the editor's current
+    `Profile.small_group`. Before CS-CORE.4C.2, editing an old group post after a
+    transfer re-bound it to the editor's current group; that historical behavior is
+    preserved in `docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md` but is no longer the
+    active edit policy.
 - `comments.forms.ReflectionCommentForm` / `ReflectionCommentEditForm`: presence of
   `user.profile.small_group` decides whether the **"My Group" visibility choice is offered**, sets the
   default visibility (group when a group exists, else private), and `clean()` rejects a group post when
@@ -194,7 +202,7 @@ diverge (a list/detail leak).
 | `ReflectionCommentForm` / `EditForm` | `Profile.small_group` | Option display | Option-gating + validation | No | No |
 | `add_comment()` | `Profile.small_group` | No | No | **Yes (`small_group_at_post`)** | No |
 | `add_reply()` | parent snapshot | No | No | **Yes (inherits parent)** | No |
-| `edit_comment()` | `Profile.small_group` (group posts) / parent (replies) | No | No | **Yes (re-binds on group edit)** | No |
+| `edit_comment()` | Existing snapshot for already-group posts; `Profile.small_group` only when newly changing private/church → group; parent for replies | No | No | **Yes (Policy C edit binding)** | No |
 
 ## 4. Privacy Invariants (binding for any future runtime slice)
 
@@ -244,13 +252,10 @@ When a user transfers groups, what happens to a previously group-shared reflecti
   to the new group, or are hidden after transfer. Requires explicit product decision.
 
 **Recommendation:** preserve option (a) — `small_group_at_post` keeps posts tied to the group at post
-time — and separately decide whether the `edit_comment` re-bind (Section 3.4) should be changed to stop
-moving an edited old post into the editor's current group. That re-bind decision is itself a privacy
-change and must not be bundled into a refactor. **That separate decision is now recorded as CS-CORE.4C.1
-(`docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md`): the chosen direction is Policy C — preserve the
-original snapshot when editing an existing group post, stamp the current group only when newly changing
-private/church → group, and implement it only in a future runtime slice. CS-CORE.4C.1 is docs-only and
-does not change the current re-bind behavior.**
+time. The separate `edit_comment` re-bind decision is recorded in CS-CORE.4C.1
+(`docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md`), and CS-CORE.4C.2 now implements Policy C: preserve
+the original snapshot when editing an existing group post, stamp the current group only when newly
+changing private/church → group, and leave replies inherited from the parent.
 
 **Replies under old group-shared posts:** replies inherit the parent snapshot (Section 3.4) and must
 continue to. Under option (a), replies stay with the parent's original group regardless of either
@@ -325,6 +330,11 @@ a better scheme emerges, but keep the sequence and the gates.
   transfer scenarios, no-group users, group-progress roster and permission behavior,
   staff/all-progress override behavior, and the 4B audit command's read-only contract.
   These tests must stay green before any source switch.
+- **CS-CORE.4C.2 — Implement reflection edit re-bind Policy C.** Complete. The
+  top-level edit path now preserves the existing group snapshot when an already-group
+  reflection stays group-visible, stamps the current legacy profile group only when a
+  private/church reflection is newly changed to group visibility, and leaves reply
+  inheritance unchanged. This is forward-only; no existing comments were mass-rewritten.
 - **CS-CORE.4D — Additive structure snapshot for new reflections only (optional).** Add
   `structure_unit_at_post` (Option C) written only on new posts; no read-path or visibility change;
   old posts unaffected. Additive migration, instant rollback by ignoring the new field.

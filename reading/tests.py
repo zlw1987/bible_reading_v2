@@ -932,7 +932,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
 
-    def test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group(self):
+    def test_top_level_group_edit_after_transfer_preserves_original_group_snapshot(self):
         post = self.make_reflection(
             user=self.author,
             body="Transfer edit source",
@@ -946,7 +946,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         response = self.client.post(
             reverse("edit_comment", args=[post.id]),
             {
-                "body": "Transfer edit current behavior",
+                "body": "Transfer edit Policy C behavior",
                 "visibility": ReflectionComment.VISIBILITY_GROUP,
                 "is_anonymous": "",
             },
@@ -954,12 +954,70 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(response.status_code, 302)
         post.refresh_from_db()
 
-        # Locked current behavior only: this documents the existing re-bind,
-        # not an endorsement of future policy.
-        self.assertEqual(post.small_group_at_post, self.new_group)
-        self.assertFalse(post.can_be_seen_by(self.old_group_member))
-        self.assertTrue(post.can_be_seen_by(self.new_group_member))
+        self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertTrue(post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
+
+    def test_top_level_group_body_and_anonymity_edit_preserves_group_snapshot(self):
+        post = self.make_reflection(
+            user=self.author,
+            body="Body edit source",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("edit_comment", args=[post.id]),
+            {
+                "body": "Body edit stays in original group",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+
+        self.assertEqual(post.body, "Body edit stays in original group")
+        self.assertTrue(post.is_anonymous)
+        self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertTrue(post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(post.can_be_seen_by(self.new_group_member))
+
+    def test_top_level_private_or_church_edit_to_group_stamps_current_profile_group(self):
+        self.author.profile.small_group = self.new_group
+        self.author.profile.save()
+        self.client.login(username=self.author.username, password="TestPass123!")
+
+        for original_visibility in [
+            ReflectionComment.VISIBILITY_PRIVATE,
+            ReflectionComment.VISIBILITY_CHURCH,
+        ]:
+            with self.subTest(original_visibility=original_visibility):
+                post = self.make_reflection(
+                    user=self.author,
+                    body=f"{original_visibility} to group source",
+                    visibility=original_visibility,
+                    small_group=self.old_group,
+                )
+
+                response = self.client.post(
+                    reverse("edit_comment", args=[post.id]),
+                    {
+                        "body": f"{original_visibility} now group",
+                        "visibility": ReflectionComment.VISIBILITY_GROUP,
+                        "is_anonymous": "",
+                    },
+                )
+                self.assertEqual(response.status_code, 302)
+                post.refresh_from_db()
+
+                self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_GROUP)
+                self.assertEqual(post.small_group_at_post, self.new_group)
+                self.assertTrue(post.can_be_seen_by(self.new_group_member))
+                self.assertFalse(post.can_be_seen_by(self.old_group_member))
+                self.assertTrue(post.can_be_seen_by(self.author))
 
     def test_no_group_user_has_safe_reflection_create_and_visibility_behavior(self):
         group_post = self.make_reflection(
@@ -1008,6 +1066,30 @@ class ReflectionPrivacyInvariantTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(ReflectionComment.objects.count(), before_count)
+
+    def test_no_group_user_cannot_edit_reflection_into_group_visibility(self):
+        post = self.make_reflection(
+            user=self.no_group_user,
+            body="No-group private edit source",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            small_group=None,
+        )
+
+        self.client.login(username=self.no_group_user.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("edit_comment", args=[post.id]),
+            {
+                "body": "No-group attempted group edit",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        post.refresh_from_db()
+
+        self.assertEqual(post.body, "No-group private edit source")
+        self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_PRIVATE)
+        self.assertIsNone(post.small_group_at_post)
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):

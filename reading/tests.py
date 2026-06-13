@@ -23,6 +23,11 @@ from accounts.models import (
     District,
     SmallGroup,
 )
+from accounts.permissions import (
+    can_view_group_progress_for,
+    get_accessible_progress_groups,
+)
+from comments.forms import ReflectionCommentForm
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
 from ministry.models import (
@@ -41,6 +46,7 @@ from reading.models import (
     ReadingPlanDay,
 )
 from reading.templatetags.datetime_extras import member_datetime
+from reading.views import get_visible_reflection_filter
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -623,6 +629,585 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Anonymous staff-visible reflection.")
         self.assertContains(response, "Anonymous (author)")
+
+
+class ReflectionPrivacyInvariantTests(TestCase):
+    """CS-CORE.4C locks current reflection privacy behavior without changing it."""
+
+    def setUp(self):
+        self.old_group = SmallGroup.objects.create(name="Invariant Old Group")
+        self.new_group = SmallGroup.objects.create(name="Invariant New Group")
+        self.other_group = SmallGroup.objects.create(name="Invariant Other Group")
+
+        self.author = self.create_user("invariant_author", group=self.old_group)
+        self.same_group_user = self.create_user(
+            "invariant_same_group",
+            group=self.old_group,
+        )
+        self.old_group_member = self.create_user(
+            "invariant_old_member",
+            group=self.old_group,
+        )
+        self.new_group_member = self.create_user(
+            "invariant_new_member",
+            group=self.new_group,
+        )
+        self.other_group_user = self.create_user(
+            "invariant_other_group",
+            group=self.other_group,
+        )
+        self.no_group_user = self.create_user("invariant_no_group")
+        self.staff = User.objects.create_user(
+            username="invariant_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+        self.plan = ReadingPlan.objects.create(
+            name="Invariant Reading Plan",
+            is_active=True,
+        )
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Invariant Active Plan",
+        )
+
+        for user in [
+            self.author,
+            self.same_group_user,
+            self.old_group_member,
+            self.new_group_member,
+            self.other_group_user,
+            self.no_group_user,
+            self.staff,
+        ]:
+            PlanEnrollment.objects.create(user=user, active_plan=self.active_plan)
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def make_reflection(
+        self,
+        *,
+        user=None,
+        body="Invariant reflection",
+        visibility=ReflectionComment.VISIBILITY_GROUP,
+        small_group=None,
+        is_hidden=False,
+        is_deleted=False,
+        parent=None,
+    ):
+        return ReflectionComment.objects.create(
+            user=user or self.author,
+            active_plan=self.active_plan,
+            plan_day=self.day,
+            parent=parent,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=visibility,
+            small_group_at_post=small_group,
+            is_hidden=is_hidden,
+            is_deleted=is_deleted,
+            body=body,
+        )
+
+    def reflection_ids_visible_by_filter(self, user):
+        return set(
+            ReflectionComment.objects.filter(
+                get_visible_reflection_filter(user),
+                scripture_ref_key="John 1",
+                parent__isnull=True,
+            ).values_list("id", flat=True)
+        )
+
+    def reflection_ids_visible_by_gate(self, user):
+        return {
+            reflection.id
+            for reflection in ReflectionComment.objects.filter(
+                scripture_ref_key="John 1",
+                parent__isnull=True,
+            )
+            if reflection.can_be_seen_by(user)
+        }
+
+    def passage_wall_group_ids_for(self, user):
+        self.client.login(username=user.username, password="TestPass123!")
+        response = self.client.get(
+            reverse("passage_wall"),
+            {
+                "ref": "John 1",
+                "tab": "group",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.client.logout()
+        return {reflection.id for reflection in response.context["reflections"]}
+
+    def test_group_church_private_and_hidden_canonical_gate(self):
+        group_post = self.make_reflection(
+            body="Group post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+        church_post = self.make_reflection(
+            body="Church post",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+        private_post = self.make_reflection(
+            body="Private post",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+        )
+        hidden_group_post = self.make_reflection(
+            body="Hidden group post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            is_hidden=True,
+        )
+        deleted_group_post = self.make_reflection(
+            body="Deleted group post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            is_deleted=True,
+        )
+
+        for viewer in [self.author, self.same_group_user, self.staff]:
+            self.assertTrue(group_post.can_be_seen_by(viewer))
+
+        for viewer in [self.other_group_user, self.no_group_user]:
+            self.assertFalse(group_post.can_be_seen_by(viewer))
+
+        for viewer in [
+            self.same_group_user,
+            self.other_group_user,
+            self.no_group_user,
+        ]:
+            self.assertTrue(church_post.can_be_seen_by(viewer))
+            self.assertFalse(private_post.can_be_seen_by(viewer))
+            self.assertFalse(hidden_group_post.can_be_seen_by(viewer))
+            self.assertFalse(deleted_group_post.can_be_seen_by(viewer))
+
+        for viewer in [self.author, self.staff]:
+            self.assertTrue(private_post.can_be_seen_by(viewer))
+            self.assertTrue(hidden_group_post.can_be_seen_by(viewer))
+            self.assertTrue(deleted_group_post.can_be_seen_by(viewer))
+
+    def test_filter_and_group_tab_agree_with_detail_for_group_privacy(self):
+        group_post = self.make_reflection(
+            body="Group invariant post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+        other_group_post = self.make_reflection(
+            user=self.other_group_user,
+            body="Other group invariant post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.other_group,
+        )
+        author_private = self.make_reflection(
+            body="Author private invariant post",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+        )
+        other_user_church_post = self.make_reflection(
+            user=self.other_group_user,
+            body="Church invariant post",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+        hidden_group_post = self.make_reflection(
+            body="Hidden group invariant post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            is_hidden=True,
+        )
+
+        for viewer in [
+            self.author,
+            self.same_group_user,
+            self.other_group_user,
+            self.no_group_user,
+            self.staff,
+        ]:
+            self.assertEqual(
+                self.reflection_ids_visible_by_filter(viewer),
+                self.reflection_ids_visible_by_gate(viewer),
+            )
+
+        # The group tab intentionally excludes church-wall posts and only adds
+        # own non-deleted posts plus visible group posts for ordinary users.
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.same_group_user),
+            {group_post.id},
+        )
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.other_group_user),
+            {other_group_post.id, other_user_church_post.id},
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(self.no_group_user), set())
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.author),
+            {group_post.id, author_private.id, hidden_group_post.id},
+        )
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.staff),
+            {group_post.id, other_group_post.id, hidden_group_post.id},
+        )
+
+        for viewer in [
+            self.author,
+            self.same_group_user,
+            self.other_group_user,
+            self.staff,
+        ]:
+            for reflection_id in self.passage_wall_group_ids_for(viewer):
+                reflection = ReflectionComment.objects.get(id=reflection_id)
+                self.assertTrue(reflection.can_be_seen_by(viewer))
+
+    def test_reply_inherits_parent_visibility_and_group_and_stays_inherited_on_edit(self):
+        parent = self.make_reflection(
+            user=self.author,
+            body="Group parent for reply",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.client.login(username=self.same_group_user.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("add_reply", args=[parent.id]),
+            {
+                "body": "Inherited reply",
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        reply = ReflectionComment.objects.get(parent=parent, body="Inherited reply")
+
+        self.assertEqual(reply.visibility, parent.visibility)
+        self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        self.assertTrue(parent.can_be_seen_by(self.same_group_user))
+        self.assertTrue(reply.can_be_seen_by(self.same_group_user))
+        self.assertFalse(parent.can_be_seen_by(self.other_group_user))
+        self.assertFalse(reply.can_be_seen_by(self.other_group_user))
+
+        response = self.client.post(
+            reverse("edit_comment", args=[reply.id]),
+            {
+                "body": "Edited inherited reply",
+                "visibility": ReflectionComment.VISIBILITY_CHURCH,
+                "is_anonymous": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        reply.refresh_from_db()
+
+        self.assertEqual(reply.body, "Edited inherited reply")
+        self.assertEqual(reply.visibility, parent.visibility)
+        self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        self.assertFalse(reply.can_be_seen_by(self.other_group_user))
+
+    def test_group_post_keeps_historical_snapshot_after_author_transfer(self):
+        post = self.make_reflection(
+            user=self.author,
+            body="Old group snapshot",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.author.profile.small_group = self.new_group
+        self.author.profile.save()
+
+        post.refresh_from_db()
+        self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertTrue(post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(post.can_be_seen_by(self.new_group_member))
+        self.assertTrue(post.can_be_seen_by(self.author))
+
+    def test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group(self):
+        post = self.make_reflection(
+            user=self.author,
+            body="Transfer edit source",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+        self.author.profile.small_group = self.new_group
+        self.author.profile.save()
+
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("edit_comment", args=[post.id]),
+            {
+                "body": "Transfer edit current behavior",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+
+        # Locked current behavior only: this documents the existing re-bind,
+        # not an endorsement of future policy.
+        self.assertEqual(post.small_group_at_post, self.new_group)
+        self.assertFalse(post.can_be_seen_by(self.old_group_member))
+        self.assertTrue(post.can_be_seen_by(self.new_group_member))
+        self.assertTrue(post.can_be_seen_by(self.author))
+
+    def test_no_group_user_has_safe_reflection_create_and_visibility_behavior(self):
+        group_post = self.make_reflection(
+            body="No-group hidden group post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+        own_group_post = self.make_reflection(
+            user=self.no_group_user,
+            body="Own no-group post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=None,
+        )
+
+        self.assertFalse(group_post.can_be_seen_by(self.no_group_user))
+        self.assertTrue(own_group_post.can_be_seen_by(self.no_group_user))
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.no_group_user),
+            {own_group_post.id},
+        )
+
+        form = ReflectionCommentForm(
+            {
+                "body": "No-group attempted group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+            user=self.no_group_user,
+            language="en",
+        )
+        self.assertNotIn(
+            ReflectionComment.VISIBILITY_GROUP,
+            [value for value, _label in form.fields["visibility"].choices],
+        )
+        self.assertFalse(form.is_valid())
+
+        self.client.login(username=self.no_group_user.username, password="TestPass123!")
+        before_count = ReflectionComment.objects.count()
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "No-group view attempt",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ReflectionComment.objects.count(), before_count)
+
+
+class GroupProgressPrivacyInvariantTests(TestCase):
+    """CS-CORE.4C locks current group-progress roster and permission behavior."""
+
+    def setUp(self):
+        self.district = District.objects.create(name="Invariant District")
+        self.other_district = District.objects.create(name="Invariant Other District")
+        self.group = SmallGroup.objects.create(
+            name="Invariant Progress Group",
+            district=self.district,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Invariant Progress Other Group",
+            district=self.other_district,
+        )
+        self.group_unit = self.create_unit("INV-PROGRESS-GROUP")
+        self.other_group_unit = self.create_unit("INV-PROGRESS-OTHER")
+        self.group.church_structure_unit = self.group_unit
+        self.group.save()
+        self.other_group.church_structure_unit = self.other_group_unit
+        self.other_group.save()
+
+        self.viewer = self.create_user("progress_viewer", group=self.group)
+        self.same_group_member = self.create_user("progress_same", group=self.group)
+        self.profile_only_member = self.create_user("progress_profile_only", group=self.group)
+        self.other_group_member = self.create_user(
+            "progress_other",
+            group=self.other_group,
+        )
+        self.no_group_user = self.create_user("progress_no_group")
+        self.membership_only_user = self.create_user("progress_membership_only")
+        self.staff = User.objects.create_user(
+            username="progress_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+
+        ChurchStructureMembership.objects.create(
+            user=self.membership_only_user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        self.plan = ReadingPlan.objects.create(
+            name="Invariant Progress Plan",
+            is_active=True,
+        )
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Invariant Progress Active Plan",
+        )
+
+        for user in [
+            self.viewer,
+            self.same_group_member,
+            self.profile_only_member,
+            self.other_group_member,
+            self.no_group_user,
+            self.membership_only_user,
+        ]:
+            PlanEnrollment.objects.create(user=user, active_plan=self.active_plan)
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def progress_response_for(self, user, *, group=None):
+        self.client.login(username=user.username, password="TestPass123!")
+        params = {}
+        if group is not None:
+            params["group"] = group.id
+        response = self.client.get(reverse("my_group_progress"), params)
+        self.assertEqual(response.status_code, 200)
+        self.client.logout()
+        return response
+
+    def row_usernames(self, response):
+        return {
+            row["member"].username
+            for row in response.context["member_rows"]
+        }
+
+    def accessible_group_ids(self, user):
+        return set(get_accessible_progress_groups(user).values_list("id", flat=True))
+
+    def test_roster_stays_profile_small_group_driven_not_membership_driven(self):
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        self.assertEqual(response.context["selected_group"], self.group)
+        self.assertEqual(
+            self.row_usernames(response),
+            {"progress_profile_only", "progress_same", "progress_viewer"},
+        )
+        self.assertNotIn("progress_membership_only", self.row_usernames(response))
+        self.assertNotIn("progress_other", self.row_usernames(response))
+        self.assertNotIn("progress_no_group", self.row_usernames(response))
+
+    def test_no_group_user_with_membership_still_gets_safe_empty_progress_state(self):
+        membership_only_viewer = self.create_user("progress_membership_viewer")
+        self.create_membership(membership_only_viewer, self.group_unit)
+
+        response = self.progress_response_for(membership_only_viewer)
+
+        self.assertIsNone(response.context["selected_group"])
+        self.assertEqual(list(response.context["member_rows"]), [])
+        self.assertContains(response, "You are not assigned to a small group yet.")
+        self.assertEqual(self.accessible_group_ids(membership_only_viewer), set())
+
+    def test_ordinary_own_group_permission_ignores_unrelated_membership(self):
+        self.create_membership(self.viewer, self.other_group_unit)
+
+        self.assertTrue(can_view_group_progress_for(self.viewer, self.group))
+        self.assertFalse(can_view_group_progress_for(self.viewer, self.other_group))
+        self.assertEqual(self.accessible_group_ids(self.viewer), {self.group.id})
+
+        response = self.progress_response_for(self.viewer, group=self.other_group)
+
+        self.assertEqual(response.context["selected_group"], self.group)
+
+    def test_legacy_group_leader_can_view_assigned_group_only(self):
+        leader = self.create_user("progress_group_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.other_group,
+        )
+
+        self.assertFalse(can_view_group_progress_for(leader, self.group))
+        self.assertTrue(can_view_group_progress_for(leader, self.other_group))
+        self.assertEqual(self.accessible_group_ids(leader), {self.other_group.id})
+
+    def test_legacy_district_leader_can_view_in_scope_groups_only(self):
+        district_group_b = SmallGroup.objects.create(
+            name="Invariant District Group B",
+            district=self.district,
+        )
+        leader = self.create_user("progress_district_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=self.district,
+        )
+
+        self.assertTrue(can_view_group_progress_for(leader, self.group))
+        self.assertTrue(can_view_group_progress_for(leader, district_group_b))
+        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
+        self.assertEqual(
+            self.accessible_group_ids(leader),
+            {self.group.id, district_group_b.id},
+        )
+
+    def test_staff_and_all_progress_role_can_view_all_active_groups(self):
+        pastor = self.create_user("progress_pastor")
+        ChurchRoleAssignment.objects.create(
+            user=pastor,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.assertTrue(can_view_group_progress_for(self.staff, self.group))
+        self.assertTrue(can_view_group_progress_for(self.staff, self.other_group))
+        self.assertTrue(can_view_group_progress_for(pastor, self.group))
+        self.assertTrue(can_view_group_progress_for(pastor, self.other_group))
+
+        response = self.progress_response_for(self.staff, group=self.other_group)
+
+        self.assertEqual(response.context["selected_group"], self.other_group)
+
 
 class ImportReadingPlanCommandTests(TestCase):
     def setUp(self):

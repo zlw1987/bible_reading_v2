@@ -1,4 +1,4 @@
-# CS-CORE.4C.1 Reflection Edit Re-bind Policy Decision
+# CS-CORE.4C.1/4C.2 Reflection Edit Re-bind Policy Decision and Implementation
 
 ## 1. Purpose and Status
 
@@ -14,18 +14,22 @@ already-flagged behavior in reflection privacy:
 
 CS-CORE.4A flagged this re-bind as "a behavior worth flagging … decide deliberately
 rather than inherit it by accident" (`docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md`
-Sections 3.4, 4.1, and No-Go Rule 2). CS-CORE.4C **locked the current behavior in a
-test** (`reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group`)
+Sections 3.4, 4.1, and No-Go Rule 2). CS-CORE.4C **locked the then-current behavior
+in a test** (`reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group`)
 with an explicit comment that the test "documents the existing re-bind, not an
-endorsement of future policy." This document is the deliberate decision that
-CS-CORE.4A asked for.
+endorsement of future policy." CS-CORE.4C.1 recorded the deliberate decision that
+CS-CORE.4A asked for, and CS-CORE.4C.2 implemented it.
 
-**Status:** decision recorded; **runtime unchanged**. This slice changes no runtime,
-code, view, form, model, migration, admin, URL, template, static, management-command,
-or test behavior. It does not remove or hide `Profile.small_group` and does not change
-`small_group_at_post` semantics in runtime. After CS-CORE.4C.1, reflection
-create/edit group binding remains legacy-driven and behaves exactly as before. The
-recommendation here **guides a future runtime slice**; it does not authorize one.
+**Status:** Policy C is active after CS-CORE.4C.2. The runtime change is limited to
+`comments.views.edit_comment()`: an existing top-level group-shared reflection that
+stays group-shared preserves its existing `small_group_at_post`; a private/church
+reflection newly changed to group visibility stamps the editor's current
+`Profile.small_group`; replies still inherit the parent snapshot. CS-CORE.4C.2 made no
+model, migration, form, admin, URL, template, CSS, management-command,
+membership-core, `structure_unit_at_post`, group-progress, ServiceEvent, Bible Study,
+or data-migration change. Existing posts that were already re-bound under the old
+behavior were not mass-rewritten. Reflection create/edit group binding remains
+legacy-driven by `Profile.small_group`.
 
 Related docs:
 
@@ -33,9 +37,9 @@ Related docs:
 - `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` (CS-CORE plan; milestone map; no-go rules)
 - `docs/LEGACY_PROFILE_SMALL_GROUP_CONSUMER_INVENTORY.md` (CS-CORE.3A consumer inventory; reflection create/edit group binding row)
 
-## 2. Current Behavior (verified against the worktree on 2026-06-12)
+## 2. Previous Behavior (verified against the worktree on 2026-06-12)
 
-All references below are to the current `claude` worktree.
+This section preserves the old Policy A behavior for historical context.
 
 ### 2.1 Creation of a group post
 
@@ -86,9 +90,9 @@ stays invisible to the new group. The re-bind only fires **on edit** (Section 2.
 after transfer, editing the old post sets `small_group_at_post = new_group`, makes it
 visible to the new group, and **removes** it from the old group's view.
 
-### 2.6 Summary table
+### 2.6 Previous behavior summary table
 
-| Action | Current snapshot effect |
+| Action | Previous snapshot effect |
 | --- | --- |
 | Create group post | Stamp author's current group (correct) |
 | Edit top-level group post, stay group (no transfer) | No-op (current == post-time) |
@@ -178,11 +182,11 @@ both groups, per an explicit archive rule.
   parent plan already lists archive as option (d): "Requires explicit product
   decision."
 
-## 5. Decision / Recommendation
+## 5. Decision / Implementation
 
 **Adopt Policy C** (preserve the original group snapshot on edit by default; reserve
-re-homing for a future explicit action), to be implemented **only in a future runtime
-slice**, not in this docs-only slice.
+re-homing for a future explicit action). CS-CORE.4C.1 recorded this decision, and
+CS-CORE.4C.2 implemented the default Policy C behavior.
 
 Rationale:
 
@@ -199,24 +203,24 @@ Rationale:
   new share and continues to stamp the editor's current group, which is consistent — the
   snapshot records the moment the post *became* group-shared, not the moment of an
   unrelated body edit.
-- **Why a future slice, not now.** Changing this is itself a privacy change to a
+- **Why a separate runtime slice.** Changing this is itself a privacy change to a
   canonical write path, and the parent plan's No-Go Rule 2 forbids changing
   `small_group_at_post` re-bind behavior "without explicit, separate approval" and
   forbids migrating reflection privacy "as a side effect of a refactor." It also
   requires intentionally rewriting a test that CS-CORE.4C deliberately locked
-  (Section 6). That belongs in its own approved, tested runtime slice (a CS-CORE.4F-class
-  per-consumer change), not bundled into a docs decision.
+  (Section 7). CS-CORE.4C.2 was that approved, tested runtime slice and was kept
+  separate from membership-core migration or any other consumer switch.
 
 This decision **supersedes nothing** in the parent plan; it **resolves** the open
 sub-question the parent plan deferred ("separately decide whether the `edit_comment`
 re-bind … should be changed," Section 4.1) by recording Policy C as the chosen
 direction.
 
-## 6. Future Runtime Slice Outline (not authorized here)
+## 6. Runtime Slice CS-CORE.4C.2 (implemented)
 
-When a future slice implements Policy C:
+CS-CORE.4C.2 implements Policy C as follows:
 
-- **Likely the only runtime change is in `comments.views.edit_comment()`.** For a
+- **The only runtime change is in `comments.views.edit_comment()`.** For a
   top-level post, distinguish two cases instead of one:
   1. **Post was already `VISIBILITY_GROUP` and stays `VISIBILITY_GROUP`** → **do not**
      re-bind; preserve the existing `small_group_at_post`.
@@ -224,14 +228,10 @@ When a future slice implements Policy C:
      editor's current `Profile.small_group` (new group-share), subject to the existing
      no-group validation.
 
-  Detecting "was already group" needs the pre-edit visibility (e.g. read it from the DB
-  instance before `form.save(commit=False)` overwrites it, or compare against
-  `form.initial`). This is a small, local change.
-- **Form validation may stay essentially unchanged.** `ReflectionCommentEditForm`
-  already gates the group option on having a current group and rejects a group post for
-  a no-group user. Policy C does not need that to change; the no-group user editing a
-  post that is *already* group-shared is an edge case to confirm (the post keeps its
-  original snapshot; the form must still not crash when the group option is hidden).
+  The implementation captures the pre-edit visibility and `small_group_at_post` before
+  `form.save(commit=False)`, then applies the two cases above.
+- **Form validation stayed unchanged.** `ReflectionCommentEditForm` already gates the
+  group option on having a current group and rejects a group post for a no-group user.
 - **No data migration.** Policy C only affects **future** edits. Existing rows are not
   touched.
 - **Do not mass-rewrite already re-bound posts.** Posts that were re-homed under the
@@ -244,46 +244,42 @@ When a future slice implements Policy C:
   scope changes, or any other consumer switch (parent plan No-Go Rules 2 and 9;
   CS-CORE plan No-Go Rule 9).
 
-## 7. Future Test Changes (not made here)
+## 7. Test Changes in CS-CORE.4C.2
 
-When the future runtime slice lands, the test suite must change **intentionally and
-together with** the runtime change:
+CS-CORE.4C.2 intentionally changed the test suite together with the runtime change:
 
-- **Intentionally replace the currently-locked re-bind test.**
-  `reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group`
-  encodes Policy A. Under Policy C it must be rewritten so that editing an existing
-  group post after transfer **preserves** `small_group_at_post == old_group`, keeps the
-  post visible to the old group, and keeps it invisible to the new group. The
-  CS-CORE.4C comment already marks this test as "current behavior, not an endorsement,"
-  so this is the sanctioned, expected change — not a regression.
-- **Add a private/church → group stamping test.** Editing a private or church post into
+- **Replaced the previously locked re-bind test.**
+  `reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_preserves_original_group_snapshot`
+  now asserts that editing an existing group post after transfer preserves
+  `small_group_at_post == old_group`, keeps the post visible to the old group, and
+  keeps it invisible to the new group.
+- **Added a private/church → group stamping test.** Editing a private or church post into
   `VISIBILITY_GROUP` stamps the editor's **current** group (new share), and is rejected
   for a no-group user.
-- **Add an explicit "edit body only, stay group" preservation test.** Editing only body
+- **Added an explicit "edit body/anonymity only, stay group" preservation test.** Editing only body
   or anonymity on an already-group post (with and without a prior transfer) preserves
   the original snapshot.
 - **Reply inheritance tests remain unchanged.** They already assert the correct Policy C
   behavior (replies follow the parent).
-- **Transfer-stability tests remain green and may be strengthened.**
-  `test_group_post_keeps_historical_snapshot_after_author_transfer` already asserts
-  transfer alone is snapshot-stable; add the edit-after-transfer stability case
-  alongside it.
+- **No-group create/edit safety is covered.** The existing create/form safety test stays
+  in place, and CS-CORE.4C.2 adds an edit-path assertion that a no-group user cannot
+  force a private reflection into group visibility by POSTing the hidden value.
 - **List == detail must stay in lockstep.** Any change must keep
   `get_visible_reflection_filter`, the `passage_wall` group tab, and `can_be_seen_by`
   agreeing for every viewer (parent plan invariant 3).
 
 ## 8. Rollback Strategy
 
-- **This docs-only slice (CS-CORE.4C.1):** nothing to roll back; it changes no runtime
-  behavior. Reverting the commit removes the document and the cross-references.
-- **The future runtime slice:** the change is a single local branch decision in
+- **The docs-only slice (CS-CORE.4C.1):** nothing to roll back; it changed no runtime
+  behavior. Reverting that commit removes the document and the cross-references.
+- **The runtime slice (CS-CORE.4C.2):** the change is a single local branch decision in
   `edit_comment()`. Rollback is to restore the unconditional re-bind (Policy A). Because
   Policy C is forward-only and writes no migration, rollback touches no stored data;
   `small_group_at_post` values written under either behavior remain valid snapshots.
 
 ## 9. No-Go Rules
 
-1. **Do not change runtime behavior in this slice.** This is a decision record only.
+1. **Do not change runtime behavior beyond the approved CS-CORE.4C.2 edit path.**
 2. **Do not silently broaden** an old group post's visibility to the author's new group
    (the leak in Section 3); any move must be an explicit, approved action.
 3. **Do not silently un-share** an old group post from its original group as a side
@@ -292,7 +288,7 @@ together with** the runtime change:
    and any historical cleanup is a separate, separately-approved data-review slice.
 5. **Do not make replies independently re-home;** replies always follow the parent
    snapshot.
-6. **Do not bundle** the future runtime change with membership-core migration, a
+6. **Do not bundle** the edit-path runtime change with membership-core migration, a
    `structure_unit_at_post` field, group-progress changes, role/scope changes, or any
    other consumer switch.
 7. **Do not change `small_group_at_post` semantics** beyond the narrow edit-path
@@ -300,15 +296,14 @@ together with** the runtime change:
 
 ## 10. Verification
 
-Because this is docs-only:
+For CS-CORE.4C.2:
 
 ```powershell
 git diff --check
-git diff --stat
+E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py check
+E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py makemigrations --check
+E:\bible-reading\_venvs\bible-reading-codex-312\Scripts\python.exe manage.py test reading.tests.ReflectionPrivacyInvariantTests -v 2
 ```
 
-No Django tests are required or were run for CS-CORE.4C.1. No browser/mobile QA was
-required or claimed. No runtime, code, view, form, model, migration, admin, URL,
-template, static, management-command, or test behavior changed. The current
-`edit_comment()` re-bind behavior, and the CS-CORE.4C test that locks it, remain
-unchanged.
+No browser/mobile QA is required or claimed because CS-CORE.4C.2 changes a Django
+view branch, focused tests, and docs only.

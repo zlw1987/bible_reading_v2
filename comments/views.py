@@ -218,6 +218,8 @@ def edit_comment(request, comment_id):
         return redirect_back_or_home(request)
 
     is_reply = comment.parent_id is not None
+    pre_edit_visibility = comment.visibility
+    pre_edit_small_group_at_post = comment.small_group_at_post
 
     if request.method == "POST":
         form = ReflectionCommentEditForm(
@@ -239,13 +241,15 @@ def edit_comment(request, comment_id):
                 edited_comment.scripture_display_zh = comment.parent.scripture_display_zh
                 edited_comment.scripture_display_en = comment.parent.scripture_display_en
             else:
-                # If sharing to group, bind it to the user's current group.
                 if edited_comment.visibility == ReflectionComment.VISIBILITY_GROUP:
-                    edited_comment.small_group_at_post = getattr(
-                        getattr(request.user, "profile", None),
-                        "small_group",
-                        None,
-                    )
+                    if pre_edit_visibility == ReflectionComment.VISIBILITY_GROUP:
+                        edited_comment.small_group_at_post = pre_edit_small_group_at_post
+                    else:
+                        edited_comment.small_group_at_post = getattr(
+                            getattr(request.user, "profile", None),
+                            "small_group",
+                            None,
+                        )
 
             edited_comment.save()
 

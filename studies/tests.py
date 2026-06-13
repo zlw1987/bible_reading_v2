@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone as datetime_timezone
 from io import StringIO
 from unittest import mock
 
+from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command, CommandError
@@ -3584,17 +3585,33 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("study_session_list"))
+        self.assertEqual(
+            [str(message) for message in get_messages(response.wsgi_request)],
+            [
+                "Legacy Bible Study sessions are retired. Please use the Bible "
+                "Study V2 schedule and meeting flow."
+            ],
+        )
 
-    def test_user_with_pastor_role_can_access_create_page(self):
+    def test_user_with_pastor_role_is_redirected_from_create_page(self):
         self.set_language("en")
         self.client.login(username="pastor_study", password="testpass123")
 
         response = self.client.get(reverse("create_study_session"))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "New Bible Study Session")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("study_session_list"))
+        self.assertNotIn("study_session_form", [template.name for template in response.templates])
+        self.assertEqual(BibleStudySession.objects.count(), 0)
+        self.assertEqual(
+            [str(message) for message in get_messages(response.wsgi_request)],
+            [
+                "Legacy Bible Study sessions are retired. Please use the Bible "
+                "Study V2 schedule and meeting flow."
+            ],
+        )
 
-    def test_manager_can_create_published_session_with_guide(self):
+    def test_manager_post_to_create_route_does_not_create_session_or_guide(self):
         self.set_language("en")
         self.client.login(username="pastor_study", password="testpass123")
 
@@ -3604,14 +3621,19 @@ class BibleStudyModuleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        session = BibleStudySession.objects.get(title="新查经")
-        self.assertEqual(session.created_by, self.manager)
-        self.assertEqual(session.status, BibleStudySession.STATUS_PUBLISHED)
-        self.assertIsNotNone(session.published_at)
-        self.assertEqual(session.guide.guide_body, "中文指引")
+        self.assertEqual(response.url, reverse("study_session_list"))
+        self.assertEqual(BibleStudySession.objects.count(), 0)
+        self.assertEqual(BibleStudyGuide.objects.count(), 0)
+        self.assertEqual(
+            [str(message) for message in get_messages(response.wsgi_request)],
+            [
+                "Legacy Bible Study sessions are retired. Please use the Bible "
+                "Study V2 schedule and meeting flow."
+            ],
+        )
 
-    def test_manager_can_create_draft_session_with_guide(self):
-        self.set_language("en")
+    def test_zh_create_route_retirement_message(self):
+        self.set_language("zh")
         self.client.login(username="pastor_study", password="testpass123")
 
         response = self.client.post(
@@ -3620,10 +3642,12 @@ class BibleStudyModuleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        session = BibleStudySession.objects.get(title="新查经")
-        self.assertEqual(session.status, BibleStudySession.STATUS_DRAFT)
-        self.assertIsNone(session.published_at)
-        self.assertEqual(session.guide.discussion_questions, "中文问题")
+        self.assertEqual(response.url, reverse("study_session_list"))
+        self.assertEqual(BibleStudySession.objects.count(), 0)
+        self.assertEqual(
+            [str(message) for message in get_messages(response.wsgi_request)],
+            ["旧版查经安排已停止创建，请使用新版查经排期与聚会流程。"],
+        )
 
     def test_manager_can_edit_session_and_guide(self):
         self.set_language("en")

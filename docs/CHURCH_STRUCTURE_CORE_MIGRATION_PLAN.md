@@ -101,6 +101,7 @@ Each milestone is separately approved, intentionally narrow, and never bundled w
 - **CS-CORE.2D — Optional structure-aware role/permission model.** Unit-scoped role scopes for leaders/progress access. Separate decision; not assumed by any other CS-CORE milestone.
 - **CS-CORE.3 — Legacy retirement, last only.** Per-table, per-field plan (Section 12). Only after no runtime consumer reads the legacy source and history-bearing FKs are re-pointed or deliberately archived. Legacy small group retirement is consumer-by-consumer.
 - **CS-CORE.3C — Bible Study V1/V2 boundary decision.** Complete as a docs-only decision record (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`): Bible Study V2 is the active product path; legacy V1 `BibleStudySession` is a retirement/archive candidate; do not migrate V1 `BibleStudySession` visibility to membership-core; V2 still has a legacy `SmallGroup` generation bridge. V1 data is not deleted, V1 direct routes/admin are unchanged, and hiding/redirect/gating of V1 entry points requires a separately approved runtime slice.
+- **CS-CORE.3D — Freeze legacy BibleStudySession app creation route.** Complete. `GET` and `POST` to `/studies/new/` now redirect to `/studies/` with retirement messaging and do not render/process the V1 creation form or create `BibleStudySession` / `BibleStudyGuide` rows. Existing V1 direct detail/edit/delete/worship/admin paths, `BibleStudySessionForm`, `BibleStudySessionAdmin`, and `BibleStudySession.can_be_seen_by()` remain unchanged.
 
 ## 8. Pilot-Safe Scope
 

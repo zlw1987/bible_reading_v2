@@ -96,6 +96,17 @@ def user_can_access_active_plan(user, active_plan):
     ).exists()
 
 
+def get_profile_small_group(user):
+    return getattr(getattr(user, "profile", None), "small_group", None)
+
+
+def get_profile_structure_unit(user):
+    small_group = get_profile_small_group(user)
+    if small_group is None:
+        return None
+    return getattr(small_group, "church_structure_unit", None)
+
+
 def get_passage_or_none(plan_day, passage_index):
     passages = get_reading_passages(plan_day)
 
@@ -143,7 +154,8 @@ def add_comment(request, active_plan_id, plan_day_id, passage_index):
         comment.scripture_ref_key = passage["search_text"]
         comment.scripture_display_zh = passage.get("display_zh", passage["display"])
         comment.scripture_display_en = passage.get("display_en", passage["display"])
-        comment.small_group_at_post = getattr(request.user.profile, "small_group", None)
+        comment.small_group_at_post = get_profile_small_group(request.user)
+        comment.structure_unit_at_post = get_profile_structure_unit(request.user)
         comment.save()
 
         messages.success(request, message_text(request, "reflection_posted"))
@@ -162,6 +174,7 @@ def add_reply(request, comment_id):
             "plan_day",
             "user",
             "small_group_at_post",
+            "structure_unit_at_post",
         ),
         id=comment_id,
         parent__isnull=True,
@@ -189,6 +202,7 @@ def add_reply(request, comment_id):
         reply.scripture_display_en = parent.scripture_display_en
         reply.visibility = parent.visibility
         reply.small_group_at_post = parent.small_group_at_post
+        reply.structure_unit_at_post = parent.structure_unit_at_post
         reply.save()
 
         messages.success(request, message_text(request, "reply_posted"))
@@ -204,7 +218,9 @@ def edit_comment(request, comment_id):
             "user",
             "parent",
             "parent__small_group_at_post",
+            "parent__structure_unit_at_post",
             "small_group_at_post",
+            "structure_unit_at_post",
         ),
         id=comment_id,
     )
@@ -220,6 +236,7 @@ def edit_comment(request, comment_id):
     is_reply = comment.parent_id is not None
     pre_edit_visibility = comment.visibility
     pre_edit_small_group_at_post = comment.small_group_at_post
+    pre_edit_structure_unit_at_post = comment.structure_unit_at_post
 
     if request.method == "POST":
         form = ReflectionCommentEditForm(
@@ -237,6 +254,7 @@ def edit_comment(request, comment_id):
                 # Replies inherit the parent reflection's context.
                 edited_comment.visibility = comment.parent.visibility
                 edited_comment.small_group_at_post = comment.parent.small_group_at_post
+                edited_comment.structure_unit_at_post = comment.parent.structure_unit_at_post
                 edited_comment.scripture_ref_key = comment.parent.scripture_ref_key
                 edited_comment.scripture_display_zh = comment.parent.scripture_display_zh
                 edited_comment.scripture_display_en = comment.parent.scripture_display_en
@@ -244,12 +262,10 @@ def edit_comment(request, comment_id):
                 if edited_comment.visibility == ReflectionComment.VISIBILITY_GROUP:
                     if pre_edit_visibility == ReflectionComment.VISIBILITY_GROUP:
                         edited_comment.small_group_at_post = pre_edit_small_group_at_post
+                        edited_comment.structure_unit_at_post = pre_edit_structure_unit_at_post
                     else:
-                        edited_comment.small_group_at_post = getattr(
-                            getattr(request.user, "profile", None),
-                            "small_group",
-                            None,
-                        )
+                        edited_comment.small_group_at_post = get_profile_small_group(request.user)
+                        edited_comment.structure_unit_at_post = get_profile_structure_unit(request.user)
 
             edited_comment.save()
 

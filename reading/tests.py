@@ -638,6 +638,28 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.old_group = SmallGroup.objects.create(name="Invariant Old Group")
         self.new_group = SmallGroup.objects.create(name="Invariant New Group")
         self.other_group = SmallGroup.objects.create(name="Invariant Other Group")
+        self.unmapped_group = SmallGroup.objects.create(name="Invariant Unmapped Group")
+        self.old_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INV_OLD",
+            name="Invariant Old Unit",
+        )
+        self.new_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INV_NEW",
+            name="Invariant New Unit",
+        )
+        self.other_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INV_OTHER",
+            name="Invariant Other Unit",
+        )
+        self.old_group.church_structure_unit = self.old_unit
+        self.old_group.save()
+        self.new_group.church_structure_unit = self.new_unit
+        self.new_group.save()
+        self.other_group.church_structure_unit = self.other_unit
+        self.other_group.save()
 
         self.author = self.create_user("invariant_author", group=self.old_group)
         self.same_group_user = self.create_user(
@@ -707,6 +729,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         is_hidden=False,
         is_deleted=False,
         parent=None,
+        structure_unit=None,
     ):
         return ReflectionComment.objects.create(
             user=user or self.author,
@@ -718,6 +741,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
             scripture_display_en="John 1",
             visibility=visibility,
             small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
             is_hidden=is_hidden,
             is_deleted=is_deleted,
             body=body,
@@ -873,12 +897,112 @@ class ReflectionPrivacyInvariantTests(TestCase):
                 reflection = ReflectionComment.objects.get(id=reflection_id)
                 self.assertTrue(reflection.can_be_seen_by(viewer))
 
+    def test_structure_unit_snapshot_does_not_drive_visibility(self):
+        mismatched_snapshot_post = self.make_reflection(
+            user=self.author,
+            body="Mismatched structure snapshot",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=self.new_unit,
+        )
+
+        self.assertTrue(mismatched_snapshot_post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(mismatched_snapshot_post.can_be_seen_by(self.new_group_member))
+        self.assertIn(
+            mismatched_snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.old_group_member),
+        )
+        self.assertNotIn(
+            mismatched_snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.new_group_member),
+        )
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.old_group_member),
+            {mismatched_snapshot_post.id},
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(self.new_group_member), set())
+
+    def test_new_group_reflection_stamps_legacy_group_and_structure_unit(self):
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Mapped group reflection",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        comment = ReflectionComment.objects.get(body="Mapped group reflection")
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+        self.assertEqual(comment.small_group_at_post, self.old_group)
+        self.assertEqual(comment.structure_unit_at_post, self.old_unit)
+        self.assertTrue(comment.can_be_seen_by(self.old_group_member))
+        self.assertFalse(comment.can_be_seen_by(self.new_group_member))
+
+    def test_new_group_reflection_with_unmapped_group_leaves_structure_unit_empty(self):
+        unmapped_user = self.create_user(
+            "invariant_unmapped_author",
+            group=self.unmapped_group,
+        )
+        PlanEnrollment.objects.create(user=unmapped_user, active_plan=self.active_plan)
+
+        self.client.login(username=unmapped_user.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Unmapped group reflection",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        comment = ReflectionComment.objects.get(body="Unmapped group reflection")
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+        self.assertEqual(comment.small_group_at_post, self.unmapped_group)
+        self.assertIsNone(comment.structure_unit_at_post)
+        self.assertTrue(comment.can_be_seen_by(unmapped_user))
+        self.assertFalse(comment.can_be_seen_by(self.old_group_member))
+
+    def test_new_private_or_church_reflection_records_structure_companion_only(self):
+        self.client.login(username=self.author.username, password="TestPass123!")
+
+        for visibility in [
+            ReflectionComment.VISIBILITY_PRIVATE,
+            ReflectionComment.VISIBILITY_CHURCH,
+        ]:
+            with self.subTest(visibility=visibility):
+                response = self.client.post(
+                    reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+                    {
+                        "body": f"{visibility} reflection structure companion",
+                        "visibility": visibility,
+                        "is_anonymous": "",
+                    },
+                )
+                self.assertEqual(response.status_code, 302)
+
+                comment = ReflectionComment.objects.get(
+                    body=f"{visibility} reflection structure companion",
+                )
+                self.assertEqual(comment.visibility, visibility)
+                self.assertEqual(comment.small_group_at_post, self.old_group)
+                self.assertEqual(comment.structure_unit_at_post, self.old_unit)
+                self.assertTrue(comment.can_be_seen_by(self.author))
+                self.assertEqual(
+                    comment.can_be_seen_by(self.old_group_member),
+                    visibility == ReflectionComment.VISIBILITY_CHURCH,
+                )
+
     def test_reply_inherits_parent_visibility_and_group_and_stays_inherited_on_edit(self):
         parent = self.make_reflection(
             user=self.author,
             body="Group parent for reply",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group=self.old_group,
+            structure_unit=self.old_unit,
         )
 
         self.client.login(username=self.same_group_user.username, password="TestPass123!")
@@ -894,6 +1018,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(reply.visibility, parent.visibility)
         self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertTrue(parent.can_be_seen_by(self.same_group_user))
         self.assertTrue(reply.can_be_seen_by(self.same_group_user))
         self.assertFalse(parent.can_be_seen_by(self.other_group_user))
@@ -913,6 +1038,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(reply.body, "Edited inherited reply")
         self.assertEqual(reply.visibility, parent.visibility)
         self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertFalse(reply.can_be_seen_by(self.other_group_user))
 
     def test_group_post_keeps_historical_snapshot_after_author_transfer(self):
@@ -938,6 +1064,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
             body="Transfer edit source",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group=self.old_group,
+            structure_unit=self.old_unit,
         )
         self.author.profile.small_group = self.new_group
         self.author.profile.save()
@@ -955,6 +1082,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         post.refresh_from_db()
 
         self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertEqual(post.structure_unit_at_post, self.old_unit)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
@@ -965,6 +1093,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
             body="Body edit source",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group=self.old_group,
+            structure_unit=self.old_unit,
         )
 
         self.client.login(username=self.author.username, password="TestPass123!")
@@ -982,6 +1111,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(post.body, "Body edit stays in original group")
         self.assertTrue(post.is_anonymous)
         self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertEqual(post.structure_unit_at_post, self.old_unit)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
 
@@ -1000,6 +1130,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
                     body=f"{original_visibility} to group source",
                     visibility=original_visibility,
                     small_group=self.old_group,
+                    structure_unit=self.old_unit,
                 )
 
                 response = self.client.post(
@@ -1015,6 +1146,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
                 self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_GROUP)
                 self.assertEqual(post.small_group_at_post, self.new_group)
+                self.assertEqual(post.structure_unit_at_post, self.new_unit)
                 self.assertTrue(post.can_be_seen_by(self.new_group_member))
                 self.assertFalse(post.can_be_seen_by(self.old_group_member))
                 self.assertTrue(post.can_be_seen_by(self.author))
@@ -1090,6 +1222,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(post.body, "No-group private edit source")
         self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_PRIVATE)
         self.assertIsNone(post.small_group_at_post)
+        self.assertIsNone(post.structure_unit_at_post)
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):

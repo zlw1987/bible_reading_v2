@@ -31,6 +31,15 @@ or data-migration change. Existing posts that were already re-bound under the ol
 behavior were not mass-rewritten. Reflection create/edit group binding remains
 legacy-driven by `Profile.small_group`.
 
+CS-CORE.4D later added nullable `ReflectionComment.structure_unit_at_post` as an
+additive, write-only companion snapshot. It mirrors the Policy C write rules recorded
+here: replies inherit the parent structure snapshot; an already-group top-level
+reflection that stays group preserves its existing structure snapshot; and a
+private/church reflection newly changed to group stamps the editor's current mapped
+structure unit when one exists. This does not change Policy C's legacy runtime
+behavior: visibility still reads `small_group_at_post` and current `Profile.small_group`,
+not `structure_unit_at_post`.
+
 Related docs:
 
 - `docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md` (CS-CORE.4A/4B/4C; privacy invariants; this is the parent plan)
@@ -243,6 +252,11 @@ CS-CORE.4C.2 implements Policy C as follows:
   belonging switches, a `structure_unit_at_post` field, group-progress changes, role/
   scope changes, or any other consumer switch (parent plan No-Go Rules 2 and 9;
   CS-CORE plan No-Go Rule 9).
+
+CS-CORE.4D was later approved as that separate `structure_unit_at_post` slice. It
+mirrors the Policy C snapshot decisions into the additive field only; it does not read
+the new field for visibility and does not change the legacy `small_group_at_post`
+runtime policy above.
 
 ## 7. Test Changes in CS-CORE.4C.2
 

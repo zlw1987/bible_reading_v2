@@ -16,6 +16,15 @@ remove or hide `Profile.small_group`, it does not change `small_group_at_post`
 semantics, and it does not change reflection visibility or group-progress permissions.
 After CS-CORE.4A, every consumer named here is still legacy-driven exactly as before.
 
+CS-CORE.4B is complete as a read-only diagnostic slice. It adds
+`audit_reading_privacy_membership_readiness`, a management command that compares
+legacy `Profile.small_group` behavior with a membership-core candidate answer for
+group-shared reflection visibility and group-progress roster membership. The command
+writes nothing, has no `--apply` mode, and is not used by request/runtime code. After
+CS-CORE.4B, reading progress, group progress, reflection/comment privacy,
+`Profile.small_group`, and `ReflectionComment.small_group_at_post` remain
+legacy-driven exactly as before; no switch happened.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -269,12 +278,16 @@ a better scheme emerges, but keep the sequence and the gates.
 
 - **CS-CORE.4A — This plan-only audit (current slice).** Docs only. No runtime change. Records the
   audit, invariants, options, staged path, test matrix, rollback strategy, and no-go rules.
-- **CS-CORE.4B — Read-only diagnostics/audit command.** A management command (modeled on
-  `audit_structure_belonging` and `audit_bible_study_membership_readiness`, read-only, writes nothing)
-  that, per group-shared reflection and per progress roster, compares the current legacy answer
-  against the membership-core candidate answer and classifies `same_visible` / `same_hidden` /
-  `would_gain` / `would_lose`, plus roster diffs. No behavior change. Its output is the standing gate
-  evidence for any later switch.
+- **CS-CORE.4B — Read-only diagnostics/audit command.** Complete.
+  `audit_reading_privacy_membership_readiness` compares the current legacy answer
+  against a membership-core candidate answer for group-shared reflection visibility
+  and progress roster membership. It classifies reflection pairs as `same_visible` /
+  `same_hidden` / `would_gain` / `would_lose`, progress roster pairs as
+  `same_in_roster` / `same_out_of_roster` / `would_gain` / `would_lose`, and reports
+  risky readiness categories such as unmapped reflection/progress groups, multiple
+  active primary memberships, and profile/membership mismatch. It is read-only,
+  writes nothing, has no `--apply`, and changes no runtime behavior. Its output is
+  the standing gate evidence for any later switch.
 - **CS-CORE.4C — Lock privacy invariants in tests/fixtures.** Add tests (no runtime change) that pin
   every invariant in Section 4 in both directions (leak and over-hide), including list==detail
   agreement, reply inheritance, transfer scenarios, no-group users, and staff override. These tests

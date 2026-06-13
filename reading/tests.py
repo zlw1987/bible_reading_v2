@@ -2,13 +2,16 @@ import os
 import re
 import tempfile
 from datetime import datetime, timedelta, timezone as datetime_timezone
+from io import StringIO
 from pathlib import Path
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -44,6 +47,9 @@ from studies.models import (
     BibleStudyMeetingRole,
     BibleStudySeries,
     BibleStudySession,
+)
+from reading.management.commands.audit_reading_privacy_membership_readiness import (
+    Command as ReadingPrivacyAuditCommand,
 )
 
 
@@ -4212,3 +4218,297 @@ class TodayActionCenterTests(TestCase):
         self.assertNotIn('action="/studies', content)
         self.assertNotContains(response, "Accept role")
         self.assertNotContains(response, "Decline role")
+
+
+class ReadingPrivacyMembershipReadinessAuditCommandTests(TestCase):
+    """CS-CORE.4B readiness audit command tests. The command is read-only."""
+
+    def run_audit_command(self, *args):
+        output = StringIO()
+        call_command(
+            "audit_reading_privacy_membership_readiness",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_mapped_group(self, name, *, unit=None):
+        unit = unit or self.create_unit(name.upper().replace(" ", "-")[:32])
+        group = SmallGroup.objects.create(name=name, church_structure_unit=unit)
+        return group, unit
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username)
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_membership(self, user, unit, **overrides):
+        defaults = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate(),
+        }
+        defaults.update(overrides)
+        return ChurchStructureMembership.objects.create(**defaults)
+
+    def create_reflection(self, group, *, user=None, **overrides):
+        plan = ReadingPlan.objects.create(
+            name=f"Audit Plan {ReadingPlan.objects.count() + 1}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        user = user or self.create_user(
+            f"audit_author_{User.objects.count() + 1}",
+            group=group,
+        )
+        defaults = {
+            "user": user,
+            "plan_day": day,
+            "scripture_ref_key": "John 1",
+            "scripture_display_zh": "约翰福音 第 1 章",
+            "scripture_display_en": "John 1",
+            "visibility": ReflectionComment.VISIBILITY_GROUP,
+            "small_group_at_post": group,
+            "body": "Audit reflection",
+        }
+        defaults.update(overrides)
+        return ReflectionComment.objects.create(**defaults)
+
+    def create_duplicate_active_primaries(self, user, first_unit, second_unit):
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=first_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=second_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+    def assert_summary_count(self, output, category, count):
+        self.assertIn(f"{category}: {count}", output)
+
+    def test_command_runs_writes_nothing_and_has_no_apply_option(self):
+        group, unit = self.create_mapped_group("Audit Read Only")
+        user = self.create_user("audit_read_only", group=group)
+        self.create_membership(user, unit)
+        self.create_reflection(group, user=user)
+        before_counts = {
+            "comments": ReflectionComment.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "users": User.objects.count(),
+            "plans": ReadingPlan.objects.count(),
+            "days": ReadingPlanDay.objects.count(),
+        }
+
+        parser = ReadingPrivacyAuditCommand().create_parser(
+            "manage.py",
+            "audit_reading_privacy_membership_readiness",
+        )
+        option_strings = {
+            option
+            for action in parser._actions
+            for option in action.option_strings
+        }
+        self.assertNotIn("--apply", option_strings)
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_audit_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("Audit only:", output)
+        self.assertEqual(
+            before_counts,
+            {
+                "comments": ReflectionComment.objects.count(),
+                "memberships": ChurchStructureMembership.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "users": User.objects.count(),
+                "plans": ReadingPlan.objects.count(),
+                "days": ReadingPlanDay.objects.count(),
+            },
+        )
+
+    def test_in_sync_case_reports_same_and_no_drift(self):
+        group, unit = self.create_mapped_group("Audit In Sync")
+        user = self.create_user("audit_in_sync", group=group)
+        self.create_membership(user, unit)
+        self.create_reflection(group, user=user)
+
+        output = self.run_audit_command("--fail-on-drift")
+
+        self.assert_summary_count(output, "same_visible", 1)
+        self.assert_summary_count(output, "same_in_roster", 1)
+        self.assert_summary_count(output, "would_gain", 0)
+        self.assert_summary_count(output, "would_lose", 0)
+        self.assert_summary_count(output, "user_profile_membership_mismatch", 0)
+
+    def test_profile_only_case_reports_would_lose(self):
+        group, _unit = self.create_mapped_group("Audit Profile Only")
+        user = self.create_user("audit_profile_only", group=group)
+        self.create_reflection(group, user=user)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "same_visible", 0)
+        self.assert_summary_count(output, "same_in_roster", 0)
+        self.assert_summary_count(output, "would_lose", 1)
+        self.assert_summary_count(
+            output, "user_profile_without_active_primary_membership", 1
+        )
+
+    def test_membership_only_case_reports_would_gain(self):
+        group, unit = self.create_mapped_group("Audit Membership Only")
+        user = self.create_user("audit_membership_only")
+        self.create_membership(user, unit)
+        self.create_reflection(group, user=user)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "would_gain", 1)
+        self.assert_summary_count(
+            output, "user_active_primary_without_profile_group", 1
+        )
+
+    def test_mismatch_reports_gain_loss_and_mismatch(self):
+        group_a, unit_a = self.create_mapped_group("Audit Group A")
+        group_b, unit_b = self.create_mapped_group("Audit Group B")
+        user = self.create_user("audit_mismatch", group=group_a)
+        self.create_membership(user, unit_b)
+        self.create_reflection(group_a, user=user)
+        self.create_reflection(group_b, user=user)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "would_gain", 1)
+        self.assert_summary_count(output, "would_lose", 1)
+        self.assert_summary_count(output, "user_profile_membership_mismatch", 1)
+        self.assertNotEqual(unit_a, unit_b)
+
+    def test_unmapped_group_fails_closed_and_reports_unmapped(self):
+        group = SmallGroup.objects.create(name="Audit Unmapped")
+        user = self.create_user("audit_unmapped", group=group)
+        self.create_reflection(group, user=user)
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "reflection_group_unmapped", 1)
+        self.assert_summary_count(output, "progress_group_unmapped", 1)
+        self.assert_summary_count(output, "would_lose", 1)
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        group, unit = self.create_mapped_group("Audit Multi Primary")
+        other_unit = self.create_unit("AUDIT-MULTI-OTHER")
+        user = self.create_user("audit_multi_primary", group=group)
+        self.create_duplicate_active_primaries(user, unit, other_unit)
+        self.create_reflection(group, user=user)
+
+        output = self.run_audit_command("--verbose")
+
+        self.assert_summary_count(output, "multiple_active_primary_memberships", 1)
+        self.assert_summary_count(output, "would_lose", 1)
+        self.assertIn("active_primary_membership_ids=", output)
+
+    def test_non_active_memberships_do_not_grant_candidate_membership(self):
+        group, unit = self.create_mapped_group("Audit Inactive States")
+        today = timezone.localdate()
+        requested = self.create_user("audit_requested", group=group)
+        ended = self.create_user("audit_ended", group=group)
+        future = self.create_user("audit_future", group=group)
+        self.create_reflection(group, user=requested)
+        ChurchStructureMembership.objects.create(
+            user=requested,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=today,
+        )
+        ChurchStructureMembership.objects.create(
+            user=ended,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=True,
+            start_date=today - timedelta(days=10),
+            end_date=today - timedelta(days=1),
+        )
+        ChurchStructureMembership.objects.create(
+            user=future,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=today + timedelta(days=1),
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "would_lose", 3)
+        self.assert_summary_count(
+            output, "user_profile_without_active_primary_membership", 3
+        )
+        self.assert_summary_count(output, "multiple_active_primary_memberships", 0)
+
+    def test_fail_on_drift_raises_only_when_risky_drift_exists(self):
+        group, unit = self.create_mapped_group("Audit Clean")
+        synced = self.create_user("audit_clean_synced", group=group)
+        self.create_membership(synced, unit)
+        self.create_user("audit_clean_nobody")
+        self.create_reflection(group, user=synced)
+
+        clean_output = self.run_audit_command("--fail-on-drift")
+        self.assert_summary_count(clean_output, "same_visible", 1)
+        self.assert_summary_count(clean_output, "same_out_of_roster", 1)
+
+        drift_group, _drift_unit = self.create_mapped_group("Audit Drift")
+        self.create_user("audit_drift", group=drift_group)
+
+        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
+            self.run_audit_command("--fail-on-drift")
+
+    def test_verbose_limit_outputs_representative_rows(self):
+        group, _unit = self.create_mapped_group("Audit Verbose Limit")
+        first = self.create_user("audit_limit_one", group=group)
+        self.create_user("audit_limit_two", group=group)
+        self.create_reflection(group, user=first)
+
+        output = self.run_audit_command("--verbose", "--limit", "1")
+
+        self.assertIn("details (drift and risk categories only):", output)
+        self.assertIn("(verbose output stopped at --limit 1)", output)
+        self.assertEqual(output.count("classification=would_lose"), 1)

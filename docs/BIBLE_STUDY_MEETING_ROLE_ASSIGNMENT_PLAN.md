@@ -106,6 +106,7 @@ The desired direction is:
 - If both `user` and `display_name` are present, treat `user` as the identity contract. Display can remain a separate UX decision, but Today identity must not depend on the manual name.
 - Keep `BibleStudyMeetingRole` separate from `TeamAssignment`; Friday Bible Study meeting responsibilities are not Ministry Operations serving assignments.
 - Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()`; since CS-CORE.2C-B, that current v2 meeting visibility uses active primary `ChurchStructureMembership` and no longer grants access from `Profile.small_group` alone.
+- Role work targets the v2 stack only. Per CS-CORE.3C (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`), Bible Study V2 is the active product path and legacy V1 `BibleStudySession` is a retirement/archive candidate; do not extend role assignment to V1 sessions.
 
 ## 4. Confirmation Decision
 

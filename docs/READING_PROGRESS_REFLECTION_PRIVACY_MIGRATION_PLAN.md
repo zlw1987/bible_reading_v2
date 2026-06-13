@@ -34,6 +34,23 @@ changes no runtime, view, form, model, template, URL, admin, static, migration, 
 of truth, or management-command behavior. After CS-CORE.4C, these consumers remain
 legacy-driven exactly as before.
 
+CS-CORE.4C.1 is complete as a docs-only policy decision slice. It records the
+deliberate decision for the top-level group-shared reflection **edit re-bind** that
+CS-CORE.4A flagged and CS-CORE.4C locked in a test: see
+`docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md`. The decision recommends **Policy C**
+— preserve the original `small_group_at_post` snapshot when editing an existing
+group-shared post (so an edit after a group transfer no longer re-homes the post),
+while still stamping the editor's current group when a private/church post is newly
+changed to group visibility, and never re-homing replies independently — to be
+implemented **only in a future runtime slice**. CS-CORE.4C.1 itself changes no runtime,
+view, form, model, template, URL, admin, static, migration, source of truth,
+management-command, or test behavior. The current edit re-bind behavior described in
+Sections 3.4 and 4.1 below remains unchanged after this docs-only slice, and the
+CS-CORE.4C test that locks it
+(`reading.tests.ReflectionPrivacyInvariantTests.test_top_level_group_edit_after_transfer_rebinds_to_current_profile_group`)
+is unchanged. Any future runtime change adopting Policy C must intentionally update
+that 4C test together with the runtime change.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -46,6 +63,7 @@ Related docs:
 
 - `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` (CS-CORE plan; runtime contract; no-go rules)
 - `docs/LEGACY_PROFILE_SMALL_GROUP_CONSUMER_INVENTORY.md` (CS-CORE.3A consumer inventory)
+- `docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md` (CS-CORE.4C.1 edit re-bind policy decision)
 - `docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md` (precedent for legacy-vs-migrate decisions)
 
 ## 2. Scope
@@ -228,7 +246,11 @@ When a user transfers groups, what happens to a previously group-shared reflecti
 **Recommendation:** preserve option (a) — `small_group_at_post` keeps posts tied to the group at post
 time — and separately decide whether the `edit_comment` re-bind (Section 3.4) should be changed to stop
 moving an edited old post into the editor's current group. That re-bind decision is itself a privacy
-change and must not be bundled into a refactor.
+change and must not be bundled into a refactor. **That separate decision is now recorded as CS-CORE.4C.1
+(`docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md`): the chosen direction is Policy C — preserve the
+original snapshot when editing an existing group post, stamp the current group only when newly changing
+private/church → group, and implement it only in a future runtime slice. CS-CORE.4C.1 is docs-only and
+does not change the current re-bind behavior.**
 
 **Replies under old group-shared posts:** replies inherit the parent snapshot (Section 3.4) and must
 continue to. Under option (a), replies stay with the parent's original group regardless of either

@@ -27,6 +27,7 @@ from studies.models import BibleStudyMeetingRole
 from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
+from .group_progress_shadow import compute_group_progress_shadow
 from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
@@ -1145,11 +1146,23 @@ def my_group_progress(request):
                 "selected_active_plan_id": None,
                 "member_rows": [],
                 "message": "You are not assigned to a small group yet.",
+                # CS-CORE.4E shadow-only divergence: internal, not rendered.
+                "group_progress_shadow": compute_group_progress_shadow(
+                    request.user, None
+                ),
             },
         )
 
     group_members = User.objects.filter(profile__small_group=selected_group).order_by(
         "username"
+    )
+
+    # CS-CORE.4E membership-core shadow comparison. This is observation only: it
+    # never changes the selected group, roster, or permissions below.
+    group_progress_shadow = compute_group_progress_shadow(
+        request.user,
+        selected_group,
+        legacy_roster_user_ids=set(group_members.values_list("id", flat=True)),
     )
 
     active_plans = (
@@ -1184,6 +1197,7 @@ def my_group_progress(request):
                 "selected_active_plan_id": None,
                 "member_rows": [],
                 "message": "No active reading plan has been joined by this group yet.",
+                "group_progress_shadow": group_progress_shadow,
             },
         )
 
@@ -1265,6 +1279,7 @@ def my_group_progress(request):
             "selected_active_plan_id": selected_active_plan.id if selected_active_plan else None,
             "member_rows": member_rows,
             "message": "",
+            "group_progress_shadow": group_progress_shadow,
         },
     )
 

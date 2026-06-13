@@ -56,6 +56,21 @@ from studies.models import (
 )
 from reading.management.commands.audit_reading_privacy_membership_readiness import (
     Command as ReadingPrivacyAuditCommand,
+    run_audit,
+)
+from reading.group_progress_shadow import (
+    GroupProgressShadow,
+    REASON_DEFAULT_SAME,
+    REASON_DEFAULT_WOULD_CHANGE,
+    REASON_LEGACY_NO_SELECTED_GROUP,
+    REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY,
+    REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY,
+    REASON_PROFILE_MEMBERSHIP_MISMATCH,
+    REASON_ROSTER_SAME,
+    REASON_ROSTER_WOULD_GAIN,
+    REASON_ROSTER_WOULD_LOSE,
+    REASON_SELECTED_GROUP_UNMAPPED,
+    compute_group_progress_shadow,
 )
 
 
@@ -1422,6 +1437,278 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         response = self.progress_response_for(self.staff, group=self.other_group)
 
         self.assertEqual(response.context["selected_group"], self.other_group)
+
+
+class GroupProgressShadowModeTests(TestCase):
+    """CS-CORE.4E group-progress membership-core shadow mode (comparison only).
+
+    The shadow layer computes a membership-core candidate default/roster alongside
+    the legacy answer. It must never change the visible roster, the default selected
+    group, or permissions, and ordinary membership must never grant progress access.
+    """
+
+    def setUp(self):
+        self.district = District.objects.create(name="Shadow District")
+        self.other_district = District.objects.create(name="Shadow Other District")
+        self.group_unit = self.create_unit("SHADOW-GROUP")
+        self.other_group_unit = self.create_unit("SHADOW-OTHER")
+        self.group = SmallGroup.objects.create(
+            name="Shadow Group",
+            district=self.district,
+            church_structure_unit=self.group_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Shadow Other Group",
+            district=self.other_district,
+            church_structure_unit=self.other_group_unit,
+        )
+
+        # Viewer belongs to self.group under both legacy and membership sources.
+        self.viewer = self.create_user("shadow_viewer", group=self.group)
+        self.create_membership(self.viewer, self.group_unit)
+
+        self.plan = ReadingPlan.objects.create(name="Shadow Plan", is_active=True)
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Shadow Active Plan",
+        )
+        PlanEnrollment.objects.create(user=self.viewer, active_plan=self.active_plan)
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def progress_response_for(self, user, *, group=None):
+        self.client.login(username=user.username, password="TestPass123!")
+        params = {}
+        if group is not None:
+            params["group"] = group.id
+        response = self.client.get(reverse("my_group_progress"), params)
+        self.assertEqual(response.status_code, 200)
+        self.client.logout()
+        return response
+
+    def row_usernames(self, response):
+        return {row["member"].username for row in response.context["member_rows"]}
+
+    def shadow_for(self, user, group):
+        return compute_group_progress_shadow(user, group)
+
+    def test_visible_roster_and_default_stay_legacy_not_membership(self):
+        membership_only = self.create_user("shadow_membership_only")
+        self.create_membership(membership_only, self.group_unit)
+
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        # Legacy default selected group and legacy roster are unchanged.
+        self.assertEqual(response.context["selected_group"], self.group)
+        self.assertEqual(self.row_usernames(response), {"shadow_viewer"})
+        self.assertNotIn("shadow_membership_only", self.row_usernames(response))
+
+    def test_shadow_context_present_but_not_user_visible(self):
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        shadow = response.context["group_progress_shadow"]
+        self.assertIsInstance(shadow, GroupProgressShadow)
+
+        # Internal shadow labels and reason codes are never rendered to the page.
+        self.assertNotContains(response, "group_progress_shadow")
+        self.assertNotContains(response, "membership_candidate_group_id")
+        self.assertNotContains(response, "would_gain")
+        self.assertNotContains(response, REASON_DEFAULT_SAME)
+        self.assertNotContains(response, REASON_ROSTER_SAME)
+
+    def test_same_default_and_same_roster_when_sources_agree(self):
+        shadow = self.shadow_for(self.viewer, self.group)
+
+        self.assertEqual(shadow.legacy_selected_group_id, self.group.id)
+        self.assertEqual(shadow.membership_candidate_group_id, self.group.id)
+        self.assertTrue(shadow.same_default)
+        self.assertTrue(shadow.same_roster)
+        self.assertEqual(shadow.would_gain_user_ids, frozenset())
+        self.assertEqual(shadow.would_lose_user_ids, frozenset())
+        self.assertIn(REASON_DEFAULT_SAME, shadow.reason_codes)
+        self.assertIn(REASON_ROSTER_SAME, shadow.reason_codes)
+
+    def test_would_gain_membership_only_member(self):
+        gain_user = self.create_user("shadow_gain")
+        self.create_membership(gain_user, self.group_unit)
+
+        shadow = self.shadow_for(self.viewer, self.group)
+
+        self.assertIn(gain_user.id, shadow.would_gain_user_ids)
+        self.assertNotIn(gain_user.id, shadow.legacy_roster_user_ids)
+        self.assertIn(gain_user.id, shadow.membership_roster_user_ids)
+        self.assertFalse(shadow.same_roster)
+        self.assertIn(REASON_ROSTER_WOULD_GAIN, shadow.reason_codes)
+
+    def test_would_lose_profile_only_member(self):
+        lose_user = self.create_user("shadow_lose", group=self.group)
+
+        shadow = self.shadow_for(self.viewer, self.group)
+
+        self.assertIn(lose_user.id, shadow.would_lose_user_ids)
+        self.assertIn(lose_user.id, shadow.legacy_roster_user_ids)
+        self.assertNotIn(lose_user.id, shadow.membership_roster_user_ids)
+        self.assertFalse(shadow.same_roster)
+        self.assertIn(REASON_ROSTER_WOULD_LOSE, shadow.reason_codes)
+
+    def test_profile_membership_mismatch_records_default_divergence(self):
+        mismatch_user = self.create_user("shadow_mismatch", group=self.group)
+        self.create_membership(mismatch_user, self.other_group_unit)
+
+        shadow = self.shadow_for(mismatch_user, self.group)
+
+        self.assertEqual(shadow.legacy_selected_group_id, self.group.id)
+        self.assertEqual(shadow.membership_candidate_group_id, self.other_group.id)
+        self.assertFalse(shadow.same_default)
+        self.assertIn(REASON_PROFILE_MEMBERSHIP_MISMATCH, shadow.reason_codes)
+        self.assertIn(REASON_DEFAULT_WOULD_CHANGE, shadow.reason_codes)
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        ambiguous_user = self.create_user("shadow_ambiguous", group=self.group)
+        # bulk_create bypasses the single-active-primary model validation so the
+        # helper's fail-closed handling of an ambiguous state is exercised.
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=ambiguous_user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=ambiguous_user,
+                    unit=self.other_group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        shadow = self.shadow_for(ambiguous_user, self.group)
+
+        # Candidate refuses to silently choose a default group.
+        self.assertIsNone(shadow.membership_candidate_group_id)
+        self.assertIn(
+            REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY, shadow.reason_codes
+        )
+        self.assertFalse(shadow.same_default)
+
+    def test_unmapped_selected_group_yields_empty_candidate_roster(self):
+        unmapped_group = SmallGroup.objects.create(
+            name="Shadow Unmapped Group",
+            district=self.district,
+            church_structure_unit=None,
+        )
+        unmapped_member = self.create_user("shadow_unmapped", group=unmapped_group)
+        PlanEnrollment.objects.create(
+            user=unmapped_member, active_plan=self.active_plan
+        )
+
+        shadow = self.shadow_for(unmapped_member, unmapped_group)
+        self.assertEqual(shadow.membership_roster_user_ids, frozenset())
+        self.assertIn(REASON_SELECTED_GROUP_UNMAPPED, shadow.reason_codes)
+
+        # Legacy page still works for the unmapped group.
+        response = self.progress_response_for(unmapped_member, group=unmapped_group)
+        self.assertEqual(response.context["selected_group"], unmapped_group)
+        self.assertIn("shadow_unmapped", self.row_usernames(response))
+
+    def test_ordinary_membership_does_not_grant_other_group_progress(self):
+        # Ordinary user belongs to self.group legacy-wise, but their single active
+        # primary membership points into other_group's unit. Membership must not
+        # grant access to other_group's progress; permission stays legacy-only.
+        ordinary_user = self.create_user("shadow_ordinary", group=self.group)
+        self.create_membership(ordinary_user, self.other_group_unit)
+        PlanEnrollment.objects.create(user=ordinary_user, active_plan=self.active_plan)
+
+        self.assertFalse(can_view_group_progress_for(ordinary_user, self.other_group))
+        self.assertEqual(
+            set(
+                get_accessible_progress_groups(ordinary_user).values_list(
+                    "id", flat=True
+                )
+            ),
+            {self.group.id},
+        )
+
+        response = self.progress_response_for(ordinary_user, group=self.other_group)
+        # Falls back to the only accessible (own legacy) group.
+        self.assertEqual(response.context["selected_group"], self.group)
+
+    def test_no_selected_group_reports_only_default_divergence(self):
+        membership_only = self.create_user("shadow_only_member")
+        self.create_membership(membership_only, self.group_unit)
+
+        shadow = self.shadow_for(membership_only, None)
+
+        self.assertIsNone(shadow.legacy_selected_group_id)
+        self.assertEqual(shadow.membership_candidate_group_id, self.group.id)
+        self.assertEqual(shadow.legacy_roster_user_ids, frozenset())
+        self.assertEqual(shadow.membership_roster_user_ids, frozenset())
+        self.assertIn(REASON_LEGACY_NO_SELECTED_GROUP, shadow.reason_codes)
+        self.assertIn(REASON_DEFAULT_WOULD_CHANGE, shadow.reason_codes)
+
+    def test_no_active_primary_membership_fails_closed_on_default(self):
+        no_membership_user = self.create_user("shadow_no_membership", group=self.group)
+
+        shadow = self.shadow_for(no_membership_user, self.group)
+
+        self.assertIsNone(shadow.membership_candidate_group_id)
+        self.assertIn(REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY, shadow.reason_codes)
+
+    def test_shadow_roster_divergence_agrees_with_audit_command(self):
+        gain_user = self.create_user("shadow_agree_gain")
+        self.create_membership(gain_user, self.group_unit)
+        lose_user = self.create_user("shadow_agree_lose", group=self.group)
+
+        shadow = self.shadow_for(self.viewer, self.group)
+        audit = run_audit()
+
+        # self.other_group has no members or memberships, so the only roster
+        # divergence the read-only audit can find is in self.group, matching the
+        # helper's would-gain / would-lose sets exactly.
+        self.assertEqual(
+            audit["stats"]["progress_would_gain"],
+            len(shadow.would_gain_user_ids),
+        )
+        self.assertEqual(
+            audit["stats"]["progress_would_lose"],
+            len(shadow.would_lose_user_ids),
+        )
+        self.assertEqual(shadow.would_gain_user_ids, frozenset({gain_user.id}))
+        self.assertEqual(shadow.would_lose_user_ids, frozenset({lose_user.id}))
 
 
 class ImportReadingPlanCommandTests(TestCase):

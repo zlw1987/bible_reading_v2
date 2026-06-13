@@ -64,6 +64,25 @@ path consults `structure_unit_at_post`. Old posts were not backfilled, no member
 switch happened, and no group-progress, ServiceEvent, Bible Study, template, admin,
 URL, CSS, or data-migration behavior changed.
 
+CS-CORE.4E is complete as a group-progress shadow-mode comparison slice. The new
+`reading/group_progress_shadow.py` helper computes a membership-core candidate default
+group and roster for the selected legacy `SmallGroup` alongside the legacy answer, and
+`reading.views.my_group_progress()` now stores that comparison in context under the
+internal `group_progress_shadow` key (not rendered). This is comparison-only: the
+actual page still uses legacy `Profile.small_group`, legacy `SmallGroup`,
+`accounts.permissions.get_accessible_progress_groups()`, and
+`accounts.permissions.can_view_group_progress_for()`, so the selected group, the
+visible roster, the redirects, and the permission set are all unchanged. The candidate
+fails closed on ambiguity (no active primary membership, multiple active primary
+memberships, an unmapped selected group, or a membership unit that is not a mapped
+small-group unit) and never grants progress access — ordinary `ChurchStructureMembership`
+still confers nothing here (invariant 5). No membership-core runtime switch happened, no
+role-scope decision was made, and no model, migration, template, CSS, admin, or URL
+change was needed. The existing read-only `audit_reading_privacy_membership_readiness`
+command already exposes equivalent progress roster `would_gain` / `would_lose` and
+risk categories, so it was reused unchanged and pinned by a new test asserting the
+helper and the command agree.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -361,9 +380,15 @@ a better scheme emerges, but keep the sequence and the gates.
   parent unit snapshot, and Policy C edits preserve/stamp the structure snapshot in the
   same cases as `small_group_at_post`. No read-path or visibility change; old posts
   unaffected and not backfilled. Additive migration, instant rollback by ignoring the new field.
-- **CS-CORE.4E — Shadow mode for group-progress roster/defaults.** Compute the membership-core roster
-  and default alongside the legacy ones, report divergence, runtime stays legacy. No switch. Gated on
-  the role-scope decision being explicitly deferred or made (it is *not* made here).
+- **CS-CORE.4E — Shadow mode for group-progress roster/defaults.** Complete. The
+  `reading/group_progress_shadow.py` helper computes the membership-core candidate
+  default group and roster for the selected legacy group alongside the legacy ones and
+  reports divergence (`same_default`, `same_roster`, `would_gain_user_ids`,
+  `would_lose_user_ids`, plus boring `reason_codes`). `my_group_progress()` stores it
+  under the internal, unrendered `group_progress_shadow` context key. Runtime stays
+  legacy: selected group, visible roster, redirects, and permissions are unchanged, the
+  candidate fails closed on ambiguity, and ordinary membership grants nothing. No source
+  switch, and the role-scope decision is still explicitly *not* made here.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback
@@ -460,8 +485,9 @@ docs only.
 
 ## 11. Non-Goals
 
-Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice, CS-CORE.4A
-through CS-CORE.4D do not include or authorize:
+Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice and the
+CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, CS-CORE.4A
+through CS-CORE.4E do not include or authorize:
 
 - any visibility read-path, template, form, admin, URL, static, deployment, source-of-truth,
   or permission change;

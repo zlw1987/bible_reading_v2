@@ -72,6 +72,17 @@ class ReflectionComment(models.Model):
         blank=True,
         related_name="reflection_comments",
     )
+    structure_unit_at_post = models.ForeignKey(
+        "accounts.ChurchStructureUnit",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reflection_comments_at_post",
+        help_text=(
+            "Additive structure snapshot for future privacy migration. "
+            "Write-only during CS-CORE.4D; current visibility still uses small_group_at_post."
+        ),
+    )
 
     body = models.TextField(max_length=3000)
     created_at = models.DateTimeField(auto_now_add=True)

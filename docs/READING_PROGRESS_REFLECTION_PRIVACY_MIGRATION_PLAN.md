@@ -56,6 +56,14 @@ re-bound posts were not mass-rewritten. Reading/progress/reflection runtime othe
 remains legacy-driven: no membership-core switch, no `structure_unit_at_post`, no
 group-progress change, and no model/migration/form/template/admin/URL/CSS change.
 
+CS-CORE.4D is complete as an additive structure snapshot slice. `ReflectionComment`
+now has nullable `structure_unit_at_post`, written only as a companion snapshot for
+new/edited future records that already write or preserve `small_group_at_post`.
+Visibility still uses `small_group_at_post` and current `Profile.small_group`; no read
+path consults `structure_unit_at_post`. Old posts were not backfilled, no membership-core
+switch happened, and no group-progress, ServiceEvent, Bible Study, template, admin,
+URL, CSS, or data-migration behavior changed.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -73,23 +81,26 @@ Related docs:
 
 ## 2. Scope
 
-In scope (audit only):
+In scope (CS-CORE.4A audit plus later approved CS-CORE.4D additive snapshot context):
 
 - `reading.views.get_user_small_group()`
 - `reading.views.get_visible_reflection_filter()`
 - `reading.views.passage_wall()`
 - `reading.views.my_group_progress()`
 - `accounts.permissions.get_accessible_progress_groups()` and `can_view_group_progress_for()`
-- `comments.models.ReflectionComment.can_be_seen_by()` and `ReflectionComment.small_group_at_post`
+- `comments.models.ReflectionComment.can_be_seen_by()`, `ReflectionComment.small_group_at_post`,
+  and additive write-only `ReflectionComment.structure_unit_at_post`
 - `comments.forms.ReflectionCommentForm`, `comments.forms.ReflectionCommentEditForm`
 - `comments.views.add_comment()`, `comments.views.add_reply()`, `comments.views.edit_comment()`
 - templates `templates/reading/group_progress.html`, `templates/reading/passage_wall.html`
 - supporting transition context only: `accounts.models.Profile.small_group`,
   `ChurchStructureMembership`, staff approval sync, `audit_structure_belonging`
 
-Out of scope (see Section 9 no-go rules and Section 11 non-goals): any runtime change,
-`ChurchRoleAssignment` scope migration, ServiceEvent changes, Bible Study V1/V2 changes,
-`Profile.small_group` removal, and `small_group_at_post` semantic change.
+Out of scope (see Section 9 no-go rules and Section 11 non-goals): any visibility read-path
+source switch, `ChurchRoleAssignment` scope migration, ServiceEvent changes, Bible Study V1/V2
+changes, `Profile.small_group` removal, and `small_group_at_post` semantic change. CS-CORE.4D
+is the approved additive exception for adding/writing `structure_unit_at_post`; it does not
+authorize any of those switches or removals.
 
 ## 3. Current Code Audit (verified against the worktree on 2026-06-12)
 
@@ -153,19 +164,27 @@ diverge (a list/detail leak).
   privacy key for group visibility forever after.
 - `comments.views.add_comment()` writes `comment.small_group_at_post = request.user.profile.small_group`
   on every new comment (snapshot **write**). For a non-group post this is incidental; for a
-  `VISIBILITY_GROUP` post it is the binding that controls who can ever see it.
+  `VISIBILITY_GROUP` post it is the binding that controls who can ever see it. After
+  CS-CORE.4D, the same create path also writes `structure_unit_at_post` from the current
+  legacy group's mapped `ChurchStructureUnit` when one exists; this structure snapshot is
+  additive/write-only and is not a visibility key.
 - `comments.views.add_reply()` makes a reply **inherit** the parent's `visibility` and
-  `small_group_at_post`. Replies never compute their own group; they ride the parent snapshot.
+  `small_group_at_post`. After CS-CORE.4D replies also inherit the parent's
+  `structure_unit_at_post`. Replies never compute their own group or structure unit; they
+  ride the parent snapshot.
 - `comments.views.edit_comment()`:
-  - replies re-inherit the parent's `visibility` / `small_group_at_post` on save;
+  - replies re-inherit the parent's `visibility` / `small_group_at_post` /
+    `structure_unit_at_post` on save;
   - for a top-level post, CS-CORE.4C.2 implements Policy C: if a post was already
     `VISIBILITY_GROUP` and remains group-shared, the existing `small_group_at_post`
     snapshot is preserved; if a private/church post is newly changed to
     `VISIBILITY_GROUP`, `small_group_at_post` is stamped from the editor's current
-    `Profile.small_group`. Before CS-CORE.4C.2, editing an old group post after a
-    transfer re-bound it to the editor's current group; that historical behavior is
-    preserved in `docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md` but is no longer the
-    active edit policy.
+    `Profile.small_group`. CS-CORE.4D mirrors those same Policy C snapshot rules into
+    `structure_unit_at_post`, preserving it for already-group posts that stay group and
+    stamping the current mapped unit only when private/church becomes group. Before
+    CS-CORE.4C.2, editing an old group post after a transfer re-bound it to the editor's
+    current group; that historical behavior is preserved in
+    `docs/REFLECTION_EDIT_REBIND_POLICY_DECISION.md` but is no longer the active edit policy.
 - `comments.forms.ReflectionCommentForm` / `ReflectionCommentEditForm`: presence of
   `user.profile.small_group` decides whether the **"My Group" visibility choice is offered**, sets the
   default visibility (group when a group exists, else private), and `clean()` rejects a group post when
@@ -200,9 +219,9 @@ diverge (a list/detail leak).
 | `my_group_progress()` default + roster | `Profile.small_group` | Partly (roster display) | **Yes (roster membership)** | No | No |
 | `get_accessible_progress_groups()` | `ChurchRoleAssignment` + `Profile.small_group` | No | **Yes (permission)** | No | **Yes** |
 | `ReflectionCommentForm` / `EditForm` | `Profile.small_group` | Option display | Option-gating + validation | No | No |
-| `add_comment()` | `Profile.small_group` | No | No | **Yes (`small_group_at_post`)** | No |
-| `add_reply()` | parent snapshot | No | No | **Yes (inherits parent)** | No |
-| `edit_comment()` | Existing snapshot for already-group posts; `Profile.small_group` only when newly changing private/church → group; parent for replies | No | No | **Yes (Policy C edit binding)** | No |
+| `add_comment()` | `Profile.small_group`; mapped `SmallGroup.church_structure_unit` only for additive write-only snapshot | No | No | **Yes (`small_group_at_post`; `structure_unit_at_post` after CS-CORE.4D)** | No |
+| `add_reply()` | parent snapshot | No | No | **Yes (inherits parent `small_group_at_post` and `structure_unit_at_post`)** | No |
+| `edit_comment()` | Existing snapshot for already-group posts; `Profile.small_group` and mapped unit only when newly changing private/church → group; parent for replies | No | No | **Yes (Policy C edit binding, mirrored into `structure_unit_at_post` after CS-CORE.4D)** | No |
 
 ## 4. Privacy Invariants (binding for any future runtime slice)
 
@@ -335,9 +354,13 @@ a better scheme emerges, but keep the sequence and the gates.
   reflection stays group-visible, stamps the current legacy profile group only when a
   private/church reflection is newly changed to group visibility, and leaves reply
   inheritance unchanged. This is forward-only; no existing comments were mass-rewritten.
-- **CS-CORE.4D — Additive structure snapshot for new reflections only (optional).** Add
-  `structure_unit_at_post` (Option C) written only on new posts; no read-path or visibility change;
-  old posts unaffected. Additive migration, instant rollback by ignoring the new field.
+- **CS-CORE.4D — Additive structure snapshot for new reflections only.** Complete. Added
+  nullable `ReflectionComment.structure_unit_at_post` (Option C) and writes it only as a
+  companion to the existing legacy snapshot behavior for new/edited future records:
+  top-level creates stamp the current mapped unit when present, replies inherit the
+  parent unit snapshot, and Policy C edits preserve/stamp the structure snapshot in the
+  same cases as `small_group_at_post`. No read-path or visibility change; old posts
+  unaffected and not backfilled. Additive migration, instant rollback by ignoring the new field.
 - **CS-CORE.4E — Shadow mode for group-progress roster/defaults.** Compute the membership-core roster
   and default alongside the legacy ones, report divergence, runtime stays legacy. No switch. Gated on
   the role-scope decision being explicitly deferred or made (it is *not* made here).
@@ -437,12 +460,14 @@ docs only.
 
 ## 11. Non-Goals
 
-CS-CORE.4A/4C do not include or authorize:
+Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice, CS-CORE.4A
+through CS-CORE.4D do not include or authorize:
 
-- any runtime, code, template, form, view, model, migration, admin, URL, static, or test-behavior
-  change;
+- any visibility read-path, template, form, admin, URL, static, deployment, source-of-truth,
+  or permission change;
 - removal, hiding, or sync-only conversion of `Profile.small_group`;
 - any change to `small_group_at_post` semantics or to reflection visibility;
+- any use of `structure_unit_at_post` for visibility, filtering, permissions, or group progress;
 - any change to group-progress permissions or rosters;
 - any `ChurchRoleAssignment` scope migration;
 - any ServiceEvent or Bible Study V1/V2 change;

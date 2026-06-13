@@ -25,6 +25,15 @@ CS-CORE.4B, reading progress, group progress, reflection/comment privacy,
 `Profile.small_group`, and `ReflectionComment.small_group_at_post` remain
 legacy-driven exactly as before; no switch happened.
 
+CS-CORE.4C is complete as a test-only privacy invariant slice. It adds targeted
+tests for the canonical reflection gate, list/detail/group-tab agreement, reply
+inheritance, transfer snapshot behavior, the current top-level edit re-bind behavior,
+no-group safety, group-progress roster membership, progress permissions, staff/all
+progress override behavior, and the existing CS-CORE.4B read-only audit command. It
+changes no runtime, view, form, model, template, URL, admin, static, migration, source
+of truth, or management-command behavior. After CS-CORE.4C, these consumers remain
+legacy-driven exactly as before.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -288,10 +297,12 @@ a better scheme emerges, but keep the sequence and the gates.
   active primary memberships, and profile/membership mismatch. It is read-only,
   writes nothing, has no `--apply`, and changes no runtime behavior. Its output is
   the standing gate evidence for any later switch.
-- **CS-CORE.4C — Lock privacy invariants in tests/fixtures.** Add tests (no runtime change) that pin
-  every invariant in Section 4 in both directions (leak and over-hide), including list==detail
-  agreement, reply inheritance, transfer scenarios, no-group users, and staff override. These tests
-  must exist and be green before any source switch.
+- **CS-CORE.4C — Lock privacy invariants in tests/fixtures.** Complete. Added tests
+  (no runtime change) that pin every invariant in Section 4 in both directions (leak
+  and over-hide), including list==detail/group-tab agreement, reply inheritance,
+  transfer scenarios, no-group users, group-progress roster and permission behavior,
+  staff/all-progress override behavior, and the 4B audit command's read-only contract.
+  These tests must stay green before any source switch.
 - **CS-CORE.4D — Additive structure snapshot for new reflections only (optional).** Add
   `structure_unit_at_post` (Option C) written only on new posts; no read-path or visibility change;
   old posts unaffected. Additive migration, instant rollback by ignoring the new field.
@@ -380,18 +391,21 @@ Drift:
 10. Do not switch any consumer before CS-CORE.4C privacy tests are green and CS-CORE.4B diagnostics
     show sustained near-zero risky drift.
 
-## 10. Verification (this docs-only slice)
+## 10. Verification
 
 ```powershell
 git diff --check
 git diff --stat
 ```
 
-No Django tests are required for CS-CORE.4A. No browser/mobile QA was performed or claimed.
+No Django tests were required for CS-CORE.4A. CS-CORE.4C added targeted Django tests
+for reading/progress/reflection privacy invariants and the existing 4B audit command
+regression. No browser/mobile QA was required or claimed because 4C changed tests and
+docs only.
 
 ## 11. Non-Goals
 
-CS-CORE.4A does not include or authorize:
+CS-CORE.4A/4C do not include or authorize:
 
 - any runtime, code, template, form, view, model, migration, admin, URL, static, or test-behavior
   change;

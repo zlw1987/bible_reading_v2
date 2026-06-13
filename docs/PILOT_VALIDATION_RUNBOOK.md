@@ -114,7 +114,7 @@ Expected:
 - Staff can reach the grouped management flows from the Staff menu.
 - Staff can perform the core pilot management tasks.
 - Staff pages do not appear in normal-user navigation.
-- Legacy Bible Study V1 is not promoted in normal or staff visible UI.
+- Legacy Bible Study V1 is not promoted in normal or staff visible UI. (Per CS-CORE.3C, Bible Study V2 is the active product path and legacy V1 `BibleStudySession` is a retirement/archive candidate; see `docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`. V1 direct routes still exist and are unchanged.)
 
 ## 6. Permission And Visibility Validation
 

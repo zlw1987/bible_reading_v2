@@ -56,6 +56,10 @@ def study_ui_text(language, key):
             "meeting_role_deleted": "Meeting role deleted.",
             "meeting_worship_saved": "Worship song saved.",
             "meeting_worship_deleted": "Worship song deleted.",
+            "legacy_create_retired": (
+                "Legacy Bible Study sessions are retired. Please use the Bible "
+                "Study V2 schedule and meeting flow."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理查经安排的权限。",
@@ -63,6 +67,7 @@ def study_ui_text(language, key):
             "saved": "查经安排已保存。",
             "cancelled": "查经安排已取消。",
             "schedule_saved": "查经安排已保存。",
+            "legacy_create_retired": "旧版查经安排已停止创建，请使用新版查经排期与聚会流程。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -1116,35 +1121,8 @@ def study_session_detail(request, session_id):
 @login_required
 def create_study_session(request):
     language = get_user_language(request)
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-        return redirect("study_session_list")
-
-    if request.method == "POST":
-        session_form = BibleStudySessionForm(request.POST, language=language)
-        guide_form = BibleStudyGuideForm(request.POST, language=language)
-        if session_form.is_valid() and guide_form.is_valid():
-            session = session_form.save(commit=False)
-            session.created_by = request.user
-            session.save()
-            guide = guide_form.save(commit=False)
-            guide.session = session
-            guide.save()
-            messages.success(request, study_ui_text(language, "saved"))
-            return redirect("study_session_detail", session_id=session.id)
-    else:
-        session_form = BibleStudySessionForm(language=language)
-        guide_form = BibleStudyGuideForm(language=language)
-
-    return render(
-        request,
-        "studies/study_session_form.html",
-        {
-            "session_form": session_form,
-            "guide_form": guide_form,
-            "is_edit": False,
-        },
-    )
+    messages.warning(request, study_ui_text(language, "legacy_create_retired"))
+    return redirect("study_session_list")
 
 
 @login_required

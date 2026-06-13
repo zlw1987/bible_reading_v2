@@ -2,9 +2,9 @@
 
 ## 1. Purpose and Status
 
-This is a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path.
+This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths.
 
-This document does not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. Hiding, redirecting, or permission-gating V1 routes is future work that requires a separately approved runtime slice.
+CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
 Related docs:
 
@@ -55,23 +55,34 @@ V1 still exists but is no longer the promoted surface:
 
 ## 5. Recommended Future Implementation Path
 
-Each step below is future work requiring its own approval; none of it is authorized by this document.
+Each remaining step below is future work requiring its own approval. CS-CORE.3D is the only runtime step recorded here as complete.
 
 1. **Step 1:** Confirm no promoted normal/staff UI links create or manage new V1 sessions (the `/studies/` landing and staff overview already promote V2 only; re-verify before any runtime slice).
 2. **Step 2:** Convert any remaining promoted V1 entry points to V2 schedule/lesson/meeting flows.
-3. **Step 3:** Decide whether `studies/new/` should redirect to the V2 schedule flow, show retirement messaging, or become staff-only archive tooling.
+3. **Step 3:** Completed by CS-CORE.3D for app-level creation only: `studies/new/` redirects to `/studies/` with retirement messaging and no longer renders or processes the V1 creation form.
 4. **Step 4:** Keep existing V1 records readable until a data/archive policy is approved.
 5. **Step 5:** Continue reducing V2's legacy `SmallGroup` bridge in a later architecture slice (generation source and `BibleStudyMeeting.small_group` ownership; see `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` Section 12).
 6. **Step 6:** Do not delete V1 tables/models/data until the project has a formal data retirement policy.
 
+## 5A. CS-CORE.3D Runtime Freeze Status
+
+CS-CORE.3D freezes new legacy V1 `BibleStudySession` creation through the app route only.
+
+- `GET /studies/new/` redirects to `/studies/` and does not render the V1 creation form.
+- `POST /studies/new/` redirects to `/studies/` and does not create a `BibleStudySession` or `BibleStudyGuide`.
+- Existing V1 records remain readable through direct allowed detail paths.
+- V1 direct detail/edit/delete/worship routes and Django Admin remain in place.
+- `BibleStudySessionForm`, `BibleStudySessionAdmin`, and `BibleStudySession.can_be_seen_by()` remain in place.
+- V1 visibility is still legacy-driven by `Profile.small_group` / legacy scope semantics.
+- V1 is not fully retired yet; no V1 data, model, table, or migration was removed by this slice.
+
 ## 6. Non-Goals
 
-This slice does not include or authorize:
+CS-CORE.3C did not include or authorize, and CS-CORE.3D still does not include or authorize:
 
-- any runtime, template, URL, form, view, model, schema, or migration change;
-- any test behavior change;
+- any template, URL, form, model, schema, or migration change;
 - deletion of any V1 data;
-- hiding, redirecting, or permission-gating V1 routes (future runtime slice only);
+- removing V1 detail/edit/delete/worship routes, forms, admin, model behavior, or legacy visibility;
 - reading/progress/privacy migration;
 - ServiceEvent fallback migration;
 - permissions/roles/ministry/team assignment migration;
@@ -79,11 +90,13 @@ This slice does not include or authorize:
 
 ## 7. Verification
 
-No Django tests are needed for this docs-only decision record.
+CS-CORE.3C was a docs-only decision record and needed no Django tests. CS-CORE.3D is a runtime freeze and should use targeted route/view tests plus the standard lightweight Django checks.
 
-Run only:
+Recommended lightweight verification for CS-CORE.3D:
 
 ```powershell
+python manage.py makemigrations --check
+python manage.py check
+python manage.py test studies.tests.BibleStudyModuleTests.test_user_with_pastor_role_is_redirected_from_create_page studies.tests.BibleStudyModuleTests.test_manager_post_to_create_route_does_not_create_session_or_guide -v 2
 git diff --check
-git diff --stat
 ```

@@ -20,6 +20,7 @@ from .forms import (
     ReflectionReportForm,
 )
 from .models import ReflectionComment, ReflectionReport
+from .reflection_visibility import get_user_group_reflection_write_context
 
 
 MESSAGE_TEXT = {
@@ -96,17 +97,6 @@ def user_can_access_active_plan(user, active_plan):
     ).exists()
 
 
-def get_profile_small_group(user):
-    return getattr(getattr(user, "profile", None), "small_group", None)
-
-
-def get_profile_structure_unit(user):
-    small_group = get_profile_small_group(user)
-    if small_group is None:
-        return None
-    return getattr(small_group, "church_structure_unit", None)
-
-
 def get_passage_or_none(plan_day, passage_index):
     passages = get_reading_passages(plan_day)
 
@@ -154,8 +144,25 @@ def add_comment(request, active_plan_id, plan_day_id, passage_index):
         comment.scripture_ref_key = passage["search_text"]
         comment.scripture_display_zh = passage.get("display_zh", passage["display"])
         comment.scripture_display_en = passage.get("display_en", passage["display"])
-        comment.small_group_at_post = get_profile_small_group(request.user)
-        comment.structure_unit_at_post = get_profile_structure_unit(request.user)
+
+        # CS-CORE.4G.3: stamp the group reflection snapshot from the
+        # membership-core write context (active primary ChurchStructureMembership),
+        # never from Profile.small_group. small_group_at_post is the optional
+        # legacy compatibility mirror.
+        write_context = get_user_group_reflection_write_context(request.user)
+
+        if (
+            comment.visibility == ReflectionComment.VISIBILITY_GROUP
+            and not write_context.can_share_to_group
+        ):
+            # Defensive fail-closed: the form already rejects group visibility
+            # without a valid membership context; never persist a group post
+            # that lacks a structure snapshot.
+            messages.error(request, message_text(request, "reflection_form_error"))
+            return redirect_back_or_home(request)
+
+        comment.structure_unit_at_post = write_context.structure_unit
+        comment.small_group_at_post = write_context.legacy_small_group
         comment.save()
 
         messages.success(request, message_text(request, "reflection_posted"))
@@ -261,11 +268,18 @@ def edit_comment(request, comment_id):
             else:
                 if edited_comment.visibility == ReflectionComment.VISIBILITY_GROUP:
                     if pre_edit_visibility == ReflectionComment.VISIBILITY_GROUP:
+                        # Policy C: preserve the original group snapshot; never
+                        # re-home an existing group post to current membership.
                         edited_comment.small_group_at_post = pre_edit_small_group_at_post
                         edited_comment.structure_unit_at_post = pre_edit_structure_unit_at_post
                     else:
-                        edited_comment.small_group_at_post = get_profile_small_group(request.user)
-                        edited_comment.structure_unit_at_post = get_profile_structure_unit(request.user)
+                        # CS-CORE.4G.3: newly entering group visibility stamps the
+                        # snapshot from the membership-core write context, not
+                        # Profile.small_group. The form rejects this transition
+                        # without a valid context, so structure_unit is set here.
+                        write_context = get_user_group_reflection_write_context(request.user)
+                        edited_comment.structure_unit_at_post = write_context.structure_unit
+                        edited_comment.small_group_at_post = write_context.legacy_small_group
 
             edited_comment.save()
 

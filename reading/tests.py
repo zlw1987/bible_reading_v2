@@ -687,7 +687,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.old_group = SmallGroup.objects.create(name="Invariant Old Group")
         self.new_group = SmallGroup.objects.create(name="Invariant New Group")
         self.other_group = SmallGroup.objects.create(name="Invariant Other Group")
-        self.unmapped_group = SmallGroup.objects.create(name="Invariant Unmapped Group")
         self.old_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="INV_OLD",
@@ -1164,29 +1163,43 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertTrue(comment.can_be_seen_by(self.old_group_member))
         self.assertFalse(comment.can_be_seen_by(self.new_group_member))
 
-    def test_new_group_reflection_with_unmapped_group_leaves_structure_unit_empty(self):
-        unmapped_user = self.create_user(
-            "invariant_unmapped_author",
-            group=self.unmapped_group,
+    def test_new_group_reflection_with_membership_unit_without_legacy_group(self):
+        # CS-CORE.4G.3 (coverage 7): a member of a small-group unit that has no
+        # legacy SmallGroup mapping can still share to group. structure_unit_at_post
+        # is stamped from the membership unit and is visible through the 4G.2 read
+        # path, while small_group_at_post stays None (no legacy mirror resolves).
+        nolegacy_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INV_NO_LEGACY",
+            name="Invariant No-Legacy Unit",
         )
-        PlanEnrollment.objects.create(user=unmapped_user, active_plan=self.active_plan)
+        author = self.create_user(
+            "invariant_nolegacy_author",
+            membership_unit=nolegacy_unit,
+        )
+        PlanEnrollment.objects.create(user=author, active_plan=self.active_plan)
+        viewer = self.create_user(
+            "invariant_nolegacy_viewer",
+            membership_unit=nolegacy_unit,
+        )
+        PlanEnrollment.objects.create(user=viewer, active_plan=self.active_plan)
 
-        self.client.login(username=unmapped_user.username, password="TestPass123!")
+        self.client.login(username=author.username, password="TestPass123!")
         response = self.client.post(
             reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
             {
-                "body": "Unmapped group reflection",
+                "body": "No-legacy group reflection",
                 "visibility": ReflectionComment.VISIBILITY_GROUP,
                 "is_anonymous": "",
             },
         )
         self.assertEqual(response.status_code, 302)
 
-        comment = ReflectionComment.objects.get(body="Unmapped group reflection")
+        comment = ReflectionComment.objects.get(body="No-legacy group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-        self.assertEqual(comment.small_group_at_post, self.unmapped_group)
-        self.assertIsNone(comment.structure_unit_at_post)
-        self.assertTrue(comment.can_be_seen_by(unmapped_user))
+        self.assertEqual(comment.structure_unit_at_post, nolegacy_unit)
+        self.assertIsNone(comment.small_group_at_post)
+        self.assertTrue(comment.can_be_seen_by(viewer))
         self.assertFalse(comment.can_be_seen_by(self.old_group_member))
 
     def test_new_private_or_church_reflection_records_structure_companion_only(self):
@@ -1338,9 +1351,15 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
 
-    def test_top_level_private_or_church_edit_to_group_stamps_current_profile_group(self):
-        self.author.profile.small_group = self.new_group
-        self.author.profile.save()
+    def test_top_level_private_or_church_edit_to_group_stamps_membership_unit(self):
+        # CS-CORE.4G.3 (coverage 8): editing a non-group top-level post into group
+        # stamps the snapshot from the author's active primary membership unit, not
+        # Profile.small_group. Move the author's membership to new_unit while their
+        # profile still points at old_group, proving the membership is the source.
+        ChurchStructureMembership.objects.filter(user=self.author).update(
+            unit=self.new_unit,
+        )
+        self.assertEqual(self.author.profile.small_group, self.old_group)
         self.client.login(username=self.author.username, password="TestPass123!")
 
         for original_visibility in [
@@ -1368,8 +1387,8 @@ class ReflectionPrivacyInvariantTests(TestCase):
                 post.refresh_from_db()
 
                 self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_GROUP)
-                self.assertEqual(post.small_group_at_post, self.new_group)
                 self.assertEqual(post.structure_unit_at_post, self.new_unit)
+                self.assertEqual(post.small_group_at_post, self.new_group)
                 self.assertTrue(post.can_be_seen_by(self.new_group_member))
                 self.assertFalse(post.can_be_seen_by(self.old_group_member))
                 self.assertTrue(post.can_be_seen_by(self.author))
@@ -1446,6 +1465,236 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_PRIVATE)
         self.assertIsNone(post.small_group_at_post)
         self.assertIsNone(post.structure_unit_at_post)
+
+    def _group_choice_values(self, form):
+        return [value for value, _label in form.fields["visibility"].choices]
+
+    def test_membership_without_profile_group_offers_group_in_form(self):
+        # CS-CORE.4G.3 (coverage 1 + 11): an active primary small-group membership
+        # offers group sharing even without Profile.small_group, and
+        # Profile.small_group alone no longer controls form option-gating.
+        membership_only = self.create_user(
+            "invariant_form_membership_only",
+            membership_unit=self.old_unit,
+        )
+        self.assertIsNone(membership_only.profile.small_group)
+
+        form = ReflectionCommentForm(
+            {
+                "body": "Membership-only group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+            user=membership_only,
+            language="en",
+        )
+        self.assertIn(ReflectionComment.VISIBILITY_GROUP, self._group_choice_values(form))
+        self.assertTrue(form.is_valid())
+
+        # Profile.small_group with no active primary membership does NOT offer group.
+        profile_only = self.create_user(
+            "invariant_form_profile_only",
+            group=self.old_group,
+            membership_unit=None,
+        )
+        self.assertEqual(profile_only.profile.small_group, self.old_group)
+        profile_form = ReflectionCommentForm(
+            {
+                "body": "Profile-only attempted group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+            user=profile_only,
+            language="en",
+        )
+        self.assertNotIn(
+            ReflectionComment.VISIBILITY_GROUP,
+            self._group_choice_values(profile_form),
+        )
+        self.assertFalse(profile_form.is_valid())
+
+    def test_membership_user_creates_group_reflection_with_structure_snapshot(self):
+        # CS-CORE.4G.3 (coverage 2 + 6): a membership-only user creates a group
+        # reflection whose structure_unit_at_post is the membership unit and whose
+        # small_group_at_post is the lone active legacy mirror; the post is visible
+        # through the 4G.2 read path to a matching member.
+        author = self.create_user(
+            "invariant_membership_author",
+            membership_unit=self.old_unit,
+        )
+        PlanEnrollment.objects.create(user=author, active_plan=self.active_plan)
+
+        self.client.login(username=author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Membership group reflection",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        comment = ReflectionComment.objects.get(body="Membership group reflection")
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+        self.assertEqual(comment.structure_unit_at_post, self.old_unit)
+        self.assertEqual(comment.small_group_at_post, self.old_group)
+        self.assertTrue(comment.can_be_seen_by(self.old_group_member))
+        self.assertFalse(comment.can_be_seen_by(self.new_group_member))
+
+    def test_profile_only_user_group_write_path_is_rejected(self):
+        # CS-CORE.4G.3 (coverage 3): Profile.small_group without an active primary
+        # membership does not get the group choice, and a forced group POST is
+        # rejected with no reflection created.
+        profile_only = self.create_user(
+            "invariant_profile_only_write",
+            group=self.old_group,
+            membership_unit=None,
+        )
+        PlanEnrollment.objects.create(user=profile_only, active_plan=self.active_plan)
+
+        self.client.login(username=profile_only.username, password="TestPass123!")
+        before_count = ReflectionComment.objects.count()
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Profile-only forced group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ReflectionComment.objects.count(), before_count)
+
+    def test_wrong_type_membership_unit_has_no_group_write_path(self):
+        # CS-CORE.4G.3 (coverage 4): an active primary membership on a non-small-group
+        # unit does not offer group sharing and a forced group POST is rejected.
+        district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="INV_DISTRICT",
+            name="Invariant District Unit",
+        )
+        author = self.create_user(
+            "invariant_wrong_type",
+            membership_unit=district_unit,
+        )
+        PlanEnrollment.objects.create(user=author, active_plan=self.active_plan)
+
+        form = ReflectionCommentForm(
+            {
+                "body": "Wrong-type attempted group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+            user=author,
+            language="en",
+        )
+        self.assertNotIn(
+            ReflectionComment.VISIBILITY_GROUP,
+            self._group_choice_values(form),
+        )
+        self.assertFalse(form.is_valid())
+
+        self.client.login(username=author.username, password="TestPass123!")
+        before_count = ReflectionComment.objects.count()
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Wrong-type forced group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ReflectionComment.objects.count(), before_count)
+
+    def test_multiple_active_primary_memberships_fail_closed_for_write(self):
+        # CS-CORE.4G.3 (coverage 5): two active primary memberships are ambiguous and
+        # fail closed for the write path, mirroring the read-path gate. bulk_create
+        # bypasses the single-active-primary model validation.
+        author = self.create_user("invariant_multi_write", membership_unit=None)
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=author,
+                    unit=self.old_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=author,
+                    unit=self.new_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+        PlanEnrollment.objects.create(user=author, active_plan=self.active_plan)
+
+        form = ReflectionCommentForm(
+            {
+                "body": "Ambiguous membership group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+            user=author,
+            language="en",
+        )
+        self.assertNotIn(
+            ReflectionComment.VISIBILITY_GROUP,
+            self._group_choice_values(form),
+        )
+        self.assertFalse(form.is_valid())
+
+        self.client.login(username=author.username, password="TestPass123!")
+        before_count = ReflectionComment.objects.count()
+        response = self.client.post(
+            reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
+            {
+                "body": "Ambiguous forced group post",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(ReflectionComment.objects.count(), before_count)
+
+    def test_existing_group_edit_preserves_snapshot_after_membership_transfer(self):
+        # CS-CORE.4G.3 (coverage 9): an existing group post edited group -> group
+        # preserves its original structure_unit_at_post and small_group_at_post under
+        # Policy C, even after the author's active primary membership transfers.
+        post = self.make_reflection(
+            user=self.author,
+            body="Existing group snapshot preserved",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=self.old_unit,
+        )
+        ChurchStructureMembership.objects.filter(user=self.author).update(
+            unit=self.new_unit,
+        )
+
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("edit_comment", args=[post.id]),
+            {
+                "body": "Existing group edited after transfer",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+
+        self.assertEqual(post.body, "Existing group edited after transfer")
+        self.assertEqual(post.structure_unit_at_post, self.old_unit)
+        self.assertEqual(post.small_group_at_post, self.old_group)
+        self.assertTrue(post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(post.can_be_seen_by(self.new_group_member))
+        self.assertTrue(post.can_be_seen_by(self.author))
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):
@@ -4484,6 +4733,8 @@ class BibleReadingFlowTests(TestCase):
 
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
+        self.add_active_primary_membership(self.user, self.group_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,
@@ -5035,6 +5286,8 @@ class BibleReadingFlowTests(TestCase):
 
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
+        self.add_active_primary_membership(self.user, self.group_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,
@@ -5423,6 +5676,8 @@ class BibleReadingFlowTests(TestCase):
 
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
+        self.add_active_primary_membership(self.user, self.group_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,

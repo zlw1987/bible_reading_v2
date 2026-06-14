@@ -3,6 +3,7 @@ from django import forms
 from accounts.language import normalize_language
 
 from .models import ReflectionComment, ReflectionReport
+from .reflection_visibility import get_user_group_reflection_write_context
 
 
 COMMENT_FORM_TEXT = {
@@ -82,9 +83,13 @@ class ReflectionCommentForm(forms.ModelForm):
         self.fields["visibility"].label = form_text(self.language, "visibility")
         self.fields["visibility"].choices = localized_visibility_choices(self.language)
         self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")
-        user_group = getattr(getattr(user, "profile", None), "small_group", None)
+        # CS-CORE.4G.3: group sharing eligibility is membership-core. A valid
+        # active primary small-group ChurchStructureMembership (not
+        # Profile.small_group) offers the group choice; everyone else gets the
+        # no-group default and the group choice is removed.
+        self.write_context = get_user_group_reflection_write_context(user)
 
-        if user_group:
+        if self.write_context.can_share_to_group:
             self.fields["visibility"].initial = ReflectionComment.VISIBILITY_GROUP
         else:
             self.fields["visibility"].initial = ReflectionComment.VISIBILITY_PRIVATE
@@ -100,9 +105,11 @@ class ReflectionCommentForm(forms.ModelForm):
         cleaned_data = super().clean()
 
         visibility = cleaned_data.get("visibility")
-        user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
-        if visibility == ReflectionComment.VISIBILITY_GROUP and not user_group:
+        if (
+            visibility == ReflectionComment.VISIBILITY_GROUP
+            and not self.write_context.can_share_to_group
+        ):
             raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data
@@ -164,9 +171,17 @@ class ReflectionCommentEditForm(forms.ModelForm):
             self.fields["is_anonymous"].label = form_text(self.language, "reply_anonymously")
             return
 
-        user_group = getattr(getattr(user, "profile", None), "small_group", None)
+        # CS-CORE.4G.3: newly entering group visibility is membership-core. An
+        # existing group post stays editable as group (Policy C) even if the
+        # editor's current membership has changed or disappeared, so the group
+        # choice is also offered when the post is already group.
+        self.write_context = get_user_group_reflection_write_context(user)
+        self.original_is_group = (
+            self.instance.pk is not None
+            and self.instance.visibility == ReflectionComment.VISIBILITY_GROUP
+        )
 
-        if not user_group:
+        if not (self.write_context.can_share_to_group or self.original_is_group):
             self.fields["visibility"].choices = [
                 choice
                 for choice in localized_visibility_choices(self.language)
@@ -180,9 +195,12 @@ class ReflectionCommentEditForm(forms.ModelForm):
             return cleaned_data
 
         visibility = cleaned_data.get("visibility")
-        user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
-        if visibility == ReflectionComment.VISIBILITY_GROUP and not user_group:
+        if (
+            visibility == ReflectionComment.VISIBILITY_GROUP
+            and not self.original_is_group
+            and not self.write_context.can_share_to_group
+        ):
             raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data

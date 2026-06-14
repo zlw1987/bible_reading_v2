@@ -639,6 +639,16 @@ a better scheme emerges, but keep the sequence and the gates.
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback
   exists. Progress *permission scoping* and any `ChurchRoleAssignment` semantics are explicitly **not**
   in this series and need their own decision.
+- **Group-progress permission / accessible group list — pending, now unblocked by CS-CORE.2D-A.**
+  `get_accessible_progress_groups()` and `can_view_group_progress_for()` remain legacy role-scope +
+  own `Profile.small_group` after the 4-series. The separate structure-aware role-scope decision has
+  now started in the CS-CORE.2D track: **CS-CORE.2D-A** added the foundation only — a nullable
+  `ChurchRoleAssignment.structure_unit` FK, the read-only `get_role_assignment_structure_unit` /
+  `assignment_scope_includes_unit` helpers, and the read-only `audit_structure_role_scopes` readiness
+  command — with **no progress-permission runtime switch** and ordinary `ChurchStructureMembership`
+  still granting nothing (invariant 5). The runtime switch of the permission/access list is the next
+  slice (CS-CORE.2D-B), gated by `audit_structure_role_scopes` evidence and preserving any approved
+  own-group rule.
 
 ## 7. Future Test Matrix (for CS-CORE.4C and each switch)
 

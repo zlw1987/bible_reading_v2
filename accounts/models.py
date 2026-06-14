@@ -431,6 +431,20 @@ class ChurchRoleAssignment(models.Model):
         blank=True,
         related_name="role_assignments",
     )
+    structure_unit = models.ForeignKey(
+        "ChurchStructureUnit",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="role_assignments",
+        help_text=(
+            "Canonical future role scope (CS-CORE.2D-A). Optional during the "
+            "migration: global roles leave this null, and the legacy district / "
+            "small_group fields remain compatibility scope fields until the "
+            "group-progress permission switch. Additive only; it does not change "
+            "role behavior in this slice."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

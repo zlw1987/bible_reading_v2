@@ -93,6 +93,62 @@ def get_user_active_role_assignments(user):
     )
 
 
+def get_role_assignment_structure_unit(assignment):
+    """Resolve a role assignment's structure-unit scope, compatibility-safe.
+
+    Read-only. Prefers the canonical ``structure_unit``; otherwise falls back to
+    the legacy ``small_group`` / ``district`` mapped ``church_structure_unit``.
+    Returns ``None`` when no structure unit can be resolved (including global
+    roles). Ordinary ``ChurchStructureMembership`` is intentionally never
+    consulted here: belonging does not decide role scope (CS-CORE.2D-A).
+
+    This is foundation-only: it does not change ``get_accessible_progress_groups``
+    or ``can_view_group_progress_for`` behavior in this slice.
+    """
+    if assignment is None:
+        return None
+
+    if assignment.structure_unit_id:
+        return assignment.structure_unit
+
+    small_group = assignment.small_group
+    if small_group is not None and small_group.church_structure_unit_id:
+        return small_group.church_structure_unit
+
+    district = assignment.district
+    if district is not None and district.church_structure_unit_id:
+        return district.church_structure_unit
+
+    return None
+
+
+def assignment_scope_includes_unit(assignment, unit):
+    """Return True when a role assignment's structure scope covers ``unit``.
+
+    Read-only and compatibility-safe. The assignment's resolved structure unit
+    covers ``unit`` when it is the same unit or an ancestor of ``unit`` (so a
+    district-like unit scope covers its descendant small-group units). Fails
+    closed when either the target ``unit`` or the resolved scope unit is missing.
+    Ordinary ``ChurchStructureMembership`` is never consulted (CS-CORE.2D-A).
+    """
+    if unit is None:
+        return False
+
+    scope_unit = get_role_assignment_structure_unit(assignment)
+    if scope_unit is None:
+        return False
+
+    current = unit
+    seen_ids = set()
+    while current is not None and current.id not in seen_ids:
+        if current.id == scope_unit.id:
+            return True
+        seen_ids.add(current.id)
+        current = current.parent
+
+    return False
+
+
 def has_capability(user, capability):
     if not getattr(user, "is_authenticated", False):
         return False

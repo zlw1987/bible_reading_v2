@@ -339,29 +339,35 @@ class ReadingCalendarViewTests(TestCase):
 
 class ReflectionWallVisibilityRegressionTests(TestCase):
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
-
-        self.author = User.objects.create_user(
-            username="author",
-            password="TestPass123!",
+        # CS-CORE.4G.2: group reflection visibility is membership-core, so each
+        # small group is mapped to a structure unit and members get an active
+        # primary membership in that unit.
+        self.group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4",
+            name="Rainbow 4 Unit",
         )
-        self.author.profile.small_group = self.group
-        self.author.profile.save()
-
-        self.same_group_user = User.objects.create_user(
-            username="same_group",
-            password="TestPass123!",
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW5",
+            name="Rainbow 5 Unit",
         )
-        self.same_group_user.profile.small_group = self.group
-        self.same_group_user.profile.save()
-
-        self.other_group_user = User.objects.create_user(
-            username="other_group",
-            password="TestPass123!",
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            church_structure_unit=self.group_unit,
         )
-        self.other_group_user.profile.small_group = self.other_group
-        self.other_group_user.profile.save()
+        self.other_group = SmallGroup.objects.create(
+            name="Rainbow 5",
+            church_structure_unit=self.other_group_unit,
+        )
+
+        self.author = self.create_member("author", self.group, self.group_unit)
+        self.same_group_user = self.create_member(
+            "same_group", self.group, self.group_unit
+        )
+        self.other_group_user = self.create_member(
+            "other_group", self.other_group, self.other_group_unit
+        )
 
         self.staff = User.objects.create_user(
             username="staff",
@@ -398,6 +404,19 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
                 active_plan=self.active_plan,
             )
 
+    def create_member(self, username, group, unit):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        user.profile.small_group = group
+        user.profile.save()
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        return user
+
     def make_reflection(
         self,
         *,
@@ -415,6 +434,10 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
         if small_group is None:
             small_group = self.group
 
+        # CS-CORE.4G.2: stamp the structure snapshot that now drives group
+        # visibility, mirroring the live create path.
+        structure_unit = small_group.church_structure_unit if small_group else None
+
         return ReflectionComment.objects.create(
             user=user,
             active_plan=self.active_plan,
@@ -427,6 +450,7 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
             is_hidden=is_hidden,
             is_anonymous=is_anonymous,
             small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
             body=body,
         )
 
@@ -648,7 +672,16 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 
 
 class ReflectionPrivacyInvariantTests(TestCase):
-    """CS-CORE.4C locks current reflection privacy behavior without changing it."""
+    """Reflection privacy invariants.
+
+    CS-CORE.4C originally locked the legacy (`Profile.small_group` /
+    `small_group_at_post`) reflection privacy behavior. CS-CORE.4G.2 switched the
+    ordinary-member group read path to `structure_unit_at_post` + active primary
+    `ChurchStructureMembership`, and these tests now assert that membership-core
+    behavior (fail-closed on missing/inactive/wrong-type snapshot, no/multiple
+    active primary memberships). Staff/author/church/private/hidden/deleted
+    behavior is unchanged.
+    """
 
     def setUp(self):
         self.old_group = SmallGroup.objects.create(name="Invariant Old Group")
@@ -669,6 +702,14 @@ class ReflectionPrivacyInvariantTests(TestCase):
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="INV_OTHER",
             name="Invariant Other Unit",
+        )
+        # Nested small-group unit under old_unit exercises the descendant rule:
+        # a member of old_child_unit can see a post snapshotted to old_unit.
+        self.old_child_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INV_OLD_CHILD",
+            name="Invariant Old Child Unit",
+            parent=self.old_unit,
         )
         self.old_group.church_structure_unit = self.old_unit
         self.old_group.save()
@@ -728,12 +769,34 @@ class ReflectionPrivacyInvariantTests(TestCase):
         ]:
             PlanEnrollment.objects.create(user=user, active_plan=self.active_plan)
 
-    def create_user(self, username, *, group=None):
+    def create_user(self, username, *, group=None, membership_unit="__from_group__"):
+        """Create a user with optional legacy group and active primary membership.
+
+        By default (CS-CORE.4G.2) the user also gets a single active primary
+        ChurchStructureMembership in the group's mapped structure unit, because
+        group reflection visibility is now membership-core. Pass
+        ``membership_unit=None`` for a legacy-profile-only user with no
+        membership, or an explicit unit to override.
+        """
         user = User.objects.create_user(username=username, password="TestPass123!")
         if group is not None:
             user.profile.small_group = group
             user.profile.save()
+
+        if membership_unit == "__from_group__":
+            membership_unit = group.church_structure_unit if group else None
+        if membership_unit is not None:
+            self.create_membership(user, membership_unit)
         return user
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
 
     def make_reflection(
         self,
@@ -745,8 +808,16 @@ class ReflectionPrivacyInvariantTests(TestCase):
         is_hidden=False,
         is_deleted=False,
         parent=None,
-        structure_unit=None,
+        structure_unit="__from_group__",
     ):
+        # CS-CORE.4G.2: group visibility is driven by the structure snapshot, so
+        # by default stamp the snapshot from the legacy group's mapped unit, the
+        # same way the live create path does. Tests pass an explicit unit (or
+        # None) to exercise mismatch / missing-snapshot fail-closed cases.
+        if structure_unit == "__from_group__":
+            structure_unit = (
+                small_group.church_structure_unit if small_group else None
+            )
         return ReflectionComment.objects.create(
             user=user or self.author,
             active_plan=self.active_plan,
@@ -913,7 +984,11 @@ class ReflectionPrivacyInvariantTests(TestCase):
                 reflection = ReflectionComment.objects.get(id=reflection_id)
                 self.assertTrue(reflection.can_be_seen_by(viewer))
 
-    def test_structure_unit_snapshot_does_not_drive_visibility(self):
+    def test_structure_unit_snapshot_drives_group_visibility(self):
+        # CS-CORE.4G.2: the structure snapshot now drives group visibility. A post
+        # whose structure_unit_at_post is new_unit but whose legacy
+        # small_group_at_post is old_group is visible to the new-unit member and
+        # hidden from the old-unit member -- the inverse of pre-4G.2 behavior.
         mismatched_snapshot_post = self.make_reflection(
             user=self.author,
             body="Mismatched structure snapshot",
@@ -922,21 +997,153 @@ class ReflectionPrivacyInvariantTests(TestCase):
             structure_unit=self.new_unit,
         )
 
-        self.assertTrue(mismatched_snapshot_post.can_be_seen_by(self.old_group_member))
-        self.assertFalse(mismatched_snapshot_post.can_be_seen_by(self.new_group_member))
+        self.assertTrue(mismatched_snapshot_post.can_be_seen_by(self.new_group_member))
+        self.assertFalse(mismatched_snapshot_post.can_be_seen_by(self.old_group_member))
         self.assertIn(
-            mismatched_snapshot_post.id,
-            self.reflection_ids_visible_by_filter(self.old_group_member),
-        )
-        self.assertNotIn(
             mismatched_snapshot_post.id,
             self.reflection_ids_visible_by_filter(self.new_group_member),
         )
+        self.assertNotIn(
+            mismatched_snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.old_group_member),
+        )
         self.assertEqual(
-            self.passage_wall_group_ids_for(self.old_group_member),
+            self.passage_wall_group_ids_for(self.new_group_member),
             {mismatched_snapshot_post.id},
         )
-        self.assertEqual(self.passage_wall_group_ids_for(self.new_group_member), set())
+        self.assertEqual(self.passage_wall_group_ids_for(self.old_group_member), set())
+
+    def test_matching_legacy_group_without_structure_snapshot_is_not_visible(self):
+        # CS-CORE.4G.2: a legacy-matching group post with NO structure snapshot
+        # fails closed for an ordinary same-legacy-group viewer.
+        post = self.make_reflection(
+            user=self.author,
+            body="Legacy only, no structure snapshot",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=None,
+        )
+
+        self.assertFalse(post.can_be_seen_by(self.old_group_member))
+        self.assertNotIn(
+            post.id,
+            self.reflection_ids_visible_by_filter(self.old_group_member),
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(self.old_group_member), set())
+
+    def test_profile_small_group_alone_does_not_grant_group_visibility(self):
+        # CS-CORE.4G.2: Profile.small_group without an active primary membership
+        # no longer grants group reflection visibility, even with a valid snapshot.
+        profile_only_user = self.create_user(
+            "invariant_profile_only",
+            group=self.old_group,
+            membership_unit=None,
+        )
+        PlanEnrollment.objects.create(
+            user=profile_only_user, active_plan=self.active_plan
+        )
+        post = self.make_reflection(
+            user=self.author,
+            body="Valid snapshot, viewer has profile group only",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.assertEqual(profile_only_user.profile.small_group, self.old_group)
+        self.assertFalse(post.can_be_seen_by(profile_only_user))
+        self.assertNotIn(
+            post.id,
+            self.reflection_ids_visible_by_filter(profile_only_user),
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(profile_only_user), set())
+
+    def test_membership_descendant_of_snapshot_unit_can_see_post(self):
+        # CS-CORE.4G.2: a member of a descendant unit of the snapshot unit matches.
+        child_member = self.create_user(
+            "invariant_child_member",
+            membership_unit=self.old_child_unit,
+        )
+        PlanEnrollment.objects.create(user=child_member, active_plan=self.active_plan)
+        post = self.make_reflection(
+            user=self.author,
+            body="Snapshot at parent unit",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=self.old_unit,
+        )
+
+        self.assertTrue(post.can_be_seen_by(child_member))
+        self.assertIn(
+            post.id,
+            self.reflection_ids_visible_by_filter(child_member),
+        )
+        self.assertEqual(
+            self.passage_wall_group_ids_for(child_member),
+            {post.id},
+        )
+
+    def test_no_active_primary_membership_fails_closed_for_group_visibility(self):
+        no_membership_user = self.create_user(
+            "invariant_no_membership",
+            membership_unit=None,
+        )
+        PlanEnrollment.objects.create(
+            user=no_membership_user, active_plan=self.active_plan
+        )
+        post = self.make_reflection(
+            user=self.author,
+            body="Valid snapshot, viewer has no membership",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.assertFalse(post.can_be_seen_by(no_membership_user))
+        self.assertNotIn(
+            post.id,
+            self.reflection_ids_visible_by_filter(no_membership_user),
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(no_membership_user), set())
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        ambiguous_user = self.create_user(
+            "invariant_ambiguous",
+            membership_unit=None,
+        )
+        # bulk_create bypasses the single-active-primary model validation so the
+        # helper's fail-closed handling of an ambiguous state is exercised.
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=ambiguous_user,
+                    unit=self.old_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=ambiguous_user,
+                    unit=self.new_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+        PlanEnrollment.objects.create(user=ambiguous_user, active_plan=self.active_plan)
+        post = self.make_reflection(
+            user=self.author,
+            body="Valid snapshot, viewer has two active primary memberships",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+        )
+
+        self.assertFalse(post.can_be_seen_by(ambiguous_user))
+        self.assertNotIn(
+            post.id,
+            self.reflection_ids_visible_by_filter(ambiguous_user),
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(ambiguous_user), set())
 
     def test_new_group_reflection_stamps_legacy_group_and_structure_unit(self):
         self.client.login(username=self.author.username, password="TestPass123!")
@@ -2589,7 +2796,18 @@ class ImportReadingPlanCommandTests(TestCase):
 
 class BibleReadingFlowTests(TestCase):
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        # CS-CORE.4G.2: group reflection visibility is membership-core, so the
+        # group is mapped to a structure unit. Ordinary-visibility tests below
+        # add active primary memberships and stamp the structure snapshot.
+        self.group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RAINBOW4_FLOW",
+            name="Rainbow 4 Flow Unit",
+        )
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            church_structure_unit=self.group_unit,
+        )
 
         self.user = User.objects.create_user(
             username="levin",
@@ -4885,9 +5103,11 @@ class BibleReadingFlowTests(TestCase):
 
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        self.add_active_primary_membership(self.user, self.group_unit)
 
         self.other_user.profile.small_group = self.group
         self.other_user.profile.save()
+        self.add_active_primary_membership(self.other_user, self.group_unit)
 
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
         PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
@@ -4901,6 +5121,7 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
             body="Group reflection.",
         )
 
@@ -5463,9 +5684,11 @@ class BibleReadingFlowTests(TestCase):
 
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        self.add_active_primary_membership(self.user, self.group_unit)
 
         self.other_user.profile.small_group = self.group
         self.other_user.profile.save()
+        self.add_active_primary_membership(self.other_user, self.group_unit)
 
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
         PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
@@ -5479,6 +5702,7 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
             body="Other user's reflection.",
         )
 

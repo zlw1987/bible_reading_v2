@@ -19,6 +19,9 @@ from accounts.permissions import (
 )
 from comments.forms import ReflectionCommentForm, ReflectionReplyForm
 from comments.models import ReflectionComment
+from comments.reflection_visibility import (
+    get_visible_group_reflection_snapshot_unit_ids,
+)
 from events.models import ServiceEvent
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
@@ -77,8 +80,6 @@ def user_can_view_active_plan_intro(user, active_plan):
 
 
 def get_visible_reflection_filter(user):
-    user_group = get_user_small_group(user)
-
     if user.is_staff:
         return Q()
 
@@ -90,12 +91,18 @@ def get_visible_reflection_filter(user):
 
     visibility_filter |= public_visible_filter
 
-    if user_group:
+    # CS-CORE.4G.2: ordinary group visibility is structure-native. Group posts
+    # are admitted only when their structure_unit_at_post matches the viewer's
+    # active primary membership unit or an ancestor of it (query-level mirror of
+    # ReflectionComment.can_be_seen_by). Profile.small_group / small_group_at_post
+    # no longer grant ordinary group visibility.
+    allowed_unit_ids = get_visible_group_reflection_snapshot_unit_ids(user)
+    if allowed_unit_ids:
         visibility_filter |= Q(
             is_hidden=False,
             is_deleted=False,
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=user_group,
+            structure_unit_at_post_id__in=allowed_unit_ids,
         )
 
     return visibility_filter
@@ -1328,8 +1335,6 @@ def passage_wall(request):
         display_zh = scripture_ref_key
         display_en = scripture_ref_key
 
-    user_group = get_user_small_group(request.user)
-
     base_queryset = (
         ReflectionComment.objects
         .filter(
@@ -1355,17 +1360,22 @@ def passage_wall(request):
             reflections = base_queryset.filter(
                 visibility=ReflectionComment.VISIBILITY_GROUP,
             )
-        elif user_group:
-            reflections = base_queryset.filter(
-                Q(user=request.user)
-                | Q(
+        else:
+            # CS-CORE.4G.2: structure-native group visibility. Ordinary viewers
+            # see their own posts plus group posts whose structure_unit_at_post
+            # matches their active primary membership unit or an ancestor of it.
+            # No membership / no snapshot match => only their own posts.
+            allowed_unit_ids = get_visible_group_reflection_snapshot_unit_ids(
+                request.user
+            )
+            group_filter = Q(user=request.user)
+            if allowed_unit_ids:
+                group_filter |= Q(
                     visibility=ReflectionComment.VISIBILITY_GROUP,
-                    small_group_at_post=user_group,
+                    structure_unit_at_post_id__in=allowed_unit_ids,
                     is_hidden=False,
                 )
-            )
-        else:
-            reflections = base_queryset.filter(user=request.user)
+            reflections = base_queryset.filter(group_filter)
 
     else:
         if request.user.is_staff:

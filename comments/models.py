@@ -79,8 +79,11 @@ class ReflectionComment(models.Model):
         on_delete=models.SET_NULL,
         related_name="reflection_comments_at_post",
         help_text=(
-            "Additive structure snapshot for future privacy migration. "
-            "Write-only during CS-CORE.4D; current visibility still uses small_group_at_post."
+            "Structure snapshot driving group reflection visibility since "
+            "CS-CORE.4G.2: ordinary group read visibility matches this snapshot "
+            "unit against the viewer's active primary ChurchStructureMembership. "
+            "small_group_at_post remains legacy compatibility / staff-display / "
+            "write-path data."
         ),
     )
 
@@ -130,8 +133,16 @@ class ReflectionComment(models.Model):
             return True
 
         if self.visibility == self.VISIBILITY_GROUP:
-            user_group = getattr(getattr(user, "profile", None), "small_group", None)
-            return bool(user_group and self.small_group_at_post_id == user_group.id)
+            # CS-CORE.4G.2: ordinary group visibility is structure-native. The
+            # post must carry a valid structure_unit_at_post snapshot and the
+            # viewer must have a single active primary ChurchStructureMembership
+            # in that unit or a descendant. Profile.small_group /
+            # small_group_at_post no longer grant ordinary group visibility.
+            from comments.reflection_visibility import (
+                user_matches_group_reflection_snapshot,
+            )
+
+            return user_matches_group_reflection_snapshot(user, self)
 
         return False
 

@@ -9,16 +9,22 @@ membership-core candidate default group.
 
 Hard contract:
 
-- This command is **read-only**. It has no ``--apply`` and writes nothing.
-- Runtime group progress remains legacy-driven; nothing here switches the source,
-  changes a roster/default, or grants/denies any progress permission. Ordinary
+- This command is **read-only**. It has no ``--apply`` and writes nothing; it itself
+  performs no source switch and no permission change.
+- Live runtime group progress is now partly membership-core: the visible roster
+  switched to the membership-core candidate in CS-CORE.4F.1, and the no-``?group=``
+  default selected group switched to a permission-fenced membership-core candidate in
+  CS-CORE.4F.2 (used only when the candidate is already in the legacy
+  ``get_accessible_progress_groups()`` result). The group-progress permission and the
+  accessible group list remain legacy-driven, and ordinary
   ``ChurchStructureMembership`` confers no progress access (privacy invariant 5).
 - The membership-core candidate fails closed on ambiguity (no active primary
   membership, multiple active primary memberships, an unmapped selected group, or a
   membership unit that is not a mapped small-group unit).
 
-It does not call or influence ``reading.views.my_group_progress()``. Use it as
-real-data gate evidence before any future group-progress source switch.
+It does not call or influence ``reading.views.my_group_progress()``; it stays a
+diagnostic / rollback comparison only. Use it as real-data gate evidence before any
+further group-progress source switch.
 """
 
 from collections import OrderedDict, defaultdict
@@ -359,8 +365,9 @@ class Command(BaseCommand):
         write("")
         write("READ-ONLY: no data was changed.")
         write(
-            "Runtime roster is membership-core after CS-CORE.4F.1; permission and "
-            "selected/default group remain legacy-driven."
+            "Runtime roster is membership-core after CS-CORE.4F.1 and the no-?group= "
+            "default selected group is permission-fenced membership-core after "
+            "CS-CORE.4F.2; permission and the accessible group list remain legacy-driven."
         )
         write(
             "This read-only command performs no source switch or permission change; "

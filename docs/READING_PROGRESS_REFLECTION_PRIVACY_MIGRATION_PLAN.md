@@ -172,6 +172,30 @@ template, UI copy, CSS, admin, or URL change. Rollback is mechanical: restore th
 selection preference to `Profile.small_group` first (remove the
 `get_membership_core_default_progress_group()` step) — no stored data is touched.
 
+**Current state (CS-CORE.4G.2).** Ordinary-member group reflection **read** visibility is now
+membership-core: `ReflectionComment.can_be_seen_by`, `reading.views.get_visible_reflection_filter`,
+and the `passage_wall` group tab read the post's `structure_unit_at_post` and match it against the
+viewer's single active primary `ChurchStructureMembership` (snapshot unit or a descendant, via
+`comments/reflection_visibility.py`). `Profile.small_group` and `small_group_at_post` **no longer
+grant** ordinary group reflection visibility; a missing/inactive/wrong-type snapshot, no active
+primary membership, or multiple active primary memberships all fail closed. `small_group_at_post`
+remains stored as legacy compatibility / staff-display / write-path data. The reflection **write
+path / form option-gating** (create/edit) still uses legacy `Profile.small_group` /
+`small_group_at_post` and is the next slice. Group-progress roster and default are switched
+(CS-CORE.4F.1/4F.2); the group-progress permission and accessible group list remain legacy
+(`get_accessible_progress_groups()` / `can_view_group_progress_for()`), coupled to legacy
+`ChurchRoleAssignment` district/group scopes and awaiting a separate structure-aware role-model
+decision. CS-CORE.4G.1 was the read-only snapshot-readiness audit that preceded the 4G.2 switch.
+
+> **Superseded draft note.** An earlier uncommitted CS-CORE.CLOSE.1 draft proposed declaring this
+> reading/progress/reflection work "closed for the demo/pilot stage" and deferring the reflection
+> read-path switch, on the rationale that demo/QA data was not a sufficient gate. **That draft was
+> superseded before commit** by the decision to prioritize and accelerate the Church Structure
+> migration, which is what CS-CORE.4G.2 implemented. Treat none of the "closed / no further
+> switches / reflection remains legacy / demo data insufficient" wording as current policy; the
+> remaining items (reflection write path, group-progress permission/access list) are sequenced
+> work, not forever-deferrals.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -204,20 +228,33 @@ In scope (CS-CORE.4A audit plus later approved CS-CORE.4D additive snapshot cont
 - supporting transition context only: `accounts.models.Profile.small_group`,
   `ChurchStructureMembership`, staff approval sync, `audit_structure_belonging`
 
-Out of scope (see Section 9 no-go rules and Section 11 non-goals): any visibility read-path
+Out of scope **for CS-CORE.4A** (see Section 9 no-go rules and Section 11 non-goals): any visibility read-path
 source switch, `ChurchRoleAssignment` scope migration, ServiceEvent changes, Bible Study V1/V2
 changes, `Profile.small_group` removal, and `small_group_at_post` semantic change. CS-CORE.4D
 is the approved additive exception for adding/writing `structure_unit_at_post`; it does not
-authorize any of those switches or removals.
+authorize any of those switches or removals. (Update: CS-CORE.4G.2 subsequently authorized and
+implemented the reflection group **read-path** source switch — `can_be_seen_by` /
+`get_visible_reflection_filter` / `passage_wall` group tab now read `structure_unit_at_post` +
+membership-core. The reflection write path, `ChurchRoleAssignment` migration, `Profile.small_group`
+removal, and `small_group_at_post` removal remain out of scope.)
 
 ## 3. Current Code Audit (verified against the worktree on 2026-06-12)
+
+> **Superseded for reflection read paths by CS-CORE.4G.2.** This section is the 2026-06-12
+> point-in-time audit that motivated the plan; it describes the **pre-4G.2** legacy reflection read
+> paths. As of CS-CORE.4G.2, `ReflectionComment.can_be_seen_by`,
+> `reading.views.get_visible_reflection_filter`, and the `passage_wall` group tab read
+> `structure_unit_at_post` + active primary `ChurchStructureMembership` (see Section 1 current state
+> and the Section 6 CS-CORE.4G.2 milestone). The reflection write path and group-progress
+> permission/access list are still legacy as described here.
 
 ### 3.1 Reading "current group" helper
 
 - `reading.views.get_user_small_group(user)` returns `user.profile.small_group` (a legacy
-  `SmallGroup` or `None`). It is a **read-only display/context helper** used by the reflection
-  filter and `passage_wall`. It does not by itself grant or deny anything; it is the seam every
-  reflection-side group decision currently flows through.
+  `SmallGroup` or `None`). It is a **read-only display/context helper**. (Pre-4G.2 it fed the
+  reflection filter and `passage_wall`; since CS-CORE.4G.2 those read paths use
+  `structure_unit_at_post` + membership-core and no longer route through this helper, which is now
+  unused by the reflection read paths.) It does not by itself grant or deny anything.
 
 ### 3.2 Group progress (`reading.views.my_group_progress`)
 
@@ -524,8 +561,48 @@ a better scheme emerges, but keep the sequence and the gates.
   create/edit forms/views all still use `small_group_at_post` and the viewer's legacy
   `Profile.small_group`. The audit prints capped verbose examples (missing snapshot, mismatch,
   legacy group unmapped, wrong-type snapshot) but **never prints reflection body text**, writes
-  nothing, has no `--apply`, and adds no model/migration/template/CSS/admin/URL change. A future
-  reflection-visibility switch remains blocked until snapshot coverage/drift is reviewed.
+  nothing, has no `--apply`, and adds no model/migration/template/CSS/admin/URL change. This was the
+  read-only readiness audit that preceded the CS-CORE.4G.2 read-path switch (which then made
+  `structure_unit_at_post` a read-path source).
+- **CS-CORE.CLOSE.1 — Superseded uncommitted draft (NOT current policy).** An earlier uncommitted
+  draft proposed declaring the reading/progress/reflection work "closed after CS-CORE.4G.1" and
+  deferring the reflection read-path switch, citing demo/QA data as an insufficient gate. **It was
+  superseded before commit** when the project chose to prioritize and accelerate the migration, and
+  CS-CORE.4G.2 switched the reflection read path. Its "no further runtime source switch is
+  authorized" statement is **not current policy**. The group-progress permission / accessible group
+  list remains legacy (a real remaining slice gated on a structure-aware role-model decision, not a
+  forever-deferral). See `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` Section 1A.
+- **CS-CORE.4G.2 — Reflection privacy read-path source switch.** Complete. Ordinary-member group
+  reflection **read** visibility now uses `structure_unit_at_post` + the viewer's single active
+  primary `ChurchStructureMembership`. `ReflectionComment.can_be_seen_by`,
+  `get_visible_reflection_filter`, and the `passage_wall` group tab admit a group-shared post only
+  when it has a valid `structure_unit_at_post` (active, `small_group` type) and the viewer's active
+  primary membership unit is that snapshot unit or a descendant of it (Section 4.1 matching rule).
+  Shared helpers in `comments/reflection_visibility.py` keep the per-row gate
+  (`user_matches_group_reflection_snapshot`) and the queryset mirror
+  (`get_visible_group_reflection_snapshot_unit_ids`) in lockstep (invariant 3). `small_group_at_post`
+  and `Profile.small_group` no longer grant ordinary group reflection visibility;
+  `small_group_at_post` stays a stored legacy compatibility snapshot / staff-display value. Missing,
+  inactive, wrong-type snapshots, no active primary membership, and multiple active primary
+  memberships all fail closed for ordinary users (invariants 1, 2, 4, 9); old rows without a
+  snapshot are not backfilled. Staff/author/church/private/hidden/deleted behavior is preserved
+  (invariants 7, 8). **Read path only** — the reflection create/edit write path and form
+  option-gating still use `Profile.small_group` / `small_group_at_post`, with `structure_unit_at_post`
+  written as the CS-CORE.4D companion; the write-path migration is a later slice. The 4G.2 runtime
+  switch itself needed no migration (`structure_unit_at_post` already existed); the field `help_text`
+  was corrected in CS-CORE.4G.2A below. No template/CSS/admin/URL, group-progress, ServiceEvent, or
+  Bible Study change. Rollback = point the three read paths back at
+  `Profile.small_group` + `small_group_at_post`; no stored data is touched.
+- **CS-CORE.4G.2A — Reconcile stale CLOSE.1 docs and field help text.** Complete (docs + help_text
+  only). Removed/reframed the superseded CLOSE.1 "closed / no further switches / reflection deferred /
+  demo data insufficient" wording in this plan and the related CS-CORE docs so they state CS-CORE.4G.2
+  as the current reflection read-path state, and corrected the now-false
+  `ReflectionComment.structure_unit_at_post` `help_text` (it claimed write-only / visibility still
+  uses `small_group_at_post`) to describe its 4G.2 read role. The help_text edit generated a
+  metadata-only migration (`comments/0006_alter_reflectioncomment_structure_unit_at_post.py`,
+  `AlterField`, no DB column/schema change). No runtime logic change to
+  `comments/reflection_visibility.py`, `can_be_seen_by`, or `reading.views`; no group-progress /
+  ServiceEvent / Bible Study / template / CSS / admin / URL change.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback
@@ -624,21 +701,29 @@ docs only.
 
 Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice, the
 CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, the
-CS-CORE.4F.1 roster-only group-progress source switch, and the CS-CORE.4F.2
-permission-fenced default-selected-group source switch, CS-CORE.4A through CS-CORE.4F.2 do
+CS-CORE.4F.1 roster-only group-progress source switch, the CS-CORE.4F.2
+permission-fenced default-selected-group source switch, and the CS-CORE.4G.2 reflection
+group **read-path** source switch, CS-CORE.4A through CS-CORE.4G.2 do
 not include or authorize:
 
-- any visibility read-path, template, form, admin, URL, static, deployment, source-of-truth,
-  or permission change (CS-CORE.4F.1 switched only the group-progress roster source and
-  CS-CORE.4F.2 switched only the permission-fenced default selected group — neither changed
-  progress permission or the accessible group list);
+- any template, form, admin, URL, static, or deployment change (CS-CORE.4F.1 switched only the
+  group-progress roster source, CS-CORE.4F.2 switched only the permission-fenced default selected
+  group, and CS-CORE.4G.2 switched only the reflection group read path — none changed templates,
+  forms, progress permission, or the accessible group list);
 - removal, hiding, or sync-only conversion of `Profile.small_group`;
-- any change to `small_group_at_post` semantics or to reflection visibility;
-- any use of `structure_unit_at_post` for visibility, filtering, permissions, or group progress;
+- any change to `small_group_at_post` **semantics** (it remains a stored legacy compatibility
+  snapshot; CS-CORE.4G.2 only stopped *reading* it for ordinary group visibility, it does not change
+  what is written or when);
+- the reflection **write path / form option-gating** (still legacy `Profile.small_group` /
+  `small_group_at_post`; CS-CORE.4G.2 switched the read path only);
 - any change to group-progress permissions or the accessible group list (CS-CORE.4F.1 changed
   only the visible roster / `member_rows` source; CS-CORE.4F.2 changed only the no-`?group=`
   default selected group, and only within the unchanged legacy-accessible set);
 - any `ChurchRoleAssignment` scope migration;
 - any ServiceEvent or Bible Study V1/V2 change;
-- any data migration;
+- any data migration or old-row backfill;
 - staging, committing, or pushing.
+
+(CS-CORE.4G.2 is the authorized exception to the earlier "no reflection-visibility read switch" /
+"no use of `structure_unit_at_post` for visibility" non-goals: ordinary-member group reflection
+read visibility now uses `structure_unit_at_post` + active primary `ChurchStructureMembership`.)

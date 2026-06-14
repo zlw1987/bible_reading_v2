@@ -509,6 +509,23 @@ a better scheme emerges, but keep the sequence and the gates.
   CS-CORE.4F.1 roster source is unchanged; and no model/migration/template/CSS/admin/URL
   change happened. Rollback = restore the default selection preference to
   `Profile.small_group` first (drop the `get_membership_core_default_progress_group()` step).
+- **CS-CORE.4G.1 — Reflection privacy structure-snapshot readiness audit (read-only).** Complete.
+  Added `reading/reflection_privacy_shadow.py` (`run_snapshot_readiness_audit()`) and wired a new
+  read-only section into the existing `audit_reading_privacy_membership_readiness` command, reusing
+  its `--verbose`/`--limit`. The audit counts group-shared `ReflectionComment` rows
+  (`visibility=group` only) and reports structure-snapshot coverage/drift against the legacy group
+  mapping: `group_reflections_checked`, `…with/without_legacy_group`,
+  `…with/missing_structure_snapshot`, `…snapshot_matches/mismatch_legacy_group_mapping`,
+  `…legacy_group_unmapped`, `…structure_snapshot_wrong_type`, and
+  `…structure_snapshot_inactive_or_missing`. This is **read-only snapshot readiness only**: it
+  answers whether rows carry enough stable `structure_unit_at_post` data to consider a future
+  visibility shadow/switch. No runtime visibility path changed — `ReflectionComment.can_be_seen_by`,
+  `get_visible_reflection_filter`, `passage_wall` group-tab filtering, and the reflection
+  create/edit forms/views all still use `small_group_at_post` and the viewer's legacy
+  `Profile.small_group`. The audit prints capped verbose examples (missing snapshot, mismatch,
+  legacy group unmapped, wrong-type snapshot) but **never prints reflection body text**, writes
+  nothing, has no `--apply`, and adds no model/migration/template/CSS/admin/URL change. A future
+  reflection-visibility switch remains blocked until snapshot coverage/drift is reviewed.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback

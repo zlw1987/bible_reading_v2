@@ -20,6 +20,11 @@ from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
 from comments.models import ReflectionComment
+from reading.reflection_privacy_shadow import (
+    SNAPSHOT_COUNTER_KEYS,
+    SNAPSHOT_EXAMPLE_KEYS,
+    run_snapshot_readiness_audit,
+)
 
 
 REFLECTION_PAIR_KEYS = (
@@ -391,8 +396,14 @@ class Command(BaseCommand):
             raise CommandError("--limit must be zero or greater.")
 
         audit = run_audit()
+        snapshot = run_snapshot_readiness_audit()
         self._print_report(
             audit,
+            verbose=options["verbose"],
+            limit=options["limit"],
+        )
+        self._print_snapshot_readiness(
+            snapshot,
             verbose=options["verbose"],
             limit=options["limit"],
         )
@@ -461,3 +472,54 @@ class Command(BaseCommand):
 
         if stopped_by_limit:
             write(f"  (verbose output stopped at --limit {limit})")
+
+    def _print_snapshot_readiness(self, snapshot, *, verbose, limit):
+        """Print the CS-CORE.4G.1 read-only structure-snapshot readiness section.
+
+        This reports only whether group-shared reflection rows carry stable
+        ``structure_unit_at_post`` data; it is not a runtime visibility switch
+        and never prints reflection body text.
+        """
+        write = self.stdout.write
+        stats = snapshot["stats"]
+
+        write("")
+        write(
+            "Reflection privacy structure-snapshot readiness "
+            "(CS-CORE.4G.1, read-only)"
+        )
+        write("=" * 76)
+        write(
+            "group-shared reflection structure snapshot coverage "
+            "(visibility=group only):"
+        )
+        for key in SNAPSHOT_COUNTER_KEYS:
+            write(f"  {key}: {stats[key]}")
+        write("")
+        write(
+            "Snapshot readiness is diagnostic only: structure_unit_at_post is not "
+            "a reflection visibility source. ReflectionComment.can_be_seen_by, "
+            "get_visible_reflection_filter, and the passage_wall group tab still "
+            "use small_group_at_post and the viewer's legacy Profile.small_group. "
+            "Reflection body text is never printed."
+        )
+
+        if not verbose:
+            return
+
+        write("")
+        write("structure-snapshot examples (diagnostic categories only):")
+        for category in SNAPSHOT_EXAMPLE_KEYS:
+            rows = snapshot["examples"][category]
+            write(f"{category}:")
+            if not rows:
+                write("  (none)")
+                continue
+
+            printed = 0
+            for row in rows:
+                if limit is not None and printed >= limit:
+                    write(f"  (stopped at --limit {limit})")
+                    break
+                write(row)
+                printed += 1

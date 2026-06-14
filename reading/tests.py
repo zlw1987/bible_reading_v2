@@ -6377,3 +6377,295 @@ class ReadingPrivacyMembershipReadinessAuditCommandTests(TestCase):
         self.assertIn("details (drift and risk categories only):", output)
         self.assertIn("(verbose output stopped at --limit 1)", output)
         self.assertEqual(output.count("classification=would_lose"), 1)
+
+
+class ReflectionPrivacySnapshotReadinessAuditCommandTests(TestCase):
+    """CS-CORE.4G.1 reflection-privacy structure-snapshot readiness audit tests.
+
+    The audit only reports whether group-shared ``ReflectionComment`` rows carry
+    stable ``structure_unit_at_post`` data for a *future* visibility shadow/switch.
+    It is strictly read-only, never changes ``can_be_seen_by`` /
+    ``get_visible_reflection_filter`` / ``passage_wall`` group filtering, and never
+    prints reflection body text.
+    """
+
+    def run_audit_command(self, *args):
+        output = StringIO()
+        call_command(
+            "audit_reading_privacy_membership_readiness",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_reflection(self, *, small_group, structure_unit, visibility, body):
+        plan = ReadingPlan.objects.create(
+            name=f"Snapshot Plan {ReadingPlan.objects.count() + 1}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        user = User.objects.create_user(
+            username=f"snapshot_author_{User.objects.count() + 1}",
+        )
+        return ReflectionComment.objects.create(
+            user=user,
+            plan_day=day,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=visibility,
+            small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
+            body=body,
+        )
+
+    def assert_summary_count(self, output, key, count):
+        self.assertIn(f"{key}: {count}", output)
+
+    def test_command_is_read_only(self):
+        unit = self.create_unit("SNAP-RO")
+        group = self.create_group("Snapshot Read Only", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=unit,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot read only body",
+        )
+        before = {
+            "comments": ReflectionComment.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "users": User.objects.count(),
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_audit_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn(
+            "Reflection privacy structure-snapshot readiness "
+            "(CS-CORE.4G.1, read-only)",
+            output,
+        )
+        self.assertEqual(
+            before,
+            {
+                "comments": ReflectionComment.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "users": User.objects.count(),
+            },
+        )
+
+    def test_matching_snapshot_increments_match_counter(self):
+        unit = self.create_unit("SNAP-MATCH")
+        group = self.create_group("Snapshot Match", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=unit,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot match body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "group_reflections_checked", 1)
+        self.assert_summary_count(
+            output, "group_reflections_with_structure_snapshot", 1
+        )
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_matches_legacy_group_mapping",
+            1,
+        )
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_mismatch_legacy_group_mapping",
+            0,
+        )
+
+    def test_missing_snapshot_increments_missing_counter(self):
+        unit = self.create_unit("SNAP-MISSING")
+        group = self.create_group("Snapshot Missing", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot missing body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(
+            output, "group_reflections_missing_structure_snapshot", 1
+        )
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_matches_legacy_group_mapping",
+            0,
+        )
+
+    def test_unmapped_legacy_group_increments_unmapped_counter(self):
+        group = self.create_group("Snapshot Unmapped", unit=None)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot unmapped body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(
+            output, "group_reflections_legacy_group_unmapped", 1
+        )
+        self.assert_summary_count(output, "group_reflections_with_legacy_group", 1)
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_matches_legacy_group_mapping",
+            0,
+        )
+
+    def test_mismatch_snapshot_increments_mismatch_counter(self):
+        unit_a = self.create_unit("SNAP-MIS-A")
+        unit_b = self.create_unit("SNAP-MIS-B")
+        group = self.create_group("Snapshot Mismatch", unit=unit_a)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=unit_b,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot mismatch body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_mismatch_legacy_group_mapping",
+            1,
+        )
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_matches_legacy_group_mapping",
+            0,
+        )
+
+    def test_wrong_type_snapshot_increments_wrong_type_counter(self):
+        unit = self.create_unit("SNAP-WT-SG")
+        wrong_type_unit = self.create_unit(
+            "SNAP-WT-FEL",
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+        )
+        group = self.create_group("Snapshot Wrong Type", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=wrong_type_unit,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="snapshot wrong type body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(
+            output, "group_reflections_structure_snapshot_wrong_type", 1
+        )
+
+    def test_non_group_visibility_reflections_not_counted(self):
+        unit = self.create_unit("SNAP-NONGROUP")
+        group = self.create_group("Snapshot Non Group", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=unit,
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="snapshot private body",
+        )
+        self.create_reflection(
+            small_group=group,
+            structure_unit=unit,
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+            body="snapshot church body",
+        )
+
+        output = self.run_audit_command()
+
+        self.assert_summary_count(output, "group_reflections_checked", 0)
+        self.assert_summary_count(
+            output,
+            "group_reflections_snapshot_matches_legacy_group_mapping",
+            0,
+        )
+
+    def test_verbose_does_not_print_reflection_body(self):
+        unit_a = self.create_unit("SNAP-V-A")
+        unit_b = self.create_unit("SNAP-V-B")
+        wrong_type_unit = self.create_unit(
+            "SNAP-V-FEL",
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+        )
+        mapped_group = self.create_group("Snapshot Verbose Mapped", unit=unit_a)
+        unmapped_group = self.create_group("Snapshot Verbose Unmapped", unit=None)
+
+        self.create_reflection(
+            small_group=mapped_group,
+            structure_unit=None,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="SECRET_MISSING_BODY",
+        )
+        self.create_reflection(
+            small_group=mapped_group,
+            structure_unit=unit_b,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="SECRET_MISMATCH_BODY",
+        )
+        self.create_reflection(
+            small_group=unmapped_group,
+            structure_unit=None,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="SECRET_UNMAPPED_BODY",
+        )
+        self.create_reflection(
+            small_group=mapped_group,
+            structure_unit=wrong_type_unit,
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            body="SECRET_WRONGTYPE_BODY",
+        )
+
+        output = self.run_audit_command("--verbose")
+
+        self.assertIn(
+            "structure-snapshot examples (diagnostic categories only):", output
+        )
+        self.assertIn("reason=missing_structure_snapshot", output)
+        self.assertIn("reason=snapshot_mismatch_legacy_group_mapping", output)
+        self.assertIn("reason=legacy_group_unmapped", output)
+        self.assertIn("reason=structure_snapshot_wrong_type", output)
+        for secret in (
+            "SECRET_MISSING_BODY",
+            "SECRET_MISMATCH_BODY",
+            "SECRET_UNMAPPED_BODY",
+            "SECRET_WRONGTYPE_BODY",
+        ):
+            self.assertNotIn(secret, output)

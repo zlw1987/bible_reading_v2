@@ -32,7 +32,9 @@ from the membership unit; both honour the same active/small-group validity check
 on the snapshot unit.
 """
 
-from accounts.models import ChurchStructureUnit
+from dataclasses import dataclass
+
+from accounts.models import ChurchStructureUnit, SmallGroup
 from accounts.structure_selectors import (
     _collect_unit_and_descendant_ids,
     get_user_primary_membership_unit,
@@ -73,6 +75,81 @@ def user_matches_group_reflection_snapshot(user, comment, target_date=None):
         return False
 
     return membership_unit.id in _collect_unit_and_descendant_ids([snapshot_unit])
+
+
+@dataclass(frozen=True)
+class GroupReflectionWriteContext:
+    """Resolved membership-core context for stamping a group reflection.
+
+    ``structure_unit`` is the canonical group reflection snapshot source; it is
+    set only when the author has a valid write context. ``legacy_small_group``
+    is the optional compatibility mirror written to ``small_group_at_post`` and
+    is ``None`` unless exactly one active legacy ``SmallGroup`` maps to the
+    structure unit. ``reason_code`` records why the context resolved the way it
+    did, for diagnostics.
+    """
+
+    structure_unit: "ChurchStructureUnit | None" = None
+    legacy_small_group: "SmallGroup | None" = None
+    reason_code: str = "no_context"
+
+    @property
+    def can_share_to_group(self):
+        return self.structure_unit is not None
+
+
+def resolve_legacy_small_group_mirror(unit):
+    """Return the lone active legacy SmallGroup mapped to ``unit`` or ``None``.
+
+    The legacy mirror is optional. It resolves only when exactly one active
+    ``SmallGroup`` maps directly to the structure unit; zero or multiple active
+    mappings resolve to ``None`` and never block group sharing (the 4G.2 read
+    path keys off ``structure_unit_at_post``, not the mirror).
+    """
+    if unit is None or unit.id is None:
+        return None
+
+    groups = list(
+        SmallGroup.objects.filter(
+            church_structure_unit_id=unit.id,
+            is_active=True,
+        )[:2]
+    )
+    if len(groups) != 1:
+        return None
+    return groups[0]
+
+
+def get_user_group_reflection_write_context(user, target_date=None):
+    """Resolve the membership-core write context for group reflection sharing.
+
+    Fail-closed mirror of the 4G.2 read gate's belonging rule. A user may stamp
+    a group reflection only when they have exactly one active primary
+    ``ChurchStructureMembership`` whose unit is an active
+    ``UNIT_SMALL_GROUP``. ``Profile.small_group`` is never consulted to decide
+    eligibility or to stamp the structure snapshot. No active primary,
+    multiple active primaries, an inactive unit, or a wrong-type unit all
+    resolve to a context with no ``structure_unit``.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return GroupReflectionWriteContext(reason_code="unauthenticated")
+
+    membership_unit = get_user_primary_membership_unit(user, target_date=target_date)
+    if membership_unit is None:
+        return GroupReflectionWriteContext(
+            reason_code="no_single_active_primary_membership"
+        )
+
+    if not snapshot_unit_is_valid_for_group_visibility(membership_unit):
+        return GroupReflectionWriteContext(
+            reason_code="membership_unit_not_active_small_group"
+        )
+
+    return GroupReflectionWriteContext(
+        structure_unit=membership_unit,
+        legacy_small_group=resolve_legacy_small_group_mirror(membership_unit),
+        reason_code="ok",
+    )
 
 
 def get_visible_group_reflection_snapshot_unit_ids(user, target_date=None):

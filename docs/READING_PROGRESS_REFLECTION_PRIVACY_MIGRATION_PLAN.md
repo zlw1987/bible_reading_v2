@@ -172,16 +172,27 @@ template, UI copy, CSS, admin, or URL change. Rollback is mechanical: restore th
 selection preference to `Profile.small_group` first (remove the
 `get_membership_core_default_progress_group()` step) — no stored data is touched.
 
-**Current state (CS-CORE.4G.2).** Ordinary-member group reflection **read** visibility is now
-membership-core: `ReflectionComment.can_be_seen_by`, `reading.views.get_visible_reflection_filter`,
-and the `passage_wall` group tab read the post's `structure_unit_at_post` and match it against the
-viewer's single active primary `ChurchStructureMembership` (snapshot unit or a descendant, via
+**Current state (CS-CORE.4G.3).** Ordinary-member group reflection **read** visibility is
+membership-core (CS-CORE.4G.2): `ReflectionComment.can_be_seen_by`,
+`reading.views.get_visible_reflection_filter`, and the `passage_wall` group tab read the post's
+`structure_unit_at_post` and match it against the viewer's single active primary
+`ChurchStructureMembership` (snapshot unit or a descendant, via
 `comments/reflection_visibility.py`). `Profile.small_group` and `small_group_at_post` **no longer
 grant** ordinary group reflection visibility; a missing/inactive/wrong-type snapshot, no active
-primary membership, or multiple active primary memberships all fail closed. `small_group_at_post`
-remains stored as legacy compatibility / staff-display / write-path data. The reflection **write
-path / form option-gating** (create/edit) still uses legacy `Profile.small_group` /
-`small_group_at_post` and is the next slice. Group-progress roster and default are switched
+primary membership, or multiple active primary memberships all fail closed. The reflection **write
+path / form option-gating** (create/edit) is now also membership-core (CS-CORE.4G.3):
+`ReflectionCommentForm` / `ReflectionCommentEditForm` offer the group choice only when the author
+has a valid active primary small-group membership (via
+`get_user_group_reflection_write_context`), and `add_comment` / `edit_comment` stamp
+`structure_unit_at_post` from that membership unit — never from `Profile.small_group`.
+`Profile.small_group` alone no longer offers or stamps group sharing, and a valid membership offers
+group sharing even with no `Profile.small_group`. `structure_unit_at_post` is the canonical group
+reflection read/write snapshot. `small_group_at_post` is now the **optional** legacy
+compatibility / staff-display mirror: it is stamped only when exactly one active legacy `SmallGroup`
+maps to the membership unit and is never an access source; a missing mirror does not block group
+sharing. Existing group posts **preserve** their original snapshots under Policy C (group → group
+edits never re-home), and replies inherit the parent's `structure_unit_at_post` /
+`small_group_at_post`. Group-progress roster and default are switched
 (CS-CORE.4F.1/4F.2); the group-progress permission and accessible group list remain legacy
 (`get_accessible_progress_groups()` / `can_view_group_progress_for()`), coupled to legacy
 `ChurchRoleAssignment` district/group scopes and awaiting a separate structure-aware role-model
@@ -603,6 +614,26 @@ a better scheme emerges, but keep the sequence and the gates.
   `AlterField`, no DB column/schema change). No runtime logic change to
   `comments/reflection_visibility.py`, `can_be_seen_by`, or `reading.views`; no group-progress /
   ServiceEvent / Bible Study / template / CSS / admin / URL change.
+- **CS-CORE.4G.3 — Reflection write-path / form source switch.** Complete. The reflection create/edit
+  **write path** and form option-gating are now membership-core, matching the 4G.2 read path. A new
+  shared helper `comments/reflection_visibility.get_user_group_reflection_write_context(user)` returns
+  a fail-closed `GroupReflectionWriteContext` (`structure_unit`, `legacy_small_group`, `reason_code`):
+  the structure unit is the user's single active primary `ChurchStructureMembership` unit when it is
+  an active `small_group`-type unit, else none (no/multiple active primaries, inactive or wrong-type
+  unit all fail closed); the legacy mirror resolves only when exactly one active `SmallGroup` maps to
+  that unit, else `None`. `Profile.small_group` is never read to decide eligibility or to stamp the
+  snapshot. `ReflectionCommentForm` offers the group choice (and `clean()` accepts group) only when
+  the context is valid; `ReflectionCommentEditForm` additionally keeps the group choice for an
+  existing group post so Policy C edits stay possible even if the editor's membership changed.
+  `add_comment` stamps `structure_unit_at_post` from the context (and `small_group_at_post` from the
+  optional mirror) for new posts, with a defensive fail-closed guard; `edit_comment` stamps from the
+  context only when a non-group top-level post newly becomes group, **preserves** the original
+  snapshots for an existing group → group edit (Policy C, no re-home), and replies keep inheriting the
+  parent's `structure_unit_at_post` / `small_group_at_post`. `structure_unit_at_post` is the canonical
+  group reflection read/write snapshot; `small_group_at_post` is the optional legacy compatibility /
+  staff-display mirror, never an access source. No model/schema migration (fields already existed); no
+  group-progress / ServiceEvent / Bible Study / role-model / template / CSS / admin / URL change.
+  Rollback = point the forms/views back at `Profile.small_group` for write-path gating/stamping.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback

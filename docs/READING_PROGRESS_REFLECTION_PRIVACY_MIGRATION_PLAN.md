@@ -73,8 +73,9 @@ CS-CORE.4E the actual page still used legacy `Profile.small_group`, legacy `Smal
 `accounts.permissions.get_accessible_progress_groups()`, and
 `accounts.permissions.can_view_group_progress_for()`, so the selected group, the
 visible roster, the redirects, and the permission set were all unchanged. (The visible
-roster later switched to membership-core in CS-CORE.4F.1; the selected/default group,
-redirects, and permission set are still legacy.) The candidate
+roster later switched to membership-core in CS-CORE.4F.1, and the no-`?group=` default
+selected group switched to a permission-fenced membership-core candidate in CS-CORE.4F.2;
+the redirects, accessible group list, and permission set are still legacy.) The candidate
 fails closed on ambiguity (no active primary membership, multiple active primary
 memberships, an unmapped selected group, or a membership unit that is not a mapped
 small-group unit) and never grants progress access — ordinary `ChurchStructureMembership`
@@ -128,8 +129,9 @@ What switched in CS-CORE.4F.1: only the group-progress visible roster / `member_
 source, now membership-core active-primary-membership matching. What did **not** switch:
 the accessible group list and progress permission remain legacy role-scope plus own
 legacy `Profile.small_group` (`get_accessible_progress_groups()` /
-`can_view_group_progress_for()` unchanged); the selected/default group resolution remains
-legacy; ordinary `ChurchStructureMembership` still grants no progress access (invariant 5)
+`can_view_group_progress_for()` unchanged); the selected/default group resolution remained
+legacy in this slice (it later switched to a permission-fenced membership-core candidate in
+CS-CORE.4F.2, described below); ordinary `ChurchStructureMembership` still grants no progress access (invariant 5)
 — it only determines who appears in the roster after the viewer already passed the legacy
 permission check; and there was no model, migration, template, UI copy, CSS, admin, or URL
 change. The `group_progress_shadow` context is retained (still unrendered) as a
@@ -137,6 +139,38 @@ diagnostic / rollback comparison that computes the legacy roster and compares it
 the membership-core candidate. Rollback is mechanical: revert the `my_group_progress()`
 roster call back to `User.objects.filter(profile__small_group=selected_group)` — no stored
 data is touched.
+
+CS-CORE.4F.2 is complete as the second group-progress runtime source switch, scoped to the
+**default selected group only** and strictly permission-fenced. When the viewer does not
+pass an explicit `?group=`, the default `selected_group` in `reading.views.my_group_progress()`
+now prefers a membership-core default candidate via the new
+`reading.group_progress_shadow.get_membership_core_default_progress_group()` helper instead
+of `Profile.small_group`. The candidate is the single active legacy `SmallGroup` mapped from
+the viewer's one active primary `ChurchStructureMembership`; it fails closed on no / multiple
+active primary memberships and on an unmapped or ambiguous unit. **The permission fence is the
+core of this slice:** the candidate is used only if its id is already present in the legacy
+`get_accessible_progress_groups()` result. If the candidate is not legacy-accessible, the
+helper returns `None` and the existing legacy default applies unchanged (`Profile.small_group`
+if accessible, else the first accessible group, else `None` → existing empty state). The
+recorded gate evidence was again `audit_group_progress_shadow --limit 5` (returncode 0):
+groups_checked 21, groups_same_roster 21, groups_with_roster_gain 0, groups_with_roster_loss 0,
+progress_would_gain 0, progress_would_lose 0, selected_group_unmapped 0,
+users_checked_for_default 19, default_same 19, default_would_change 0,
+profile_membership_mismatch 0, membership_no_active_primary 0,
+membership_multiple_active_primary 0, membership_unit_unmapped 0.
+
+What switched in CS-CORE.4F.2: only the no-`?group=` default selected group, now a
+permission-fenced membership-core candidate. What did **not** switch: the accessible group
+list and progress permission remain legacy role-scope plus own legacy `Profile.small_group`
+(`get_accessible_progress_groups()` / `can_view_group_progress_for()` unchanged); explicit
+`?group=` selection remains legacy-permission-gated (an accessible request is authoritative,
+an inaccessible one falls through the same default logic); ordinary `ChurchStructureMembership`
+still grants no progress access and cannot expand the accessible group list (invariant 5) — it
+can only *suggest* a default already inside the legacy-accessible set; the visible roster
+already switched in CS-CORE.4F.1 and remains membership-core; and there was no model, migration,
+template, UI copy, CSS, admin, or URL change. Rollback is mechanical: restore the default
+selection preference to `Profile.small_group` first (remove the
+`get_membership_core_default_progress_group()` step) — no stored data is touched.
 
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
@@ -459,11 +493,22 @@ a better scheme emerges, but keep the sequence and the gates.
   group-progress roster (`member_rows`) now uses the membership-core candidate via
   `get_membership_core_progress_roster_users()` instead of `Profile.small_group`, after the
   CS-CORE.4E.1 demo-site gate showed zero roster/default drift. Only the roster source
-  switched: the accessible group list, progress permission, and selected/default group stay
-  legacy-driven; ordinary membership still grants no progress access; the shadow context is
+  switched in this slice: the accessible group list, progress permission, and selected/default
+  group stayed legacy-driven (the selected/default group switched separately in CS-CORE.4F.2,
+  below); ordinary membership still grants no progress access; the shadow context is
   kept as a diagnostic/rollback comparison; and no model/migration/template/CSS/admin/URL
   change happened. Rollback = revert the roster call to
   `User.objects.filter(profile__small_group=selected_group)`.
+- **CS-CORE.4F.2 — Group progress default-selected-group source switch, permission-fenced.**
+  Complete. With no explicit `?group=`, the default `selected_group` now prefers a
+  membership-core candidate via `get_membership_core_default_progress_group()` instead of
+  `Profile.small_group`, but only when that candidate is already in the legacy
+  `get_accessible_progress_groups()` result. The accessible group list and progress
+  permission stay legacy-driven; explicit `?group=` stays legacy-permission-gated; ordinary
+  membership still grants no progress access and cannot expand the accessible list; the
+  CS-CORE.4F.1 roster source is unchanged; and no model/migration/template/CSS/admin/URL
+  change happened. Rollback = restore the default selection preference to
+  `Profile.small_group` first (drop the `get_membership_core_default_progress_group()` step).
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback
@@ -561,18 +606,21 @@ docs only.
 ## 11. Non-Goals
 
 Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice, the
-CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, and the
-CS-CORE.4F.1 roster-only group-progress source switch, CS-CORE.4A through CS-CORE.4F.1 do
+CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, the
+CS-CORE.4F.1 roster-only group-progress source switch, and the CS-CORE.4F.2
+permission-fenced default-selected-group source switch, CS-CORE.4A through CS-CORE.4F.2 do
 not include or authorize:
 
 - any visibility read-path, template, form, admin, URL, static, deployment, source-of-truth,
-  or permission change (CS-CORE.4F.1 switched only the group-progress roster source, not
-  permission, the accessible group list, or the selected/default group);
+  or permission change (CS-CORE.4F.1 switched only the group-progress roster source and
+  CS-CORE.4F.2 switched only the permission-fenced default selected group — neither changed
+  progress permission or the accessible group list);
 - removal, hiding, or sync-only conversion of `Profile.small_group`;
 - any change to `small_group_at_post` semantics or to reflection visibility;
 - any use of `structure_unit_at_post` for visibility, filtering, permissions, or group progress;
-- any change to group-progress permissions, the accessible group list, or the selected/default
-  group (CS-CORE.4F.1 changed only the visible roster / `member_rows` source);
+- any change to group-progress permissions or the accessible group list (CS-CORE.4F.1 changed
+  only the visible roster / `member_rows` source; CS-CORE.4F.2 changed only the no-`?group=`
+  default selected group, and only within the unchanged legacy-accessible set);
 - any `ChurchRoleAssignment` scope migration;
 - any ServiceEvent or Bible Study V1/V2 change;
 - any data migration;

@@ -70,6 +70,7 @@ from reading.group_progress_shadow import (
     REASON_ROSTER_WOULD_LOSE,
     REASON_SELECTED_GROUP_UNMAPPED,
     compute_group_progress_shadow,
+    get_membership_core_default_progress_group,
     get_membership_core_progress_roster_users,
 )
 
@@ -1448,12 +1449,19 @@ class GroupProgressPrivacyInvariantTests(TestCase):
 class GroupProgressShadowModeTests(TestCase):
     """CS-CORE.4E group-progress membership-core shadow mode (comparison only).
 
-    The shadow layer computes a membership-core candidate default/roster alongside
-    the legacy answer. It never changes the default selected group or permissions,
-    and ordinary membership never grants progress access. After CS-CORE.4F.1 the
-    visible roster does follow the membership-core source, but the shadow itself
-    stays a diagnostic/rollback comparison: it still computes the legacy roster and
-    compares it against the membership-core candidate.
+    The shadow layer (``compute_group_progress_shadow`` and friends) computes a
+    membership-core candidate default/roster alongside the legacy ``Profile.small_group``
+    baseline. The shadow functions themselves never grant/deny access and never mutate
+    the selected group, roster, or permissions; they stay a diagnostic/rollback
+    comparison that recomputes the legacy baseline and compares it to the candidate.
+
+    Note the *runtime* page has since moved on from that legacy baseline for the
+    switched pieces: the visible roster follows the membership-core source after
+    CS-CORE.4F.1, and the no-``?group=`` default selected group is a permission-fenced
+    membership-core candidate after CS-CORE.4F.2 (used only when already in the legacy
+    ``get_accessible_progress_groups()`` set). The group-progress permission and
+    accessible group list remain legacy, and ordinary membership never grants progress
+    access.
     """
 
     def setUp(self):
@@ -1536,7 +1544,11 @@ class GroupProgressShadowModeTests(TestCase):
 
         response = self.progress_response_for(self.viewer, group=self.group)
 
-        # The selected/default group still follows legacy accessible-group logic.
+        # Explicit ?group=self.group is honored through the unchanged legacy
+        # permission gate (self.group is legacy-accessible to the viewer). Here the
+        # CS-CORE.4F.2 membership-core default candidate would also resolve to
+        # self.group — the viewer's active primary membership maps to it — so the
+        # legacy baseline and the permission-fenced membership default coincide.
         self.assertEqual(response.context["selected_group"], self.group)
         # CS-CORE.4F.1: the visible roster switched to the membership-core source,
         # so the membership-only user (no legacy Profile.small_group) now appears
@@ -1788,8 +1800,9 @@ class GroupProgressShadowAuditCommandTests(TestCase):
         self.assertEqual(write_sql, [])
         self.assertIn("READ-ONLY: no data was changed.", output)
         self.assertIn(
-            "Runtime roster is membership-core after CS-CORE.4F.1; permission and "
-            "selected/default group remain legacy-driven.",
+            "Runtime roster is membership-core after CS-CORE.4F.1 and the no-?group= "
+            "default selected group is permission-fenced membership-core after "
+            "CS-CORE.4F.2; permission and the accessible group list remain legacy-driven.",
             output,
         )
         self.assert_summary_count(output, "groups_checked", 1)
@@ -1934,9 +1947,16 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
     The visible roster (``member_rows`` in ``reading.views.my_group_progress``) now
     uses the membership-core candidate (single active primary
     ``ChurchStructureMembership`` matched to the selected group's mapped small-group
-    unit or a descendant) instead of legacy ``Profile.small_group``. Permission, the
-    accessible group list, and the selected/default group remain legacy-driven, and
-    ordinary membership still grants no progress access (privacy invariant 5).
+    unit or a descendant) instead of legacy ``Profile.small_group``. Permission and
+    the accessible group list remain legacy-driven, and ordinary membership still
+    grants no progress access (privacy invariant 5).
+
+    (The default *selected* group later switched to a permission-fenced
+    membership-core candidate in CS-CORE.4F.2; see
+    ``GroupProgressDefaultSourceSwitchTests``. The default-group cases in this 4F.1
+    class still hold because their membership candidate is not in the viewer's
+    legacy-accessible groups, so the 4F.2 fence excludes it and the legacy default
+    applies — which is exactly the permission fence those cases exercise.)
     """
 
     def setUp(self):
@@ -2057,8 +2077,10 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
 
     def test_default_selected_group_stays_legacy_not_membership_candidate(self):
         # Legacy profile group (self.group) differs from the membership candidate
-        # default (other_group). With no ?group= param the default must follow the
-        # legacy accessible-group logic, not the membership candidate.
+        # default (other_group). The CS-CORE.4F.2 default helper is permission-fenced:
+        # the candidate other_group is NOT in this ordinary user's legacy-accessible
+        # groups ({self.group}), so it is excluded and the legacy default applies. The
+        # selected group must therefore be the legacy self.group, not other_group.
         dual = self.create_user("switch_dual", group=self.group)
         self.create_membership(dual, self.other_group_unit)
         PlanEnrollment.objects.create(user=dual, active_plan=self.active_plan)
@@ -2155,6 +2177,258 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
             )
         # Still read-only: nothing about runtime was changed by the command.
         self.assertIn("READ-ONLY: no data was changed.", output.getvalue())
+
+
+class GroupProgressDefaultSourceSwitchTests(TestCase):
+    """CS-CORE.4F.2 locks the permission-fenced default-selected-group switch.
+
+    With no explicit ``?group=``, ``reading.views.my_group_progress`` now prefers a
+    membership-core default candidate (single active primary
+    ``ChurchStructureMembership`` mapped to one active legacy ``SmallGroup``) over the
+    legacy ``Profile.small_group`` default. The candidate is **permission-fenced**: it
+    is only used when it is already in the legacy
+    ``get_accessible_progress_groups()`` result, so ordinary membership never grants
+    progress access, never expands the accessible group list, and never bypasses the
+    legacy permission gate. Explicit ``?group=`` remains legacy-permission-gated, and
+    the visible roster stays the membership-core source switched in CS-CORE.4F.1.
+    """
+
+    def setUp(self):
+        self.district = District.objects.create(name="Default District")
+        self.other_district = District.objects.create(name="Default Other District")
+        self.unit_a = self.create_unit("DEF-A")
+        self.unit_b = self.create_unit("DEF-B")
+        self.unit_c = self.create_unit("DEF-C")
+        self.group_a = SmallGroup.objects.create(
+            name="Default Group A",
+            district=self.district,
+            church_structure_unit=self.unit_a,
+        )
+        self.group_b = SmallGroup.objects.create(
+            name="Default Group B",
+            district=self.district,
+            church_structure_unit=self.unit_b,
+        )
+        # group_c is in another district: out of a self.district leader's scope.
+        self.group_c = SmallGroup.objects.create(
+            name="Default Group C",
+            district=self.other_district,
+            church_structure_unit=self.unit_c,
+        )
+
+        self.plan = ReadingPlan.objects.create(name="Default Plan", is_active=True)
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Default Active Plan",
+        )
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def make_district_leader(self, user, district):
+        ChurchRoleAssignment.objects.create(
+            user=user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+    def progress_response_for(self, user, *, group=None):
+        self.client.login(username=user.username, password="TestPass123!")
+        params = {}
+        if group is not None:
+            params["group"] = group.id
+        response = self.client.get(reverse("my_group_progress"), params)
+        self.assertEqual(response.status_code, 200)
+        self.client.logout()
+        return response
+
+    def row_usernames(self, response):
+        return {row["member"].username for row in response.context["member_rows"]}
+
+    def accessible_group_ids(self, user):
+        return set(get_accessible_progress_groups(user).values_list("id", flat=True))
+
+    def test_default_uses_membership_core_when_candidate_is_legacy_accessible(self):
+        # District leader over self.district can legacy-access group_a and group_b.
+        # Legacy profile default points to group_a; the single active primary
+        # membership points to group_b. With no ?group=, the permission-fenced
+        # membership-core candidate (group_b) is used instead of the legacy default.
+        leader = self.create_user("default_leader", group=self.group_a)
+        self.make_district_leader(leader, self.district)
+        self.create_membership(leader, self.unit_b)
+
+        self.assertEqual(
+            self.accessible_group_ids(leader),
+            {self.group_a.id, self.group_b.id},
+        )
+
+        response = self.progress_response_for(leader)
+
+        self.assertEqual(response.context["selected_group"], self.group_b)
+        # Sanity: the legacy default (profile group_a) was not chosen.
+        self.assertNotEqual(response.context["selected_group"], self.group_a)
+
+    def test_default_falls_back_to_legacy_when_candidate_not_accessible(self):
+        # Ordinary user: legacy profile group_a (their only accessible group) and an
+        # active primary membership in group_b's unit. group_b is NOT legacy
+        # accessible, so the membership candidate is fenced out and the legacy default
+        # (group_a) applies. Proves ordinary membership does not grant progress access.
+        user = self.create_user("default_ordinary", group=self.group_a)
+        self.create_membership(user, self.unit_b)
+
+        self.assertEqual(self.accessible_group_ids(user), {self.group_a.id})
+
+        response = self.progress_response_for(user)
+
+        self.assertEqual(response.context["selected_group"], self.group_a)
+
+    def test_membership_only_user_with_no_accessible_groups_gets_empty_state(self):
+        # No legacy Profile.small_group, no role, but an active primary membership in
+        # group_a's unit. group_a is not legacy accessible, so the candidate is fenced
+        # out and there is no accessible group at all: safe empty state.
+        user = self.create_user("default_membership_only")
+        self.create_membership(user, self.unit_a)
+
+        self.assertEqual(self.accessible_group_ids(user), set())
+
+        response = self.progress_response_for(user)
+
+        self.assertIsNone(response.context["selected_group"])
+        self.assertEqual(list(response.context["member_rows"]), [])
+        self.assertContains(response, "You are not assigned to a small group yet.")
+
+    def test_explicit_accessible_group_overrides_membership_default(self):
+        # District leader accesses group_a and group_b; membership default is group_b.
+        # An explicit accessible ?group=group_a stays authoritative.
+        leader = self.create_user("default_explicit", group=self.group_a)
+        self.make_district_leader(leader, self.district)
+        self.create_membership(leader, self.unit_b)
+
+        response = self.progress_response_for(leader, group=self.group_a)
+
+        self.assertEqual(response.context["selected_group"], self.group_a)
+
+    def test_explicit_inaccessible_group_falls_through_to_membership_default(self):
+        # District leader accesses group_a and group_b but not group_c (other
+        # district). An explicit inaccessible ?group=group_c falls through the default
+        # logic, which now selects the permission-fenced membership default group_b.
+        leader = self.create_user("default_explicit_bad", group=self.group_a)
+        self.make_district_leader(leader, self.district)
+        self.create_membership(leader, self.unit_b)
+
+        self.assertNotIn(self.group_c.id, self.accessible_group_ids(leader))
+
+        response = self.progress_response_for(leader, group=self.group_c)
+
+        self.assertEqual(response.context["selected_group"], self.group_b)
+
+    def test_multiple_active_primary_memberships_fail_closed_to_legacy_default(self):
+        # Two active primary memberships are ambiguous: the membership candidate fails
+        # closed and the legacy default (profile group_a) applies, not an arbitrary
+        # membership group.
+        leader = self.create_user("default_ambiguous", group=self.group_a)
+        self.make_district_leader(leader, self.district)
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=leader,
+                    unit=self.unit_a,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=leader,
+                    unit=self.unit_b,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        response = self.progress_response_for(leader)
+
+        self.assertEqual(response.context["selected_group"], self.group_a)
+
+    def test_unmapped_membership_unit_fails_closed_to_legacy_default(self):
+        # The active primary membership is in a unit that maps to no active
+        # SmallGroup, so the candidate fails closed and the legacy default applies.
+        leader = self.create_user("default_unmapped", group=self.group_a)
+        self.make_district_leader(leader, self.district)
+        unmapped_unit = self.create_unit("DEF-UNMAPPED")
+        self.create_membership(leader, unmapped_unit)
+
+        response = self.progress_response_for(leader)
+
+        self.assertEqual(response.context["selected_group"], self.group_a)
+
+    def test_ordinary_membership_does_not_expand_accessible_groups(self):
+        # An active primary membership in group_a's unit, with no role and no legacy
+        # profile group, must not make group_a (or anything) accessible.
+        user = self.create_user("default_no_expand")
+        self.create_membership(user, self.unit_a)
+
+        self.assertEqual(self.accessible_group_ids(user), set())
+        self.assertFalse(can_view_group_progress_for(user, self.group_a))
+
+    def test_default_helper_is_permission_fenced(self):
+        # Direct helper checks: a mapped candidate is only returned when it is in the
+        # provided accessible set, and never when the set omits it or is None.
+        user = self.create_user("default_helper")
+        self.create_membership(user, self.unit_b)
+
+        self.assertEqual(
+            get_membership_core_default_progress_group(
+                user, accessible_groups=[self.group_a, self.group_b]
+            ),
+            self.group_b,
+        )
+        self.assertIsNone(
+            get_membership_core_default_progress_group(
+                user, accessible_groups=[self.group_a]
+            )
+        )
+        self.assertIsNone(
+            get_membership_core_default_progress_group(user, accessible_groups=None)
+        )
+        # Id-based accessible sets are accepted too.
+        self.assertEqual(
+            get_membership_core_default_progress_group(
+                user, accessible_groups={self.group_b.id}
+            ),
+            self.group_b,
+        )
 
 
 class ImportReadingPlanCommandTests(TestCase):

@@ -29,6 +29,7 @@ from studies.views import get_v2_landing_context
 from .forms import ReadingGuidePostForm
 from .group_progress_shadow import (
     compute_group_progress_shadow,
+    get_membership_core_default_progress_group,
     get_membership_core_progress_roster_users,
 )
 from .passage_services import get_memory_passages, get_reading_passages
@@ -1128,6 +1129,20 @@ def my_group_progress(request):
 
     if group_id:
         selected_group = groups.filter(id=group_id).first()
+
+    # CS-CORE.4F.2: when there is no usable explicit ?group=, prefer a
+    # permission-fenced membership-core default candidate over the legacy
+    # Profile.small_group default. The helper only returns a group that is already in
+    # the legacy-accessible `groups` queryset, so membership can never expand the
+    # accessible list or bypass the legacy permission gate; ordinary membership grants
+    # no progress access. If there is no safe candidate it returns None and the legacy
+    # default below applies unchanged.
+    if selected_group is None:
+        membership_default = get_membership_core_default_progress_group(
+            request.user, accessible_groups=groups
+        )
+        if membership_default is not None:
+            selected_group = membership_default
 
     if selected_group is None and user_profile and user_profile.small_group:
         selected_group = groups.filter(id=user_profile.small_group_id).first()

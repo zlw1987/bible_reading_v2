@@ -1,19 +1,27 @@
-"""Group progress membership-core shadow comparison (CS-CORE.4E).
+"""Group progress membership-core shadow comparison + runtime selectors (CS-CORE.4E/4F).
 
 This module computes a **shadow** membership-core candidate answer for the group
-progress default group and roster, alongside the current legacy answer, so that
-divergence can be observed without changing any runtime behavior.
+progress default group and roster, alongside the legacy ``Profile.small_group``
+baseline answer, so that divergence can be observed (``compute_group_progress_shadow``
+/ ``compute_group_progress_roster_shadow``). That legacy baseline is now a
+diagnostic / rollback comparison, not the page's live source for the switched pieces.
+This module also hosts the membership-core *runtime* selectors that the page now uses:
+the visible roster source (``get_membership_core_progress_roster_users``, switched in
+CS-CORE.4F.1) and the permission-fenced default selected group
+(``get_membership_core_default_progress_group``, switched in CS-CORE.4F.2).
 
 Hard rules (binding, see
 ``docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md`` Section 4 and the
 no-go rules):
 
-- This is a **comparison-only** layer. It must never grant or deny access and must
-  never change the user-visible roster, default selected group, or permissions.
-- The actual group progress page keeps using legacy ``Profile.small_group``, legacy
-  ``SmallGroup``, ``accounts.permissions.get_accessible_progress_groups()``, and
-  ``accounts.permissions.can_view_group_progress_for()``.
-- The membership-core candidate here is a *roster/default* comparison only. Ordinary
+- The shadow functions are a **comparison-only** layer: they must never grant or deny
+  access and must never change the roster, default selected group, or permissions.
+- The group-progress permission gate and the accessible group list keep using legacy
+  ``accounts.permissions.get_accessible_progress_groups()`` and
+  ``accounts.permissions.can_view_group_progress_for()``. The 4F.2 default helper is
+  **permission-fenced**: it can only suggest a group already in the legacy-accessible
+  set, never expand it.
+- The membership-core candidate is a *roster/default* source only. Ordinary
   ``ChurchStructureMembership`` must never be used to infer group-progress permission
   (privacy invariant 5).
 
@@ -29,7 +37,7 @@ from dataclasses import dataclass, field
 from typing import FrozenSet, List, Optional, Tuple
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
@@ -74,9 +82,17 @@ class GroupProgressRosterShadow:
 class GroupProgressShadow:
     """Read-only comparison between the legacy and membership-core candidates.
 
-    None of these fields drive runtime behavior. ``legacy_selected_group_id`` and
-    ``legacy_roster_user_ids`` reflect what the page actually shows today;
-    everything prefixed ``membership_`` / ``would_`` is the shadow candidate only.
+    None of these fields drive runtime behavior; this dataclass is a diagnostic /
+    rollback comparison only and never grants, denies, or mutates anything.
+    ``legacy_selected_group_id`` and ``legacy_roster_user_ids`` are the **legacy
+    baseline** (the pre-switch ``Profile.small_group`` answer), kept for comparison
+    and rollback — they are no longer what the page renders for the switched pieces.
+    The live page now builds its visible roster from the membership-core candidate
+    (CS-CORE.4F.1) and prefers a permission-fenced membership-core default selected
+    group when no ``?group=`` is given (CS-CORE.4F.2), so the ``membership_`` fields
+    mirror the live roster/default source for those switched pieces only. The
+    group-progress permission and accessible group list remain legacy-driven and are
+    not represented here.
     """
 
     legacy_selected_group_id: Optional[int]
@@ -135,6 +151,90 @@ def _candidate_group_for_unit(unit):
     if len(groups) != 1:
         return None
     return groups[0]
+
+
+def _membership_core_candidate_default_group(user, target_date):
+    """Return ``(candidate_group, reason_code)`` for the user's membership default.
+
+    The candidate is the single active legacy ``SmallGroup`` mapped from the user's
+    one active primary ``ChurchStructureMembership`` unit, as of ``target_date``.
+    ``reason_code`` is ``None`` on success, otherwise the fail-closed reason:
+
+    - no active primary membership -> ``REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY``
+    - more than one active primary membership -> ``REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY``
+    - unit not a mapped single small-group unit -> ``REASON_MEMBERSHIP_UNIT_UNMAPPED``
+
+    This computes a *candidate only*: it never consults permissions and never grants
+    access. It is shared by :func:`compute_group_progress_shadow` (which reports the
+    reason code) and :func:`get_membership_core_default_progress_group` (which adds
+    the permission fence).
+    """
+    memberships = _active_primary_memberships(user, target_date)
+    if not memberships:
+        return None, REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY
+    if len(memberships) > 1:
+        return None, REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY
+    candidate_group = _candidate_group_for_unit(memberships[0].unit)
+    if candidate_group is None:
+        return None, REASON_MEMBERSHIP_UNIT_UNMAPPED
+    return candidate_group, None
+
+
+def _candidate_in_accessible(candidate_group, accessible_groups):
+    """Return ``True`` only if ``candidate_group`` is in ``accessible_groups``.
+
+    ``accessible_groups`` is the legacy ``get_accessible_progress_groups()`` result
+    and may be a ``QuerySet``, a list/set of ``SmallGroup`` objects, or a list/set of
+    group ids. ``None`` (no fence supplied) yields ``False`` so the helper never
+    suggests a default without an explicit legacy-accessible set to fence against.
+    """
+    if candidate_group is None or accessible_groups is None:
+        return False
+
+    candidate_id = candidate_group.pk
+    if isinstance(accessible_groups, QuerySet):
+        return accessible_groups.filter(pk=candidate_id).exists()
+
+    for item in accessible_groups:
+        if isinstance(item, int):
+            if item == candidate_id:
+                return True
+        elif getattr(item, "pk", None) == candidate_id:
+            return True
+    return False
+
+
+def get_membership_core_default_progress_group(
+    user, *, accessible_groups=None, target_date=None
+):
+    """Permission-fenced membership-core default group for group progress (CS-CORE.4F.2).
+
+    Returns the legacy ``SmallGroup`` that the group-progress page should *prefer* as
+    the default selected group when the viewer did not pass an explicit ``?group=``,
+    or ``None`` when there is no safe membership-core candidate.
+
+    The candidate is computed by :func:`_membership_core_candidate_default_group`
+    (exactly one active primary ``ChurchStructureMembership`` mapped to exactly one
+    active legacy ``SmallGroup``; it fails closed on no/multiple active primary
+    memberships and on an unmapped/ambiguous unit).
+
+    It is then **permission-fenced**: the candidate is returned only when its id is
+    already present in ``accessible_groups`` (the legacy
+    ``accounts.permissions.get_accessible_progress_groups()`` result). When
+    ``accessible_groups`` is not supplied, or the candidate is not in it, this returns
+    ``None``. This helper therefore never grants progress access on its own and never
+    expands the accessible group list; ordinary ``ChurchStructureMembership`` confers
+    no progress access (privacy invariant 5).
+    """
+    target_date = target_date or timezone.localdate()
+    candidate_group, _reason = _membership_core_candidate_default_group(
+        user, target_date
+    )
+    if candidate_group is None:
+        return None
+    if not _candidate_in_accessible(candidate_group, accessible_groups):
+        return None
+    return candidate_group
 
 
 def _unit_and_descendant_ids(unit):
@@ -302,10 +402,14 @@ def compute_group_progress_shadow(
 ):
     """Compute the legacy-vs-membership-core shadow comparison.
 
-    ``selected_group`` is the legacy ``SmallGroup`` the page actually selected (or
-    ``None`` when the page had no selectable group). ``legacy_roster_user_ids`` may
-    be supplied by the caller to avoid recomputing the roster the view already has;
-    when omitted it is derived from ``Profile.small_group`` exactly as the page does.
+    ``selected_group`` is the ``SmallGroup`` the page actually selected (or ``None``
+    when the page had no selectable group); since CS-CORE.4F.2 that selection may
+    itself be the permission-fenced membership-core default rather than the legacy
+    ``Profile.small_group`` default. ``legacy_roster_user_ids`` is the **legacy
+    baseline** roster (the pre-4F.1 ``Profile.small_group`` answer) used for the
+    comparison; it may be supplied by the caller, and when omitted it is derived from
+    ``Profile.small_group`` here. Note this baseline is no longer the page's live
+    roster source — that switched to the membership-core candidate in CS-CORE.4F.1.
 
     This function only reads. It returns a :class:`GroupProgressShadow` and changes
     nothing.
@@ -317,17 +421,14 @@ def compute_group_progress_shadow(
     if selected_group is None:
         reasons.append(REASON_LEGACY_NO_SELECTED_GROUP)
 
-    # Membership-core candidate default group (fail closed on ambiguity).
-    memberships = _active_primary_memberships(user, target_date)
-    candidate_group = None
-    if not memberships:
-        reasons.append(REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY)
-    elif len(memberships) > 1:
-        reasons.append(REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY)
-    else:
-        candidate_group = _candidate_group_for_unit(memberships[0].unit)
-        if candidate_group is None:
-            reasons.append(REASON_MEMBERSHIP_UNIT_UNMAPPED)
+    # Membership-core candidate default group (fail closed on ambiguity). This shares
+    # the same candidate logic the runtime CS-CORE.4F.2 default-group helper uses; the
+    # reason code (when any) is surfaced here for the shadow/audit comparison only.
+    candidate_group, candidate_reason = _membership_core_candidate_default_group(
+        user, target_date
+    )
+    if candidate_reason is not None:
+        reasons.append(candidate_reason)
 
     membership_candidate_group_id = (
         candidate_group.id if candidate_group is not None else None

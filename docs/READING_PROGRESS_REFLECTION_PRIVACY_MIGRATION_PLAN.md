@@ -83,6 +83,27 @@ command already exposes equivalent progress roster `would_gain` / `would_lose` a
 risk categories, so it was reused unchanged and pinned by a new test asserting the
 helper and the command agree.
 
+CS-CORE.4E.1 is complete as a focused operational gate command. It adds
+`reading.group_progress_shadow.compute_group_progress_roster_shadow()` (a viewer-free,
+group-level roster shadow that `compute_group_progress_shadow()` now reuses for its
+roster half without changing its public output or semantics) and a new read-only
+management command `audit_group_progress_shadow`. The command compares, for each
+active legacy `SmallGroup`, the legacy `Profile.small_group` roster against the
+membership-core candidate roster, and separately compares each relevant user's legacy
+default group against the membership-core candidate default group. It reports summary
+counters (`groups_checked`, `groups_same_roster`, `groups_with_roster_gain`,
+`groups_with_roster_loss`, `progress_would_gain`, `progress_would_lose`,
+`selected_group_unmapped`, `users_checked_for_default`, `default_same`,
+`default_would_change`, `profile_membership_mismatch`, `membership_no_active_primary`,
+`membership_multiple_active_primary`, `membership_unit_unmapped`) plus capped verbose
+detail, and supports `--group-id`, `--limit`, `--verbose`, `--date`, and
+`--fail-on-drift`. It is **read-only**: it has no `--apply`, writes nothing, never
+calls or alters `my_group_progress()`, and the candidate fails closed on ambiguity.
+Runtime group progress remains legacy-driven — no membership-core source switch and no
+permission change happened, and ordinary `ChurchStructureMembership` still grants no
+progress access (invariant 5). The command exists to be run against real data as gate
+evidence before any future group-progress source switch; it does not perform one.
+
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
 `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and
@@ -389,6 +410,16 @@ a better scheme emerges, but keep the sequence and the gates.
   legacy: selected group, visible roster, redirects, and permissions are unchanged, the
   candidate fails closed on ambiguity, and ordinary membership grants nothing. No source
   switch, and the role-scope decision is still explicitly *not* made here.
+- **CS-CORE.4E.1 — Operational group-progress shadow audit command.** Complete. Adds
+  the viewer-free `compute_group_progress_roster_shadow()` helper (reused by
+  `compute_group_progress_shadow()` for its roster half) and the read-only
+  `audit_group_progress_shadow` management command. The command compares legacy
+  `Profile.small_group` rosters/defaults against the membership-core candidate per
+  active legacy `SmallGroup`, with `--group-id`, `--limit`, `--verbose`, `--date`, and
+  `--fail-on-drift`. It writes nothing, has no `--apply`, never touches
+  `my_group_progress()`, and exists as real-data gate evidence before any future
+  group-progress switch. Runtime stays legacy-driven; no source switch and no
+  permission change happened.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback

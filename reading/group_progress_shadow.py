@@ -52,6 +52,25 @@ REASON_ROSTER_WOULD_LOSE = "roster_would_lose"
 
 
 @dataclass(frozen=True)
+class GroupProgressRosterShadow:
+    """Read-only roster comparison for a single selected legacy ``SmallGroup``.
+
+    This is the group-level half of :class:`GroupProgressShadow`: it compares the
+    legacy ``Profile.small_group`` roster with the membership-core candidate roster
+    for one selected group, and never depends on a particular viewer. It changes
+    nothing and never grants or denies access.
+    """
+
+    selected_group_id: Optional[int]
+    legacy_roster_user_ids: FrozenSet[int]
+    membership_roster_user_ids: FrozenSet[int]
+    same_roster: bool
+    would_gain_user_ids: FrozenSet[int]
+    would_lose_user_ids: FrozenSet[int]
+    reason_codes: Tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class GroupProgressShadow:
     """Read-only comparison between the legacy and membership-core candidates.
 
@@ -175,6 +194,72 @@ def _membership_roster_user_ids(selected_group, target_date):
     return roster, False
 
 
+def compute_group_progress_roster_shadow(
+    selected_group,
+    *,
+    legacy_roster_user_ids=None,
+    target_date=None,
+):
+    """Compare the legacy vs membership-core roster for one selected legacy group.
+
+    ``selected_group`` is the legacy ``SmallGroup`` to compare. The legacy roster is
+    ``User.objects.filter(profile__small_group=selected_group)`` (or the
+    ``legacy_roster_user_ids`` the caller already computed); the membership-core
+    candidate roster is the set of users with exactly one active primary membership
+    whose unit is the group's mapped ``ChurchStructureUnit`` or a descendant.
+
+    The candidate fails closed on an unmapped or wrong-type selected group (it then
+    yields an empty candidate roster and the ``selected_group_unmapped`` reason).
+    This function only reads; it never grants/denies access and never writes.
+    """
+    target_date = target_date or timezone.localdate()
+    reasons: List[str] = []
+
+    if selected_group is None:
+        # Nothing to compare; there is no legacy group to build a roster from.
+        return GroupProgressRosterShadow(
+            selected_group_id=None,
+            legacy_roster_user_ids=frozenset(),
+            membership_roster_user_ids=frozenset(),
+            same_roster=True,
+            would_gain_user_ids=frozenset(),
+            would_lose_user_ids=frozenset(),
+            reason_codes=(REASON_LEGACY_NO_SELECTED_GROUP,),
+        )
+
+    if legacy_roster_user_ids is None:
+        legacy_roster = _legacy_roster_user_ids(selected_group)
+    else:
+        legacy_roster = set(legacy_roster_user_ids)
+
+    membership_roster, unmapped = _membership_roster_user_ids(
+        selected_group, target_date
+    )
+    if unmapped:
+        reasons.append(REASON_SELECTED_GROUP_UNMAPPED)
+
+    would_gain = membership_roster - legacy_roster
+    would_lose = legacy_roster - membership_roster
+    same_roster = legacy_roster == membership_roster
+
+    if same_roster:
+        reasons.append(REASON_ROSTER_SAME)
+    if would_gain:
+        reasons.append(REASON_ROSTER_WOULD_GAIN)
+    if would_lose:
+        reasons.append(REASON_ROSTER_WOULD_LOSE)
+
+    return GroupProgressRosterShadow(
+        selected_group_id=selected_group.id,
+        legacy_roster_user_ids=frozenset(legacy_roster),
+        membership_roster_user_ids=frozenset(membership_roster),
+        same_roster=same_roster,
+        would_gain_user_ids=frozenset(would_gain),
+        would_lose_user_ids=frozenset(would_lose),
+        reason_codes=tuple(reasons),
+    )
+
+
 def compute_group_progress_shadow(
     user,
     selected_group,
@@ -227,42 +312,30 @@ def compute_group_progress_shadow(
     ):
         reasons.append(REASON_PROFILE_MEMBERSHIP_MISMATCH)
 
-    # Roster comparison for the selected legacy group only.
-    if selected_group is None:
-        legacy_roster = set()
-        membership_roster = set()
-    else:
-        if legacy_roster_user_ids is None:
-            legacy_roster = _legacy_roster_user_ids(selected_group)
-        else:
-            legacy_roster = set(legacy_roster_user_ids)
-
-        membership_roster, unmapped = _membership_roster_user_ids(
-            selected_group, target_date
-        )
-        if unmapped:
-            reasons.append(REASON_SELECTED_GROUP_UNMAPPED)
-
-    would_gain = membership_roster - legacy_roster
-    would_lose = legacy_roster - membership_roster
-    same_roster = legacy_roster == membership_roster
-
+    # Roster comparison for the selected legacy group only, reusing the group-level
+    # helper. The no-selected-group reason is owned by this function (above), so the
+    # helper's own REASON_LEGACY_NO_SELECTED_GROUP is dropped here to avoid a
+    # duplicate; the public output is otherwise unchanged.
+    roster_shadow = compute_group_progress_roster_shadow(
+        selected_group,
+        legacy_roster_user_ids=legacy_roster_user_ids,
+        target_date=target_date,
+    )
     if selected_group is not None:
-        reasons.append(REASON_ROSTER_SAME if same_roster else None)
-        if would_gain:
-            reasons.append(REASON_ROSTER_WOULD_GAIN)
-        if would_lose:
-            reasons.append(REASON_ROSTER_WOULD_LOSE)
-    reasons = [reason for reason in reasons if reason is not None]
+        reasons.extend(
+            code
+            for code in roster_shadow.reason_codes
+            if code != REASON_LEGACY_NO_SELECTED_GROUP
+        )
 
     return GroupProgressShadow(
         legacy_selected_group_id=legacy_selected_group_id,
         membership_candidate_group_id=membership_candidate_group_id,
-        legacy_roster_user_ids=frozenset(legacy_roster),
-        membership_roster_user_ids=frozenset(membership_roster),
+        legacy_roster_user_ids=roster_shadow.legacy_roster_user_ids,
+        membership_roster_user_ids=roster_shadow.membership_roster_user_ids,
         same_default=same_default,
-        same_roster=same_roster,
-        would_gain_user_ids=frozenset(would_gain),
-        would_lose_user_ids=frozenset(would_lose),
+        same_roster=roster_shadow.same_roster,
+        would_gain_user_ids=roster_shadow.would_gain_user_ids,
+        would_lose_user_ids=roster_shadow.would_lose_user_ids,
         reason_codes=tuple(reasons),
     )

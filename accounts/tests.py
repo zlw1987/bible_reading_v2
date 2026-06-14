@@ -28,7 +28,9 @@ from accounts.permissions import (
     CAP_VIEW_ALL_GROUP_PROGRESS,
     CAP_VIEW_DISTRICT_PROGRESS,
     CAP_VIEW_GROUP_PROGRESS,
+    assignment_scope_includes_unit,
     get_accessible_progress_groups,
+    get_role_assignment_structure_unit,
     has_capability,
 )
 from comments.models import ReflectionComment, ReflectionReport
@@ -7265,3 +7267,450 @@ class AccountSignupLanguageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already taken")
         self.assertEqual(User.objects.filter(username="casey").count(), 0)
+
+
+class StructureRoleScopeFoundationTests(TestCase):
+    """CS-CORE.2D-A: ChurchRoleAssignment.structure_unit field + scope helpers.
+
+    Foundation only. Adding the field and the resolution helpers does not change
+    any progress-permission runtime behavior, and ordinary
+    ChurchStructureMembership is never used as a role-scope source here.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="role_scope_user")
+        self.district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="DIST-A",
+            name="District A",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SG-A",
+            name="Small Group A",
+            parent=self.district_unit,
+        )
+        self.sibling_group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SG-B",
+            name="Small Group B",
+            parent=self.district_unit,
+        )
+        self.unrelated_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SG-Z",
+            name="Small Group Z",
+        )
+
+    def test_legacy_small_group_scope_assignment_unchanged(self):
+        group = SmallGroup.objects.create(name="Legacy SG")
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.small_group_id, group.id)
+        self.assertIsNone(assignment.structure_unit_id)
+
+    def test_assignment_can_be_created_with_structure_unit(self):
+        group = SmallGroup.objects.create(name="Mapped SG")
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+            structure_unit=self.group_unit,
+        )
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
+
+    def test_resolver_returns_explicit_structure_unit_first(self):
+        group = SmallGroup.objects.create(
+            name="Mapped SG2", church_structure_unit=self.sibling_group_unit
+        )
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+            structure_unit=self.group_unit,
+        )
+
+        self.assertEqual(
+            get_role_assignment_structure_unit(assignment), self.group_unit
+        )
+
+    def test_resolver_falls_back_to_legacy_small_group_unit(self):
+        group = SmallGroup.objects.create(
+            name="Mapped SG3", church_structure_unit=self.group_unit
+        )
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        self.assertEqual(
+            get_role_assignment_structure_unit(assignment), self.group_unit
+        )
+
+    def test_resolver_falls_back_to_legacy_district_unit(self):
+        district = District.objects.create(
+            name="Mapped District", church_structure_unit=self.district_unit
+        )
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+        self.assertEqual(
+            get_role_assignment_structure_unit(assignment), self.district_unit
+        )
+
+    def test_resolver_returns_none_for_unmapped_legacy_scope(self):
+        group = SmallGroup.objects.create(name="Unmapped SG")
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        self.assertIsNone(get_role_assignment_structure_unit(assignment))
+
+    def test_resolver_returns_none_for_global_scope(self):
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.assertIsNone(get_role_assignment_structure_unit(assignment))
+
+    def test_scope_includes_same_unit(self):
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=SmallGroup.objects.create(name="Same SG"),
+            structure_unit=self.group_unit,
+        )
+
+        self.assertTrue(
+            assignment_scope_includes_unit(assignment, self.group_unit)
+        )
+
+    def test_scope_includes_descendant_small_group_under_district_unit(self):
+        district = District.objects.create(
+            name="Cover District", church_structure_unit=self.district_unit
+        )
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+        # group_unit is a child of district_unit, so a district-like scope covers it.
+        self.assertTrue(
+            assignment_scope_includes_unit(assignment, self.group_unit)
+        )
+
+    def test_scope_excludes_sibling_and_unrelated_units(self):
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=SmallGroup.objects.create(name="Excl SG"),
+            structure_unit=self.group_unit,
+        )
+
+        # A small-group-unit scope does not cover a sibling or unrelated unit,
+        # and never reaches up to its own parent district.
+        self.assertFalse(
+            assignment_scope_includes_unit(assignment, self.sibling_group_unit)
+        )
+        self.assertFalse(
+            assignment_scope_includes_unit(assignment, self.unrelated_unit)
+        )
+        self.assertFalse(
+            assignment_scope_includes_unit(assignment, self.district_unit)
+        )
+
+    def test_scope_fails_closed_on_missing_unit_or_unresolved_scope(self):
+        unresolved = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=SmallGroup.objects.create(name="NoUnit SG"),
+        )
+
+        # Missing target unit fails closed.
+        self.assertFalse(
+            assignment_scope_includes_unit(unresolved, None)
+        )
+        # Unresolved assignment scope (no explicit unit, unmapped legacy) fails closed.
+        self.assertFalse(
+            assignment_scope_includes_unit(unresolved, self.group_unit)
+        )
+
+    def test_helpers_do_not_use_membership_for_scope(self):
+        # An ordinary active primary membership under group_unit must not make a
+        # global-scope (or any) assignment resolve to that unit.
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        global_assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        self.assertIsNone(get_role_assignment_structure_unit(global_assignment))
+        self.assertFalse(
+            assignment_scope_includes_unit(global_assignment, self.group_unit)
+        )
+
+    def test_existing_progress_permission_helpers_remain_legacy(self):
+        # CS-CORE.2D-A is foundation only: get_accessible_progress_groups still
+        # honors legacy SmallGroup-scoped role assignments and Profile.small_group.
+        group = SmallGroup.objects.create(name="Legacy Perm SG")
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        self.assertEqual(list(get_accessible_progress_groups(self.user)), [group])
+
+
+class StructureRoleScopeAuditCommandTests(TestCase):
+    """CS-CORE.2D-A read-only role-scope readiness audit command tests."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="audit_role_user")
+
+    def run_command(self, *args):
+        output = StringIO()
+        call_command("audit_structure_role_scopes", *args, stdout=output)
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+            parent=parent,
+        )
+
+    def assert_summary_count(self, output, key, count):
+        self.assertIn(f"{key}: {count}", output)
+
+    def test_command_is_read_only(self):
+        unit = self.create_unit("AUDIT-RO")
+        group = SmallGroup.objects.create(
+            name="Audit RO SG", church_structure_unit=unit
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+        before = {
+            "assignments": ChurchRoleAssignment.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "districts": District.objects.count(),
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(
+                ("INSERT", "UPDATE", "DELETE")
+            )
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("Audit only:", output)
+        self.assertEqual(
+            before,
+            {
+                "assignments": ChurchRoleAssignment.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "districts": District.objects.count(),
+            },
+        )
+
+    def test_mapped_small_group_scope_is_ready(self):
+        unit = self.create_unit("AUDIT-MAP-SG")
+        group = SmallGroup.objects.create(
+            name="Audit Mapped SG", church_structure_unit=unit
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        output = self.run_command()
+
+        self.assert_summary_count(output, "assignments_checked", 1)
+        self.assert_summary_count(output, "legacy_small_group_scope_mapped", 1)
+        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 0)
+        self.assert_summary_count(output, "assignments_ready_for_structure_scope", 1)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 0
+        )
+
+    def test_unmapped_small_group_scope_is_not_ready(self):
+        group = SmallGroup.objects.create(name="Audit Unmapped SG")
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 1)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 1
+        )
+        self.assertIn("reason=legacy_small_group_scope_unmapped", output)
+
+    def test_mapped_and_unmapped_district_scopes_counted(self):
+        unit = self.create_unit("AUDIT-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT)
+        mapped_district = District.objects.create(
+            name="Audit Mapped District", church_structure_unit=unit
+        )
+        unmapped_district = District.objects.create(name="Audit Unmapped District")
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=mapped_district,
+        )
+        other = User.objects.create_user(username="audit_role_user2")
+        ChurchRoleAssignment.objects.create(
+            user=other,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=unmapped_district,
+        )
+
+        output = self.run_command()
+
+        self.assert_summary_count(output, "legacy_district_scope_mapped", 1)
+        self.assert_summary_count(output, "legacy_district_scope_unmapped", 1)
+
+    def test_global_assignment_counted_and_ready(self):
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        output = self.run_command()
+
+        self.assert_summary_count(output, "global_assignments", 1)
+        self.assert_summary_count(output, "assignments_missing_structure_unit", 1)
+        self.assert_summary_count(output, "assignments_ready_for_structure_scope", 1)
+
+    def test_mismatch_between_structure_unit_and_legacy_mapping(self):
+        unit_a = self.create_unit("AUDIT-MIS-A")
+        unit_b = self.create_unit("AUDIT-MIS-B")
+        group = SmallGroup.objects.create(
+            name="Audit Mismatch SG", church_structure_unit=unit_a
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+            structure_unit=unit_b,
+        )
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "legacy_scope_mismatch_structure_unit", 1)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 1
+        )
+        self.assertIn("reason=legacy_scope_mismatch_structure_unit", output)
+
+    def test_inactive_structure_unit_counted_and_not_ready(self):
+        inactive_unit = self.create_unit("AUDIT-INACT", is_active=False)
+        group = SmallGroup.objects.create(
+            name="Audit Inactive SG", church_structure_unit=inactive_unit
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+        )
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "structure_unit_inactive", 1)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 1
+        )
+        self.assertIn("reason=structure_unit_inactive", output)
+
+    def test_wrong_type_structure_unit_for_small_group_scope(self):
+        fellowship_unit = self.create_unit(
+            "AUDIT-WT-FEL", unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP
+        )
+        group = SmallGroup.objects.create(name="Audit WrongType SG")
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=group,
+            structure_unit=fellowship_unit,
+        )
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "structure_unit_wrong_type_for_scope", 1)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 1
+        )
+        self.assertIn("reason=structure_unit_wrong_type_for_scope", output)
+
+    def test_limit_caps_verbose_rows(self):
+        for index in range(3):
+            group = SmallGroup.objects.create(name=f"Audit Limit SG {index}")
+            user = User.objects.create_user(username=f"audit_limit_user_{index}")
+            ChurchRoleAssignment.objects.create(
+                user=user,
+                role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+                scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+                small_group=group,
+            )
+
+        output = self.run_command("--verbose", "--limit", "1")
+
+        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 3)
+        self.assertIn("(stopped at --limit 1)", output)

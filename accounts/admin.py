@@ -294,6 +294,7 @@ class ChurchRoleAssignmentAdmin(admin.ModelAdmin):
         "scope_type",
         "district",
         "small_group",
+        "structure_unit",
         "is_active",
         "created_at",
     )

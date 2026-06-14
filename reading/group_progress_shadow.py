@@ -260,6 +260,39 @@ def compute_group_progress_roster_shadow(
     )
 
 
+def get_membership_core_progress_roster_users(selected_group, *, target_date=None):
+    """Runtime membership-core roster for the group-progress page (CS-CORE.4F.1).
+
+    Returns the ``User`` queryset that should populate the group-progress roster
+    (``member_rows``) for ``selected_group`` using the membership-core candidate
+    rule instead of legacy ``Profile.small_group``. A user is included when they
+    have exactly one active primary ``ChurchStructureMembership`` whose unit is the
+    selected group's mapped small-group ``ChurchStructureUnit`` or a descendant of
+    it, evaluated as of ``target_date`` (today by default).
+
+    This is **roster only**, never permission. The caller must already have decided,
+    via legacy ``accounts.permissions``, that the viewer may see ``selected_group``;
+    ordinary ``ChurchStructureMembership`` confers no progress access on its own
+    (privacy invariant 5). It reuses the same fail-closed roster logic as
+    :func:`compute_group_progress_roster_shadow`, so it returns an empty queryset
+    when ``selected_group`` is ``None``, unmapped, or not a small-group-type unit,
+    and excludes users with multiple active primary memberships (ambiguous).
+
+    Ordered by username then id for a deterministic roster compatible with the
+    legacy page ordering (legacy used ``order_by("username")``).
+    """
+    User = get_user_model()
+    if selected_group is None:
+        return User.objects.none()
+
+    target_date = target_date or timezone.localdate()
+    roster_user_ids, unmapped = _membership_roster_user_ids(selected_group, target_date)
+    if unmapped or not roster_user_ids:
+        return User.objects.none()
+
+    return User.objects.filter(id__in=roster_user_ids).order_by("username", "id")
+
+
 def compute_group_progress_shadow(
     user,
     selected_group,

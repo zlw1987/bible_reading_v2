@@ -358,9 +358,12 @@ class Command(BaseCommand):
             write(f"  {key}: {stats[key]}")
         write("")
         write("READ-ONLY: no data was changed.")
-        write("Runtime remains legacy-driven.")
         write(
-            "No membership-core source switch or permission change happened; "
+            "Runtime roster is membership-core after CS-CORE.4F.1; permission and "
+            "selected/default group remain legacy-driven."
+        )
+        write(
+            "This read-only command performs no source switch or permission change; "
             "ordinary membership grants no progress access."
         )
 

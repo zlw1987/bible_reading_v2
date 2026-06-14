@@ -1711,6 +1711,204 @@ class GroupProgressShadowModeTests(TestCase):
         self.assertEqual(shadow.would_lose_user_ids, frozenset({lose_user.id}))
 
 
+class GroupProgressShadowAuditCommandTests(TestCase):
+    """CS-CORE.4E.1 operational group-progress shadow audit command tests.
+
+    The command is read-only: it compares the legacy ``Profile.small_group`` roster
+    and default against a membership-core candidate and writes nothing. It never
+    switches the runtime source, changes a roster/default, or grants progress access.
+    """
+
+    def run_command(self, *args):
+        output = StringIO()
+        call_command("audit_group_progress_shadow", *args, stdout=output)
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_membership(self, user, unit, **overrides):
+        defaults = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate(),
+        }
+        defaults.update(overrides)
+        return ChurchStructureMembership.objects.create(**defaults)
+
+    def assert_summary_count(self, output, key, count):
+        self.assertIn(f"{key}: {count}", output)
+
+    def test_command_runs_read_only_and_prints_summary(self):
+        unit = self.create_unit("AUDIT-GP-RO")
+        group = self.create_group("Audit GP Read Only", unit=unit)
+        user = self.create_user("audit_gp_ro", group=group)
+        self.create_membership(user, unit)
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("READ-ONLY: no data was changed.", output)
+        self.assertIn("Runtime remains legacy-driven.", output)
+        self.assert_summary_count(output, "groups_checked", 1)
+
+    def test_same_roster_group_reports_same_and_no_drift(self):
+        unit = self.create_unit("AUDIT-GP-SAME")
+        group = self.create_group("Audit GP Same", unit=unit)
+        user = self.create_user("audit_gp_same", group=group)
+        self.create_membership(user, unit)
+
+        output = self.run_command("--fail-on-drift")
+
+        self.assert_summary_count(output, "groups_checked", 1)
+        self.assert_summary_count(output, "groups_same_roster", 1)
+        self.assert_summary_count(output, "groups_with_roster_gain", 0)
+        self.assert_summary_count(output, "groups_with_roster_loss", 0)
+        self.assert_summary_count(output, "progress_would_gain", 0)
+        self.assert_summary_count(output, "progress_would_lose", 0)
+        self.assert_summary_count(output, "default_would_change", 0)
+
+    def test_would_gain_membership_only_user_reported(self):
+        unit = self.create_unit("AUDIT-GP-GAIN")
+        group = self.create_group("Audit GP Gain", unit=unit)
+        # Membership under the group's unit, but no legacy Profile.small_group.
+        gain_user = self.create_user("audit_gp_gain")
+        self.create_membership(gain_user, unit)
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "progress_would_gain", 1)
+        self.assert_summary_count(output, "groups_with_roster_gain", 1)
+        self.assertIn("audit_gp_gain", output)
+
+    def test_would_lose_profile_only_user_reported(self):
+        unit = self.create_unit("AUDIT-GP-LOSE")
+        group = self.create_group("Audit GP Lose", unit=unit)
+        # Legacy default group but no active primary membership.
+        self.create_user("audit_gp_lose", group=group)
+
+        output = self.run_command()
+
+        self.assert_summary_count(output, "progress_would_lose", 1)
+        self.assert_summary_count(output, "groups_with_roster_loss", 1)
+        self.assert_summary_count(output, "membership_no_active_primary", 1)
+
+    def test_unmapped_group_reported_and_candidate_fails_closed(self):
+        group = self.create_group("Audit GP Unmapped", unit=None)
+        self.create_user("audit_gp_unmapped", group=group)
+
+        output = self.run_command()
+
+        self.assert_summary_count(output, "selected_group_unmapped", 1)
+        # Legacy member is present but the candidate roster is empty -> would lose.
+        self.assert_summary_count(output, "progress_would_lose", 1)
+
+    def test_multiple_active_primary_membership_fails_closed(self):
+        unit = self.create_unit("AUDIT-GP-MULTI")
+        other_unit = self.create_unit("AUDIT-GP-MULTI-OTHER")
+        group = self.create_group("Audit GP Multi", unit=unit)
+        user = self.create_user("audit_gp_multi", group=group)
+        # bulk_create bypasses single-active-primary validation to exercise the
+        # fail-closed ambiguity handling, consistent with existing 4E tests.
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=other_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        output = self.run_command("--verbose")
+
+        self.assert_summary_count(output, "membership_multiple_active_primary", 1)
+
+    def test_group_id_limits_output_to_that_group(self):
+        unit_one = self.create_unit("AUDIT-GP-ONE")
+        unit_two = self.create_unit("AUDIT-GP-TWO")
+        group_one = self.create_group("Audit GP One", unit=unit_one)
+        group_two = self.create_group("Audit GP Two", unit=unit_two)
+        user_one = self.create_user("audit_gp_one", group=group_one)
+        self.create_membership(user_one, unit_one)
+        user_two = self.create_user("audit_gp_two", group=group_two)
+        self.create_membership(user_two, unit_two)
+
+        output = self.run_command("--group-id", str(group_one.id))
+
+        self.assert_summary_count(output, "groups_checked", 1)
+        self.assertIn(f"group_id_filter: {group_one.id}", output)
+
+    def test_fail_on_drift_raises_when_drift_exists(self):
+        unit = self.create_unit("AUDIT-GP-DRIFT")
+        group = self.create_group("Audit GP Drift", unit=unit)
+        self.create_user("audit_gp_drift", group=group)
+
+        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
+            self.run_command("--fail-on-drift")
+
+    def test_command_does_not_write_any_rows(self):
+        unit = self.create_unit("AUDIT-GP-NOWRITE")
+        group = self.create_group("Audit GP No Write", unit=unit)
+        user = self.create_user("audit_gp_nowrite", group=group)
+        self.create_membership(user, unit)
+        plan = ReadingPlan.objects.create(name="Audit GP Plan", is_active=True)
+
+        before = {
+            "users": User.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "plans": ReadingPlan.objects.count(),
+        }
+
+        self.run_command("--verbose", "--fail-on-drift")
+
+        self.assertEqual(
+            before,
+            {
+                "users": User.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "memberships": ChurchStructureMembership.objects.count(),
+                "plans": ReadingPlan.objects.count(),
+            },
+        )
+        # Sanity: the plan we created is still the only one.
+        self.assertEqual(ReadingPlan.objects.filter(id=plan.id).count(), 1)
+
+
 class ImportReadingPlanCommandTests(TestCase):
     def setUp(self):
         self.temp_files = []

@@ -27,7 +27,10 @@ from studies.models import BibleStudyMeetingRole
 from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
-from .group_progress_shadow import compute_group_progress_shadow
+from .group_progress_shadow import (
+    compute_group_progress_shadow,
+    get_membership_core_progress_roster_users,
+)
 from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
@@ -1117,7 +1120,6 @@ def check_in(request, active_plan_id, plan_day_id):
 
 @login_required
 def my_group_progress(request):
-    User = get_user_model()
     user_profile = getattr(request.user, "profile", None)
     groups = get_accessible_progress_groups(request.user)
 
@@ -1153,16 +1155,22 @@ def my_group_progress(request):
             },
         )
 
-    group_members = User.objects.filter(profile__small_group=selected_group).order_by(
-        "username"
-    )
+    # CS-CORE.4F.1: the visible roster source is now the membership-core candidate
+    # (active primary ChurchStructureMembership) instead of legacy
+    # Profile.small_group. This switches only who appears in member_rows; the
+    # accessible group list, the selected/default group resolution above, and the
+    # legacy progress permission gate are all unchanged. Ordinary membership grants
+    # no progress access — the viewer already passed the legacy permission check.
+    group_members = get_membership_core_progress_roster_users(selected_group)
 
-    # CS-CORE.4E membership-core shadow comparison. This is observation only: it
-    # never changes the selected group, roster, or permissions below.
+    # CS-CORE.4E membership-core shadow comparison, retained after the 4F.1 roster
+    # switch as a diagnostic / rollback comparison only (not rendered). It still
+    # computes the legacy Profile.small_group roster itself and compares it against
+    # the membership-core candidate, so it surfaces drift between the old and new
+    # roster sources for the now-live switch.
     group_progress_shadow = compute_group_progress_shadow(
         request.user,
         selected_group,
-        legacy_roster_user_ids=set(group_members.values_list("id", flat=True)),
     )
 
     active_plans = (

@@ -68,11 +68,13 @@ CS-CORE.4E is complete as a group-progress shadow-mode comparison slice. The new
 `reading/group_progress_shadow.py` helper computes a membership-core candidate default
 group and roster for the selected legacy `SmallGroup` alongside the legacy answer, and
 `reading.views.my_group_progress()` now stores that comparison in context under the
-internal `group_progress_shadow` key (not rendered). This is comparison-only: the
-actual page still uses legacy `Profile.small_group`, legacy `SmallGroup`,
+internal `group_progress_shadow` key (not rendered). This was comparison-only: as of
+CS-CORE.4E the actual page still used legacy `Profile.small_group`, legacy `SmallGroup`,
 `accounts.permissions.get_accessible_progress_groups()`, and
 `accounts.permissions.can_view_group_progress_for()`, so the selected group, the
-visible roster, the redirects, and the permission set are all unchanged. The candidate
+visible roster, the redirects, and the permission set were all unchanged. (The visible
+roster later switched to membership-core in CS-CORE.4F.1; the selected/default group,
+redirects, and permission set are still legacy.) The candidate
 fails closed on ambiguity (no active primary membership, multiple active primary
 memberships, an unmapped selected group, or a membership unit that is not a mapped
 small-group unit) and never grants progress access — ordinary `ChurchStructureMembership`
@@ -99,10 +101,42 @@ counters (`groups_checked`, `groups_same_roster`, `groups_with_roster_gain`,
 detail, and supports `--group-id`, `--limit`, `--verbose`, `--date`, and
 `--fail-on-drift`. It is **read-only**: it has no `--apply`, writes nothing, never
 calls or alters `my_group_progress()`, and the candidate fails closed on ambiguity.
-Runtime group progress remains legacy-driven — no membership-core source switch and no
-permission change happened, and ordinary `ChurchStructureMembership` still grants no
-progress access (invariant 5). The command exists to be run against real data as gate
-evidence before any future group-progress source switch; it does not perform one.
+As of CS-CORE.4E.1 runtime group progress remained legacy-driven — this command performed
+no membership-core source switch and no permission change, and ordinary
+`ChurchStructureMembership` still grants no progress access (invariant 5). The command
+exists to be run against real data as gate evidence before a group-progress source
+switch; it does not perform one (the roster-only switch later landed in CS-CORE.4F.1).
+
+CS-CORE.4F.1 is complete as the first group-progress runtime source switch, scoped to
+the **roster only**. After the CS-CORE.4E.1 real-data gate run on the GoDaddy demo site
+showed zero roster/default drift, the visible group-progress roster (`member_rows` in
+`reading.views.my_group_progress()`) now comes from the membership-core candidate via the
+new `reading.group_progress_shadow.get_membership_core_progress_roster_users()` helper
+instead of `User.objects.filter(profile__small_group=selected_group)`. A user appears in
+the roster when they have exactly one active primary `ChurchStructureMembership` whose
+unit is the selected group's mapped small-group `ChurchStructureUnit` or a descendant;
+the helper fails closed (empty roster) for a `None`, unmapped, or wrong-type selected
+group, and excludes users with multiple active primary memberships. The recorded gate
+evidence was `audit_group_progress_shadow --limit 5` (returncode 0): groups_checked 21,
+groups_same_roster 21, groups_with_roster_gain 0, groups_with_roster_loss 0,
+progress_would_gain 0, progress_would_lose 0, selected_group_unmapped 0,
+users_checked_for_default 19, default_same 19, default_would_change 0,
+profile_membership_mismatch 0, membership_no_active_primary 0,
+membership_multiple_active_primary 0, membership_unit_unmapped 0.
+
+What switched in CS-CORE.4F.1: only the group-progress visible roster / `member_rows`
+source, now membership-core active-primary-membership matching. What did **not** switch:
+the accessible group list and progress permission remain legacy role-scope plus own
+legacy `Profile.small_group` (`get_accessible_progress_groups()` /
+`can_view_group_progress_for()` unchanged); the selected/default group resolution remains
+legacy; ordinary `ChurchStructureMembership` still grants no progress access (invariant 5)
+— it only determines who appears in the roster after the viewer already passed the legacy
+permission check; and there was no model, migration, template, UI copy, CSS, admin, or URL
+change. The `group_progress_shadow` context is retained (still unrendered) as a
+diagnostic / rollback comparison that computes the legacy roster and compares it against
+the membership-core candidate. Rollback is mechanical: revert the `my_group_progress()`
+roster call back to `User.objects.filter(profile__small_group=selected_group)` — no stored
+data is touched.
 
 This plan follows the established CS-CORE direction (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`):
 legacy retire / new model as core, `ChurchStructureUnit` is the canonical structure tree,
@@ -418,8 +452,18 @@ a better scheme emerges, but keep the sequence and the gates.
   active legacy `SmallGroup`, with `--group-id`, `--limit`, `--verbose`, `--date`, and
   `--fail-on-drift`. It writes nothing, has no `--apply`, never touches
   `my_group_progress()`, and exists as real-data gate evidence before any future
-  group-progress switch. Runtime stays legacy-driven; no source switch and no
-  permission change happened.
+  group-progress switch. This slice itself made no source switch and no permission
+  change; runtime stayed legacy-driven through CS-CORE.4E.1 (the roster-only switch
+  landed next, in CS-CORE.4F.1).
+- **CS-CORE.4F.1 — Group progress roster-only source switch.** Complete. The visible
+  group-progress roster (`member_rows`) now uses the membership-core candidate via
+  `get_membership_core_progress_roster_users()` instead of `Profile.small_group`, after the
+  CS-CORE.4E.1 demo-site gate showed zero roster/default drift. Only the roster source
+  switched: the accessible group list, progress permission, and selected/default group stay
+  legacy-driven; ordinary membership still grants no progress access; the shadow context is
+  kept as a diagnostic/rollback comparison; and no model/migration/template/CSS/admin/URL
+  change happened. Rollback = revert the roster call to
+  `User.objects.filter(profile__small_group=selected_group)`.
 - **CS-CORE.4F+ — One runtime switch at a time.** Switch a single consumer per release (e.g. the
   reflection "group" read filter, then the canonical gate, then progress roster), each only after
   4C tests are green, 4B diagnostics show sustained near-zero risky drift, and a documented rollback
@@ -516,16 +560,19 @@ docs only.
 
 ## 11. Non-Goals
 
-Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice and the
-CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, CS-CORE.4A
-through CS-CORE.4E do not include or authorize:
+Beyond the completed CS-CORE.4D additive model/migration/write-path/test/doc slice, the
+CS-CORE.4E comparison-only group-progress shadow helper/context/test slice, and the
+CS-CORE.4F.1 roster-only group-progress source switch, CS-CORE.4A through CS-CORE.4F.1 do
+not include or authorize:
 
 - any visibility read-path, template, form, admin, URL, static, deployment, source-of-truth,
-  or permission change;
+  or permission change (CS-CORE.4F.1 switched only the group-progress roster source, not
+  permission, the accessible group list, or the selected/default group);
 - removal, hiding, or sync-only conversion of `Profile.small_group`;
 - any change to `small_group_at_post` semantics or to reflection visibility;
 - any use of `structure_unit_at_post` for visibility, filtering, permissions, or group progress;
-- any change to group-progress permissions or rosters;
+- any change to group-progress permissions, the accessible group list, or the selected/default
+  group (CS-CORE.4F.1 changed only the visible roster / `member_rows` source);
 - any `ChurchRoleAssignment` scope migration;
 - any ServiceEvent or Bible Study V1/V2 change;
 - any data migration;

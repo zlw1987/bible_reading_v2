@@ -14,7 +14,6 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
-from django.contrib.auth.models import User
 
 from accounts.models import (
     ChurchRoleAssignment,
@@ -71,6 +70,7 @@ from reading.group_progress_shadow import (
     REASON_ROSTER_WOULD_LOSE,
     REASON_SELECTED_GROUP_UNMAPPED,
     compute_group_progress_shadow,
+    get_membership_core_progress_roster_users,
 )
 
 
@@ -1353,15 +1353,21 @@ class GroupProgressPrivacyInvariantTests(TestCase):
     def accessible_group_ids(self, user):
         return set(get_accessible_progress_groups(user).values_list("id", flat=True))
 
-    def test_roster_stays_profile_small_group_driven_not_membership_driven(self):
+    def test_roster_now_membership_core_driven_not_profile(self):
+        # CS-CORE.4F.1 switched the visible roster source: member_rows now follows
+        # active primary ChurchStructureMembership, not legacy Profile.small_group.
+        # Only progress_membership_only has an active primary membership under the
+        # group unit; the profile-only members are excluded.
         response = self.progress_response_for(self.viewer, group=self.group)
 
         self.assertEqual(response.context["selected_group"], self.group)
         self.assertEqual(
             self.row_usernames(response),
-            {"progress_profile_only", "progress_same", "progress_viewer"},
+            {"progress_membership_only"},
         )
-        self.assertNotIn("progress_membership_only", self.row_usernames(response))
+        self.assertNotIn("progress_viewer", self.row_usernames(response))
+        self.assertNotIn("progress_same", self.row_usernames(response))
+        self.assertNotIn("progress_profile_only", self.row_usernames(response))
         self.assertNotIn("progress_other", self.row_usernames(response))
         self.assertNotIn("progress_no_group", self.row_usernames(response))
 
@@ -1443,8 +1449,11 @@ class GroupProgressShadowModeTests(TestCase):
     """CS-CORE.4E group-progress membership-core shadow mode (comparison only).
 
     The shadow layer computes a membership-core candidate default/roster alongside
-    the legacy answer. It must never change the visible roster, the default selected
-    group, or permissions, and ordinary membership must never grant progress access.
+    the legacy answer. It never changes the default selected group or permissions,
+    and ordinary membership never grants progress access. After CS-CORE.4F.1 the
+    visible roster does follow the membership-core source, but the shadow itself
+    stays a diagnostic/rollback comparison: it still computes the legacy roster and
+    compares it against the membership-core candidate.
     """
 
     def setUp(self):
@@ -1521,16 +1530,21 @@ class GroupProgressShadowModeTests(TestCase):
     def shadow_for(self, user, group):
         return compute_group_progress_shadow(user, group)
 
-    def test_visible_roster_and_default_stay_legacy_not_membership(self):
+    def test_default_stays_legacy_and_roster_now_membership_core(self):
         membership_only = self.create_user("shadow_membership_only")
         self.create_membership(membership_only, self.group_unit)
 
         response = self.progress_response_for(self.viewer, group=self.group)
 
-        # Legacy default selected group and legacy roster are unchanged.
+        # The selected/default group still follows legacy accessible-group logic.
         self.assertEqual(response.context["selected_group"], self.group)
-        self.assertEqual(self.row_usernames(response), {"shadow_viewer"})
-        self.assertNotIn("shadow_membership_only", self.row_usernames(response))
+        # CS-CORE.4F.1: the visible roster switched to the membership-core source,
+        # so the membership-only user (no legacy Profile.small_group) now appears
+        # alongside the viewer, who also has an active primary membership.
+        self.assertEqual(
+            self.row_usernames(response),
+            {"shadow_viewer", "shadow_membership_only"},
+        )
 
     def test_shadow_context_present_but_not_user_visible(self):
         response = self.progress_response_for(self.viewer, group=self.group)
@@ -1640,10 +1654,11 @@ class GroupProgressShadowModeTests(TestCase):
         self.assertEqual(shadow.membership_roster_user_ids, frozenset())
         self.assertIn(REASON_SELECTED_GROUP_UNMAPPED, shadow.reason_codes)
 
-        # Legacy page still works for the unmapped group.
+        # The page still selects the unmapped group, but after CS-CORE.4F.1 its
+        # membership-core roster fails closed to empty (no crash).
         response = self.progress_response_for(unmapped_member, group=unmapped_group)
         self.assertEqual(response.context["selected_group"], unmapped_group)
-        self.assertIn("shadow_unmapped", self.row_usernames(response))
+        self.assertEqual(list(response.context["member_rows"]), [])
 
     def test_ordinary_membership_does_not_grant_other_group_progress(self):
         # Ordinary user belongs to self.group legacy-wise, but their single active
@@ -1772,7 +1787,11 @@ class GroupProgressShadowAuditCommandTests(TestCase):
         ]
         self.assertEqual(write_sql, [])
         self.assertIn("READ-ONLY: no data was changed.", output)
-        self.assertIn("Runtime remains legacy-driven.", output)
+        self.assertIn(
+            "Runtime roster is membership-core after CS-CORE.4F.1; permission and "
+            "selected/default group remain legacy-driven.",
+            output,
+        )
         self.assert_summary_count(output, "groups_checked", 1)
 
     def test_same_roster_group_reports_same_and_no_drift(self):
@@ -1907,6 +1926,235 @@ class GroupProgressShadowAuditCommandTests(TestCase):
         )
         # Sanity: the plan we created is still the only one.
         self.assertEqual(ReadingPlan.objects.filter(id=plan.id).count(), 1)
+
+
+class GroupProgressRosterSourceSwitchTests(TestCase):
+    """CS-CORE.4F.1 locks the group-progress roster-only source switch.
+
+    The visible roster (``member_rows`` in ``reading.views.my_group_progress``) now
+    uses the membership-core candidate (single active primary
+    ``ChurchStructureMembership`` matched to the selected group's mapped small-group
+    unit or a descendant) instead of legacy ``Profile.small_group``. Permission, the
+    accessible group list, and the selected/default group remain legacy-driven, and
+    ordinary membership still grants no progress access (privacy invariant 5).
+    """
+
+    def setUp(self):
+        self.district = District.objects.create(name="Switch District")
+        self.other_district = District.objects.create(name="Switch Other District")
+        self.group_unit = self.create_unit("SWITCH-GROUP")
+        self.other_group_unit = self.create_unit("SWITCH-OTHER")
+        self.group = SmallGroup.objects.create(
+            name="Switch Group",
+            district=self.district,
+            church_structure_unit=self.group_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Switch Other Group",
+            district=self.other_district,
+            church_structure_unit=self.other_group_unit,
+        )
+
+        # Viewer has legacy permission to self.group (own legacy profile group) and
+        # an active primary membership under the group unit, so they can both view
+        # the page and appear in the membership-core roster.
+        self.viewer = self.create_user("switch_viewer", group=self.group)
+        self.create_membership(self.viewer, self.group_unit)
+
+        self.plan = ReadingPlan.objects.create(name="Switch Plan", is_active=True)
+        self.day = ReadingPlanDay.objects.create(
+            plan=self.plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        self.active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate(),
+            title="Switch Active Plan",
+        )
+        PlanEnrollment.objects.create(user=self.viewer, active_plan=self.active_plan)
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def progress_response_for(self, user, *, group=None):
+        self.client.login(username=user.username, password="TestPass123!")
+        params = {}
+        if group is not None:
+            params["group"] = group.id
+        response = self.client.get(reverse("my_group_progress"), params)
+        self.assertEqual(response.status_code, 200)
+        self.client.logout()
+        return response
+
+    def row_usernames(self, response):
+        return {row["member"].username for row in response.context["member_rows"]}
+
+    def accessible_group_ids(self, user):
+        return set(get_accessible_progress_groups(user).values_list("id", flat=True))
+
+    def test_roster_includes_membership_core_user_without_legacy_profile_group(self):
+        # User has an active primary membership under the group unit but no legacy
+        # Profile.small_group; the membership-core roster source must include them.
+        membership_user = self.create_user("switch_membership")
+        self.create_membership(membership_user, self.group_unit)
+        PlanEnrollment.objects.create(
+            user=membership_user, active_plan=self.active_plan
+        )
+
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        self.assertIn("switch_membership", self.row_usernames(response))
+        membership_user.refresh_from_db()
+        self.assertIsNone(membership_user.profile.small_group)
+
+    def test_legacy_profile_only_user_excluded_from_roster(self):
+        # User has Profile.small_group=group but no active primary membership; the
+        # membership-core roster source must exclude them.
+        self.create_user("switch_profile_only", group=self.group)
+
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        self.assertEqual(response.context["selected_group"], self.group)
+        self.assertNotIn("switch_profile_only", self.row_usernames(response))
+        # Sanity: the membership-core roster member is still present.
+        self.assertIn("switch_viewer", self.row_usernames(response))
+
+    def test_membership_in_other_group_does_not_grant_progress_permission(self):
+        # Permission stays legacy: an ordinary membership in another group's unit
+        # never grants progress access to that other group.
+        ordinary = self.create_user("switch_ordinary", group=self.group)
+        self.create_membership(ordinary, self.other_group_unit)
+
+        self.assertFalse(can_view_group_progress_for(ordinary, self.other_group))
+        self.assertEqual(self.accessible_group_ids(ordinary), {self.group.id})
+
+        response = self.progress_response_for(ordinary, group=self.other_group)
+        # Falls back to the only accessible (own legacy) group, exactly as before.
+        self.assertEqual(response.context["selected_group"], self.group)
+
+    def test_default_selected_group_stays_legacy_not_membership_candidate(self):
+        # Legacy profile group (self.group) differs from the membership candidate
+        # default (other_group). With no ?group= param the default must follow the
+        # legacy accessible-group logic, not the membership candidate.
+        dual = self.create_user("switch_dual", group=self.group)
+        self.create_membership(dual, self.other_group_unit)
+        PlanEnrollment.objects.create(user=dual, active_plan=self.active_plan)
+
+        response = self.progress_response_for(dual)
+
+        self.assertEqual(response.context["selected_group"], self.group)
+
+    def test_unmapped_selected_group_yields_empty_roster_without_crash(self):
+        # Viewer has legacy permission/default to an unmapped group; the page still
+        # selects it, but the membership-core roster fails closed to empty.
+        unmapped_group = SmallGroup.objects.create(
+            name="Switch Unmapped",
+            district=self.district,
+            church_structure_unit=None,
+        )
+        unmapped_viewer = self.create_user("switch_unmapped", group=unmapped_group)
+        PlanEnrollment.objects.create(
+            user=unmapped_viewer, active_plan=self.active_plan
+        )
+
+        response = self.progress_response_for(unmapped_viewer, group=unmapped_group)
+
+        self.assertEqual(response.context["selected_group"], unmapped_group)
+        self.assertEqual(list(response.context["member_rows"]), [])
+
+    def test_multiple_active_primary_membership_user_excluded_from_roster(self):
+        # User with two active primary memberships is ambiguous and fails closed,
+        # so they are excluded from the membership-core roster.
+        ambiguous = self.create_user("switch_ambiguous")
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=ambiguous,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=ambiguous,
+                    unit=self.other_group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+        PlanEnrollment.objects.create(user=ambiguous, active_plan=self.active_plan)
+
+        response = self.progress_response_for(self.viewer, group=self.group)
+
+        self.assertNotIn("switch_ambiguous", self.row_usernames(response))
+        self.assertIn("switch_viewer", self.row_usernames(response))
+
+    def test_roster_helper_includes_descendant_unit_members(self):
+        # The roster helper includes members whose active primary membership is in a
+        # descendant unit of the selected group's mapped small-group unit.
+        child_unit = self.create_unit("SWITCH-CHILD", parent=self.group_unit)
+        child_member = self.create_user("switch_child")
+        self.create_membership(child_member, child_unit)
+
+        roster = get_membership_core_progress_roster_users(self.group)
+        usernames = set(roster.values_list("username", flat=True))
+
+        self.assertIn("switch_child", usernames)
+        self.assertIn("switch_viewer", usernames)
+
+    def test_roster_helper_fails_closed_for_none_and_unmapped_group(self):
+        self.assertEqual(
+            list(get_membership_core_progress_roster_users(None)), []
+        )
+        unmapped_group = SmallGroup.objects.create(
+            name="Switch Helper Unmapped",
+            district=self.district,
+            church_structure_unit=None,
+        )
+        self.assertEqual(
+            list(get_membership_core_progress_roster_users(unmapped_group)), []
+        )
+
+    def test_audit_command_remains_readonly_gate_after_runtime_switch(self):
+        # The runtime roster switch is implemented, but audit_group_progress_shadow
+        # stays a read-only gate: it still detects legacy-vs-membership drift and
+        # --fail-on-drift would still block. A legacy profile-only member (no active
+        # primary membership) creates would-lose drift against the candidate.
+        self.create_user("switch_drift_profile_only", group=self.group)
+
+        output = StringIO()
+        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
+            call_command(
+                "audit_group_progress_shadow", "--fail-on-drift", stdout=output
+            )
+        # Still read-only: nothing about runtime was changed by the command.
+        self.assertIn("READ-ONLY: no data was changed.", output.getvalue())
 
 
 class ImportReadingPlanCommandTests(TestCase):
@@ -2125,6 +2373,31 @@ class BibleReadingFlowTests(TestCase):
         session = self.client.session
         session["language"] = language
         session.save()
+
+    def map_group_to_unit(self, group, code):
+        """Map a legacy SmallGroup to a small-group ChurchStructureUnit.
+
+        After CS-CORE.4F.1 the visible group-progress roster is membership-core, so
+        a legacy group needs a mapped small-group unit before any membership can
+        place a user in its roster.
+        """
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+        )
+        group.church_structure_unit = unit
+        group.save()
+        return unit
+
+    def add_active_primary_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
 
     def create_guide_publisher(self, username="pastor_user"):
         publisher = User.objects.create_user(
@@ -2873,12 +3146,19 @@ class BibleReadingFlowTests(TestCase):
 
     def test_group_progress_shows_same_group_members_only(self):
         other_group = SmallGroup.objects.create(name="Other Group")
+        group_unit = self.map_group_to_unit(self.group, "FLOW-SAME-GROUP")
+        other_unit = self.map_group_to_unit(other_group, "FLOW-SAME-OTHER")
 
+        # Profile.small_group keeps legacy permission/default for the viewer; the
+        # visible roster is membership-core after CS-CORE.4F.1, so members also need
+        # an active primary membership under the group's mapped unit.
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        self.add_active_primary_membership(self.user, group_unit)
 
         self.other_user.profile.small_group = self.group
         self.other_user.profile.save()
+        self.add_active_primary_membership(self.other_user, group_unit)
 
         outside_user = User.objects.create_user(
             username="outside",
@@ -2887,6 +3167,8 @@ class BibleReadingFlowTests(TestCase):
         )
         outside_user.profile.small_group = other_group
         outside_user.profile.save()
+        # Membership in another mapped group unit: outside the selected roster.
+        self.add_active_primary_membership(outside_user, other_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,
@@ -2911,11 +3193,15 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotIn(">outside<", response.content.decode())
 
     def test_group_progress_shows_checked_and_missing_status(self):
+        group_unit = self.map_group_to_unit(self.group, "FLOW-STATUS-GROUP")
+
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        self.add_active_primary_membership(self.user, group_unit)
 
         self.other_user.profile.small_group = self.group
         self.other_user.profile.save()
+        self.add_active_primary_membership(self.other_user, group_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,
@@ -2941,11 +3227,15 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Missing")
 
     def test_group_progress_shows_not_joined_member(self):
+        group_unit = self.map_group_to_unit(self.group, "FLOW-NOTJOINED-GROUP")
+
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        self.add_active_primary_membership(self.user, group_unit)
 
         self.other_user.profile.small_group = self.group
         self.other_user.profile.save()
+        self.add_active_primary_membership(self.other_user, group_unit)
 
         PlanEnrollment.objects.create(
             user=self.user,
@@ -5156,16 +5446,24 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "Midweek Prayer Gathering")
 
     def test_church_gathering_datetime_is_member_formatted(self):
+        # Relative future datetime so the gathering always falls inside the Today
+        # page's upcoming/this-week window, regardless of the current date.
+        formatted_dt = (timezone.now() + timedelta(days=1)).replace(
+            hour=19, minute=30, second=0, microsecond=0
+        )
         self.make_event(
             title_en="Formatted Gathering",
-            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            start_datetime=formatted_dt,
         )
 
         response = self.get_home()
 
         self.assertContains(response, "Formatted Gathering")
-        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
-        self.assertNotContains(response, "June 12, 2026")
+        self.assertContains(response, member_datetime(formatted_dt, "en"))
+        # Today must use the member-formatted datetime, not Django's raw default
+        # rendering (which uses dotted "a.m."/"p.m."). Date-independent check.
+        self.assertNotContains(response, "a.m.")
+        self.assertNotContains(response, "p.m.")
 
     def test_draft_and_cancelled_gatherings_excluded_for_staff(self):
         self.make_event(
@@ -5218,17 +5516,25 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "My Group Lesson")
 
     def test_v2_meeting_datetime_is_member_formatted(self):
+        # Relative future datetime so the meeting always falls inside the Today
+        # page's upcoming/this-week window, regardless of the current date.
+        formatted_dt = (timezone.now() + timedelta(days=2)).replace(
+            hour=19, minute=30, second=0, microsecond=0
+        )
         self.make_meeting(
             small_group=self.group,
             lesson_title_en="Formatted Group Lesson",
-            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            meeting_datetime=formatted_dt,
         )
 
         response = self.get_home()
 
         self.assertContains(response, "Formatted Group Lesson")
-        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
-        self.assertNotContains(response, "June 12, 2026")
+        self.assertContains(response, member_datetime(formatted_dt, "en"))
+        # Today must use the member-formatted datetime, not Django's raw default
+        # rendering (which uses dotted "a.m."/"p.m."). Date-independent check.
+        self.assertNotContains(response, "a.m.")
+        self.assertNotContains(response, "p.m.")
 
     def test_other_group_meeting_not_shown(self):
         self.make_meeting(

@@ -450,11 +450,38 @@ the meeting-identity decision (Section 4.5).
     and `meeting_kind` are not read by visibility, generation, landing/Today, or
     role/worship pickers in this slice (like `ServiceEventAudienceScope` at
     SE-AS.2). No data backfill.
-- **BS-STRUCT.1C** — backfill/audit command (dry-run first, SE-AS.6B pattern):
-  for every existing meeting, propose one audience row = the `small_group`'s
-  mapped unit; report parity (post-row visibility vs current single-group
-  visibility); apply mode behind explicit `--apply`, additive only, never mutate
-  `small_group`.
+- **BS-STRUCT.1C** — backfill/audit command (dry-run first, SE-AS.6B pattern).
+  ✅ **implemented.** Management command
+  `backfill_bible_study_meeting_audience_scopes`
+  (`studies/management/commands/backfill_bible_study_meeting_audience_scopes.py`).
+  - **Dry-run by default**, `--apply` to write. A single shared classification
+    pass (`_scan_meetings`) feeds both modes, so apply never creates a row the
+    dry-run would not have reported as `would_create`.
+  - For each meeting it proposes one audience row = the `small_group`'s mapped
+    unit, valid only when that unit **exists, is active, and is
+    `UNIT_SMALL_GROUP`**. Classification buckets: `skipped_existing_audience`,
+    `would_create`, `missing_small_group` (null group), `unmapped_small_group`
+    (no `church_structure_unit`), `inactive_structure_unit`, `wrong_unit_type`,
+    `validation_error`.
+  - **Additive only.** With `--apply` it creates the missing
+    `BibleStudyMeetingAudienceScope` row and backfills `anchor_unit` **only when
+    it is currently null** (never overwrites a set anchor). It **never mutates
+    `small_group`** (reported `legacy_small_group_mutated = 0`) and **never
+    changes runtime visibility / generation / Today-landing / role-worship
+    picker behavior** (reported `runtime_switched = false`). Idempotent: a second
+    run skips existing-audience meetings and creates `0` rows.
+  - **Parity (conservative, structural).** Because the current runtime
+    small-group path already keys off `small_group.church_structure_unit` gated
+    on `UNIT_SMALL_GROUP` (`studies.visibility`), the proposed unit is
+    structurally identical to the unit the runtime already matches; the command
+    confirms this per `would_create` meeting (`parity_structural_match`). A full
+    per-user parity matrix is intentionally **not** rebuilt here — that already
+    has a dedicated command, `audit_bible_study_membership_readiness` — so 1C
+    keeps its classification strict instead.
+  - Options: `--apply`, `--limit N`, `--meeting-id ID`,
+    `--verbose`/`--verbose-events` (per-meeting decisions), `--fail-on-issues`.
+  - Tests: `studies/test_backfill_meeting_audience_command.py`.
+  - **Runtime still does not read audience rows** after this slice.
 - **BS-STRUCT.1D** — generation writes audience rows + `anchor_unit` for normal
   group-level meetings (still one per leaf unit); `small_group` mirror filled for
   one-to-one mappings.

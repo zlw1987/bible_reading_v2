@@ -4,7 +4,7 @@
 
 SE-AS.3 recorded the implementation plan for migrating ServiceEvent / Church Gatherings audience scope from the legacy `scope_type` / `district` / `small_group` fields toward the `ChurchStructureUnit` audience-scope foundation (`ServiceEventAudienceScope`).
 
-Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the runtime visibility rule with legacy fallback: events with one or more `ServiceEventAudienceScope` rows use those audience rows for ordinary-user visibility; events with zero rows keep the existing legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` behavior. SE-AS.5 is complete as the staff selector UI/display: staff can select optional `ChurchStructureUnit` audience rows on single create/edit and recurring create; staff detail shows effective audience source and readable labels. Historical note: at SE-AS.4/SE-AS.5 time, audience-row matching was not yet membership-core; CS-CORE.2B-A later switched ServiceEvent audience-row matching to active primary `ChurchStructureMembership`, while zero-row events still use legacy fallback. Legacy scope fields remain preserved/editable as fallback. SE-AS.6B is complete as an audit-only dry-run command, including SE-AS.6B.1 verbose output polish; no SE-AS.6C apply/backfill, setup/edit UI, CS-MAP.3, CS-SETUP.1, Community Activities, schema change, or migration was added.
+Status: SE-AS.3 is complete as docs-only planning. SE-AS.4 is complete as the runtime visibility rule with legacy fallback: events with one or more `ServiceEventAudienceScope` rows use those audience rows for ordinary-user visibility; events with zero rows keep the existing legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` behavior. SE-AS.5 is complete as the staff selector UI/display: staff can select optional `ChurchStructureUnit` audience rows on single create/edit and recurring create; staff detail shows effective audience source and readable labels. Historical note: at SE-AS.4/SE-AS.5 time, audience-row matching was not yet membership-core; CS-CORE.2B-A later switched ServiceEvent audience-row matching to active primary `ChurchStructureMembership`, while zero-row events still use legacy fallback. Legacy scope fields remain preserved/editable as fallback. SE-AS.6B is complete as an audit-only dry-run command, including SE-AS.6B.1 verbose output polish. SE-AS.6C is complete as an explicit `--apply` mode on the same command (dry-run remains the default; apply creates `ServiceEventAudienceScope` rows only for parity-safe `would-create` events, never mutating legacy fields, and is idempotent). Implementation does not mean production apply has been run: production apply still requires an explicit human command and a current backup, and the zero-row legacy fallback is not retired in this slice. No setup/edit UI, CS-MAP.3, CS-SETUP.1, Community Activities, schema change, or migration was added.
 
 Milestone renumbering note: `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md` (SE-AS.1) originally labeled "SE-AS.3" as the future staff create/edit UI. This plan re-scopes SE-AS.3 as the runtime migration plan itself and renumbers later milestones (see Section 5). Where older docs say "SE-AS.3 staff UI selector," that work is now SE-AS.5 in this plan.
 
@@ -12,7 +12,13 @@ SE-AS.5A is complete as the docs-only staff audience selector interaction plan i
 
 SE-AS.6A is complete as a docs-only planning checkpoint. It records the backfill / compatibility contract, hard invariants, parity requirement, and report categories in Section 8A, and recommends splitting any future backfill work into SE-AS.6B (dry-run audit command only) and SE-AS.6C (optional apply after dry-run review). SE-AS.6A adds no management command, test, schema, migration, or runtime change.
 
-SE-AS.6B is complete as the dry-run audit command only. The `backfill_service_event_audience_scopes` management command (in the `events` app) scans `ServiceEvent` rows read-only and reports the Section 8A.5 categories; it has no `--apply`, creates no `ServiceEventAudienceScope` rows, and mutates no legacy field, unit, membership, profile, or group. SE-AS.6B.1 is complete as verbose-output polish: `--verbose-events` now prints event id, title/date when available, legacy scope/status, decision category, proposed unit label/path when available, and reason text while staying audit-only. SE-AS.6C (optional apply) remains a future milestone and requires separate explicit approval after dry-run output review.
+SE-AS.6B is complete as the dry-run audit command. The `backfill_service_event_audience_scopes` management command (in the `events` app) scans `ServiceEvent` rows read-only and reports the Section 8A.5 categories; by default it creates no `ServiceEventAudienceScope` rows and mutates no legacy field, unit, membership, profile, or group. SE-AS.6B.1 is complete as verbose-output polish: `--verbose-events` prints event id, title/date when available, legacy scope/status, decision category, proposed unit label/path when available, and reason text.
+
+SE-AS.6C is complete as the explicit apply mode on the same command. Adding `--apply` makes the command create `ServiceEventAudienceScope` rows for events the dry-run classifies as parity-safe `would-create`; without `--apply` the command stays a read-only dry-run that changes nothing. Dry-run and apply share one decision path (`_scan_events`), so apply can never act on an event the dry-run would not have reported. Apply runs in a single atomic transaction, skips events that already have audience rows, is idempotent (a second run creates `0` additional rows), and never mutates `ServiceEvent.scope_type` / `district` / `small_group` / `ministry_context`, `ChurchStructureUnit`, `ChurchStructureMembership`, `Profile`, `SmallGroup`, `District`, or `MinistryContext`. Apply-mode output is clearly distinguished (`APPLY mode` header) and adds a `created audience rows : N` count; `legacy-fields-mutated (must be 0)` stays `0`.
+
+SE-AS.6C parity correction (current-runtime parity): the parity check compares **pre-backfill legacy zero-row visibility** (matched directly through `Profile.small_group`) against **post-backfill membership-core visibility** (the active primary `ChurchStructureMembership` rule the runtime actually applies once an event has rows, per CS-CORE.2B-A), via the canonical `accounts.structure_selectors.user_matches_structure_audience` matcher. It no longer uses `studies.models.resolve_units_to_small_groups()` as the proposed post-row audience truth. The command compares the actual ordinary-user ID sets the two rules produce (managers excluded, since `can_be_managed_by` overrides both paths); if creating a row would add or drop even one ordinary user, the event is classified parity-mismatch and skipped. Global events still map to the active root unit, which both rules treat as all authenticated users, so global backfill stays parity-safe by construction.
+
+Production-data dry-run review caveat: the previously captured GoDaddy dry-run (37 scanned / 1 skipped-existing / 36 would-create / 0 root skipped / 0 district skipped / 0 small-group skipped / 0 parity mismatch / 0 legacy mutation) was produced by the **old legacy-resolver parity logic** and must **not** be treated as final apply approval after this correction. The production-data dry-run must be **rerun** with the corrected membership-core parity logic and re-reviewed before any real apply. Implementation does **not** mean production apply has been run: production apply still requires an explicit human command and a current recoverable backup, and the zero-row legacy fallback is **not** retired in this slice.
 
 ## 2. Historical State Audit at SE-AS.3 Planning Time
 
@@ -65,7 +71,7 @@ This section is preserved as historical context: it records the state originally
 | Rotation Anchor Team / 配搭参考团队 | `ServiceEvent.rotation_anchor_team` | Scheduling suggestion anchor only. |
 | TeamAssignment / 服事安排 | `TeamAssignment(Member)` | Actual serving assignment. |
 | My Serving / 我的服事 | user's `TeamAssignmentMember` rows | User's own assignments; independent of audience. |
-| ChurchStructureMembership | membership rows (approved/requested) | Future belonging source. Not current runtime visibility; not changed by this plan. |
+| ChurchStructureMembership | membership rows (approved/requested) | As of CS-CORE.2B-A, the active primary membership is the runtime visibility source for ServiceEvent rows that **have** audience rows (via `user_matches_structure_audience`). Zero-row events still fall back to legacy `Profile.small_group`. Requested/unapproved/inactive memberships grant nothing. This plan does not change the membership model itself. |
 
 Note: SE-AS.1 used "Coverage Scope / 覆盖对象" as the preferred wording. This plan standardizes on Audience Scope / 适用范围 for the ServiceEvent staff UI; final copy should be confirmed once at SE-AS.5 implementation so both docs and UI agree.
 
@@ -121,7 +127,7 @@ Implementation notes:
 
 - Unit matching reuses `studies.models.resolve_units_to_small_groups()` so ServiceEvent and Bible Study Schedule share the same `ChurchStructureUnit` to legacy `SmallGroup` resolution semantics.
 - Root unit rows behave like legacy global scope and match all authenticated ordinary users, including users without a current small group.
-- Non-root rows match only through the user's current `Profile.small_group`; `ChurchStructureMembership` is not consulted.
+- Non-root rows matched only through the user's current `Profile.small_group` **at SE-AS.4 time**; `ChurchStructureMembership` was not consulted then. **Superseded by CS-CORE.2B-A:** non-root audience-row matching now uses the user's single active primary `ChurchStructureMembership` (see Section 1 and the canonical `accounts.structure_selectors.user_matches_structure_audience`). Zero-row events still fall back to `Profile.small_group`.
 - Stored rows whose units are later deactivated keep matching per the Section 7 parity decision.
 - SE-AS.4 itself added no selector UI, no ServiceEvent form/template audience picker, no backfill command, no Community Activities, no CS-MAP.3, and no CS-SETUP.1 work. SE-AS.5 later added the selector/display only.
 
@@ -144,7 +150,7 @@ Backfill is optional and is not a prerequisite for ServiceEvent correctness (see
 
 - **SE-AS.6A — docs-only planning checkpoint (complete with this task).** Records the future backfill / compatibility contract, hard invariants, parity requirement, dry-run report categories, and risk areas in Section 8A. No command, test, schema, migration, or runtime change.
 - **SE-AS.6B — dry-run audit command only (complete).** Implements `backfill_service_event_audience_scopes` (in the `events` app) as a read-only audit that scans events and reports the Section 8A categories. It creates nothing and has no `--apply` path. SE-AS.6B.1 verbose-output polish is complete: `--verbose-events` prints event id, title/date when available, legacy scope/status, decision category, proposed unit label/path when available, and reason text.
-- **SE-AS.6C — optional apply mode (future, separate approval, only after SE-AS.6B dry-run output is reviewed in production).** Adds an explicit `--apply` that creates audience rows only for events proven parity-safe by the dry-run rules.
+- **SE-AS.6C — apply mode (implemented, with CS-CORE.2B-A parity correction).** Adds an explicit `--apply` to the same command that creates audience rows only for events proven parity-safe by the dry-run rules. Dry-run remains the default; apply shares the dry-run decision path, runs in one atomic transaction, skips events that already have rows, is idempotent, mutates no legacy field, and reports a `created audience rows` count. **Parity is current-runtime parity:** pre-backfill legacy zero-row visibility (`Profile.small_group`) vs post-backfill membership-core visibility (active primary `ChurchStructureMembership` via `user_matches_structure_audience`), not the legacy `resolve_units_to_small_groups` resolver. The earlier GoDaddy dry-run (37 scanned / 1 skipped-existing / 36 would-create / 0 skipped / 0 parity mismatch / 0 legacy mutation) was produced by the **old legacy-resolver parity logic** and is **not** valid apply approval after this correction — the production-data dry-run must be rerun with the corrected logic and re-reviewed. Implementation does not mean production apply has been run; production apply still requires an explicit human command and a current backup. The zero-row legacy fallback is not retired by this slice.
 - **Later — legacy fallback deprecation planning (future, separate approval).** Plan-only evaluation of eventual legacy `scope_type` / `district` / `small_group` field deprecation (the old SE-AS.6 scope from SE-AS.1); no destructive change until audience rows have proven stable in production.
 
 Staff/admin clarity for which source governs each event (audience rows vs legacy fallback) already shipped with SE-AS.5 staff detail display.
@@ -156,13 +162,15 @@ Implemented by SE-AS.4. The runtime rule, in order:
 1. Unauthenticated users: denied (unchanged).
 2. `can_be_managed_by` (staff, superuser, `CAP_MANAGE_SERVICE_EVENTS`): allowed, including drafts (unchanged — managers keep broader access).
 3. Draft/cancelled, or any non-published/completed status: denied for ordinary users (unchanged).
-4. If the event has one or more `ServiceEventAudienceScope` rows: those rows are the audience source. The user is in the audience iff they match the selected units per Section 7.
-5. Otherwise (no audience rows): fall back to legacy `scope_type` / `district` / `small_group` exactly as today.
-6. Ordinary-user matching uses `Profile.small_group` only. `ChurchStructureMembership` is not consulted; requested/unapproved memberships must never grant visibility. Migrating matching to membership is a separate, unapproved, future decision.
+4. If the event has one or more `ServiceEventAudienceScope` rows: those rows are the audience source. The user is in the audience iff they match the selected units. **At SE-AS.4 time this matched via Section 7 (`Profile.small_group`); as of CS-CORE.2B-A it matches via the user's single active primary `ChurchStructureMembership`** through `accounts.structure_selectors.user_matches_structure_audience` (root rows still match all authenticated users).
+5. Otherwise (no audience rows): fall back to legacy `scope_type` / `district` / `small_group` exactly as today, matched through `Profile.small_group`.
+6. **Zero-row (fallback) matching** uses `Profile.small_group` only. **Audience-row matching** now consults active primary `ChurchStructureMembership` (CS-CORE.2B-A); in both paths requested/unapproved/inactive memberships must never grant visibility. (The earlier statement that audience-row matching never consults membership applied only before CS-CORE.2B-A.)
 
 Justification: the fallback rule means the migration never has a flag-day; every existing event is untouched until staff (or an explicit backfill) give it audience rows, and removing rows restores legacy behavior per event.
 
 ## 7. Unit-to-User Resolution for Ordinary Users
+
+**Scope note (CS-CORE.2B-A correction).** This section describes the **legacy `Profile.small_group` resolver** (`resolve_units_to_small_groups`) only. As shipped at SE-AS.4 this was also how ServiceEvent audience rows matched, but **that is no longer current ServiceEvent behavior**: as of CS-CORE.2B-A a ServiceEvent that has audience rows matches ordinary users through the user's single active primary `ChurchStructureMembership` via `accounts.structure_selectors.user_matches_structure_audience`, **not** through `Profile.small_group`. The `Profile.small_group` resolver below now describes (a) the **zero-row legacy fallback** for ServiceEvents and (b) the separate **Bible Study** generation/visibility path, which still resolves through `Profile.small_group`. Read this section as legacy/Bible-Study resolver semantics, not as the current ServiceEvent audience-row runtime.
 
 Selected `ChurchStructureUnit` rows map to current users through the legacy mapping fields, mirroring the proven Bible Study resolver:
 
@@ -217,7 +225,7 @@ A future command must **never**:
 
 - Mutate, clear, or rewrite `scope_type`, `district`, or `small_group` on any event. Backfill is additive (it only creates `ServiceEventAudienceScope` rows) and non-destructive to legacy fields.
 - Create, edit, deactivate, move, or otherwise modify `ChurchStructureUnit` rows. Unit seeding stays exclusively in `seed_church_structure_units`.
-- Use `ChurchStructureMembership` as a ServiceEvent visibility source or as a backfill mapping input. Membership grants no ServiceEvent visibility.
+- Use `ChurchStructureMembership` as a backfill **mapping input** (the proposed unit is derived only from the legacy `church_structure_unit` mapping of the event's district/small group, never from membership rows). Note (CS-CORE.2B-A correction): membership **is** the runtime visibility source for events that have audience rows, so the parity check legitimately reads active primary membership to compute the proposed post-row audience; it just must not use membership to choose which unit to map an event to.
 - Backfill an event that already has one or more audience rows (skip it; it is already governed by its rows).
 - Change My Serving, `TeamAssignment` / `TeamAssignmentMember`, required-team coverage, rotation anchor / copy-forward, `ministry_context` (Host / Language Label), or any other ministry-scheduling behavior.
 - Remove, hide, deprecate, or disable the legacy fallback fields. They remain editable fallback fields throughout SE-AS.6.
@@ -225,7 +233,7 @@ A future command must **never**:
 ### 8A.4 Parity requirement (binding)
 
 - For every event a future command proposes to backfill, the ordinary-user visibility **after** creating audience rows must equal the ordinary-user visibility under the **pre-backfill legacy rule**, for every ordinary user. Backfill must be visibility-neutral.
-- Parity is computed using the same unit-to-user resolution as the runtime rule (Section 7), so the comparison is: legacy-rule audience set vs. resolved-unit audience set.
+- **Current-runtime parity (CS-CORE.2B-A correction).** Parity is computed against the rule the runtime actually applies, not the legacy resolver: the comparison is **legacy zero-row audience** (matched directly through `Profile.small_group`) vs. **membership-core post-row audience** (active primary `ChurchStructureMembership`, via `accounts.structure_selectors.user_matches_structure_audience`). The command must **not** use `resolve_units_to_small_groups()` as the proposed post-row audience truth for ServiceEvent rows. The comparison is over the actual ordinary-user ID sets the two rules produce, excluding managers (`can_be_managed_by` overrides both paths). Root/global remains parity-safe because both rules treat the active root unit as all authenticated users.
 - If parity cannot be proven for an event (unmapped/inactive/ambiguous mapping, or any resolution that would add or drop even one user), the command must **skip** that event, leave zero audience rows on it, and report it.
 - The dry-run report must explicitly include **parity-mismatch** and **skipped-for-safety** categories so a reviewer sees exactly which events were not backfilled and why. Silent skips are not acceptable.
 
@@ -290,18 +298,18 @@ SE-AS.6B.1 does not approve apply/backfill. SE-AS.6C remains unapproved and requ
 - **Active/inactive mapping assumptions must not silently change visibility.** Validation forbids selecting inactive units at create time, but the runtime rule keeps matching a stored row whose unit later went inactive (Section 7 parity decision). Backfill must not exploit or contradict this: it maps only through currently-active mappings and skips when the mapping is inactive, so a backfilled row never changes who can see an event versus the legacy rule.
 - **Custom / unmapped units may match no ordinary users.** A unit with no legacy `SmallGroup` mapping at or beneath it resolves to an empty ordinary audience. Backfill must not point a legacy event at such a unit when the legacy rule matched real users — that would fail parity and must be skipped.
 - **Root maps to all authenticated users, including users without `Profile.small_group`.** This is the only mapping that reaches users with no current small group, and it is the correct parity target for legacy `global` events.
-- **Non-root unit matching still depends on each user's current `Profile.small_group`.** District/small-group backfilled rows match exactly the users the legacy district/small-group rule matched, because both resolve through `Profile.small_group`; this is what makes district/small-group backfill parity-safe when the mapping exists and is active.
+- **Non-root post-row matching depends on active primary `ChurchStructureMembership`, not `Profile.small_group` (CS-CORE.2B-A correction).** Once an event has audience rows the runtime matches a non-root district/small-group row through the user's single active primary membership unit. District/small-group backfill is therefore parity-safe only when, for every ordinary user, the legacy `Profile.small_group` rule and the membership-core rule pick the same users — i.e. legacy group and active primary membership are aligned. A user who matched the legacy rule via `Profile.small_group` but has no active primary membership (or whose membership points elsewhere) is a parity mismatch and forces the event to be skipped. (Earlier revisions of this plan incorrectly stated both sides resolve through `Profile.small_group`; that was the pre-CS-CORE.2B-A behavior.)
 
 ### 8A.8 Recommended future milestone split
 
 - **SE-AS.6A** — docs-only planning checkpoint (this task).
 - **SE-AS.6B** — dry-run audit command only, no apply. Reports the 8A.5 categories; creates nothing. SE-AS.6B.1 verbose output polish is complete.
-- **SE-AS.6C** — optional apply mode, unapproved and separate; only after SE-AS.6B dry-run output has been captured and reviewed in staging/production; creates rows only for parity-safe events behind an explicit `--apply`.
-- **Later** — legacy fallback deprecation planning, only after audience rows have proven stable in production. No destructive change before then.
+- **SE-AS.6C** — apply mode (implemented; parity corrected to current-runtime membership-core per CS-CORE.2B-A). Creates rows only for parity-safe events behind an explicit `--apply`; dry-run stays the default. The earlier GoDaddy dry-run (Section 1) used the old legacy-resolver parity logic and must be rerun with the corrected membership-core parity before any real apply; production apply has not been run and still requires an explicit human command plus a current backup.
+- **Later** — legacy fallback deprecation planning, only after audience rows have proven stable in production. No destructive change before then; the zero-row fallback is not retired by SE-AS.6C.
 
 ## 8B. SE-AS.6C.0 Optional Apply-Mode Preflight Design (docs-only)
 
-SE-AS.6C.0 is **design-only**. It does not approve SE-AS.6C, does not add apply behavior, and does not change the audit command. The current command remains dry-run/audit-only: no `--apply` exists, so no one should run apply. SE-AS.6C remains a future, separately approved milestone.
+SE-AS.6C.0 was the design-only preflight for apply mode. **Status update:** SE-AS.6C apply mode is now implemented (with the CS-CORE.2B-A current-runtime parity correction), so an `--apply` flag now exists. The guardrails in this section remain binding on that implementation and on any production apply. Implementation is **not** approval to run apply against a real database: production apply still requires explicit human action, a current backup, and a fresh production-data dry-run reviewed under the corrected membership-core parity logic.
 
 ### 8B.1 Preconditions before SE-AS.6C can be approved
 
@@ -369,16 +377,18 @@ Legacy fallback parity:
 - Event with zero audience rows: global/district/small_group visibility identical to current behavior for ordinary users (with and without `Profile.small_group`).
 - Existing event test suite passes unchanged.
 
-Audience-row visibility:
+Audience-row visibility (ServiceEvent, membership-core as of CS-CORE.2B-A):
 
-- Root unit row → visible to all authenticated ordinary users, including users with no small group.
-- Ministry-context unit row → visible to users whose `Profile.small_group.district.ministry_context` maps to the unit (or descendant mapping); invisible to the other ministry context.
-- District unit row → visible to users whose small group is in that district; invisible to sibling districts.
-- Small-group unit row → visible only to that group's members; no leakage to unrelated small groups in the same district.
+For ServiceEvents that **have** audience rows, ordinary-user matching is through the user's single active primary `ChurchStructureMembership` unit via `accounts.structure_selectors.user_matches_structure_audience`, **not** `Profile.small_group`. (Zero-row events keep the legacy `Profile.small_group` fallback covered under "Legacy fallback parity" above. Bible Study's own audience path is separate and still resolves through `Profile.small_group`.) A non-root row matches when the user's active primary membership unit is the selected unit or a descendant of it; requested/unapproved/inactive memberships never match.
+
+- Root unit row → visible to all authenticated ordinary users, including users with no membership/small group.
+- Ministry-context unit row → visible to users whose active primary membership unit is the ministry-context unit or a descendant of it; invisible to the other ministry context.
+- District unit row → visible to users whose active primary membership unit is the district unit or a descendant (e.g. a child small-group unit); invisible to sibling districts.
+- Small-group unit row → visible only to users whose active primary membership unit is that group's unit; no leakage to unrelated small groups in the same district.
 - Multi-unit sibling selection (two groups) and cross-branch selection (CM district + EM group) → union visibility, nothing else.
 - Custom/unmapped unit row → no ordinary user sees it; managers still do.
 - Unit inactive after selection → behavior matches the Section 7 decision, asserted explicitly.
-- User with no `Profile.small_group` → sees root-audience events only.
+- User with no active primary membership → sees root-audience events only (and, for zero-row events, whatever the legacy `Profile.small_group` fallback grants).
 
 Boundaries preserved:
 

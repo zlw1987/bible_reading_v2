@@ -1,0 +1,67 @@
+ServiceEvent audience-scope backfill (SE-AS.6C, APPLY mode)
+====================================================================
+total events scanned                          : 37
+skipped (already has audience rows)           : 1
+
+global:
+  mappable to single active root unit         : 21
+  skipped (root missing or ambiguous)         : 0
+district:
+  mapped and parity-safe                      : 1
+  skipped (unmapped / inactive / unsafe)      : 0
+small group:
+  mapped and parity-safe                      : 14
+  skipped (unmapped / inactive / unsafe)      : 0
+
+parity-mismatch skipped                       : 0
+
+events by status:
+  draft                                       : 1
+  published                                   : 12
+  completed                                   : 0
+  cancelled                                   : 24
+
+would-create audience rows                    : 36
+legacy-fields-mutated (must be 0)             : 0
+created audience rows                         : 36
+
+Apply mode: created 36 ServiceEventAudienceScope row(s) for parity-safe events; no legacy fields mutated.
+
+per-event decisions:
+  event #1 | title: 主日崇拜 | starts: 2026-05-24 10:00 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #2 | title: 主日崇拜 | starts: 2026-05-31 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #3 | title: 主日崇拜 | starts: 2026-06-07 10:00 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #4 | title: 主日崇拜 | starts: 2026-06-14 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #5 | title: 主日崇拜 | starts: 2026-06-21 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #6 | title: 主日崇拜 | starts: 2026-06-28 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #7 | title: 小组查经 | starts: 2026-05-24 19:40 UTC | legacy: small_group/published | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #8 | title: 小组查经 | starts: 2026-05-31 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #9 | title: 小组查经 | starts: 2026-06-07 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #10 | title: 小组查经 | starts: 2026-06-14 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #11 | title: 小组查经 | starts: 2026-06-21 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #12 | title: 小组查经 | starts: 2026-06-28 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #13 | title: 小组查经 | starts: 2026-07-05 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #14 | title: 小组查经 | starts: 2026-07-12 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #15 | title: 小组查经 | starts: 2026-07-19 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #16 | title: 小组查经 | starts: 2026-07-26 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #17 | title: 小组查经 | starts: 2026-08-02 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #18 | title: 小组查经 | starts: 2026-08-09 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #19 | title: 小组查经 | starts: 2026-08-16 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #20 | title: 小组查经 | starts: 2026-08-23 19:40 UTC | legacy: small_group/cancelled | category: would-create | proposed unit: 全教会 > 中文部 > 二区 > Rainbow 4 (SMALLGROUP-1) | reason: legacy audience matches proposed membership-core audience
+  event #21 | title: 主日聚会范围测试 | starts: 2026-05-31 10:40 UTC | legacy: district/published | category: would-create | proposed unit: 全教会 > 中文部 > 二区 (DISTRICT-2) | reason: legacy audience matches proposed membership-core audience
+  event #22 | title: 主日崇拜 | starts: 2026-07-05 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #23 | title: 主日崇拜 | starts: 2026-07-12 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #24 | title: 主日崇拜 | starts: 2026-07-19 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #25 | title: 服事排班测试 | starts: 2026-06-13 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #26 | title: 主日崇拜 | starts: 2026-07-26 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #27 | title: 主日崇拜 | starts: 2026-08-02 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #28 | title: 主日崇拜 | starts: 2026-08-09 10:00 UTC | legacy: global/cancelled | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #29 | title: 主日崇拜 | starts: 2026-06-14 10:00 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #30 | title: 主日崇拜 | starts: 2026-06-21 10:00 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #31 | title: 主日崇拜 | starts: 2026-06-28 10:00 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #32 | title: 主日崇拜 | starts: 2026-06-07 09:30 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #33 | title: 主日崇拜 | starts: 2026-06-14 09:30 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #34 | title: 主日崇拜 | starts: 2026-06-21 09:30 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #35 | title: 主日崇拜 | starts: 2026-06-28 09:30 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #36 | title: 主日崇拜 | starts: 2026-07-05 09:30 UTC | legacy: global/published | category: would-create | proposed unit: 全教会 (CHURCH) | reason: global -> active root unit
+  event #37 | title: 测试 | starts: 2026-06-26 20:43 UTC | legacy: global/draft | category: skipped-existing-rows | reason: already has audience rows

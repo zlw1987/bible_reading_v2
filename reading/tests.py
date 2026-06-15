@@ -1703,22 +1703,44 @@ class GroupProgressPrivacyInvariantTests(TestCase):
     def setUp(self):
         self.district = District.objects.create(name="Invariant District")
         self.other_district = District.objects.create(name="Invariant Other District")
+        # CS-CORE.2D-B: progress permission/access is structure-aware. Map the legacy
+        # district/group rows to a unit hierarchy (district unit -> small-group unit).
+        self.district_unit = self.create_unit(
+            "INV-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.other_district_unit = self.create_unit(
+            "INV-OTHER-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.group_unit = self.create_unit(
+            "INV-PROGRESS-GROUP", parent=self.district_unit
+        )
+        self.other_group_unit = self.create_unit(
+            "INV-PROGRESS-OTHER", parent=self.other_district_unit
+        )
+        self.district.church_structure_unit = self.district_unit
+        self.district.save()
+        self.other_district.church_structure_unit = self.other_district_unit
+        self.other_district.save()
         self.group = SmallGroup.objects.create(
             name="Invariant Progress Group",
             district=self.district,
+            church_structure_unit=self.group_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Invariant Progress Other Group",
             district=self.other_district,
+            church_structure_unit=self.other_group_unit,
         )
-        self.group_unit = self.create_unit("INV-PROGRESS-GROUP")
-        self.other_group_unit = self.create_unit("INV-PROGRESS-OTHER")
-        self.group.church_structure_unit = self.group_unit
-        self.group.save()
-        self.other_group.church_structure_unit = self.other_group_unit
-        self.other_group.save()
 
         self.viewer = self.create_user("progress_viewer", group=self.group)
+        # The viewer reaches the page via a group-leader role on self.group (not via
+        # membership), so they can view it without appearing in the membership roster.
+        ChurchRoleAssignment.objects.create(
+            user=self.viewer,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
         self.same_group_member = self.create_user("progress_same", group=self.group)
         self.profile_only_member = self.create_user("progress_profile_only", group=self.group)
         self.other_group_member = self.create_user(
@@ -1733,13 +1755,7 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             is_staff=True,
         )
 
-        ChurchStructureMembership.objects.create(
-            user=self.membership_only_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
+        self.create_membership(self.membership_only_user, self.group_unit)
 
         self.plan = ReadingPlan.objects.create(
             name="Invariant Progress Plan",
@@ -1828,27 +1844,61 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertNotIn("progress_other", self.row_usernames(response))
         self.assertNotIn("progress_no_group", self.row_usernames(response))
 
-    def test_no_group_user_with_membership_still_gets_safe_empty_progress_state(self):
+    def test_membership_only_viewer_gets_own_group_progress(self):
+        # CS-CORE.2D-B: own-group access now comes from the active primary membership.
+        # A membership-only viewer (membership on the group unit) can view their own
+        # group page and appears in the membership-core roster.
         membership_only_viewer = self.create_user("progress_membership_viewer")
         self.create_membership(membership_only_viewer, self.group_unit)
+        PlanEnrollment.objects.create(
+            user=membership_only_viewer, active_plan=self.active_plan
+        )
 
+        self.assertEqual(
+            self.accessible_group_ids(membership_only_viewer), {self.group.id}
+        )
         response = self.progress_response_for(membership_only_viewer)
+
+        self.assertEqual(response.context["selected_group"], self.group)
+        self.assertIn("progress_membership_viewer", self.row_usernames(response))
+
+    def test_profile_only_viewer_gets_safe_empty_progress_state(self):
+        # CS-CORE.2D-B: Profile.small_group no longer grants progress access. A viewer
+        # with only a legacy profile group (no membership, no role) gets the safe
+        # empty state.
+        profile_only_viewer = self.create_user(
+            "progress_profile_only_viewer", group=self.group
+        )
+        PlanEnrollment.objects.create(
+            user=profile_only_viewer, active_plan=self.active_plan
+        )
+
+        self.assertEqual(self.accessible_group_ids(profile_only_viewer), set())
+        response = self.progress_response_for(profile_only_viewer)
 
         self.assertIsNone(response.context["selected_group"])
         self.assertEqual(list(response.context["member_rows"]), [])
         self.assertContains(response, "You are not assigned to a small group yet.")
-        self.assertEqual(self.accessible_group_ids(membership_only_viewer), set())
 
-    def test_ordinary_own_group_permission_ignores_unrelated_membership(self):
+    def test_role_and_membership_grant_only_their_own_groups_not_siblings(self):
+        # CS-CORE.2D-B: the viewer's group-leader role grants self.group; an added
+        # ordinary membership grants only its own mapped group (other_group); neither
+        # grants a third sibling group under the same district.
+        sibling_unit = self.create_unit("INV-SIBLING", parent=self.district_unit)
+        sibling_group = SmallGroup.objects.create(
+            name="Invariant Sibling Group",
+            district=self.district,
+            church_structure_unit=sibling_unit,
+        )
         self.create_membership(self.viewer, self.other_group_unit)
 
+        self.assertEqual(
+            self.accessible_group_ids(self.viewer),
+            {self.group.id, self.other_group.id},
+        )
         self.assertTrue(can_view_group_progress_for(self.viewer, self.group))
-        self.assertFalse(can_view_group_progress_for(self.viewer, self.other_group))
-        self.assertEqual(self.accessible_group_ids(self.viewer), {self.group.id})
-
-        response = self.progress_response_for(self.viewer, group=self.other_group)
-
-        self.assertEqual(response.context["selected_group"], self.group)
+        self.assertTrue(can_view_group_progress_for(self.viewer, self.other_group))
+        self.assertFalse(can_view_group_progress_for(self.viewer, sibling_group))
 
     def test_legacy_group_leader_can_view_assigned_group_only(self):
         leader = self.create_user("progress_group_leader")
@@ -1863,10 +1913,14 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertTrue(can_view_group_progress_for(leader, self.other_group))
         self.assertEqual(self.accessible_group_ids(leader), {self.other_group.id})
 
-    def test_legacy_district_leader_can_view_in_scope_groups_only(self):
+    def test_structure_district_leader_can_view_descendant_groups_only(self):
+        district_group_b_unit = self.create_unit(
+            "INV-DIST-GROUP-B", parent=self.district_unit
+        )
         district_group_b = SmallGroup.objects.create(
             name="Invariant District Group B",
             district=self.district,
+            church_structure_unit=district_group_b_unit,
         )
         leader = self.create_user("progress_district_leader")
         ChurchRoleAssignment.objects.create(
@@ -2122,33 +2176,41 @@ class GroupProgressShadowModeTests(TestCase):
         self.assertEqual(shadow.membership_roster_user_ids, frozenset())
         self.assertIn(REASON_SELECTED_GROUP_UNMAPPED, shadow.reason_codes)
 
-        # The page still selects the unmapped group, but after CS-CORE.4F.1 its
-        # membership-core roster fails closed to empty (no crash).
-        response = self.progress_response_for(unmapped_member, group=unmapped_group)
+        # A staff viewer can still select the unmapped group; its membership-core
+        # roster fails closed to empty (no crash). After CS-CORE.2D-B an ordinary user
+        # can no longer reach an unmapped group at all.
+        staff = User.objects.create_user(
+            username="shadow_unmapped_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+        response = self.progress_response_for(staff, group=unmapped_group)
         self.assertEqual(response.context["selected_group"], unmapped_group)
         self.assertEqual(list(response.context["member_rows"]), [])
 
-    def test_ordinary_membership_does_not_grant_other_group_progress(self):
-        # Ordinary user belongs to self.group legacy-wise, but their single active
-        # primary membership points into other_group's unit. Membership must not
-        # grant access to other_group's progress; permission stays legacy-only.
+    def test_ordinary_membership_grants_own_group_not_legacy_profile_group(self):
+        # CS-CORE.2D-B: progress access follows the active primary membership, not
+        # Profile.small_group. This user's profile points to self.group but their
+        # membership points into other_group's unit, so only other_group is accessible
+        # (its own mapped group) and the legacy profile group is not.
         ordinary_user = self.create_user("shadow_ordinary", group=self.group)
         self.create_membership(ordinary_user, self.other_group_unit)
         PlanEnrollment.objects.create(user=ordinary_user, active_plan=self.active_plan)
 
-        self.assertFalse(can_view_group_progress_for(ordinary_user, self.other_group))
+        self.assertTrue(can_view_group_progress_for(ordinary_user, self.other_group))
+        self.assertFalse(can_view_group_progress_for(ordinary_user, self.group))
         self.assertEqual(
             set(
                 get_accessible_progress_groups(ordinary_user).values_list(
                     "id", flat=True
                 )
             ),
-            {self.group.id},
+            {self.other_group.id},
         )
 
-        response = self.progress_response_for(ordinary_user, group=self.other_group)
-        # Falls back to the only accessible (own legacy) group.
-        self.assertEqual(response.context["selected_group"], self.group)
+        response = self.progress_response_for(ordinary_user, group=self.group)
+        # self.group is no longer accessible; selection falls back to the own group.
+        self.assertEqual(response.context["selected_group"], self.other_group)
 
     def test_no_selected_group_reports_only_default_divergence(self):
         membership_only = self.create_user("shadow_only_member")
@@ -2518,27 +2580,25 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         # Sanity: the membership-core roster member is still present.
         self.assertIn("switch_viewer", self.row_usernames(response))
 
-    def test_membership_in_other_group_does_not_grant_progress_permission(self):
-        # Permission stays legacy: an ordinary membership in another group's unit
-        # never grants progress access to that other group.
-        ordinary = self.create_user("switch_ordinary", group=self.group)
-        self.create_membership(ordinary, self.other_group_unit)
+    def test_membership_grants_own_group_only_not_sibling(self):
+        # CS-CORE.2D-B: an ordinary membership now grants progress access to its own
+        # mapped group, but never to a different group.
+        ordinary = self.create_user("switch_ordinary")
+        self.create_membership(ordinary, self.group_unit)
 
+        self.assertTrue(can_view_group_progress_for(ordinary, self.group))
         self.assertFalse(can_view_group_progress_for(ordinary, self.other_group))
         self.assertEqual(self.accessible_group_ids(ordinary), {self.group.id})
 
+        # Selecting an inaccessible other group falls back to the accessible own group.
         response = self.progress_response_for(ordinary, group=self.other_group)
-        # Falls back to the only accessible (own legacy) group, exactly as before.
         self.assertEqual(response.context["selected_group"], self.group)
 
-    def test_default_selected_group_stays_legacy_not_membership_candidate(self):
-        # Legacy profile group (self.group) differs from the membership candidate
-        # default (other_group). The CS-CORE.4F.2 default helper is permission-fenced:
-        # the candidate other_group is NOT in this ordinary user's legacy-accessible
-        # groups ({self.group}), so it is excluded and the legacy default applies. The
-        # selected group must therefore be the legacy self.group, not other_group.
-        dual = self.create_user("switch_dual", group=self.group)
-        self.create_membership(dual, self.other_group_unit)
+    def test_default_selected_group_is_membership_own_group(self):
+        # CS-CORE.2D-B: with no ?group=, the default selected group is the viewer's
+        # membership-core own group (now both the access source and the 4F.2 default).
+        dual = self.create_user("switch_dual")
+        self.create_membership(dual, self.group_unit)
         PlanEnrollment.objects.create(user=dual, active_plan=self.active_plan)
 
         response = self.progress_response_for(dual)
@@ -2546,19 +2606,20 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         self.assertEqual(response.context["selected_group"], self.group)
 
     def test_unmapped_selected_group_yields_empty_roster_without_crash(self):
-        # Viewer has legacy permission/default to an unmapped group; the page still
-        # selects it, but the membership-core roster fails closed to empty.
+        # A staff viewer can select an unmapped group (staff sees all active groups);
+        # the membership-core roster fails closed to empty without crashing.
+        staff = User.objects.create_user(
+            username="switch_unmapped_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
         unmapped_group = SmallGroup.objects.create(
             name="Switch Unmapped",
             district=self.district,
             church_structure_unit=None,
         )
-        unmapped_viewer = self.create_user("switch_unmapped", group=unmapped_group)
-        PlanEnrollment.objects.create(
-            user=unmapped_viewer, active_plan=self.active_plan
-        )
 
-        response = self.progress_response_for(unmapped_viewer, group=unmapped_group)
+        response = self.progress_response_for(staff, group=unmapped_group)
 
         self.assertEqual(response.context["selected_group"], unmapped_group)
         self.assertEqual(list(response.context["member_rows"]), [])
@@ -2652,9 +2713,22 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
     def setUp(self):
         self.district = District.objects.create(name="Default District")
         self.other_district = District.objects.create(name="Default Other District")
-        self.unit_a = self.create_unit("DEF-A")
-        self.unit_b = self.create_unit("DEF-B")
-        self.unit_c = self.create_unit("DEF-C")
+        # CS-CORE.2D-B: district-leader scopes resolve through the mapped district
+        # unit, so unit_a/unit_b sit under the district unit and unit_c under the
+        # other district unit.
+        self.district_unit = self.create_unit(
+            "DEF-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.other_district_unit = self.create_unit(
+            "DEF-OTHER-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.district.church_structure_unit = self.district_unit
+        self.district.save()
+        self.other_district.church_structure_unit = self.other_district_unit
+        self.other_district.save()
+        self.unit_a = self.create_unit("DEF-A", parent=self.district_unit)
+        self.unit_b = self.create_unit("DEF-B", parent=self.district_unit)
+        self.unit_c = self.create_unit("DEF-C", parent=self.other_district_unit)
         self.group_a = SmallGroup.objects.create(
             name="Default Group A",
             district=self.district,
@@ -2753,26 +2827,25 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         # Sanity: the legacy default (profile group_a) was not chosen.
         self.assertNotEqual(response.context["selected_group"], self.group_a)
 
-    def test_default_falls_back_to_legacy_when_candidate_not_accessible(self):
-        # Ordinary user: legacy profile group_a (their only accessible group) and an
-        # active primary membership in group_b's unit. group_b is NOT legacy
-        # accessible, so the membership candidate is fenced out and the legacy default
-        # (group_a) applies. Proves ordinary membership does not grant progress access.
-        user = self.create_user("default_ordinary", group=self.group_a)
+    def test_ordinary_membership_default_selects_own_group(self):
+        # CS-CORE.2D-B: an ordinary user (no role) with an active primary membership in
+        # group_b's unit now has own-group access to group_b, and with no ?group= it is
+        # the default selected group.
+        user = self.create_user("default_ordinary")
         self.create_membership(user, self.unit_b)
 
-        self.assertEqual(self.accessible_group_ids(user), {self.group_a.id})
+        self.assertEqual(self.accessible_group_ids(user), {self.group_b.id})
 
         response = self.progress_response_for(user)
 
-        self.assertEqual(response.context["selected_group"], self.group_a)
+        self.assertEqual(response.context["selected_group"], self.group_b)
 
-    def test_membership_only_user_with_no_accessible_groups_gets_empty_state(self):
-        # No legacy Profile.small_group, no role, but an active primary membership in
-        # group_a's unit. group_a is not legacy accessible, so the candidate is fenced
-        # out and there is no accessible group at all: safe empty state.
+    def test_membership_with_unmapped_unit_gets_empty_state(self):
+        # CS-CORE.2D-B: a membership whose unit maps to no active SmallGroup yields no
+        # own-group access and (with no role) the safe empty state.
         user = self.create_user("default_membership_only")
-        self.create_membership(user, self.unit_a)
+        unmapped_unit = self.create_unit("DEF-EMPTY-UNMAPPED")
+        self.create_membership(user, unmapped_unit)
 
         self.assertEqual(self.accessible_group_ids(user), set())
 
@@ -2849,14 +2922,16 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
         self.assertEqual(response.context["selected_group"], self.group_a)
 
-    def test_ordinary_membership_does_not_expand_accessible_groups(self):
-        # An active primary membership in group_a's unit, with no role and no legacy
-        # profile group, must not make group_a (or anything) accessible.
+    def test_ordinary_membership_grants_only_own_group_not_others(self):
+        # CS-CORE.2D-B: an active primary membership in group_a's unit grants own-group
+        # access to group_a only, never to other groups (group_b/group_c).
         user = self.create_user("default_no_expand")
         self.create_membership(user, self.unit_a)
 
-        self.assertEqual(self.accessible_group_ids(user), set())
-        self.assertFalse(can_view_group_progress_for(user, self.group_a))
+        self.assertEqual(self.accessible_group_ids(user), {self.group_a.id})
+        self.assertTrue(can_view_group_progress_for(user, self.group_a))
+        self.assertFalse(can_view_group_progress_for(user, self.group_b))
+        self.assertFalse(can_view_group_progress_for(user, self.group_c))
 
     def test_default_helper_is_permission_fenced(self):
         # Direct helper checks: a mapped candidate is only returned when it is in the
@@ -4001,6 +4076,8 @@ class BibleReadingFlowTests(TestCase):
         )
         assigned_group = SmallGroup.objects.create(name="Assigned Group")
         other_group = SmallGroup.objects.create(name="Outside Group")
+        # CS-CORE.2D-B: scoped role access resolves through the mapped structure unit.
+        self.map_group_to_unit(assigned_group, "FLOW-LEADER-ASSIGNED")
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
@@ -4021,6 +4098,29 @@ class BibleReadingFlowTests(TestCase):
         district = District.objects.create(name="North District")
         group_a = SmallGroup.objects.create(name="North Group A", district=district)
         group_b = SmallGroup.objects.create(name="North Group B", district=district)
+        # CS-CORE.2D-B: a district-leader scope resolves through the mapped district
+        # unit and covers its descendant small-group units.
+        district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="FLOW-DIST-N",
+            name="North District Unit",
+        )
+        district.church_structure_unit = district_unit
+        district.save()
+        group_a.church_structure_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-DIST-N-A",
+            name="North Group A Unit",
+            parent=district_unit,
+        )
+        group_a.save()
+        group_b.church_structure_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-DIST-N-B",
+            name="North Group B Unit",
+            parent=district_unit,
+        )
+        group_b.save()
         leader = User.objects.create_user(
             username="district_leader",
             email="district@example.com",
@@ -4054,6 +4154,36 @@ class BibleReadingFlowTests(TestCase):
             name="West Group",
             district=outside_district,
         )
+        # CS-CORE.2D-B: map both districts/groups so the structure-aware district
+        # scope covers the in-district group but never the out-of-district one.
+        district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="FLOW-DIST-E",
+            name="East District Unit",
+        )
+        district.church_structure_unit = district_unit
+        district.save()
+        inside_group.church_structure_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-DIST-E-IN",
+            name="East Group Unit",
+            parent=district_unit,
+        )
+        inside_group.save()
+        outside_district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="FLOW-DIST-W",
+            name="West District Unit",
+        )
+        outside_district.church_structure_unit = outside_district_unit
+        outside_district.save()
+        outside_group.church_structure_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-DIST-W-OUT",
+            name="West Group Unit",
+            parent=outside_district_unit,
+        )
+        outside_group.save()
         leader = User.objects.create_user(
             username="limited_leader",
             email="limited@example.com",

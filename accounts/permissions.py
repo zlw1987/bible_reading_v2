@@ -1,9 +1,8 @@
-from functools import reduce
-from operator import or_
-
-from django.db.models import Q
-
-from .models import ChurchRoleAssignment, SmallGroup
+from .models import ChurchRoleAssignment, ChurchStructureUnit, SmallGroup
+from .structure_selectors import (
+    _collect_unit_and_descendant_ids,
+    get_user_primary_membership_unit,
+)
 
 CAP_MANAGE_READING_PLANS = "manage_reading_plans"
 CAP_PUBLISH_READING_GUIDES = "publish_reading_guides"
@@ -88,7 +87,13 @@ def get_user_active_role_assignments(user):
 
     return (
         ChurchRoleAssignment.objects.filter(user=user, is_active=True)
-        .select_related("district", "small_group")
+        .select_related(
+            "district",
+            "district__church_structure_unit",
+            "small_group",
+            "small_group__church_structure_unit",
+            "structure_unit",
+        )
         .order_by("role", "scope_type")
     )
 
@@ -100,10 +105,13 @@ def get_role_assignment_structure_unit(assignment):
     the legacy ``small_group`` / ``district`` mapped ``church_structure_unit``.
     Returns ``None`` when no structure unit can be resolved (including global
     roles). Ordinary ``ChurchStructureMembership`` is intentionally never
-    consulted here: belonging does not decide role scope (CS-CORE.2D-A).
+    consulted here: belonging does not decide role scope.
 
-    This is foundation-only: it does not change ``get_accessible_progress_groups``
-    or ``can_view_group_progress_for`` behavior in this slice.
+    Introduced as the CS-CORE.2D-A foundation; CS-CORE.2D-B now uses it to drive
+    the group-progress permission / accessible group list at runtime
+    (``get_accessible_progress_groups`` / ``can_view_group_progress_for``). The
+    legacy ``small_group`` / ``district`` fallback is the transition path until
+    role rows carry ``structure_unit`` directly.
     """
     if assignment is None:
         return None
@@ -129,7 +137,11 @@ def assignment_scope_includes_unit(assignment, unit):
     covers ``unit`` when it is the same unit or an ancestor of ``unit`` (so a
     district-like unit scope covers its descendant small-group units). Fails
     closed when either the target ``unit`` or the resolved scope unit is missing.
-    Ordinary ``ChurchStructureMembership`` is never consulted (CS-CORE.2D-A).
+    Ordinary ``ChurchStructureMembership`` is never consulted.
+
+    Added as the CS-CORE.2D-A foundation and consistent with the CS-CORE.2D-B
+    structure-aware group-progress permission behavior (the same unit-plus-descendant
+    scope rule ``get_accessible_progress_groups`` applies).
     """
     if unit is None:
         return False
@@ -163,7 +175,58 @@ def has_capability(user, capability):
     return False
 
 
-def get_accessible_progress_groups(user):
+def get_user_membership_progress_own_group(user, target_date=None):
+    """Resolve a user's own-group progress group from membership-core (CS-CORE.2D-B).
+
+    Membership-core replacement for the legacy ``Profile.small_group`` own-group
+    progress rule. Resolves the user's single active primary
+    ``ChurchStructureMembership`` unit to exactly one active legacy ``SmallGroup``
+    mapped to that unit. ``Profile.small_group`` is never read.
+
+    Fails closed (returns ``None``) on:
+
+    - no active primary membership, or multiple active primary memberships
+      (ambiguous, via :func:`get_user_primary_membership_unit`);
+    - a membership unit that is not a ``small_group``-type unit; or
+    - a unit that does not map to exactly one active legacy ``SmallGroup``.
+
+    This grants *own-group* progress access only (the single mapped group); it is
+    never a broad role/capability grant and never reaches sibling or descendant
+    groups (privacy invariant 5 / concept separation).
+    """
+    unit = get_user_primary_membership_unit(user, target_date=target_date)
+    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+        return None
+
+    groups = list(
+        SmallGroup.objects.filter(is_active=True, church_structure_unit=unit)[:2]
+    )
+    if len(groups) != 1:
+        return None
+    return groups[0]
+
+
+def get_accessible_progress_groups(user, target_date=None):
+    """Active legacy ``SmallGroup`` rows the user may view group progress for.
+
+    CS-CORE.2D-B structure-aware switch. Staff / superuser / the global
+    ``CAP_VIEW_ALL_GROUP_PROGRESS`` capability still see every active group, and
+    global role behavior is unchanged. Scoped access is otherwise the union of:
+
+    - **Structure-aware role scopes:** for the two progress-relevant scoped roles
+      (district leader on a district scope, group leader on a small-group scope),
+      the scope unit is resolved by :func:`get_role_assignment_structure_unit`
+      (explicit ``structure_unit`` first, then the legacy ``district`` /
+      ``small_group`` mapped unit as a transition fallback). A scope covers active
+      legacy ``SmallGroup`` rows whose mapped ``church_structure_unit`` is that unit
+      or a descendant. Unmapped legacy scopes resolve to ``None`` and fail closed.
+    - **Own-group:** the membership-core own group from
+      :func:`get_user_membership_progress_own_group` (no longer
+      ``Profile.small_group``).
+
+    Ordinary ``ChurchStructureMembership`` grants only the single mapped own group,
+    never a broader set.
+    """
     groups = SmallGroup.objects.filter(is_active=True).order_by("name")
 
     if not getattr(user, "is_authenticated", False):
@@ -176,45 +239,58 @@ def get_accessible_progress_groups(user):
     ):
         return groups
 
-    filters = []
-    assignments = list(get_user_active_role_assignments(user))
+    accessible_ids = set()
 
-    district_ids = [
-        assignment.district_id
-        for assignment in assignments
-        if assignment.role == ChurchRoleAssignment.ROLE_DISTRICT_LEADER
-        and assignment.scope_type == ChurchRoleAssignment.SCOPE_DISTRICT
-        and assignment.district_id
-    ]
-    if district_ids:
-        filters.append(Q(district_id__in=district_ids, district__is_active=True))
+    # Structure-aware role scopes. Only the two progress-relevant scoped roles grant
+    # group access, matching the legacy role gating; the scope unit is resolved via
+    # the CS-CORE.2D-A helper and covers the unit plus its descendants.
+    scope_unit_ids = set()
+    for assignment in get_user_active_role_assignments(user):
+        is_district_scope = (
+            assignment.role == ChurchRoleAssignment.ROLE_DISTRICT_LEADER
+            and assignment.scope_type == ChurchRoleAssignment.SCOPE_DISTRICT
+        )
+        is_group_scope = (
+            assignment.role == ChurchRoleAssignment.ROLE_GROUP_LEADER
+            and assignment.scope_type == ChurchRoleAssignment.SCOPE_SMALL_GROUP
+        )
+        if not (is_district_scope or is_group_scope):
+            continue
+        scope_unit = get_role_assignment_structure_unit(assignment)
+        if scope_unit is not None:
+            scope_unit_ids |= _collect_unit_and_descendant_ids([scope_unit])
 
-    small_group_ids = [
-        assignment.small_group_id
-        for assignment in assignments
-        if assignment.role == ChurchRoleAssignment.ROLE_GROUP_LEADER
-        and assignment.scope_type == ChurchRoleAssignment.SCOPE_SMALL_GROUP
-        and assignment.small_group_id
-    ]
-    if small_group_ids:
-        filters.append(Q(id__in=small_group_ids))
+    if scope_unit_ids:
+        accessible_ids.update(
+            groups.filter(
+                church_structure_unit_id__in=scope_unit_ids
+            ).values_list("id", flat=True)
+        )
 
-    profile = getattr(user, "profile", None)
-    own_group = getattr(profile, "small_group", None)
-    if own_group and own_group.is_active:
-        filters.append(Q(id=own_group.id))
+    # Ordinary own-group access, migrated from Profile.small_group to membership-core.
+    own_group = get_user_membership_progress_own_group(user, target_date=target_date)
+    if own_group is not None and own_group.is_active:
+        accessible_ids.add(own_group.id)
 
-    if not filters:
+    if not accessible_ids:
         return groups.none()
 
-    return groups.filter(reduce(or_, filters)).distinct().order_by("name")
+    return groups.filter(id__in=accessible_ids).order_by("name")
 
 
-def can_view_group_progress_for(user, small_group):
+def can_view_group_progress_for(user, small_group, target_date=None):
+    """Whether ``user`` may view group progress for ``small_group``.
+
+    Agrees exactly with :func:`get_accessible_progress_groups`: it is true iff
+    ``small_group`` is in that accessible set. There is no separate staff
+    short-circuit, so the single-group gate never diverges from the list (staff /
+    global capability still match because the accessible set is every active group).
+    """
     if small_group is None:
         return False
 
-    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
-        return True
-
-    return get_accessible_progress_groups(user).filter(id=small_group.id).exists()
+    return (
+        get_accessible_progress_groups(user, target_date=target_date)
+        .filter(id=small_group.id)
+        .exists()
+    )

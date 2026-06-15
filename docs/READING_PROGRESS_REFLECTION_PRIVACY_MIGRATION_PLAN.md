@@ -677,6 +677,14 @@ a better scheme emerges, but keep the sequence and the gates.
   compatibility targets until the group-progress UI/model is fully structure-native. Rollback =
   restore the legacy `district_id` / `small_group_id` / `Profile.small_group` filters in
   `get_accessible_progress_groups()`.
+- **Role-scope backfill tooling — CS-CORE.2D-C (no runtime change).** A data-migration command
+  (`backfill_structure_role_scopes`, dry-run by default, `--apply` to write) populates
+  `ChurchRoleAssignment.structure_unit` from the mapped legacy `district` / `small_group` role scopes
+  on existing rows, sharing the CS-CORE.2D-A readiness rules. This is **tooling only**: the runtime
+  group-progress permission / accessible group list keeps its CS-CORE.2D-B behavior (the legacy
+  mapped-unit fallback still resolves scopes that have no `structure_unit` yet), and the legacy
+  `district` / `small_group` role fields remain. Fallback retirement stays future work, gated on real
+  data being backfilled and verified.
 
 ## 7. Future Test Matrix (for CS-CORE.4C and each switch)
 

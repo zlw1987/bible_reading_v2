@@ -14,7 +14,7 @@ CS-CORE.4G.2 switched the ordinary-member group reflection **read paths**, and C
 
 Remaining legacy work (active, sequenced — not blocked on demo/QA data):
 
-- **Legacy `ChurchRoleAssignment.district` / `small_group` role scope fields** — kept as a compatibility/transition fallback only: after CS-CORE.2D-B, group-progress permission resolves role scope through `structure_unit` (or these legacy fields' mapped `church_structure_unit`); an unmapped legacy role scope fails closed. Retire once role rows carry `structure_unit` directly.
+- **Legacy `ChurchRoleAssignment.district` / `small_group` role scope fields** — kept as a compatibility/transition fallback only: after CS-CORE.2D-B, group-progress permission resolves role scope through `structure_unit` (or these legacy fields' mapped `church_structure_unit`); an unmapped legacy role scope fails closed. **CS-CORE.2D-C added backfill tooling** (`backfill_structure_role_scopes`, dry-run by default, `--apply` to write) that populates `structure_unit` from these mapped legacy scopes on existing rows. The fallback is **not retired**: actual fallback retirement remains future work, gated on real data being backfilled with `--apply` and verified. Retire only once role rows carry `structure_unit` directly.
 - **Legacy `Profile.small_group` / `SmallGroup` / `District` / `MinistryContext`** — kept as the compatibility layer for now; retire per-table once no runtime consumer reads them.
 - **ServiceEvent zero-row legacy fallback** — kept; deprecation is a future product decision.
 - **Bible Study v2 legacy `SmallGroup` meeting-generation bridge** — kept for now.

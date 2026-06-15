@@ -45,10 +45,10 @@
 
     <div class="form-row">
         <h2 class="card-title">
-            {% if language == "zh" %}未选择上方范围时使用（旧版）{% else %}Used when no structure audience is selected{% endif %}
+            {% if language == "zh" %}未选择上方范围时用于转换{% else %}Converted when no structure audience is selected{% endif %}
         </h2>
         <p class="muted">
-            {% if language == "zh" %}如果上方没有选择任何教会结构单元，系统会使用这里的全教会 / 区 / 小组设置。上方一旦有选择，这里只作为备用记录，不会再额外筛选。{% else %}If no structure unit is selected above, the event uses these Whole Church / District / Small Group settings. Once structure units are selected, these fields are kept only as fallback records and are not an extra filter.{% endif %}
+            {% if language == "zh" %}如果上方没有选择任何教会结构单元，保存时系统会把这里的全教会 / 区 / 小组设置转换为一条结构适用范围记录。保存需要存在有效且启用的结构映射。上方一旦有选择，这里只作为备用记录，不会再额外筛选。{% else %}If no structure unit is selected above, these Whole Church / District / Small Group settings are converted into a structure audience row when you save. Saving requires a valid, active structure mapping. Once structure units are selected, these fields are kept only as fallback records and are not an extra filter.{% endif %}
         </p>
     </div>
 

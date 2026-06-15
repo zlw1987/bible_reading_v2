@@ -347,8 +347,20 @@ Proposed (not implemented; safest direction):
    `small_group` and joint meetings, this constraint cannot be the identity key.
    A later slice must define meeting identity (e.g. `(lesson, anchor_unit)` plus
    an audience-set signature, or a generation key) so generation stays
-   idempotent without blocking multiple/joint meetings per lesson. **Flag as a
-   design decision for BS-STRUCT.1B, not resolved here.**
+   idempotent without blocking multiple/joint meetings per lesson.
+   **Resolved in BS-STRUCT.1B (see Section 6).** The existing
+   `unique_bible_study_meeting_lesson_group` constraint was made **conditional
+   on a non-null `small_group`**, so normal group-level duplicates are still
+   rejected while multiple null-`small_group` (higher-level/joint) meetings per
+   lesson are allowed. A nullable `generation_key` CharField was added with a
+   **conditional** `unique_bible_study_meeting_lesson_generation_key` constraint
+   on `(lesson, generation_key)` enforced only when `generation_key` is set;
+   multiple null keys per lesson are allowed. No runtime depends on
+   `generation_key` yet. **BS-STRUCT.1B-FU1:** `BibleStudyMeeting.clean()`
+   normalizes a blank/whitespace-only `generation_key` to `None` (and strips
+   non-empty keys) before constraint validation in `full_clean()`, so an empty
+   string never collides as a set value under the conditional constraint.
+   Model/test-only — no schema change, no new migration.
 6. **Future models (not immediate blockers):**
    `BibleStudyMeetingPrep` (if group-local prep outgrows the inline fields),
    `BibleStudyWorshipPlan` (draft/confirm/finalize status), and rotation-slot
@@ -414,12 +426,30 @@ BS-V2.6.5 rules).
 Names/order are provisional and should be adjusted after BS-STRUCT.1B confirms
 the meeting-identity decision (Section 4.5).
 
-- **BS-STRUCT.1A** — docs-only design/audit (this document). ✅ scope of this slice.
-- **BS-STRUCT.1B** — model foundation: add `BibleStudyMeetingAudienceScope`,
-  `BibleStudyMeeting.anchor_unit`, make `small_group` nullable, add the
-  rotation/replacement marker, and resolve the `(lesson, small_group)` identity
-  question. **No runtime read change** — audience rows are inert (like
-  `ServiceEventAudienceScope` was at SE-AS.2). Migration adds columns/table only.
+- **BS-STRUCT.1A** — docs-only design/audit (this document). ✅ complete.
+- **BS-STRUCT.1B** — model foundation. ✅ **implemented** (inert foundation
+  only; migration `studies/migrations/0009_biblestudymeetingaudiencescope_and_more.py`).
+  Exactly what landed:
+  - Added `BibleStudyMeetingAudienceScope(meeting, unit)` — CASCADE on meeting,
+    PROTECT on unit, unique `(meeting, unit)`, indexes on `meeting` and `unit`,
+    and `clean()` validation mirroring `BibleStudySeriesAudienceScope` (active
+    unit; whole-church root not combinable; no ancestor+descendant for the same
+    meeting; siblings/cross-branch allowed).
+  - Added `BibleStudyMeeting.get_audience_scope_units()` convenience method.
+  - Added `BibleStudyMeeting.anchor_unit` (FK `ChurchStructureUnit`,
+    null/blank, `on_delete=SET_NULL`) — display/grouping/ownership only; no
+    visibility read.
+  - Converted `BibleStudyMeeting.small_group` to nullable/blank and changed
+    `on_delete` from CASCADE to SET_NULL (compatibility mirror).
+  - Added nullable `generation_key` CharField + meeting-identity constraints
+    (Section 4.5).
+  - Added `meeting_kind` CharField (`normal` default / `higher_level` / `joint`
+    / `cancelled_replacement`) as an inert rotation/replacement readiness
+    marker; no rotation logic reads it.
+  - **No runtime read change**: audience rows, `anchor_unit`, `generation_key`,
+    and `meeting_kind` are not read by visibility, generation, landing/Today, or
+    role/worship pickers in this slice (like `ServiceEventAudienceScope` at
+    SE-AS.2). No data backfill.
 - **BS-STRUCT.1C** — backfill/audit command (dry-run first, SE-AS.6B pattern):
   for every existing meeting, propose one audience row = the `small_group`'s
   mapped unit; report parity (post-row visibility vs current single-group
@@ -468,13 +498,23 @@ plan's hard work is concentrated in the meeting-audience representation
 5. **Whether joint meetings consume any group rotation slot.** Default proposed:
    no (shift forward). Confirm, and confirm whether some joint meetings *should*
    consume a slot.
-6. **Meeting identity / idempotency key (Section 4.5).** With nullable
-   `small_group` and joint meetings, what replaces `(lesson, small_group)` as the
-   generation idempotency key? Blocks BS-STRUCT.1B.
-7. **`small_group` nullability impact.** Existing code/tests/templates assume a
-   non-null `small_group` (`__str__`, manage-list filters, landing, unique
-   constraint). Making it nullable is a wide-but-shallow change to audit in
-   BS-STRUCT.1B.
+6. **Meeting identity / idempotency key (Section 4.5). ✅ Resolved in
+   BS-STRUCT.1B.** The existing `(lesson, small_group)` unique constraint was
+   made **conditional on a non-null `small_group`** (normal group meetings still
+   cannot duplicate), and a nullable `generation_key` was added with a
+   **conditional** `(lesson, generation_key)` unique constraint enforced only
+   when the key is set — so multiple null-`small_group` / null-key
+   higher-level/joint meetings per lesson are allowed. BS-STRUCT.1B-FU1
+   normalizes blank/whitespace `generation_key` values to `None` so an empty
+   string never collides as a set value. No runtime depends on `generation_key`
+   yet; the future generation slices (1D/1G) will choose how to populate it.
+7. **`small_group` nullability impact. ✅ Audited and implemented in
+   BS-STRUCT.1B.** `small_group` is now nullable/blank with
+   `on_delete=SET_NULL`; `__str__`, manage-list filters, and landing continue to
+   work because normal group-level meetings still set it, and the existing
+   tests/suite pass. Higher-level/joint meetings can now leave it null. The
+   field remains a compatibility mirror; later slices (1E/1F) move
+   visibility/pickers off it onto audience rows before it is eventually retired.
 8. **Legacy V1 `BibleStudySession`.** Confirmed out of scope (retirement target);
    this migration must not touch its visibility. Re-confirm no slice accidentally
    couples V1 into the new audience model.

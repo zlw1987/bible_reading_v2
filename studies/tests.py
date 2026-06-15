@@ -35,6 +35,7 @@ from .models import (
     BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
@@ -2013,6 +2014,10 @@ class BibleStudyModuleTests(TestCase):
     def test_regular_member_cannot_access_meeting_preparation_edit_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        # The regular member must be able to *see* the meeting (membership-core)
+        # so the preparation-edit guard redirects them to meeting detail rather
+        # than the list. They still cannot edit preparation.
+        self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
         response = self.client.get(
@@ -2040,6 +2045,9 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_shows_preparation_edit_link_only_to_manager(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        # The regular member needs membership-core visibility to load the
+        # meeting detail (200); the manager path below is unaffected by this.
+        self.create_membership(self.user, self.group_unit)
 
         self.client.login(username="study_staff", password="testpass123")
         manager_response = self.client.get(
@@ -3015,10 +3023,22 @@ class BibleStudyModuleTests(TestCase):
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
         v1_session = self.create_session(title_en="Fallback V1 Session")
-        self.create_membership(self.user, self.group_unit)
+        # Pin the membership start well before the fixed meeting date so it is
+        # still active once "now" is pinned just before that date below.
+        self.create_membership(
+            self.user,
+            self.group_unit,
+            start_date=date(2026, 1, 1),
+        )
         self.client.login(username="regular", password="testpass123")
 
-        response = self.client.get(reverse("study_session_list"))
+        # This test pins the meeting to a fixed Friday to assert member-facing
+        # datetime formatting, so pin "now" just before it; otherwise the
+        # landing's upcoming-meeting filter (meeting_datetime >= now) drops it
+        # once the wall clock passes that date.
+        fixed_now = datetime(2026, 6, 12, 9, 0, tzinfo=datetime_timezone.utc)
+        with mock.patch("studies.views.timezone.now", return_value=fixed_now):
+            response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Current Bible Study")
@@ -4137,6 +4157,269 @@ class BibleStudyModuleTests(TestCase):
 
         with self.assertRaises(ProtectedError):
             self.same_group_unit.delete()
+
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1B: Bible Study meeting audience model foundation (inert)
+    # ------------------------------------------------------------------
+
+    def test_meeting_audience_scope_row_can_use_active_unit(self):
+        meeting = self.create_meeting()
+        link = BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(link.unit, self.group_unit)
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+
+    def test_meeting_audience_scope_duplicate_meeting_unit_rejected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.group_unit,
+            )
+
+    def test_meeting_audience_scope_inactive_unit_rejected(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTMEET",
+            name="Inactive Meeting Unit",
+            is_active=False,
+        )
+        meeting = self.create_meeting()
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=inactive_unit,
+            )
+
+    def test_meeting_audience_scope_root_then_other_unit_rejected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.root_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.em_unit,
+            )
+
+    def test_meeting_audience_scope_other_then_root_unit_rejected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.em_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.root_unit,
+            )
+
+    def test_meeting_audience_scope_ancestor_then_descendant_rejected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.cm_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.group_unit,
+            )
+
+    def test_meeting_audience_scope_descendant_then_ancestor_rejected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        with self.assertRaises(ValidationError):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.cm_unit,
+            )
+
+    def test_meeting_audience_scope_sibling_units_allowed(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.same_group_unit,
+        )
+
+        self.assertEqual(
+            set(meeting.get_audience_scope_units()),
+            {self.group_unit, self.same_group_unit},
+        )
+
+    def test_meeting_audience_scope_cross_branch_units_allowed(self):
+        meeting = self.create_meeting(small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+
+        self.assertEqual(
+            set(meeting.get_audience_scope_units()),
+            {self.group_unit, self.other_group_unit},
+        )
+
+    def test_deleting_meeting_cascades_audience_scope_rows(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        meeting_id = meeting.id
+
+        meeting.delete()
+
+        self.assertFalse(
+            BibleStudyMeetingAudienceScope.objects.filter(
+                meeting_id=meeting_id,
+            ).exists()
+        )
+
+    def test_deleting_meeting_referenced_unit_is_protected(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.same_group_unit,
+        )
+
+        with self.assertRaises(ProtectedError):
+            self.same_group_unit.delete()
+
+    def test_meeting_get_audience_scope_units_returns_selected_units(self):
+        meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+
+    def test_meeting_small_group_can_be_null_for_higher_level_meeting(self):
+        meeting = self.create_meeting(
+            small_group=None,
+            anchor_unit=self.north_unit,
+            meeting_kind=BibleStudyMeeting.KIND_HIGHER_LEVEL,
+        )
+
+        # Model validation passes for a higher-level / joint-ready meeting, and
+        # an audience row can still be attached to it.
+        meeting.full_clean()
+        self.assertIsNone(meeting.small_group_id)
+        self.assertEqual(meeting.anchor_unit, self.north_unit)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.north_unit])
+
+    def test_existing_duplicate_lesson_small_group_still_rejected(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_meeting(lesson=lesson, small_group=self.group)
+
+        with self.assertRaises(ValidationError):
+            self.create_meeting(lesson=lesson, small_group=self.group)
+
+    def test_generation_key_duplicate_rejected_when_non_null(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            generation_key="joint-1",
+        )
+
+        with self.assertRaises(ValidationError):
+            self.create_meeting(
+                lesson=lesson,
+                small_group=None,
+                generation_key="joint-1",
+            )
+
+    def test_multiple_null_generation_keys_allowed(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        first = self.create_meeting(lesson=lesson, small_group=None)
+        second = self.create_meeting(lesson=lesson, small_group=None)
+
+        self.assertIsNone(first.generation_key)
+        self.assertIsNone(second.generation_key)
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(
+                lesson=lesson,
+                generation_key__isnull=True,
+            ).count(),
+            2,
+        )
+
+    def test_generation_key_blank_normalized_to_none(self):
+        meeting = self.create_meeting(small_group=None, generation_key="")
+
+        self.assertIsNone(meeting.generation_key)
+        meeting.refresh_from_db()
+        self.assertIsNone(meeting.generation_key)
+
+    def test_generation_key_whitespace_normalized_to_none(self):
+        meeting = self.create_meeting(small_group=None, generation_key="   ")
+
+        self.assertIsNone(meeting.generation_key)
+        meeting.refresh_from_db()
+        self.assertIsNone(meeting.generation_key)
+
+    def test_multiple_blank_generation_keys_allowed_after_normalization(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        first = self.create_meeting(lesson=lesson, small_group=None, generation_key="")
+        second = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            generation_key="   ",
+        )
+
+        self.assertIsNone(first.generation_key)
+        self.assertIsNone(second.generation_key)
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(
+                lesson=lesson,
+                generation_key__isnull=True,
+            ).count(),
+            2,
+        )
+
+    def test_generation_key_stripped_when_set(self):
+        meeting = self.create_meeting(
+            small_group=None,
+            generation_key="  joint-7  ",
+        )
+
+        self.assertEqual(meeting.generation_key, "joint-7")
+
+    def test_meeting_kind_defaults_to_normal(self):
+        meeting = self.create_meeting()
+
+        self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
     def test_get_eligible_small_groups_resolves_root_to_all_active(self):
         inactive_group = SmallGroup.objects.create(

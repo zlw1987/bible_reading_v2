@@ -636,15 +636,57 @@ class BibleStudyMeeting(models.Model):
         (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    # BS-STRUCT.1B rotation/replacement readiness marker. Inert in this slice:
+    # no generation, visibility, or rotation logic reads it yet. It exists so a
+    # future rotation engine can tell a normal group week from a higher-level /
+    # joint / cancelled-replacement week without re-deriving it.
+    KIND_NORMAL = "normal"
+    KIND_HIGHER_LEVEL = "higher_level"
+    KIND_JOINT = "joint"
+    KIND_CANCELLED_REPLACEMENT = "cancelled_replacement"
+
+    KIND_CHOICES = [
+        (KIND_NORMAL, "Normal group meeting"),
+        (KIND_HIGHER_LEVEL, "Higher-level meeting"),
+        (KIND_JOINT, "Multi-unit joint meeting"),
+        (KIND_CANCELLED_REPLACEMENT, "Cancelled / replacement week"),
+    ]
+
     lesson = models.ForeignKey(
         BibleStudyLesson,
         on_delete=models.CASCADE,
         related_name="meetings",
     )
+    # BS-STRUCT.1B: legacy SmallGroup becomes a temporary compatibility mirror,
+    # not the audience source of truth. It is now nullable so higher-level and
+    # multi-unit joint meetings (which map to no single leaf group) are
+    # representable, and SET_NULL so retiring a legacy group never deletes a
+    # meeting. Normal group-level meetings still set it.
     small_group = models.ForeignKey(
         SmallGroup,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="bible_study_meetings",
+    )
+    # BS-STRUCT.1B: optional primary organizational unit for
+    # display/grouping/ownership. Not a visibility source; no runtime reads it
+    # for visibility in this slice.
+    anchor_unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="anchored_bible_study_meetings",
+    )
+    # BS-STRUCT.1B: future generation idempotency key. Nullable; multiple null
+    # rows are allowed. A conditional unique constraint enforces one meeting per
+    # (lesson, generation_key) only when it is set. No runtime depends on it yet.
+    generation_key = models.CharField(max_length=120, null=True, blank=True)
+    meeting_kind = models.CharField(
+        max_length=32,
+        choices=KIND_CHOICES,
+        default=KIND_NORMAL,
     )
     meeting_datetime = models.DateTimeField()
     location = models.CharField(max_length=180, blank=True, default="")
@@ -687,18 +729,55 @@ class BibleStudyMeeting(models.Model):
     class Meta:
         ordering = ["-meeting_datetime"]
         constraints = [
+            # Existing duplicate protection for normal group-level meetings.
+            # Now conditional on a non-null small_group so multiple
+            # higher-level / joint meetings (small_group is null) for one lesson
+            # are not blocked, while two meetings for the same (lesson, group)
+            # are still rejected.
             models.UniqueConstraint(
                 fields=["lesson", "small_group"],
+                condition=models.Q(small_group__isnull=False),
                 name="unique_bible_study_meeting_lesson_group",
-            )
+            ),
+            # BS-STRUCT.1B future identity key for joint/higher-level meetings
+            # that have no single small_group. Only enforced when set; multiple
+            # null generation_key rows for one lesson are allowed.
+            models.UniqueConstraint(
+                fields=["lesson", "generation_key"],
+                condition=models.Q(generation_key__isnull=False),
+                name="unique_bible_study_meeting_lesson_generation_key",
+            ),
         ]
 
     def __str__(self):
         return f"{self.lesson} - {self.small_group}"
 
+    def clean(self):
+        super().clean()
+        # BS-STRUCT.1B-FU1: treat a blank/whitespace-only generation_key as
+        # unset (None) so it is excluded from the conditional
+        # (lesson, generation_key) unique constraint rather than colliding as a
+        # set "" value. Non-empty keys are stripped. This runs before
+        # validate_constraints() inside full_clean(), so the normalized value is
+        # what the constraint sees and what is persisted.
+        if self.generation_key is not None:
+            self.generation_key = self.generation_key.strip() or None
+
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+    def get_audience_scope_units(self):
+        """Return selected ChurchStructureUnit rows for a saved meeting.
+
+        BS-STRUCT.1B inert foundation: rows can be created and validated, but no
+        runtime visibility / generation / picker path reads them yet.
+        """
+        if not self.pk:
+            return ChurchStructureUnit.objects.none()
+        return ChurchStructureUnit.objects.filter(
+            bible_study_meeting_audience_scopes__meeting_id=self.pk,
+        ).distinct()
 
     @property
     def is_published(self):
@@ -736,6 +815,113 @@ class BibleStudyMeeting(models.Model):
             return False
 
         return user_matches_meeting_small_group_membership(user, self.small_group)
+
+
+class BibleStudyMeetingAudienceScope(models.Model):
+    """App-specific audience-scope join from a meeting to ChurchStructureUnit.
+
+    BS-STRUCT.1B inert foundation. Selected units are intended to become the
+    structure-native meeting audience (single group, district, CM/EM, or
+    multi-unit joint such as Singles + Campus), replacing the single legacy
+    ``BibleStudyMeeting.small_group`` FK as the audience source. In this slice
+    they are model-only: validated and storable, but no runtime visibility,
+    generation, landing/Today, or role/worship picker path reads them yet.
+    Validation mirrors ``BibleStudySeriesAudienceScope``.
+    """
+
+    meeting = models.ForeignKey(
+        BibleStudyMeeting,
+        on_delete=models.CASCADE,
+        related_name="audience_scope_links",
+    )
+    unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.PROTECT,
+        related_name="bible_study_meeting_audience_scopes",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = [
+            "meeting__meeting_datetime",
+            "unit__parent_id",
+            "unit__sort_order",
+            "unit__code",
+            "unit__name",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["meeting", "unit"],
+                name="unique_bible_study_meeting_audience_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["meeting"]),
+            models.Index(fields=["unit"]),
+        ]
+
+    def __str__(self):
+        return f"{self.unit} audience scope for {self.meeting}"
+
+    def clean(self):
+        errors = {}
+
+        if self.unit_id and not self.unit.is_active:
+            errors["unit"] = "Audience scope must use an active church structure unit."
+
+        if self.meeting_id and self.unit_id and "unit" not in errors:
+            selected_units = ChurchStructureUnit.objects.filter(
+                bible_study_meeting_audience_scopes__meeting_id=self.meeting_id,
+            )
+            if self.pk:
+                selected_units = selected_units.exclude(
+                    bible_study_meeting_audience_scopes__pk=self.pk,
+                )
+
+            selected_unit_ids = set(selected_units.values_list("id", flat=True))
+
+            if selected_unit_ids and (
+                self.unit.unit_type == ChurchStructureUnit.UNIT_ROOT
+                or selected_units.filter(
+                    unit_type=ChurchStructureUnit.UNIT_ROOT,
+                ).exists()
+            ):
+                errors["unit"] = (
+                    "Whole-church audience scope cannot be combined with other "
+                    "units for the same meeting."
+                )
+            else:
+                ancestor_ids = {
+                    ancestor.id
+                    for ancestor in self.unit.get_ancestors()
+                    if ancestor.id is not None
+                }
+
+                if ancestor_ids & selected_unit_ids:
+                    errors["unit"] = (
+                        "Audience scope cannot include both an ancestor and "
+                        "descendant unit for the same meeting."
+                    )
+                else:
+                    for selected_unit in selected_units:
+                        selected_ancestor_ids = {
+                            ancestor.id
+                            for ancestor in selected_unit.get_ancestors()
+                            if ancestor.id is not None
+                        }
+                        if self.unit_id in selected_ancestor_ids:
+                            errors["unit"] = (
+                                "Audience scope cannot include both an ancestor "
+                                "and descendant unit for the same meeting."
+                            )
+                            break
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 
 class BibleStudyMeetingWorshipSong(models.Model):

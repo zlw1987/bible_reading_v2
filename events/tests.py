@@ -24,6 +24,7 @@ from ministry.models import (
     TeamAssignmentMember,
     TeamMembership,
 )
+from reading.templatetags.datetime_extras import member_datetime
 
 from .forms import RecurringServiceEventForm, ServiceEventForm
 from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequiredTeam
@@ -2095,9 +2096,17 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_list_shows_visible_event_with_type_time_and_detail_link(self):
         self.set_language("en")
-        event = self.create_event(
-            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
+        # Use a future start so the event stays under the default "upcoming"
+        # tab; a hardcoded past date silently drops out of the list once that
+        # date passes. Fix the time-of-day so the rendered label is stable.
+        start = (timezone.now() + timezone.timedelta(days=3)).replace(
+            hour=19, minute=30, second=0, microsecond=0
         )
+        event = self.create_event(
+            start_datetime=start,
+            end_datetime=start + timezone.timedelta(hours=2),
+        )
+        expected_label = member_datetime(start, "en")
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(reverse("service_event_list"))
@@ -2105,8 +2114,9 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Event Type")
-        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
-        self.assertNotContains(response, "June 12, 2026")
+        self.assertContains(response, expected_label)
+        # The member format is used, not the long "June 12, 2026" style.
+        self.assertNotContains(response, "%s %d, %d" % (start.strftime("%B"), start.day, start.year))
         self.assertContains(response, "View details")
         detail_url = reverse("service_event_detail", args=[event.id])
         self.assertContains(response, 'href="%s"' % detail_url)
@@ -2246,7 +2256,10 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Start Time")
         # Management / scheduling metadata is hidden from ordinary members.
         self.assertNotContains(response, "Management details")
-        self.assertNotContains(response, "Scope")
+        # The management audience-source wording (SE-AS.5) stays staff-only.
+        self.assertNotContains(response, "Visibility source")
+        self.assertNotContains(response, "Structure audience")
+        self.assertNotContains(response, "Legacy fallback")
         self.assertNotContains(response, "Status")
         self.assertNotContains(response, "Required Ministry Teams")
         self.assertNotContains(response, "Rotation Anchor Team")
@@ -2266,7 +2279,10 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "管理信息")
-        self.assertNotContains(response, "范围")
+        # The management audience-source wording (SE-AS.5) stays staff-only.
+        self.assertNotContains(response, "可见范围来源")
+        self.assertNotContains(response, "教会结构适用范围")
+        self.assertNotContains(response, "备用适用范围")
         self.assertNotContains(response, "状态")
         self.assertNotContains(response, "需要的事工团队")
         self.assertNotContains(response, "配搭参考团队")
@@ -2285,7 +2301,9 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Management details")
         self.assertContains(response, "Status")
-        self.assertContains(response, "Scope")
+        # SE-AS.5 replaced the old "Scope" label with the effective
+        # audience "Visibility source" line in the management card.
+        self.assertContains(response, "Visibility source")
         self.assertContains(response, "Required Ministry Teams")
         self.assertContains(response, "Rotation Anchor Team")
 

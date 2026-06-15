@@ -225,7 +225,14 @@ def create_recurring_events(cleaned_data, user):
     required_teams = cleaned_data.get("required_teams")
     rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
     ministry_context = cleaned_data.get("ministry_context")
-    audience_units = list(cleaned_data.get("audience_units") or [])
+    # SE-AS.7A: use the resolved audience units (selected units, or the legacy
+    # scope fields converted into a structure unit) so every created event gets
+    # audience rows instead of dropping into the zero-row legacy fallback.
+    audience_units = list(
+        cleaned_data.get("resolved_audience_units")
+        or cleaned_data.get("audience_units")
+        or []
+    )
 
     with transaction.atomic():
         for event_date in dates_to_create:

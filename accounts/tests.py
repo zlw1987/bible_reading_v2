@@ -29,8 +29,10 @@ from accounts.permissions import (
     CAP_VIEW_DISTRICT_PROGRESS,
     CAP_VIEW_GROUP_PROGRESS,
     assignment_scope_includes_unit,
+    can_view_group_progress_for,
     get_accessible_progress_groups,
     get_role_assignment_structure_unit,
+    get_user_membership_progress_own_group,
     has_capability,
 )
 from comments.models import ReflectionComment, ReflectionReport
@@ -3125,10 +3127,44 @@ class ChurchRolePermissionTests(TestCase):
     def setUp(self):
         self.district = District.objects.create(name="North")
         self.other_district = District.objects.create(name="South")
-        self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.district)
+        # CS-CORE.2D-B: progress permission/access is now structure-aware, so the
+        # legacy district/group rows are mapped to a ChurchStructureUnit hierarchy
+        # (district unit -> small-group unit) for the role-scope fallback to resolve.
+        self.district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="PERM-DIST-N",
+            name="North Unit",
+        )
+        self.other_district_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="PERM-DIST-S",
+            name="South Unit",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="PERM-SG-4",
+            name="Rainbow 4 Unit",
+            parent=self.district_unit,
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="PERM-SG-5",
+            name="Rainbow 5 Unit",
+            parent=self.other_district_unit,
+        )
+        self.district.church_structure_unit = self.district_unit
+        self.district.save()
+        self.other_district.church_structure_unit = self.other_district_unit
+        self.other_district.save()
+        self.group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            district=self.district,
+            church_structure_unit=self.group_unit,
+        )
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
             district=self.other_district,
+            church_structure_unit=self.other_group_unit,
         )
         self.user = User.objects.create_user(
             username="member",
@@ -3138,6 +3174,15 @@ class ChurchRolePermissionTests(TestCase):
             username="staff_roles",
             password="TestPass123!",
             is_staff=True,
+        )
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
         )
 
     def test_district_can_be_created_and_assigned_to_small_group(self):
@@ -3249,13 +3294,21 @@ class ChurchRolePermissionTests(TestCase):
 
         self.assertEqual(groups, [self.group])
 
-    def test_regular_user_gets_own_profile_small_group(self):
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
+    def test_regular_user_gets_own_membership_group(self):
+        # CS-CORE.2D-B: own-group progress access now comes from the active primary
+        # ChurchStructureMembership mapped to a small group, not Profile.small_group.
+        self.create_membership(self.user, self.group_unit)
 
         groups = list(get_accessible_progress_groups(self.user))
 
         self.assertEqual(groups, [self.group])
+
+    def test_profile_only_user_no_longer_gets_progress_access(self):
+        # CS-CORE.2D-B: Profile.small_group alone no longer grants progress access.
+        self.user.profile.small_group = self.group
+        self.user.profile.save()
+
+        self.assertEqual(list(get_accessible_progress_groups(self.user)), [])
 
 
 class StaffMembershipRequestListTests(TestCase):
@@ -7482,18 +7535,32 @@ class StructureRoleScopeFoundationTests(TestCase):
             assignment_scope_includes_unit(global_assignment, self.group_unit)
         )
 
-    def test_existing_progress_permission_helpers_remain_legacy(self):
-        # CS-CORE.2D-A is foundation only: get_accessible_progress_groups still
-        # honors legacy SmallGroup-scoped role assignments and Profile.small_group.
-        group = SmallGroup.objects.create(name="Legacy Perm SG")
+    def test_progress_permission_uses_structure_aware_role_scope(self):
+        # CS-CORE.2D-B: a legacy SmallGroup-scoped role still grants progress access
+        # through its mapped structure unit (transition fallback), while an unmapped
+        # legacy scope fails closed.
+        mapped_group = SmallGroup.objects.create(
+            name="Mapped Perm SG", church_structure_unit=self.group_unit
+        )
         ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
+            small_group=mapped_group,
+        )
+        self.assertEqual(
+            list(get_accessible_progress_groups(self.user)), [mapped_group]
         )
 
-        self.assertEqual(list(get_accessible_progress_groups(self.user)), [group])
+        unmapped_user = User.objects.create_user(username="unmapped_perm_user")
+        unmapped_group = SmallGroup.objects.create(name="Unmapped Perm SG")
+        ChurchRoleAssignment.objects.create(
+            user=unmapped_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=unmapped_group,
+        )
+        self.assertEqual(list(get_accessible_progress_groups(unmapped_user)), [])
 
 
 class StructureRoleScopeAuditCommandTests(TestCase):
@@ -7714,3 +7781,283 @@ class StructureRoleScopeAuditCommandTests(TestCase):
 
         self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 3)
         self.assertIn("(stopped at --limit 1)", output)
+
+
+class GroupProgressPermissionSourceSwitchTests(TestCase):
+    """CS-CORE.2D-B: group-progress permission/access list is structure-aware.
+
+    ``get_accessible_progress_groups`` / ``can_view_group_progress_for`` resolve
+    scoped role access through ``ChurchRoleAssignment.structure_unit`` (or the legacy
+    district/small_group mapped unit during transition) plus its descendants, and the
+    ordinary own-group rule comes from the single active primary
+    ``ChurchStructureMembership`` mapped to exactly one active legacy ``SmallGroup``.
+    ``Profile.small_group`` no longer grants any progress access, and ordinary
+    membership grants only its own mapped group (never a broad grant).
+    """
+
+    def setUp(self):
+        # district_unit
+        #   |- group_unit            -> self.group
+        #   |- sibling_unit          -> self.sibling_group
+        # other_district_unit
+        #   |- other_group_unit      -> self.other_group
+        self.district_unit = self.create_unit(
+            "PERM2DB-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.other_district_unit = self.create_unit(
+            "PERM2DB-OTHER-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        self.group_unit = self.create_unit("PERM2DB-SG", parent=self.district_unit)
+        self.sibling_unit = self.create_unit(
+            "PERM2DB-SIB", parent=self.district_unit
+        )
+        self.other_group_unit = self.create_unit(
+            "PERM2DB-OTHER-SG", parent=self.other_district_unit
+        )
+
+        self.district = District.objects.create(
+            name="Perm2DB District", church_structure_unit=self.district_unit
+        )
+        self.other_district = District.objects.create(
+            name="Perm2DB Other District",
+            church_structure_unit=self.other_district_unit,
+        )
+        self.group = SmallGroup.objects.create(
+            name="Perm2DB Group",
+            district=self.district,
+            church_structure_unit=self.group_unit,
+        )
+        self.sibling_group = SmallGroup.objects.create(
+            name="Perm2DB Sibling Group",
+            district=self.district,
+            church_structure_unit=self.sibling_unit,
+        )
+        self.other_group = SmallGroup.objects.create(
+            name="Perm2DB Other Group",
+            district=self.other_district,
+            church_structure_unit=self.other_group_unit,
+        )
+
+    def create_unit(self, code, *, unit_type=None, parent=None):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            parent=parent,
+        )
+
+    def create_user(self, username, *, group=None):
+        user = User.objects.create_user(username=username, password="TestPass123!")
+        if group is not None:
+            user.profile.small_group = group
+            user.profile.save()
+        return user
+
+    def create_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def accessible_ids(self, user):
+        return set(get_accessible_progress_groups(user).values_list("id", flat=True))
+
+    # --- ordinary own-group via membership-core ---------------------------------
+
+    def test_membership_only_user_gets_own_group_even_without_profile(self):
+        user = self.create_user("perm2db_membership_only")
+        self.create_membership(user, self.group_unit)
+
+        self.assertEqual(
+            get_user_membership_progress_own_group(user), self.group
+        )
+        self.assertEqual(self.accessible_ids(user), {self.group.id})
+        self.assertTrue(can_view_group_progress_for(user, self.group))
+
+    def test_profile_only_user_gets_no_own_group_access(self):
+        user = self.create_user("perm2db_profile_only", group=self.group)
+
+        self.assertIsNone(get_user_membership_progress_own_group(user))
+        self.assertEqual(self.accessible_ids(user), set())
+        self.assertFalse(can_view_group_progress_for(user, self.group))
+
+    def test_multiple_active_primary_memberships_fail_closed(self):
+        user = self.create_user("perm2db_multi")
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.other_group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        self.assertIsNone(get_user_membership_progress_own_group(user))
+        self.assertEqual(self.accessible_ids(user), set())
+
+    def test_unmapped_or_wrong_type_membership_unit_fails_closed(self):
+        # Unmapped small-group unit (maps to no active SmallGroup).
+        unmapped_user = self.create_user("perm2db_unmapped")
+        self.create_membership(unmapped_user, self.create_unit("PERM2DB-UNMAPPED"))
+        self.assertIsNone(get_user_membership_progress_own_group(unmapped_user))
+        self.assertEqual(self.accessible_ids(unmapped_user), set())
+
+        # Wrong-type unit (fellowship, not small_group).
+        wrong_type_user = self.create_user("perm2db_wrong_type")
+        fellowship_unit = self.create_unit(
+            "PERM2DB-FEL", unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP
+        )
+        SmallGroup.objects.create(
+            name="Perm2DB Fellowship-mapped",
+            church_structure_unit=fellowship_unit,
+        )
+        self.create_membership(wrong_type_user, fellowship_unit)
+        self.assertIsNone(get_user_membership_progress_own_group(wrong_type_user))
+        self.assertEqual(self.accessible_ids(wrong_type_user), set())
+
+    def test_membership_unit_mapping_to_two_active_groups_fails_closed(self):
+        user = self.create_user("perm2db_ambiguous_map")
+        shared_unit = self.create_unit("PERM2DB-SHARED", parent=self.district_unit)
+        SmallGroup.objects.create(
+            name="Perm2DB Shared A", church_structure_unit=shared_unit
+        )
+        SmallGroup.objects.create(
+            name="Perm2DB Shared B", church_structure_unit=shared_unit
+        )
+        self.create_membership(user, shared_unit)
+
+        self.assertIsNone(get_user_membership_progress_own_group(user))
+        self.assertEqual(self.accessible_ids(user), set())
+
+    def test_ordinary_membership_grants_only_own_group_not_siblings(self):
+        user = self.create_user("perm2db_own_only")
+        self.create_membership(user, self.group_unit)
+
+        self.assertEqual(self.accessible_ids(user), {self.group.id})
+        self.assertTrue(can_view_group_progress_for(user, self.group))
+        self.assertFalse(can_view_group_progress_for(user, self.sibling_group))
+        self.assertFalse(can_view_group_progress_for(user, self.other_group))
+
+    # --- structure-aware role scopes --------------------------------------------
+
+    def test_group_leader_structure_unit_scope_grants_that_group(self):
+        leader = self.create_user("perm2db_group_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+            structure_unit=self.group_unit,
+        )
+
+        self.assertEqual(self.accessible_ids(leader), {self.group.id})
+        self.assertFalse(can_view_group_progress_for(leader, self.sibling_group))
+
+    def test_district_leader_scope_includes_descendant_groups_only(self):
+        leader = self.create_user("perm2db_district_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=self.district,
+        )
+
+        # district_unit covers its descendant small-group units (group + sibling),
+        # but not a group under another district.
+        self.assertEqual(
+            self.accessible_ids(leader),
+            {self.group.id, self.sibling_group.id},
+        )
+        self.assertTrue(can_view_group_progress_for(leader, self.group))
+        self.assertTrue(can_view_group_progress_for(leader, self.sibling_group))
+        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
+
+    def test_legacy_small_group_scope_resolves_through_mapping_fallback(self):
+        leader = self.create_user("perm2db_legacy_group_leader")
+        # No explicit structure_unit: resolved via small_group.church_structure_unit.
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        self.assertEqual(self.accessible_ids(leader), {self.group.id})
+
+    def test_legacy_district_scope_resolves_through_mapping_fallback(self):
+        leader = self.create_user("perm2db_legacy_district_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=self.district,
+        )
+
+        self.assertEqual(
+            self.accessible_ids(leader),
+            {self.group.id, self.sibling_group.id},
+        )
+
+    def test_unmapped_legacy_role_scope_fails_closed(self):
+        leader = self.create_user("perm2db_unmapped_leader")
+        unmapped_group = SmallGroup.objects.create(name="Perm2DB Unmapped Group")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=unmapped_group,
+        )
+
+        self.assertEqual(self.accessible_ids(leader), set())
+        self.assertFalse(can_view_group_progress_for(leader, unmapped_group))
+
+    # --- staff / global + agreement ---------------------------------------------
+
+    def test_staff_superuser_and_global_capability_see_all_active_groups(self):
+        staff = User.objects.create_user(
+            username="perm2db_staff", password="TestPass123!", is_staff=True
+        )
+        superuser = User.objects.create_superuser(
+            username="perm2db_super", password="TestPass123!"
+        )
+        pastor = self.create_user("perm2db_pastor")
+        ChurchRoleAssignment.objects.create(
+            user=pastor,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+        all_active = {self.group.id, self.sibling_group.id, self.other_group.id}
+        for viewer in (staff, superuser, pastor):
+            self.assertEqual(self.accessible_ids(viewer), all_active)
+            self.assertTrue(can_view_group_progress_for(viewer, self.other_group))
+
+    def test_can_view_agrees_with_accessible_list_for_allowed_and_denied(self):
+        leader = self.create_user("perm2db_agree")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        accessible = self.accessible_ids(leader)
+        for candidate in (self.group, self.sibling_group, self.other_group):
+            self.assertEqual(
+                can_view_group_progress_for(leader, candidate),
+                candidate.id in accessible,
+            )

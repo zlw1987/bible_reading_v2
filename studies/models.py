@@ -770,8 +770,12 @@ class BibleStudyMeeting(models.Model):
     def get_audience_scope_units(self):
         """Return selected ChurchStructureUnit rows for a saved meeting.
 
-        BS-STRUCT.1B inert foundation: rows can be created and validated, but no
-        runtime visibility / generation / picker path reads them yet.
+        Since BS-STRUCT.1D generation writes a row for each newly generated
+        normal group-level meeting, and since BS-STRUCT.1E ordinary-member
+        visibility and the V2 landing/Today read path read these rows when
+        present (with the legacy ``small_group`` path kept only as a zero-row
+        fallback). Role / worship pickers still do not read these rows; that
+        remains deferred to BS-STRUCT.1F.
         """
         if not self.pk:
             return ChurchStructureUnit.objects.none()
@@ -800,8 +804,10 @@ class BibleStudyMeeting(models.Model):
 
     def can_be_seen_by(self, user):
         from .visibility import (
+            meeting_has_audience_scope_rows,
             meeting_is_member_visible,
             user_has_bible_study_manager_override,
+            user_matches_meeting_audience_scopes,
             user_matches_meeting_small_group_membership,
         )
 
@@ -814,19 +820,29 @@ class BibleStudyMeeting(models.Model):
         if not meeting_is_member_visible(self):
             return False
 
+        # BS-STRUCT.1E: audience-scope rows are the visibility source of truth
+        # when present; the legacy small_group membership path is only a
+        # zero-row fallback. Profile.small_group is never consulted on either
+        # path.
+        if meeting_has_audience_scope_rows(self):
+            return user_matches_meeting_audience_scopes(user, self)
+
         return user_matches_meeting_small_group_membership(user, self.small_group)
 
 
 class BibleStudyMeetingAudienceScope(models.Model):
     """App-specific audience-scope join from a meeting to ChurchStructureUnit.
 
-    BS-STRUCT.1B inert foundation. Selected units are intended to become the
-    structure-native meeting audience (single group, district, CM/EM, or
-    multi-unit joint such as Singles + Campus), replacing the single legacy
-    ``BibleStudyMeeting.small_group`` FK as the audience source. In this slice
-    they are model-only: validated and storable, but no runtime visibility,
-    generation, landing/Today, or role/worship picker path reads them yet.
-    Validation mirrors ``BibleStudySeriesAudienceScope``.
+    Selected units are the structure-native meeting audience (single group,
+    district, CM/EM, or multi-unit joint such as Singles + Campus), replacing
+    the single legacy ``BibleStudyMeeting.small_group`` FK as the audience
+    source. Since BS-STRUCT.1D generation writes a row for each newly generated
+    normal group-level meeting, and since BS-STRUCT.1E ordinary-member
+    visibility and the V2 landing/Today read path read these rows when present
+    (with the legacy ``small_group`` path kept only as a zero-row fallback).
+    Role / worship pickers still read the single ``small_group`` unit, not these
+    rows; that remains deferred to BS-STRUCT.1F. Validation mirrors
+    ``BibleStudySeriesAudienceScope``.
     """
 
     meeting = models.ForeignKey(

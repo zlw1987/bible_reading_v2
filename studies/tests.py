@@ -4997,6 +4997,362 @@ class BibleStudyModuleTests(TestCase):
         self.assertFalse(meeting.can_be_seen_by(requested_member))
 
     # ------------------------------------------------------------------
+    # BS-STRUCT.1E: meeting audience-row visibility + V2 landing read switch
+    # ------------------------------------------------------------------
+
+    def test_audience_row_membership_user_can_view_with_null_small_group(self):
+        member = User.objects.create_user(
+            username="bse_audience_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertTrue(meeting.can_be_seen_by(member))
+
+    def test_audience_row_descendant_membership_can_view(self):
+        child_unit = ChurchStructureUnit.objects.create(
+            parent=self.group_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="BSE-R4-CHILD",
+            name="BSE Rainbow 4 Child",
+        )
+        member = User.objects.create_user(
+            username="bse_descendant_member",
+            password="testpass123",
+        )
+        self.create_membership(member, child_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        # Audience targets the ancestor group unit; a descendant member matches.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertTrue(meeting.can_be_seen_by(member))
+
+    def test_audience_row_district_membership_can_view_district_meeting(self):
+        member = User.objects.create_user(
+            username="bse_district_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.north_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+
+        self.assertTrue(meeting.can_be_seen_by(member))
+
+    def test_audience_row_wrong_branch_membership_cannot_view(self):
+        member = User.objects.create_user(
+            username="bse_wrong_branch",
+            password="testpass123",
+        )
+        self.create_membership(member, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertFalse(meeting.can_be_seen_by(member))
+
+    def test_audience_row_profile_only_user_cannot_view(self):
+        # self.user has Profile.small_group but no ChurchStructureMembership.
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertFalse(meeting.can_be_seen_by(self.user))
+
+    def test_audience_row_multiple_active_primary_memberships_fail_closed(self):
+        member = User.objects.create_user(
+            username="bse_multi_primary",
+            password="testpass123",
+        )
+        today = timezone.localdate()
+        # bulk_create bypasses the single-active-primary model validation to set
+        # up the fail-closed condition the runtime must still guard against.
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=member,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timezone.timedelta(days=1),
+                )
+                for unit in (self.group_unit, self.same_group_unit)
+            ]
+        )
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertFalse(meeting.can_be_seen_by(member))
+
+    def test_audience_row_manager_override_can_view(self):
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertTrue(meeting.can_be_seen_by(self.manager))
+        self.assertTrue(meeting.can_be_seen_by(self.staff))
+
+    def test_zero_row_meeting_falls_back_to_legacy_small_group_path(self):
+        member = User.objects.create_user(
+            username="bse_zero_row_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.assertTrue(meeting.can_be_seen_by(member))
+        # other_user has no membership -> fail closed even on the fallback path.
+        self.assertFalse(meeting.can_be_seen_by(self.other_user))
+
+    def test_audience_rows_take_precedence_over_small_group_fallback(self):
+        in_group_member = User.objects.create_user(
+            username="bse_precedence_in_group",
+            password="testpass123",
+        )
+        in_audience_member = User.objects.create_user(
+            username="bse_precedence_in_audience",
+            password="testpass123",
+        )
+        self.create_membership(in_group_member, self.group_unit)
+        self.create_membership(in_audience_member, self.other_group_unit)
+        # Legacy small_group still points at self.group, but the audience row
+        # targets a different branch; the audience row wins.
+        meeting = self.create_meeting(
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+
+        self.assertFalse(meeting.can_be_seen_by(in_group_member))
+        self.assertTrue(meeting.can_be_seen_by(in_audience_member))
+
+    def test_landing_shows_audience_row_meeting_with_null_small_group(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Audience Row Landing Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        self.user.profile.small_group = None
+        self.user.profile.save(update_fields=["small_group"])
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Audience Row Landing Guide")
+        self.assertContains(
+            response,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_landing_shows_district_audience_meeting_for_descendant_membership(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="District Audience Landing Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+        self.user.profile.small_group = None
+        self.user.profile.save(update_fields=["small_group"])
+        # group_unit is a descendant of the district north_unit.
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "District Audience Landing Guide")
+
+    def test_landing_hides_audience_row_meeting_from_wrong_branch_membership(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Wrong Branch Audience Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        self.create_membership(self.user, self.other_group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No current Bible Study is available yet.")
+        self.assertNotContains(response, "Wrong Branch Audience Guide")
+
+    def test_landing_zero_row_meeting_still_appears_through_fallback(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Zero Row Fallback Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Zero Row Fallback Guide")
+        self.assertContains(
+            response,
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+    def test_landing_precedence_hides_meeting_from_original_group_member(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Precedence Landing Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        # Audience row redirects the audience to a different branch even though
+        # the legacy small_group still maps to the original group.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No current Bible Study is available yet.")
+        self.assertNotContains(response, "Precedence Landing Guide")
+
+    def test_landing_profile_only_user_does_not_see_audience_row_meeting(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Profile Only Audience Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        # self.user keeps its Profile.small_group but has no membership.
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Your confirmed group membership is not ready yet, so no current Bible Study is available.",
+        )
+        self.assertNotContains(response, "Profile Only Audience Guide")
+
+    def test_landing_staff_links_render_with_audience_row_meeting_present(self):
+        self.set_language("en")
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Staff Audience Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Staff Links")
+        self.assertContains(response, reverse("bible_study_meeting_manage_list"))
+
+    # ------------------------------------------------------------------
     # BS-AS.2: audience picker UX, compact display, cancelled list cleanup
     # ------------------------------------------------------------------
 

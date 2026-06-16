@@ -62,19 +62,82 @@ def _get_single_active_primary_membership_unit(user, target_date=None):
     return memberships[0].unit
 
 
-def _collect_unit_and_descendant_ids(unit):
-    unit_ids = set()
-    frontier = [unit.id] if unit and unit.id is not None else []
+def _collect_units_and_descendant_ids(unit_ids):
+    collected = set()
+    frontier = [unit_id for unit_id in unit_ids if unit_id is not None]
 
     while frontier:
-        unit_ids.update(frontier)
+        collected.update(frontier)
         frontier = list(
             ChurchStructureUnit.objects.filter(parent_id__in=frontier)
-            .exclude(id__in=unit_ids)
+            .exclude(id__in=collected)
             .values_list("id", flat=True)
         )
 
-    return unit_ids
+    return collected
+
+
+def _collect_unit_and_descendant_ids(unit):
+    if unit is None or unit.id is None:
+        return set()
+    return _collect_units_and_descendant_ids([unit.id])
+
+
+def meeting_has_audience_scope_rows(meeting):
+    """Return whether a meeting has any BibleStudyMeetingAudienceScope rows."""
+    return meeting.audience_scope_links.exists()
+
+
+def user_matches_meeting_audience_scopes(user, meeting, target_date=None):
+    """Match an ordinary member to a meeting via its audience-scope rows.
+
+    BS-STRUCT.1E: a meeting with one or more ``BibleStudyMeetingAudienceScope``
+    rows uses those rows as the visibility source of truth. The user matches
+    when their single active primary ``ChurchStructureMembership.unit`` is one of
+    the meeting's audience units or a descendant of one of them. Unlike the
+    legacy ``small_group`` path, the audience unit may be any structure level
+    (small group, district, CM/EM, ...), so no ``UNIT_SMALL_GROUP`` gate is
+    applied here. ``Profile.small_group`` is never consulted.
+
+    Fail-closed: no audience rows, no single active primary membership, or a
+    membership outside every audience unit's subtree all return ``False``.
+    """
+    audience_unit_ids = list(
+        meeting.audience_scope_links.values_list("unit_id", flat=True)
+    )
+    if not audience_unit_ids:
+        return False
+
+    membership_unit = _get_single_active_primary_membership_unit(
+        user, target_date=target_date
+    )
+    if membership_unit is None:
+        return False
+
+    return membership_unit.id in _collect_units_and_descendant_ids(audience_unit_ids)
+
+
+def get_membership_audience_candidate_unit_ids(user, target_date=None):
+    """Return ancestor-or-self unit ids of a user's active primary membership.
+
+    BS-STRUCT.1E: a meeting whose audience-scope row targets any of these units
+    includes the user, because the user's membership unit is that unit or a
+    descendant of it. Returns an empty list when the user has no single active
+    primary membership. Used to pre-filter audience-row meetings for the V2
+    landing/Today read path; final per-meeting authority stays with
+    ``BibleStudyMeeting.can_be_seen_by``.
+    """
+    membership_unit = _get_single_active_primary_membership_unit(
+        user, target_date=target_date
+    )
+    if membership_unit is None:
+        return []
+
+    return [
+        unit.id
+        for unit in membership_unit.get_ancestors() + [membership_unit]
+        if unit.id is not None
+    ]
 
 
 def user_matches_meeting_small_group_membership(user, small_group, target_date=None):

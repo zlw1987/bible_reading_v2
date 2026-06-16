@@ -512,12 +512,71 @@ the meeting-identity decision (Section 4.5).
     duplicate audience rows.
   - Tests: new BS-STRUCT.1D methods in `studies/tests.py`
     (`BibleStudyModuleTests`).
-  - **Runtime still does not read audience rows.** Visibility, Today/landing, and
-    role/worship pickers all still key off `small_group`; this slice only stops
-    newly generated normal meetings from being zero-row legacy-only meetings.
+  - **Runtime did not read audience rows as of this slice** (superseded by
+    BS-STRUCT.1E). At 1D, visibility, Today/landing, and role/worship pickers
+    all still keyed off `small_group`; this slice only stopped newly generated
+    normal meetings from being zero-row legacy-only meetings. Since 1E,
+    visibility and Today/landing read audience rows when present; role/worship
+    pickers remain on `small_group` until BS-STRUCT.1F.
 - **BS-STRUCT.1E** — visibility switches to **meeting audience rows + active
   primary membership**, with the single-`small_group` path kept only as zero-row
   fallback. Includes V2 landing / Today switch to audience-row matching.
+  ✅ **implemented.**
+  - **Row-first visibility with zero-row `small_group` fallback.**
+    `BibleStudyMeeting.can_be_seen_by` keeps the unchanged manager override and
+    the unchanged published / status / parent-lesson / parent-series member
+    gates (`meeting_is_member_visible`). For ordinary users it now branches on
+    `meeting_has_audience_scope_rows(self)`:
+    - **When the meeting has one or more `BibleStudyMeetingAudienceScope` rows**
+      those rows are the source of truth (`user_matches_meeting_audience_scopes`).
+      The user matches when their **single active primary**
+      `ChurchStructureMembership.unit` is one of the meeting's audience units
+      **or a descendant** of one of them. Unlike the legacy small-group path
+      there is **no `UNIT_SMALL_GROUP` gate**, so an audience row on a district /
+      CM / EM unit is matched by a member of that unit or any descendant unit.
+    - **When the meeting has zero audience rows** it falls back to the existing
+      legacy `user_matches_meeting_small_group_membership(self.small_group)`
+      path (mapped `UNIT_SMALL_GROUP` unit + active-primary membership), exactly
+      as before this slice.
+    - Fail-closed is preserved on both paths: anonymous, no active primary
+      membership, requested / ended / future membership, **multiple** active
+      primary memberships, unpublished / cancelled / draft meeting, and
+      unpublished / inactive parent lesson or series all return `False`.
+      `Profile.small_group` is **never** consulted on either path.
+    - **Audience rows take precedence over the `small_group` fallback.** A
+      meeting whose legacy `small_group` still points at the user's group but
+      whose audience row targets a different branch is **not** visible to the
+      original-group member and **is** visible to the audience-unit member.
+  - **V2 landing / Today now uses meeting audience rows when present.**
+    `get_v2_landing_context(user)` (also reused by Today via
+    `reading/views.py`) no longer requires a resolved legacy small group when
+    audience-row meetings exist. It resolves the user's active-primary
+    membership ancestor-or-self unit ids
+    (`get_membership_audience_candidate_unit_ids`) and selects upcoming
+    published V2 meetings matching **either** an audience row on one of those
+    units **or** the legacy `small_group` zero-row fallback, then confirms each
+    candidate through `can_be_seen_by` (the per-meeting authority, so audience
+    precedence still applies). The empty/no-group state is only shown when the
+    user has **neither** a resolvable legacy group **nor** any active primary
+    membership (e.g. a profile-only user), so a membership user with a null
+    `small_group` still sees their audience-row meeting, and a member of a
+    descendant unit sees a higher-level / district audience-row meeting.
+    `user_small_group` is still returned for existing templates but no longer
+    gates audience-row visibility; the template/context shape is otherwise
+    unchanged.
+  - **Generation is unchanged in this slice.** No generation, anchor, or
+    `meeting_kind` write path was touched; this slice is read-only switching.
+  - **Role / worship pickers still key off `small_group`** (single mapped unit)
+    and are intentionally **not** changed here — that is BS-STRUCT.1F.
+  - **`small_group` is not removed and the zero-row fallback remains.**
+  - Tests: new BS-STRUCT.1E methods in `studies/tests.py`
+    (`BibleStudyModuleTests`) covering detail visibility (null-`small_group`
+    membership match, descendant match, district match, wrong-branch miss,
+    profile-only miss, multiple-active-primary fail-closed, manager override,
+    zero-row fallback, and audience-row precedence) and the landing/Today read
+    path (membership with null group, descendant of district audience, wrong
+    branch, zero-row fallback, precedence hide, profile-only empty state, and
+    staff links).
 - **BS-STRUCT.1F** — role / worship pickers read meeting audience rows (union of
   units) instead of the single `small_group` unit.
 - **BS-STRUCT.1G** — support higher-level / joint generation cases (5.2–5.4),

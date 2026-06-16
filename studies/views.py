@@ -35,6 +35,7 @@ from .models import (
 )
 from .services import cancel_bible_study_lesson_with_meetings
 from .visibility import (
+    get_membership_audience_candidate_unit_ids,
     get_membership_visible_small_groups,
     get_small_group_structure_unit,
 )
@@ -116,9 +117,18 @@ def get_visible_study_sessions(user):
 def get_v2_landing_context(user):
     show_staff_links = can_manage_bible_studies(user)
 
+    # BS-STRUCT.1E: the landing/Today read path now resolves visibility from
+    # meeting audience-scope rows when present, with the legacy small_group
+    # membership path kept only as a zero-row fallback. ``user_small_group`` is
+    # still surfaced for existing templates, but it no longer gates audience-row
+    # meeting visibility.
     visible_small_groups = get_membership_visible_small_groups(user)
     user_small_group = visible_small_groups.order_by("name").first()
-    if not user_small_group:
+    audience_candidate_unit_ids = get_membership_audience_candidate_unit_ids(user)
+
+    # A user with neither a resolvable legacy group nor any active primary
+    # membership (e.g. a profile-only user) cannot match either path.
+    if user_small_group is None and not audience_candidate_unit_ids:
         return {
             "user_small_group": None,
             "primary_meeting": None,
@@ -131,12 +141,13 @@ def get_v2_landing_context(user):
         BibleStudyMeeting.STATUS_PUBLISHED,
         BibleStudyMeeting.STATUS_COMPLETED,
     ]
-    meetings = BibleStudyMeeting.objects.select_related(
+    base_meetings = BibleStudyMeeting.objects.select_related(
         "lesson",
         "lesson__series",
         "small_group",
+    ).prefetch_related(
+        "audience_scope_links",
     ).filter(
-        small_group__in=visible_small_groups,
         meeting_datetime__gte=timezone.now(),
         status__in=visible_statuses,
         lesson__status__in=[
@@ -148,8 +159,36 @@ def get_v2_landing_context(user):
             BibleStudySeries.STATUS_PUBLISHED,
             BibleStudySeries.STATUS_COMPLETED,
         ],
-    ).order_by("meeting_datetime")[:3]
-    upcoming_meetings = [meeting for meeting in meetings if meeting.can_be_seen_by(user)]
+    )
+
+    # Candidate filter: audience-row meetings whose audience unit is the user's
+    # membership unit or an ancestor of it, plus zero-row meetings still reached
+    # through the legacy small_group fallback. ``can_be_seen_by`` remains the
+    # final per-meeting authority below, so this is only a (possibly broad)
+    # pre-filter; e.g. an audience-row meeting whose small_group still points at
+    # the user's group is admitted here but correctly rejected by the
+    # audience-row precedence in ``can_be_seen_by``.
+    visibility_q = Q()
+    if audience_candidate_unit_ids:
+        visibility_q |= Q(
+            audience_scope_links__unit_id__in=audience_candidate_unit_ids,
+        )
+    if visible_small_groups:
+        visibility_q |= Q(small_group__in=visible_small_groups)
+
+    if not visibility_q:
+        candidate_meetings = BibleStudyMeeting.objects.none()
+    else:
+        candidate_meetings = (
+            base_meetings.filter(visibility_q).distinct().order_by("meeting_datetime")
+        )
+
+    upcoming_meetings = []
+    for meeting in candidate_meetings:
+        if meeting.can_be_seen_by(user):
+            upcoming_meetings.append(meeting)
+        if len(upcoming_meetings) >= 3:
+            break
 
     return {
         "user_small_group": user_small_group,
@@ -185,8 +224,12 @@ def write_normal_meeting_audience_scope(meeting):
     Fail-closed by design: an invalid mapping never produces an audience row, so
     a meeting is never falsely presented as structure-native. Never mutates
     ``small_group``; never overwrites an existing ``anchor_unit``; never changes
-    ``meeting_kind`` (stays ``normal``). Runtime visibility still reads
-    ``small_group``, not these rows.
+    ``meeting_kind`` (stays ``normal``). This helper is the generation-side
+    writer; since BS-STRUCT.1E ordinary-member visibility and the V2
+    landing/Today read path read these rows when present (with ``small_group``
+    kept only as a zero-row fallback). Role / worship pickers still read the
+    single ``small_group`` unit, not these rows; that remains deferred to
+    BS-STRUCT.1F.
     """
     unit = get_small_group_structure_unit(meeting.small_group)
     if (

@@ -3,7 +3,10 @@
 Thin wrapper over ``reading.structure_runtime_readiness.run_audit``. It prints a
 resolvability inventory for the remaining legacy small-group data behind the
 reading / reflection / progress runtime and reports whether any blocker stands in
-the way of retiring the last ``Profile.small_group`` reads.
+the way of retiring the legacy ``Profile.small_group`` / ``small_group_at_post``
+data. (As of READING-STRUCT.1D the Reading runtime no longer *reads*
+``Profile.small_group``; what remains is the legacy snapshot/storage data and the
+reflection backfill gap.)
 
 This command is **read-only**: it has no ``--apply`` and writes nothing. It does
 not switch any runtime source. Use it as real-data evidence before the next

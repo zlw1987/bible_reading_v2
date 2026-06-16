@@ -39,8 +39,15 @@ from .passage_services import get_memory_passages, get_reading_passages
 from .bible_sources import parse_memory_verse_text, parse_reading_text
 from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, ReadingPlanDay
 
-def get_user_small_group(user):
-    return getattr(getattr(user, "profile", None), "small_group", None)
+# READING-STRUCT.1E: the legacy ``get_user_small_group(user)`` helper (returned
+# ``Profile.small_group``) was removed as dead code. Its last runtime callers
+# were dropped when reflection read visibility moved to the structure snapshot
+# (CS-CORE.4G.2) and the group-progress default stopped reading
+# ``Profile.small_group`` (READING-STRUCT.1D). ``Profile.small_group`` is no
+# longer a Reading runtime source; the membership-core helpers
+# (``accounts.structure_selectors`` / ``reading.group_progress_shadow``) are the
+# source of truth, and legacy small-group reads survive only in the read-only
+# audit / shadow-comparison code.
 
 
 def can_publish_reading_guides(user):

@@ -278,11 +278,13 @@ removal and `small_group_at_post` removal remain out of scope.)
 
 ### 3.1 Reading "current group" helper
 
-- `reading.views.get_user_small_group(user)` returns `user.profile.small_group` (a legacy
-  `SmallGroup` or `None`). It is a **read-only display/context helper**. (Pre-4G.2 it fed the
-  reflection filter and `passage_wall`; since CS-CORE.4G.2 those read paths use
-  `structure_unit_at_post` + membership-core and no longer route through this helper, which is now
-  unused by the reflection read paths.) It does not by itself grant or deny anything.
+- `reading.views.get_user_small_group(user)` **was removed in READING-STRUCT.1E**
+  (see `docs/READING_STRUCTURE_RUNTIME_MIGRATION_PLAN.md`). It returned
+  `user.profile.small_group`. CS-CORE.4G.2 dropped its reflection-read uses and
+  READING-STRUCT.1D dropped the group-progress default use, leaving it with zero
+  callers, so it was deleted as dead code. The references to it elsewhere in this
+  CS-CORE.4A-era document are retained as historical design context. No Reading
+  runtime path reads `Profile.small_group` after 1D/1E.
 
 ### 3.2 Group progress (`reading.views.my_group_progress`)
 

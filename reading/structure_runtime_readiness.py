@@ -17,9 +17,10 @@ Current runtime state this audit is written against (verified in the worktree):
   ``small_group_at_post`` / ``Profile.small_group`` are legacy compatibility /
   mirror data only.
 - Group-progress roster is membership-core (CS-CORE.4F.1) and the no-``?group=``
-  default is a permission-fenced membership-core candidate (CS-CORE.4F.2), with
-  ``Profile.small_group`` surviving only as a last-resort default-group fallback
-  in ``reading.views.my_group_progress``.
+  default is a permission-fenced membership-core candidate (CS-CORE.4F.2). Since
+  READING-STRUCT.1D the legacy ``Profile.small_group`` default fallback has been
+  removed, so ``Profile.small_group`` is no longer a Reading runtime source at
+  all; it is read here only to inventory readiness, not to drive behavior.
 
 So the readiness questions this audit answers are:
 
@@ -28,7 +29,8 @@ So the readiness questions this audit answers are:
   (legacy-only, missing/invalid snapshot)?
 - Do active legacy progress groups all map to an active small-group unit?
 - Do users carry an unambiguous single active primary membership, and which
-  still depend on the legacy ``Profile.small_group`` default fallback?
+  profile-only users would lack a membership equivalent once the legacy
+  ``Profile.small_group`` data is finally retired?
 
 It writes nothing: no reflection, profile, membership, group, unit, progress,
 role, permission, or reading row is created, edited, or deleted. It has no
@@ -278,8 +280,11 @@ def run_audit(target_date=None):
         else:
             stats["users_with_no_active_primary_membership"] += 1
 
-        # Users who still rely on the legacy Profile.small_group default-group
-        # fallback (no single active primary membership to replace it).
+        # Profile-only users: a legacy Profile.small_group but no single active
+        # primary membership to represent the same belonging. Runtime no longer
+        # uses Profile.small_group (READING-STRUCT.1D), so these are not a runtime
+        # fallback; they are the readiness gap to close before the legacy field
+        # can be retired.
         if profile_group is not None and active_primary_count != 1:
             stats["users_profile_group_without_single_membership"] += 1
             details["users_profile_group_without_single_membership"].append(

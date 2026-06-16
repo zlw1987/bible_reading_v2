@@ -11,13 +11,15 @@ runtime legacy small-group dependencies** in Reading / Reflection / Progress and
 the audit that measures readiness to retire them.
 
 Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) + 1C (reflection
-visibility row-first, verified) + 1D (group progress membership-core default)
-implemented.** 1A–1C are code/tests/docs only with no runtime change; 1D makes a
-small runtime change — it removes the last legacy `Profile.small_group` read in
-the group-progress default-group path. The reflection read/write visibility path
-and the group-progress roster/default path are now fully membership-core (see
-below); what remains is retiring the legacy mirror data and the `SmallGroup`
-storage bridge once real-data evidence is clean.
+visibility row-first, verified) + 1D (group progress membership-core default) +
+1E (legacy small-group helper cleanup) implemented.** 1A–1C are code/tests/docs
+only with no runtime change; 1D made a small runtime change (removed the last
+legacy `Profile.small_group` read in the group-progress default-group path); 1E
+removed the now-dead `reading.views.get_user_small_group` helper and corrected
+stale wording. The reflection read/write visibility path and the group-progress
+roster/default path are now fully membership-core (see below); **no Reading
+runtime path reads `Profile.small_group`.** What remains is retiring the legacy
+mirror data and the `SmallGroup` storage bridge once real-data evidence is clean.
 
 This document's code changes **no runtime behavior**. It adds a read-only audit
 (`reading.structure_runtime_readiness` + the
@@ -41,13 +43,13 @@ production command has been run.
 Verified against the worktree on 2026-06-16:
 
 1. **Group-progress default group fallback** —
-   `reading.views.my_group_progress` still reads `Profile.small_group` as the
-   *last-resort* default selected group (after a permission-fenced membership-core
-   default candidate, CS-CORE.4F.2). It only picks a default among the already
-   legacy-accessible groups; it never grants access. This is the main remaining
-   ordinary-runtime `Profile.small_group` read.
-2. **`reading.views.get_user_small_group(user)`** — thin
-   `profile.small_group` reader retained for legacy/default/option-gating use.
+   `reading.views.my_group_progress` read `Profile.small_group` as the
+   *last-resort* default selected group. **Removed in READING-STRUCT.1D** — the
+   default is now membership-core candidate → first accessible group → no-group
+   state. No `Profile.small_group` read remains in the group-progress runtime.
+2. ~~**`reading.views.get_user_small_group(user)`** — thin `profile.small_group`
+   reader.~~ **Removed in READING-STRUCT.1E** as dead code (its last callers were
+   dropped by CS-CORE.4G.2 and READING-STRUCT.1D).
 3. **Legacy mirror writes** — group reflections still stamp
    `ReflectionComment.small_group_at_post` as an optional compatibility mirror
    (only when exactly one active legacy `SmallGroup` maps to the author's
@@ -92,11 +94,10 @@ resolution in `accounts.permissions`, not in reading runtime.
 - Backfill `structure_unit_at_post` for legacy group reflections that predate
   CS-CORE.4D/4G.2 so historical group posts are not silently invisible under the
   live structure-native gate.
-- Eventually drop the `small_group_at_post` mirror writes and `get_user_small_group`
-  once no consumer remains (coordinate with the cross-module
-  `Profile.small_group` retirement in CHURCH_STRUCTURE_CORE Section 12).
-
-None of these are done in this slice.
+- Eventually drop the `small_group_at_post` mirror writes once no consumer
+  remains (coordinate with the cross-module `Profile.small_group` retirement in
+  CHURCH_STRUCTURE_CORE Section 12). (`get_user_small_group` was already removed
+  in READING-STRUCT.1E.)
 
 ## 4. What the audit measures (READING-STRUCT.1A)
 
@@ -286,9 +287,49 @@ membership-core / first-accessible / no-group behavior, plus new cases:
 profile-group-without-membership → no group; profile≠membership → membership
 group wins; ended membership → no group.
 
+## 5.7 Legacy small-group helper cleanup (READING-STRUCT.1E — implemented)
+
+**Outcome: dead-code/wording cleanup; no behavior change.** After 1C/1D no
+Reading runtime path reads `Profile.small_group`. This slice removed the now-dead
+helper and corrected stale wording so nothing implies a `Profile.small_group`
+runtime fallback still exists.
+
+**Removed (genuinely unused dead code):**
+
+- `reading.views.get_user_small_group(user)` — returned `Profile.small_group`.
+  It had **zero callers** (code, templates, or tests): CS-CORE.4G.2 dropped its
+  reflection-read uses and READING-STRUCT.1D dropped the group-progress default
+  use. A short comment in its place records the removal so it is not reintroduced.
+
+**Kept intentionally (audit / diagnostic / storage — not runtime source):**
+
+- `reading.group_progress_shadow` legacy-roster/default helpers (`_profile_small_group`,
+  `_legacy_roster_user_ids`) — the **comparison baseline** for the read-only
+  shadow audit; explicitly diagnostic, never the live source.
+- `reading.structure_runtime_readiness` and the three audit/backfill commands
+  read `Profile.small_group` / `small_group_at_post` to **inventory readiness**
+  and to **source the snapshot backfill**, never to drive runtime.
+- `ReflectionComment.small_group_at_post` — legacy snapshot/storage + write-path
+  mirror; it is **not** a visibility source. When `structure_unit_at_post` is
+  missing, ordinary group visibility stays **fail-closed** (Section 5.5), not a
+  legacy-group fallback.
+- `accounts.structure_selectors.get_user_legacy_small_group` — accounts-level
+  legacy comparator, out of Reading scope; unchanged.
+
+**Wording corrected:** the `reading.structure_runtime_readiness` module docstring
+and the `users_profile_group_without_single_membership` comment no longer call
+`Profile.small_group` a "last-resort fallback"; the
+`audit_reading_structure_runtime_readiness` help no longer says the runtime still
+"reads" `Profile.small_group`.
+
+**No model/field retirement is claimed.** `Profile.small_group`, `SmallGroup`, and
+`small_group_at_post` all remain (storage / bridge / audit). Reflection runtime is
+unchanged; no migration, and no production command / `--apply` was run (only the
+read-only audit).
+
 ## 6. Next proposed slice
 
-**READING-STRUCT.1E (proposed):** run the 1B backfill `--apply` on real data
+**READING-STRUCT.1F (proposed):** run the 1B backfill `--apply` on real data
 (driving `reflections_legacy_only_no_valid_snapshot` to zero), then a
 fallback-removal / legacy-field-retirement slice for the `small_group_at_post`
 mirror and the `SmallGroup` progress storage bridge — each gated on a clean
@@ -297,5 +338,6 @@ mirror and the `SmallGroup` progress storage bridge — each gated on a clean
 the cross-module `Profile.small_group` retirement (CHURCH_STRUCTURE_CORE
 Section 12).
 
-The 1A audit, 1B backfill, and 1C verification slices perform **no** runtime
-switch; 1D makes the single group-progress default-source change described above.
+The 1A audit, 1B backfill, 1C verification, and 1E cleanup slices perform **no**
+runtime switch; 1D makes the single group-progress default-source change
+described above.

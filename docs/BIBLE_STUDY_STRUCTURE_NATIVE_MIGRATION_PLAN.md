@@ -482,9 +482,39 @@ the meeting-identity decision (Section 4.5).
     `--verbose`/`--verbose-events` (per-meeting decisions), `--fail-on-issues`.
   - Tests: `studies/test_backfill_meeting_audience_command.py`.
   - **Runtime still does not read audience rows** after this slice.
-- **BS-STRUCT.1D** — generation writes audience rows + `anchor_unit` for normal
-  group-level meetings (still one per leaf unit); `small_group` mirror filled for
-  one-to-one mappings.
+- **BS-STRUCT.1D** — normal generation writes audience rows + `anchor_unit`.
+  ✅ **implemented.** `generate_bible_study_meetings` (`studies/views.py`) now,
+  for every **newly created** normal group-level `BibleStudyMeeting`, calls the
+  new `write_normal_meeting_audience_scope(meeting)` helper:
+  - It resolves `meeting.small_group.church_structure_unit`. **Only when that
+    unit exists, is active, and is `UNIT_SMALL_GROUP`** does it create one
+    `BibleStudyMeetingAudienceScope(meeting, unit)` row (via `get_or_create`) and
+    set `meeting.anchor_unit = unit` **when that anchor is currently null**
+    (`save(update_fields=["anchor_unit", "updated_at"])`, so the `small_group`
+    column is never rewritten). `small_group` stays set as the compatibility
+    mirror and `meeting_kind` stays `normal`.
+  - **Invalid mapping is fail-closed.** If the group has no valid active
+    `UNIT_SMALL_GROUP` mapping (unmapped, inactive unit, or wrong unit type), the
+    legacy meeting is **still created** exactly as before (unchanged generation
+    count/behavior) but gets **no audience row and no `anchor_unit`** — i.e. it
+    stays a pre-1D legacy-only zero-row meeting — and the affected group names are
+    surfaced to the manager in a `messages.warning`. This was chosen over
+    "skip with warning" because it preserves existing generation behavior and
+    never falsely presents a meeting as structure-native; existing-row backfill
+    is BS-STRUCT.1C's job.
+  - **Existing meetings are never mutated.** Rows are written only for meetings
+    this run creates; meetings already present are skipped by the existing
+    `get_or_create` missing-group logic and left untouched (no row, no anchor).
+  - **`generation_key` left inert** in this slice (the `(lesson, small_group)`
+    unique constraint already gives normal-meeting idempotency; a second
+    identity key is deferred to the higher-level/joint slices per Section 4.5).
+  - Idempotent: a second generation run creates no duplicate meetings and no
+    duplicate audience rows.
+  - Tests: new BS-STRUCT.1D methods in `studies/tests.py`
+    (`BibleStudyModuleTests`).
+  - **Runtime still does not read audience rows.** Visibility, Today/landing, and
+    role/worship pickers all still key off `small_group`; this slice only stops
+    newly generated normal meetings from being zero-row legacy-only meetings.
 - **BS-STRUCT.1E** — visibility switches to **meeting audience rows + active
   primary membership**, with the single-`small_group` path kept only as zero-row
   fallback. Includes V2 landing / Today switch to audience-row matching.

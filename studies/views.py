@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.language import get_user_language
+from accounts.models import ChurchStructureUnit
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -25,6 +26,7 @@ from .forms import (
 from .models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
@@ -32,7 +34,10 @@ from .models import (
     BibleStudyWorshipSong,
 )
 from .services import cancel_bible_study_lesson_with_meetings
-from .visibility import get_membership_visible_small_groups
+from .visibility import (
+    get_membership_visible_small_groups,
+    get_small_group_structure_unit,
+)
 
 
 def study_ui_text(language, key):
@@ -163,6 +168,42 @@ def get_default_meeting_datetime(lesson):
             timezone.get_current_timezone(),
         )
     return meeting_datetime
+
+
+def write_normal_meeting_audience_scope(meeting):
+    """BS-STRUCT.1D: attach a structure-native audience row to a freshly
+    generated normal group-level meeting.
+
+    Resolves the meeting's legacy ``small_group`` mapped
+    ``ChurchStructureUnit`` and, only when that unit exists, is active, and is
+    ``UNIT_SMALL_GROUP``, creates one ``BibleStudyMeetingAudienceScope`` row and
+    sets ``anchor_unit`` to that unit when it is currently null. Returns ``True``
+    when a row was written, ``False`` when the group has no valid active
+    small-group unit mapping (the meeting is then left exactly as the pre-1D
+    legacy-only zero-row meeting and the caller surfaces a warning).
+
+    Fail-closed by design: an invalid mapping never produces an audience row, so
+    a meeting is never falsely presented as structure-native. Never mutates
+    ``small_group``; never overwrites an existing ``anchor_unit``; never changes
+    ``meeting_kind`` (stays ``normal``). Runtime visibility still reads
+    ``small_group``, not these rows.
+    """
+    unit = get_small_group_structure_unit(meeting.small_group)
+    if (
+        unit is None
+        or not unit.is_active
+        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
+    ):
+        return False
+
+    BibleStudyMeetingAudienceScope.objects.get_or_create(
+        meeting=meeting,
+        unit=unit,
+    )
+    if meeting.anchor_unit_id is None:
+        meeting.anchor_unit = unit
+        meeting.save(update_fields=["anchor_unit", "updated_at"])
+    return True
 
 
 def get_bible_study_meeting_generation_preview(lesson):
@@ -410,6 +451,12 @@ def generate_bible_study_meetings(request, lesson_id):
 
     if request.method == "POST":
         created_count = 0
+        # BS-STRUCT.1D: groups whose newly generated meeting could not be made
+        # structure-native because their small_group has no valid active
+        # UNIT_SMALL_GROUP mapping. The meeting is still created (unchanged
+        # legacy behavior) but is left as a legacy-only zero-row meeting and
+        # surfaced as a warning rather than silently given an invalid row.
+        unmapped_groups = []
         default_meeting_datetime = get_default_meeting_datetime(lesson)
 
         for small_group in preview["missing_groups"]:
@@ -428,6 +475,11 @@ def generate_bible_study_meetings(request, lesson_id):
 
             if created:
                 created_count += 1
+                # BS-STRUCT.1D: only newly created normal group-level meetings
+                # get a structure-native audience row + anchor_unit. Existing
+                # meetings are never mutated here (that is BS-STRUCT.1C's job).
+                if not write_normal_meeting_audience_scope(meeting):
+                    unmapped_groups.append(small_group)
 
         skipped_count = preview["eligible_count"] - created_count
         message = (
@@ -439,6 +491,21 @@ def generate_bible_study_meetings(request, lesson_id):
             )
         )
         messages.success(request, message)
+
+        if unmapped_groups:
+            group_names = "、".join(group.name for group in unmapped_groups)
+            group_names_en = ", ".join(group.name for group in unmapped_groups)
+            warning = (
+                f"有 {len(unmapped_groups)} 个小组未配置有效的教会结构单元，"
+                f"生成的聚会暂无结构受众范围：{group_names}。"
+                if language == "zh"
+                else (
+                    f"{len(unmapped_groups)} group(s) have no valid church "
+                    "structure unit mapping; their generated meetings have no "
+                    f"structure audience scope: {group_names_en}."
+                )
+            )
+            messages.warning(request, warning)
         return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
 
     return render(

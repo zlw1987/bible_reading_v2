@@ -11,12 +11,13 @@ runtime legacy small-group dependencies** in Reading / Reflection / Progress and
 the audit that measures readiness to retire them.
 
 Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) + 1C (reflection
-visibility row-first, verified) implemented.** Code/tests/docs only; no model,
-schema, migration, or runtime-behavior change. The reflection read/write
-visibility path and the group-progress roster/default path are already
-membership-core (see below); what remains is retiring the last
-`Profile.small_group` reads and the legacy mirror data once real-data evidence is
-clean.
+visibility row-first, verified) + 1D (group progress membership-core default)
+implemented.** 1A–1C are code/tests/docs only with no runtime change; 1D makes a
+small runtime change — it removes the last legacy `Profile.small_group` read in
+the group-progress default-group path. The reflection read/write visibility path
+and the group-progress roster/default path are now fully membership-core (see
+below); what remains is retiring the legacy mirror data and the `SmallGroup`
+storage bridge once real-data evidence is clean.
 
 This document's code changes **no runtime behavior**. It adds a read-only audit
 (`reading.structure_runtime_readiness` + the
@@ -75,17 +76,19 @@ resolution in `accounts.permissions`, not in reading runtime.
 - **Group-progress visible roster — membership-core (CS-CORE.4F.1).**
   `get_membership_core_progress_roster_users` drives `member_rows`.
 - **Group-progress default selected group — permission-fenced membership-core
-  (CS-CORE.4F.2)**, falling back to legacy `Profile.small_group` only as the last
-  resort.
+  (CS-CORE.4F.2 + READING-STRUCT.1D).** The legacy `Profile.small_group`
+  last-resort default fallback was **removed** in 1D; the default is now the
+  membership-core candidate, then the first accessible group, then the safe
+  no-group state. `Profile.small_group` is no longer a group-progress runtime
+  source.
 - **Group-progress accessible list / own group — membership-core / role-scope
   structure-aware (CS-CORE.2D-B)** in `accounts.permissions.get_accessible_progress_groups`;
   ordinary membership grants only the single mapped own group.
 
 ## 3. What remains before legacy retirement
 
-- Replace the `my_group_progress` last-resort `Profile.small_group` default with
-  a membership-core (or "no default") behavior, once the audit shows no users
-  depend solely on the legacy default.
+- ~~Replace the `my_group_progress` last-resort `Profile.small_group` default~~ —
+  **done in READING-STRUCT.1D** (see Section 5.6).
 - Backfill `structure_unit_at_post` for legacy group reflections that predate
   CS-CORE.4D/4G.2 so historical group posts are not silently invisible under the
   live structure-native gate.
@@ -236,14 +239,63 @@ public/private/hidden regression cases in `ReflectionWallVisibilityRegressionTes
 
 **Group progress runtime was not switched in this slice.**
 
+## 5.6 Group progress default is membership-core (READING-STRUCT.1D — implemented)
+
+**Outcome: small runtime change.** `reading.views.my_group_progress` previously
+had three default-group sources when no explicit `?group=` was passed:
+(1) the permission-fenced membership-core candidate (CS-CORE.4F.2), then
+(2) a legacy `Profile.small_group` last-resort fallback, then
+(3) the first accessible group. READING-STRUCT.1D **removed source (2)**.
+
+New rule (no explicit `?group=`):
+
+1. permission-fenced membership-core candidate — the user's exactly-one active
+   primary `ChurchStructureMembership`, mapped through its unit to a single active
+   legacy `SmallGroup` **bridge**, and only if already in the legacy
+   `get_accessible_progress_groups()` set;
+2. else the first accessible group (role/permission driven — e.g. a district
+   leader's first scoped group);
+3. else the safe no-group state ("You are not assigned to a small group yet.").
+
+`Profile.small_group` is **no longer read** anywhere in the group-progress
+runtime. The membership candidate fails closed on no / multiple active primary
+memberships and on a unit that does not map to exactly one active small-group; in
+those cases an ordinary user (whose only accessible group is the membership-core
+own group) gets the no-group state rather than the legacy profile group. The
+date/status validity rules (active, primary, `start_date`/`end_date` window) are
+the shared `accounts.structure_selectors` / `group_progress_shadow` ones, so
+requested / future / ended memberships do not count.
+
+The rest of the page was already membership-core and is unchanged: the accessible
+group list / own group (`get_accessible_progress_groups` →
+`get_user_membership_progress_own_group`, CS-CORE.2D-B), the visible roster
+(`get_membership_core_progress_roster_users`, CS-CORE.4F.1), and the legacy
+permission gate. No new helper was added — the existing
+`get_membership_core_default_progress_group` already encodes the
+exactly-one-active-primary → single-active-`SmallGroup`-bridge rule.
+
+**Legacy SmallGroup remains only as the storage/query bridge** (the progress
+model and `accessible_groups` set still key on `SmallGroup`); no model or field
+was removed or renamed, and no migration was added.
+
+**Reflection runtime is unchanged** (still snapshot-only per Section 5.5). **No
+production command or `--apply` was run** (only the read-only audit). Existing
+tests that had asserted the legacy profile default as runtime truth
+(`GroupProgressDefaultSourceSwitchTests`) were updated to assert the new
+membership-core / first-accessible / no-group behavior, plus new cases:
+profile-group-without-membership → no group; profile≠membership → membership
+group wins; ended membership → no group.
+
 ## 6. Next proposed slice
 
-**READING-STRUCT.1D (proposed):** switch the `my_group_progress` last-resort
-default to membership-core (or no default) and remove the
-`Profile.small_group` default read, gated on a clean
-`audit_reading_structure_runtime_readiness --fail-on-blockers` (after the 1B
-backfill `--apply` is run and verified on real data) and the existing
-`audit_group_progress_shadow --fail-on-drift`.
+**READING-STRUCT.1E (proposed):** run the 1B backfill `--apply` on real data
+(driving `reflections_legacy_only_no_valid_snapshot` to zero), then a
+fallback-removal / legacy-field-retirement slice for the `small_group_at_post`
+mirror and the `SmallGroup` progress storage bridge — each gated on a clean
+`audit_reading_structure_runtime_readiness --fail-on-blockers` and
+`audit_group_progress_shadow --fail-on-drift` over real data, coordinated with
+the cross-module `Profile.small_group` retirement (CHURCH_STRUCTURE_CORE
+Section 12).
 
-Each is a separate, individually-gated slice; the 1A audit, 1B backfill, and 1C
-verification slices perform **no** runtime switch.
+The 1A audit, 1B backfill, and 1C verification slices perform **no** runtime
+switch; 1D makes the single group-progress default-source change described above.

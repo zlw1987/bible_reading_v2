@@ -2757,17 +2757,23 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
 
 
 class GroupProgressDefaultSourceSwitchTests(TestCase):
-    """CS-CORE.4F.2 locks the permission-fenced default-selected-group switch.
+    """CS-CORE.4F.2 + READING-STRUCT.1D lock the default-selected-group source.
 
-    With no explicit ``?group=``, ``reading.views.my_group_progress`` now prefers a
-    membership-core default candidate (single active primary
-    ``ChurchStructureMembership`` mapped to one active legacy ``SmallGroup``) over the
-    legacy ``Profile.small_group`` default. The candidate is **permission-fenced**: it
-    is only used when it is already in the legacy
-    ``get_accessible_progress_groups()`` result, so ordinary membership never grants
-    progress access, never expands the accessible group list, and never bypasses the
-    legacy permission gate. Explicit ``?group=`` remains legacy-permission-gated, and
-    the visible roster stays the membership-core source switched in CS-CORE.4F.1.
+    With no explicit ``?group=``, ``reading.views.my_group_progress`` uses the
+    permission-fenced membership-core default candidate (single active primary
+    ``ChurchStructureMembership`` mapped to one active legacy ``SmallGroup``). The
+    candidate is **permission-fenced**: it is only used when it is already in the
+    legacy ``get_accessible_progress_groups()`` result, so ordinary membership never
+    grants progress access, never expands the accessible group list, and never
+    bypasses the legacy permission gate.
+
+    READING-STRUCT.1D removed the former legacy ``Profile.small_group`` default
+    fallback: when there is no membership candidate the default is simply the first
+    accessible group (role/permission driven), and ordinary users with no
+    resolvable membership fall through to the safe no-group state.
+    ``Profile.small_group`` is no longer a group-progress runtime source. Explicit
+    ``?group=`` remains legacy-permission-gated, and the visible roster stays the
+    membership-core source switched in CS-CORE.4F.1.
     """
 
     def setUp(self):
@@ -2940,11 +2946,12 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
         self.assertEqual(response.context["selected_group"], self.group_b)
 
-    def test_multiple_active_primary_memberships_fail_closed_to_legacy_default(self):
-        # Two active primary memberships are ambiguous: the membership candidate fails
-        # closed and the legacy default (profile group_a) applies, not an arbitrary
-        # membership group.
-        leader = self.create_user("default_ambiguous", group=self.group_a)
+    def test_multiple_active_primary_memberships_fall_through_to_first_accessible(self):
+        # READING-STRUCT.1D: two active primary memberships are ambiguous, so the
+        # membership candidate fails closed. The profile group (group_b) is NOT
+        # consulted; the default falls through to the first accessible group
+        # (group_a, the leader's first role-scoped group by name).
+        leader = self.create_user("default_ambiguous", group=self.group_b)
         self.make_district_leader(leader, self.district)
         today = timezone.localdate()
         ChurchStructureMembership.objects.bulk_create(
@@ -2968,19 +2975,74 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
         response = self.progress_response_for(leader)
 
+        # First accessible group (group_a), not the profile group (group_b).
         self.assertEqual(response.context["selected_group"], self.group_a)
+        self.assertNotEqual(response.context["selected_group"], self.group_b)
 
-    def test_unmapped_membership_unit_fails_closed_to_legacy_default(self):
-        # The active primary membership is in a unit that maps to no active
-        # SmallGroup, so the candidate fails closed and the legacy default applies.
-        leader = self.create_user("default_unmapped", group=self.group_a)
+    def test_unmapped_membership_unit_falls_through_to_first_accessible(self):
+        # READING-STRUCT.1D: the active primary membership maps to no active
+        # SmallGroup, so the candidate fails closed. The profile group (group_b) is
+        # NOT consulted; the default falls through to the first accessible group.
+        leader = self.create_user("default_unmapped", group=self.group_b)
         self.make_district_leader(leader, self.district)
         unmapped_unit = self.create_unit("DEF-UNMAPPED")
         self.create_membership(leader, unmapped_unit)
 
         response = self.progress_response_for(leader)
 
+        # First accessible group (group_a), not the profile group (group_b).
         self.assertEqual(response.context["selected_group"], self.group_a)
+        self.assertNotEqual(response.context["selected_group"], self.group_b)
+
+    def test_ordinary_profile_group_without_membership_gets_no_group_progress(self):
+        # READING-STRUCT.1D: an ordinary user whose Profile.small_group points at a
+        # group but who has no active primary membership gets NO group progress via
+        # profile fallback -- accessible is empty and the safe no-group state shows.
+        user = self.create_user("default_profile_only", group=self.group_a)
+
+        self.assertEqual(self.accessible_group_ids(user), set())
+
+        response = self.progress_response_for(user)
+
+        self.assertIsNone(response.context["selected_group"])
+        self.assertEqual(list(response.context["member_rows"]), [])
+        self.assertContains(response, "You are not assigned to a small group yet.")
+
+    def test_ordinary_profile_and_membership_differ_uses_membership_group(self):
+        # READING-STRUCT.1D: when Profile.small_group (group_a) and the active primary
+        # membership (group_b's unit) disagree, the membership group wins and the
+        # profile group is never used as a runtime source.
+        user = self.create_user("default_mismatch", group=self.group_a)
+        self.create_membership(user, self.unit_b)
+
+        # Ordinary own-group access is membership-core: only group_b is accessible.
+        self.assertEqual(self.accessible_group_ids(user), {self.group_b.id})
+
+        response = self.progress_response_for(user)
+
+        self.assertEqual(response.context["selected_group"], self.group_b)
+        self.assertNotEqual(response.context["selected_group"], self.group_a)
+
+    def test_ordinary_ended_membership_fails_closed_to_no_group(self):
+        # READING-STRUCT.1D: an ended (non-active) primary membership does not count,
+        # and Profile.small_group is not a fallback, so the user gets no group
+        # progress rather than the legacy profile group.
+        user = self.create_user("default_ended", group=self.group_a)
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.unit_b,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=True,
+            start_date=timezone.localdate() - timedelta(days=10),
+            end_date=timezone.localdate() - timedelta(days=1),
+        )
+
+        self.assertEqual(self.accessible_group_ids(user), set())
+
+        response = self.progress_response_for(user)
+
+        self.assertIsNone(response.context["selected_group"])
+        self.assertContains(response, "You are not assigned to a small group yet.")
 
     def test_ordinary_membership_grants_only_own_group_not_others(self):
         # CS-CORE.2D-B: an active primary membership in group_a's unit grants own-group

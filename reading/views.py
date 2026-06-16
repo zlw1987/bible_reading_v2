@@ -1128,7 +1128,6 @@ def check_in(request, active_plan_id, plan_day_id):
 
 @login_required
 def my_group_progress(request):
-    user_profile = getattr(request.user, "profile", None)
     groups = get_accessible_progress_groups(request.user)
 
     selected_group = None
@@ -1137,22 +1136,22 @@ def my_group_progress(request):
     if group_id:
         selected_group = groups.filter(id=group_id).first()
 
-    # CS-CORE.4F.2: when there is no usable explicit ?group=, prefer a
-    # permission-fenced membership-core default candidate over the legacy
-    # Profile.small_group default. The helper only returns a group that is already in
-    # the legacy-accessible `groups` queryset, so membership can never expand the
-    # accessible list or bypass the legacy permission gate; ordinary membership grants
-    # no progress access. If there is no safe candidate it returns None and the legacy
-    # default below applies unchanged.
+    # CS-CORE.4F.2 + READING-STRUCT.1D: when there is no usable explicit ?group=,
+    # the default selected group is the permission-fenced membership-core candidate
+    # (single active primary ChurchStructureMembership mapped to one active legacy
+    # SmallGroup, already in the legacy-accessible `groups`). It fails closed on
+    # no / multiple / unmapped membership. READING-STRUCT.1D removed the former
+    # legacy Profile.small_group default fallback, so Profile.small_group is no
+    # longer a group-progress runtime source. When there is no membership
+    # candidate the default is simply the first accessible group (role/permission
+    # driven), and ordinary users with no resolvable membership fall through to the
+    # safe no-group state below.
     if selected_group is None:
         membership_default = get_membership_core_default_progress_group(
             request.user, accessible_groups=groups
         )
         if membership_default is not None:
             selected_group = membership_default
-
-    if selected_group is None and user_profile and user_profile.small_group:
-        selected_group = groups.filter(id=user_profile.small_group_id).first()
 
     if selected_group is None:
         selected_group = groups.first()

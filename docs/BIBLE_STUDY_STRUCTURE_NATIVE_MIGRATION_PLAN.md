@@ -1068,7 +1068,13 @@ the meeting-identity decision (Section 4.5).
   - **Duplicate prevention.** `clean()` rejects a second meeting for the same
     `(lesson, unit)` before save, matching either an existing `generation_key` or
     a meeting whose audience rows are exactly that single unit — so the
-    structure-native identity never raises an `IntegrityError`.
+    structure-native identity never raises an `IntegrityError`. **BS-STRUCT.1O-FU1:**
+    duplicate prevention also treats an existing legacy **zero-row** mirror meeting
+    for the selected unit as a duplicate — when exactly one active legacy group
+    maps to the unit (`resolve_unit_small_group_mirror`), any other meeting for the
+    lesson with that `small_group` is caught, so an old zero-row meeting no longer
+    slips through to the `(lesson, small_group)` constraint. This guard stays until
+    the zero-row fallback is retired.
   - **Fail-safe (carried over).** The form still refuses to edit a higher-level /
     joint / multi-unit meeting (`meeting_kind != normal`, or audience rows that
     are not a single small-group row), leaving those rows untouched.

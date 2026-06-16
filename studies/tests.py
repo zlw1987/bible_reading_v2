@@ -2625,6 +2625,104 @@ class BibleStudyModuleTests(TestCase):
             [self.same_group_unit.id],
         )
 
+    def test_manual_create_duplicate_legacy_zero_row_mirror_is_rejected(self):
+        # BS-STRUCT.1O-FU1: an old legacy zero-row meeting (small_group set, no
+        # audience row, no generation_key) for the selected unit's mirror must be
+        # caught as a duplicate, not slip through to an IntegrityError on the
+        # (lesson, small_group) unique constraint.
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        zero_row = self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        self.assertEqual(zero_row.audience_scope_links.count(), 0)
+        self.assertIsNone(zero_row.generation_key)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already exists")
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(lesson=lesson).count(), 1
+        )
+
+    def test_manual_edit_duplicate_legacy_zero_row_mirror_is_rejected(self):
+        # BS-STRUCT.1O-FU1: editing a meeting onto a unit whose legacy mirror is
+        # already used by an old zero-row meeting is rejected with a friendly
+        # error and leaves the edited meeting's rows untouched.
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        # Meeting A: old legacy zero-row meeting on self.group (-> group_unit).
+        self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        # Meeting B: a structure-native meeting targeting a different unit.
+        self.client.login(username="study_staff", password="testpass123")
+        self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(
+                lesson=lesson, audience_unit=self.same_group_unit.id
+            ),
+        )
+        meeting_b = BibleStudyMeeting.objects.get(
+            lesson=lesson, generation_key__endswith=f":{self.same_group_unit.id}"
+        )
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting_b.id]),
+            self.meeting_post_data(
+                lesson=lesson, audience_unit=self.group_unit.id
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already exists")
+        meeting_b.refresh_from_db()
+        self.assertEqual(
+            list(meeting_b.audience_scope_links.values_list("unit_id", flat=True)),
+            [self.same_group_unit.id],
+        )
+
+    def test_manual_create_no_mirror_unit_ignores_zero_row_meeting(self):
+        # BS-STRUCT.1O-FU1: no false positive — a selected unit with no legacy
+        # mirror must not be blocked by an unrelated legacy zero-row meeting.
+        self.set_language("en")
+        lonely_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="LONELYFU1",
+            name="Lonely Group FU1",
+            name_en="Lonely Group FU1",
+        )
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        # An unrelated old zero-row meeting on a different group.
+        self.create_meeting(
+            lesson=lesson,
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, audience_unit=lonely_unit.id),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(lesson=lesson).count(), 2
+        )
+        new_meeting = BibleStudyMeeting.objects.get(lesson=lesson, anchor_unit=lonely_unit)
+        self.assertIsNone(new_meeting.small_group_id)
+
     def test_manual_edit_does_not_clobber_multi_unit_audience(self):
         self.set_language("en")
         meeting = self.create_meeting(

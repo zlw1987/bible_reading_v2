@@ -173,7 +173,7 @@ def sync_normal_meeting_audience_scope_for_unit(meeting, unit):
     consulted as a source of truth. Returns the mirror ``SmallGroup`` (or
     ``None``) so callers/tests can assert the mirror result.
     """
-    mirror, _ambiguous = _resolve_unit_small_group_mirror(unit)
+    mirror, _ambiguous = resolve_unit_small_group_mirror(unit)
 
     BibleStudyMeetingAudienceScope.objects.get_or_create(meeting=meeting, unit=unit)
     meeting.audience_scope_links.exclude(unit=unit).delete()
@@ -285,6 +285,19 @@ def _resolve_unit_small_group_mirror(unit):
     if len(active_groups) > 1:
         return None, True
     return None, False
+
+
+def resolve_unit_small_group_mirror(unit):
+    """Public ``(mirror, ambiguous)`` for a unit's exact-one legacy ``SmallGroup``.
+
+    Thin public wrapper over :func:`_resolve_unit_small_group_mirror` so callers
+    outside generation (e.g. the manual ``BibleStudyMeetingForm`` duplicate
+    check) share the exact-one-active-legacy-group semantics rather than
+    re-deriving them. Returns ``(group, False)`` only when exactly one active
+    legacy group maps to ``unit``; ``(None, True)`` when ambiguous (two or more);
+    ``(None, False)`` when none.
+    """
+    return _resolve_unit_small_group_mirror(unit)
 
 
 def _ordered_targets(targets):

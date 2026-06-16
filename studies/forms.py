@@ -21,6 +21,7 @@ from .models import (
 from .services import (
     normal_generation_key_for_unit,
     resolve_normal_small_group_unit,
+    resolve_unit_small_group_mirror,
 )
 from .visibility import filter_users_for_meeting_audience
 
@@ -904,11 +905,21 @@ class BibleStudyMeetingForm(forms.ModelForm):
     def _duplicate_meeting_exists(self, lesson, unit):
         """Whether another meeting for ``lesson`` already targets ``unit``.
 
-        Matches by the structure-native ``generation_key`` (so a manual meeting
-        cannot duplicate a generated meeting for the same unit) or by an existing
-        meeting whose audience rows are exactly that single unit (so it cannot
-        duplicate another normal single-unit meeting). The current instance is
-        excluded when editing.
+        Matches by, in order:
+
+        * the structure-native ``generation_key`` (so a manual meeting cannot
+          duplicate a generated meeting for the same unit);
+        * the legacy ``small_group`` mirror — only when exactly one active legacy
+          group maps to ``unit`` (BS-STRUCT.1O-FU1). This catches an old legacy
+          **zero-row** meeting (``small_group`` set, no audience row, no
+          ``generation_key``) that would otherwise slip past and collide with the
+          ``(lesson, small_group)`` unique constraint at save time, raising an
+          ``IntegrityError`` instead of a friendly form error. No mirror /
+          ambiguous mirror invents nothing;
+        * an existing meeting whose audience rows are exactly that single unit (so
+          it cannot duplicate another normal single-unit meeting).
+
+        The current instance is excluded when editing.
         """
         others = BibleStudyMeeting.objects.filter(lesson=lesson)
         if self.instance.pk:
@@ -917,6 +928,10 @@ class BibleStudyMeetingForm(forms.ModelForm):
         if others.filter(
             generation_key=normal_generation_key_for_unit(unit)
         ).exists():
+            return True
+
+        mirror, _ambiguous = resolve_unit_small_group_mirror(unit)
+        if mirror is not None and others.filter(small_group=mirror).exists():
             return True
 
         for meeting in others.prefetch_related("audience_scope_links"):

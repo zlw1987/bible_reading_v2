@@ -421,7 +421,7 @@ class BibleStudyModuleTests(TestCase):
         )
         data = {
             "lesson": lesson.id,
-            "small_group": self.group.id,
+            "audience_unit": self.group_unit.id,
             "meeting_datetime": self.future_time.strftime("%Y-%m-%dT%H:%M"),
             "location": "小组家",
             "location_en": "Small group home",
@@ -2417,7 +2417,40 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meeting.group_direction_en, "Updated direction")
         self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
 
-    # --- BS-STRUCT.1H: manual meeting form writes/repairs audience rows ---
+    # --- BS-STRUCT.1O: manual meeting form is structure-unit-native ---
+
+    def test_meeting_form_uses_audience_unit_not_small_group(self):
+        form = BibleStudyMeetingForm()
+
+        self.assertIn("audience_unit", form.fields)
+        self.assertNotIn("small_group", form.fields)
+        # The picker only offers active small-group structure units.
+        unit_ids = set(
+            form.fields["audience_unit"].queryset.values_list("id", flat=True)
+        )
+        self.assertIn(self.group_unit.id, unit_ids)
+        self.assertNotIn(self.north_unit.id, unit_ids)
+        self.assertNotIn(self.root_unit.id, unit_ids)
+
+    def test_meeting_form_audience_unit_label_is_bilingual(self):
+        self.assertEqual(
+            BibleStudyMeetingForm().fields["audience_unit"].label,
+            "Audience Unit",
+        )
+        self.assertEqual(
+            BibleStudyMeetingForm(language="zh").fields["audience_unit"].label,
+            "适用单位",
+        )
+
+    def test_meeting_form_page_has_no_legacy_small_group_select(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("create_bible_study_meeting"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="small_group"')
+        self.assertContains(response, 'name="audience_unit"')
 
     def test_manual_create_writes_audience_row_and_anchor(self):
         self.set_language("en")
@@ -2426,15 +2459,16 @@ class BibleStudyModuleTests(TestCase):
 
         response = self.client.post(
             reverse("create_bible_study_meeting"),
-            self.meeting_post_data(lesson=lesson, small_group=self.group.id),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
         )
 
         self.assertEqual(response.status_code, 302)
-        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson)
         rows = list(meeting.audience_scope_links.all())
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].unit_id, self.group_unit.id)
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+        self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
     def test_manual_create_keeps_small_group_mirror_and_normal_kind(self):
         self.set_language("en")
@@ -2443,78 +2477,58 @@ class BibleStudyModuleTests(TestCase):
 
         self.client.post(
             reverse("create_bible_study_meeting"),
-            self.meeting_post_data(lesson=lesson, small_group=self.group.id),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
         )
 
-        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson)
+        # Exactly one active legacy group maps to group_unit, so it is mirrored.
         self.assertEqual(meeting.small_group_id, self.group.id)
         self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
-    def test_manual_create_unmapped_group_is_invalid_and_creates_no_meeting(self):
+    def test_manual_create_unit_without_legacy_mirror_sets_small_group_none(self):
         self.set_language("en")
-        unmapped = SmallGroup.objects.create(
-            name="Unmapped Group", district=self.north
-        )
-        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
-        self.client.login(username="study_staff", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_bible_study_meeting"),
-            self.meeting_post_data(lesson=lesson, small_group=unmapped.id),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "not mapped to an active small-group")
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
-        )
-
-    def test_manual_create_inactive_unit_is_invalid_and_creates_no_meeting(self):
-        self.set_language("en")
-        inactive_unit = ChurchStructureUnit.objects.create(
+        # An active small-group unit with no legacy SmallGroup mapped to it.
+        lonely_unit = ChurchStructureUnit.objects.create(
             parent=self.north_unit,
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="INACTIVEGRP",
-            name="Inactive Unit",
-            is_active=False,
+            code="LONELY",
+            name="Lonely Group",
+            name_en="Lonely Group",
         )
-        bad_group = SmallGroup.objects.create(
-            name="Inactive Unit Group", district=self.north
-        )
-        bad_group.church_structure_unit = inactive_unit
-        bad_group.save()
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.post(
             reverse("create_bible_study_meeting"),
-            self.meeting_post_data(lesson=lesson, small_group=bad_group.id),
+            self.meeting_post_data(lesson=lesson, audience_unit=lonely_unit.id),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
-        )
+        self.assertEqual(response.status_code, 302)
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson)
+        self.assertIsNone(meeting.small_group_id)
+        rows = list(meeting.audience_scope_links.all())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].unit_id, lonely_unit.id)
+        self.assertEqual(meeting.anchor_unit_id, lonely_unit.id)
 
-    def test_manual_create_wrong_unit_type_is_invalid_and_creates_no_meeting(self):
+    def test_manual_create_duplicate_unit_is_rejected(self):
         self.set_language("en")
-        wrong_group = SmallGroup.objects.create(
-            name="Wrong Type Group", district=self.north
-        )
-        # Map to a DISTRICT unit, which the normal small-group path rejects.
-        wrong_group.church_structure_unit = self.north_unit
-        wrong_group.save()
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
+        self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
+        )
         response = self.client.post(
             reverse("create_bible_study_meeting"),
-            self.meeting_post_data(lesson=lesson, small_group=wrong_group.id),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
+        self.assertContains(response, "already exists")
+        self.assertEqual(
+            BibleStudyMeeting.objects.filter(lesson=lesson).count(), 1
         )
 
     def test_manual_edit_zero_row_meeting_creates_missing_row(self):
@@ -2529,7 +2543,9 @@ class BibleStudyModuleTests(TestCase):
 
         response = self.client.post(
             reverse("edit_bible_study_meeting", args=[meeting.id]),
-            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+            self.meeting_post_data(
+                lesson=meeting.lesson, audience_unit=self.group_unit.id
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -2539,7 +2555,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(rows[0].unit_id, self.group_unit.id)
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
 
-    def test_manual_edit_changing_group_replaces_row_and_drops_stale(self):
+    def test_manual_edit_changing_unit_replaces_row_and_drops_stale(self):
         self.set_language("en")
         meeting = self.create_meeting(
             small_group=self.group, status=BibleStudyMeeting.STATUS_DRAFT
@@ -2555,22 +2571,59 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.post(
             reverse("edit_bible_study_meeting", args=[meeting.id]),
             self.meeting_post_data(
-                lesson=meeting.lesson, small_group=self.same_group.id
+                lesson=meeting.lesson, audience_unit=self.same_group_unit.id
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         meeting.refresh_from_db()
         rows = list(meeting.audience_scope_links.all())
-        # Exactly one row, pointing at the new group; the stale old row is gone.
+        # Exactly one row, pointing at the new unit; the stale old row is gone.
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].unit_id, self.same_group_unit.id)
         self.assertFalse(
             meeting.audience_scope_links.filter(unit=self.group_unit).exists()
         )
-        # The anchor was a mirror of the old group, so it follows the change.
+        # Anchor follows the selected unit; the mirror follows the new unit.
         self.assertEqual(meeting.small_group_id, self.same_group.id)
         self.assertEqual(meeting.anchor_unit_id, self.same_group_unit.id)
+
+    def test_manual_edit_duplicate_unit_is_rejected(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        # Meeting A already targets group_unit for this lesson.
+        self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, audience_unit=self.group_unit.id),
+        )
+        # Meeting B targets a different unit for the same lesson.
+        self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(
+                lesson=lesson, audience_unit=self.same_group_unit.id
+            ),
+        )
+        meeting_b = BibleStudyMeeting.objects.get(
+            lesson=lesson, generation_key__endswith=f":{self.same_group_unit.id}"
+        )
+
+        # Editing B onto group_unit collides with A and must be rejected.
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting_b.id]),
+            self.meeting_post_data(
+                lesson=lesson, audience_unit=self.group_unit.id
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already exists")
+        meeting_b.refresh_from_db()
+        self.assertEqual(
+            list(meeting_b.audience_scope_links.values_list("unit_id", flat=True)),
+            [self.same_group_unit.id],
+        )
 
     def test_manual_edit_does_not_clobber_multi_unit_audience(self):
         self.set_language("en")
@@ -2588,7 +2641,9 @@ class BibleStudyModuleTests(TestCase):
 
         response = self.client.post(
             reverse("edit_bible_study_meeting", args=[meeting.id]),
-            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+            self.meeting_post_data(
+                lesson=meeting.lesson, audience_unit=self.group_unit.id
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -2614,7 +2669,9 @@ class BibleStudyModuleTests(TestCase):
 
         response = self.client.post(
             reverse("edit_bible_study_meeting", args=[meeting.id]),
-            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+            self.meeting_post_data(
+                lesson=meeting.lesson, audience_unit=self.group_unit.id
+            ),
         )
 
         self.assertEqual(response.status_code, 200)

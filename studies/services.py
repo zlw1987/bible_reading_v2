@@ -88,12 +88,16 @@ def write_normal_meeting_audience_scope(meeting):
 
 
 def sync_normal_meeting_audience_scope(meeting):
-    """BS-STRUCT.1H manual-form writer: create or repair the normal audience row.
+    """BS-STRUCT.1H small-group-keyed writer: create or repair the normal row.
 
-    Used by ``BibleStudyMeetingForm`` create/edit (not generation) to keep the
-    structure-native audience row and the legacy ``small_group`` mirror aligned
-    for a normal small-group meeting. The caller (the form's ``clean()``) must
-    have already validated that:
+    Retained for compatibility only. The manual ``BibleStudyMeetingForm`` is
+    structure-unit-native since BS-STRUCT.1O and now uses
+    :func:`sync_normal_meeting_audience_scope_for_unit` (keyed on the selected
+    ``ChurchStructureUnit``) instead of this small-group-keyed helper. This
+    function keeps the structure-native audience row and the legacy
+    ``small_group`` mirror aligned for a normal small-group meeting, deriving the
+    unit from ``meeting.small_group``. Any future caller must have already
+    validated that:
 
     * ``meeting.small_group`` resolves to a valid active ``UNIT_SMALL_GROUP``
       unit (so this returns ``True`` in practice); and
@@ -139,6 +143,55 @@ def sync_normal_meeting_audience_scope(meeting):
         meeting.anchor_unit = unit
         meeting.save(update_fields=["anchor_unit", "updated_at"])
     return True
+
+
+def sync_normal_meeting_audience_scope_for_unit(meeting, unit):
+    """BS-STRUCT.1O manual-form writer keyed on a structure unit, not a group.
+
+    The manual normal small-group meeting form now chooses a
+    ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` as the source of truth. This
+    helper aligns the meeting to that unit. The caller (the form's ``clean()``)
+    must have already validated that the meeting is a normal single-unit
+    small-group meeting — never a higher-level / joint / multi-unit meeting — so
+    the stale-row deletion below can never clobber a district / joint audience.
+
+    Behavior:
+
+    * create/get the single audience row for ``unit``;
+    * delete any other (stale) audience rows so the runtime row matches the
+      selected unit after a unit change;
+    * set ``anchor_unit`` to ``unit``;
+    * set ``meeting_kind`` to ``normal``;
+    * set the structure-native ``generation_key`` (``normal-unit:{unit_id}``) so
+      a manual normal meeting shares the per-unit idempotency key with
+      generation, giving one normal meeting per (lesson, unit);
+    * set the legacy ``small_group`` mirror from ``unit`` using the exact-one-
+      active-legacy-group rule — ``None`` when no active legacy group maps to the
+      unit or the mapping is ambiguous (two or more active groups).
+
+    The legacy ``small_group`` is only ever written here as a mirror; it is never
+    consulted as a source of truth. Returns the mirror ``SmallGroup`` (or
+    ``None``) so callers/tests can assert the mirror result.
+    """
+    mirror, _ambiguous = _resolve_unit_small_group_mirror(unit)
+
+    BibleStudyMeetingAudienceScope.objects.get_or_create(meeting=meeting, unit=unit)
+    meeting.audience_scope_links.exclude(unit=unit).delete()
+
+    meeting.anchor_unit = unit
+    meeting.meeting_kind = BibleStudyMeeting.KIND_NORMAL
+    meeting.generation_key = normal_generation_key_for_unit(unit)
+    meeting.small_group = mirror
+    meeting.save(
+        update_fields=[
+            "anchor_unit",
+            "meeting_kind",
+            "generation_key",
+            "small_group",
+            "updated_at",
+        ]
+    )
+    return mirror
 
 
 # ---------------------------------------------------------------------------

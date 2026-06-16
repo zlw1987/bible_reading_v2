@@ -9,7 +9,7 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.1N.** The design slices that
+Status: **partially migrated through BS-STRUCT.1O.** The design slices that
 followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
@@ -32,7 +32,13 @@ followed BS-STRUCT.1A are now implemented:
 - the staff meeting manage-list filter is **structure-audience aware**: it
   filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
   (unit-or-descendant), with the legacy zero-row `small_group` fallback still
-  included, and no longer exposes a legacy `small_group` select (BS-STRUCT.1N).
+  included, and no longer exposes a legacy `small_group` select (BS-STRUCT.1N);
+- the manual normal meeting create/edit form is **structure-unit-native**: it
+  chooses an active `UNIT_SMALL_GROUP` `ChurchStructureUnit` (`audience_unit`)
+  as the audience source of truth, writes the audience row + `anchor_unit` +
+  per-unit `generation_key`, keeps `small_group` only as a mirror when exactly
+  one active legacy group maps, and no longer exposes a legacy `small_group`
+  select (BS-STRUCT.1O).
 
 So the document as a whole is **no longer "docs-only / changes no runtime
 behavior."** The runtime now reads meeting audience rows. What remains is
@@ -187,7 +193,7 @@ its meeting carries no `small_group` mirror (structure-native, warned).
 
 | Concept | Where used in `studies/` |
 | --- | --- |
-| `SmallGroup` | **No longer the V2 visibility / picker source when a meeting has audience rows.** Now a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`); still the normal-generation target / idempotency key (`(lesson, small_group)`), a manage-list filter, the **zero-row fallback** for meetings with no audience rows, plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
+| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, or the manual-form source field.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; the **zero-row fallback** for meetings with no audience rows; the secondary `(lesson, small_group)` idempotency constraint; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
 | `District` | `BibleStudySeries.district` / `BibleStudySession.district` legacy scope fields only. |
 | `Profile.small_group` | **No longer read by V2 meeting visibility or pickers.** Still read by V1 `BibleStudySession.can_be_seen_by()` and by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
 | `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, row-first runtime source)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**; also the mapping target for `SmallGroup.church_structure_unit` used in resolution and the zero-row fallback. |
@@ -281,13 +287,27 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    generation fallback.) The conditional `(lesson, small_group)` unique
    constraint remains as secondary protection alongside the
    `(lesson, generation_key)` constraint.
-2. **Manual create/edit meeting form** — since BS-STRUCT.1H, the normal manual
-   `BibleStudyMeetingForm` write path now writes/repairs a
-   `BibleStudyMeetingAudienceScope` row for the mapped small-group unit (and sets
-   `anchor_unit`), and fails validation on an invalid/unmapped/inactive/wrong-type
-   group instead of creating a legacy-only zero-row meeting. It still keeps
-   `small_group` set as the compatibility mirror and refuses to edit a
-   higher-level / joint / multi-unit meeting (that write UI is deferred).
+2. **Manual create/edit meeting form** — since BS-STRUCT.1O the normal manual
+   `BibleStudyMeetingForm` is **structure-unit-native**. The visible source field
+   is `audience_unit`, a single active `UNIT_SMALL_GROUP` `ChurchStructureUnit`
+   (path-labelled); the legacy `small_group` select is gone. Create/edit go
+   through `sync_normal_meeting_audience_scope_for_unit(meeting, unit)`, which
+   writes one `BibleStudyMeetingAudienceScope` row for the selected unit, sets
+   `anchor_unit`, sets `meeting_kind = normal`, sets the per-unit
+   `generation_key` (`normal-unit:{unit_id}`, shared with generation), and sets
+   `small_group` only as a mirror when **exactly one** active legacy group maps
+   to the unit (`None` for a structure-native unit with no legacy group or an
+   ambiguous many-to-one mapping). Duplicate prevention rejects a second meeting
+   for the same `(lesson, unit)` (by matching `generation_key` or an existing
+   single-unit audience row) before save. On edit, the initial unit resolves in
+   priority order: a single `UNIT_SMALL_GROUP` audience row → an active
+   `UNIT_SMALL_GROUP` `anchor_unit` → the unit mapped from the existing
+   `small_group` → blank. The form still refuses to edit a higher-level / joint /
+   multi-unit meeting (it rejects a meeting whose `meeting_kind != normal` or
+   whose audience rows are not a single small-group row, leaving those rows
+   untouched); that higher-level write UI is deferred. The legacy
+   small-group-keyed `sync_normal_meeting_audience_scope(meeting)` helper is
+   retained for compatibility but is no longer the manual-form source of truth.
 3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
    all retain the legacy single-`small_group` path for meetings with no audience
    rows. Manual writes (BS-STRUCT.1H) no longer create legacy-only zero-row
@@ -304,11 +324,12 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    `BibleStudyMeetingAudienceScope` row on the selected unit or a descendant
    (row-first, mirroring runtime visibility), **or** — for a zero-row meeting —
    when its legacy `small_group.church_structure_unit` is the selected unit or a
-   descendant. The legacy `?small_group=<id>` query is tolerated only as a
-   one-shot redirect: it is mapped to that group's structure unit so old
-   bookmarks keep working, but the UI field is gone. The zero-row fallback clause
-   is retained here until BS-STRUCT.2+; `small_group` remains a compatibility
-   mirror and zero-row fallback source.
+   descendant. A legacy `?small_group=<id>` query (with no `unit`) is tolerated
+   and **mapped internally** to that group's structure unit within the same
+   request — it is handled in-view, not an HTTP redirect — so old bookmarks keep
+   working, but the UI field is gone. The zero-row fallback clause is retained
+   here until BS-STRUCT.2+; `small_group` remains a compatibility mirror and
+   zero-row fallback source.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still
    exist for compatibility / display / coexistence, but **since BS-STRUCT.1M they
@@ -1007,9 +1028,10 @@ the meeting-identity decision (Section 4.5).
     BS-STRUCT.2+. An invalid / unknown / non-numeric `unit` fails safe (no filter,
     select shows "All").
   - **Legacy URL tolerance.** A legacy `?small_group=<id>` query with no `unit`
-    is mapped once to that group's `church_structure_unit`
-    (`get_small_group_structure_unit`) so old bookmarks keep working; the UI no
-    longer renders a legacy small-group `<select>`.
+    is mapped internally (in-view, not an HTTP redirect) to that group's
+    `church_structure_unit` (`get_small_group_structure_unit`) within the same
+    request so old bookmarks keep working; the UI no longer renders a legacy
+    small-group `<select>`.
   - **Options / template.** The view passes `unit_options` (active non-root
     units) and the template renders a bilingual "Audience Unit / 适用单位" select
     using a new `study_unit_path` filter (`ChurchStructureUnit.path_label`).
@@ -1023,6 +1045,53 @@ the meeting-identity decision (Section 4.5).
     removed** (still a manage-list match clause and a runtime fallback);
     `small_group` is not removed or renamed; no V1 `BibleStudySession` change;
     no schema / migration change.
+- **BS-STRUCT.1O** — manual Bible Study meeting create/edit form becomes
+  **structure-unit-native**. ✅ **implemented.** Code/tests/docs only; no
+  model/schema/migration change.
+  - **Form change.** `BibleStudyMeetingForm` (`studies/forms.py`) drops the
+    visible legacy `small_group` field and adds `audience_unit`, a single-select
+    `ChurchStructureUnitChoiceField` whose queryset is active `UNIT_SMALL_GROUP`
+    units, path-labelled (`Audience Unit` / `适用单位`). Because the picker only
+    offers valid active small-group units, the old unmapped / inactive /
+    wrong-type validation is unnecessary. On edit the initial unit resolves:
+    single `UNIT_SMALL_GROUP` audience row → active `UNIT_SMALL_GROUP`
+    `anchor_unit` → unit mapped from existing `small_group` → blank.
+  - **Service change.** New `sync_normal_meeting_audience_scope_for_unit(meeting,
+    unit)` (`studies/services.py`) creates/gets the single audience row for the
+    selected unit, deletes stale rows (caller-validated normal single-unit), sets
+    `anchor_unit`, sets `meeting_kind = normal`, sets the per-unit
+    `generation_key` (`normal-unit:{unit_id}`, shared with generation), and sets
+    the legacy `small_group` mirror only when exactly one active legacy group maps
+    to the unit (`None` for a no-mirror or ambiguous mapping). The view path
+    (`create_bible_study_meeting` / `edit_bible_study_meeting`) now calls this
+    helper with `form.cleaned_data["audience_unit"]`.
+  - **Duplicate prevention.** `clean()` rejects a second meeting for the same
+    `(lesson, unit)` before save, matching either an existing `generation_key` or
+    a meeting whose audience rows are exactly that single unit — so the
+    structure-native identity never raises an `IntegrityError`.
+  - **Fail-safe (carried over).** The form still refuses to edit a higher-level /
+    joint / multi-unit meeting (`meeting_kind != normal`, or audience rows that
+    are not a single small-group row), leaving those rows untouched.
+  - **Template.** `templates/studies/bible_study_meeting_form.html` is
+    field-agnostic (iterates `form`), so removing `small_group` and adding
+    `audience_unit` flows through with no template edit; the staff UI no longer
+    renders a legacy small-group select.
+  - **Tests.** Updated/added `BibleStudyModuleTests` cases: form exposes
+    `audience_unit` not `small_group` and the picker only offers small-group
+    units; bilingual label; the create page renders no `name="small_group"`;
+    manual create writes row + anchor + normal kind; mirror set when one active
+    legacy group maps; `small_group=None` for a no-mirror unit; create/edit
+    duplicate `(lesson, unit)` rejected; edit changes unit and replaces the stale
+    row + anchor + mirror; multi-unit and higher-level edits rejected with rows
+    untouched. The three obsolete BS-STRUCT.1H unmapped / inactive-unit /
+    wrong-type legacy-group validation tests were **removed** as unreachable —
+    the `audience_unit` picker can no longer select such a unit.
+  - **Boundary (unchanged by this slice):** the zero-row fallback is **not
+    removed**; `small_group` is not removed or renamed (kept as a mirror written
+    by this form); the small-group-keyed
+    `sync_normal_meeting_audience_scope(meeting)` helper is retained for
+    compatibility; no higher-level / joint write UI is added; no V1
+    `BibleStudySession` change; no schema / migration change.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
   CS-CORE Section 12 legacy retirement). Precondition: a clean

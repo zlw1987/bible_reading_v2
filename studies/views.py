@@ -43,7 +43,7 @@ from .services import (
     create_normal_meeting_for_target,
     find_existing_meeting_for_target,
     resolve_normal_generation_targets,
-    sync_normal_meeting_audience_scope,
+    sync_normal_meeting_audience_scope_for_unit,
 )
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
@@ -700,9 +700,10 @@ def bible_study_meeting_manage_list(request):
 
     # BS-STRUCT.1N: the manage-list filter is now structure-audience aware. The
     # preferred GET param is ``unit`` (a ChurchStructureUnit id). A legacy
-    # ``small_group=<id>`` URL is tolerated only as a one-shot redirect target:
-    # it is mapped to that group's structure unit so old bookmarks keep working,
-    # but the UI no longer exposes a legacy small-group field.
+    # ``small_group=<id>`` URL (with no ``unit``) is tolerated and mapped
+    # internally to that group's structure unit within this same request (not an
+    # HTTP redirect) so old bookmarks keep working, but the UI no longer exposes
+    # a legacy small-group field.
     unit_id = (request.GET.get("unit") or "").strip()
     legacy_small_group_id = (request.GET.get("small_group") or "").strip()
     if not unit_id and legacy_small_group_id.isdigit():
@@ -837,10 +838,14 @@ def create_bible_study_meeting(request):
                 meeting = form.save(commit=False)
                 meeting.created_by = request.user
                 meeting.save()
-                # BS-STRUCT.1H: a valid manual normal small-group meeting is
-                # never left legacy-only; clean() already rejected an invalid
-                # mapping, so this writes the equivalent audience row + anchor.
-                sync_normal_meeting_audience_scope(meeting)
+                # BS-STRUCT.1O: the form's selected structure unit is the source
+                # of truth; this writes the audience row + anchor + generation key
+                # and the legacy small_group mirror. clean() already rejected
+                # duplicates and higher-level / joint / multi-unit edits.
+                sync_normal_meeting_audience_scope_for_unit(
+                    meeting,
+                    form.cleaned_data["audience_unit"],
+                )
             message = (
                 "小组查经聚会已保存。"
                 if language == "zh"
@@ -876,10 +881,14 @@ def edit_bible_study_meeting(request, meeting_id):
         if form.is_valid():
             with transaction.atomic():
                 meeting = form.save()
-                # BS-STRUCT.1H: repair a zero-row meeting or realign the single
-                # normal small-group row + mirror after a group change. clean()
-                # already blocked invalid mappings and higher-level/joint rows.
-                sync_normal_meeting_audience_scope(meeting)
+                # BS-STRUCT.1O: realign the single normal audience row + anchor +
+                # generation key and the legacy small_group mirror to the selected
+                # structure unit. clean() already blocked duplicates and
+                # higher-level / joint / multi-unit edits.
+                sync_normal_meeting_audience_scope_for_unit(
+                    meeting,
+                    form.cleaned_data["audience_unit"],
+                )
             message = (
                 "小组查经聚会已保存。"
                 if language == "zh"

@@ -18,12 +18,26 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
-from .services import resolve_normal_small_group_unit
+from .services import (
+    normal_generation_key_for_unit,
+    resolve_normal_small_group_unit,
+)
 from .visibility import filter_users_for_meeting_audience
 
 
 class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
     """Multi-select that labels units by their readable bilingual path."""
+
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        return obj.path_label(self.language)
+
+
+class ChurchStructureUnitChoiceField(forms.ModelChoiceField):
+    """Single-select that labels a unit by its readable bilingual path."""
 
     def __init__(self, *args, language="en", **kwargs):
         self.language = language
@@ -663,6 +677,7 @@ MEETING_FORM_TEXT = {
     "en": {
         "lesson": "Weekly Bible Study Guide",
         "small_group": "Small Group",
+        "audience_unit": "Audience Unit",
         "meeting_datetime": "Meeting Time",
         "location": "Location",
         "location_en": "English location",
@@ -684,6 +699,15 @@ MEETING_FORM_TEXT = {
         ),
         "direction_placeholder": "Direction for this small group meeting.",
         "questions_placeholder": "Questions for this small group.",
+        "audience_unit_help": (
+            "Choose the small-group church structure unit this meeting is for. "
+            "The legacy small group is kept automatically as a compatibility "
+            "mirror when exactly one active legacy group maps to this unit."
+        ),
+        "audience_unit_required": "Select the audience unit for this meeting.",
+        "duplicate_unit": (
+            "A meeting for this guide and audience unit already exists."
+        ),
         "small_group_required": "Select the small group for this meeting.",
         "small_group_unit_invalid": (
             "The selected small group is not mapped to an active small-group "
@@ -698,6 +722,7 @@ MEETING_FORM_TEXT = {
     "zh": {
         "lesson": "每周查经指引",
         "small_group": "小组",
+        "audience_unit": "适用单位",
         "meeting_datetime": "聚会时间",
         "location": "地点",
         "location_en": "英文地点",
@@ -718,6 +743,12 @@ MEETING_FORM_TEXT = {
         ),
         "direction_placeholder": "这个小组聚会的查经方向。",
         "questions_placeholder": "这个小组的讨论问题。",
+        "audience_unit_help": (
+            "选择这次聚会所属的小组级教会结构单元。"
+            "当恰好有一个启用的旧版小组映射到该单元时，系统会自动保留旧版小组作为兼容镜像。"
+        ),
+        "audience_unit_required": "请选择这次聚会的适用单位。",
+        "duplicate_unit": "这个查经指引和适用单位的聚会已经存在。",
         "small_group_required": "请选择这次聚会的小组。",
         "small_group_unit_invalid": (
             "所选小组没有映射到有效的、启用的小组级教会结构单元，"
@@ -737,9 +768,13 @@ def meeting_form_text(language):
 class BibleStudyMeetingForm(forms.ModelForm):
     class Meta:
         model = BibleStudyMeeting
+        # BS-STRUCT.1O: the legacy ``small_group`` is no longer a visible form
+        # field. The manual normal meeting form is structure-unit-native: it
+        # chooses a ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` (``audience_unit``
+        # below) as the source of truth and the service layer writes
+        # ``small_group`` only as a compatibility mirror.
         fields = [
             "lesson",
-            "small_group",
             "meeting_datetime",
             "location",
             "location_en",
@@ -767,13 +802,26 @@ class BibleStudyMeetingForm(forms.ModelForm):
         self.language = language
         text = meeting_form_text(language)
 
+        # BS-STRUCT.1O: structure-unit-native audience source. The picker only
+        # offers active ``UNIT_SMALL_GROUP`` units; an inactive / wrong-type /
+        # unmapped unit can no longer be chosen, so the legacy mapping-validation
+        # checks are unnecessary here.
+        self.fields["audience_unit"] = ChurchStructureUnitChoiceField(
+            language=language,
+            queryset=ChurchStructureUnit.objects.filter(
+                is_active=True,
+                unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            ).order_by("sort_order", "code", "name"),
+            required=True,
+            label=text["audience_unit"],
+            help_text=text["audience_unit_help"],
+            error_messages={"required": text["audience_unit_required"]},
+        )
+        self.fields["audience_unit"].initial = self._initial_audience_unit_id()
+        self.order_fields(["lesson", "audience_unit"])
+
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
-
-        # BS-STRUCT.1H: a normal manual small-group meeting must target exactly
-        # one small group; the model FK is nullable only for higher-level/joint
-        # meetings, which this small-group form does not create.
-        self.fields["small_group"].required = True
 
         self.fields["lesson"].queryset = BibleStudyLesson.objects.select_related(
             "series",
@@ -797,6 +845,42 @@ class BibleStudyMeetingForm(forms.ModelForm):
         self.fields["service_event"].help_text = text["service_event_help"]
         self.fields["meeting_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
+    def _initial_audience_unit_id(self):
+        """Resolve the initial selected unit for an edit, by BS-STRUCT.1O priority.
+
+        1. exactly one existing audience row that is ``UNIT_SMALL_GROUP``;
+        2. existing ``anchor_unit`` if it is an active ``UNIT_SMALL_GROUP``;
+        3. mapped unit from the existing legacy ``small_group``;
+        4. blank.
+        """
+        instance = self.instance
+        if instance is None or not instance.pk:
+            return None
+
+        rows = list(instance.audience_scope_links.select_related("unit"))
+        if len(rows) == 1:
+            row_unit = rows[0].unit
+            if (
+                row_unit is not None
+                and row_unit.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
+            ):
+                return row_unit.id
+
+        anchor = instance.anchor_unit
+        if (
+            anchor is not None
+            and anchor.is_active
+            and anchor.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
+        ):
+            return anchor.id
+
+        if instance.small_group_id:
+            unit = resolve_normal_small_group_unit(instance.small_group)
+            if unit is not None:
+                return unit.id
+
+        return None
+
     @staticmethod
     def _existing_rows_are_single_normal_small_group(rows):
         """Whether a meeting's existing audience rows are a normal group set.
@@ -817,23 +901,37 @@ class BibleStudyMeetingForm(forms.ModelForm):
             and row_unit.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
         )
 
+    def _duplicate_meeting_exists(self, lesson, unit):
+        """Whether another meeting for ``lesson`` already targets ``unit``.
+
+        Matches by the structure-native ``generation_key`` (so a manual meeting
+        cannot duplicate a generated meeting for the same unit) or by an existing
+        meeting whose audience rows are exactly that single unit (so it cannot
+        duplicate another normal single-unit meeting). The current instance is
+        excluded when editing.
+        """
+        others = BibleStudyMeeting.objects.filter(lesson=lesson)
+        if self.instance.pk:
+            others = others.exclude(pk=self.instance.pk)
+
+        if others.filter(
+            generation_key=normal_generation_key_for_unit(unit)
+        ).exists():
+            return True
+
+        for meeting in others.prefetch_related("audience_scope_links"):
+            unit_ids = [link.unit_id for link in meeting.audience_scope_links.all()]
+            if unit_ids == [unit.id]:
+                return True
+        return False
+
     def clean(self):
         cleaned = super().clean()
         text = meeting_form_text(self.language)
 
-        small_group = cleaned.get("small_group")
-        if small_group is None:
-            # The field is required, so an empty value is already flagged; guard
-            # against a stale/duplicate message only when nothing was reported.
-            if "small_group" not in self.errors:
-                self.add_error("small_group", text["small_group_required"])
-            return cleaned
-
-        # The selected group must map to an active small-group structure unit, or
-        # this meeting would be a legacy-only zero-row meeting after save.
-        unit = resolve_normal_small_group_unit(small_group)
+        unit = cleaned.get("audience_unit")
         if unit is None:
-            self.add_error("small_group", text["small_group_unit_invalid"])
+            # The field is required; the missing-value error is already flagged.
             return cleaned
 
         # Never let this small-group-only form silently convert a higher-level,
@@ -846,6 +944,14 @@ class BibleStudyMeetingForm(forms.ModelForm):
             if not self._existing_rows_are_single_normal_small_group(rows):
                 self.add_error(None, text["meeting_audience_not_small_group"])
                 return cleaned
+
+        # Structure-native duplicate prevention: one normal manual meeting per
+        # (lesson, unit). Validated before save so the generation_key /
+        # single-audience-row identity never raises an IntegrityError.
+        lesson = cleaned.get("lesson")
+        if lesson is not None and self._duplicate_meeting_exists(lesson, unit):
+            self.add_error("audience_unit", text["duplicate_unit"])
+            return cleaned
 
         return cleaned
 

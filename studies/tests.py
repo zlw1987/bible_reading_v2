@@ -1522,6 +1522,11 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_preview_shows_counts(self):
         self.set_language("en")
+        # BS-STRUCT.1M: generation requires structure audience rows; a root-unit
+        # row expands to all active small-group units (the old global behavior).
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson()
         self.create_meeting(lesson=lesson, small_group=self.group)
         self.client.login(username="study_staff", password="testpass123")
@@ -1541,6 +1546,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_creates_draft_meetings_for_global_scope(self):
         self.set_language("en")
+        # BS-STRUCT.1M: root-unit audience row == old global scope.
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(
             status=BibleStudyLesson.STATUS_PUBLISHED,
             lesson_date=timezone.localdate() + timezone.timedelta(days=9),
@@ -1583,9 +1592,11 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_uses_district_scope(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_DISTRICT
-        self.series.district = self.north
-        self.series.save()
+        # BS-STRUCT.1M: a district-unit audience row expands to its descendant
+        # small-group units (North => Rainbow 4 + Rainbow 4B).
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.north_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1604,9 +1615,11 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_preview_uses_ministry_context_scope(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_MINISTRY_CONTEXT
-        self.series.ministry_context = self.cm
-        self.series.save()
+        # BS-STRUCT.1M: a ministry-context-unit audience row expands to its
+        # descendant small-group units (CM => North => Rainbow 4 + Rainbow 4B).
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.cm_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.create_meeting(lesson=lesson, small_group=self.group)
         self.client.login(username="study_staff", password="testpass123")
@@ -1622,9 +1635,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_uses_ministry_context_scope_idempotently(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_MINISTRY_CONTEXT
-        self.series.ministry_context = self.cm
-        self.series.save()
+        # BS-STRUCT.1M: CM ministry-context-unit audience row => North groups.
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.cm_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1652,9 +1666,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_uses_small_group_scope(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
-        self.series.small_group = self.group
-        self.series.save()
+        # BS-STRUCT.1M: a single small-group-unit audience row => one meeting.
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.group_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1667,16 +1682,28 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meetings.count(), 1)
         self.assertEqual(meetings.get().small_group, self.group)
 
-    def test_generate_meetings_excludes_inactive_small_groups(self):
+    def test_generate_meetings_excludes_inactive_units(self):
         self.set_language("en")
-        inactive_group = SmallGroup.objects.create(
-            name="Inactive Generate Group",
-            district=self.north,
+        # BS-STRUCT.1M: an audience row on an active district whose only
+        # descendant small-group unit is inactive expands to zero active leaf
+        # units, so no meeting is generated. (Audience rows themselves must
+        # reference an active unit, so the inactivity lives on the descendant.)
+        empty_district = ChurchStructureUnit.objects.create(
+            parent=self.cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="EMPTYDIST",
+            name="Empty District",
+        )
+        ChurchStructureUnit.objects.create(
+            parent=empty_district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVEGEN",
+            name="Inactive Generate Unit",
             is_active=False,
         )
-        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
-        self.series.small_group = inactive_group
-        self.series.save()
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=empty_district
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1688,9 +1715,15 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Created 0 small group meetings")
         self.assertFalse(BibleStudyMeeting.objects.filter(lesson=lesson).exists())
+        # A structure audience row is present, so the missing-audience warning
+        # must not fire.
+        self.assertNotContains(response, "no structure audience scope")
 
     def test_generate_meetings_skips_existing_without_overwriting(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         existing = self.create_meeting(
             lesson=lesson,
@@ -1716,6 +1749,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_treats_cancelled_meeting_as_existing(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         existing = self.create_meeting(
             lesson=lesson,
@@ -1744,9 +1780,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_does_not_reactivate_cancelled_meeting(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
-        self.series.small_group = self.group
-        self.series.save()
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.group_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         existing = self.create_meeting(
             lesson=lesson,
@@ -1769,6 +1805,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_is_idempotent(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1788,6 +1827,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_does_not_create_related_operations_records(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1805,6 +1847,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_guide_detail_shows_generated_meetings_after_generation(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1837,6 +1882,9 @@ class BibleStudyModuleTests(TestCase):
     # ------------------------------------------------------------------
     def test_generate_meetings_writes_one_audience_row_per_created_meeting(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1864,6 +1912,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_audience_rows_are_idempotent(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1880,6 +1931,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_does_not_backfill_existing_meeting(self):
         self.set_language("en")
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         existing = self.create_meeting(lesson=lesson, small_group=self.group)
         self.client.login(username="study_staff", password="testpass123")
@@ -1900,9 +1954,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_district_scope_writes_rows_for_each_group(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_DISTRICT
-        self.series.district = self.north
-        self.series.save()
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.north_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1920,11 +1974,48 @@ class BibleStudyModuleTests(TestCase):
                 meeting.anchor_unit_id, meeting.small_group.church_structure_unit_id
             )
 
-    def test_generate_meetings_unmapped_group_is_skipped_with_warning(self):
+    # BS-STRUCT.1M: the pre-1L legacy-fallback generation tests
+    # (unmapped / inactive-unit / wrong-type legacy group skipped with warning)
+    # were removed. Normal generation no longer consults legacy groups at all; a
+    # series with zero structure audience rows now fails closed (see
+    # test_generate_meetings_without_series_audience_fails_closed below), so the
+    # invalid-legacy-mapping cases they covered are unreachable from generation.
+
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1M: generation requires series audience rows (fail closed).
+    # ------------------------------------------------------------------
+    def test_generate_meetings_without_series_audience_fails_closed(self):
         self.set_language("en")
-        unmapped = SmallGroup.objects.create(
-            name="Unmapped Group", district=self.north
+        # self.series carries the legacy default scope but has zero
+        # BibleStudySeriesAudienceScope rows: generation must create nothing and
+        # warn the manager, never falling back to legacy global/district/group.
+        self.assertFalse(self.series.audience_scope_links.exists())
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        get_response = self.client.get(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
         )
+        self.assertEqual(get_response.status_code, 200)
+        self.assertTrue(
+            get_response.context["generation_preview"]["missing_series_audience"]
+        )
+        self.assertEqual(
+            get_response.context["generation_preview"]["eligible_count"], 0
+        )
+        self.assertContains(get_response, "no structure audience scope")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 0)
+        self.assertContains(response, "no structure audience scope")
+
+    def test_generate_meetings_without_series_audience_fails_closed_zh(self):
+        self.set_language("zh")
+        self.assertFalse(self.series.audience_scope_links.exists())
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -1933,72 +2024,8 @@ class BibleStudyModuleTests(TestCase):
             follow=True,
         )
 
-        # BS-STRUCT.1L: an unmapped legacy group no longer produces a legacy-only
-        # zero-row meeting. It is skipped with a manager-visible warning.
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(
-                lesson=lesson, small_group=unmapped
-            ).exists()
-        )
-        self.assertContains(response, "no valid church structure unit mapping")
-        self.assertContains(response, "Unmapped Group")
-        # Valid groups in the same run still got their structure-native rows.
-        valid_meeting = BibleStudyMeeting.objects.get(
-            lesson=lesson, small_group=self.group
-        )
-        self.assertEqual(valid_meeting.audience_scope_links.count(), 1)
-
-    def test_generate_meetings_inactive_unit_is_skipped_with_warning(self):
-        self.set_language("en")
-        inactive_unit = ChurchStructureUnit.objects.create(
-            parent=self.north_unit,
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="INACTIVEGRP",
-            name="Inactive Unit",
-            is_active=False,
-        )
-        bad_group = SmallGroup.objects.create(
-            name="Inactive Unit Group", district=self.north
-        )
-        bad_group.church_structure_unit = inactive_unit
-        bad_group.save()
-        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
-        self.client.login(username="study_staff", password="testpass123")
-
-        response = self.client.post(
-            reverse("generate_bible_study_meetings", args=[lesson.id]),
-            follow=True,
-        )
-
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(
-                lesson=lesson, small_group=bad_group
-            ).exists()
-        )
-        self.assertContains(response, "Inactive Unit Group")
-
-    def test_generate_meetings_wrong_unit_type_is_skipped_with_warning(self):
-        self.set_language("en")
-        wrong_group = SmallGroup.objects.create(
-            name="Wrong Type Group", district=self.north
-        )
-        # Map to a DISTRICT unit, which the small-group runtime path rejects.
-        wrong_group.church_structure_unit = self.north_unit
-        wrong_group.save()
-        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
-        self.client.login(username="study_staff", password="testpass123")
-
-        response = self.client.post(
-            reverse("generate_bible_study_meetings", args=[lesson.id]),
-            follow=True,
-        )
-
-        self.assertFalse(
-            BibleStudyMeeting.objects.filter(
-                lesson=lesson, small_group=wrong_group
-            ).exists()
-        )
-        self.assertContains(response, "Wrong Type Group")
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 0)
+        self.assertContains(response, "还没有设置教会结构适用范围")
 
     # ------------------------------------------------------------------
     # BS-STRUCT.1L: normal generation targets ChurchStructureUnit leaves.
@@ -2082,9 +2109,11 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_recognizes_pre_1l_meeting_without_generation_key(self):
         self.set_language("en")
-        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
-        self.series.small_group = self.group
-        self.series.save()
+        # BS-STRUCT.1M: the schedule must carry a structure audience row for
+        # generation to run; target the single small-group unit.
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.group_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         # A meeting from before BS-STRUCT.1L: small_group + a single audience row,
         # but no generation_key.
@@ -2109,6 +2138,9 @@ class BibleStudyModuleTests(TestCase):
         )
 
     def test_generate_meetings_audience_rows_do_not_broaden_runtime_visibility(self):
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.root_unit
+        )
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
         self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
@@ -6209,6 +6241,11 @@ class BibleStudyModuleTests(TestCase):
 
     def test_lesson_detail_hides_cancelled_meetings(self):
         self.set_language("en")
+        # BS-STRUCT.1M: generation preview needs structure audience rows; North
+        # expands to Rainbow 4 + Rainbow 4B (the two meetings below).
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.north_unit
+        )
         lesson = self.create_lesson(
             series=self.series,
             status=BibleStudyLesson.STATUS_PUBLISHED,

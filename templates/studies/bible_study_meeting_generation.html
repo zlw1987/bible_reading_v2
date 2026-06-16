@@ -22,6 +22,18 @@
 </div>
 
 <div class="card">
+    {% if generation_preview.missing_series_audience %}
+    <div class="notice-panel">
+        <p>
+            {% if language == "zh" %}
+                这个查经安排还没有设置教会结构适用范围，因此不会生成任何聚会。请先编辑查经安排的适用范围。
+            {% else %}
+                This Bible Study schedule has no structure audience scope, so no meetings will be generated. Please edit the schedule audience scope first.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
     <div class="table-wrap">
         <table>
             <tbody>

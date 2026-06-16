@@ -34,6 +34,7 @@ from .models import (
 )
 from .services import (
     GENERATION_WARNING_AMBIGUOUS_MIRROR,
+    GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
     GENERATION_WARNING_UNMAPPED_GROUP,
     build_existing_normal_meeting_index,
     cancel_bible_study_lesson_with_meetings,
@@ -238,6 +239,13 @@ def get_bible_study_meeting_generation_preview(lesson):
         else:
             missing_targets.append(target)
 
+    # BS-STRUCT.1M: surface the fail-closed missing-series-audience state to the
+    # preview so the GET page can warn before a no-op POST.
+    missing_series_audience = any(
+        warning.kind == GENERATION_WARNING_MISSING_SERIES_AUDIENCE
+        for warning in warnings
+    )
+
     return {
         "targets": targets,
         "missing_targets": missing_targets,
@@ -245,6 +253,7 @@ def get_bible_study_meeting_generation_preview(lesson):
         "eligible_count": len(targets),
         "existing_count": existing_count,
         "missing_count": len(missing_targets),
+        "missing_series_audience": missing_series_audience,
     }
 
 
@@ -503,6 +512,22 @@ def generate_bible_study_meetings(request, lesson_id):
             )
         )
         messages.success(request, message)
+
+        # BS-STRUCT.1M: a series with zero structure audience rows fails closed.
+        # No meetings are generated and the manager is told to configure the
+        # schedule audience scope first.
+        if preview.get("missing_series_audience"):
+            missing_audience_message = (
+                "这个查经安排还没有设置教会结构适用范围，因此没有生成聚会。"
+                "请先编辑查经安排的适用范围。"
+                if language == "zh"
+                else (
+                    "This Bible Study schedule has no structure audience scope. "
+                    "No meetings were generated. Please edit the schedule "
+                    "audience scope first."
+                )
+            )
+            messages.warning(request, missing_audience_message)
 
         # BS-STRUCT.1L: legacy fallback groups with an invalid (unmapped /
         # inactive / wrong-type) structure mapping are skipped with a warning

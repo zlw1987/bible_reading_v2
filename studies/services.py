@@ -158,6 +158,9 @@ NORMAL_GENERATION_KEY_PREFIX = "normal-unit:"
 # service layer knowing about request language.
 GENERATION_WARNING_UNMAPPED_GROUP = "unmapped_group"
 GENERATION_WARNING_AMBIGUOUS_MIRROR = "ambiguous_mirror"
+# BS-STRUCT.1M: a series with zero BibleStudySeriesAudienceScope rows no longer
+# falls back to legacy scope; generation fails closed and surfaces this warning.
+GENERATION_WARNING_MISSING_SERIES_AUDIENCE = "missing_series_audience"
 
 
 def normal_generation_key_for_unit(unit):
@@ -251,27 +254,26 @@ def resolve_normal_generation_targets(series):
 
     * ``targets`` — a deduplicated (by unit id), deterministically ordered list
       of :class:`GenerationTarget`.
-    * ``warnings`` — a list of :class:`GenerationWarning` describing legacy
-      groups skipped because their structure mapping is missing / inactive /
-      wrong type, and units whose legacy mirror was dropped as ambiguous.
+    * ``warnings`` — a list of :class:`GenerationWarning` describing units whose
+      legacy mirror was dropped as ambiguous, or (when the series has no
+      structure audience rows) a single
+      ``GENERATION_WARNING_MISSING_SERIES_AUDIENCE`` warning.
 
-    Two resolution paths:
+    Resolution (BS-STRUCT.1M — structure-audience-required):
 
     * **Structure audience rows present** — each selected
       ``BibleStudySeriesAudienceScope`` unit expands to its active
       descendant-or-self ``UNIT_SMALL_GROUP`` units; each such unit becomes one
       target. This is the structure-native path and can produce targets for
-      units that have no legacy ``SmallGroup`` mirror.
-    * **Legacy fallback (zero audience rows)** — start from the legacy
-      ``series.get_eligible_small_groups()`` and convert each eligible group to
-      its mapped active ``UNIT_SMALL_GROUP`` unit via
-      :func:`resolve_normal_small_group_unit`. An invalid (unmapped / inactive /
-      wrong-type) mapping is skipped with a warning rather than creating a
-      legacy-only zero-row meeting, preserving the fail-closed invariant that a
-      generated meeting is never falsely presented as structure-native.
-
-    In both paths the legacy ``small_group`` mirror is attached only when
-    exactly one active legacy group maps to the target unit.
+      units that have no legacy ``SmallGroup`` mirror. The legacy ``small_group``
+      mirror is attached only when exactly one active legacy group maps to the
+      target unit.
+    * **Zero audience rows** — generation **fails closed**. The legacy
+      ``series.get_eligible_small_groups()`` / ``scope_type`` / ``district`` /
+      ``small_group`` fields are **no longer** consulted as a generation source.
+      No targets are produced; instead a single
+      ``GENERATION_WARNING_MISSING_SERIES_AUDIENCE`` warning is returned so the
+      view can tell the manager to configure the schedule audience scope first.
     """
     warnings = []
     seen_unit_ids = set()
@@ -279,43 +281,21 @@ def resolve_normal_generation_targets(series):
 
     audience_units = list(series.get_audience_scope_units())
 
-    if audience_units:
-        unit_ids = _collect_descendant_or_self_unit_ids(audience_units)
-        leaf_units = ChurchStructureUnit.objects.filter(
-            id__in=unit_ids,
-            is_active=True,
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-        )
-        for unit in leaf_units:
-            if unit.id in seen_unit_ids:
-                continue
-            seen_unit_ids.add(unit.id)
-            mirror, ambiguous = _resolve_unit_small_group_mirror(unit)
-            if ambiguous:
-                warnings.append(
-                    GenerationWarning(
-                        kind=GENERATION_WARNING_AMBIGUOUS_MIRROR,
-                        unit=unit,
-                    )
-                )
-            targets.append(GenerationTarget(unit=unit, small_group=mirror))
-        return _ordered_targets(targets), warnings
+    if not audience_units:
+        # BS-STRUCT.1M fail-closed: no structure audience rows => no generation.
+        # No legacy-only meeting, no zero-row meeting, no hidden fallback.
+        return [], [
+            GenerationWarning(kind=GENERATION_WARNING_MISSING_SERIES_AUDIENCE)
+        ]
 
-    # Legacy fallback: zero structure audience rows.
-    for group in series.get_eligible_small_groups():
-        unit = resolve_normal_small_group_unit(group)
-        if unit is None:
-            warnings.append(
-                GenerationWarning(
-                    kind=GENERATION_WARNING_UNMAPPED_GROUP,
-                    small_group=group,
-                )
-            )
-            continue
+    unit_ids = _collect_descendant_or_self_unit_ids(audience_units)
+    leaf_units = ChurchStructureUnit.objects.filter(
+        id__in=unit_ids,
+        is_active=True,
+        unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+    )
+    for unit in leaf_units:
         if unit.id in seen_unit_ids:
-            # Two eligible groups map to the same unit: one structure-native
-            # target, no duplicate meeting. The mirror was already resolved by
-            # the single-active-group rule below (so duplicates drop the mirror).
             continue
         seen_unit_ids.add(unit.id)
         mirror, ambiguous = _resolve_unit_small_group_mirror(unit)

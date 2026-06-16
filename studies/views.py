@@ -36,7 +36,6 @@ from .models import (
 from .services import (
     GENERATION_WARNING_AMBIGUOUS_MIRROR,
     GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
-    GENERATION_WARNING_UNMAPPED_GROUP,
     _collect_descendant_or_self_unit_ids,
     build_existing_normal_meeting_index,
     cancel_bible_study_lesson_with_meetings,
@@ -531,29 +530,6 @@ def generate_bible_study_meetings(request, lesson_id):
                 )
             )
             messages.warning(request, missing_audience_message)
-
-        # BS-STRUCT.1L: legacy fallback groups with an invalid (unmapped /
-        # inactive / wrong-type) structure mapping are skipped with a warning
-        # rather than creating a legacy-only zero-row meeting.
-        unmapped_groups = [
-            warning.small_group
-            for warning in preview["warnings"]
-            if warning.kind == GENERATION_WARNING_UNMAPPED_GROUP
-        ]
-        if unmapped_groups:
-            group_names = "、".join(group.name for group in unmapped_groups)
-            group_names_en = ", ".join(group.name for group in unmapped_groups)
-            warning_message = (
-                f"有 {len(unmapped_groups)} 个小组未配置有效的教会结构单元，"
-                f"已跳过，未生成聚会：{group_names}。"
-                if language == "zh"
-                else (
-                    f"{len(unmapped_groups)} group(s) have no valid church "
-                    "structure unit mapping and were skipped; no meeting was "
-                    f"generated for them: {group_names_en}."
-                )
-            )
-            messages.warning(request, warning_message)
 
         # BS-STRUCT.1L: a target unit with several active legacy small groups is
         # ambiguous, so its generated meeting carries no legacy small_group

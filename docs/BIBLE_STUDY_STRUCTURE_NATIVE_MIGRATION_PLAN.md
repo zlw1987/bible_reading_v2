@@ -9,7 +9,7 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.1O.** The design slices that
+Status: **partially migrated through BS-STRUCT.1P.** The design slices that
 followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
@@ -38,7 +38,14 @@ followed BS-STRUCT.1A are now implemented:
   as the audience source of truth, writes the audience row + `anchor_unit` +
   per-unit `generation_key`, keeps `small_group` only as a mirror when exactly
   one active legacy group maps, and no longer exposes a legacy `small_group`
-  select (BS-STRUCT.1O).
+  select (BS-STRUCT.1O);
+- obsolete small-group-keyed write/generation helpers were removed
+  (`write_normal_meeting_audience_scope`, the compatibility-only
+  `sync_normal_meeting_audience_scope`, and the never-produced
+  `GENERATION_WARNING_UNMAPPED_GROUP` constant + its unreachable view warning
+  branch), so no dead code can lure future work back onto a legacy
+  `small_group` write path (BS-STRUCT.1P). The zero-row runtime fallback and the
+  `small_group` mirror are **unchanged**.
 
 So the document as a whole is **no longer "docs-only / changes no runtime
 behavior."** The runtime now reads meeting audience rows. What remains is
@@ -306,8 +313,12 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    multi-unit meeting (it rejects a meeting whose `meeting_kind != normal` or
    whose audience rows are not a single small-group row, leaving those rows
    untouched); that higher-level write UI is deferred. The legacy
-   small-group-keyed `sync_normal_meeting_audience_scope(meeting)` helper is
-   retained for compatibility but is no longer the manual-form source of truth.
+   small-group-keyed `sync_normal_meeting_audience_scope(meeting)` /
+   `write_normal_meeting_audience_scope(meeting)` helpers that earlier slices kept
+   around were **removed in BS-STRUCT.1P** as obsolete; only
+   `resolve_normal_small_group_unit(small_group)` survives, and only to pre-fill
+   the edit `audience_unit` from an existing legacy `small_group` (it is not a
+   write path).
 3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
    all retain the legacy single-`small_group` path for meetings with no audience
    rows. Manual writes (BS-STRUCT.1H) no longer create legacy-only zero-row
@@ -1096,8 +1107,45 @@ the meeting-identity decision (Section 4.5).
     removed**; `small_group` is not removed or renamed (kept as a mirror written
     by this form); the small-group-keyed
     `sync_normal_meeting_audience_scope(meeting)` helper is retained for
-    compatibility; no higher-level / joint write UI is added; no V1
-    `BibleStudySession` change; no schema / migration change.
+    compatibility (later removed in BS-STRUCT.1P); no higher-level / joint write
+    UI is added; no V1 `BibleStudySession` change; no schema / migration change.
+- **BS-STRUCT.1P** — remove obsolete small-group-keyed Bible Study
+  write/generation helpers. ✅ **implemented.** Code/tests/docs only; no
+  model/schema/migration change.
+  - **Removed `write_normal_meeting_audience_scope(meeting)`** (`studies/services.py`)
+    — the BS-STRUCT.1D generation-side small-group-keyed writer. Generation is
+    structure-unit-native since BS-STRUCT.1L (`create_normal_meeting_for_target`
+    writes the row/anchor/key directly), so this had no caller in code, tests, or
+    management commands.
+  - **Removed `sync_normal_meeting_audience_scope(meeting)`** (`studies/services.py`)
+    — the BS-STRUCT.1H manual-form small-group-keyed writer, already superseded by
+    `sync_normal_meeting_audience_scope_for_unit(meeting, unit)` in BS-STRUCT.1O
+    and kept only "for compatibility" with no remaining caller. Removing it stops
+    future work from re-entering a legacy `small_group` write path.
+  - **Removed `GENERATION_WARNING_UNMAPPED_GROUP`** (`studies/services.py`) and its
+    **unreachable view warning branch** (`studies/views.py`). Since BS-STRUCT.1L/1M
+    generation no longer resolves legacy `SmallGroup` rows, `resolve_normal_generation_targets`
+    can only emit `GENERATION_WARNING_AMBIGUOUS_MIRROR` /
+    `GENERATION_WARNING_MISSING_SERIES_AUDIENCE`, so the unmapped-group warning was
+    dead code. The `GENERATION_WARNING_UNMAPPED_GROUP` import was dropped from the
+    view.
+  - **Kept `resolve_normal_small_group_unit(small_group)`** (`studies/services.py`),
+    reason: still used by `BibleStudyMeetingForm._initial_audience_unit_id` (edit
+    initial resolution priority 3 — map an existing legacy `small_group` to its
+    unit). Docstring updated to record it is the sole caller and not a write path.
+    The `studies/forms.py` import is unchanged.
+  - **No test changes.** No test imported or asserted the removed helpers /
+    constant; the targeted generation / manual-form / zero-row-fallback tests
+    (including `test_meeting_role_form_zero_row_meeting_falls_back_to_small_group`)
+    pass unchanged.
+  - **Boundary (unchanged by this slice):** the **zero-row runtime fallback is
+    not removed** (visibility, landing/Today, role/worship pickers, and the
+    manage-list filter still fall back to the single `small_group` for zero-row
+    meetings); `BibleStudyMeeting.small_group` is **not** removed or renamed and
+    remains a compatibility mirror + zero-row fallback source;
+    `get_small_group_structure_unit` and the membership-core fallback helpers are
+    untouched; no V1 `BibleStudySession` change; no schema / migration change; no
+    production command run.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
   CS-CORE Section 12 legacy retirement). Precondition: a clean

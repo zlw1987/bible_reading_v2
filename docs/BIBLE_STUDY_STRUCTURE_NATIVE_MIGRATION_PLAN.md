@@ -196,12 +196,17 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    conditional `(lesson, small_group)` unique constraint, resolving eligible
    targets through `get_eligible_small_groups()` /
    `resolve_units_to_small_groups()` (series audience → legacy `SmallGroup`).
-2. **Manual create/edit meeting form** still writes `small_group` and does
-   **not** write `BibleStudyMeetingAudienceScope` rows, so manually created
-   meetings rely on the zero-row fallback.
+2. **Manual create/edit meeting form** — since BS-STRUCT.1H, the normal manual
+   `BibleStudyMeetingForm` write path now writes/repairs a
+   `BibleStudyMeetingAudienceScope` row for the mapped small-group unit (and sets
+   `anchor_unit`), and fails validation on an invalid/unmapped/inactive/wrong-type
+   group instead of creating a legacy-only zero-row meeting. It still keeps
+   `small_group` set as the compatibility mirror and refuses to edit a
+   higher-level / joint / multi-unit meeting (that write UI is deferred).
 3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
    all retain the legacy single-`small_group` path for meetings with no audience
-   rows.
+   rows (old/pre-backfill data); retired only after BS-STRUCT.1I production
+   backfill/apply and BS-STRUCT.2+.
 4. **Manage-list filters** still expose / filter by legacy `small_group`.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still a
@@ -638,8 +643,55 @@ the meeting-identity decision (Section 4.5).
     audience).
 - **BS-STRUCT.1G** — support higher-level / joint generation cases (5.2–5.4),
   including replacement/suppression marking.
-- **BS-STRUCT.1H** — stop normal write paths from creating legacy-only meeting
-  audience (zero-row guard, SE-AS.7A pattern).
+- **BS-STRUCT.1H** — stop the **normal manual** `BibleStudyMeetingForm`
+  create/edit path from creating or preserving legacy-only zero-row meetings
+  (zero-row guard, SE-AS.7A pattern). ✅ **implemented.**
+  - **Reusable normal-meeting audience logic moved to `studies/services.py`.**
+    `write_normal_meeting_audience_scope` (the BS-STRUCT.1D generation-side
+    create-only writer) was moved from `studies/views.py` to
+    `studies/services.py` unchanged in behavior (`views.py` now imports it), and
+    a shared `resolve_normal_small_group_unit(small_group)` helper centralizes
+    the "active `UNIT_SMALL_GROUP` mapping" validation both writers use. A new
+    `sync_normal_meeting_audience_scope(meeting)` handles the manual-form
+    create/repair/realign case. No circular imports: `forms` → `services` →
+    `models` / `visibility`.
+  - **Manual create now writes audience rows.** `BibleStudyMeetingForm` makes
+    `small_group` required, and `clean()` rejects (form invalid, nothing saved) a
+    selected group whose `church_structure_unit` is missing, inactive, or not
+    `UNIT_SMALL_GROUP`. On a valid save the create/edit views call
+    `sync_normal_meeting_audience_scope` inside a `transaction.atomic()`, which
+    creates exactly one `BibleStudyMeetingAudienceScope(meeting, mapped unit)`
+    row and sets `anchor_unit` when null. `small_group` stays set as the
+    compatibility mirror and `meeting_kind` stays `normal`. So a normal manual
+    meeting is never left as a legacy-only zero-row meeting, and an invalid
+    mapping fails validation instead of creating one.
+  - **Manual edit repairs or realigns the normal audience row.** Editing a
+    zero-row meeting with a valid group creates the missing row and sets the
+    anchor when null. Changing the selected group updates the single normal
+    small-group row to the newly mapped unit and **drops the stale old row** so
+    the row-first runtime and the `small_group` mirror stay aligned; the anchor
+    follows the change **only** when it still mirrors the old group's unit
+    (an unrelated, manually set anchor is preserved).
+  - **Higher-level / joint / multi-unit meetings are protected.** This
+    small-group-only form fails safely (validation error, rows untouched) when
+    the existing meeting has `meeting_kind != normal`, multiple audience rows, or
+    a single non-small-group (district / CM / EM / custom) audience row, so a
+    district/joint meeting is never silently converted into a fake single-group
+    meeting. Building an audience-scope picker UI for higher-level/joint meetings
+    remains deferred (BS-STRUCT.1G and later).
+  - **Zero-row fallback still remains** for old data in visibility, landing/Today,
+    and role/worship pickers until production backfill/apply (BS-STRUCT.1I) and
+    fallback retirement (BS-STRUCT.2+). `small_group` is not removed.
+  - **Unchanged in this slice:** generation behavior (the moved helper is
+    behavior-identical), visibility/detail access, landing/Today, role/worship
+    picker behavior, and models/schema/migrations.
+  - Tests: new BS-STRUCT.1H methods in `studies/tests.py`
+    (`BibleStudyModuleTests`) — manual create writes one row + anchor and keeps
+    the mirror/`normal` kind; unmapped / inactive-unit / wrong-type create is
+    invalid and creates no meeting; edit of a zero-row meeting creates the row;
+    edit changing the group replaces the row and drops the stale one (anchor
+    follows); edit does not clobber a multi-unit or higher-level audience
+    meeting.
 - **BS-STRUCT.1I** — production backfill/apply + post-apply audit.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with

@@ -2111,6 +2111,215 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meeting.group_direction_en, "Updated direction")
         self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_PUBLISHED)
 
+    # --- BS-STRUCT.1H: manual meeting form writes/repairs audience rows ---
+
+    def test_manual_create_writes_audience_row_and_anchor(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, small_group=self.group.id),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        rows = list(meeting.audience_scope_links.all())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].unit_id, self.group_unit.id)
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+
+    def test_manual_create_keeps_small_group_mirror_and_normal_kind(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, small_group=self.group.id),
+        )
+
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        self.assertEqual(meeting.small_group_id, self.group.id)
+        self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
+
+    def test_manual_create_unmapped_group_is_invalid_and_creates_no_meeting(self):
+        self.set_language("en")
+        unmapped = SmallGroup.objects.create(
+            name="Unmapped Group", district=self.north
+        )
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, small_group=unmapped.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "not mapped to an active small-group")
+        self.assertFalse(
+            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
+        )
+
+    def test_manual_create_inactive_unit_is_invalid_and_creates_no_meeting(self):
+        self.set_language("en")
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVEGRP",
+            name="Inactive Unit",
+            is_active=False,
+        )
+        bad_group = SmallGroup.objects.create(
+            name="Inactive Unit Group", district=self.north
+        )
+        bad_group.church_structure_unit = inactive_unit
+        bad_group.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, small_group=bad_group.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
+        )
+
+    def test_manual_create_wrong_unit_type_is_invalid_and_creates_no_meeting(self):
+        self.set_language("en")
+        wrong_group = SmallGroup.objects.create(
+            name="Wrong Type Group", district=self.north
+        )
+        # Map to a DISTRICT unit, which the normal small-group path rejects.
+        wrong_group.church_structure_unit = self.north_unit
+        wrong_group.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_bible_study_meeting"),
+            self.meeting_post_data(lesson=lesson, small_group=wrong_group.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            BibleStudyMeeting.objects.filter(lesson=lesson).exists()
+        )
+
+    def test_manual_edit_zero_row_meeting_creates_missing_row(self):
+        self.set_language("en")
+        meeting = self.create_meeting(
+            small_group=self.group, status=BibleStudyMeeting.STATUS_DRAFT
+        )
+        # Pre-condition: legacy-only zero-row meeting.
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.assertIsNone(meeting.anchor_unit_id)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting.id]),
+            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        rows = list(meeting.audience_scope_links.all())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].unit_id, self.group_unit.id)
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+
+    def test_manual_edit_changing_group_replaces_row_and_drops_stale(self):
+        self.set_language("en")
+        meeting = self.create_meeting(
+            small_group=self.group, status=BibleStudyMeeting.STATUS_DRAFT
+        )
+        # Give it the equivalent normal small-group row + anchor first.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting, unit=self.group_unit
+        )
+        meeting.anchor_unit = self.group_unit
+        meeting.save(update_fields=["anchor_unit"])
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting.id]),
+            self.meeting_post_data(
+                lesson=meeting.lesson, small_group=self.same_group.id
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        rows = list(meeting.audience_scope_links.all())
+        # Exactly one row, pointing at the new group; the stale old row is gone.
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].unit_id, self.same_group_unit.id)
+        self.assertFalse(
+            meeting.audience_scope_links.filter(unit=self.group_unit).exists()
+        )
+        # The anchor was a mirror of the old group, so it follows the change.
+        self.assertEqual(meeting.small_group_id, self.same_group.id)
+        self.assertEqual(meeting.anchor_unit_id, self.same_group_unit.id)
+
+    def test_manual_edit_does_not_clobber_multi_unit_audience(self):
+        self.set_language("en")
+        meeting = self.create_meeting(
+            small_group=self.group, status=BibleStudyMeeting.STATUS_DRAFT
+        )
+        # A multi-unit (joint) audience that this small-group form must not touch.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting, unit=self.group_unit
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting, unit=self.other_group_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting.id]),
+            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "higher-level, joint, or multi-unit")
+        meeting.refresh_from_db()
+        self.assertEqual(
+            set(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+            {self.group_unit.id, self.other_group_unit.id},
+        )
+
+    def test_manual_edit_does_not_clobber_higher_level_audience(self):
+        self.set_language("en")
+        meeting = self.create_meeting(
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+            meeting_kind=BibleStudyMeeting.KIND_HIGHER_LEVEL,
+        )
+        # A single district (higher-level) audience row.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting, unit=self.north_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_bible_study_meeting", args=[meeting.id]),
+            self.meeting_post_data(lesson=meeting.lesson, small_group=self.group.id),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "higher-level, joint, or multi-unit")
+        meeting.refresh_from_db()
+        self.assertEqual(
+            list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+            [self.north_unit.id],
+        )
+        self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_HIGHER_LEVEL)
+
     def test_staff_can_cancel_bible_study_meeting(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)

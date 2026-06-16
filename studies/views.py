@@ -2,13 +2,12 @@ from datetime import datetime, time
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.language import get_user_language
-from accounts.models import ChurchStructureUnit
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -26,18 +25,20 @@ from .forms import (
 from .models import (
     BibleStudyLesson,
     BibleStudyMeeting,
-    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySession,
     BibleStudyWorshipSong,
 )
-from .services import cancel_bible_study_lesson_with_meetings
+from .services import (
+    cancel_bible_study_lesson_with_meetings,
+    sync_normal_meeting_audience_scope,
+    write_normal_meeting_audience_scope,
+)
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
     get_membership_visible_small_groups,
-    get_small_group_structure_unit,
 )
 
 
@@ -207,46 +208,6 @@ def get_default_meeting_datetime(lesson):
             timezone.get_current_timezone(),
         )
     return meeting_datetime
-
-
-def write_normal_meeting_audience_scope(meeting):
-    """BS-STRUCT.1D: attach a structure-native audience row to a freshly
-    generated normal group-level meeting.
-
-    Resolves the meeting's legacy ``small_group`` mapped
-    ``ChurchStructureUnit`` and, only when that unit exists, is active, and is
-    ``UNIT_SMALL_GROUP``, creates one ``BibleStudyMeetingAudienceScope`` row and
-    sets ``anchor_unit`` to that unit when it is currently null. Returns ``True``
-    when a row was written, ``False`` when the group has no valid active
-    small-group unit mapping (the meeting is then left exactly as the pre-1D
-    legacy-only zero-row meeting and the caller surfaces a warning).
-
-    Fail-closed by design: an invalid mapping never produces an audience row, so
-    a meeting is never falsely presented as structure-native. Never mutates
-    ``small_group``; never overwrites an existing ``anchor_unit``; never changes
-    ``meeting_kind`` (stays ``normal``). This helper is the generation-side
-    writer; since BS-STRUCT.1E ordinary-member visibility and the V2
-    landing/Today read path read these rows when present (with ``small_group``
-    kept only as a zero-row fallback). Role / worship pickers still read the
-    single ``small_group`` unit, not these rows; that remains deferred to
-    BS-STRUCT.1F.
-    """
-    unit = get_small_group_structure_unit(meeting.small_group)
-    if (
-        unit is None
-        or not unit.is_active
-        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
-    ):
-        return False
-
-    BibleStudyMeetingAudienceScope.objects.get_or_create(
-        meeting=meeting,
-        unit=unit,
-    )
-    if meeting.anchor_unit_id is None:
-        meeting.anchor_unit = unit
-        meeting.save(update_fields=["anchor_unit", "updated_at"])
-    return True
 
 
 def get_bible_study_meeting_generation_preview(lesson):
@@ -766,9 +727,14 @@ def create_bible_study_meeting(request):
     if request.method == "POST":
         form = BibleStudyMeetingForm(request.POST, language=language)
         if form.is_valid():
-            meeting = form.save(commit=False)
-            meeting.created_by = request.user
-            meeting.save()
+            with transaction.atomic():
+                meeting = form.save(commit=False)
+                meeting.created_by = request.user
+                meeting.save()
+                # BS-STRUCT.1H: a valid manual normal small-group meeting is
+                # never left legacy-only; clean() already rejected an invalid
+                # mapping, so this writes the equivalent audience row + anchor.
+                sync_normal_meeting_audience_scope(meeting)
             message = (
                 "小组查经聚会已保存。"
                 if language == "zh"
@@ -802,7 +768,12 @@ def edit_bible_study_meeting(request, meeting_id):
             language=language,
         )
         if form.is_valid():
-            meeting = form.save()
+            with transaction.atomic():
+                meeting = form.save()
+                # BS-STRUCT.1H: repair a zero-row meeting or realign the single
+                # normal small-group row + mirror after a group change. clean()
+                # already blocked invalid mappings and higher-level/joint rows.
+                sync_normal_meeting_audience_scope(meeting)
             message = (
                 "小组查经聚会已保存。"
                 if language == "zh"

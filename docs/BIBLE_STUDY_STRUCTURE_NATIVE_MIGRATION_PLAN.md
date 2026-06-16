@@ -9,7 +9,7 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.1M.** The design slices that
+Status: **partially migrated through BS-STRUCT.1N.** The design slices that
 followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
@@ -28,7 +28,11 @@ followed BS-STRUCT.1A are now implemented:
 - normal generation now **requires** series structure audience rows: a schedule
   with zero `BibleStudySeriesAudienceScope` rows **fails closed** (no meetings,
   manager warning) instead of falling back to legacy `scope_type` / `district` /
-  `small_group` (BS-STRUCT.1M).
+  `small_group` (BS-STRUCT.1M);
+- the staff meeting manage-list filter is **structure-audience aware**: it
+  filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
+  (unit-or-descendant), with the legacy zero-row `small_group` fallback still
+  included, and no longer exposes a legacy `small_group` select (BS-STRUCT.1N).
 
 So the document as a whole is **no longer "docs-only / changes no runtime
 behavior."** The runtime now reads meeting audience rows. What remains is
@@ -294,7 +298,17 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    `audit_bible_study_structure_retirement_readiness` command (BS-STRUCT.1J)
    measures how many meetings still depend on this fallback and whether any hard
    blockers remain; it does **not** remove the fallback.
-4. **Manage-list filters** still expose / filter by legacy `small_group`.
+4. **Manage-list filter** — **since BS-STRUCT.1N the staff meeting manage-list no
+   longer exposes / filters by legacy `small_group`.** It now filters by
+   `ChurchStructureUnit` (GET `unit`): a meeting matches when it has a
+   `BibleStudyMeetingAudienceScope` row on the selected unit or a descendant
+   (row-first, mirroring runtime visibility), **or** — for a zero-row meeting —
+   when its legacy `small_group.church_structure_unit` is the selected unit or a
+   descendant. The legacy `?small_group=<id>` query is tolerated only as a
+   one-shot redirect: it is mapped to that group's structure unit so old
+   bookmarks keep working, but the UI field is gone. The zero-row fallback clause
+   is retained here until BS-STRUCT.2+; `small_group` remains a compatibility
+   mirror and zero-row fallback source.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still
    exist for compatibility / display / coexistence, but **since BS-STRUCT.1M they
@@ -979,6 +993,36 @@ the meeting-identity decision (Section 4.5).
     still expose `small_group`; higher-level / joint generation UI remains
     BS-STRUCT.1G; V1 `BibleStudySession` is unchanged. Full legacy retirement is
     **not** claimed.
+- **BS-STRUCT.1N** — staff meeting manage-list filter becomes
+  **structure-audience aware**. ✅ **implemented.** Code/tests/docs only; no
+  model/schema/migration change.
+  - **Filter change.** `bible_study_meeting_manage_list()` (`studies/views.py`)
+    now reads GET `unit` (a `ChurchStructureUnit` id) instead of `small_group`.
+    It filters meetings with
+    `Q(audience_scope_links__unit_id__in=ids) | (Q(audience_scope_links__isnull=True)
+    & Q(small_group__church_structure_unit_id__in=ids))`, where `ids` is the
+    selected unit plus its descendants (`_collect_descendant_or_self_unit_ids`),
+    de-duplicated with `.distinct()`. This is row-first (mirroring runtime
+    visibility) with the zero-row `small_group` fallback retained until
+    BS-STRUCT.2+. An invalid / unknown / non-numeric `unit` fails safe (no filter,
+    select shows "All").
+  - **Legacy URL tolerance.** A legacy `?small_group=<id>` query with no `unit`
+    is mapped once to that group's `church_structure_unit`
+    (`get_small_group_structure_unit`) so old bookmarks keep working; the UI no
+    longer renders a legacy small-group `<select>`.
+  - **Options / template.** The view passes `unit_options` (active non-root
+    units) and the template renders a bilingual "Audience Unit / 适用单位" select
+    using a new `study_unit_path` filter (`ChurchStructureUnit.path_label`).
+    Status and lesson filters are unchanged.
+  - **Tests.** New `BibleStudyModuleTests` cases: filter by small-group unit;
+    district unit includes descendant; wrong-branch unit excludes; zero-row
+    fallback included by unit or ancestor district; legacy `small_group` param
+    maps to unit; invalid unit fails safe; template uses `unit` not
+    `small_group`; status + unit filters combine.
+  - **Boundary (unchanged by this slice):** the zero-row fallback is **not
+    removed** (still a manage-list match clause and a runtime fallback);
+    `small_group` is not removed or renamed; no V1 `BibleStudySession` change;
+    no schema / migration change.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
   CS-CORE Section 12 legacy retirement). Precondition: a clean

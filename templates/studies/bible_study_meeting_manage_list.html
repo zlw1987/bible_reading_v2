@@ -39,12 +39,12 @@
             </select>
         </label>
         <label>
-            {% if language == "zh" %}小组{% else %}Small Group{% endif %}
-            <select name="small_group">
+            {% if language == "zh" %}适用单位{% else %}Audience Unit{% endif %}
+            <select name="unit">
                 <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
-                {% for small_group in small_group_options %}
-                <option value="{{ small_group.id }}" {% if small_group_id == small_group.id|stringformat:"s" %}selected{% endif %}>
-                    {{ small_group }}
+                {% for unit in unit_options %}
+                <option value="{{ unit.id }}" {% if unit_id == unit.id|stringformat:"s" %}selected{% endif %}>
+                    {{ unit|study_unit_path:language }}
                 </option>
                 {% endfor %}
             </select>

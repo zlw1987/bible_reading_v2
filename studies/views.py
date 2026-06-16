@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from accounts.language import get_user_language
+from accounts.models import ChurchStructureUnit
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -36,6 +37,7 @@ from .services import (
     GENERATION_WARNING_AMBIGUOUS_MIRROR,
     GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
     GENERATION_WARNING_UNMAPPED_GROUP,
+    _collect_descendant_or_self_unit_ids,
     build_existing_normal_meeting_index,
     cancel_bible_study_lesson_with_meetings,
     create_normal_meeting_for_target,
@@ -46,6 +48,7 @@ from .services import (
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
     get_membership_visible_small_groups,
+    get_small_group_structure_unit,
 )
 
 
@@ -694,7 +697,32 @@ def bible_study_meeting_manage_list(request):
 
     status = (request.GET.get("status") or "").strip()
     lesson_id = (request.GET.get("lesson") or "").strip()
-    small_group_id = (request.GET.get("small_group") or "").strip()
+
+    # BS-STRUCT.1N: the manage-list filter is now structure-audience aware. The
+    # preferred GET param is ``unit`` (a ChurchStructureUnit id). A legacy
+    # ``small_group=<id>`` URL is tolerated only as a one-shot redirect target:
+    # it is mapped to that group's structure unit so old bookmarks keep working,
+    # but the UI no longer exposes a legacy small-group field.
+    unit_id = (request.GET.get("unit") or "").strip()
+    legacy_small_group_id = (request.GET.get("small_group") or "").strip()
+    if not unit_id and legacy_small_group_id.isdigit():
+        small_group_model = BibleStudyMeeting._meta.get_field(
+            "small_group"
+        ).remote_field.model
+        legacy_group = small_group_model.objects.filter(
+            id=legacy_small_group_id
+        ).first()
+        mapped_unit = get_small_group_structure_unit(legacy_group)
+        if mapped_unit is not None:
+            unit_id = str(mapped_unit.id)
+
+    selected_unit = None
+    if unit_id.isdigit():
+        selected_unit = ChurchStructureUnit.objects.filter(id=unit_id).first()
+    # An invalid / unknown unit id fails safe: no filter is applied and the
+    # select falls back to "All".
+    unit_id = str(selected_unit.id) if selected_unit is not None else ""
+
     meetings = BibleStudyMeeting.objects.exclude(
         status=BibleStudyMeeting.STATUS_CANCELLED,
     ).select_related(
@@ -707,8 +735,19 @@ def bible_study_meeting_manage_list(request):
         meetings = meetings.filter(status=status)
     if lesson_id:
         meetings = meetings.filter(lesson_id=lesson_id)
-    if small_group_id:
-        meetings = meetings.filter(small_group_id=small_group_id)
+    if selected_unit is not None:
+        # Match the selected unit or any descendant. Meetings with audience rows
+        # match on those rows (row-first, mirroring runtime visibility); zero-row
+        # meetings still match through the legacy small_group -> structure unit
+        # fallback, which remains until BS-STRUCT.2+.
+        unit_ids = _collect_descendant_or_self_unit_ids([selected_unit])
+        meetings = meetings.filter(
+            Q(audience_scope_links__unit_id__in=unit_ids)
+            | (
+                Q(audience_scope_links__isnull=True)
+                & Q(small_group__church_structure_unit_id__in=unit_ids)
+            )
+        ).distinct()
 
     status_choices = [
         choice
@@ -716,9 +755,6 @@ def bible_study_meeting_manage_list(request):
         if choice[0] != BibleStudyMeeting.STATUS_CANCELLED
     ]
 
-    small_group_model = BibleStudyMeeting._meta.get_field(
-        "small_group"
-    ).remote_field.model
     return render(
         request,
         "studies/bible_study_meeting_manage_list.html",
@@ -730,12 +766,14 @@ def bible_study_meeting_manage_list(request):
                 "-lesson_date",
                 "title",
             ),
-            "small_group_options": small_group_model.objects.filter(
+            "unit_options": ChurchStructureUnit.objects.filter(
                 is_active=True,
-            ).order_by("name"),
+            ).exclude(
+                unit_type=ChurchStructureUnit.UNIT_ROOT,
+            ).order_by("sort_order", "code", "name"),
             "status": status,
             "lesson_id": lesson_id,
-            "small_group_id": small_group_id,
+            "unit_id": unit_id,
             "status_choices": status_choices,
         },
     )

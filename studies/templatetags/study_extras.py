@@ -155,6 +155,18 @@ def study_lesson_title(lesson, language):
 
 
 @register.filter
+def study_unit_path(unit, language):
+    """Render a ChurchStructureUnit's ancestor path label in the given language.
+
+    Used by the Bible Study meeting manage-list audience-unit filter
+    (BS-STRUCT.1N) so the option labels show the structure path.
+    """
+    if not unit:
+        return ""
+    return unit.path_label(language)
+
+
+@register.filter
 def study_lesson_pastor_guide(lesson, language):
     if not lesson:
         return ""

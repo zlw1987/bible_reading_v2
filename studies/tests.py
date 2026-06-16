@@ -2179,6 +2179,167 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("study_session_list"))
 
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1N: manage-list filter is structure-audience aware.
+    # ------------------------------------------------------------------
+    def test_meeting_manage_list_filters_by_small_group_unit(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        match = self.create_meeting(lesson=lesson, small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=match, unit=self.group_unit
+        )
+        other = self.create_meeting(lesson=lesson, small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=other, unit=self.other_group_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.group_unit.id},
+        )
+
+        listed = list(response.context["meetings"])
+        self.assertIn(match, listed)
+        self.assertNotIn(other, listed)
+        self.assertEqual(response.context["unit_id"], str(self.group_unit.id))
+
+    def test_meeting_manage_list_district_unit_includes_descendant(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        match = self.create_meeting(lesson=lesson, small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=match, unit=self.group_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.north_unit.id},
+        )
+
+        # group_unit is a descendant of north_unit, so the meeting matches.
+        self.assertIn(match, list(response.context["meetings"]))
+
+    def test_meeting_manage_list_wrong_branch_unit_excludes(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        north_meeting = self.create_meeting(lesson=lesson, small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=north_meeting, unit=self.group_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.south_unit.id},
+        )
+
+        self.assertNotIn(north_meeting, list(response.context["meetings"]))
+
+    def test_meeting_manage_list_zero_row_fallback_included(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        # A zero-row meeting: legacy small_group mirror only, no audience rows.
+        fallback = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.assertEqual(fallback.audience_scope_links.count(), 0)
+        self.client.login(username="study_staff", password="testpass123")
+
+        by_group_unit = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.group_unit.id},
+        )
+        by_district = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.north_unit.id},
+        )
+
+        # Included via the legacy small_group -> structure unit fallback, both at
+        # its own unit and at an ancestor district (fallback survives until
+        # BS-STRUCT.2+).
+        self.assertIn(fallback, list(by_group_unit.context["meetings"]))
+        self.assertIn(fallback, list(by_district.context["meetings"]))
+
+    def test_meeting_manage_list_legacy_small_group_param_maps_to_unit(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        fallback = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"small_group": self.group.id},
+        )
+
+        # The legacy ?small_group=<id> URL is tolerated and mapped to the group's
+        # structure unit; the filter then behaves like ?unit=<group_unit.id>.
+        self.assertEqual(response.context["unit_id"], str(self.group_unit.id))
+        self.assertIn(fallback, list(response.context["meetings"]))
+
+    def test_meeting_manage_list_invalid_unit_fails_safe(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        meeting = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        non_numeric = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": "not-a-number"},
+        )
+        unknown = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": "99999999"},
+        )
+
+        # No crash; no filter applied; select falls back to "All".
+        self.assertEqual(non_numeric.status_code, 200)
+        self.assertEqual(non_numeric.context["unit_id"], "")
+        self.assertIn(meeting, list(non_numeric.context["meetings"]))
+        self.assertEqual(unknown.status_code, 200)
+        self.assertEqual(unknown.context["unit_id"], "")
+        self.assertIn(meeting, list(unknown.context["meetings"]))
+
+    def test_meeting_manage_list_template_uses_unit_filter_not_small_group(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(reverse("bible_study_meeting_manage_list"))
+
+        self.assertContains(response, 'name="unit"')
+        self.assertContains(response, "Audience Unit")
+        self.assertNotContains(response, 'name="small_group"')
+
+    def test_meeting_manage_list_status_and_unit_filter_combine(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        published = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=published, unit=self.group_unit
+        )
+        draft = self.create_meeting(
+            lesson=lesson,
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=draft, unit=self.group_unit
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_manage_list"),
+            {"unit": self.group_unit.id, "status": BibleStudyMeeting.STATUS_PUBLISHED},
+        )
+
+        listed = list(response.context["meetings"])
+        self.assertIn(published, listed)
+        self.assertNotIn(draft, listed)
+
     def test_staff_can_create_bible_study_meeting(self):
         self.set_language("en")
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)

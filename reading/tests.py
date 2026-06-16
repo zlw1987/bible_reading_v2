@@ -57,6 +57,9 @@ from reading.management.commands.audit_reading_privacy_membership_readiness impo
     Command as ReadingPrivacyAuditCommand,
     run_audit,
 )
+from reading.structure_runtime_readiness import (
+    run_audit as run_reading_structure_runtime_audit,
+)
 from reading.group_progress_shadow import (
     GroupProgressShadow,
     REASON_DEFAULT_SAME,
@@ -7278,3 +7281,254 @@ class ReflectionPrivacySnapshotReadinessAuditCommandTests(TestCase):
             "SECRET_WRONGTYPE_BODY",
         ):
             self.assertNotIn(secret, output)
+
+
+class ReadingStructureRuntimeReadinessAuditTests(TestCase):
+    """READING-STRUCT.1A read-only structure-runtime readiness inventory tests.
+
+    The audit reports an inventory + blocker verdict for the remaining legacy
+    small-group dependencies in the reading / reflection / progress runtime. It
+    is strictly read-only, switches no runtime source, and never prints
+    reflection body text.
+    """
+
+    plan_counter = 0
+
+    def run_audit_command(self, *args):
+        output = StringIO()
+        call_command(
+            "audit_reading_structure_runtime_readiness",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_group_reflection(self, *, small_group, structure_unit, body):
+        type(self).plan_counter += 1
+        plan = ReadingPlan.objects.create(
+            name=f"Runtime Plan {self.plan_counter}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        author = User.objects.create_user(username=f"runtime_author_{self.plan_counter}")
+        return ReflectionComment.objects.create(
+            user=author,
+            plan_day=day,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
+            body=body,
+        )
+
+    def add_active_primary_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+    def test_clean_mapped_data_has_no_blockers(self):
+        unit = self.create_unit("CLEAN-SG")
+        group = self.create_group("Clean Group", unit=unit)
+        self.create_group_reflection(
+            small_group=group, structure_unit=unit, body="clean body"
+        )
+        member = User.objects.create_user(username="clean_member")
+        member.profile.small_group = group
+        member.profile.save()
+        self.add_active_primary_membership(member, unit)
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["group_visible_reflections"], 1)
+        self.assertEqual(stats["reflections_snapshot_resolvable"], 1)
+        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 0)
+        self.assertEqual(stats["progress_groups_total"], 1)
+        self.assertEqual(stats["progress_groups_resolvable"], 1)
+        self.assertEqual(stats["users_with_single_active_primary_membership"], 1)
+        self.assertEqual(stats["users_profile_group_without_single_membership"], 0)
+        self.assertEqual(audit["blockers"], [])
+
+        # --fail-on-blockers must succeed (no error) on clean data.
+        self.run_audit_command("--fail-on-blockers")
+
+    def test_missing_snapshot_legacy_only_is_blocker(self):
+        unit = self.create_unit("MISS-SG")
+        group = self.create_group("Missing Snapshot Group", unit=unit)
+        # Legacy group set, but no structure snapshot: invisible under 4G.2.
+        self.create_group_reflection(
+            small_group=group, structure_unit=None, body="SECRET_MISSING"
+        )
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["reflections_with_legacy_small_group"], 1)
+        self.assertEqual(stats["reflections_with_structure_snapshot"], 0)
+        self.assertEqual(stats["reflections_snapshot_missing"], 1)
+        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 1)
+        self.assertIn("reflections_legacy_only_no_valid_snapshot", audit["blockers"])
+
+        with self.assertRaises(CommandError):
+            self.run_audit_command("--fail-on-blockers")
+
+        # Read-only: never prints reflection body text.
+        self.assertNotIn("SECRET_MISSING", self.run_audit_command("--verbose"))
+
+    def test_inactive_snapshot_unit_is_unresolved(self):
+        inactive_unit = self.create_unit("INACT-SG", is_active=False)
+        group = self.create_group("Inactive Unit Group", unit=inactive_unit)
+        self.create_group_reflection(
+            small_group=group, structure_unit=inactive_unit, body="inactive body"
+        )
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["reflections_snapshot_inactive_unit"], 1)
+        self.assertEqual(stats["reflections_snapshot_resolvable"], 0)
+        self.assertEqual(stats["progress_groups_inactive_unit"], 1)
+        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 1)
+        self.assertIn("progress_groups_inactive_unit", audit["blockers"])
+
+    def test_wrong_unit_type_snapshot_is_unresolved(self):
+        district_unit = self.create_unit(
+            "WRONG-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        group = self.create_group("Wrong Type Group", unit=district_unit)
+        self.create_group_reflection(
+            small_group=group, structure_unit=district_unit, body="wrong type body"
+        )
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["reflections_snapshot_wrong_unit_type"], 1)
+        self.assertEqual(stats["progress_groups_wrong_unit_type"], 1)
+        self.assertEqual(stats["reflections_snapshot_resolvable"], 0)
+        self.assertIn("progress_groups_wrong_unit_type", audit["blockers"])
+
+    def test_progress_group_missing_mapping_is_blocker(self):
+        # Active legacy group with no church_structure_unit mapping at all.
+        self.create_group("Unmapped Group", unit=None)
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["progress_groups_total"], 1)
+        self.assertEqual(stats["progress_groups_missing_mapping"], 1)
+        self.assertEqual(stats["progress_groups_resolvable"], 0)
+        self.assertIn("progress_groups_missing_mapping", audit["blockers"])
+
+    def test_profile_only_user_without_membership_is_blocker(self):
+        unit = self.create_unit("PROF-SG")
+        group = self.create_group("Profile Only Group", unit=unit)
+        member = User.objects.create_user(username="profile_only")
+        member.profile.small_group = group
+        member.profile.save()
+        # No ChurchStructureMembership created for this user.
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["users_with_profile_small_group"], 1)
+        self.assertEqual(stats["users_with_no_active_primary_membership"], 1)
+        self.assertEqual(stats["users_profile_group_without_single_membership"], 1)
+        self.assertIn(
+            "users_profile_group_without_single_membership", audit["blockers"]
+        )
+
+    def test_multiple_active_primary_membership_is_blocker(self):
+        unit_a = self.create_unit("MULTI-A")
+        unit_b = self.create_unit("MULTI-B")
+        member = User.objects.create_user(username="multi_member")
+        # The model forbids two active primary memberships via clean(); bulk_create
+        # skips validation so we can reproduce the data-drift the audit defends
+        # against (the DB has no unique constraint enforcing this).
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=member,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=timezone.localdate(),
+                )
+                for unit in (unit_a, unit_b)
+            ]
+        )
+
+        audit = run_reading_structure_runtime_audit()
+        stats = audit["stats"]
+
+        self.assertEqual(stats["users_with_multiple_active_primary_membership"], 1)
+        self.assertEqual(stats["users_with_single_active_primary_membership"], 0)
+        self.assertIn(
+            "users_with_multiple_active_primary_membership", audit["blockers"]
+        )
+
+    def test_command_is_read_only(self):
+        unit = self.create_unit("RO-SG")
+        group = self.create_group("Read Only Group", unit=unit)
+        self.create_group_reflection(
+            small_group=group, structure_unit=unit, body="read only body"
+        )
+        member = User.objects.create_user(username="ro_member")
+        member.profile.small_group = group
+        member.profile.save()
+        self.add_active_primary_membership(member, unit)
+
+        before = {
+            "comments": ReflectionComment.objects.count(),
+            "groups": SmallGroup.objects.count(),
+            "units": ChurchStructureUnit.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "users": User.objects.count(),
+        }
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_audit_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertEqual(
+            before,
+            {
+                "comments": ReflectionComment.objects.count(),
+                "groups": SmallGroup.objects.count(),
+                "units": ChurchStructureUnit.objects.count(),
+                "memberships": ChurchStructureMembership.objects.count(),
+                "users": User.objects.count(),
+            },
+        )
+        self.assertIn(
+            "Reading structure-runtime readiness audit (READING-STRUCT.1A, read-only)",
+            output,
+        )
+        self.assertIn("READ-ONLY: no reflection", output)

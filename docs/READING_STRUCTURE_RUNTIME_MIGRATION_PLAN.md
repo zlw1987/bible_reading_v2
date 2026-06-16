@@ -10,16 +10,19 @@ design / invariants / rollback documents. This doc tracks only the **remaining
 runtime legacy small-group dependencies** in Reading / Reflection / Progress and
 the audit that measures readiness to retire them.
 
-Status: **READING-STRUCT.1A (audit) implemented.** Code/tests/docs only; no
-model, schema, migration, or runtime-behavior change. The reflection read/write
-visibility path and the group-progress roster/default path are already
-membership-core (see below); what remains is retiring the last
+Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) implemented.**
+Code/tests/docs only; no model, schema, migration, or runtime-behavior change.
+The reflection read/write visibility path and the group-progress roster/default
+path are already membership-core (see below); what remains is retiring the last
 `Profile.small_group` reads and the legacy mirror data once real-data evidence is
 clean.
 
-This document changes **no runtime behavior**. The only code it adds is a
-read-only audit (`reading.structure_runtime_readiness` + the
-`audit_reading_structure_runtime_readiness` command).
+This document's code changes **no runtime behavior**. It adds a read-only audit
+(`reading.structure_runtime_readiness` + the
+`audit_reading_structure_runtime_readiness` command) and a dry-run/apply data
+backfill (`backfill_reflection_structure_snapshots`) that only sets the additive
+`structure_unit_at_post` snapshot column. No runtime source is switched and no
+production command has been run.
 
 ## 1. Current legacy consumers in Reading / Reflection / Progress
 
@@ -126,18 +129,64 @@ The command writes nothing, has no `--apply`, never switches a runtime source,
 and never prints reflection body text. `--verbose` prints capped representative
 rows (ids / labels only) for the unresolved and blocker categories.
 
-## 5. Next proposed slice (after this audit)
+## 5. Snapshot backfill (READING-STRUCT.1B — implemented)
 
-**READING-STRUCT.1B (proposed):** backfill `structure_unit_at_post` for legacy
-group reflections that resolve to exactly one active small-group unit (mirroring
-the Bible Study backfill pattern), driving
-`reflections_legacy_only_no_valid_snapshot` to zero; keep it read-shadowed first.
+`python manage.py backfill_reflection_structure_snapshots` (logic in
+`run_backfill`, in the command module) backfills the additive
+`ReflectionComment.structure_unit_at_post` snapshot for group-visible,
+non-hidden, non-deleted reflections that are missing it, driving the
+`reflections_legacy_only_no_valid_snapshot` blocker toward zero.
+
+**Classification (per reflection):**
+
+- existing `structure_unit_at_post` set → `skipped_existing_snapshot` (never
+  overwritten);
+- legacy `small_group_at_post` is null → `missing_legacy_group` (issue);
+- legacy group's `church_structure_unit` is null → `missing_mapping` (issue);
+- mapped unit inactive → `inactive_unit` (issue);
+- mapped unit not `UNIT_SMALL_GROUP` → `wrong_unit_type` (issue);
+- otherwise (active small-group unit) → `would_backfill` (dry-run) /
+  `backfilled` (`--apply`).
+
+The resolvability check reuses `reading.structure_runtime_readiness`’s
+`_unit_resolution_reason`, so it stays in lockstep with both the 1A audit and the
+live `comments.reflection_visibility` read gate.
+
+**Counters:** `reflections_checked`, `skipped_existing_snapshot`,
+`would_backfill`, `backfilled`, `missing_legacy_group`, `missing_mapping`,
+`inactive_unit`, `wrong_unit_type`, `validation_error`, `legacy_fields_mutated`
+(always 0), plus a printed `runtime_switched: false`.
+
+**Contract:**
+
+- **Dry-run by default;** `--apply` is required to write. Without `--apply` the
+  command is strictly read-only.
+- It only ever sets a currently-null `structure_unit_at_post`. It never
+  overwrites an existing snapshot, never mutates `small_group_at_post` /
+  `Profile.small_group` or any other legacy field (`legacy_fields_mutated` stays
+  0), and never changes `visibility` / `is_hidden` / `is_deleted` or any runtime
+  privacy behavior.
+- Idempotent: a second `--apply` finds the backfilled rows already
+  snapshot-backed (`skipped_existing_snapshot`) and writes 0 rows.
+- Flags: `--apply`, `--limit N`, `--reflection-id ID`, `--verbose`,
+  `--detail-limit N`, `--fail-on-issues` (exits nonzero when any unresolved issue
+  bucket — `missing_legacy_group` / `missing_mapping` / `inactive_unit` /
+  `wrong_unit_type` / `validation_error` — is nonzero; `would_backfill` is **not**
+  an issue). `--verbose` prints capped id/label-only rows and never prints
+  reflection body text.
+- **No production command has been run.** The dev-DB dry-run reports the same 6
+  backfillable rows the 1A audit flagged (plus 2 `missing_legacy_group` rows that
+  need manual repair, not backfill). The runtime read/write paths are unchanged;
+  this only prepares data for the later structure-native runtime switch.
+
+## 6. Next proposed slice
 
 **READING-STRUCT.1C (proposed):** switch the `my_group_progress` last-resort
 default to membership-core (or no default) and remove the
 `Profile.small_group` default read, gated on a clean
-`audit_reading_structure_runtime_readiness --fail-on-blockers` and the existing
-`audit_group_progress_shadow --fail-on-drift` over real data.
+`audit_reading_structure_runtime_readiness --fail-on-blockers` (after the 1B
+backfill `--apply` is run and verified on real data) and the existing
+`audit_group_progress_shadow --fail-on-drift`.
 
-Each is a separate, individually-gated slice; this audit slice does **not**
-perform any switch.
+Each is a separate, individually-gated slice; the 1A audit and 1B backfill slices
+perform **no** runtime switch.

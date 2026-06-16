@@ -60,6 +60,9 @@ from reading.management.commands.audit_reading_privacy_membership_readiness impo
 from reading.structure_runtime_readiness import (
     run_audit as run_reading_structure_runtime_audit,
 )
+from reading.management.commands.backfill_reflection_structure_snapshots import (
+    run_backfill as run_reflection_snapshot_backfill,
+)
 from reading.group_progress_shadow import (
     GroupProgressShadow,
     REASON_DEFAULT_SAME,
@@ -7532,3 +7535,224 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
             output,
         )
         self.assertIn("READ-ONLY: no reflection", output)
+
+
+class ReflectionStructureSnapshotBackfillCommandTests(TestCase):
+    """READING-STRUCT.1B backfill command tests.
+
+    The command backfills ``ReflectionComment.structure_unit_at_post`` for
+    group-visible reflections whose legacy ``small_group_at_post`` resolves to an
+    active small-group unit. Dry-run by default; ``--apply`` writes; it never
+    overwrites an existing snapshot, never mutates legacy fields, and never
+    changes runtime visibility.
+    """
+
+    plan_counter = 0
+
+    def run_backfill_command(self, *args):
+        output = StringIO()
+        call_command(
+            "backfill_reflection_structure_snapshots",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_group_reflection(self, *, small_group, structure_unit=None, body):
+        type(self).plan_counter += 1
+        plan = ReadingPlan.objects.create(
+            name=f"Backfill Plan {self.plan_counter}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        author = User.objects.create_user(username=f"backfill_author_{self.plan_counter}")
+        return ReflectionComment.objects.create(
+            user=author,
+            plan_day=day,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
+            body=body,
+        )
+
+    def test_dry_run_reports_would_backfill_without_mutating(self):
+        unit = self.create_unit("BF-DRY")
+        group = self.create_group("Backfill Dry Group", unit=unit)
+        comment = self.create_group_reflection(small_group=group, body="dry body")
+
+        result = run_reflection_snapshot_backfill()
+        stats = result["stats"]
+
+        self.assertEqual(stats["reflections_checked"], 1)
+        self.assertEqual(stats["would_backfill"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertEqual(stats["legacy_fields_mutated"], 0)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+        # Legacy mirror untouched.
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+
+    def test_apply_fills_structure_unit_at_post(self):
+        unit = self.create_unit("BF-APPLY")
+        group = self.create_group("Backfill Apply Group", unit=unit)
+        comment = self.create_group_reflection(small_group=group, body="apply body")
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["backfilled"], 1)
+        self.assertEqual(stats["would_backfill"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
+        # Legacy mirror untouched; visibility unchanged.
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+
+    def test_apply_is_idempotent(self):
+        unit = self.create_unit("BF-IDEM")
+        group = self.create_group("Backfill Idempotent Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="idem body")
+
+        first = run_reflection_snapshot_backfill(apply=True)
+        self.assertEqual(first["stats"]["backfilled"], 1)
+
+        second = run_reflection_snapshot_backfill(apply=True)
+        self.assertEqual(second["stats"]["backfilled"], 0)
+        self.assertEqual(second["stats"]["would_backfill"], 0)
+        self.assertEqual(second["stats"]["skipped_existing_snapshot"], 1)
+
+        # A follow-up dry-run is also a no-op.
+        third = run_reflection_snapshot_backfill()
+        self.assertEqual(third["stats"]["would_backfill"], 0)
+        self.assertEqual(third["stats"]["skipped_existing_snapshot"], 1)
+
+    def test_missing_legacy_group_is_reported_not_backfilled(self):
+        comment = self.create_group_reflection(small_group=None, body="no group body")
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["missing_legacy_group"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertIn("missing_legacy_group", result["issues"])
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_missing_mapping_is_reported_not_backfilled(self):
+        group = self.create_group("Unmapped Group", unit=None)
+        comment = self.create_group_reflection(small_group=group, body="unmapped body")
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["missing_mapping"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertIn("missing_mapping", result["issues"])
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_inactive_unit_is_reported_not_backfilled(self):
+        inactive_unit = self.create_unit("BF-INACT", is_active=False)
+        group = self.create_group("Inactive Unit Group", unit=inactive_unit)
+        comment = self.create_group_reflection(small_group=group, body="inactive body")
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["inactive_unit"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertIn("inactive_unit", result["issues"])
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_wrong_unit_type_is_reported_not_backfilled(self):
+        district_unit = self.create_unit(
+            "BF-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        group = self.create_group("Wrong Type Group", unit=district_unit)
+        comment = self.create_group_reflection(small_group=group, body="wrong type body")
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["wrong_unit_type"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertIn("wrong_unit_type", result["issues"])
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_existing_snapshot_is_not_overwritten(self):
+        unit_a = self.create_unit("BF-EXIST-A")
+        unit_b = self.create_unit("BF-EXIST-B")
+        group_b = self.create_group("Existing Snapshot Group", unit=unit_b)
+        # Snapshot already points at unit_a; legacy group maps to unit_b.
+        comment = self.create_group_reflection(
+            small_group=group_b, structure_unit=unit_a, body="existing body"
+        )
+
+        result = run_reflection_snapshot_backfill(apply=True)
+        stats = result["stats"]
+
+        self.assertEqual(stats["skipped_existing_snapshot"], 1)
+        self.assertEqual(stats["backfilled"], 0)
+        self.assertEqual(stats["would_backfill"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.structure_unit_at_post_id, unit_a.id)
+
+    def test_fail_on_issues_raises_on_unresolved(self):
+        group = self.create_group("Unmapped Group", unit=None)
+        self.create_group_reflection(small_group=group, body="issue body")
+
+        with self.assertRaises(CommandError):
+            self.run_backfill_command("--fail-on-issues")
+
+    def test_fail_on_issues_clean_after_apply(self):
+        unit = self.create_unit("BF-CLEAN")
+        group = self.create_group("Clean Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="clean body")
+
+        # No issue buckets -> --fail-on-issues exits 0 even though a row is
+        # backfillable (would_backfill is not an issue).
+        self.run_backfill_command("--apply", "--fail-on-issues")
+        self.assertEqual(
+            ReflectionComment.objects.filter(
+                structure_unit_at_post=unit
+            ).count(),
+            1,
+        )
+
+    def test_command_is_read_only_in_dry_run(self):
+        unit = self.create_unit("BF-RO")
+        group = self.create_group("Read Only Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="SECRET_BACKFILL_BODY")
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_backfill_command("--verbose")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("mode: DRY-RUN (read-only)", output)
+        self.assertNotIn("SECRET_BACKFILL_BODY", output)

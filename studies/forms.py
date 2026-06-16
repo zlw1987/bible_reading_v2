@@ -18,6 +18,7 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
+from .services import resolve_normal_small_group_unit
 from .visibility import filter_users_for_meeting_audience
 
 
@@ -683,6 +684,16 @@ MEETING_FORM_TEXT = {
         ),
         "direction_placeholder": "Direction for this small group meeting.",
         "questions_placeholder": "Questions for this small group.",
+        "small_group_required": "Select the small group for this meeting.",
+        "small_group_unit_invalid": (
+            "The selected small group is not mapped to an active small-group "
+            "church structure unit, so this meeting cannot be made "
+            "structure-native. Map the small group first."
+        ),
+        "meeting_audience_not_small_group": (
+            "This meeting is a higher-level, joint, or multi-unit meeting and "
+            "cannot be edited through the small-group meeting form."
+        ),
     },
     "zh": {
         "lesson": "每周查经指引",
@@ -707,6 +718,14 @@ MEETING_FORM_TEXT = {
         ),
         "direction_placeholder": "这个小组聚会的查经方向。",
         "questions_placeholder": "这个小组的讨论问题。",
+        "small_group_required": "请选择这次聚会的小组。",
+        "small_group_unit_invalid": (
+            "所选小组没有映射到有效的、启用的小组级教会结构单元，"
+            "无法生成结构受众范围。请先为小组配置结构单元。"
+        ),
+        "meeting_audience_not_small_group": (
+            "这是一个上级、联合或多单元聚会，不能通过小组聚会表单编辑。"
+        ),
     },
 }
 
@@ -745,10 +764,16 @@ class BibleStudyMeetingForm(forms.ModelForm):
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.language = language
         text = meeting_form_text(language)
 
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
+
+        # BS-STRUCT.1H: a normal manual small-group meeting must target exactly
+        # one small group; the model FK is nullable only for higher-level/joint
+        # meetings, which this small-group form does not create.
+        self.fields["small_group"].required = True
 
         self.fields["lesson"].queryset = BibleStudyLesson.objects.select_related(
             "series",
@@ -771,6 +796,58 @@ class BibleStudyMeetingForm(forms.ModelForm):
         self.fields["service_event"].required = False
         self.fields["service_event"].help_text = text["service_event_help"]
         self.fields["meeting_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+    @staticmethod
+    def _existing_rows_are_single_normal_small_group(rows):
+        """Whether a meeting's existing audience rows are a normal group set.
+
+        Zero rows (a legacy-only meeting to repair) or exactly one
+        ``UNIT_SMALL_GROUP`` row (a normal group meeting, possibly being moved to
+        a different group) are safe for this small-group form to repair/realign.
+        Multiple rows, or a single higher-level (district / CM / EM / custom)
+        row, mean a higher-level / joint meeting that must not be clobbered.
+        """
+        if len(rows) == 0:
+            return True
+        if len(rows) != 1:
+            return False
+        row_unit = rows[0].unit
+        return (
+            row_unit is not None
+            and row_unit.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        text = meeting_form_text(self.language)
+
+        small_group = cleaned.get("small_group")
+        if small_group is None:
+            # The field is required, so an empty value is already flagged; guard
+            # against a stale/duplicate message only when nothing was reported.
+            if "small_group" not in self.errors:
+                self.add_error("small_group", text["small_group_required"])
+            return cleaned
+
+        # The selected group must map to an active small-group structure unit, or
+        # this meeting would be a legacy-only zero-row meeting after save.
+        unit = resolve_normal_small_group_unit(small_group)
+        if unit is None:
+            self.add_error("small_group", text["small_group_unit_invalid"])
+            return cleaned
+
+        # Never let this small-group-only form silently convert a higher-level,
+        # joint, or multi-unit meeting into a fake single-group meeting.
+        if self.instance.pk:
+            if self.instance.meeting_kind != BibleStudyMeeting.KIND_NORMAL:
+                self.add_error(None, text["meeting_audience_not_small_group"])
+                return cleaned
+            rows = list(self.instance.audience_scope_links.select_related("unit"))
+            if not self._existing_rows_are_single_normal_small_group(rows):
+                self.add_error(None, text["meeting_audience_not_small_group"])
+                return cleaned
+
+        return cleaned
 
 
 class BibleStudyMeetingPreparationForm(forms.ModelForm):

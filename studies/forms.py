@@ -18,7 +18,7 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
-from .visibility import filter_users_for_meeting_small_group_membership
+from .visibility import filter_users_for_meeting_audience
 
 
 class ChurchStructureUnitMultipleChoiceField(forms.ModelMultipleChoiceField):
@@ -895,9 +895,9 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
         user_model = get_user_model()
         users = user_model.objects.filter(is_active=True)
         if meeting:
-            users = filter_users_for_meeting_small_group_membership(
+            users = filter_users_for_meeting_audience(
                 users,
-                meeting.small_group,
+                meeting,
             )
             if self.instance.user_id:
                 users = users | user_model.objects.filter(id=self.instance.user_id)
@@ -1020,9 +1020,9 @@ class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
         user_model = get_user_model()
         users = user_model.objects.filter(is_active=True)
         if meeting:
-            users = filter_users_for_meeting_small_group_membership(
+            users = filter_users_for_meeting_audience(
                 users,
-                meeting.small_group,
+                meeting,
             )
             if self.instance.worship_lead_user_id:
                 users = users | user_model.objects.filter(

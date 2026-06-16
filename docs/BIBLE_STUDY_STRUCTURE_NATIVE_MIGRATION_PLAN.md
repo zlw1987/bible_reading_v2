@@ -205,8 +205,11 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    higher-level / joint / multi-unit meeting (that write UI is deferred).
 3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
    all retain the legacy single-`small_group` path for meetings with no audience
-   rows (old/pre-backfill data); retired only after BS-STRUCT.1I production
-   backfill/apply and BS-STRUCT.2+.
+   rows. Manual writes (BS-STRUCT.1H) no longer create legacy-only zero-row
+   meetings, and the local real-data meetings have been backfilled (BS-STRUCT.1I
+   local apply, 2026-06-15). The zero-row fallback nonetheless **remains in
+   runtime** until BS-STRUCT.1I production rollout and the final retirement audits
+   are complete (BS-STRUCT.2+).
 4. **Manage-list filters** still expose / filter by legacy `small_group`.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still a
@@ -693,6 +696,26 @@ the meeting-identity decision (Section 4.5).
     follows); edit does not clobber a multi-unit or higher-level audience
     meeting.
 - **BS-STRUCT.1I** — production backfill/apply + post-apply audit.
+  ⚠️ **partially completed (local real-data only).** Local real-data sqlite apply
+  completed on 2026-06-15. Production apply remains a deployment/runbook step
+  unless separately confirmed.
+  - **Local real-data apply result (2026-06-15).** Run against the local
+    real-data sqlite DB only (`bible_reading_v2/db.sqlite3`); no production DB was
+    touched. With `--apply`: 29 meetings checked, 29
+    `BibleStudyMeetingAudienceScope` rows created, 29 `anchor_unit` values
+    backfilled. `legacy_small_group_mutated = 0` and `runtime_switched = false`
+    (additive only; no runtime/generation/Today-landing/picker behavior changed).
+    Post-state: `BibleStudyMeeting.objects.count() = 29` and
+    `BibleStudyMeetingAudienceScope.objects.count() = 29`.
+  - **Post-apply dry-run (idempotency + clean audit).** 29 meetings checked,
+    `skipped_existing_audience = 29`, `would_create = 0`, `created = 0`, and all
+    issue buckets = 0. `--fail-on-issues` exited `0`.
+  - **Production rollout boundary.** Production rollout is a separate runbook
+    step and was **not** run here. On production: (1) run database migrations
+    first; (2) run the backfill command as a **dry-run** and review; (3) only if
+    the dry-run is clean, run it with `--apply`; (4) re-run the dry-run post-apply
+    with `--fail-on-issues` and confirm it exits `0`. **Do not remove the zero-row
+    fallback** until production has been applied and verified clean.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
   CS-CORE Section 12 legacy retirement).

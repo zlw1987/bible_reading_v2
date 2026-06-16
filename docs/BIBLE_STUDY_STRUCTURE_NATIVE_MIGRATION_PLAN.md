@@ -209,7 +209,10 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    meetings, and the local real-data meetings have been backfilled (BS-STRUCT.1I
    local apply, 2026-06-15). The zero-row fallback nonetheless **remains in
    runtime** until BS-STRUCT.1I production rollout and the final retirement audits
-   are complete (BS-STRUCT.2+).
+   are complete (BS-STRUCT.2+). The read-only
+   `audit_bible_study_structure_retirement_readiness` command (BS-STRUCT.1J)
+   measures how many meetings still depend on this fallback and whether any hard
+   blockers remain; it does **not** remove the fallback.
 4. **Manage-list filters** still expose / filter by legacy `small_group`.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still a
@@ -716,9 +719,91 @@ the meeting-identity decision (Section 4.5).
     the dry-run is clean, run it with `--apply`; (4) re-run the dry-run post-apply
     with `--fail-on-issues` and confirm it exits `0`. **Do not remove the zero-row
     fallback** until production has been applied and verified clean.
+- **BS-STRUCT.1J** — Bible Study legacy-retirement **readiness audit**
+  (read-only). ✅ **implemented.** Management command
+  `audit_bible_study_structure_retirement_readiness`
+  (`studies/management/commands/audit_bible_study_structure_retirement_readiness.py`).
+  - **Strictly read-only.** It scans **every** `BibleStudyMeeting` row
+    (all statuses, since every meeting must carry audience rows before the
+    fallback can go) and reports human-readable counters. It has **no
+    `--apply`**, creates/edits/deletes **nothing** (no `BibleStudyMeeting`,
+    `BibleStudyMeetingAudienceScope`, `SmallGroup`, `ChurchStructureUnit`,
+    `ChurchStructureMembership`, or `Profile` writes), and changes **no** runtime
+    behavior (visibility, landing/Today, role/worship pickers, generation, and
+    forms are untouched). It audits whichever DB Django is configured to use, so
+    it needs no production access of its own.
+  - **What it proves.** It quantifies exactly what remains before the zero-row
+    `small_group` fallback can be removed: how many meetings still have **zero**
+    audience rows (the meetings still served only by the fallback), how many have
+    single-group / higher-level / multi-unit / joint audience, the health of each
+    meeting's legacy `small_group` mirror mapping (unmapped / inactive / wrong
+    unit type), `anchor_unit` presence/mismatch, and any disagreement between a
+    single small-group audience row and its `small_group` mirror unit.
+  - **Counters:** `meetings_checked`, `meetings_with_audience_rows`,
+    `meetings_without_audience_rows`, `normal_meetings_without_audience_rows`,
+    `meetings_with_null_small_group`,
+    `meetings_with_existing_audience_and_null_small_group`,
+    `meetings_with_single_small_group_audience`,
+    `meetings_with_multi_unit_audience`, `meetings_with_higher_level_audience`,
+    `meetings_with_anchor_unit`, `meetings_missing_anchor_unit`,
+    `meetings_anchor_mismatch_small_group_unit`, `meetings_small_group_unmapped`,
+    `meetings_small_group_inactive_unit`, `meetings_small_group_wrong_unit_type`,
+    `meetings_audience_mismatch_small_group_mirror`, plus fixed-truth flags
+    `legacy_small_group_fallback_still_present = true`,
+    `db_data_blockers_clear` (machine-checkable: no hard blockers in the DB), and
+    `runtime_zero_row_fallback_removable = false`.
+  - **Hard blockers vs warnings.** Only two counters are **hard blockers** (and
+    only they trip a nonzero exit under `--fail-on-blockers`):
+    `meetings_without_audience_rows` (rule 1 — any zero-row meeting still depends
+    on the fallback; this subsumes `normal_meetings_without_audience_rows` and
+    the null-`small_group`-with-zero-rows case, rule 6) and
+    `meetings_audience_mismatch_small_group_mirror` (rule 2 — a single
+    small-group audience row whose unit disagrees with its active-`UNIT_SMALL_GROUP`
+    `small_group` mirror; classified **explicitly as a blocker** because the
+    row-first runtime and the legacy mirror point at different units). Everything
+    else is a **warning**: broken mirror mappings
+    (`meetings_small_group_unmapped` / `_inactive_unit` / `_wrong_unit_type`) are
+    data hygiene (already a hard blocker via `meetings_without_audience_rows`
+    when the meeting is also zero-row; otherwise the row-first runtime no longer
+    depends on the mirror), and `anchor_unit` issues
+    (`meetings_missing_anchor_unit` / `meetings_anchor_mismatch_small_group_unit`)
+    are warnings because `anchor_unit` is display/grouping/ownership only and
+    never a visibility source (rule 7). A single higher-level audience row,
+    multi-unit/joint audience, and null `small_group` **with** audience rows are
+    acceptable, not blockers (rules 3–5). `Profile.small_group` is never consulted
+    (rule 8); V1 `BibleStudySession` is excluded as a separate retirement target
+    (rule 9).
+  - **This audit does not remove the fallback.** It is purely diagnostic. Even
+    when `db_data_blockers_clear` is `true`, `runtime_zero_row_fallback_removable`
+    stays `false` by construction, because removal also requires a **separately
+    verified production rollout** (BS-STRUCT.1I) that this command cannot confirm.
+    The local configured `-claude` worktree DB currently has **0 meetings**
+    (clean audit, all counters `0`); the 29 real meetings backfilled at
+    BS-STRUCT.1I live in the sibling `bible_reading_v2/db.sqlite3`, which is where
+    this audit should be run before any fallback-removal decision.
+  - Options: `--verbose` (lists meeting id / lesson title / `small_group` for
+    each blocker and warning category), `--fail-on-blockers` (nonzero exit only
+    when a hard blocker is present; still read-only).
+  - Tests: `studies/test_retirement_readiness_command.py`.
+  - **Remaining legacy surfaces after 1J** (none removed by this slice):
+    - the **zero-row `small_group` fallback** still serves visibility,
+      landing/Today, and role/worship pickers for any meeting with no audience
+      rows;
+    - **generation** still resolves normal group meetings through legacy
+      `SmallGroup` (`get_eligible_small_groups()` /
+      `resolve_units_to_small_groups()`) and keys idempotency on `small_group`;
+    - **manage-list filters** still expose / filter by `small_group`;
+    - **series legacy scope fallback** (`scope_type` / `ministry_context` /
+      `district` / `small_group` + `apply_audience_legacy_fallback()`) remains;
+    - **V1 `BibleStudySession`** remains excluded / a retirement target;
+    - **production rollout (BS-STRUCT.1I) remains required** before the fallback
+      can be removed.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
-  CS-CORE Section 12 legacy retirement).
+  CS-CORE Section 12 legacy retirement). Precondition: a clean
+  `audit_bible_study_structure_retirement_readiness --fail-on-blockers` run
+  against production **and** a separately verified production apply
+  (BS-STRUCT.1I).
 
 The user-side resolver migration that ServiceEvent/Bible Study needed for
 *visibility* is **already done** for Bible Study (CS-CORE.2C-B / 3B), so this

@@ -41,11 +41,13 @@
         </table>
     </div>
 
-    {% if generation_preview.missing_groups %}
+    {% if generation_preview.missing_targets %}
     <h2>{% if language == "zh" %}将要生成的聚会{% else %}Meetings to Create{% endif %}</h2>
     <ul>
-        {% for small_group in generation_preview.missing_groups %}
-        <li>{{ small_group }}</li>
+        {% for target in generation_preview.missing_targets %}
+        <li>
+            {{ target.unit }}{% if target.small_group %} ({{ target.small_group }}){% endif %}
+        </li>
         {% endfor %}
     </ul>
     {% else %}

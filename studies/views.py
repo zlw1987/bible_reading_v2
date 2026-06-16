@@ -2,6 +2,7 @@ from datetime import datetime, time
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,9 +33,14 @@ from .models import (
     BibleStudyWorshipSong,
 )
 from .services import (
+    GENERATION_WARNING_AMBIGUOUS_MIRROR,
+    GENERATION_WARNING_UNMAPPED_GROUP,
+    build_existing_normal_meeting_index,
     cancel_bible_study_lesson_with_meetings,
+    create_normal_meeting_for_target,
+    find_existing_meeting_for_target,
+    resolve_normal_generation_targets,
     sync_normal_meeting_audience_scope,
-    write_normal_meeting_audience_scope,
 )
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
@@ -211,23 +217,34 @@ def get_default_meeting_datetime(lesson):
 
 
 def get_bible_study_meeting_generation_preview(lesson):
-    eligible_groups = lesson.series.get_eligible_small_groups()
-    existing_group_ids = set(
-        lesson.meetings.filter(small_group__in=eligible_groups).values_list(
-            "small_group_id",
-            flat=True,
-        )
-    )
-    missing_groups = eligible_groups.exclude(id__in=existing_group_ids)
-    eligible_count = eligible_groups.count()
-    existing_count = len(existing_group_ids)
-    missing_count = eligible_count - existing_count
+    """Build the structure-unit-native normal generation preview (BS-STRUCT.1L).
+
+    The preview is now based on :class:`GenerationTarget` rows resolved from the
+    series (each an active ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` leaf),
+    not on the set of missing legacy ``SmallGroup`` rows. A target counts as
+    existing when any existing meeting matches it by generation key, legacy
+    ``small_group`` mirror, or a single-unit audience row (so pre-1L meetings
+    are recognized and never duplicated). Cancelled meetings still count as
+    existing and are deliberately not regenerated.
+    """
+    targets, warnings = resolve_normal_generation_targets(lesson.series)
+    index = build_existing_normal_meeting_index(lesson)
+
+    missing_targets = []
+    existing_count = 0
+    for target in targets:
+        if find_existing_meeting_for_target(index, target) is not None:
+            existing_count += 1
+        else:
+            missing_targets.append(target)
+
     return {
-        "eligible_groups": eligible_groups,
-        "missing_groups": missing_groups,
-        "eligible_count": eligible_count,
+        "targets": targets,
+        "missing_targets": missing_targets,
+        "warnings": warnings,
+        "eligible_count": len(targets),
         "existing_count": existing_count,
-        "missing_count": missing_count,
+        "missing_count": len(missing_targets),
     }
 
 
@@ -455,35 +472,26 @@ def generate_bible_study_meetings(request, lesson_id):
 
     if request.method == "POST":
         created_count = 0
-        # BS-STRUCT.1D: groups whose newly generated meeting could not be made
-        # structure-native because their small_group has no valid active
-        # UNIT_SMALL_GROUP mapping. The meeting is still created (unchanged
-        # legacy behavior) but is left as a legacy-only zero-row meeting and
-        # surfaced as a warning rather than silently given an invalid row.
-        unmapped_groups = []
+        # BS-STRUCT.1L: each missing target is one active UNIT_SMALL_GROUP
+        # ChurchStructureUnit leaf. Create one structure-native normal meeting
+        # per target (audience row + anchor_unit + per-unit generation_key),
+        # with the legacy small_group attached only as a mirror when present.
         default_meeting_datetime = get_default_meeting_datetime(lesson)
 
-        for small_group in preview["missing_groups"]:
+        for target in preview["missing_targets"]:
             try:
-                meeting, created = BibleStudyMeeting.objects.get_or_create(
-                    lesson=lesson,
-                    small_group=small_group,
-                    defaults={
-                        "meeting_datetime": default_meeting_datetime,
-                        "status": BibleStudyMeeting.STATUS_DRAFT,
-                        "created_by": request.user,
-                    },
-                )
-            except IntegrityError:
-                created = False
-
-            if created:
+                with transaction.atomic():
+                    create_normal_meeting_for_target(
+                        lesson,
+                        target,
+                        meeting_datetime=default_meeting_datetime,
+                        created_by=request.user,
+                    )
                 created_count += 1
-                # BS-STRUCT.1D: only newly created normal group-level meetings
-                # get a structure-native audience row + anchor_unit. Existing
-                # meetings are never mutated here (that is BS-STRUCT.1C's job).
-                if not write_normal_meeting_audience_scope(meeting):
-                    unmapped_groups.append(small_group)
+            except (IntegrityError, ValidationError):
+                # A meeting for this unit was created concurrently (or already
+                # exists under the unique constraints); treat it as existing.
+                continue
 
         skipped_count = preview["eligible_count"] - created_count
         message = (
@@ -496,20 +504,55 @@ def generate_bible_study_meetings(request, lesson_id):
         )
         messages.success(request, message)
 
+        # BS-STRUCT.1L: legacy fallback groups with an invalid (unmapped /
+        # inactive / wrong-type) structure mapping are skipped with a warning
+        # rather than creating a legacy-only zero-row meeting.
+        unmapped_groups = [
+            warning.small_group
+            for warning in preview["warnings"]
+            if warning.kind == GENERATION_WARNING_UNMAPPED_GROUP
+        ]
         if unmapped_groups:
             group_names = "、".join(group.name for group in unmapped_groups)
             group_names_en = ", ".join(group.name for group in unmapped_groups)
-            warning = (
+            warning_message = (
                 f"有 {len(unmapped_groups)} 个小组未配置有效的教会结构单元，"
-                f"生成的聚会暂无结构受众范围：{group_names}。"
+                f"已跳过，未生成聚会：{group_names}。"
                 if language == "zh"
                 else (
                     f"{len(unmapped_groups)} group(s) have no valid church "
-                    "structure unit mapping; their generated meetings have no "
-                    f"structure audience scope: {group_names_en}."
+                    "structure unit mapping and were skipped; no meeting was "
+                    f"generated for them: {group_names_en}."
                 )
             )
-            messages.warning(request, warning)
+            messages.warning(request, warning_message)
+
+        # BS-STRUCT.1L: a target unit with several active legacy small groups is
+        # ambiguous, so its generated meeting carries no legacy small_group
+        # mirror (the structure-native audience row still drives runtime).
+        ambiguous_units = [
+            warning.unit
+            for warning in preview["warnings"]
+            if warning.kind == GENERATION_WARNING_AMBIGUOUS_MIRROR
+        ]
+        if ambiguous_units:
+            unit_names = "、".join(
+                unit.display_name("zh") for unit in ambiguous_units
+            )
+            unit_names_en = ", ".join(
+                unit.display_name("en") for unit in ambiguous_units
+            )
+            ambiguous_message = (
+                f"有 {len(ambiguous_units)} 个结构单元对应多个有效的传统小组，"
+                f"生成的聚会未设置传统小组镜像：{unit_names}。"
+                if language == "zh"
+                else (
+                    f"{len(ambiguous_units)} unit(s) map to multiple active "
+                    "legacy small groups; their generated meetings have no "
+                    f"legacy small-group mirror: {unit_names_en}."
+                )
+            )
+            messages.warning(request, ambiguous_message)
         return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
 
     return render(

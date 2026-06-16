@@ -9,7 +9,7 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.1J.** The design slices that
+Status: **partially migrated through BS-STRUCT.1L.** The design slices that
 followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
@@ -21,7 +21,10 @@ followed BS-STRUCT.1A are now implemented:
   they read `BibleStudyMeetingAudienceScope` rows when present and fall back to
   the legacy single-`small_group` path only for zero-row meetings
   (BS-STRUCT.1E / 1F);
-- a read-only retirement-readiness audit command exists (BS-STRUCT.1J).
+- a read-only retirement-readiness audit command exists (BS-STRUCT.1J);
+- normal generation is **structure-unit-native**: it targets `ChurchStructureUnit`
+  leaf small-group units, keys idempotency on a per-unit `generation_key`, and
+  keeps `small_group` only as a compatibility mirror (BS-STRUCT.1L).
 
 So the document as a whole is **no longer "docs-only / changes no runtime
 behavior."** The runtime now reads meeting audience rows. What remains is
@@ -132,21 +135,41 @@ Legacy V1 stack, frozen as archive (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_
 
 ### 1.3 How meetings are generated
 
+Since BS-STRUCT.1L, normal generation is **structure-unit-native**: the
+generated target is a `ChurchStructureUnit` leaf small-group unit, not
+fundamentally a legacy `SmallGroup`. `resolve_normal_generation_targets(series)`
+(`studies/services.py`) returns a deduplicated, deterministically ordered list of
+`GenerationTarget(unit, small_group)` where `unit` is an active
+`UNIT_SMALL_GROUP` unit and `small_group` is an optional legacy mirror attached
+only when exactly one active legacy group maps to that unit.
+
 `get_bible_study_meeting_generation_preview()` + `generate_bible_study_meetings()`
 (`studies/views.py`):
 
-1. `lesson.series.get_eligible_small_groups()` resolves the eligible legacy
-   `SmallGroup` set. If the series has audience rows, this is
-   `resolve_units_to_small_groups(units)` (selector layer, CS-CORE.1C); else it
-   falls back to legacy `scope_type` semantics.
-2. The preview diffs eligible groups against already-existing meetings for the
-   lesson and lists `missing_groups`.
-3. On POST, one `BibleStudyMeeting` is `get_or_create`d **per missing small
-   group**, with a default Friday 19:30 datetime and `status=draft`.
+1. **Targets.** When the series has `BibleStudySeriesAudienceScope` rows, each
+   selected unit expands to its active descendant-or-self `UNIT_SMALL_GROUP`
+   units (one target each — this path can target structure-native units that
+   have no legacy `SmallGroup`). When the series has zero audience rows, it falls
+   back to legacy `get_eligible_small_groups()` and converts each eligible group
+   to its mapped active `UNIT_SMALL_GROUP` unit; a group whose mapping is
+   missing / inactive / wrong-type is **skipped with a manager warning** rather
+   than creating a legacy-only zero-row meeting.
+2. **Preview.** Targets are diffed against existing meetings. A target counts as
+   existing when any meeting matches it by `generation_key`
+   (`normal-unit:{unit_id}`), by the legacy `small_group` mirror, or by a single
+   audience row equal to the target unit — so pre-1L meetings (mirror + row, no
+   key) are recognized and never duplicated. The preview lists `missing_targets`.
+3. **On POST**, one `BibleStudyMeeting` is created **per missing target** with
+   `small_group = target.small_group` (or `None`), `anchor_unit = target.unit`,
+   `meeting_kind = normal`, the stable per-unit `generation_key`, one
+   `BibleStudyMeetingAudienceScope` row for the target unit, a default Friday
+   19:30 datetime, and `status=draft`.
 
-Generation is idempotent (skips existing, including cancelled), one meeting per
-`(lesson, small_group)`. **It always produces one meeting per leaf small group;
-there is no concept of a single higher-level or multi-unit joint meeting.**
+Generation is idempotent (skips existing, including cancelled) and creates no
+duplicate meeting or audience row. **It still produces one normal meeting per
+leaf small-group unit; higher-level / multi-unit joint generation remains a later
+slice (BS-STRUCT.1G).** A unit with several active legacy groups is ambiguous, so
+its meeting carries no `small_group` mirror (structure-native, warned).
 
 ### 1.4 Where each structure concept is used
 
@@ -230,10 +253,18 @@ pickers are now **row-first** with a zero-row `small_group` fallback
 (BS-STRUCT.1E/1F), so the remaining legacy surface is concentrated in the
 **write** and **resolution** paths plus the fallback itself:
 
-1. **Generation** writes meetings keyed on legacy `SmallGroup` and the
-   conditional `(lesson, small_group)` unique constraint, resolving eligible
-   targets through `get_eligible_small_groups()` /
-   `resolve_units_to_small_groups()` (series audience → legacy `SmallGroup`).
+1. **Generation** is structure-unit-native since BS-STRUCT.1L: it resolves
+   `ChurchStructureUnit` leaf `UNIT_SMALL_GROUP` targets via
+   `resolve_normal_generation_targets()`, keys idempotency on the per-unit
+   `generation_key` (`normal-unit:{unit_id}`), and writes one audience row +
+   `anchor_unit` per target. `small_group` is attached only as a compatibility
+   mirror (and may be `None` for a structure-native unit). The legacy resolution
+   path still exists **only** as the zero-row series fallback: a series with no
+   audience rows resolves through `get_eligible_small_groups()` /
+   `resolve_units_to_small_groups()` and converts those legacy groups to units,
+   skipping invalid mappings with a warning instead of creating legacy-only
+   meetings. The conditional `(lesson, small_group)` unique constraint remains as
+   secondary protection alongside the `(lesson, generation_key)` constraint.
 2. **Manual create/edit meeting form** — since BS-STRUCT.1H, the normal manual
    `BibleStudyMeetingForm` write path now writes/repairs a
    `BibleStudyMeetingAudienceScope` row for the mapped small-group unit (and sets
@@ -845,6 +876,53 @@ the meeting-identity decision (Section 4.5).
     - **V1 `BibleStudySession`** remains excluded / a retirement target;
     - **production rollout (BS-STRUCT.1I) remains required** before the fallback
       can be removed.
+- **BS-STRUCT.1L** — normal generation becomes **structure-unit-native**.
+  ✅ **implemented.** Code/tests/docs only; no model/schema/migration change (the
+  `anchor_unit`, `generation_key`, and `meeting_kind` fields already existed).
+  - **New resolver.** `resolve_normal_generation_targets(series)`
+    (`studies/services.py`) returns `(targets, warnings)` where each
+    `GenerationTarget(unit, small_group)` is one active `UNIT_SMALL_GROUP`
+    `ChurchStructureUnit` leaf. With series audience rows, each selected unit
+    expands to its active descendant-or-self small-group units (one target each,
+    including structure-native units with no legacy mirror). With zero audience
+    rows it falls back to `get_eligible_small_groups()` and converts each
+    eligible group to its mapped active small-group unit. Targets are
+    deduplicated by unit id and deterministically ordered by unit
+    `sort_order` / `code` / `name` / `id`. The legacy `small_group` mirror is
+    attached only when **exactly one** active legacy group maps to the unit;
+    ambiguous (many-to-one) units get no mirror (warned), and duplicate eligible
+    groups collapse to one target with no mirror.
+  - **Generation key.** `normal_generation_key_for_unit(unit)` →
+    `normal-unit:{unit_id}`. Keyed on the structure unit (not `small_group`)
+    because the target is now a unit; this makes generation idempotent even for a
+    structure-native unit with no legacy mirror, enforced by the existing
+    `(lesson, generation_key)` conditional unique constraint.
+  - **Existing-meeting detection.** `build_existing_normal_meeting_index()` +
+    `find_existing_meeting_for_target()` match a target against existing meetings
+    by `generation_key`, by legacy `small_group` mirror, **or** by a single
+    audience row equal to the target unit — so pre-1L meetings (mirror + one row,
+    no key) are recognized and never duplicated; cancelled meetings still count
+    as existing.
+  - **Creation.** `create_normal_meeting_for_target()` writes one meeting per
+    missing target with `small_group = target.small_group` (or `None`),
+    `anchor_unit = target.unit`, `meeting_kind = normal`, the per-unit
+    `generation_key`, and one audience row for the target unit. Default Friday
+    19:30 datetime and `status=draft` behavior is preserved.
+  - **Fail-closed mappings.** Legacy-fallback groups whose mapping is
+    missing / inactive / wrong-type are **skipped with a manager warning**
+    instead of creating a legacy-only zero-row meeting (a behavior change from
+    BS-STRUCT.1D, which created the legacy meeting). `write_normal_meeting_audience_scope()`
+    is retained in `studies/services.py` for the manual-form path lineage but is
+    no longer called by generation.
+  - **Boundary (unchanged by this slice):** higher-level / joint generation UI
+    remains BS-STRUCT.1G; manage-list filters still expose `small_group`; the
+    series legacy scope fallback still exists; the **zero-row fallback is not
+    removed** (still required until production rollout and the final
+    fallback-removal slice); `small_group` remains a compatibility mirror, not
+    retired; V1 `BibleStudySession` is unchanged.
+  - Tests: new BS-STRUCT.1L methods in `studies/tests.py`
+    (`BibleStudyModuleTests`); three BS-STRUCT.1D "creates legacy meeting"
+    tests were updated to assert skip-with-warning.
 - **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
   zero-row fallback once all consumers are proven migrated (coordinate with
   CS-CORE Section 12 legacy retirement). Precondition: a clean

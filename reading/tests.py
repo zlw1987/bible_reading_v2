@@ -919,6 +919,60 @@ class ReflectionPrivacyInvariantTests(TestCase):
             self.assertTrue(hidden_group_post.can_be_seen_by(viewer))
             self.assertTrue(deleted_group_post.can_be_seen_by(viewer))
 
+    def test_struct_1c_snapshot_row_first_precedence_no_legacy_fallback(self):
+        # READING-STRUCT.1C guard: reflection group visibility is structure
+        # snapshot row-first (snapshot-only). When a valid snapshot exists it is
+        # the sole audience source (legacy Profile.small_group / small_group_at_post
+        # never override it); when no valid snapshot exists the post fails closed
+        # for ordinary viewers -- no legacy fallback was re-added. Holds for the
+        # per-row gate, the list/feed filter, and the passage_wall group tab.
+        snapshot_post = self.make_reflection(
+            user=self.author,
+            body="Snapshot wins over legacy group",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,  # legacy mirror points at old_unit
+            structure_unit=self.new_unit,  # snapshot points at new_unit
+        )
+        no_snapshot_post = self.make_reflection(
+            user=self.author,
+            body="Legacy only, no snapshot",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=None,
+        )
+
+        # Snapshot wins: the new_unit member sees it; the old (legacy-matching)
+        # member does not -- legacy small_group does not override the snapshot.
+        self.assertTrue(snapshot_post.can_be_seen_by(self.new_group_member))
+        self.assertFalse(snapshot_post.can_be_seen_by(self.old_group_member))
+        self.assertIn(
+            snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.new_group_member),
+        )
+        self.assertNotIn(
+            snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.old_group_member),
+        )
+        self.assertEqual(
+            self.passage_wall_group_ids_for(self.new_group_member),
+            {snapshot_post.id},
+        )
+
+        # No snapshot: fail closed for the legacy-matching member -- no fallback.
+        self.assertFalse(no_snapshot_post.can_be_seen_by(self.old_group_member))
+        self.assertNotIn(
+            no_snapshot_post.id,
+            self.reflection_ids_visible_by_filter(self.old_group_member),
+        )
+        self.assertEqual(self.passage_wall_group_ids_for(self.old_group_member), set())
+
+        # Detail gate and queryset filter stay in lockstep for both viewers.
+        for viewer in [self.new_group_member, self.old_group_member]:
+            self.assertEqual(
+                self.reflection_ids_visible_by_filter(viewer),
+                self.reflection_ids_visible_by_gate(viewer),
+            )
+
     def test_filter_and_group_tab_agree_with_detail_for_group_privacy(self):
         group_post = self.make_reflection(
             body="Group invariant post",

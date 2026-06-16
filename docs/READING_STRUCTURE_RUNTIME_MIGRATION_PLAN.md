@@ -10,10 +10,11 @@ design / invariants / rollback documents. This doc tracks only the **remaining
 runtime legacy small-group dependencies** in Reading / Reflection / Progress and
 the audit that measures readiness to retire them.
 
-Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) implemented.**
-Code/tests/docs only; no model, schema, migration, or runtime-behavior change.
-The reflection read/write visibility path and the group-progress roster/default
-path are already membership-core (see below); what remains is retiring the last
+Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) + 1C (reflection
+visibility row-first, verified) implemented.** Code/tests/docs only; no model,
+schema, migration, or runtime-behavior change. The reflection read/write
+visibility path and the group-progress roster/default path are already
+membership-core (see below); what remains is retiring the last
 `Profile.small_group` reads and the legacy mirror data once real-data evidence is
 clean.
 
@@ -23,6 +24,16 @@ This document's code changes **no runtime behavior**. It adds a read-only audit
 backfill (`backfill_reflection_structure_snapshots`) that only sets the additive
 `structure_unit_at_post` snapshot column. No runtime source is switched and no
 production command has been run.
+
+> **READING-STRUCT.1C finding (2026-06-16).** Group-shared reflection visibility
+> was already made structure-snapshot row-first — in fact snapshot-**only**, with
+> the legacy `Profile.small_group` / `small_group_at_post` fallback **removed** —
+> by CS-CORE.4G.2 (commit `238481f`), which predates this plan. So the 1C goal is
+> already in effect and *stricter* than the original 1C draft (which had proposed
+> keeping a legacy fallback for no-snapshot rows). Per an explicit decision this
+> slice **does not re-add** that legacy fallback (doing so would reverse the
+> 4G.2 privacy tightening); it only verifies and documents the current behavior.
+> See Section 5.5.
 
 ## 1. Current legacy consumers in Reading / Reflection / Progress
 
@@ -179,14 +190,60 @@ live `comments.reflection_visibility` read gate.
   need manual repair, not backfill). The runtime read/write paths are unchanged;
   this only prepares data for the later structure-native runtime switch.
 
+## 5.5 Reflection visibility row-first (READING-STRUCT.1C — verified, no change)
+
+**Outcome: already implemented by CS-CORE.4G.2; this slice makes no runtime
+change and deliberately does not re-add a legacy fallback.**
+
+Group-shared `ReflectionComment` read visibility is **structure-snapshot
+row-first** — in fact snapshot-**only**:
+
+- When a group post has a valid `structure_unit_at_post` (active
+  `UNIT_SMALL_GROUP`), that snapshot unit is the sole audience source: a viewer
+  sees it only with exactly one active primary `ChurchStructureMembership` in
+  that unit **or a descendant**. `Profile.small_group` / `small_group_at_post`
+  are not consulted. Fail-closed on no active primary membership, multiple active
+  primary memberships, or an inactive/wrong-type snapshot.
+- When a group post has **no** valid snapshot, it currently fails closed (visible
+  only to author/staff). CS-CORE.4G.2 **removed** the old legacy
+  `Profile.small_group` fallback here; this slice **keeps it removed** by explicit
+  decision (re-adding it would reverse the 4G.2 privacy tightening). The
+  no-snapshot rows the 1A audit flags
+  (`reflections_legacy_only_no_valid_snapshot`) become visible again only once the
+  1B backfill is run with `--apply` on real data — not via a legacy fallback.
+- Private / church / hidden / deleted / author / staff behavior is unchanged.
+
+This applies uniformly to detail access (`ReflectionComment.can_be_seen_by`), the
+list/feed filter (`reading.views.get_visible_reflection_filter`, used by the
+passage reader), and the `passage_wall` group tab — all routed through
+`comments.reflection_visibility` (`user_matches_group_reflection_snapshot`
+per-row gate and `get_visible_group_reflection_snapshot_unit_ids` queryset
+mirror, kept in lockstep). No new helper was added (the canonical per-row gate
+already exists).
+
+**Verification (no code change in this slice):** the row-first / no-fallback
+behavior is locked by existing tests in `reading.tests.ReflectionPrivacyInvariantTests`,
+including `test_structure_unit_snapshot_drives_group_visibility` (snapshot wins
+over a mismatched legacy group; list + detail agree),
+`test_matching_legacy_group_without_structure_snapshot_is_not_visible` (no-snapshot
+fail-closed, **no** legacy fallback),
+`test_profile_small_group_alone_does_not_grant_group_visibility`,
+`test_membership_descendant_of_snapshot_unit_can_see_post`,
+`test_no_active_primary_membership_fails_closed_for_group_visibility`,
+`test_multiple_active_primary_memberships_fail_closed`, and
+`test_filter_and_group_tab_agree_with_detail_for_group_privacy`; plus the
+public/private/hidden regression cases in `ReflectionWallVisibilityRegressionTests`.
+
+**Group progress runtime was not switched in this slice.**
+
 ## 6. Next proposed slice
 
-**READING-STRUCT.1C (proposed):** switch the `my_group_progress` last-resort
+**READING-STRUCT.1D (proposed):** switch the `my_group_progress` last-resort
 default to membership-core (or no default) and remove the
 `Profile.small_group` default read, gated on a clean
 `audit_reading_structure_runtime_readiness --fail-on-blockers` (after the 1B
 backfill `--apply` is run and verified on real data) and the existing
 `audit_group_progress_shadow --fail-on-drift`.
 
-Each is a separate, individually-gated slice; the 1A audit and 1B backfill slices
-perform **no** runtime switch.
+Each is a separate, individually-gated slice; the 1A audit, 1B backfill, and 1C
+verification slices perform **no** runtime switch.

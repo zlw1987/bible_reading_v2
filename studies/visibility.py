@@ -187,6 +187,58 @@ def filter_users_for_meeting_small_group_membership(users, small_group, target_d
     )
 
 
+def filter_users_for_meeting_audience(users, meeting, target_date=None):
+    """Filter a user queryset to a meeting's audience-row candidate members.
+
+    BS-STRUCT.1F: role / worship pickers read meeting audience rows when present.
+    When a meeting has one or more ``BibleStudyMeetingAudienceScope`` rows, the
+    candidates are users with exactly one active primary
+    ``ChurchStructureMembership`` whose unit is one of the meeting's audience
+    units or a descendant of one of them. The audience unit may be any structure
+    level (small group, district, CM/EM, custom/fellowship, ...), so no
+    ``UNIT_SMALL_GROUP`` gate is applied and ``Profile.small_group`` is never
+    consulted. Audience rows take precedence over the legacy ``small_group``
+    mirror.
+
+    When the meeting has zero audience rows, this falls back to the existing
+    ``filter_users_for_meeting_small_group_membership`` membership-core path
+    keyed to ``meeting.small_group``.
+
+    Fail-closed: no single active primary membership, or a membership outside
+    every audience unit's subtree, excludes the user.
+    """
+    if meeting is None:
+        return users.none()
+
+    audience_unit_ids = list(
+        meeting.audience_scope_links.values_list("unit_id", flat=True)
+    )
+    if not audience_unit_ids:
+        return filter_users_for_meeting_small_group_membership(
+            users, meeting.small_group, target_date=target_date
+        )
+
+    target_date = target_date or timezone.localdate()
+    active_primary_memberships = ChurchStructureMembership.objects.filter(
+        status=ChurchStructureMembership.STATUS_ACTIVE,
+        is_primary=True,
+        start_date__lte=target_date,
+    ).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date))
+    single_active_primary_user_ids = (
+        active_primary_memberships.values("user_id")
+        .annotate(active_primary_count=models.Count("id"))
+        .filter(active_primary_count=1)
+        .values("user_id")
+    )
+    matching_user_ids = active_primary_memberships.filter(
+        unit_id__in=_collect_units_and_descendant_ids(audience_unit_ids),
+    ).values("user_id")
+
+    return users.filter(id__in=matching_user_ids).filter(
+        id__in=single_active_primary_user_ids,
+    )
+
+
 def get_membership_visible_small_groups(user, target_date=None):
     """Return legacy SmallGroups visible to a user through membership-core."""
     membership_unit = _get_single_active_primary_membership_unit(

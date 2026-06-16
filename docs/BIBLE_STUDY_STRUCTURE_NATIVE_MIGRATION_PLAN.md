@@ -128,39 +128,52 @@ there is no concept of a single higher-level or multi-unit joint meeting.**
    `CAP_PUBLISH_BIBLE_STUDY_GUIDES`) → always visible.
 2. `meeting_is_member_visible()` — meeting published + lesson published + series
    active & published.
-3. `user_matches_meeting_small_group_membership(user, meeting.small_group)` —
-   the meeting's single `small_group` must map to a **small-group-type**
-   `ChurchStructureUnit`; the user's single active primary membership unit must
-   be that unit or a descendant. `Profile.small_group` grants nothing here.
+3. Row-first audience match (BS-STRUCT.1E): when the meeting has one or more
+   `BibleStudyMeetingAudienceScope` rows,
+   `user_matches_meeting_audience_scopes(user, meeting)` is the source of truth —
+   the user's single active primary membership unit must be one of the audience
+   units **or a descendant** (any unit level; no `UNIT_SMALL_GROUP` gate). When
+   the meeting has **zero** audience rows it falls back to
+   `user_matches_meeting_small_group_membership(user, meeting.small_group)` — the
+   single `small_group` mapped to a **small-group-type** `ChurchStructureUnit`,
+   matched by the user's single active primary membership unit or a descendant.
+   `Profile.small_group` grants nothing on either path.
 
-**Important consequence:** visibility is already membership-core, but it is
-keyed entirely off the meeting's **single `small_group` FK and its mapped
-unit**. A meeting mapped to a district/CM/EM/custom unit fails closed for
-ordinary users (the helper requires `UNIT_SMALL_GROUP`). So the *only* meeting
-audience the runtime can express today is "one leaf small group."
+**Current state:** visibility is membership-core and **row-first**. A meeting
+with audience rows can express any audience level (single group, district,
+CM/EM, custom, or multi-unit joint), and the legacy single-`small_group` path
+survives only as the zero-row fallback for meetings that have no audience rows.
 
 ### 1.6 Current Today / landing behavior
 
 `get_v2_landing_context()` (`studies/views.py`, reused by `reading/views.py` for
-Today, per CS-CORE.3C audit):
+Today, per CS-CORE.3C audit) is **row-first** (BS-STRUCT.1E):
 
-- `get_membership_visible_small_groups(user)` derives the user's legacy
-  `SmallGroup`(s) from their single active primary membership unit (and
-  small-group ancestors).
-- Picks the first such group, then loads up to 3 upcoming published meetings for
-  groups in that set, filtered again through `can_be_seen_by`.
+- It resolves the user's active primary membership ancestor-or-self unit ids
+  (`get_membership_audience_candidate_unit_ids`) and selects upcoming published
+  meetings matching **either** an audience row on one of those units **or** the
+  legacy `small_group` zero-row fallback, confirming each through
+  `can_be_seen_by` (so audience-row precedence still applies).
+- The empty/no-group state is only shown when the user has **neither** a
+  resolvable legacy group **nor** any active primary membership (e.g. a
+  profile-only user), so a membership user with a null `small_group` still sees
+  their audience-row meeting and a descendant-unit member sees a higher-level /
+  district audience-row meeting.
 - Today additionally surfaces the user's linked `BibleStudyMeetingRole` chips.
 
-This is **single-group-centric**: a user with no single active primary
-membership, or whose membership unit is not a small-group unit, sees "no small
-group." Joint/higher-level meetings cannot appear here today.
+So joint / higher-level audience-row meetings now appear here; only the zero-row
+fallback remains single-group-centric. `Profile.small_group` is not consulted.
 
 ### 1.7 Current worship / song / leader / role picker behavior
 
 - `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` filter the
-  user dropdown through `filter_users_for_meeting_small_group_membership(users,
+  user dropdown through `filter_users_for_meeting_audience(users, meeting)`
+  (BS-STRUCT.1F): when the meeting has audience rows the candidates are
+  active-primary members of any audience unit (or descendants); a zero-row
+  meeting falls back to `filter_users_for_meeting_small_group_membership(users,
   meeting.small_group)` — active primary members of the meeting's single
-  small-group unit (or descendants), single-active-primary only (CS-CORE.3B).
+  small-group unit (or descendants). Both paths are single-active-primary only
+  (CS-CORE.3B) and never consult `Profile.small_group`.
 - Worship set / roles are per-meeting; manager-controlled. No role-aware editing
   permissions yet (BS-V2.7 deferred). No automatic assignment, rotation,
   availability, swap, or reminders.
@@ -174,25 +187,33 @@ for this migration** — see Section 7 open question on V1 handling.
 
 ### 1.9 Remaining legacy consumers (the migration surface)
 
-1. **`BibleStudyMeeting.small_group`** — the single hard FK. The meeting's
-   entire audience, visibility, generation identity, and picker scope flow
-   through it. **This is the core legacy dependency to break.**
-2. **Generation** writes meetings keyed on legacy `SmallGroup` and the
-   `(lesson, small_group)` unique constraint.
-3. **`get_eligible_small_groups()` / `resolve_units_to_small_groups()`** — series
-   audience still resolves *to legacy SmallGroup* for generation.
-4. **V2 landing / Today** derives the user's *legacy SmallGroup* set
-   (`get_membership_visible_small_groups`) and matches meetings by group.
+Runtime **reads** for meeting visibility, V2 landing / Today, and role/worship
+pickers are now **row-first** with a zero-row `small_group` fallback
+(BS-STRUCT.1E/1F), so the remaining legacy surface is concentrated in the
+**write** and **resolution** paths plus the fallback itself:
+
+1. **Generation** writes meetings keyed on legacy `SmallGroup` and the
+   conditional `(lesson, small_group)` unique constraint, resolving eligible
+   targets through `get_eligible_small_groups()` /
+   `resolve_units_to_small_groups()` (series audience → legacy `SmallGroup`).
+2. **Manual create/edit meeting form** still writes `small_group` and does
+   **not** write `BibleStudyMeetingAudienceScope` rows, so manually created
+   meetings rely on the zero-row fallback.
+3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
+   all retain the legacy single-`small_group` path for meetings with no audience
+   rows.
+4. **Manage-list filters** still expose / filter by legacy `small_group`.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still a
    coexistence fallback.
 6. **V1 `BibleStudySession`** — legacy-only, retirement target (excluded).
 
-Note: visibility and pickers are **already** membership-core in their *user*
-resolution; they are not legacy in *who the user is*, only in *how the meeting's
-audience is expressed* (one `SmallGroup`). This is the inverse of the situation
-SE-AS faced, and it narrows this migration's real blocker to the meeting
-audience representation + generation, not the user-side resolver.
+Note: the runtime reads are **already** membership-core in their *user*
+resolution and now structure-native in *how the meeting's audience is read*
+(audience rows when present); `Profile.small_group` is not used by V2 visibility,
+landing/Today, or pickers. The remaining blocker is the audience **write** path
+(generation + manual form) and retiring the zero-row fallback once every meeting
+carries rows.
 
 ---
 
@@ -578,7 +599,43 @@ the meeting-identity decision (Section 4.5).
     branch, zero-row fallback, precedence hide, profile-only empty state, and
     staff links).
 - **BS-STRUCT.1F** — role / worship pickers read meeting audience rows (union of
-  units) instead of the single `small_group` unit.
+  units) instead of the single `small_group` unit. ✅ **implemented.**
+  - **Row-first picker candidates with zero-row `small_group` fallback.**
+    `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` now build
+    their user dropdown through `filter_users_for_meeting_audience(users,
+    meeting)`:
+    - **When the meeting has one or more `BibleStudyMeetingAudienceScope` rows**
+      those rows are the candidate source. Candidates are users with a **single
+      active primary** `ChurchStructureMembership` whose unit is one of the
+      meeting's audience units **or a descendant** of one of them. Unlike the
+      legacy small-group path there is **no `UNIT_SMALL_GROUP` gate**, so audience
+      rows on a district / CM / EM / custom unit offer that unit's members and any
+      descendant unit's members. `Profile.small_group` is **never** consulted.
+    - **When the meeting has zero audience rows** it falls back to the existing
+      `filter_users_for_meeting_small_group_membership(users,
+      meeting.small_group)` membership-core path, exactly as before this slice.
+    - Fail-closed is preserved on the audience path: no active primary
+      membership, requested / ended / future membership, **multiple** active
+      primary memberships, and wrong-branch membership all exclude the user.
+    - **Audience rows take precedence over the `small_group` mirror.** A meeting
+      whose legacy `small_group` still points at one group but whose audience row
+      targets a different unit offers the **audience** unit's members, not the
+      `small_group` members.
+  - **Edit forms keep the currently selected user available** even when that user
+    no longer matches the meeting audience (unchanged edit behavior), and the
+    blank-user + display-name fallback flow is unchanged.
+  - **Visibility / detail access, V2 landing / Today, and generation are
+    unchanged in this slice** — the read switch for those happened in
+    BS-STRUCT.1E / 1D; this slice only changes role/worship candidate filtering.
+  - **`small_group` is not removed and the zero-row fallback remains.** No
+    models / schema / migrations changed.
+  - Tests: new BS-STRUCT.1F methods in `studies/tests.py`
+    (`BibleStudyModuleTests`) for both the role form and the worship-song form
+    (audience-row match with null `small_group`, district/ancestor descendant
+    match, wrong-branch miss, profile-only miss, multiple-active-primary
+    fail-closed, zero-row `small_group` fallback, audience-row precedence over
+    `small_group`, and selected user/lead retained on edit when outside the
+    audience).
 - **BS-STRUCT.1G** — support higher-level / joint generation cases (5.2–5.4),
   including replacement/suppression marking.
 - **BS-STRUCT.1H** — stop normal write paths from creating legacy-only meeting

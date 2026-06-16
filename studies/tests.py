@@ -2288,6 +2288,173 @@ class BibleStudyModuleTests(TestCase):
         self.assertIn(self.user, users)
         self.assertIn(self.other_user, users)
 
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1F: role picker reads meeting audience rows when present.
+    # ------------------------------------------------------------------
+
+    def test_meeting_role_form_audience_row_includes_membership_user_null_group(self):
+        member = User.objects.create_user(
+            username="role_audience_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["user"].queryset)
+
+    def test_meeting_role_form_audience_district_includes_descendant_member(self):
+        member = User.objects.create_user(
+            username="role_audience_descendant",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        # Audience targets the district; a small-group member below it matches.
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["user"].queryset)
+
+    def test_meeting_role_form_audience_row_excludes_wrong_branch_user(self):
+        member = User.objects.create_user(
+            username="role_audience_wrong_branch",
+            password="testpass123",
+        )
+        self.create_membership(member, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertNotIn(member, form.fields["user"].queryset)
+
+    def test_meeting_role_form_audience_row_excludes_profile_only_user(self):
+        # self.user has Profile.small_group but no ChurchStructureMembership.
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertNotIn(self.user, form.fields["user"].queryset)
+
+    def test_meeting_role_form_audience_row_excludes_multiple_primary(self):
+        member = User.objects.create_user(
+            username="role_audience_multi_primary",
+            password="testpass123",
+        )
+        today = timezone.localdate()
+        # bulk_create bypasses single-active-primary model validation to set up
+        # the fail-closed condition the picker must still guard against.
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=member,
+                    unit=unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today - timezone.timedelta(days=1),
+                )
+                for unit in (self.group_unit, self.same_group_unit)
+            ]
+        )
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertNotIn(member, form.fields["user"].queryset)
+
+    def test_meeting_role_form_zero_row_meeting_falls_back_to_small_group(self):
+        member = User.objects.create_user(
+            username="role_zero_row_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["user"].queryset)
+
+    def test_meeting_role_form_audience_row_takes_precedence_over_small_group(self):
+        rainbow4_member = User.objects.create_user(
+            username="role_precedence_r4",
+            password="testpass123",
+        )
+        self.create_membership(rainbow4_member, self.group_unit)
+        rainbow5_member = User.objects.create_user(
+            username="role_precedence_r5",
+            password="testpass123",
+        )
+        self.create_membership(rainbow5_member, self.other_group_unit)
+        # small_group mirror points at Rainbow 4, audience row at Rainbow 5.
+        meeting = self.create_meeting(
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        users = form.fields["user"].queryset
+        self.assertIn(rainbow5_member, users)
+        self.assertNotIn(rainbow4_member, users)
+
+    def test_meeting_role_form_keeps_selected_user_outside_audience_on_edit(self):
+        # other_user belongs to Rainbow 5, outside the Rainbow 4 audience row.
+        self.create_membership(self.other_user, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        role = self.create_meeting_role(meeting, user=self.other_user)
+
+        form = BibleStudyMeetingRoleForm(instance=role, meeting=meeting)
+
+        self.assertIn(self.other_user, form.fields["user"].queryset)
+
     def test_meeting_role_form_rejects_blank_assignee(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
         form = BibleStudyMeetingRoleForm(
@@ -2689,6 +2856,128 @@ class BibleStudyModuleTests(TestCase):
         users = form.fields["worship_lead_user"].queryset
         self.assertIn(self.user, users)
         self.assertIn(self.other_user, users)
+
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1F: worship picker reads meeting audience rows when present.
+    # ------------------------------------------------------------------
+
+    def test_meeting_worship_form_audience_row_includes_membership_user(self):
+        member = User.objects.create_user(
+            username="worship_audience_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["worship_lead_user"].queryset)
+
+    def test_meeting_worship_form_audience_district_includes_descendant_member(self):
+        member = User.objects.create_user(
+            username="worship_audience_descendant",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["worship_lead_user"].queryset)
+
+    def test_meeting_worship_form_audience_row_excludes_wrong_branch_and_profile(self):
+        wrong_branch = User.objects.create_user(
+            username="worship_audience_wrong_branch",
+            password="testpass123",
+        )
+        self.create_membership(wrong_branch, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        users = form.fields["worship_lead_user"].queryset
+        self.assertNotIn(wrong_branch, users)
+        # self.user is profile-only (no ChurchStructureMembership).
+        self.assertNotIn(self.user, users)
+
+    def test_meeting_worship_form_zero_row_meeting_falls_back_to_small_group(self):
+        member = User.objects.create_user(
+            username="worship_zero_row_member",
+            password="testpass123",
+        )
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["worship_lead_user"].queryset)
+
+    def test_meeting_worship_form_audience_row_takes_precedence_over_small_group(self):
+        rainbow4_member = User.objects.create_user(
+            username="worship_precedence_r4",
+            password="testpass123",
+        )
+        self.create_membership(rainbow4_member, self.group_unit)
+        rainbow5_member = User.objects.create_user(
+            username="worship_precedence_r5",
+            password="testpass123",
+        )
+        self.create_membership(rainbow5_member, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=self.group,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        users = form.fields["worship_lead_user"].queryset
+        self.assertIn(rainbow5_member, users)
+        self.assertNotIn(rainbow4_member, users)
+
+    def test_meeting_worship_form_keeps_selected_lead_outside_audience_on_edit(self):
+        self.create_membership(self.other_user, self.other_group_unit)
+        meeting = self.create_meeting(
+            small_group=None,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        song = self.create_meeting_worship_song(
+            meeting,
+            worship_lead_user=self.other_user,
+        )
+
+        form = BibleStudyMeetingWorshipSongForm(instance=song, meeting=meeting)
+
+        self.assertIn(self.other_user, form.fields["worship_lead_user"].queryset)
 
     def test_staff_can_edit_meeting_worship_song(self):
         self.set_language("en")

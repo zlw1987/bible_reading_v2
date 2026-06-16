@@ -1832,6 +1832,189 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "将要生成的聚会")
         self.assertNotContains(response, "查经课程")
 
+    # ------------------------------------------------------------------
+    # BS-STRUCT.1D: normal generation also writes meeting audience rows.
+    # ------------------------------------------------------------------
+    def test_generate_meetings_writes_one_audience_row_per_created_meeting(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 3)
+        expected_unit = {
+            self.group.id: self.group_unit.id,
+            self.same_group.id: self.same_group_unit.id,
+            self.other_group.id: self.other_group_unit.id,
+        }
+        for meeting in meetings:
+            rows = list(meeting.audience_scope_links.all())
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].unit_id, expected_unit[meeting.small_group_id])
+            # anchor_unit set to the same mapped unit.
+            self.assertEqual(
+                meeting.anchor_unit_id, expected_unit[meeting.small_group_id]
+            )
+            # meeting_kind stays normal; small_group mirror stays set.
+            self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
+            self.assertIsNotNone(meeting.small_group_id)
+            self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_DRAFT)
+
+    def test_generate_meetings_audience_rows_are_idempotent(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        self.assertEqual(BibleStudyMeeting.objects.filter(lesson=lesson).count(), 3)
+        self.assertEqual(
+            BibleStudyMeetingAudienceScope.objects.filter(
+                meeting__lesson=lesson
+            ).count(),
+            3,
+        )
+
+    def test_generate_meetings_does_not_backfill_existing_meeting(self):
+        self.set_language("en")
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        existing = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        existing.refresh_from_db()
+        # BS-STRUCT.1D only writes rows for meetings it creates; the existing
+        # meeting is skipped and never mutated (1C backfills existing rows).
+        self.assertEqual(existing.audience_scope_links.count(), 0)
+        self.assertIsNone(existing.anchor_unit_id)
+        created = BibleStudyMeeting.objects.filter(lesson=lesson).exclude(
+            id=existing.id
+        )
+        self.assertEqual(created.count(), 2)
+        for meeting in created:
+            self.assertEqual(meeting.audience_scope_links.count(), 1)
+
+    def test_generate_meetings_district_scope_writes_rows_for_each_group(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_DISTRICT
+        self.series.district = self.north
+        self.series.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 2)
+        for meeting in meetings:
+            rows = list(meeting.audience_scope_links.all())
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(
+                rows[0].unit_id, meeting.small_group.church_structure_unit_id
+            )
+            self.assertEqual(
+                meeting.anchor_unit_id, meeting.small_group.church_structure_unit_id
+            )
+
+    def test_generate_meetings_unmapped_group_creates_legacy_meeting_with_warning(self):
+        self.set_language("en")
+        unmapped = SmallGroup.objects.create(
+            name="Unmapped Group", district=self.north
+        )
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=unmapped)
+        # Fail-closed: legacy meeting still created, but no audience row and no
+        # anchor_unit, so it is never falsely presented as structure-native.
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.assertIsNone(meeting.anchor_unit_id)
+        self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
+        self.assertContains(response, "no valid church structure unit mapping")
+        self.assertContains(response, "Unmapped Group")
+        # Valid groups in the same run still got their rows.
+        valid_meeting = BibleStudyMeeting.objects.get(
+            lesson=lesson, small_group=self.group
+        )
+        self.assertEqual(valid_meeting.audience_scope_links.count(), 1)
+
+    def test_generate_meetings_inactive_unit_creates_legacy_meeting_with_warning(self):
+        self.set_language("en")
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVEGRP",
+            name="Inactive Unit",
+            is_active=False,
+        )
+        bad_group = SmallGroup.objects.create(
+            name="Inactive Unit Group", district=self.north
+        )
+        bad_group.church_structure_unit = inactive_unit
+        bad_group.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=bad_group)
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.assertIsNone(meeting.anchor_unit_id)
+        self.assertContains(response, "Inactive Unit Group")
+
+    def test_generate_meetings_wrong_unit_type_creates_legacy_meeting_with_warning(self):
+        self.set_language("en")
+        wrong_group = SmallGroup.objects.create(
+            name="Wrong Type Group", district=self.north
+        )
+        # Map to a DISTRICT unit, which the small-group runtime path rejects.
+        wrong_group.church_structure_unit = self.north_unit
+        wrong_group.save()
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+            follow=True,
+        )
+
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=wrong_group)
+        self.assertEqual(meeting.audience_scope_links.count(), 0)
+        self.assertIsNone(meeting.anchor_unit_id)
+        self.assertContains(response, "Wrong Type Group")
+
+    def test_generate_meetings_audience_rows_do_not_broaden_runtime_visibility(self):
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+        self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
+
+        group_meeting = BibleStudyMeeting.objects.get(
+            lesson=lesson, small_group=self.group
+        )
+        group_meeting.status = BibleStudyMeeting.STATUS_PUBLISHED
+        group_meeting.save()
+
+        self.create_membership(self.user, self.group_unit)
+        self.create_membership(self.other_user, self.other_group_unit)
+
+        # Runtime still keys visibility off small_group membership, not the new
+        # audience rows: a member of the meeting's group sees it; a member of a
+        # different group does not. The rows did not broaden visibility.
+        self.assertTrue(group_meeting.can_be_seen_by(self.user))
+        self.assertFalse(group_meeting.can_be_seen_by(self.other_user))
+
     def test_staff_can_access_meeting_management_list(self):
         self.set_language("en")
         self.client.login(username="study_staff", password="testpass123")

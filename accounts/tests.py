@@ -114,6 +114,15 @@ class AccountProfileTests(TestCase):
         self.assertIn("/login/", response.url)
 
     def test_profile_page_shows_user_info(self):
+        # CS-RETIRE.1A: the "current confirmed group" display uses the active
+        # primary ChurchStructureMembership unit, not legacy Profile.small_group.
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
         self.client.login(username="levin", password="OldPass123!")
 
         response = self.client.get(reverse("profile"))
@@ -121,11 +130,29 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "levin")
-        self.assertContains(response, "Rainbow 4")
+        # The membership unit path (not the legacy small group) is the group shown.
+        self.assertContains(response, "Profile Rainbow 4")
         self.assertContains(response, "我参加的小组")
         self.assertContains(response, "Profile Rainbow 5")
         self.assertNotContains(response, "SMALLGROUP-6 - Profile Rainbow 5")
         self.assertNotIn('name="small_group"', content)
+
+    def test_profile_page_no_membership_shows_no_group_not_legacy_profile(self):
+        # CS-RETIRE.1A: with a legacy Profile.small_group but no active primary
+        # membership, the page shows the no-group state, not the legacy group.
+        self.assertEqual(self.user.profile.small_group, self.group)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.user).exists()
+        )
+        self.set_language("en")
+        self.client.login(username="levin", password="OldPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Not sure / new here")
+        # The legacy group name is not presented as the confirmed group.
+        self.assertNotContains(response, "Current confirmed group: Rainbow 4")
 
     def test_user_can_update_profile_without_email(self):
         self.client.login(username="levin", password="OldPass123!")
@@ -3489,22 +3516,21 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
         self.assertContains(response, "Request Source")
-        self.assertContains(response, "Current active group data")
-        self.assertContains(response, "Current small group")
-        self.assertContains(response, "Current group update target")
+        self.assertContains(response, "Legacy small group data (reference only)")
+        self.assertContains(response, "Legacy small group (reference)")
         self.assertContains(response, "Group membership after approval")
         self.assertContains(response, "Approval state")
         self.assertContains(
             response,
-            "Approval creates the primary membership record.",
+            "Approval creates the primary church-structure membership record.",
         )
-        self.assertContains(response, "No single active current small group")
         self.assertContains(response, "No existing confirmed membership")
-        self.assertNotContains(response, "future foundation")
-        self.assertNotContains(response, "Future church-structure foundation")
-        self.assertNotContains(response, "Current runtime data")
-        self.assertNotContains(response, "legacy small group")
-        self.assertContains(response, "Confirm and Sync by Rule")
+        # CS-RETIRE.1A: the legacy sync-target row and sync-on-approval wording
+        # are gone (approval no longer writes Profile.small_group).
+        self.assertNotContains(response, "Current group update target")
+        self.assertNotContains(response, "No single active current small group")
+        self.assertNotContains(response, "Confirm and Sync by Rule")
+        self.assertContains(response, "Approve Request")
         self.assertContains(response, "Decline Request")
 
     def test_chinese_authorized_user_sees_request_detail_staff_wording(self):
@@ -3521,21 +3547,25 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "小组申请详情")
         self.assertContains(response, "申请加入的小组/团契")
-        self.assertContains(response, "目前生效的小组资料")
-        self.assertContains(response, "当前小组")
-        self.assertContains(response, "确认后会更新到的小组")
+        self.assertContains(response, "旧版小组资料（仅供参考）")
+        self.assertContains(response, "旧版小组（仅供参考）")
         self.assertContains(response, "确认后的归属记录")
         self.assertContains(response, "现有已确认归属")
         self.assertContains(
             response,
-            "确认后会建立主要归属记录；只有当申请的小组正好对应一个启用中的当前小组时，才会更新目前生效的小组资料。",
+            "确认后会建立主要归属记录（教会架构归属）。审核不再更新旧版小组资料；归属记录才是依据。",
         )
+        # CS-RETIRE.1A: the legacy sync-target row is gone.
+        self.assertNotContains(response, "确认后会更新到的小组")
         self.assertNotContains(response, "未来教会架构基础")
         self.assertNotContains(response, "当前运行资料")
-        self.assertNotContains(response, "确认后可同步的旧小组")
 
-    def test_detail_shows_transfer_warning_for_different_mapped_small_group(self):
-        mapped_group = SmallGroup.objects.create(
+    def test_detail_has_no_profile_sync_warning_after_retire_1a(self):
+        # CS-RETIRE.1A: approval no longer writes Profile.small_group, so the
+        # detail page no longer shows a "will update the current active group"
+        # sync warning even when the requested unit maps to a different active
+        # legacy group than the user's current Profile.small_group.
+        SmallGroup.objects.create(
             name="Mapped Rainbow 5",
             church_structure_unit=self.unit,
         )
@@ -3550,11 +3580,10 @@ class StaffMembershipRequestListTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
+        self.assertNotContains(
             response,
             "confirming this request will update the current active group data",
         )
-        self.assertContains(response, mapped_group.name)
 
     def test_detail_only_allows_requested_memberships(self):
         active_user = User.objects.create_user(username="active_detail")
@@ -3642,12 +3671,17 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(membership.requested_by, requested_by)
         self.assertEqual(self.user.profile.small_group, original_group)
 
-    def test_approve_mapped_unit_updates_profile_small_group(self):
+    def test_approve_mapped_unit_does_not_update_profile_small_group(self):
+        # CS-RETIRE.1A: approval no longer mirrors into Profile.small_group, even
+        # when the requested unit maps to exactly one active legacy group. The
+        # ChurchStructureMembership is the source of truth; the legacy field is
+        # left untouched.
         mapped_group = SmallGroup.objects.create(
             name="Mapped Rainbow 4",
             church_structure_unit=self.unit,
         )
         membership = self.create_membership()
+        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3659,7 +3693,8 @@ class StaffMembershipRequestListTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
         self.assertTrue(membership.is_primary)
-        self.assertEqual(self.user.profile.small_group, mapped_group)
+        self.assertEqual(self.user.profile.small_group, original_group)
+        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_approve_inactive_mapped_small_group_does_not_update_profile_small_group(self):
         SmallGroup.objects.create(
@@ -3855,9 +3890,13 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
-    def test_mapped_approval_changes_service_event_visibility_through_profile_small_group(self):
+    def test_mapped_approval_does_not_write_profile_or_change_event_visibility(self):
+        # CS-RETIRE.1A: approval no longer mirrors into Profile.small_group, so it
+        # no longer flips a legacy zero-row-fallback ServiceEvent's visibility via
+        # the profile group. The membership is the source of truth; the legacy
+        # field (and the legacy event fallback that reads it) is left untouched.
         district = District.objects.create(name="Mapped District 1")
-        group = SmallGroup.objects.create(
+        SmallGroup.objects.create(
             name="Mapped District Group",
             district=district,
             church_structure_unit=self.unit,
@@ -3880,8 +3919,10 @@ class StaffMembershipRequestListTests(TestCase):
         )
         self.normal_user.profile.refresh_from_db()
 
-        self.assertEqual(self.normal_user.profile.small_group, group)
-        self.assertTrue(event.can_be_seen_by(self.normal_user))
+        # Profile.small_group is not written, and the legacy event visibility is
+        # unchanged by approval.
+        self.assertIsNone(self.normal_user.profile.small_group)
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_rejected_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
@@ -3929,7 +3970,12 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
 
-    def test_mapped_approval_keeps_bible_study_scope_legacy_group_based(self):
+    def test_mapped_approval_does_not_write_profile_or_change_v1_session_visibility(self):
+        # CS-RETIRE.1A: approval no longer writes Profile.small_group, so it no
+        # longer flips a legacy V1 BibleStudySession's profile-based visibility.
+        # Series scope resolution (get_eligible_small_groups) is structure/legacy
+        # based and unaffected; the V1 session stays invisible because the profile
+        # group is never written.
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         district = District.objects.create(
             name="Mapped District 2",
@@ -3965,9 +4011,11 @@ class StaffMembershipRequestListTests(TestCase):
         )
         self.normal_user.profile.refresh_from_db()
 
-        self.assertEqual(self.normal_user.profile.small_group, group)
+        # Profile.small_group not written; series scope unchanged; V1 session
+        # still not visible (V1 reads the unchanged legacy profile group).
+        self.assertIsNone(self.normal_user.profile.small_group)
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
-        self.assertTrue(session.can_be_seen_by(self.normal_user))
+        self.assertFalse(session.can_be_seen_by(self.normal_user))
 
 
 class StaffOverviewTests(TestCase):

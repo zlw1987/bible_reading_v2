@@ -23,8 +23,8 @@
 
         <p>
             <strong>{{ ui.current_confirmed_small_group }}:</strong>
-            {% if form.profile.small_group %}
-            {{ form.profile.small_group.name }}
+            {% if active_primary_membership_label %}
+            {{ active_primary_membership_label }}
             {% else %}
             {{ ui.no_small_group }}
             {% endif %}

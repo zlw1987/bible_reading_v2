@@ -56,15 +56,6 @@
                 -
                 {% endif %}
             </dd>
-
-            <dt>{{ ui.legacy_sync_target }}</dt>
-            <dd>
-                {% if mapped_legacy_small_group %}
-                {{ mapped_legacy_small_group.name }}
-                {% else %}
-                {{ ui.no_legacy_sync_target }}
-                {% endif %}
-            </dd>
         </dl>
     </section>
 
@@ -86,17 +77,6 @@
         <p class="form-help">{{ ui.approval_state_help }}</p>
     </section>
 </div>
-
-{% if show_profile_sync_warning %}
-<div class="card">
-    <p class="status status-warning">
-        {{ ui.profile_small_group_sync_warning }}
-        {% if mapped_legacy_small_group %}
-        {{ mapped_legacy_small_group.name }}
-        {% endif %}
-    </p>
-</div>
-{% endif %}
 
 <div class="card membership-request-actions">
     <form method="post" action="{% url 'staff_membership_request_approve' membership.id %}" class="inline-action-form">

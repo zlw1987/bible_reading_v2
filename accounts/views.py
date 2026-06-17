@@ -1154,6 +1154,18 @@ def profile(request):
     else:
         form = ProfileForm(user=request.user, request=request)
 
+    # CS-RETIRE.1A: the user's "current confirmed group" display is the active
+    # primary ChurchStructureMembership (the source of truth), not the legacy
+    # Profile.small_group field. No membership => the no-group state.
+    active_primary_membership = ChurchStructureMembership.current_primary_for_user(
+        request.user,
+    )
+    active_primary_membership_label = (
+        active_primary_membership.unit.path_label(language)
+        if active_primary_membership
+        else ""
+    )
+
     return render(
         request,
         "accounts/profile.html",
@@ -1161,6 +1173,8 @@ def profile(request):
             "form": form,
             "pending_group_request": pending_group_request,
             "pending_group_request_label": pending_group_request_label,
+            "active_primary_membership": active_primary_membership,
+            "active_primary_membership_label": active_primary_membership_label,
         },
     )
 
@@ -1310,18 +1324,6 @@ def get_requested_membership_or_404(membership_id):
     )
 
 
-def _get_single_active_legacy_small_group_for_unit(unit):
-    groups = list(
-        SmallGroup.objects.filter(
-            church_structure_unit=unit,
-            is_active=True,
-        )[:2]
-    )
-    if len(groups) == 1:
-        return groups[0]
-    return None
-
-
 @user_passes_test(can_manage_church_memberships)
 def staff_membership_request_detail(request, membership_id):
     membership = get_requested_membership_or_404(membership_id)
@@ -1329,16 +1331,11 @@ def staff_membership_request_detail(request, membership_id):
     active_primary = ChurchStructureMembership.current_primary_for_user(
         membership.user,
     )
-    mapped_legacy_small_group = _get_single_active_legacy_small_group_for_unit(
-        membership.unit,
-    )
-    current_small_group = membership.user.profile.small_group
-    show_profile_sync_warning = bool(
-        mapped_legacy_small_group
-        and current_small_group
-        and current_small_group != mapped_legacy_small_group
-    )
 
+    # CS-RETIRE.1A: approval no longer writes Profile.small_group. The legacy
+    # profile group is shown read-only as archive/reference context only; there is
+    # no "sync target" and no sync-on-approval warning, because membership is now
+    # the source of truth.
     return render(
         request,
         "accounts/staff/membership_request_detail.html",
@@ -1349,8 +1346,6 @@ def staff_membership_request_detail(request, membership_id):
             "active_primary_path": (
                 active_primary.unit.path_label(language) if active_primary else ""
             ),
-            "mapped_legacy_small_group": mapped_legacy_small_group,
-            "show_profile_sync_warning": show_profile_sync_warning,
         },
     )
 
@@ -1382,34 +1377,17 @@ def staff_membership_request_approve(request, membership_id):
     membership.approved_at = timezone.now()
     membership.save()
 
-    mapped_legacy_small_group = None
-    if (
-        membership.status == ChurchStructureMembership.STATUS_ACTIVE
-        and membership.is_primary
-    ):
-        mapped_legacy_small_group = _get_single_active_legacy_small_group_for_unit(
-            membership.unit,
-        )
-
-    if mapped_legacy_small_group:
-        profile, _ = Profile.objects.get_or_create(user=membership.user)
-        profile.small_group = mapped_legacy_small_group
-        profile.save(update_fields=["small_group"])
-        messages.success(
-            request,
-            (
-                "Group request confirmed. Current runtime small group updated to "
-                f"{mapped_legacy_small_group.name}."
-            ),
-        )
-    else:
-        messages.warning(
-            request,
-            (
-                "Group request confirmed. Current runtime small group was not "
-                "changed because there is not exactly one active mapped small group."
-            ),
-        )
+    # CS-RETIRE.1A: the approved ChurchStructureMembership is now the source of
+    # truth for belonging. We intentionally no longer mirror the approval into the
+    # legacy Profile.small_group field (it is legacy archive/audit data only, not a
+    # runtime source for Reading, Bible Study, or events).
+    messages.success(
+        request,
+        (
+            "Group request approved as the user's active primary church-structure "
+            "membership. The legacy Profile.small_group field was not changed."
+        ),
+    )
     return redirect("staff_membership_request_list")
 
 

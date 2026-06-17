@@ -7476,7 +7476,9 @@ class StructureRoleScopeFoundationTests(TestCase):
             get_role_assignment_structure_unit(assignment), self.group_unit
         )
 
-    def test_resolver_falls_back_to_legacy_small_group_unit(self):
+    def test_resolver_ignores_legacy_small_group_unit_after_retirement(self):
+        # ROLE-RETIRE.1B: the legacy small_group runtime fallback is retired, so a
+        # scoped row with only a mapped legacy small_group resolves to None.
         group = SmallGroup.objects.create(
             name="Mapped SG3", church_structure_unit=self.group_unit
         )
@@ -7487,11 +7489,11 @@ class StructureRoleScopeFoundationTests(TestCase):
             small_group=group,
         )
 
-        self.assertEqual(
-            get_role_assignment_structure_unit(assignment), self.group_unit
-        )
+        self.assertIsNone(get_role_assignment_structure_unit(assignment))
 
-    def test_resolver_falls_back_to_legacy_district_unit(self):
+    def test_resolver_ignores_legacy_district_unit_after_retirement(self):
+        # ROLE-RETIRE.1B: the legacy district runtime fallback is retired, so a
+        # scoped row with only a mapped legacy district resolves to None.
         district = District.objects.create(
             name="Mapped District", church_structure_unit=self.district_unit
         )
@@ -7502,9 +7504,7 @@ class StructureRoleScopeFoundationTests(TestCase):
             district=district,
         )
 
-        self.assertEqual(
-            get_role_assignment_structure_unit(assignment), self.district_unit
-        )
+        self.assertIsNone(get_role_assignment_structure_unit(assignment))
 
     def test_resolver_returns_none_for_unmapped_legacy_scope(self):
         group = SmallGroup.objects.create(name="Unmapped SG")
@@ -7548,11 +7548,33 @@ class StructureRoleScopeFoundationTests(TestCase):
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=district,
+            structure_unit=self.district_unit,
         )
 
         # group_unit is a child of district_unit, so a district-like scope covers it.
         self.assertTrue(
             assignment_scope_includes_unit(assignment, self.group_unit)
+        )
+
+    def test_scope_fails_closed_for_legacy_only_district_after_retirement(self):
+        # ROLE-RETIRE.1B: a legacy-only district scope (no structure_unit) no
+        # longer covers its descendant units at runtime.
+        district = District.objects.create(
+            name="Legacy Cover District", church_structure_unit=self.district_unit
+        )
+        assignment = ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
+            district=district,
+        )
+
+        self.assertIsNone(get_role_assignment_structure_unit(assignment))
+        self.assertFalse(
+            assignment_scope_includes_unit(assignment, self.group_unit)
+        )
+        self.assertFalse(
+            assignment_scope_includes_unit(assignment, self.district_unit)
         )
 
     def test_scope_excludes_sibling_and_unrelated_units(self):
@@ -7615,9 +7637,9 @@ class StructureRoleScopeFoundationTests(TestCase):
         )
 
     def test_progress_permission_uses_structure_aware_role_scope(self):
-        # CS-CORE.2D-B: a legacy SmallGroup-scoped role still grants progress access
-        # through its mapped structure unit (transition fallback), while an unmapped
-        # legacy scope fails closed.
+        # ROLE-RETIRE.1B: progress access now requires an explicit structure_unit.
+        # A scoped role with only a mapped legacy SmallGroup no longer grants
+        # access; the same role with structure_unit set does.
         mapped_group = SmallGroup.objects.create(
             name="Mapped Perm SG", church_structure_unit=self.group_unit
         )
@@ -7627,8 +7649,19 @@ class StructureRoleScopeFoundationTests(TestCase):
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             small_group=mapped_group,
         )
+        # Legacy-only mapped scope no longer grants access after retirement.
+        self.assertEqual(list(get_accessible_progress_groups(self.user)), [])
+
+        explicit_user = User.objects.create_user(username="explicit_perm_user")
+        ChurchRoleAssignment.objects.create(
+            user=explicit_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=mapped_group,
+            structure_unit=self.group_unit,
+        )
         self.assertEqual(
-            list(get_accessible_progress_groups(self.user)), [mapped_group]
+            list(get_accessible_progress_groups(explicit_user)), [mapped_group]
         )
 
         unmapped_user = User.objects.create_user(username="unmapped_perm_user")
@@ -7866,12 +7899,12 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
     """CS-CORE.2D-B: group-progress permission/access list is structure-aware.
 
     ``get_accessible_progress_groups`` / ``can_view_group_progress_for`` resolve
-    scoped role access through ``ChurchRoleAssignment.structure_unit`` (or the legacy
-    district/small_group mapped unit during transition) plus its descendants, and the
-    ordinary own-group rule comes from the single active primary
-    ``ChurchStructureMembership`` mapped to exactly one active legacy ``SmallGroup``.
-    ``Profile.small_group`` no longer grants any progress access, and ordinary
-    membership grants only its own mapped group (never a broad grant).
+    scoped role access through ``ChurchRoleAssignment.structure_unit`` only (the
+    legacy district/small_group runtime fallback was retired in ROLE-RETIRE.1B) plus
+    its descendants, and the ordinary own-group rule comes from the single active
+    primary ``ChurchStructureMembership`` mapped to exactly one active legacy
+    ``SmallGroup``. ``Profile.small_group`` no longer grants any progress access, and
+    ordinary membership grants only its own mapped group (never a broad grant).
     """
 
     def setUp(self):
@@ -8053,6 +8086,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=self.district,
+            structure_unit=self.district_unit,
         )
 
         # district_unit covers its descendant small-group units (group + sibling),
@@ -8065,9 +8099,10 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.assertTrue(can_view_group_progress_for(leader, self.sibling_group))
         self.assertFalse(can_view_group_progress_for(leader, self.other_group))
 
-    def test_legacy_small_group_scope_resolves_through_mapping_fallback(self):
+    def test_legacy_small_group_scope_fails_closed_after_retirement(self):
+        # ROLE-RETIRE.1B: a scoped role with only a mapped legacy small_group and no
+        # structure_unit no longer grants progress access.
         leader = self.create_user("perm2db_legacy_group_leader")
-        # No explicit structure_unit: resolved via small_group.church_structure_unit.
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
@@ -8075,9 +8110,12 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             small_group=self.group,
         )
 
-        self.assertEqual(self.accessible_ids(leader), {self.group.id})
+        self.assertEqual(self.accessible_ids(leader), set())
+        self.assertFalse(can_view_group_progress_for(leader, self.group))
 
-    def test_legacy_district_scope_resolves_through_mapping_fallback(self):
+    def test_legacy_district_scope_fails_closed_after_retirement(self):
+        # ROLE-RETIRE.1B: a scoped role with only a mapped legacy district and no
+        # structure_unit no longer grants progress access to descendant groups.
         leader = self.create_user("perm2db_legacy_district_leader")
         ChurchRoleAssignment.objects.create(
             user=leader,
@@ -8086,10 +8124,51 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             district=self.district,
         )
 
-        self.assertEqual(
-            self.accessible_ids(leader),
-            {self.group.id, self.sibling_group.id},
+        self.assertEqual(self.accessible_ids(leader), set())
+        self.assertFalse(can_view_group_progress_for(leader, self.group))
+        self.assertFalse(can_view_group_progress_for(leader, self.sibling_group))
+
+    def test_structure_unit_followed_when_legacy_fields_disagree(self):
+        # ROLE-RETIRE.1B: when structure_unit is set, runtime follows it and ignores
+        # legacy fields even if they point elsewhere.
+        leader = self.create_user("perm2db_disagree_leader")
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            # Legacy small_group maps to other_group_unit, structure_unit to group_unit.
+            small_group=self.other_group,
+            structure_unit=self.group_unit,
         )
+
+        self.assertEqual(self.accessible_ids(leader), {self.group.id})
+        self.assertTrue(can_view_group_progress_for(leader, self.group))
+        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
+
+    def test_legacy_fields_not_mutated_by_permission_checks(self):
+        # ROLE-RETIRE.1B read-only invariant: evaluating progress permissions never
+        # writes structure_unit or touches the legacy scope fields.
+        leader = self.create_user("perm2db_readonly_leader")
+        assignment = ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+
+        with CaptureQueriesContext(connection) as queries:
+            self.accessible_ids(leader)
+            can_view_group_progress_for(leader, self.group)
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        assignment.refresh_from_db()
+        self.assertIsNone(assignment.structure_unit_id)
+        self.assertEqual(assignment.small_group_id, self.group.id)
 
     def test_unmapped_legacy_role_scope_fails_closed(self):
         leader = self.create_user("perm2db_unmapped_leader")
@@ -8132,6 +8211,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             small_group=self.group,
+            structure_unit=self.group_unit,
         )
 
         accessible = self.accessible_ids(leader)

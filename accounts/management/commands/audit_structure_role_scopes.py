@@ -16,7 +16,14 @@ from collections import OrderedDict
 from django.core.management.base import BaseCommand, CommandError
 
 from accounts.models import ChurchRoleAssignment, ChurchStructureUnit
-from accounts.permissions import get_role_assignment_structure_unit
+# Diagnostic-only resolution: explicit structure_unit first, then the legacy
+# district / small_group mapped unit. The runtime legacy fallback was retired in
+# ROLE-RETIRE.1B, so this audit deliberately uses the diagnostic helper (not the
+# runtime get_role_assignment_structure_unit) to keep inspecting what a legacy
+# scope would map to for migration / backfill / rollback readiness.
+from accounts.permissions import (
+    resolve_role_assignment_structure_unit_for_diagnostics,
+)
 
 
 COUNTER_KEYS = (
@@ -166,8 +173,11 @@ def run_audit():
                     )
                 )
 
-        # Effective scope unit a future switch would use (explicit-first).
-        resolved_unit = get_role_assignment_structure_unit(assignment)
+        # Candidate scope unit for migration readiness (explicit-first, then legacy
+        # fallback). Diagnostic only — runtime no longer honors the legacy fallback.
+        resolved_unit = resolve_role_assignment_structure_unit_for_diagnostics(
+            assignment
+        )
 
         mismatch = bool(
             assignment.structure_unit_id

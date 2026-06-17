@@ -1795,11 +1795,13 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.viewer = self.create_user("progress_viewer", group=self.group)
         # The viewer reaches the page via a group-leader role on self.group (not via
         # membership), so they can view it without appearing in the membership roster.
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=self.viewer,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             small_group=self.group,
+            structure_unit=self.group_unit,
         )
         self.same_group_member = self.create_user("progress_same", group=self.group)
         self.profile_only_member = self.create_user("progress_profile_only", group=self.group)
@@ -1960,13 +1962,15 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertTrue(can_view_group_progress_for(self.viewer, self.other_group))
         self.assertFalse(can_view_group_progress_for(self.viewer, sibling_group))
 
-    def test_legacy_group_leader_can_view_assigned_group_only(self):
+    def test_group_leader_can_view_assigned_group_only(self):
         leader = self.create_user("progress_group_leader")
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             small_group=self.other_group,
+            structure_unit=self.other_group_unit,
         )
 
         self.assertFalse(can_view_group_progress_for(leader, self.group))
@@ -1983,11 +1987,13 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             church_structure_unit=district_group_b_unit,
         )
         leader = self.create_user("progress_district_leader")
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=self.district,
+            structure_unit=self.district_unit,
         )
 
         self.assertTrue(can_view_group_progress_for(leader, self.group))
@@ -2850,11 +2856,13 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         )
 
     def make_district_leader(self, user, district):
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=district,
+            structure_unit=district.church_structure_unit,
         )
 
     def progress_response_for(self, user, *, group=None):
@@ -4198,13 +4206,14 @@ class BibleReadingFlowTests(TestCase):
         )
         assigned_group = SmallGroup.objects.create(name="Assigned Group")
         other_group = SmallGroup.objects.create(name="Outside Group")
-        # CS-CORE.2D-B: scoped role access resolves through the mapped structure unit.
-        self.map_group_to_unit(assigned_group, "FLOW-LEADER-ASSIGNED")
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
+        assigned_unit = self.map_group_to_unit(assigned_group, "FLOW-LEADER-ASSIGNED")
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             small_group=assigned_group,
+            structure_unit=assigned_unit,
         )
 
         self.client.login(username="group_leader", password="testpass123")
@@ -4248,11 +4257,13 @@ class BibleReadingFlowTests(TestCase):
             email="district@example.com",
             password="testpass123",
         )
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=district,
+            structure_unit=district_unit,
         )
 
         self.client.login(username="district_leader", password="testpass123")
@@ -4311,11 +4322,13 @@ class BibleReadingFlowTests(TestCase):
             email="limited@example.com",
             password="testpass123",
         )
+        # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
             district=district,
+            structure_unit=district_unit,
         )
 
         self.client.login(username="limited_leader", password="testpass123")

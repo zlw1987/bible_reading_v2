@@ -99,19 +99,48 @@ def get_user_active_role_assignments(user):
 
 
 def get_role_assignment_structure_unit(assignment):
-    """Resolve a role assignment's structure-unit scope, compatibility-safe.
+    """Resolve a role assignment's *runtime* structure-unit scope (explicit only).
 
-    Read-only. Prefers the canonical ``structure_unit``; otherwise falls back to
-    the legacy ``small_group`` / ``district`` mapped ``church_structure_unit``.
-    Returns ``None`` when no structure unit can be resolved (including global
-    roles). Ordinary ``ChurchStructureMembership`` is intentionally never
-    consulted here: belonging does not decide role scope.
+    Read-only. Returns the canonical ``structure_unit`` when set, otherwise
+    ``None`` (including global roles and any non-global scoped row that is missing
+    ``structure_unit``). Ordinary ``ChurchStructureMembership`` is intentionally
+    never consulted here: belonging does not decide role scope.
 
-    Introduced as the CS-CORE.2D-A foundation; CS-CORE.2D-B now uses it to drive
-    the group-progress permission / accessible group list at runtime
-    (``get_accessible_progress_groups`` / ``can_view_group_progress_for``). The
-    legacy ``small_group`` / ``district`` fallback is the transition path until
-    role rows carry ``structure_unit`` directly.
+    ROLE-RETIRE.1B: the legacy ``district`` / ``small_group`` runtime fallback was
+    retired. Runtime scoped role access now uses ``structure_unit`` only, so a
+    non-global scoped assignment with a missing ``structure_unit`` fails closed.
+    The legacy ``district`` / ``small_group`` fields are retained only for
+    stored/admin/display/audit/backfill/rollback context and must not grant
+    runtime access; diagnostics that still need to derive a candidate unit from
+    those legacy fields use
+    :func:`resolve_role_assignment_structure_unit_for_diagnostics` instead.
+
+    Introduced as the CS-CORE.2D-A foundation; CS-CORE.2D-B used it to drive the
+    group-progress permission / accessible group list at runtime
+    (``get_accessible_progress_groups`` / ``can_view_group_progress_for``).
+    """
+    if assignment is None:
+        return None
+
+    if assignment.structure_unit_id:
+        return assignment.structure_unit
+
+    return None
+
+
+def resolve_role_assignment_structure_unit_for_diagnostics(assignment):
+    """Diagnostic-only structure-unit resolution with the legacy fallback.
+
+    NOT a runtime permission path. Read-only. Prefers the canonical
+    ``structure_unit``; otherwise derives a candidate unit from the legacy
+    ``small_group`` / ``district`` mapped ``church_structure_unit``. Returns
+    ``None`` when nothing can be resolved (including global roles).
+
+    This is used exclusively by the audit / backfill / rollback tooling so it can
+    still inspect what a legacy scope *would* map to for migration context.
+    Runtime must never call this helper: the legacy runtime fallback was retired
+    in ROLE-RETIRE.1B (use :func:`get_role_assignment_structure_unit` for any
+    permission decision). Ordinary ``ChurchStructureMembership`` is never read.
     """
     if assignment is None:
         return None
@@ -133,10 +162,12 @@ def get_role_assignment_structure_unit(assignment):
 def assignment_scope_includes_unit(assignment, unit):
     """Return True when a role assignment's structure scope covers ``unit``.
 
-    Read-only and compatibility-safe. The assignment's resolved structure unit
-    covers ``unit`` when it is the same unit or an ancestor of ``unit`` (so a
-    district-like unit scope covers its descendant small-group units). Fails
-    closed when either the target ``unit`` or the resolved scope unit is missing.
+    Read-only. The assignment's runtime structure unit (explicit ``structure_unit``
+    only; see :func:`get_role_assignment_structure_unit`) covers ``unit`` when it is
+    the same unit or an ancestor of ``unit`` (so a district-like unit scope covers
+    its descendant small-group units). Fails closed when the target ``unit`` is
+    missing or the scope unit is missing — including a non-global scoped assignment
+    with no ``structure_unit`` after the ROLE-RETIRE.1B legacy-fallback retirement.
     Ordinary ``ChurchStructureMembership`` is never consulted.
 
     Added as the CS-CORE.2D-A foundation and consistent with the CS-CORE.2D-B
@@ -216,10 +247,11 @@ def get_accessible_progress_groups(user, target_date=None):
     - **Structure-aware role scopes:** for the two progress-relevant scoped roles
       (district leader on a district scope, group leader on a small-group scope),
       the scope unit is resolved by :func:`get_role_assignment_structure_unit`
-      (explicit ``structure_unit`` first, then the legacy ``district`` /
-      ``small_group`` mapped unit as a transition fallback). A scope covers active
-      legacy ``SmallGroup`` rows whose mapped ``church_structure_unit`` is that unit
-      or a descendant. Unmapped legacy scopes resolve to ``None`` and fail closed.
+      (explicit ``structure_unit`` only). A scope covers active legacy
+      ``SmallGroup`` rows whose mapped ``church_structure_unit`` is that unit or a
+      descendant. ROLE-RETIRE.1B retired the legacy ``district`` / ``small_group``
+      runtime fallback, so a scoped role assignment with no ``structure_unit`` (or
+      one that does not resolve) fails closed.
     - **Own-group:** the membership-core own group from
       :func:`get_user_membership_progress_own_group` (no longer
       ``Profile.small_group``).
@@ -243,7 +275,8 @@ def get_accessible_progress_groups(user, target_date=None):
 
     # Structure-aware role scopes. Only the two progress-relevant scoped roles grant
     # group access, matching the legacy role gating; the scope unit is resolved via
-    # the CS-CORE.2D-A helper and covers the unit plus its descendants.
+    # the CS-CORE.2D-A helper (explicit structure_unit only after ROLE-RETIRE.1B)
+    # and covers the unit plus its descendants.
     scope_unit_ids = set()
     for assignment in get_user_active_role_assignments(user):
         is_district_scope = (

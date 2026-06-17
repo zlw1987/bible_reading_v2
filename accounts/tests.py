@@ -3066,7 +3066,9 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "Legacy Small Groups")
         self.assertContains(response, "旧小组")
         self.assertContains(response, "Bible Study generation and legacy BibleStudySession")
-        self.assertContains(response, "ServiceEvent zero-row fallback")
+        self.assertContains(
+            response, "ServiceEvent zero-row legacy fallback was retired in SE-RETIRE.1B"
+        )
         self.assertContains(response, "Profile.small_group")
         self.assertContains(
             response,
@@ -3097,7 +3099,10 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(district_response, "Legacy Districts")
         self.assertContains(district_response, "旧区")
         self.assertContains(district_response, "Bible Study")
-        self.assertContains(district_response, "ServiceEvent zero-row fallback")
+        self.assertContains(
+            district_response,
+            "ServiceEvent zero-row legacy fallback was retired in SE-RETIRE.1B",
+        )
 
     def test_church_structure_unit_admin_explains_future_foundation_status(self):
         unit = ChurchStructureUnit.objects.create(
@@ -3154,7 +3159,8 @@ class ChurchStructureAdminClarityTests(TestCase):
         )
         self.assertContains(
             response,
-            "ServiceEvent zero-row legacy fallback",
+            "ServiceEvent zero-row legacy fallback "
+            "was retired in SE-RETIRE.1B",
         )
         self.assertContains(
             response,
@@ -5172,7 +5178,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "ServiceEvents with no audience rows still use legacy fallback via Profile.small_group",
+            "ServiceEvents with no audience rows fail closed for ordinary users after SE-RETIRE.1B",
         )
         self.assertNotContains(
             response,
@@ -5215,7 +5221,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "没有结构适用范围记录的旧版教会聚会仍按 Profile.small_group 的旧版 fallback 运作",
+            "没有结构适用范围记录的教会聚会对普通用户一律不可见",
         )
         self.assertNotContains(
             response,
@@ -5592,8 +5598,8 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "ServiceEvents with no audience rows still use legacy fallback via "
-            "Profile.small_group",
+            "ServiceEvents with no audience rows fail closed for ordinary users "
+            "after SE-RETIRE.1B",
         )
         self.assertNotContains(
             response,
@@ -6070,8 +6076,8 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "ServiceEvents with no audience rows still use legacy fallback via "
-            "Profile.small_group",
+            "ServiceEvents with no audience rows fail closed for ordinary users "
+            "after SE-RETIRE.1B",
         )
         self.assertNotContains(
             response,
@@ -6127,7 +6133,7 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "没有结构适用范围记录的旧版教会聚会仍按 Profile.small_group 的旧版 fallback 运作",
+            "没有结构适用范围记录的教会聚会对普通用户一律不可见",
         )
         self.assertNotContains(
             response,

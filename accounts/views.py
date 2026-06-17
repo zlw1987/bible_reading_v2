@@ -232,10 +232,12 @@ def staff_structure_map(request):
     admin-capable staff (per-row rename + Details link); no other structure
     edits happen here. Ordinary-user matching remains consumer-specific during
     the transition: ServiceEvent audience rows now match through active primary
-    ChurchStructureMembership, while zero-row ServiceEvents, Bible Study member
-    visibility/generation, reading/privacy/progress, permissions, and My
-    Serving remain legacy/consumer-specific as documented. The structure map is
-    counts/setup context only and does not itself grant visibility.
+    ChurchStructureMembership, and zero-row ServiceEvents fail closed for
+    ordinary users (the zero-row legacy fallback was retired in SE-RETIRE.1B),
+    while Bible Study member visibility/generation, reading/privacy/progress,
+    permissions, and My Serving remain legacy/consumer-specific as documented.
+    The structure map is counts/setup context only and does not itself grant
+    visibility.
     """
     language = get_user_language(request)
     today = timezone.localdate()

@@ -202,31 +202,21 @@ class ServiceEvent(models.Model):
             return False
 
         # SE-AS.4: when audience scope rows exist, they are the audience
-        # source for ordinary users. Events with no rows fall through to the
-        # legacy scope behavior below unchanged, so there is no flag day and
-        # removing an event's rows restores its legacy behavior.
+        # source for ordinary users.
         audience_units = [link.unit for link in self.audience_scope_links.all()]
         if audience_units:
             return self._audience_scope_allows(user, audience_units)
 
-        if self.scope_type == self.SCOPE_GLOBAL:
-            return True
-
-        profile = getattr(user, "profile", None)
-        user_group = getattr(profile, "small_group", None)
-        if not user_group:
-            return False
-
-        if self.scope_type == self.SCOPE_DISTRICT:
-            return bool(
-                self.district_id
-                and user_group.district_id
-                and self.district_id == user_group.district_id
-            )
-
-        if self.scope_type == self.SCOPE_SMALL_GROUP:
-            return bool(self.small_group_id and self.small_group_id == user_group.id)
-
+        # SE-RETIRE.1B: the zero-audience-row legacy runtime fallback is
+        # retired. Events with no audience rows no longer consult the legacy
+        # scope_type / district / small_group fields or Profile.small_group for
+        # ordinary-user visibility. Manager/staff override is handled above via
+        # can_be_managed_by(), and unauthenticated/draft/cancelled denial is
+        # handled above. Ordinary users now fail closed when an event has zero
+        # audience rows, making that an invalid/safety state rather than a
+        # legacy fallback. The legacy fields remain stored for
+        # display/admin/backfill/audit/rollback context only and are not
+        # deleted in this slice.
         return False
 
     def _audience_scope_allows(self, user, units):

@@ -28,7 +28,7 @@ from accounts.permissions import (
 )
 from comments.forms import ReflectionCommentForm
 from comments.models import ReflectionComment
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceEventAudienceScope
 from ministry.models import (
     MinistryTeam,
     TeamAssignment,
@@ -6354,6 +6354,18 @@ class TodayActionCenterTests(TestCase):
             status=status or ServiceEvent.STATUS_PUBLISHED,
         )
 
+    def add_event_audience(self, event, *units):
+        for unit in units:
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+    def make_visible_event(self, **kwargs):
+        # SE-RETIRE.1B: the zero-row legacy fallback is retired, so an ordinary
+        # member only sees a gathering that carries audience rows. A root
+        # audience row matches every authenticated user via membership-core.
+        event = self.make_event(**kwargs)
+        self.add_event_audience(event, self.root_unit)
+        return event
+
     def make_assignment(self, event, *, confirmed=False):
         assignment = TeamAssignment.objects.create(
             service_event=event,
@@ -6431,7 +6443,10 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Confirm in My Serving")
 
     def test_pending_assignment_not_duplicated_as_full_row_in_week(self):
-        event = self.make_event(title_en="Sunday Service Gamma")
+        # The event must be visible in the This Week gatherings zone for the
+        # compact serving note to render, so give it an audience row (the
+        # zero-row legacy fallback is retired in SE-RETIRE.1B).
+        event = self.make_visible_event(title_en="Sunday Service Gamma")
         self.make_assignment(event, confirmed=False)
 
         response = self.get_home()
@@ -6443,7 +6458,7 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "You are serving — pending confirmation")
 
     def test_church_gatherings_shows_visible_upcoming(self):
-        self.make_event(title_en="Midweek Prayer Gathering")
+        self.make_visible_event(title_en="Midweek Prayer Gathering")
 
         response = self.get_home()
 
@@ -6456,7 +6471,7 @@ class TodayActionCenterTests(TestCase):
         formatted_dt = (timezone.now() + timedelta(days=1)).replace(
             hour=19, minute=30, second=0, microsecond=0
         )
-        self.make_event(
+        self.make_visible_event(
             title_en="Formatted Gathering",
             start_datetime=formatted_dt,
         )
@@ -6626,7 +6641,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotIn(confirm_url, content)
 
     def test_bilingual_section_titles_render(self):
-        self.make_event(title_en="Bilingual Gathering")
+        self.make_visible_event(title_en="Bilingual Gathering")
 
         english = self.get_home(language="en")
         self.assertContains(english, "Today's Reading")

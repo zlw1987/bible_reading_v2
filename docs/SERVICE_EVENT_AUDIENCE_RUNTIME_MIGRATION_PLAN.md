@@ -26,6 +26,8 @@ SE-AS.7A is complete as the write-path guard that stops new zero-row legacy-fall
 
 SE-RETIRE.1A is complete as a **read-only retirement-readiness audit** for the zero-audience-row legacy fallback (see Section 13). It adds the `audit_service_event_fallback_retirement_readiness` management command, which reports which zero-row events still rely on the legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` fallback, which are backfillable into equivalent audience rows, and which currently block fallback removal. It does **not** remove the zero-row fallback, does **not** change `ServiceEvent.can_be_seen_by`, does **not** hide or remove legacy form fields, adds no schema/migration, and touches no production database. Future fallback removal remains a separate, approved slice that is gated on this audit running clean on the target (production) data.
 
+SE-RETIRE.1B is complete as the **runtime retirement of the zero-audience-row legacy fallback for ordinary users** (see Section 14). After the SE-RETIRE.1A audit ran clean on production (37/37 events carry audience rows, zero blockers), `ServiceEvent.can_be_seen_by` no longer consults the legacy `scope_type` / `district` / `small_group` fields or `Profile.small_group` for ordinary-user visibility of an event that has **zero** `ServiceEventAudienceScope` rows. Such an event now **fails closed** for ordinary users — a zero-row event is an invalid/safety state, not a legacy fallback. Manager/staff/event-manager override (`can_be_managed_by`), unauthenticated denial, draft/cancelled/status gates, and the audience-row membership-core path are all unchanged. SE-RETIRE.1B does **not** delete or rename the legacy fields (they remain stored/editable for display/admin/backfill/audit/rollback context), does **not** hide legacy form fields, does **not** remove `backfill_service_event_audience_scopes` or `audit_service_event_fallback_retirement_readiness`, adds no schema/migration, and changes no Bible Study / Reading / Profile / TeamAssignment / My Serving runtime.
+
 ## 2. Historical State Audit at SE-AS.3 Planning Time
 
 This section is preserved as historical context: it records the state originally audited from docs plus light code reading during SE-AS.3 planning, before SE-AS.4/SE-AS.5 shipped. It does not describe current behavior. Current implemented status is in Section 1 and Sections 5–7.
@@ -71,13 +73,13 @@ This section is preserved as historical context: it records the state originally
 
 | Concept | Source | Role |
 | --- | --- | --- |
-| Audience Scope / 适用范围 | `ServiceEventAudienceScope` units when rows exist; otherwise legacy `scope_type`/`district`/`small_group` fallback | Who the event/gathering is for. The only concept this plan migrates. |
+| Audience Scope / 适用范围 | `ServiceEventAudienceScope` units. As of SE-RETIRE.1B a zero-row event fails closed for ordinary users; the legacy `scope_type`/`district`/`small_group` fields are stored/admin/display data only, no longer a runtime fallback. | Who the event/gathering is for. The only concept this plan migrates. |
 | Host / Language Label / 主办/语言标签 | `ServiceEvent.ministry_context` | Display label only. Never visibility. |
 | Required Ministry Teams / 需要的事工团队 | `ServiceEventRequiredTeam` | Which teams need coverage. Not audience. |
 | Rotation Anchor Team / 配搭参考团队 | `ServiceEvent.rotation_anchor_team` | Scheduling suggestion anchor only. |
 | TeamAssignment / 服事安排 | `TeamAssignment(Member)` | Actual serving assignment. |
 | My Serving / 我的服事 | user's `TeamAssignmentMember` rows | User's own assignments; independent of audience. |
-| ChurchStructureMembership | membership rows (approved/requested) | As of CS-CORE.2B-A, the active primary membership is the runtime visibility source for ServiceEvent rows that **have** audience rows (via `user_matches_structure_audience`). Zero-row events still fall back to legacy `Profile.small_group`. Requested/unapproved/inactive memberships grant nothing. This plan does not change the membership model itself. |
+| ChurchStructureMembership | membership rows (approved/requested) | As of CS-CORE.2B-A, the active primary membership is the runtime visibility source for ServiceEvent rows that **have** audience rows (via `user_matches_structure_audience`). As of SE-RETIRE.1B, zero-row events fail closed for ordinary users (no `Profile.small_group` fallback). Requested/unapproved/inactive memberships grant nothing. This plan does not change the membership model itself. |
 
 Note: SE-AS.1 used "Coverage Scope / 覆盖对象" as the preferred wording. This plan standardizes on Audience Scope / 适用范围 for the ServiceEvent staff UI; final copy should be confirmed once at SE-AS.5 implementation so both docs and UI agree.
 
@@ -179,14 +181,14 @@ Implemented by SE-AS.4. The runtime rule, in order:
 2. `can_be_managed_by` (staff, superuser, `CAP_MANAGE_SERVICE_EVENTS`): allowed, including drafts (unchanged — managers keep broader access).
 3. Draft/cancelled, or any non-published/completed status: denied for ordinary users (unchanged).
 4. If the event has one or more `ServiceEventAudienceScope` rows: those rows are the audience source. The user is in the audience iff they match the selected units. **At SE-AS.4 time this matched via Section 7 (`Profile.small_group`); as of CS-CORE.2B-A it matches via the user's single active primary `ChurchStructureMembership`** through `accounts.structure_selectors.user_matches_structure_audience` (root rows still match all authenticated users).
-5. Otherwise (no audience rows): fall back to legacy `scope_type` / `district` / `small_group` exactly as today, matched through `Profile.small_group`.
-6. **Zero-row (fallback) matching** uses `Profile.small_group` only. **Audience-row matching** now consults active primary `ChurchStructureMembership` (CS-CORE.2B-A); in both paths requested/unapproved/inactive memberships must never grant visibility. (The earlier statement that audience-row matching never consults membership applied only before CS-CORE.2B-A.)
+5. Otherwise (no audience rows): **as of SE-RETIRE.1B, ordinary users fail closed.** The legacy `scope_type` / `district` / `small_group` fields and `Profile.small_group` are no longer consulted for ordinary visibility. (Before SE-RETIRE.1B this step fell back to the legacy fields matched through `Profile.small_group`; that fallback is retired — see Section 14.)
+6. **Audience-row matching** consults active primary `ChurchStructureMembership` (CS-CORE.2B-A); requested/unapproved/inactive memberships never grant visibility. There is no longer a zero-row `Profile.small_group` matching path for ordinary users (retired in SE-RETIRE.1B). (The earlier statement that audience-row matching never consults membership applied only before CS-CORE.2B-A.)
 
 Justification: the fallback rule means the migration never has a flag-day; every existing event is untouched until staff (or an explicit backfill) give it audience rows, and removing rows restores legacy behavior per event.
 
 ## 7. Unit-to-User Resolution for Ordinary Users
 
-**Scope note (CS-CORE.2B-A correction).** This section describes the **legacy `Profile.small_group` resolver** (`resolve_units_to_small_groups`) only. As shipped at SE-AS.4 this was also how ServiceEvent audience rows matched, but **that is no longer current ServiceEvent behavior**: as of CS-CORE.2B-A a ServiceEvent that has audience rows matches ordinary users through the user's single active primary `ChurchStructureMembership` via `accounts.structure_selectors.user_matches_structure_audience`, **not** through `Profile.small_group`. The `Profile.small_group` resolver below now describes (a) the **zero-row legacy fallback** for ServiceEvents and (b) the separate **Bible Study** generation/visibility path, which still resolves through `Profile.small_group`. Read this section as legacy/Bible-Study resolver semantics, not as the current ServiceEvent audience-row runtime.
+**Scope note (CS-CORE.2B-A correction).** This section describes the **legacy `Profile.small_group` resolver** (`resolve_units_to_small_groups`) only. As shipped at SE-AS.4 this was also how ServiceEvent audience rows matched, but **that is no longer current ServiceEvent behavior**: as of CS-CORE.2B-A a ServiceEvent that has audience rows matches ordinary users through the user's single active primary `ChurchStructureMembership` via `accounts.structure_selectors.user_matches_structure_audience`, **not** through `Profile.small_group`. The `Profile.small_group` resolver below now describes only the separate **Bible Study** generation/visibility path, which still resolves through `Profile.small_group`. It **no longer** describes any ServiceEvent path: as of SE-RETIRE.1B the ServiceEvent zero-row legacy fallback is retired and zero-row events fail closed for ordinary users (Section 14). Read this section as legacy/Bible-Study resolver semantics, not as any current ServiceEvent runtime.
 
 Selected `ChurchStructureUnit` rows map to current users through the legacy mapping fields, mirroring the proven Bible Study resolver:
 
@@ -448,7 +450,7 @@ Resolved (kept for history):
 Still open:
 
 - Legacy `scope_type` / `district` / `small_group` field deprecation/removal: timing and approach. Not in scope for SE-AS.7A; requires separate approval and stays deferred until audience rows have proven stable in production. No destructive change before then.
-- Whether/when to retire the zero-row runtime fallback in `ServiceEvent.can_be_seen_by`. SE-AS.7A stops new zero-row writes but deliberately keeps the runtime fallback as a safety net; retiring it is a separate, later decision. SE-RETIRE.1A (Section 13) adds the read-only retirement-readiness audit that gates that decision but does not itself retire the fallback.
+- **Resolved (SE-RETIRE.1B).** The zero-row runtime fallback in `ServiceEvent.can_be_seen_by` is retired: zero-row events now fail closed for ordinary users (Section 14). SE-AS.7A stopped new zero-row writes; SE-RETIRE.1A gated the decision with a clean production audit; SE-RETIRE.1B removed the runtime fallback. Legacy `scope_type` / `district` / `small_group` fields remain stored/editable until the separate, still-deferred legacy-field retirement (the bullet above).
 
 ## 13. SE-RETIRE.1A — Zero-Row Fallback Retirement Readiness Audit (read-only)
 
@@ -508,3 +510,48 @@ re-runs clean on the target data.
 **Future fallback removal requires this audit to run clean on the target
 (production) data** and is its own approved slice; SE-RETIRE.1A neither removes
 the fallback nor hides any legacy form field.
+
+## 14. SE-RETIRE.1B — Retire the Zero-Row Runtime Fallback (fail closed)
+
+SE-RETIRE.1B retires the zero-audience-row legacy **runtime** fallback in
+`ServiceEvent.can_be_seen_by` for ordinary users. It was applied after the
+SE-RETIRE.1A audit ran clean on production (`events_checked: 37`,
+`events_with_audience_rows: 37`, `events_without_audience_rows: 0`, all zero-row
+scope/blocker counters `0`, `legacy_fields_mutated: 0`, `runtime_switched:
+false`, `--fail-on-blockers` passed).
+
+New runtime behavior for `ServiceEvent.can_be_seen_by`:
+
+- Unauthenticated users: denied (unchanged).
+- `can_be_managed_by` (staff, superuser, `CAP_MANAGE_SERVICE_EVENTS`): allowed,
+  including drafts and including zero-row events (unchanged manager override).
+- Draft/cancelled, or any non-published/completed status: denied for ordinary
+  users (unchanged).
+- Event **with** one or more `ServiceEventAudienceScope` rows: those rows are
+  the audience source, matched by active primary `ChurchStructureMembership`
+  (CS-CORE.2B-A) — **unchanged**.
+- Event with **zero** audience rows: **ordinary users fail closed.** The legacy
+  `scope_type` / `district` / `small_group` fields and `Profile.small_group`
+  are **no longer consulted** for ordinary visibility. A zero-row event is now
+  an invalid/safety state, not a legacy fallback.
+
+What SE-RETIRE.1B deliberately does **not** do:
+
+- It does **not** delete or rename the legacy `scope_type` / `district` /
+  `small_group` fields. They remain stored and editable for
+  display/admin/backfill/audit/rollback context only. Legacy-field retirement
+  is still a separate, later, gated decision (Section 12).
+- It does **not** hide or remove the legacy fallback form fields.
+- It does **not** remove `backfill_service_event_audience_scopes` (tooling
+  still converts legacy fields into audience rows) or
+  `audit_service_event_fallback_retirement_readiness`.
+- It does **not** change the SE-AS.7A write-path guard, Bible Study, Reading,
+  Profile, TeamAssignment, or My Serving runtime, and adds no schema/migration.
+
+`audit_service_event_fallback_retirement_readiness` remains useful **after**
+SE-RETIRE.1B: it is now a standing guard/diagnostic that detects and explains
+any accidental zero-row event (which would now be invisible to ordinary users),
+and supports rollback reasoning. Its blocker policy is unchanged — it still
+reports any visible/active zero-row event as a blocker — so a clean audit
+(`blockers_total == 0`) confirms no ordinary-user-visible event depends on a
+zero-row state.

@@ -183,6 +183,23 @@ class ServiceEventFoundationTests(TestCase):
         data.update(overrides)
         return ServiceEvent.objects.create(**data)
 
+    def add_audience(self, event, *units):
+        for unit in units:
+            ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
+
+    def create_visible_event(self, **overrides):
+        """Create an event ordinary members can see after SE-RETIRE.1B.
+
+        The zero-audience-row legacy runtime fallback is retired, so ordinary
+        users no longer see zero-row events. Rendering/display tests that only
+        need an ordinary-visible event attach a root audience row, which matches
+        every authenticated user via membership-core, replacing the old
+        zero-row global default these tests used to rely on.
+        """
+        event = self.create_event(**overrides)
+        self.add_audience(event, self.root_unit)
+        return event
+
     def create_structure_unit(self, code, name, parent=None, is_active=True):
         return ChurchStructureUnit.objects.create(
             parent=parent,
@@ -278,15 +295,39 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_published_global_event_visible_to_regular_user(self):
+    def test_zero_row_global_event_hidden_from_regular_user(self):
+        # SE-RETIRE.1B: the zero-audience-row legacy fallback is retired. A
+        # published global event with no ServiceEventAudienceScope rows is an
+        # invalid/safety state and ordinary users fail closed, even though the
+        # legacy scope_type is global.
         self.set_language("en")
         event = self.create_event()
+
+        self.client.login(username="regular", password="testpass123")
+        list_response = self.client.get(reverse("service_event_list"))
+        detail_response = self.client.get(
+            reverse("service_event_detail", args=[event.id])
+        )
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertNotContains(list_response, event.title_en)
+        self.assertEqual(detail_response.status_code, 302)
+        self.assertEqual(detail_response.url, reverse("service_event_list"))
+        self.assertFalse(event.can_be_seen_by(self.user))
+
+    def test_root_audience_global_event_visible_to_regular_user(self):
+        # SE-RETIRE.1B: ordinary visibility now requires audience rows. A root
+        # audience row matches every authenticated user (membership-core),
+        # which is how a whole-church gathering is now expressed.
+        self.set_language("en")
+        event = self.create_visible_event()
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(reverse("service_event_list"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, event.title_en)
+        self.assertTrue(event.can_be_seen_by(self.user))
 
     def test_draft_event_hidden_from_regular_user(self):
         self.set_language("en")
@@ -321,7 +362,10 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Draft Event")
 
-    def test_district_scoped_event_visible_to_matching_district_user(self):
+    def test_zero_row_district_event_hidden_even_when_profile_group_matches(self):
+        # SE-RETIRE.1B: a zero-row district event no longer consults the legacy
+        # district scope or Profile.small_group, so even a user whose profile
+        # small group is in the matching district fails closed.
         self.set_language("en")
         event = self.create_event(
             title_en="North Event",
@@ -332,8 +376,9 @@ class ServiceEventFoundationTests(TestCase):
         self.client.login(username="same_district", password="testpass123")
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "North Event")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+        self.assertFalse(event.can_be_seen_by(self.same_district_user))
 
     def test_district_scoped_event_hidden_from_outside_district_user(self):
         self.set_language("en")
@@ -349,7 +394,10 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("service_event_list"))
 
-    def test_small_group_scoped_event_visible_to_same_group_user(self):
+    def test_zero_row_small_group_event_hidden_even_when_profile_group_matches(self):
+        # SE-RETIRE.1B: a zero-row small-group event no longer consults the
+        # legacy small_group scope or Profile.small_group, so even the matching
+        # small-group member fails closed.
         self.set_language("en")
         event = self.create_event(
             title_en="Group Event",
@@ -360,8 +408,9 @@ class ServiceEventFoundationTests(TestCase):
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Group Event")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("service_event_list"))
+        self.assertFalse(event.can_be_seen_by(self.user))
 
     def test_small_group_scoped_event_hidden_from_different_group_user(self):
         self.set_language("en")
@@ -1550,7 +1599,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_ministry_context_label_can_be_saved_without_changing_visibility(self):
         self.set_language("en")
-        event = self.create_event(
+        event = self.create_visible_event(
             title_en="CM Sunday Service",
             ministry_context=self.cm,
         )
@@ -1612,7 +1661,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_chinese_list_and_detail_pages_show_chinese_labels(self):
         self.set_language("zh")
-        event = self.create_event()
+        event = self.create_visible_event()
 
         self.client.login(username="regular", password="testpass123")
         list_response = self.client.get(reverse("service_event_list"))
@@ -1625,7 +1674,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_english_list_and_detail_pages_show_english_labels(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_visible_event()
 
         self.client.login(username="regular", password="testpass123")
         list_response = self.client.get(reverse("service_event_list"))
@@ -1638,7 +1687,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_regular_viewer_does_not_see_required_teams_metadata(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_visible_event()
         event.required_teams.add(self.required_team)
 
         self.client.login(username="regular", password="testpass123")
@@ -1667,7 +1716,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_ordinary_event_viewer_does_not_see_rotation_anchor_metadata(self):
         self.set_language("en")
-        event = self.create_event(rotation_anchor_team=self.required_team)
+        event = self.create_visible_event(rotation_anchor_team=self.required_team)
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(reverse("service_event_detail", args=[event.id]))
@@ -1769,7 +1818,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_regular_event_viewer_does_not_see_coworker_coverage(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_visible_event()
         event.required_teams.add(self.required_team)
         membership = TeamMembership.objects.create(
             team=self.required_team,
@@ -2048,20 +2097,24 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(ServiceEvent.objects.count(), 0)
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
-    def test_manually_created_zero_row_event_keeps_legacy_fallback(self):
-        # SE-AS.7A: the runtime zero-row legacy fallback is unchanged. A
+    def test_manually_created_zero_row_event_fails_closed_for_ordinary_users(self):
+        # SE-RETIRE.1B: the runtime zero-row legacy fallback is retired. A
         # ServiceEvent created directly (not via the guarded form) with zero
-        # audience rows still resolves visibility through the legacy fields and
-        # Profile.small_group, with no membership required.
+        # audience rows is now an invalid/safety state for ordinary visibility:
+        # ordinary users fail closed regardless of legacy fields or
+        # Profile.small_group, while managers/staff keep their override. (The
+        # SE-AS.7A write-path guard still prevents the normal forms from
+        # creating such events.)
         event = self.create_event(
             scope_type=ServiceEvent.SCOPE_DISTRICT,
             district=self.north,
         )
 
         self.assertEqual(event.audience_scope_links.count(), 0)
-        self.assertTrue(event.can_be_seen_by(self.user))
-        self.assertTrue(event.can_be_seen_by(self.same_district_user))
+        self.assertFalse(event.can_be_seen_by(self.user))
+        self.assertFalse(event.can_be_seen_by(self.same_district_user))
         self.assertFalse(event.can_be_seen_by(self.other_user))
+        self.assertTrue(event.can_be_seen_by(self.staff))
 
     def test_recurring_create_skips_existing_events(self):
         self.set_language("en")
@@ -2380,7 +2433,7 @@ class ServiceEventFoundationTests(TestCase):
         start = (timezone.now() + timezone.timedelta(days=3)).replace(
             hour=19, minute=30, second=0, microsecond=0
         )
-        event = self.create_event(
+        event = self.create_visible_event(
             start_datetime=start,
             end_datetime=start + timezone.timedelta(hours=2),
         )
@@ -2421,7 +2474,10 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "New Service Event")
         self.assertContains(response, "Create Recurring Events")
 
-    def test_member_list_respects_legacy_district_scope_visibility(self):
+    def test_member_list_hides_zero_row_district_event_from_all_ordinary_users(self):
+        # SE-RETIRE.1B: a zero-row district event fails closed for every
+        # ordinary user, including the one whose Profile.small_group would have
+        # matched the retired legacy district rule.
         self.set_language("en")
         self.create_event(
             title_en="North District Event",
@@ -2430,16 +2486,16 @@ class ServiceEventFoundationTests(TestCase):
         )
 
         self.client.login(username="same_district", password="testpass123")
-        visible = self.client.get(reverse("service_event_list"))
-        self.assertContains(visible, "North District Event")
+        same_district = self.client.get(reverse("service_event_list"))
+        self.assertNotContains(same_district, "North District Event")
 
         self.client.login(username="other_group", password="testpass123")
-        hidden = self.client.get(reverse("service_event_list"))
-        self.assertNotContains(hidden, "North District Event")
+        other = self.client.get(reverse("service_event_list"))
+        self.assertNotContains(other, "North District Event")
 
     def test_member_detail_shows_details_and_back_link(self):
         self.set_language("en")
-        event = self.create_event(
+        event = self.create_visible_event(
             start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
             end_datetime=datetime(2026, 6, 12, 21, 0, tzinfo=datetime_timezone.utc),
         )
@@ -2462,7 +2518,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_detail_back_link_chinese(self):
         self.set_language("zh")
-        event = self.create_event()
+        event = self.create_visible_event()
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(
@@ -2483,7 +2539,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_event_detail_marks_events_nav_active(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_visible_event()
 
         self.client.login(username="regular", password="testpass123")
         response = self.client.get(
@@ -2520,7 +2576,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_detail_hides_management_metadata(self):
         self.set_language("en")
-        event = self.create_event(rotation_anchor_team=self.required_team)
+        event = self.create_visible_event(rotation_anchor_team=self.required_team)
         event.required_teams.add(self.required_team)
 
         self.client.login(username="regular", password="testpass123")
@@ -2547,7 +2603,7 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_member_detail_hides_management_metadata_chinese(self):
         self.set_language("zh")
-        event = self.create_event(rotation_anchor_team=self.required_team)
+        event = self.create_visible_event(rotation_anchor_team=self.required_team)
         event.required_teams.add(self.required_team)
 
         self.client.login(username="regular", password="testpass123")
@@ -2779,27 +2835,35 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         session["language"] = language
         session.save()
 
-    def test_no_audience_rows_keeps_legacy_behavior_exactly(self):
+    def test_no_audience_rows_fail_closed_for_ordinary_users(self):
+        # SE-RETIRE.1B: this previously asserted zero-row legacy-fallback
+        # parity. The zero-row runtime fallback is now retired, so zero-row
+        # events fail closed for every ordinary user regardless of legacy
+        # scope_type / district / small_group or Profile.small_group, while
+        # managers/staff keep their override.
         global_event = self.create_event()
-        self.assertTrue(global_event.can_be_seen_by(self.group_user))
-        self.assertTrue(global_event.can_be_seen_by(self.no_group_user))
+        self.assertFalse(global_event.can_be_seen_by(self.group_user))
+        self.assertFalse(global_event.can_be_seen_by(self.no_group_user))
+        self.assertTrue(global_event.can_be_seen_by(self.staff))
 
         district_event = self.create_event(
             scope_type=ServiceEvent.SCOPE_DISTRICT,
             district=self.north,
         )
-        self.assertTrue(district_event.can_be_seen_by(self.group_user))
-        self.assertTrue(district_event.can_be_seen_by(self.group_b_user))
+        self.assertFalse(district_event.can_be_seen_by(self.group_user))
+        self.assertFalse(district_event.can_be_seen_by(self.group_b_user))
         self.assertFalse(district_event.can_be_seen_by(self.other_user))
         self.assertFalse(district_event.can_be_seen_by(self.no_group_user))
+        self.assertTrue(district_event.can_be_seen_by(self.staff))
 
         group_event = self.create_event(
             scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
             small_group=self.group,
         )
-        self.assertTrue(group_event.can_be_seen_by(self.group_user))
+        self.assertFalse(group_event.can_be_seen_by(self.group_user))
         self.assertFalse(group_event.can_be_seen_by(self.group_b_user))
         self.assertFalse(group_event.can_be_seen_by(self.no_group_user))
+        self.assertTrue(group_event.can_be_seen_by(self.staff))
 
     def test_audience_rows_override_legacy_scope_fields(self):
         # Legacy says global, audience rows narrow it to one group.
@@ -2914,13 +2978,14 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.add_audience(root_event, self.root_unit)
         self.assertTrue(root_event.can_be_seen_by(profile_only))
 
-        # Legacy fallback events (no audience rows) still see the profile
-        # group, so the same user keeps legacy small-group visibility.
-        legacy_event = self.create_event(
+        # SE-RETIRE.1B: zero-row events no longer consult Profile.small_group,
+        # so a profile-only user (no membership) fails closed on a zero-row
+        # small-group event too, not just on audience-row events.
+        zero_row_event = self.create_event(
             scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
             small_group=self.group,
         )
-        self.assertTrue(legacy_event.can_be_seen_by(profile_only))
+        self.assertFalse(zero_row_event.can_be_seen_by(profile_only))
 
     def test_requested_membership_does_not_grant_audience_visibility(self):
         event = self.create_event()
@@ -3025,15 +3090,19 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.add_audience(root_event, self.root_unit)
         self.assertTrue(root_event.can_be_seen_by(user))
 
-    def test_legacy_fallback_events_ignore_membership_rows(self):
+    def test_zero_row_events_fail_closed_regardless_of_membership(self):
+        # SE-RETIRE.1B: this previously asserted that zero-row legacy-fallback
+        # events read Profile.small_group only and that a zero-row global event
+        # stayed visible. With the zero-row runtime fallback retired, zero-row
+        # events fail closed for ordinary users whether or not they have a
+        # ChurchStructureMembership; neither legacy fields nor membership rows
+        # are consulted when an event has no audience rows.
         membership_only = User.objects.create_user(
             username="audience_membership_only",
             password="testpass123",
         )
         self.create_membership(membership_only, self.group_unit)
 
-        # Legacy fallback (no audience rows) still reads Profile.small_group
-        # only, so the membership grants no district/group visibility.
         district_event = self.create_event(
             scope_type=ServiceEvent.SCOPE_DISTRICT,
             district=self.north,
@@ -3047,7 +3116,9 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.assertFalse(group_event.can_be_seen_by(membership_only))
 
         global_event = self.create_event()
-        self.assertTrue(global_event.can_be_seen_by(membership_only))
+        self.assertFalse(global_event.can_be_seen_by(membership_only))
+        # Managers/staff still see zero-row events via the unchanged override.
+        self.assertTrue(global_event.can_be_seen_by(self.staff))
 
     def test_status_and_staff_behavior_preserved_with_audience_rows(self):
         draft = self.create_event(status=ServiceEvent.STATUS_DRAFT)

@@ -1071,7 +1071,11 @@ class MinistryContextBridgeTests(TestCase):
 
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
 
-    def test_profile_small_group_still_drives_service_event_scope(self):
+    def test_zero_row_service_event_no_longer_driven_by_profile_small_group(self):
+        # SE-RETIRE.1B: this previously asserted that Profile.small_group drove
+        # zero-row ServiceEvent scope. The zero-row legacy runtime fallback is
+        # retired, so an event with no ServiceEventAudienceScope rows fails
+        # closed for ordinary users regardless of Profile.small_group.
         district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(name="Rainbow 4", district=district)
         other_group = SmallGroup.objects.create(name="Rainbow 5")
@@ -1098,7 +1102,7 @@ class MinistryContextBridgeTests(TestCase):
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
-        self.assertTrue(event.can_be_seen_by(user))
+        self.assertFalse(event.can_be_seen_by(user))
         self.assertFalse(event.can_be_seen_by(other_user))
 
 
@@ -2104,7 +2108,10 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
 
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
         self.assertEqual(user.profile.small_group, group)
-        self.assertTrue(event.can_be_seen_by(user))
+        # SE-RETIRE.1B: the seed command still does not create ServiceEvent
+        # audience rows, so this zero-row event fails closed for ordinary users
+        # (the zero-row legacy fallback via Profile.small_group is retired).
+        self.assertFalse(event.can_be_seen_by(user))
         self.assertFalse(event.can_be_seen_by(other_user))
 
 
@@ -2443,7 +2450,10 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         user.profile.small_group = group
         user.profile.save()
 
-        self.assertTrue(event.can_be_seen_by(user))
+        # SE-RETIRE.1B: with the zero-row legacy fallback retired, neither the
+        # membership nor Profile.small_group grants visibility for a zero-row
+        # event; it fails closed until it carries audience rows.
+        self.assertFalse(event.can_be_seen_by(user))
 
 
 class ChurchStructureMembershipBackfillCommandTests(TestCase):
@@ -2632,7 +2642,10 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
         self.run_backfill_command("--apply")
 
         self.assertEqual(list(series.get_eligible_small_groups()), [group])
-        self.assertTrue(event.can_be_seen_by(user))
+        # SE-RETIRE.1B: the membership backfill creates no ServiceEvent audience
+        # rows, so this zero-row event fails closed for ordinary users; the
+        # retired legacy fallback no longer reads Profile.small_group.
+        self.assertFalse(event.can_be_seen_by(user))
         self.assertFalse(event.can_be_seen_by(other_user))
 
     def test_dry_run_and_apply_flags_cannot_be_combined(self):
@@ -3863,7 +3876,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.normal_user.profile.small_group = group
         self.normal_user.profile.save()
 
-        self.assertTrue(event.can_be_seen_by(self.normal_user))
+        # SE-RETIRE.1B: the requested membership grants nothing, and the
+        # retired zero-row fallback means even Profile.small_group no longer
+        # makes a zero-row event visible.
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_unmapped_approved_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
@@ -3888,7 +3904,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.normal_user.profile.small_group = group
         self.normal_user.profile.save()
 
-        self.assertTrue(event.can_be_seen_by(self.normal_user))
+        # SE-RETIRE.1B: the approved (unmapped) membership grants nothing, and
+        # the retired zero-row fallback means Profile.small_group no longer
+        # makes a zero-row event visible either.
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_mapped_approval_does_not_write_profile_or_change_event_visibility(self):
         # CS-RETIRE.1A: approval no longer mirrors into Profile.small_group, so it
@@ -3947,7 +3966,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.normal_user.profile.small_group = group
         self.normal_user.profile.save()
 
-        self.assertTrue(event.can_be_seen_by(self.normal_user))
+        # SE-RETIRE.1B: the rejected membership grants nothing, and the retired
+        # zero-row fallback means Profile.small_group no longer makes a
+        # zero-row event visible either.
+        self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_approved_membership_does_not_change_bible_study_scope_behavior(self):
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
@@ -7086,7 +7108,10 @@ class AccountSignupLanguageTests(TestCase):
         user.profile.small_group = group
         user.profile.save()
 
-        self.assertTrue(event.can_be_seen_by(user))
+        # SE-RETIRE.1B: the signup request grants nothing, and the retired
+        # zero-row fallback means Profile.small_group no longer makes a
+        # zero-row event visible either.
+        self.assertFalse(event.can_be_seen_by(user))
 
     def test_signup_request_appears_in_staff_membership_request_flow(self):
         staff = User.objects.create_user(

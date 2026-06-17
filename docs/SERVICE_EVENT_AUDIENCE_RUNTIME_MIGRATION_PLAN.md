@@ -24,6 +24,8 @@ SE-AS.6C production apply — completed. The corrected membership-core apply has
 
 SE-AS.7A is complete as the write-path guard that stops new zero-row legacy-fallback events. With production backfilled, ordinary ServiceEvent create/edit/recurring write paths now refuse to save an event into the zero-`ServiceEventAudienceScope` legacy-fallback state. When staff select audience units, those rows are saved as before. When staff leave the audience picker empty, the legacy `scope_type` / `district` / `small_group` fields are converted into a structure audience row using the same mapping rules as the SE-AS.6 backfill: `global` -> the single active root unit; `district` -> `district.church_structure_unit` when present and active; `small_group` -> `small_group.church_structure_unit` when present and active. The conversion lives in the new app helper `events.forms.resolve_legacy_service_event_scope_to_structure_units(...)`, enforced authoritatively in form validation (`AudienceUnitOptionsMixin.clean_resolved_audience_units`) on both `ServiceEventForm` (single create/edit) and `RecurringServiceEventForm` (recurring create); the recurring create view persists the resolved units to every created event. If the required mapping is missing, inactive, or the active root is missing/ambiguous, form validation fails with clear bilingual copy and saves nothing (no event, no rows) rather than silently dropping into the zero-row fallback. Edit saves are held to the same rule: clearing the audience selection converts the legacy fields instead of leaving zero rows. There is no ordinary emergency/admin-only zero-row write path in these forms, so none was preserved. SE-AS.7A does **not** delete legacy fields, does **not** remove the runtime fallback, does **not** change Bible Study or TeamAssignment / My Serving / required-team logic, and adds no data migration: `ServiceEvent.can_be_seen_by` keeps its zero-row legacy fallback unchanged for events created outside these guarded forms (e.g. directly via the ORM), which remain a safety net. Help text on both forms was updated (bilingual) to say an empty selection is converted from the fallback fields and that saving requires a valid structure mapping.
 
+SE-RETIRE.1A is complete as a **read-only retirement-readiness audit** for the zero-audience-row legacy fallback (see Section 13). It adds the `audit_service_event_fallback_retirement_readiness` management command, which reports which zero-row events still rely on the legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` fallback, which are backfillable into equivalent audience rows, and which currently block fallback removal. It does **not** remove the zero-row fallback, does **not** change `ServiceEvent.can_be_seen_by`, does **not** hide or remove legacy form fields, adds no schema/migration, and touches no production database. Future fallback removal remains a separate, approved slice that is gated on this audit running clean on the target (production) data.
+
 ## 2. Historical State Audit at SE-AS.3 Planning Time
 
 This section is preserved as historical context: it records the state originally audited from docs plus light code reading during SE-AS.3 planning, before SE-AS.4/SE-AS.5 shipped. It does not describe current behavior. Current implemented status is in Section 1 and Sections 5–7.
@@ -446,4 +448,63 @@ Resolved (kept for history):
 Still open:
 
 - Legacy `scope_type` / `district` / `small_group` field deprecation/removal: timing and approach. Not in scope for SE-AS.7A; requires separate approval and stays deferred until audience rows have proven stable in production. No destructive change before then.
-- Whether/when to retire the zero-row runtime fallback in `ServiceEvent.can_be_seen_by`. SE-AS.7A stops new zero-row writes but deliberately keeps the runtime fallback as a safety net; retiring it is a separate, later decision.
+- Whether/when to retire the zero-row runtime fallback in `ServiceEvent.can_be_seen_by`. SE-AS.7A stops new zero-row writes but deliberately keeps the runtime fallback as a safety net; retiring it is a separate, later decision. SE-RETIRE.1A (Section 13) adds the read-only retirement-readiness audit that gates that decision but does not itself retire the fallback.
+
+## 13. SE-RETIRE.1A — Zero-Row Fallback Retirement Readiness Audit (read-only)
+
+SE-RETIRE.1A adds a read-only audit that answers one question: **can the
+zero-audience-row legacy fallback in `ServiceEvent.can_be_seen_by` be safely
+removed or made fail-closed yet?** It is the readiness gate for a future,
+separately-approved fallback-removal slice. It does not remove the fallback.
+
+Command: `audit_service_event_fallback_retirement_readiness` (in the `events`
+app). It is **read-only** — no `--apply`, no runtime change, no schema or
+migration, no production-DB write. It never mutates any `ServiceEvent`,
+`ServiceEventAudienceScope`, legacy `scope_type` / `district` / `small_group`
+field, `ChurchStructureUnit`, `ChurchStructureMembership`, `Profile`,
+`SmallGroup`, `District`, or `MinistryContext` row. `legacy_fields_mutated` is
+always `0` and `runtime_switched` is always `false` by construction.
+
+Backfillability is delegated to the existing
+`backfill_service_event_audience_scopes` decision path (`_classify_event`): an
+event is "backfillable" exactly when that command would classify it as a
+parity-safe `would-create` (convertible to an equivalent membership-core
+audience row under the current runtime, CS-CORE.2B-A). The two commands stay in
+agreement by construction.
+
+Reported counters: `events_checked`, `events_with_audience_rows`,
+`events_without_audience_rows`, `published_without_audience_rows`,
+`future_or_upcoming_without_audience_rows`,
+`active_visible_without_audience_rows`, `zero_row_global_fallback`,
+`zero_row_district_fallback`, `zero_row_small_group_fallback`,
+`zero_row_unscoped_or_invalid`, `zero_row_backfillable`,
+`zero_row_not_backfillable`, `blocker_visible_zero_row_events`,
+`blocker_not_backfillable_zero_row_events`, `blockers_total`,
+`legacy_fields_mutated` (always `0`), plus `runtime_switched` (always `false`).
+
+Blocker policy (what currently prevents fallback removal):
+
+- A zero-row event is **blocking** when removing the fallback would change what
+  an ordinary user sees: it is ordinary-user-visible today (status published or
+  completed) **and** still active/upcoming (published, or an upcoming start).
+- Draft and cancelled events are never ordinary-user-visible, and purely past
+  completed events are treated as harmless archive, so neither is a blocker.
+- Among blocking zero-row events, those that are **not backfillable** (unmapped
+  / inactive / wrong-type / invalid / parity-mismatch legacy fields) are the
+  hard blockers, counted separately.
+
+Options: `--verbose` (per-event lines listing id / title / status / start /
+scope labels only — never description/body text), `--limit N`, `--event-id ID`,
+and `--fail-on-blockers` (exits nonzero when `blockers_total > 0`; still
+read-only).
+
+A clean audit (`blockers_total == 0`) means every ordinary-user-visible, active
+event already carries audience rows, so the zero-row fallback could be retired
+without changing any current audience. Backfillable-but-not-yet-backfilled
+events still block removal until
+`backfill_service_event_audience_scopes --apply` has been run and the audit
+re-runs clean on the target data.
+
+**Future fallback removal requires this audit to run clean on the target
+(production) data** and is its own approved slice; SE-RETIRE.1A neither removes
+the fallback nor hides any legacy form field.

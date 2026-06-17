@@ -12,11 +12,16 @@ the audit that measures readiness to retire them.
 
 Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) + 1C (reflection
 visibility row-first, verified) + 1D (group progress membership-core default) +
-1E (legacy small-group helper cleanup) implemented.** 1A–1C are code/tests/docs
-only with no runtime change; 1D made a small runtime change (removed the last
-legacy `Profile.small_group` read in the group-progress default-group path); 1E
-removed the now-dead `reading.views.get_user_small_group` helper and corrected
-stale wording. The reflection read/write visibility path and the group-progress
+1E (legacy small-group helper cleanup) + 1F (local real-data backfill apply
+recorded) implemented.** 1A–1C are code/tests/docs only with no runtime change;
+1D made a small runtime change (removed the last legacy `Profile.small_group`
+read in the group-progress default-group path); 1E removed the now-dead
+`reading.views.get_user_small_group` helper and corrected stale wording; 1F is
+docs-only and records the successful local real-data `--apply` run of the 1B
+backfill (see Section 5.8). **Local real-data Reading reflection blockers are
+now clear** (`reflections_legacy_only_no_valid_snapshot: 0`); two no-source
+reflections remain intentionally unresolved / fail-closed. **Production apply
+status is not claimed and should only be claimed if separately confirmed.** The reflection read/write visibility path and the group-progress
 roster/default path are now fully membership-core (see below); **no Reading
 runtime path reads `Profile.small_group`.** What remains is retiring the legacy
 mirror data and the `SmallGroup` storage bridge once real-data evidence is clean.
@@ -91,9 +96,12 @@ resolution in `accounts.permissions`, not in reading runtime.
 
 - ~~Replace the `my_group_progress` last-resort `Profile.small_group` default~~ —
   **done in READING-STRUCT.1D** (see Section 5.6).
-- Backfill `structure_unit_at_post` for legacy group reflections that predate
+- ~~Backfill `structure_unit_at_post` for legacy group reflections that predate
   CS-CORE.4D/4G.2 so historical group posts are not silently invisible under the
-  live structure-native gate.
+  live structure-native gate.~~ — **done on local real data in READING-STRUCT.1F**
+  (6 rows backfilled; `reflections_legacy_only_no_valid_snapshot` now 0 locally;
+  see Section 5.8). Two no-source reflections (no legacy small group) remain
+  intentionally unresolved / fail-closed. **Production apply not claimed.**
 - Eventually drop the `small_group_at_post` mirror writes once no consumer
   remains (coordinate with the cross-module `Profile.small_group` retirement in
   CHURCH_STRUCTURE_CORE Section 12). (`get_user_small_group` was already removed
@@ -327,17 +335,92 @@ and the `users_profile_group_without_single_membership` comment no longer call
 unchanged; no migration, and no production command / `--apply` was run (only the
 read-only audit).
 
+## 5.8 Local real-data snapshot backfill apply (READING-STRUCT.1F — recorded)
+
+**Outcome: docs-only record of a successful local real-data `--apply` run of the
+1B backfill. No code/test/migration/template/runtime change in this slice, and no
+production command was run.** The user ran the READING-STRUCT.1B backfill on the
+local real-data DB after CS-RETIRE.1A. This section records the evidence.
+
+**Pre-apply audit (`audit_reading_structure_runtime_readiness`):**
+
+- `group_visible_reflections: 8`
+- `reflections_with_legacy_small_group: 6`
+- `reflections_with_structure_snapshot: 0`
+- `reflections_snapshot_missing: 8`
+- `reflections_legacy_only_no_valid_snapshot: 6`
+- `progress_groups_total: 21`, `progress_groups_resolvable: 21`
+- `users_with_single_active_primary_membership: 19`
+- `users_with_multiple_active_primary_membership: 0`
+- `users_profile_group_without_single_membership: 0`
+- blockers present: `reflections_legacy_only_no_valid_snapshot`
+
+**Backfill dry-run:** `reflections_checked: 8`, `skipped_existing_snapshot: 0`,
+`would_backfill: 6`, `backfilled: 0`, `missing_legacy_group: 2`,
+`missing_mapping: 0`, `inactive_unit: 0`, `wrong_unit_type: 0`,
+`validation_error: 0`, `legacy_fields_mutated: 0`, `runtime_switched: false`.
+
+**Apply result (`--apply`):** `reflections_checked: 8`,
+`skipped_existing_snapshot: 0`, `would_backfill: 0`, `backfilled: 6`,
+`missing_legacy_group: 2`, `missing_mapping: 0`, `inactive_unit: 0`,
+`wrong_unit_type: 0`, `validation_error: 0`, `legacy_fields_mutated: 0`,
+`runtime_switched: false`.
+
+Rows backfilled:
+
+- `comment_id=4` → unit #15 SMALLGROUP-1
+- `comment_id=5` → unit #15 SMALLGROUP-1
+- `comment_id=6` → unit #15 SMALLGROUP-1
+- `comment_id=7` → unit #15 SMALLGROUP-1
+- `comment_id=9` → unit #16 SMALLGROUP-2
+- `comment_id=10` → unit #15 SMALLGROUP-1
+
+**Post-apply dry-run:** `reflections_checked: 8`, `skipped_existing_snapshot: 6`,
+`would_backfill: 0`, `backfilled: 0`, `missing_legacy_group: 2`, all other
+mapping/type/validation buckets 0, `legacy_fields_mutated: 0`,
+`runtime_switched: false` (idempotent — the 6 rows are now snapshot-backed).
+
+**Post-apply audit:** `group_visible_reflections: 8`,
+`reflections_with_legacy_small_group: 6`,
+`reflections_with_structure_snapshot: 6`, `reflections_snapshot_resolvable: 6`,
+`reflections_snapshot_missing: 2`,
+`reflections_legacy_only_no_valid_snapshot: 0`, `progress_groups_total: 21`,
+`progress_groups_resolvable: 21` (all progress unresolved buckets 0),
+`users_with_multiple_active_primary_membership: 0`,
+`users_profile_group_without_single_membership: 0`, **blockers present: none**.
+
+**Interpretation:**
+
+- `comment_id=1` and `comment_id=2` still have no snapshot because they also have
+  **no legacy small-group source** (`missing_legacy_group: 2`). They are **not
+  auto-backfillable** and, under the snapshot-only reflection privacy gate
+  (Section 5.5), they **remain fail-closed for ordinary users**. This is
+  **expected** and is **not a blocker** for Reading runtime retirement.
+- **No legacy fields were mutated** (`legacy_fields_mutated: 0`); only the
+  additive `structure_unit_at_post` snapshot was set.
+- **No runtime source was switched** by the command (`runtime_switched: false`).
+- **Local real-data Reading reflection blockers are clear**
+  (`reflections_legacy_only_no_valid_snapshot: 0`).
+- **Production apply status is not claimed here and should only be claimed if
+  separately confirmed** on the production DB.
+
 ## 6. Next proposed slice
 
-**READING-STRUCT.1F (proposed):** run the 1B backfill `--apply` on real data
-(driving `reflections_legacy_only_no_valid_snapshot` to zero), then a
-fallback-removal / legacy-field-retirement slice for the `small_group_at_post`
-mirror and the `SmallGroup` progress storage bridge — each gated on a clean
-`audit_reading_structure_runtime_readiness --fail-on-blockers` and
-`audit_group_progress_shadow --fail-on-drift` over real data, coordinated with
-the cross-module `Profile.small_group` retirement (CHURCH_STRUCTURE_CORE
-Section 12).
+**READING-STRUCT.1F (done locally — see Section 5.8):** the 1B backfill `--apply`
+was run on the **local real-data** DB, driving
+`reflections_legacy_only_no_valid_snapshot` to zero locally (two no-source
+reflections remain intentionally unresolved / fail-closed). **The same apply has
+not been claimed on production** and should only be claimed if separately
+confirmed.
+
+**Next (proposed):** a fallback-removal / legacy-field-retirement slice for the
+`small_group_at_post` mirror and the `SmallGroup` progress storage bridge — each
+gated on a clean `audit_reading_structure_runtime_readiness --fail-on-blockers`
+and `audit_group_progress_shadow --fail-on-drift` over the target (eventually
+production) data, coordinated with the cross-module `Profile.small_group`
+retirement (CHURCH_STRUCTURE_CORE Section 12).
 
 The 1A audit, 1B backfill, 1C verification, and 1E cleanup slices perform **no**
 runtime switch; 1D makes the single group-progress default-source change
-described above.
+described above; 1F is docs-only (records the local apply) and switches no
+runtime source.

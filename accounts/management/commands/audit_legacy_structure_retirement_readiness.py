@@ -263,6 +263,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "backfill support for Bible Study meeting audience rows",
     ),
     (
+        "studies.management.commands.backfill_bible_study_v2_generation_keys",
+        "backfill support for Bible Study V2 generation keys; dry-run by default",
+    ),
+    (
         "studies.management.commands.purge_legacy_bible_study_v1_sessions",
         "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
     ),

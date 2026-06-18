@@ -221,6 +221,10 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             "studies.management.commands.purge_legacy_bible_study_v1_sessions",
             out.getvalue(),
         )
+        self.assertIn(
+            "studies.management.commands.backfill_bible_study_v2_generation_keys",
+            out.getvalue(),
+        )
 
 
 class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):

@@ -41,6 +41,12 @@ followed BS-STRUCT.1A are now implemented:
   per-unit `generation_key`, keeps `small_group` only as a mirror when exactly
   one active legacy group maps, and no longer exposes a legacy `small_group`
   select (BS-STRUCT.1O);
+- BS-V2-KEY.1A adds a dry-run-first backfill command for existing normal V2
+  meetings that already have one safe small-group audience row but are missing
+  the structure-native `generation_key` and/or null `anchor_unit`. It prepares
+  for future `BibleStudyMeeting.small_group` mirror retirement, but does not
+  change V2 visibility/runtime behavior and does not delete or alter
+  `small_group`;
 - obsolete small-group-keyed write/generation helpers were removed
   (`write_normal_meeting_audience_scope`, the compatibility-only
   `sync_normal_meeting_audience_scope`, and the never-produced
@@ -933,6 +939,38 @@ the meeting-identity decision (Section 4.5).
       with a warning rather than falling back to legacy scope fields;
     - **V1 `BibleStudySession`** remains excluded / a retirement target;
     - field-level legacy cleanup and V1 archive/retirement remain separate.
+- **BS-V2-KEY.1A** — backfill structure-native identity keys for existing
+  normal V2 meetings. ✅ **implemented.** Management command
+  `backfill_bible_study_v2_generation_keys`
+  (`studies/management/commands/backfill_bible_study_v2_generation_keys.py`).
+  - **Dry-run by default.** Without `--apply`, it writes nothing and reports
+    safe updates, skipped rows, blockers, `data_mutated: false`,
+    `runtime_mutated: false`, and `legacy_small_group_mutated: 0`. `--limit N`
+    caps verbose printed examples only; it does not narrow scan/apply scope. Use
+    `--meeting-id` or `--lesson-id` to intentionally narrow matching rows.
+  - **Safe target.** A row is eligible only when `meeting_kind = normal`, it has
+    exactly one `BibleStudyMeetingAudienceScope` row, that row points at an
+    active `UNIT_SMALL_GROUP` unit, the expected key is
+    `normal-unit:{unit_id}`, no other meeting for the same lesson already has
+    that key, and any existing `anchor_unit` already matches that audience unit.
+  - **Apply behavior.** Apply mode updates only missing/blank `generation_key`
+    and a null `anchor_unit` using `save(update_fields=[...])` inside
+    `transaction.atomic()`. It never mutates `BibleStudyMeeting.small_group`,
+    `BibleStudyMeetingAudienceScope`, `BibleStudySeries`, or
+    `BibleStudyLesson`, and it does not change visibility, landing/Today,
+    role/worship picker, generation, or permission behavior.
+  - **Future production apply command, when intentionally approved:**
+
+    ```powershell
+    .venv\Scripts\python.exe manage.py backfill_bible_study_v2_generation_keys --apply
+    ```
+
+    Do not run `--apply` against local/dev data during the BS-V2-KEY.1A
+    implementation task. Field/schema cleanup remains a later slice.
+  - **Audit alignment.** The comprehensive
+    `audit_legacy_structure_retirement_readiness` command still reports
+    `bible_study_normal_meetings_missing_generation_key`; after this backfill is
+    intentionally applied in a target database, that counter can reach `0`.
 - **BS-STRUCT.1L** — normal generation becomes **structure-unit-native**.
   ✅ **implemented.** Code/tests/docs only; no model/schema/migration change (the
   `anchor_unit`, `generation_key`, and `meeting_kind` fields already existed).

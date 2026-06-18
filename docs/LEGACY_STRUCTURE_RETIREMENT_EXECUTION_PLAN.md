@@ -32,6 +32,30 @@ The purge command is dry-run by default. It deletes no V1 rows unless staff expl
 
 Do not run that `--apply` command against the local/dev database during the BS-V1-PURGE.1A implementation task.
 
+V2 generation-key backfill command:
+
+```powershell
+.venv\Scripts\python.exe manage.py backfill_bible_study_v2_generation_keys
+```
+
+BS-V2-KEY.1A adds this dry-run-first command to backfill structure-native
+`generation_key` (`normal-unit:{unit_id}`) and a safe null `anchor_unit` for
+existing normal V2 meetings that already have exactly one active small-group
+`BibleStudyMeetingAudienceScope` row. It does not change V2 visibility/runtime
+behavior, does not delete or alter `small_group`, and does not modify audience
+rows. Future apply, when intentionally approved, would be:
+
+```powershell
+.venv\Scripts\python.exe manage.py backfill_bible_study_v2_generation_keys --apply
+```
+
+For this command, `--limit N` only caps verbose printed examples; it does not
+narrow dry-run scan scope or apply scope. Use `--meeting-id` or `--lesson-id` to
+intentionally narrow the matching rows.
+
+Do not run that `--apply` command against the local/dev database during the
+BS-V2-KEY.1A implementation task. Field/schema cleanup remains later.
+
 Current runtime split:
 
 - `Profile.small_group` has no normal app-level write path after CS-RETIRE.1A, but remains stored legacy/admin/archive/audit data.
@@ -51,7 +75,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | V1 Bible Study session visibility | `studies.models.BibleStudySession.can_be_seen_by()` | retired app runtime / pilot data pending explicit purge | BS-V1-RETIRE.1A makes app-level V1 visibility fail closed for ordinary users and managers. `Profile.small_group`, `District`, `SmallGroup`, and `scope_type` no longer grant V1 app access. BS-V1-PURGE.1A adds guarded cleanup tooling; runtime code does not run it automatically. |
 | Bible Study schedule legacy scope / generation compatibility | `BibleStudySeries.get_eligible_small_groups()`, `BibleStudySeries.scope_type`, `ministry_context`, `district`, `small_group` | generation/idempotency bridge | Kept to support coexistence and historical scope data while structure audience rows drive the current V2 path. |
 | Bible Study V2 meeting `small_group` | `studies.models.BibleStudyMeeting.small_group` | stored mirror/display/history snapshot | No longer ordinary visibility source; still mirror/display/history and secondary compatibility identity. |
-| Bible Study V2 generation key / anchor bridge | `studies.services.normal_generation_key_for_unit()`, `anchor_unit`, `generation_key` | generation/idempotency bridge | Structure-native idempotency is present but still coexists with legacy mirrors and pre-bridge meeting recognition. |
+| Bible Study V2 generation key / anchor bridge | `studies.services.normal_generation_key_for_unit()`, `anchor_unit`, `generation_key`, `backfill_bible_study_v2_generation_keys` | generation/idempotency bridge | Structure-native idempotency is present; BS-V2-KEY.1A adds dry-run-first support to backfill missing safe keys/anchors without changing runtime behavior, audience rows, or the `small_group` mirror. |
 | Reflection legacy small-group snapshot | `comments.models.ReflectionComment.small_group_at_post` | stored mirror/display/history snapshot | No longer grants ordinary group visibility; removal waits for snapshot coverage/mismatch checks. |
 | Reflection structure snapshot | `ReflectionComment.structure_unit_at_post` | already runtime-retired / historical only | Canonical group reflection read/write snapshot after CS-CORE.4G.2/4G.3. |
 | Role legacy scope fields | `ChurchRoleAssignment.district`, `ChurchRoleAssignment.small_group` | stored mirror/display/history snapshot | Runtime fallback is retired; fields remain display/audit/backfill/rollback context until field-level retirement. |
@@ -171,7 +195,7 @@ Blockers:
 - The audit preserves that split: `bible_study_v1_app_runtime_legacy_blockers` remains `0`, while `bible_study_v1_purge_pending` contributes to `bible_study_legacy_retirement_blockers` as a data/table-retirement blocker.
 - BS-V1-PURGE.1A does not delete V2 `BibleStudyMeeting` data, does not change V2 behavior, and does not remove V1 models/tables. Schema cleanup remains a later migration slice.
 - V2 `BibleStudyMeeting.small_group` remains stored mirror/history/idempotency compatibility and blocks field removal even though it is no longer ordinary visibility authority.
-- Active series without audience rows and normal meetings without generation keys are generation/idempotency readiness blockers.
+- Active series without audience rows and normal meetings without generation keys are generation/idempotency readiness blockers. BS-V2-KEY.1A support can reduce `bible_study_normal_meetings_missing_generation_key` after a separately approved future `--apply` run.
 
 ### Reflection Legacy Snapshots
 
@@ -207,7 +231,7 @@ Blockers:
 ## Recommended Next Sequence
 
 1. Run the explicit V1 pilot-data purge procedure only when staff intentionally approve it: dry-run `purge_legacy_bible_study_v1_sessions`, review matched rows, then run `purge_legacy_bible_study_v1_sessions --apply --confirm-v1-bible-study-retirement` against the target database. Do not treat this command as ordinary runtime, and do not run `--apply` during the BS-V1-PURGE.1A local/dev implementation task.
-2. Harden Bible Study V2 generation/idempotency bridge: active schedules should carry audience rows, normal meetings should carry audience rows and generation keys, and mirror/audience mismatches should be zero.
+2. Harden Bible Study V2 generation/idempotency bridge: active schedules should carry audience rows, normal meetings should carry audience rows and generation keys, and mirror/audience mismatches should be zero. Run `backfill_bible_study_v2_generation_keys` in dry-run mode first; apply only when intentionally approved.
 3. Plan ServiceEvent legacy scope field deprecation: stored data, forms, display, backfill/audit commands, rollback, and zero-row safety-state handling.
 4. Plan role legacy field retirement after confirming no scoped assignment lacks explicit valid `structure_unit` and no legacy-vs-structure mismatch remains.
 5. Plan `Profile.small_group` read-only/removal: use the audit to separate represented values from no-membership, mismatch, unmapped, or multiple-primary blockers.

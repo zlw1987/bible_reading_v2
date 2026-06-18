@@ -46,7 +46,6 @@ from .services import (
 )
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
-    get_membership_visible_small_groups,
     get_small_group_structure_unit,
 )
 
@@ -127,20 +126,17 @@ def get_visible_study_sessions(user):
 def get_v2_landing_context(user):
     show_staff_links = can_manage_bible_studies(user)
 
-    # BS-STRUCT.1E: the landing/Today read path now resolves visibility from
-    # meeting audience-scope rows when present, with the legacy small_group
-    # membership path kept only as a zero-row fallback. ``user_small_group`` is
-    # still surfaced for existing templates, but it no longer gates audience-row
-    # meeting visibility.
-    visible_small_groups = get_membership_visible_small_groups(user)
-    user_small_group = visible_small_groups.order_by("name").first()
+    # BS-STRUCT.2A: audience rows are the V2 runtime source of truth. Zero-row
+    # meetings fail closed for ordinary users; user_small_group remains template
+    # display compatibility only.
+    user_small_group = getattr(getattr(user, "profile", None), "small_group", None)
     audience_candidate_unit_ids = get_membership_audience_candidate_unit_ids(user)
 
-    # A user with neither a resolvable legacy group nor any active primary
-    # membership (e.g. a profile-only user) cannot match either path.
-    if user_small_group is None and not audience_candidate_unit_ids:
+    # A user with no active primary membership cannot match any V2 meeting
+    # audience row. Profile.small_group no longer admits zero-row meetings.
+    if not audience_candidate_unit_ids:
         return {
-            "user_small_group": None,
+            "user_small_group": user_small_group,
             "primary_meeting": None,
             "upcoming_meetings": [],
             "show_no_small_group": True,
@@ -172,26 +168,15 @@ def get_v2_landing_context(user):
     )
 
     # Candidate filter: audience-row meetings whose audience unit is the user's
-    # membership unit or an ancestor of it, plus zero-row meetings still reached
-    # through the legacy small_group fallback. ``can_be_seen_by`` remains the
-    # final per-meeting authority below, so this is only a (possibly broad)
-    # pre-filter; e.g. an audience-row meeting whose small_group still points at
-    # the user's group is admitted here but correctly rejected by the
-    # audience-row precedence in ``can_be_seen_by``.
-    visibility_q = Q()
-    if audience_candidate_unit_ids:
-        visibility_q |= Q(
+    # membership unit or an ancestor of it. ``can_be_seen_by`` remains the final
+    # per-meeting authority below.
+    candidate_meetings = (
+        base_meetings.filter(
             audience_scope_links__unit_id__in=audience_candidate_unit_ids,
         )
-    if visible_small_groups:
-        visibility_q |= Q(small_group__in=visible_small_groups)
-
-    if not visibility_q:
-        candidate_meetings = BibleStudyMeeting.objects.none()
-    else:
-        candidate_meetings = (
-            base_meetings.filter(visibility_q).distinct().order_by("meeting_datetime")
-        )
+        .distinct()
+        .order_by("meeting_datetime")
+    )
 
     upcoming_meetings = []
     for meeting in candidate_meetings:
@@ -713,17 +698,12 @@ def bible_study_meeting_manage_list(request):
     if lesson_id:
         meetings = meetings.filter(lesson_id=lesson_id)
     if selected_unit is not None:
-        # Match the selected unit or any descendant. Meetings with audience rows
-        # match on those rows (row-first, mirroring runtime visibility); zero-row
-        # meetings still match through the legacy small_group -> structure unit
-        # fallback, which remains until BS-STRUCT.2+.
+        # Match the selected unit or any descendant using audience rows only.
+        # Zero-row meetings fail closed for ordinary users; legacy small_group
+        # remains mirror/display/backfill context only.
         unit_ids = _collect_descendant_or_self_unit_ids([selected_unit])
         meetings = meetings.filter(
-            Q(audience_scope_links__unit_id__in=unit_ids)
-            | (
-                Q(audience_scope_links__isnull=True)
-                & Q(small_group__church_structure_unit_id__in=unit_ids)
-            )
+            audience_scope_links__unit_id__in=unit_ids,
         ).distinct()
 
     status_choices = [

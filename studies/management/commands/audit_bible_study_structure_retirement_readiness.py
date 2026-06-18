@@ -1,11 +1,11 @@
-"""BS-STRUCT.1J read-only Bible Study legacy-retirement readiness audit.
+"""BS-STRUCT.2A read-only Bible Study legacy-retirement readiness audit.
 
 This command answers one operational question: *what remains before we can
-remove the zero-row ``small_group`` fallback and the legacy ``SmallGroup``
-bridge for Bible Study v2 meetings?* It scans every ``BibleStudyMeeting`` row
-and reports human-readable counters describing how each meeting's structure
-audience (``BibleStudyMeetingAudienceScope`` rows) relates to its legacy
-``small_group`` mirror, its ``anchor_unit``, and its ``meeting_kind``.
+keep zero-row V2 meetings failed closed for ordinary users?* It scans every
+``BibleStudyMeeting`` row and reports human-readable counters describing how
+each meeting's structure audience (``BibleStudyMeetingAudienceScope`` rows)
+relates to its legacy ``small_group`` mirror, its ``anchor_unit``, and its
+``meeting_kind``.
 
 It is **strictly read-only**:
 
@@ -14,9 +14,8 @@ It is **strictly read-only**:
   ``Profile`` writes).
 - It changes **no** runtime behavior: visibility, landing/Today, role/worship
   pickers, generation, and forms are untouched.
-- It does **not** remove the zero-row fallback or the legacy bridge. That is a
-  later slice (BS-STRUCT.2+) gated on a clean audit **and** a separately
-  verified production rollout (BS-STRUCT.1I).
+- It does **not** delete legacy ``small_group`` fields or the legacy bridge.
+  Those remain mirror/display/backfill context for separate retirement slices.
 
 It audits whichever database Django is configured to use, so it needs no
 production access of its own; an operator runs it against the target DB.
@@ -24,13 +23,13 @@ production access of its own; an operator runs it against the target DB.
 Hard blockers vs warnings
 -------------------------
 
-Two counters are **hard blockers** for removing the zero-row fallback:
+Two counters are **hard blockers** for keeping zero-row V2 meetings failed
+closed without losing ordinary-member access to valid meetings:
 
 - ``meetings_without_audience_rows`` — any meeting with zero
-  ``BibleStudyMeetingAudienceScope`` rows still depends on the legacy
-  single-``small_group`` zero-row fallback for visibility / pickers, so the
-  fallback cannot be removed while any such meeting exists (classification
-  rule 1). This subsumes the more specific
+  ``BibleStudyMeetingAudienceScope`` rows now fails closed for ordinary users,
+  so it must be backfilled or intentionally handled before publication
+  (classification rule 1). This subsumes the more specific
   ``normal_meetings_without_audience_rows`` and the null-``small_group``-with-
   zero-rows case (rule 6).
 - ``meetings_audience_mismatch_small_group_mirror`` — a meeting with exactly one
@@ -48,22 +47,21 @@ fallback-removal blocker on its own:
   broken. When such a meeting also has zero audience rows it is already a hard
   blocker via ``meetings_without_audience_rows``; when it has audience rows the
   row-first runtime no longer depends on the mirror, so the broken mirror is
-  data hygiene, not a removal blocker.
+  data hygiene, not a zero-row fail-closed blocker.
 - ``meetings_missing_anchor_unit`` / ``meetings_anchor_mismatch_small_group_unit``
   — ``anchor_unit`` is display/grouping/ownership only and is never a visibility
   source (see ``BibleStudyMeeting.anchor_unit``), so anchor issues are warnings
   (rule 7).
 
-Two flags are emitted as fixed truths for this slice:
+Two flags are emitted as runtime-state summaries for this slice:
 
-- ``legacy_small_group_fallback_still_present = true`` — the zero-row fallback
-  code still exists in ``studies.visibility`` / landing/Today / pickers.
-- ``runtime_zero_row_fallback_removable = false`` — kept ``false`` in this slice
-  by construction. Removal requires **both** zero DB/data blockers (machine-
-  checkable here) **and** a separately verified production rollout
-  (BS-STRUCT.1I), which this command cannot confirm. The report still surfaces
-  the machine-checkable half as ``db_data_blockers_clear`` so an operator can
-  see when the data side is ready.
+- ``legacy_small_group_fallback_still_present = false`` — ordinary-member V2
+  runtime visibility, landing/Today, and role/worship picker candidates no
+  longer use the zero-row ``small_group`` fallback.
+- ``runtime_zero_row_fallback_removed = true`` — zero-row V2 meetings fail
+  closed for ordinary users. The report still surfaces
+  ``db_data_blockers_clear`` so an operator can see whether any DB rows would
+  now be hidden from ordinary users by that fail-closed behavior.
 
 ``Profile.small_group`` is **not** a V2 visibility/picker source and is never
 consulted here (classification rule 8). V1 ``BibleStudySession`` is excluded
@@ -98,9 +96,10 @@ _STAT_KEYS = (
     "meetings_audience_mismatch_small_group_mirror",
 )
 
-# Hard blockers for removing the zero-row fallback. Only these cause a nonzero
-# exit under ``--fail-on-blockers``. See the module docstring for why each is a
-# blocker and why the warning counters are not.
+# Hard blockers for keeping zero-row V2 meetings failed closed without hiding
+# intended ordinary-member meetings. Only these cause a nonzero exit under
+# ``--fail-on-blockers``. See the module docstring for why each is a blocker and
+# why the warning counters are not.
 _BLOCKER_KEYS = (
     "meetings_without_audience_rows",
     "meetings_audience_mismatch_small_group_mirror",
@@ -179,7 +178,7 @@ def run_audit():
 
     Returns ``(stats, details)``. Creates, edits, or deletes nothing. Audits all
     meetings regardless of status, because every meeting must carry audience rows
-    before the zero-row fallback can be removed.
+    before zero-row fail-closed behavior is data-safe.
     """
     stats = _new_stats()
     details = _new_details()
@@ -303,12 +302,12 @@ def _blockers_present(stats):
 
 class Command(BaseCommand):
     help = (
-        "Read-only Bible Study legacy-retirement readiness audit (BS-STRUCT.1J). "
+        "Read-only Bible Study legacy-retirement readiness audit (BS-STRUCT.2A). "
         "Scans every BibleStudyMeeting and reports counters describing how each "
         "meeting's BibleStudyMeetingAudienceScope rows relate to its legacy "
         "small_group mirror, anchor_unit, and meeting_kind. Creates/edits/deletes "
-        "nothing, changes no runtime behavior, and removes no fallback. It does "
-        "not prove production was applied; that remains a separate rollout step. "
+        "nothing and changes no runtime behavior. It does not delete legacy "
+        "small_group fields or the legacy bridge. "
         "With --fail-on-blockers it exits nonzero only when a hard blocker "
         "(meetings_without_audience_rows or "
         "meetings_audience_mismatch_small_group_mirror) is present."
@@ -320,7 +319,8 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Also list meeting id / lesson title / small_group for each "
-                "blocker and warning category (zero-row meetings, "
+                "blocker and warning category (zero-row meetings that now fail "
+                "closed, "
                 "null-small_group zero-row meetings, unmapped/inactive/wrong-type "
                 "mirror mappings, single-row/mirror mismatches, and anchor "
                 "mismatches). Independent of Django -v verbosity."
@@ -333,7 +333,7 @@ class Command(BaseCommand):
                 "Exit with an error when any hard blocker is present "
                 "(meetings_without_audience_rows, "
                 "meetings_audience_mismatch_small_group_mirror). Still read-only; "
-                "nothing is changed and no fallback is removed."
+                "nothing is changed."
             ),
         )
 
@@ -354,7 +354,7 @@ class Command(BaseCommand):
 
         write(
             "Bible Study legacy-retirement readiness audit "
-            "(BS-STRUCT.1J, read-only)"
+            "(BS-STRUCT.2A, read-only)"
         )
         write("=" * 72)
         write(f"meetings_checked                                : {stats['meetings_checked']}")
@@ -374,10 +374,10 @@ class Command(BaseCommand):
         write(f"meetings_small_group_wrong_unit_type            : {stats['meetings_small_group_wrong_unit_type']}")
         write(f"meetings_audience_mismatch_small_group_mirror   : {stats['meetings_audience_mismatch_small_group_mirror']}")
         write("-" * 72)
-        write("blockers (hard, gate fallback removal):")
+        write("blockers (hard, gate zero-row fail-closed safety):")
         for key in _BLOCKER_KEYS:
             write(f"  {key:<44}: {stats[key]}")
-        write("warnings (informational, not fallback-removal blockers):")
+        write("warnings (informational, not zero-row fail-closed blockers):")
         for key in (
             "meetings_small_group_unmapped",
             "meetings_small_group_inactive_unit",
@@ -387,18 +387,16 @@ class Command(BaseCommand):
         ):
             write(f"  {key:<44}: {stats[key]}")
         write("-" * 72)
-        # Fixed-truth flags for this slice (see module docstring).
-        write("legacy_small_group_fallback_still_present       : true")
+        # Runtime-state flags for this slice (see module docstring).
+        write("legacy_small_group_fallback_still_present       : false")
         write(f"db_data_blockers_clear                          : {'true' if blockers_clear else 'false'}")
-        write("runtime_zero_row_fallback_removable             : false")
+        write("runtime_zero_row_fallback_removed               : true")
         write("")
         write(
             "Audit only: no meeting, audience row, small_group, unit, membership, "
-            "or profile was changed; no runtime behavior changed; no fallback was "
-            "removed. Fallback removal requires zero DB/data blockers AND a "
-            "separately verified production rollout (BS-STRUCT.1I), so "
-            "runtime_zero_row_fallback_removable stays false here even when "
-            "db_data_blockers_clear is true."
+            "or profile was changed; no runtime behavior changed. Zero-row V2 "
+            "meetings now fail closed for ordinary users in runtime code; this "
+            "command reports whether database rows are clear for that behavior."
         )
 
         if not verbose:

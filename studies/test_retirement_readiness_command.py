@@ -105,8 +105,8 @@ class ReadinessCounterTests(_ReadinessTestMixin, TestCase):
         self.assertIn("meetings_without_audience_rows                  : 0", output)
         self.assertIn("meetings_with_single_small_group_audience       : 1", output)
         self.assertIn("db_data_blockers_clear                          : true", output)
-        self.assertIn("runtime_zero_row_fallback_removable             : false", output)
-        self.assertIn("legacy_small_group_fallback_still_present       : true", output)
+        self.assertIn("runtime_zero_row_fallback_removed               : true", output)
+        self.assertIn("legacy_small_group_fallback_still_present       : false", output)
 
         # --fail-on-blockers exits 0 (no CommandError).
         self.run_command("--fail-on-blockers")

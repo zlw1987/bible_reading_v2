@@ -770,12 +770,11 @@ class BibleStudyMeeting(models.Model):
     def get_audience_scope_units(self):
         """Return selected ChurchStructureUnit rows for a saved meeting.
 
-        Since BS-STRUCT.1D generation writes a row for each newly generated
-        normal group-level meeting, and since BS-STRUCT.1E ordinary-member
-        visibility and the V2 landing/Today read path read these rows when
-        present (with the legacy ``small_group`` path kept only as a zero-row
-        fallback). Role / worship pickers still do not read these rows; that
-        remains deferred to BS-STRUCT.1F.
+        BibleStudyMeetingAudienceScope rows are the V2 runtime source of truth
+        for ordinary-member visibility. V2 landing/Today and role/worship
+        candidate pickers also read these rows. Zero-row V2 meetings fail closed
+        for ordinary users; legacy ``small_group`` remains mirror/display/
+        backfill/history/idempotency compatibility only.
         """
         if not self.pk:
             return ChurchStructureUnit.objects.none()
@@ -808,7 +807,6 @@ class BibleStudyMeeting(models.Model):
             meeting_is_member_visible,
             user_has_bible_study_manager_override,
             user_matches_meeting_audience_scopes,
-            user_matches_meeting_small_group_membership,
         )
 
         if not getattr(user, "is_authenticated", False):
@@ -820,14 +818,13 @@ class BibleStudyMeeting(models.Model):
         if not meeting_is_member_visible(self):
             return False
 
-        # BS-STRUCT.1E: audience-scope rows are the visibility source of truth
-        # when present; the legacy small_group membership path is only a
-        # zero-row fallback. Profile.small_group is never consulted on either
-        # path.
+        # BS-STRUCT.2A: audience-scope rows are the V2 runtime source of truth.
+        # Zero-row meetings fail closed for ordinary users; legacy small_group
+        # remains mirror/display/backfill context only.
         if meeting_has_audience_scope_rows(self):
             return user_matches_meeting_audience_scopes(user, self)
 
-        return user_matches_meeting_small_group_membership(user, self.small_group)
+        return False
 
 
 class BibleStudyMeetingAudienceScope(models.Model):
@@ -838,11 +835,10 @@ class BibleStudyMeetingAudienceScope(models.Model):
     the single legacy ``BibleStudyMeeting.small_group`` FK as the audience
     source. Since BS-STRUCT.1D generation writes a row for each newly generated
     normal group-level meeting, and since BS-STRUCT.1E ordinary-member
-    visibility and the V2 landing/Today read path read these rows when present
-    (with the legacy ``small_group`` path kept only as a zero-row fallback).
-    Role / worship pickers still read the single ``small_group`` unit, not these
-    rows; that remains deferred to BS-STRUCT.1F. Validation mirrors
-    ``BibleStudySeriesAudienceScope``.
+    visibility, the V2 landing/Today read path, and role / worship pickers read
+    these rows. Zero-row V2 meetings fail closed for ordinary users; legacy
+    ``small_group`` remains mirror/display/backfill context only. Validation
+    mirrors ``BibleStudySeriesAudienceScope``.
     """
 
     meeting = models.ForeignKey(

@@ -190,22 +190,19 @@ def filter_users_for_meeting_small_group_membership(users, small_group, target_d
 def filter_users_for_meeting_audience(users, meeting, target_date=None):
     """Filter a user queryset to a meeting's audience-row candidate members.
 
-    BS-STRUCT.1F: role / worship pickers read meeting audience rows when present.
+    BS-STRUCT.2A: role / worship pickers read meeting audience rows.
     When a meeting has one or more ``BibleStudyMeetingAudienceScope`` rows, the
     candidates are users with exactly one active primary
     ``ChurchStructureMembership`` whose unit is one of the meeting's audience
     units or a descendant of one of them. The audience unit may be any structure
     level (small group, district, CM/EM, custom/fellowship, ...), so no
     ``UNIT_SMALL_GROUP`` gate is applied and ``Profile.small_group`` is never
-    consulted. Audience rows take precedence over the legacy ``small_group``
-    mirror.
+    consulted. Legacy ``small_group`` remains mirror/display/backfill context
+    only.
 
-    When the meeting has zero audience rows, this falls back to the existing
-    ``filter_users_for_meeting_small_group_membership`` membership-core path
-    keyed to ``meeting.small_group``.
-
-    Fail-closed: no single active primary membership, or a membership outside
-    every audience unit's subtree, excludes the user.
+    Fail-closed: no meeting, zero audience rows, no single active primary
+    membership, or a membership outside every audience unit's subtree excludes
+    the user.
     """
     if meeting is None:
         return users.none()
@@ -214,9 +211,7 @@ def filter_users_for_meeting_audience(users, meeting, target_date=None):
         meeting.audience_scope_links.values_list("unit_id", flat=True)
     )
     if not audience_unit_ids:
-        return filter_users_for_meeting_small_group_membership(
-            users, meeting.small_group, target_date=target_date
-        )
+        return users.none()
 
     target_date = target_date or timezone.localdate()
     active_primary_memberships = ChurchStructureMembership.objects.filter(

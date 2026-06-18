@@ -2238,12 +2238,12 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertNotIn(north_meeting, list(response.context["meetings"]))
 
-    def test_meeting_manage_list_zero_row_fallback_included(self):
+    def test_meeting_manage_list_zero_row_meeting_excluded_by_unit_filter(self):
         self.set_language("en")
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         # A zero-row meeting: legacy small_group mirror only, no audience rows.
-        fallback = self.create_meeting(lesson=lesson, small_group=self.group)
-        self.assertEqual(fallback.audience_scope_links.count(), 0)
+        zero_row = self.create_meeting(lesson=lesson, small_group=self.group)
+        self.assertEqual(zero_row.audience_scope_links.count(), 0)
         self.client.login(username="study_staff", password="testpass123")
 
         by_group_unit = self.client.get(
@@ -2255,16 +2255,20 @@ class BibleStudyModuleTests(TestCase):
             {"unit": self.north_unit.id},
         )
 
-        # Included via the legacy small_group -> structure unit fallback, both at
-        # its own unit and at an ancestor district (fallback survives until
-        # BS-STRUCT.2+).
-        self.assertIn(fallback, list(by_group_unit.context["meetings"]))
-        self.assertIn(fallback, list(by_district.context["meetings"]))
+        # Unit filtering now matches audience rows only; zero-row meetings no
+        # longer match through the legacy small_group mirror.
+        self.assertNotIn(zero_row, list(by_group_unit.context["meetings"]))
+        self.assertNotIn(zero_row, list(by_district.context["meetings"]))
 
     def test_meeting_manage_list_legacy_small_group_param_maps_to_unit(self):
         self.set_language("en")
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
-        fallback = self.create_meeting(lesson=lesson, small_group=self.group)
+        zero_row = self.create_meeting(lesson=lesson, small_group=self.group)
+        match = self.create_meeting(lesson=lesson, small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=match,
+            unit=self.group_unit,
+        )
         self.client.login(username="study_staff", password="testpass123")
 
         response = self.client.get(
@@ -2273,9 +2277,12 @@ class BibleStudyModuleTests(TestCase):
         )
 
         # The legacy ?small_group=<id> URL is tolerated and mapped to the group's
-        # structure unit; the filter then behaves like ?unit=<group_unit.id>.
+        # structure unit; the filter then behaves like ?unit=<group_unit.id> and
+        # still matches audience rows only.
         self.assertEqual(response.context["unit_id"], str(self.group_unit.id))
-        self.assertIn(fallback, list(response.context["meetings"]))
+        listed = list(response.context["meetings"])
+        self.assertIn(match, listed)
+        self.assertNotIn(zero_row, listed)
 
     def test_meeting_manage_list_invalid_unit_fails_safe(self):
         self.set_language("en")
@@ -2867,7 +2874,11 @@ class BibleStudyModuleTests(TestCase):
     def test_regular_member_cannot_access_meeting_preparation_edit_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
-        # The regular member must be able to *see* the meeting (membership-core)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        # The regular member must be able to *see* the meeting (audience row)
         # so the preparation-edit guard redirects them to meeting detail rather
         # than the list. They still cannot edit preparation.
         self.create_membership(self.user, self.group_unit)
@@ -2898,7 +2909,11 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_shows_preparation_edit_link_only_to_manager(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
-        # The regular member needs membership-core visibility to load the
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        # The regular member needs audience-row visibility to load the
         # meeting detail (200); the manager path below is unaffected by this.
         self.create_membership(self.user, self.group_unit)
 
@@ -2922,6 +2937,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_role_form_filters_users_to_meeting_membership_core(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         membership_user = User.objects.create_user(
             username="role_membership_match",
             password="testpass123",
@@ -2949,6 +2968,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_role_form_keeps_selected_user_available_on_edit(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         role = self.create_meeting_role(meeting, user=self.other_user)
 
@@ -3068,7 +3091,7 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertNotIn(member, form.fields["user"].queryset)
 
-    def test_meeting_role_form_zero_row_meeting_falls_back_to_small_group(self):
+    def test_meeting_role_form_zero_row_meeting_has_no_ordinary_candidates(self):
         member = User.objects.create_user(
             username="role_zero_row_member",
             password="testpass123",
@@ -3079,7 +3102,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meeting.audience_scope_links.count(), 0)
         form = BibleStudyMeetingRoleForm(meeting=meeting)
 
-        self.assertIn(member, form.fields["user"].queryset)
+        self.assertNotIn(member, form.fields["user"].queryset)
 
     def test_meeting_role_form_audience_row_takes_precedence_over_small_group(self):
         rainbow4_member = User.objects.create_user(
@@ -3204,6 +3227,10 @@ class BibleStudyModuleTests(TestCase):
     def test_regular_user_cannot_access_meeting_role_management_page(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -3220,6 +3247,10 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_add_meeting_role(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -3288,6 +3319,10 @@ class BibleStudyModuleTests(TestCase):
     def test_regular_user_cannot_edit_or_delete_meeting_role(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         role = self.create_meeting_role(meeting)
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
@@ -3310,6 +3345,10 @@ class BibleStudyModuleTests(TestCase):
     def test_regular_user_cannot_post_meeting_role(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -3328,6 +3367,10 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_displays_roles_to_own_group_user(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.create_meeting_role(
             meeting,
@@ -3367,6 +3410,10 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_role_controls_are_manager_only(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
 
         self.client.login(username="study_staff", password="testpass123")
         manager_response = self.client.get(
@@ -3392,6 +3439,10 @@ class BibleStudyModuleTests(TestCase):
     def test_chinese_meeting_role_labels_render(self):
         self.set_language("zh")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_meeting_role(
             meeting,
             role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
@@ -3476,6 +3527,10 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_add_meeting_worship_song(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
 
@@ -3491,6 +3546,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_worship_song_form_filters_worship_lead_to_membership_core(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         membership_user = User.objects.create_user(
             username="worship_membership_match",
             password="testpass123",
@@ -3515,6 +3574,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_worship_song_form_keeps_selected_lead_available_on_edit(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         song = self.create_meeting_worship_song(
             meeting,
@@ -3591,7 +3654,7 @@ class BibleStudyModuleTests(TestCase):
         # self.user is profile-only (no ChurchStructureMembership).
         self.assertNotIn(self.user, users)
 
-    def test_meeting_worship_form_zero_row_meeting_falls_back_to_small_group(self):
+    def test_meeting_worship_form_zero_row_meeting_has_no_ordinary_candidates(self):
         member = User.objects.create_user(
             username="worship_zero_row_member",
             password="testpass123",
@@ -3602,7 +3665,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meeting.audience_scope_links.count(), 0)
         form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
 
-        self.assertIn(member, form.fields["worship_lead_user"].queryset)
+        self.assertNotIn(member, form.fields["worship_lead_user"].queryset)
 
     def test_meeting_worship_form_audience_row_takes_precedence_over_small_group(self):
         rainbow4_member = User.objects.create_user(
@@ -3690,6 +3753,10 @@ class BibleStudyModuleTests(TestCase):
     def test_duplicate_meeting_worship_sort_order_is_rejected(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_meeting_worship_song(meeting, sort_order=1)
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
@@ -3722,6 +3789,10 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_displays_worship_set_to_own_group_user(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.create_meeting_worship_song(
             meeting,
@@ -3763,6 +3834,10 @@ class BibleStudyModuleTests(TestCase):
     def test_meeting_detail_worship_controls_are_manager_only(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
 
         self.client.login(username="study_staff", password="testpass123")
         manager_response = self.client.get(
@@ -4558,6 +4633,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_bible_study_meeting_visibility_helper_is_group_scoped(self):
         meeting = self.create_meeting()
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
 
         self.assertTrue(meeting.can_be_seen_by(self.user))
@@ -5907,10 +5986,14 @@ class BibleStudyModuleTests(TestCase):
             small_group=self.group,
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
 
         # The schedule audience still only controls generated legacy meetings;
-        # the meeting itself remains scoped through its mapped small group.
+        # the meeting itself is visible through its own audience row.
         self.assertTrue(meeting.can_be_seen_by(self.user))
         self.assertFalse(meeting.can_be_seen_by(self.other_user))
 
@@ -5949,6 +6032,10 @@ class BibleStudyModuleTests(TestCase):
             lesson=lesson,
             small_group=self.group,
             status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
         )
 
         self.assertTrue(meeting.can_be_seen_by(active_member))
@@ -6091,7 +6178,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertTrue(meeting.can_be_seen_by(self.manager))
         self.assertTrue(meeting.can_be_seen_by(self.staff))
 
-    def test_zero_row_meeting_falls_back_to_legacy_small_group_path(self):
+    def test_zero_row_meeting_fails_closed_for_member_but_allows_manager_override(self):
         member = User.objects.create_user(
             username="bse_zero_row_member",
             password="testpass123",
@@ -6103,9 +6190,10 @@ class BibleStudyModuleTests(TestCase):
         )
 
         self.assertEqual(meeting.audience_scope_links.count(), 0)
-        self.assertTrue(meeting.can_be_seen_by(member))
-        # other_user has no membership -> fail closed even on the fallback path.
+        self.assertFalse(meeting.can_be_seen_by(member))
         self.assertFalse(meeting.can_be_seen_by(self.other_user))
+        self.assertTrue(meeting.can_be_seen_by(self.manager))
+        self.assertTrue(meeting.can_be_seen_by(self.staff))
 
     def test_audience_rows_take_precedence_over_small_group_fallback(self):
         in_group_member = User.objects.create_user(
@@ -6211,7 +6299,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "No current Bible Study is available yet.")
         self.assertNotContains(response, "Wrong Branch Audience Guide")
 
-    def test_landing_zero_row_meeting_still_appears_through_fallback(self):
+    def test_landing_zero_row_meeting_does_not_appear_through_small_group(self):
         self.set_language("en")
         lesson = self.create_lesson(
             status=BibleStudyLesson.STATUS_PUBLISHED,
@@ -6229,8 +6317,9 @@ class BibleStudyModuleTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Zero Row Fallback Guide")
-        self.assertContains(
+        self.assertContains(response, "No current Bible Study is available yet.")
+        self.assertNotContains(response, "Zero Row Fallback Guide")
+        self.assertNotContains(
             response,
             reverse("bible_study_meeting_detail", args=[meeting.id]),
         )

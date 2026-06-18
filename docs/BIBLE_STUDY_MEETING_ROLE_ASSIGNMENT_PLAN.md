@@ -13,7 +13,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 - Anchors one small-group Friday meeting to a `BibleStudyLesson` and legacy `SmallGroup`.
 - Key fields: `lesson`, `small_group`, `meeting_datetime`, `location`, `location_en`, `meeting_link`, `group_direction`, `group_direction_en`, `group_questions`, `group_questions_en`, `status`, optional `service_event`, and audit fields.
 - Still has older discussion-leader fields: `discussion_leader_user` and `discussion_leader_name`.
-- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings when the parent lesson and schedule are published and their single active primary `ChurchStructureMembership` matches the meeting legacy `SmallGroup`'s mapped small-group `ChurchStructureUnit` or a descendant. `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
+- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings when the parent lesson and schedule are published and their single active primary `ChurchStructureMembership` matches a `BibleStudyMeetingAudienceScope` row (the selected unit or a descendant). Since BS-STRUCT.2A, zero-row V2 meetings fail closed for ordinary users. `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only, and `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
 
 `BibleStudyMeetingRole`
 
@@ -34,7 +34,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 
 - `BibleStudyMeetingRoleForm` exposes `role`, `user`, `display_name`, `notes`, and `notes_en`.
 - BS-ROLE.1B originally limited the `user` queryset to active users whose `profile.small_group` matched the meeting's small group, plus the already-selected user when editing.
-- Since CS-CORE.3B, `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` user pickers use membership-core matching for the meeting's legacy `SmallGroup`, while preserving the currently saved user on edit.
+- Since CS-CORE.3B and BS-STRUCT.2A, `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` user pickers use membership-core matching against the meeting's `BibleStudyMeetingAudienceScope` rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates.
 - The placeholder/help text frames `display_name` as a fallback when no user is selected, and BS-ROLE.1B form validation requires either a linked `user` or non-empty `display_name`.
 - Staff/authorized users create roles through `manage_bible_study_meeting_roles`.
 - Staff/authorized users edit roles through `edit_bible_study_meeting_role`.
@@ -68,7 +68,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 
 Existing tests cover:
 
-- Role form filtering to the meeting small group; after CS-CORE.3B this means membership-core matching for the meeting's legacy `SmallGroup`, not `Profile.small_group` alone.
+- Role form filtering to the meeting audience rows; after BS-STRUCT.2A this means membership-core matching for `BibleStudyMeetingAudienceScope` rows, not the legacy `small_group` mirror and not `Profile.small_group` alone.
 - Staff access to role management.
 - Ordinary-user denial for role management/edit/delete.
 - Staff add/edit/delete for roles.
@@ -99,13 +99,13 @@ The desired direction is:
 
 ## 3. Recommended Design Direction
 
-- Prefer linking roles to real `User` records whenever the responsible person has an active membership-core match for the meeting's legacy small group.
+- Prefer linking roles to real `User` records whenever the responsible person has an active membership-core match for the meeting's audience rows.
 - Keep `display_name` only as a fallback for people without accounts, guest names, or one-off cases.
 - Do not infer identity by matching `display_name` to a user's full name, username, preferred name, profile field, or translated display text.
 - For Today role chips, use only `BibleStudyMeetingRole.objects.filter(user=request.user, ...)` after applying the existing meeting visibility/date/status rules.
 - If both `user` and `display_name` are present, treat `user` as the identity contract. Display can remain a separate UX decision, but Today identity must not depend on the manual name.
 - Keep `BibleStudyMeetingRole` separate from `TeamAssignment`; Friday Bible Study meeting responsibilities are not Ministry Operations serving assignments.
-- Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()`; since CS-CORE.2C-B, that current v2 meeting visibility uses active primary `ChurchStructureMembership` and no longer grants access from `Profile.small_group` alone.
+- Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()`; since BS-STRUCT.2A, current v2 meeting visibility uses `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, zero-row meetings fail closed for ordinary users, and neither `Profile.small_group` nor the legacy `BibleStudyMeeting.small_group` mirror grants ordinary access.
 - Role work targets the v2 stack only. Per CS-CORE.3C (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`), Bible Study V2 is the active product path and legacy V1 `BibleStudySession` is a retirement/archive candidate; do not extend role assignment to V1 sessions.
 
 ## 4. Confirmation Decision

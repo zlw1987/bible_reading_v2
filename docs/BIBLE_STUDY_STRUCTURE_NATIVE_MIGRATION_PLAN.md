@@ -9,7 +9,7 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.1P.** The design slices that
+Status: **partially migrated through BS-STRUCT.2A.** The design slices that
 followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
@@ -17,10 +17,11 @@ followed BS-STRUCT.1A are now implemented:
   — BS-STRUCT.1B);
 - backfill/audit and normal-generation/manual-form writers populate meeting
   audience rows (BS-STRUCT.1C / 1D / 1H);
-- visibility, V2 landing / Today, and role/worship pickers are **row-first**:
-  they read `BibleStudyMeetingAudienceScope` rows when present and fall back to
-  the legacy single-`small_group` path only for zero-row meetings
-  (BS-STRUCT.1E / 1F);
+- visibility, V2 landing / Today, and role/worship pickers now treat
+  `BibleStudyMeetingAudienceScope` rows as the V2 runtime source of truth.
+  Zero-row V2 meetings fail closed for ordinary users, and
+  `BibleStudyMeeting.small_group` no longer grants ordinary runtime access
+  (BS-STRUCT.1E / 1F / 2A);
 - a read-only retirement-readiness audit command exists (BS-STRUCT.1J);
 - normal generation is **structure-unit-native**: it targets `ChurchStructureUnit`
   leaf small-group units, keys idempotency on a per-unit `generation_key`, and
@@ -31,8 +32,9 @@ followed BS-STRUCT.1A are now implemented:
   `small_group` (BS-STRUCT.1M);
 - the staff meeting manage-list filter is **structure-audience aware**: it
   filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
-  (unit-or-descendant), with the legacy zero-row `small_group` fallback still
-  included, and no longer exposes a legacy `small_group` select (BS-STRUCT.1N);
+  (unit-or-descendant), matches audience rows only, and no longer exposes a
+  legacy `small_group` select; old `?small_group=<id>` URLs are still tolerated
+  only as an in-view mapping to `unit` (BS-STRUCT.1N / 2A);
 - the manual normal meeting create/edit form is **structure-unit-native**: it
   chooses an active `UNIT_SMALL_GROUP` `ChurchStructureUnit` (`audience_unit`)
   as the audience source of truth, writes the audience row + `anchor_unit` +
@@ -44,17 +46,19 @@ followed BS-STRUCT.1A are now implemented:
   `sync_normal_meeting_audience_scope`, and the never-produced
   `GENERATION_WARNING_UNMAPPED_GROUP` constant + its unreachable view warning
   branch), so no dead code can lure future work back onto a legacy
-  `small_group` write path (BS-STRUCT.1P). The zero-row runtime fallback and the
-  `small_group` mirror are **unchanged**.
+  `small_group` write path (BS-STRUCT.1P);
+- BS-STRUCT.2A retired the V2 zero-row ordinary-user runtime fallback after a
+  clean readiness gate: 29 meetings checked, 29 with audience rows, zero
+  zero-row blockers, `db_data_blockers_clear = true`,
+  `legacy_small_group_fallback_still_present = false`, and
+  `runtime_zero_row_fallback_removed = true`. No schema/model deletion and no
+  migration were created.
 
 So the document as a whole is **no longer "docs-only / changes no runtime
-behavior."** The runtime now reads meeting audience rows. What remains is
-retiring the zero-row `small_group` fallback (BS-STRUCT.2+).
-
-**Production rollout remains a separate, not-yet-confirmed step.** BS-STRUCT.1I
-was applied against **local real-data sqlite only**; the production backfill/apply
-and the production retirement audits are still outstanding, and the zero-row
-fallback must not be removed until production has been applied and verified clean.
+behavior."** The runtime now reads meeting audience rows, and zero-row V2
+meetings fail closed for ordinary users. What remains is the legacy generation /
+idempotency / display bridge and V1 archive retirement, not an ordinary-user
+zero-row runtime access path.
 This document does not stage/commit/push anything.
 
 It deliberately follows the proven ServiceEvent runtime-migration pattern
@@ -200,10 +204,10 @@ its meeting carries no `small_group` mirror (structure-native, warned).
 
 | Concept | Where used in `studies/` |
 | --- | --- |
-| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, or the manual-form source field.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; the **zero-row fallback** for meetings with no audience rows; the secondary `(lesson, small_group)` idempotency constraint; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
+| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, or the manual-form source field.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; the secondary `(lesson, small_group)` idempotency constraint; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
 | `District` | `BibleStudySeries.district` / `BibleStudySession.district` legacy scope fields only. |
 | `Profile.small_group` | **No longer read by V2 meeting visibility or pickers.** Still read by V1 `BibleStudySession.can_be_seen_by()` and by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
-| `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, row-first runtime source)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**; also the mapping target for `SmallGroup.church_structure_unit` used in resolution and the zero-row fallback. |
+| `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, V2 runtime source of truth)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**; also the mapping target for `SmallGroup.church_structure_unit` used in generation/resolution and legacy mirror compatibility. |
 | `ChurchStructureMembership` | **The V2 runtime user-belonging source** for meeting visibility (`studies/visibility.py`, CS-CORE.2C-B) and for role/worship user pickers (CS-CORE.3B). Single active primary membership only; multiple/none fails closed. |
 
 ### 1.5 Current visibility behavior
@@ -214,52 +218,46 @@ its meeting carries no `small_group` mirror (structure-native, warned).
    `CAP_PUBLISH_BIBLE_STUDY_GUIDES`) → always visible.
 2. `meeting_is_member_visible()` — meeting published + lesson published + series
    active & published.
-3. Row-first audience match (BS-STRUCT.1E): when the meeting has one or more
-   `BibleStudyMeetingAudienceScope` rows,
-   `user_matches_meeting_audience_scopes(user, meeting)` is the source of truth —
-   the user's single active primary membership unit must be one of the audience
-   units **or a descendant** (any unit level; no `UNIT_SMALL_GROUP` gate). When
-   the meeting has **zero** audience rows it falls back to
-   `user_matches_meeting_small_group_membership(user, meeting.small_group)` — the
-   single `small_group` mapped to a **small-group-type** `ChurchStructureUnit`,
-   matched by the user's single active primary membership unit or a descendant.
-   `Profile.small_group` grants nothing on either path.
+3. Audience-row match (BS-STRUCT.1E / 2A):
+   `user_matches_meeting_audience_scopes(user, meeting)` is the ordinary-member
+   source of truth — the user's single active primary membership unit must be
+   one of the audience units **or a descendant** (any unit level; no
+   `UNIT_SMALL_GROUP` gate). When the meeting has **zero** audience rows, it
+   fails closed for ordinary users. `BibleStudyMeeting.small_group` and
+   `Profile.small_group` grant no ordinary V2 meeting visibility.
 
-**Current state:** visibility is membership-core and **row-first**. A meeting
-with audience rows can express any audience level (single group, district,
-CM/EM, custom, or multi-unit joint), and the legacy single-`small_group` path
-survives only as the zero-row fallback for meetings that have no audience rows.
+**Current state:** visibility is membership-core and audience-row authoritative.
+A meeting with audience rows can express any audience level (single group,
+district, CM/EM, custom, or multi-unit joint). A zero-row meeting is an
+invalid/safety state for ordinary users, not a legacy access path.
 
 ### 1.6 Current Today / landing behavior
 
 `get_v2_landing_context()` (`studies/views.py`, reused by `reading/views.py` for
-Today, per CS-CORE.3C audit) is **row-first** (BS-STRUCT.1E):
+Today, per CS-CORE.3C audit) is **audience-row based** (BS-STRUCT.1E / 2A):
 
 - It resolves the user's active primary membership ancestor-or-self unit ids
   (`get_membership_audience_candidate_unit_ids`) and selects upcoming published
-  meetings matching **either** an audience row on one of those units **or** the
-  legacy `small_group` zero-row fallback, confirming each through
-  `can_be_seen_by` (so audience-row precedence still applies).
-- The empty/no-group state is only shown when the user has **neither** a
-  resolvable legacy group **nor** any active primary membership (e.g. a
-  profile-only user), so a membership user with a null `small_group` still sees
-  their audience-row meeting and a descendant-unit member sees a higher-level /
-  district audience-row meeting.
+  meetings matching an audience row on one of those units, confirming each
+  through `can_be_seen_by`.
+- The empty/no-group state is shown when the user has no active primary
+  membership candidate ids. `Profile.small_group` / legacy visible small groups
+  no longer admit zero-row meetings. A membership user with a null
+  `small_group` still sees their audience-row meeting, and a descendant-unit
+  member sees a higher-level / district audience-row meeting.
 - Today additionally surfaces the user's linked `BibleStudyMeetingRole` chips.
 
-So joint / higher-level audience-row meetings now appear here; only the zero-row
-fallback remains single-group-centric. `Profile.small_group` is not consulted.
+So joint / higher-level audience-row meetings appear here. Zero-row V2 meetings
+do not appear for ordinary users. `Profile.small_group` is not consulted.
 
 ### 1.7 Current worship / song / leader / role picker behavior
 
 - `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` filter the
   user dropdown through `filter_users_for_meeting_audience(users, meeting)`
-  (BS-STRUCT.1F): when the meeting has audience rows the candidates are
-  active-primary members of any audience unit (or descendants); a zero-row
-  meeting falls back to `filter_users_for_meeting_small_group_membership(users,
-  meeting.small_group)` — active primary members of the meeting's single
-  small-group unit (or descendants). Both paths are single-active-primary only
-  (CS-CORE.3B) and never consult `Profile.small_group`.
+  (BS-STRUCT.1F / 2A): candidates are active-primary members of any audience
+  unit (or descendants). A zero-row meeting returns no ordinary candidates.
+  Candidate filtering is single-active-primary only (CS-CORE.3B) and never
+  consults `Profile.small_group`.
 - Worship set / roles are per-meeting; manager-controlled. No role-aware editing
   permissions yet (BS-V2.7 deferred). No automatic assignment, rotation,
   availability, swap, or reminders.
@@ -274,9 +272,10 @@ for this migration** — see Section 7 open question on V1 handling.
 ### 1.9 Remaining legacy consumers (the migration surface)
 
 Runtime **reads** for meeting visibility, V2 landing / Today, and role/worship
-pickers are now **row-first** with a zero-row `small_group` fallback
-(BS-STRUCT.1E/1F), so the remaining legacy surface is concentrated in the
-**write** and **resolution** paths plus the fallback itself:
+pickers are now audience-row authoritative with zero-row meetings failing closed
+for ordinary users (BS-STRUCT.1E/1F/2A), so the remaining legacy surface is
+concentrated in the **write**, **resolution**, mirror/display, and V1 archive
+paths:
 
 1. **Generation** is structure-unit-native since BS-STRUCT.1L and
    **structure-audience-required** since BS-STRUCT.1M: it resolves
@@ -319,28 +318,25 @@ pickers are now **row-first** with a zero-row `small_group` fallback
    `resolve_normal_small_group_unit(small_group)` survives, and only to pre-fill
    the edit `audience_unit` from an existing legacy `small_group` (it is not a
    write path).
-3. **Zero-row `small_group` fallback** — visibility, landing/Today, and pickers
-   all retain the legacy single-`small_group` path for meetings with no audience
-   rows. Manual writes (BS-STRUCT.1H) no longer create legacy-only zero-row
-   meetings, and the local real-data meetings have been backfilled (BS-STRUCT.1I
-   local apply, 2026-06-15). The zero-row fallback nonetheless **remains in
-   runtime** until BS-STRUCT.1I production rollout and the final retirement audits
-   are complete (BS-STRUCT.2+). The read-only
-   `audit_bible_study_structure_retirement_readiness` command (BS-STRUCT.1J)
-   measures how many meetings still depend on this fallback and whether any hard
-   blockers remain; it does **not** remove the fallback.
+3. **Zero-row meetings** — retired as an ordinary-user runtime path in
+   BS-STRUCT.2A. Manual writes no longer create legacy-only zero-row meetings,
+   readiness reported 29/29 meetings with audience rows and zero blockers, and
+   runtime now fails closed for ordinary users when a meeting has no
+   `BibleStudyMeetingAudienceScope` rows. The read-only
+   `audit_bible_study_structure_retirement_readiness` command remains a standing
+   diagnostic for zero-row safety, mirror drift, and rollback/backfill context.
 4. **Manage-list filter** — **since BS-STRUCT.1N the staff meeting manage-list no
    longer exposes / filters by legacy `small_group`.** It now filters by
    `ChurchStructureUnit` (GET `unit`): a meeting matches when it has a
    `BibleStudyMeetingAudienceScope` row on the selected unit or a descendant
-   (row-first, mirroring runtime visibility), **or** — for a zero-row meeting —
-   when its legacy `small_group.church_structure_unit` is the selected unit or a
-   descendant. A legacy `?small_group=<id>` query (with no `unit`) is tolerated
+   (mirroring runtime visibility). A legacy `?small_group=<id>` query (with no
+   `unit`) is tolerated
    and **mapped internally** to that group's structure unit within the same
    request — it is handled in-view, not an HTTP redirect — so old bookmarks keep
-   working, but the UI field is gone. The zero-row fallback clause is retained
-   here until BS-STRUCT.2+; `small_group` remains a compatibility mirror and
-   zero-row fallback source.
+   working, but the UI field is gone. After BS-STRUCT.2A, that mapped unit still
+   matches audience rows only; `small_group` remains a compatibility mirror /
+   display / history / backfill / idempotency field, not a manage-list fallback
+   source.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still
    exist for compatibility / display / coexistence, but **since BS-STRUCT.1M they
@@ -351,10 +347,10 @@ pickers are now **row-first** with a zero-row `small_group` fallback
 
 Note: the runtime reads are **already** membership-core in their *user*
 resolution and now structure-native in *how the meeting's audience is read*
-(audience rows when present); `Profile.small_group` is not used by V2 visibility,
-landing/Today, or pickers. The remaining blocker is the audience **write** path
-(generation + manual form) and retiring the zero-row fallback once every meeting
-carries rows.
+(audience rows); `Profile.small_group` and `BibleStudyMeeting.small_group` are
+not ordinary-user V2 visibility, landing/Today, or picker access sources. The
+remaining blockers are the legacy generation / mirror / idempotency bridge,
+field-level cleanup, and V1 archive/retirement execution.
 
 ---
 
@@ -449,30 +445,25 @@ FK — that cannot express multi-unit joint meetings.
 
 ## 3. Migration Blockers vs Post-Migration Product Features
 
-### 3.1 Migration blockers (required to retire the legacy Bible Study `SmallGroup` dependency)
+### 3.1 Migration blockers cleared by BS-STRUCT.2A
 
-1. **Meeting audience can no longer be representable only by legacy
-   `SmallGroup`.** Add `BibleStudyMeetingAudienceScope(meeting, unit)`.
-2. **Meeting generation must write structure audience rows** (not only a
-   `small_group` FK), and must support the higher-level / joint cases.
-3. **Visibility must read meeting audience rows + active primary
-   `ChurchStructureMembership`.** Today visibility is already membership-core but
-   keyed off the single `small_group` unit; it must switch to "user's active
-   primary membership unit is in (a descendant of) any meeting audience unit,"
-   with the single-`small_group` path kept only as zero-row fallback.
-4. **Role / worship candidate filtering must not depend on a single
-   `small_group` unit.** It is already membership-core (not `Profile.small_group`),
-   but it must read the meeting's audience rows (union of units) instead of the
-   one `small_group`.
-5. **Existing meetings must be backfilled or safely bridged** — every existing
-   meeting needs an audience row equivalent to its current `small_group` unit
-   (audit + parity, ServiceEvent SE-AS.6 pattern).
-6. **Normal write paths must stop creating legacy-only meeting audience** — once
-   backfilled, generation/create/edit must not produce a meeting whose audience
-   exists only as a `small_group` FK with zero audience rows (SE-AS.7A pattern).
-7. **Audit must prove no normal runtime / write path still depends on legacy
-   `SmallGroup`** for Bible Study meeting audience/visibility/pickers (landing &
-   Today included).
+The former V2 meeting-runtime blockers have been cleared:
+
+1. `BibleStudyMeetingAudienceScope(meeting, unit)` exists and is the V2 runtime
+   source of truth for ordinary-member visibility.
+2. Meeting generation and manual write paths write structure audience rows rather
+   than legacy-only `small_group` audience.
+3. Visibility, `/studies/` / Today, and role/worship pickers read meeting
+   audience rows plus active primary `ChurchStructureMembership`; zero-row V2
+   meetings fail closed for ordinary users.
+4. Existing production V2 meetings were audited/backfilled: 29 checked, 29 with
+   audience rows, zero zero-row blockers.
+5. `BibleStudyMeeting.small_group` remains only mirror/display/backfill/history/
+   idempotency compatibility. It is not an ordinary-member V2 visibility,
+   landing/Today, or role/worship picker fallback.
+
+Remaining migration work is now field-level cleanup, the generation/idempotency
+bridge, and V1 `BibleStudySession` archive/retirement.
 
 ### 3.2 Post-migration product features (explicitly NOT blockers)
 
@@ -917,26 +908,28 @@ the meeting-identity decision (Section 4.5).
     `normal_meetings_without_audience_rows = 0`, all 29 with a single small-group
     audience row and an anchor unit, and **zero hard blockers** (every issue
     counter `0`). `db_data_blockers_clear = true` and `--fail-on-blockers` exited
-    cleanly. This is **local real-data only**; `runtime_zero_row_fallback_removable`
-    is still `false` and production rollout is **not** separately confirmed, so the
-    zero-row fallback is **not** removable yet.
+    cleanly. BS-STRUCT.2A later reported the same safety condition for the
+    configured data (29 checked, 29 with rows, 0 blockers) and retired the
+    ordinary-user zero-row runtime fallback in code.
   - Options: `--verbose` (lists meeting id / lesson title / `small_group` for
     each blocker and warning category), `--fail-on-blockers` (nonzero exit only
     when a hard blocker is present; still read-only).
   - Tests: `studies/test_retirement_readiness_command.py`.
-  - **Remaining legacy surfaces after 1J** (none removed by this slice):
-    - the **zero-row `small_group` fallback** still serves visibility,
-      landing/Today, and role/worship pickers for any meeting with no audience
-      rows;
-    - **generation** still resolves normal group meetings through legacy
-      `SmallGroup` (`get_eligible_small_groups()` /
-      `resolve_units_to_small_groups()`) and keys idempotency on `small_group`;
-    - **manage-list filters** still expose / filter by `small_group`;
-    - **series legacy scope fallback** (`scope_type` / `ministry_context` /
-      `district` / `small_group` + `apply_audience_legacy_fallback()`) remains;
+  - **Remaining legacy surfaces after 1J** (none removed by that slice; updated
+    after BS-STRUCT.2A):
+    - zero-row meetings are now a fail-closed safety state for ordinary users,
+      not a `small_group` fallback path;
+    - **generation** is now structure-unit-native after BS-STRUCT.1L/1M: normal
+      generation targets active `UNIT_SMALL_GROUP` leaves, writes audience rows,
+      and keys primary idempotency on `generation_key`; `small_group` remains an
+      optional mirror and secondary compatibility/idempotency guard only;
+    - **manage-list filters** now filter by audience rows only while tolerating
+      old `?small_group=` URLs as a mapping to `unit`;
+    - **series zero-row legacy generation fallback is retired**: schedules with
+      zero `BibleStudySeriesAudienceScope` rows fail closed for normal generation
+      with a warning rather than falling back to legacy scope fields;
     - **V1 `BibleStudySession`** remains excluded / a retirement target;
-    - **production rollout (BS-STRUCT.1I) remains required** before the fallback
-      can be removed.
+    - field-level legacy cleanup and V1 archive/retirement remain separate.
 - **BS-STRUCT.1L** — normal generation becomes **structure-unit-native**.
   ✅ **implemented.** Code/tests/docs only; no model/schema/migration change (the
   `anchor_unit`, `generation_key`, and `meeting_kind` fields already existed).
@@ -1017,9 +1010,9 @@ the meeting-identity decision (Section 4.5).
     and that an inactive audience unit yields 0 meetings without the
     missing-audience warning. The model-level `get_eligible_small_groups_*` tests
     remain as legacy model-method coverage.
-  - **Boundary (unchanged by this slice):** the **zero-row meeting fallback is
-    not removed** (visibility / landing / pickers still fall back for old
-    meetings until production rollout and the final fallback-removal slice);
+  - **Boundary (as of this slice):** the zero-row meeting fallback was still
+    present in BS-STRUCT.1M, but BS-STRUCT.2A later retired it for ordinary
+    users; zero-row V2 meetings now fail closed.
     `small_group` is not removed or renamed; `BibleStudySeries` legacy fields are
     not removed (compatibility / display / coexistence only); manage-list filters
     still expose `small_group`; higher-level / joint generation UI remains
@@ -1029,15 +1022,12 @@ the meeting-identity decision (Section 4.5).
   **structure-audience aware**. ✅ **implemented.** Code/tests/docs only; no
   model/schema/migration change.
   - **Filter change.** `bible_study_meeting_manage_list()` (`studies/views.py`)
-    now reads GET `unit` (a `ChurchStructureUnit` id) instead of `small_group`.
-    It filters meetings with
-    `Q(audience_scope_links__unit_id__in=ids) | (Q(audience_scope_links__isnull=True)
-    & Q(small_group__church_structure_unit_id__in=ids))`, where `ids` is the
-    selected unit plus its descendants (`_collect_descendant_or_self_unit_ids`),
-    de-duplicated with `.distinct()`. This is row-first (mirroring runtime
-    visibility) with the zero-row `small_group` fallback retained until
-    BS-STRUCT.2+. An invalid / unknown / non-numeric `unit` fails safe (no filter,
-    select shows "All").
+    reads GET `unit` (a `ChurchStructureUnit` id) instead of `small_group`.
+    It filters meetings whose audience rows target the selected unit or a
+    descendant (`_collect_descendant_or_self_unit_ids`), de-duplicated with
+    `.distinct()`. Since BS-STRUCT.2A, zero-row meetings no longer match through
+    `small_group`. An invalid / unknown / non-numeric `unit` fails safe (no
+    filter, select shows "All").
   - **Legacy URL tolerance.** A legacy `?small_group=<id>` query with no `unit`
     is mapped internally (in-view, not an HTTP redirect) to that group's
     `church_structure_unit` (`get_small_group_structure_unit`) within the same
@@ -1048,14 +1038,13 @@ the meeting-identity decision (Section 4.5).
     using a new `study_unit_path` filter (`ChurchStructureUnit.path_label`).
     Status and lesson filters are unchanged.
   - **Tests.** New `BibleStudyModuleTests` cases: filter by small-group unit;
-    district unit includes descendant; wrong-branch unit excludes; zero-row
-    fallback included by unit or ancestor district; legacy `small_group` param
-    maps to unit; invalid unit fails safe; template uses `unit` not
-    `small_group`; status + unit filters combine.
-  - **Boundary (unchanged by this slice):** the zero-row fallback is **not
-    removed** (still a manage-list match clause and a runtime fallback);
-    `small_group` is not removed or renamed; no V1 `BibleStudySession` change;
-    no schema / migration change.
+    district unit includes descendant; wrong-branch unit excludes; legacy
+    `small_group` param maps to unit; invalid unit fails safe; template uses
+    `unit` not `small_group`; status + unit filters combine. BS-STRUCT.2A later
+    flipped the zero-row manage-list assertions so zero-row meetings no longer
+    match through `small_group`.
+  - **Boundary:** `small_group` is not removed or renamed; no V1
+    `BibleStudySession` change; no schema / migration change.
 - **BS-STRUCT.1O** — manual Bible Study meeting create/edit form becomes
   **structure-unit-native**. ✅ **implemented.** Code/tests/docs only; no
   model/schema/migration change.
@@ -1103,8 +1092,9 @@ the meeting-identity decision (Section 4.5).
     untouched. The three obsolete BS-STRUCT.1H unmapped / inactive-unit /
     wrong-type legacy-group validation tests were **removed** as unreachable —
     the `audience_unit` picker can no longer select such a unit.
-  - **Boundary (unchanged by this slice):** the zero-row fallback is **not
-    removed**; `small_group` is not removed or renamed (kept as a mirror written
+  - **Boundary (as of this slice):** the zero-row fallback was still present in
+    BS-STRUCT.1O, but BS-STRUCT.2A later retired it for ordinary users;
+    `small_group` is not removed or renamed (kept as a mirror written
     by this form); the small-group-keyed
     `sync_normal_meeting_audience_scope(meeting)` helper is retained for
     compatibility (later removed in BS-STRUCT.1P); no higher-level / joint write
@@ -1138,20 +1128,34 @@ the meeting-identity decision (Section 4.5).
     constant; the targeted generation / manual-form / zero-row-fallback tests
     (including `test_meeting_role_form_zero_row_meeting_falls_back_to_small_group`)
     pass unchanged.
-  - **Boundary (unchanged by this slice):** the **zero-row runtime fallback is
-    not removed** (visibility, landing/Today, role/worship pickers, and the
-    manage-list filter still fall back to the single `small_group` for zero-row
-    meetings); `BibleStudyMeeting.small_group` is **not** removed or renamed and
-    remains a compatibility mirror + zero-row fallback source;
+  - **Boundary (as of this slice):** the zero-row runtime fallback was still
+    present in BS-STRUCT.1P, but BS-STRUCT.2A later retired it for ordinary
+    users. `BibleStudyMeeting.small_group` is **not** removed or renamed and
+    remains a compatibility mirror / display / history / backfill /
+    idempotency field;
     `get_small_group_structure_unit` and the membership-core fallback helpers are
     untouched; no V1 `BibleStudySession` change; no schema / migration change; no
     production command run.
-- **BS-STRUCT.2+** — retire the legacy `SmallGroup` Bible Study bridge and the
-  zero-row fallback once all consumers are proven migrated (coordinate with
-  CS-CORE Section 12 legacy retirement). Precondition: a clean
-  `audit_bible_study_structure_retirement_readiness --fail-on-blockers` run
-  against production **and** a separately verified production apply
-  (BS-STRUCT.1I).
+- **BS-STRUCT.2A** — retire the V2 zero-row `small_group` runtime fallback for
+  ordinary users. ✅ **implemented.** V2 meetings with audience rows remain
+  visible through membership-core audience-row matching; V2 meetings with zero
+  `BibleStudyMeetingAudienceScope` rows fail closed for ordinary users; manager /
+  staff override is unchanged. Landing/Today no longer includes zero-row meetings
+  through legacy `small_group`; role/worship candidate filtering returns no
+  ordinary candidates for zero-row meetings; the manage-list unit filter matches
+  audience rows only while still tolerating legacy `?small_group=<id>` URLs as a
+  mapping to `unit`. `BibleStudyMeeting.small_group` remains mirror/display/
+  backfill/history/idempotency compatibility only. V1 `BibleStudySession` legacy
+  visibility is unchanged and remains an archive/retirement target. No schema
+  field/model was deleted and no migration was created. Readiness reported 29
+  meetings checked, 29 with audience rows, zero zero-row blockers,
+  `db_data_blockers_clear = true`, `legacy_small_group_fallback_still_present =
+  false`, and `runtime_zero_row_fallback_removed = true`.
+- **BS-STRUCT.2+ future work** — field-level cleanup / retirement of the legacy
+  Bible Study `SmallGroup` bridge only after remaining compatibility consumers
+  are resolved (coordinate with CS-CORE Section 12 legacy retirement). This does
+  **not** mean V1 `BibleStudySession` should be migrated to membership-core; V1
+  remains an archive/retirement target.
 
 The user-side resolver migration that ServiceEvent/Bible Study needed for
 *visibility* is **already done** for Bible Study (CS-CORE.2C-B / 3B), so this

@@ -702,8 +702,8 @@ MEETING_FORM_TEXT = {
         "questions_placeholder": "Questions for this small group.",
         "audience_unit_help": (
             "Choose the small-group church structure unit this meeting is for. "
-            "The legacy small group is kept automatically as a compatibility "
-            "mirror when exactly one active legacy group maps to this unit."
+            "New saves use the church structure unit and leave the legacy small "
+            "group mirror unset."
         ),
         "audience_unit_required": "Select the audience unit for this meeting.",
         "duplicate_unit": (
@@ -746,7 +746,7 @@ MEETING_FORM_TEXT = {
         "questions_placeholder": "这个小组的讨论问题。",
         "audience_unit_help": (
             "选择这次聚会所属的小组级教会结构单元。"
-            "当恰好有一个启用的旧版小组映射到该单元时，系统会自动保留旧版小组作为兼容镜像。"
+            "新的保存会使用教会结构单元，并不再写入旧版小组镜像。"
         ),
         "audience_unit_required": "请选择这次聚会的适用单位。",
         "duplicate_unit": "这个查经指引和适用单位的聚会已经存在。",
@@ -772,8 +772,8 @@ class BibleStudyMeetingForm(forms.ModelForm):
         # BS-STRUCT.1O: the legacy ``small_group`` is no longer a visible form
         # field. The manual normal meeting form is structure-unit-native: it
         # chooses a ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` (``audience_unit``
-        # below) as the source of truth and the service layer writes
-        # ``small_group`` only as a compatibility mirror.
+        # below) as the source of truth. The service layer no longer writes a new
+        # ``small_group`` mirror.
         fields = [
             "lesson",
             "meeting_datetime",

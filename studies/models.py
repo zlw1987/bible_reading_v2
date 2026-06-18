@@ -626,7 +626,10 @@ class BibleStudyMeeting(models.Model):
     # not the audience source of truth. It is now nullable so higher-level and
     # multi-unit joint meetings (which map to no single leaf group) are
     # representable, and SET_NULL so retiring a legacy group never deletes a
-    # meeting. Normal group-level meetings still set it.
+    # meeting. Historically normal V2 meetings set it as a compatibility
+    # mirror; after BS-V2-MIRROR.1B, new generated/manual normal V2 meetings
+    # leave it null. Existing old values remain stored for old-row
+    # compatibility, fallback display, diagnostics, and future cleanup.
     small_group = models.ForeignKey(
         SmallGroup,
         on_delete=models.SET_NULL,
@@ -644,9 +647,9 @@ class BibleStudyMeeting(models.Model):
         blank=True,
         related_name="anchored_bible_study_meetings",
     )
-    # BS-STRUCT.1B: future generation idempotency key. Nullable; multiple null
-    # rows are allowed. A conditional unique constraint enforces one meeting per
-    # (lesson, generation_key) only when it is set. No runtime depends on it yet.
+    # BS-STRUCT.1B / BS-V2-KEY.1A: structure-native generation idempotency key.
+    # Nullable; multiple null rows are allowed. A conditional unique constraint
+    # enforces one meeting per (lesson, generation_key) only when it is set.
     generation_key = models.CharField(max_length=120, null=True, blank=True)
     meeting_kind = models.CharField(
         max_length=32,
@@ -833,8 +836,9 @@ class BibleStudyMeetingAudienceScope(models.Model):
     normal group-level meeting, and since BS-STRUCT.1E ordinary-member
     visibility, the V2 landing/Today read path, and role / worship pickers read
     these rows. Zero-row V2 meetings fail closed for ordinary users; legacy
-    ``small_group`` remains mirror/display/backfill context only. Validation
-    mirrors ``BibleStudySeriesAudienceScope``.
+    ``small_group`` remains stored old-row compatibility, fallback display,
+    diagnostics, and backfill context only. Validation mirrors
+    ``BibleStudySeriesAudienceScope``.
     """
 
     meeting = models.ForeignKey(

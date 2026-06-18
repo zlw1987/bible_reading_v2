@@ -474,7 +474,7 @@ def generate_bible_study_meetings(request, lesson_id):
         # BS-STRUCT.1L: each missing target is one active UNIT_SMALL_GROUP
         # ChurchStructureUnit leaf. Create one structure-native normal meeting
         # per target (audience row + anchor_unit + per-unit generation_key),
-        # with the legacy small_group attached only as a mirror when present.
+        # leaving the legacy small_group mirror unset for new rows.
         default_meeting_datetime = get_default_meeting_datetime(lesson)
 
         for target in preview["missing_targets"]:
@@ -805,8 +805,9 @@ def create_bible_study_meeting(request):
                 meeting.save()
                 # BS-STRUCT.1O: the form's selected structure unit is the source
                 # of truth; this writes the audience row + anchor + generation key
-                # and the legacy small_group mirror. clean() already rejected
-                # duplicates and higher-level / joint / multi-unit edits.
+                # while leaving the legacy small_group mirror unset. clean()
+                # already rejected duplicates and higher-level / joint /
+                # multi-unit edits.
                 sync_normal_meeting_audience_scope_for_unit(
                     meeting,
                     form.cleaned_data["audience_unit"],
@@ -847,9 +848,10 @@ def edit_bible_study_meeting(request, meeting_id):
             with transaction.atomic():
                 meeting = form.save()
                 # BS-STRUCT.1O: realign the single normal audience row + anchor +
-                # generation key and the legacy small_group mirror to the selected
-                # structure unit. clean() already blocked duplicates and
-                # higher-level / joint / multi-unit edits.
+                # generation key to the selected structure unit. The helper
+                # preserves only an already-valid old small_group mirror and
+                # clears stale mismatches. clean() already blocked duplicates
+                # and higher-level / joint / multi-unit edits.
                 sync_normal_meeting_audience_scope_for_unit(
                     meeting,
                     form.cleaned_data["audience_unit"],

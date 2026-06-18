@@ -1562,16 +1562,27 @@ class BibleStudyModuleTests(TestCase):
         )
 
         meetings = BibleStudyMeeting.objects.filter(lesson=lesson).order_by(
-            "small_group__name",
+            "anchor_unit__name",
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Created 3 small group meetings")
         self.assertEqual(meetings.count(), 3)
         self.assertEqual(
-            set(meetings.values_list("small_group", flat=True)),
-            {self.group.id, self.same_group.id, self.other_group.id},
+            set(meetings.values_list("small_group_id", flat=True)),
+            {None},
+        )
+        self.assertEqual(
+            set(meetings.values_list("anchor_unit_id", flat=True)),
+            {self.group_unit.id, self.same_group_unit.id, self.other_group_unit.id},
         )
         for meeting in meetings:
+            self.assertEqual(
+                meeting.generation_key, f"normal-unit:{meeting.anchor_unit_id}"
+            )
+            self.assertEqual(
+                list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+                [meeting.anchor_unit_id],
+            )
             self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_DRAFT)
             self.assertEqual(meeting.created_by, self.staff)
             self.assertEqual(meeting.lesson, lesson)
@@ -1605,13 +1616,21 @@ class BibleStudyModuleTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 2)
         self.assertEqual(
-            set(BibleStudyMeeting.objects.filter(lesson=lesson).values_list(
-                "small_group",
-                flat=True,
-            )),
-            {self.group.id, self.same_group.id},
+            set(meetings.values_list("anchor_unit_id", flat=True)),
+            {self.group_unit.id, self.same_group_unit.id},
         )
+        self.assertEqual(set(meetings.values_list("small_group_id", flat=True)), {None})
+        for meeting in meetings:
+            self.assertEqual(
+                meeting.generation_key, f"normal-unit:{meeting.anchor_unit_id}"
+            )
+            self.assertEqual(
+                list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+                [meeting.anchor_unit_id],
+            )
 
     def test_generate_meetings_preview_uses_ministry_context_scope(self):
         self.set_language("en")
@@ -1657,12 +1676,11 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(second_response, "Skipped 2 existing meetings")
         self.assertEqual(meetings.count(), 2)
         self.assertEqual(
-            set(meetings.values_list("small_group", flat=True)),
-            {self.group.id, self.same_group.id},
+            set(meetings.values_list("anchor_unit_id", flat=True)),
+            {self.group_unit.id, self.same_group_unit.id},
         )
-        self.assertFalse(
-            meetings.filter(small_group__district__ministry_context=self.em).exists()
-        )
+        self.assertFalse(meetings.filter(anchor_unit=self.other_group_unit).exists())
+        self.assertFalse(meetings.filter(small_group__isnull=False).exists())
 
     def test_generate_meetings_uses_small_group_scope(self):
         self.set_language("en")
@@ -1680,7 +1698,14 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
         self.assertEqual(meetings.count(), 1)
-        self.assertEqual(meetings.get().small_group, self.group)
+        meeting = meetings.get()
+        self.assertIsNone(meeting.small_group_id)
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+        self.assertEqual(meeting.generation_key, f"normal-unit:{self.group_unit.id}")
+        self.assertEqual(
+            list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+            [self.group_unit.id],
+        )
 
     def test_generate_meetings_excludes_inactive_units(self):
         self.set_language("en")
@@ -1893,22 +1918,24 @@ class BibleStudyModuleTests(TestCase):
         meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
         self.assertEqual(meetings.count(), 3)
         expected_unit = {
-            self.group.id: self.group_unit.id,
-            self.same_group.id: self.same_group_unit.id,
-            self.other_group.id: self.other_group_unit.id,
+            self.group_unit.id,
+            self.same_group_unit.id,
+            self.other_group_unit.id,
         }
+        seen_units = set()
         for meeting in meetings:
             rows = list(meeting.audience_scope_links.all())
             self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0].unit_id, expected_unit[meeting.small_group_id])
-            # anchor_unit set to the same mapped unit.
+            self.assertEqual(rows[0].unit_id, meeting.anchor_unit_id)
             self.assertEqual(
-                meeting.anchor_unit_id, expected_unit[meeting.small_group_id]
+                meeting.generation_key, f"normal-unit:{meeting.anchor_unit_id}"
             )
-            # meeting_kind stays normal; small_group mirror stays set.
+            seen_units.add(meeting.anchor_unit_id)
+            # meeting_kind stays normal; new meetings do not write a mirror.
             self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
-            self.assertIsNotNone(meeting.small_group_id)
+            self.assertIsNone(meeting.small_group_id)
             self.assertEqual(meeting.status, BibleStudyMeeting.STATUS_DRAFT)
+        self.assertEqual(seen_units, expected_unit)
 
     def test_generate_meetings_audience_rows_are_idempotent(self):
         self.set_language("en")
@@ -1967,12 +1994,12 @@ class BibleStudyModuleTests(TestCase):
         for meeting in meetings:
             rows = list(meeting.audience_scope_links.all())
             self.assertEqual(len(rows), 1)
-            self.assertEqual(
-                rows[0].unit_id, meeting.small_group.church_structure_unit_id
+            self.assertEqual(rows[0].unit_id, meeting.anchor_unit_id)
+            self.assertIn(
+                meeting.anchor_unit_id,
+                {self.group_unit.id, self.same_group_unit.id},
             )
-            self.assertEqual(
-                meeting.anchor_unit_id, meeting.small_group.church_structure_unit_id
-            )
+            self.assertIsNone(meeting.small_group_id)
 
     # BS-STRUCT.1M: the pre-1L legacy-fallback generation tests
     # (unmapped / inactive-unit / wrong-type legacy group skipped with warning)
@@ -2056,10 +2083,7 @@ class BibleStudyModuleTests(TestCase):
                 meeting.generation_key, f"normal-unit:{meeting.anchor_unit_id}"
             )
             self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
-            # Mirror attached because each unit has exactly one active group.
-            self.assertEqual(
-                meeting.small_group.church_structure_unit_id, meeting.anchor_unit_id
-            )
+            self.assertIsNone(meeting.small_group_id)
 
     def test_generate_meetings_structure_native_unit_without_legacy_mirror(self):
         self.set_language("en")
@@ -2146,7 +2170,7 @@ class BibleStudyModuleTests(TestCase):
         self.client.post(reverse("generate_bible_study_meetings", args=[lesson.id]))
 
         group_meeting = BibleStudyMeeting.objects.get(
-            lesson=lesson, small_group=self.group
+            lesson=lesson, anchor_unit=self.group_unit
         )
         group_meeting.status = BibleStudyMeeting.STATUS_PUBLISHED
         group_meeting.save()
@@ -2154,9 +2178,9 @@ class BibleStudyModuleTests(TestCase):
         self.create_membership(self.user, self.group_unit)
         self.create_membership(self.other_user, self.other_group_unit)
 
-        # Runtime still keys visibility off small_group membership, not the new
-        # audience rows: a member of the meeting's group sees it; a member of a
-        # different group does not. The rows did not broaden visibility.
+        # Runtime keys visibility off audience rows + active primary membership,
+        # not the legacy mirror: a member of the meeting's unit sees it; a member
+        # of a different group does not.
         self.assertTrue(group_meeting.can_be_seen_by(self.user))
         self.assertFalse(group_meeting.can_be_seen_by(self.other_user))
 
@@ -2357,7 +2381,7 @@ class BibleStudyModuleTests(TestCase):
             self.meeting_post_data(lesson=lesson),
         )
 
-        meeting = BibleStudyMeeting.objects.get(lesson=lesson, small_group=self.group)
+        meeting = BibleStudyMeeting.objects.get(lesson=lesson)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.url,
@@ -2365,6 +2389,8 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertEqual(meeting.created_by, self.staff)
         self.assertIsNone(meeting.service_event)
+        self.assertIsNone(meeting.small_group_id)
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
 
     def test_meeting_form_deemphasizes_compatibility_leader_fields(self):
         form = BibleStudyMeetingForm()
@@ -2477,7 +2503,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
         self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
-    def test_manual_create_keeps_small_group_mirror_and_normal_kind(self):
+    def test_manual_create_leaves_small_group_mirror_unset_and_sets_key(self):
         self.set_language("en")
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")
@@ -2488,8 +2514,9 @@ class BibleStudyModuleTests(TestCase):
         )
 
         meeting = BibleStudyMeeting.objects.get(lesson=lesson)
-        # Exactly one active legacy group maps to group_unit, so it is mirrored.
-        self.assertEqual(meeting.small_group_id, self.group.id)
+        self.assertIsNone(meeting.small_group_id)
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+        self.assertEqual(meeting.generation_key, f"normal-unit:{self.group_unit.id}")
         self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
     def test_manual_create_unit_without_legacy_mirror_sets_small_group_none(self):
@@ -2561,6 +2588,8 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].unit_id, self.group_unit.id)
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+        self.assertEqual(meeting.generation_key, f"normal-unit:{self.group_unit.id}")
+        self.assertEqual(meeting.small_group_id, self.group.id)
 
     def test_manual_edit_changing_unit_replaces_row_and_drops_stale(self):
         self.set_language("en")
@@ -2591,9 +2620,13 @@ class BibleStudyModuleTests(TestCase):
         self.assertFalse(
             meeting.audience_scope_links.filter(unit=self.group_unit).exists()
         )
-        # Anchor follows the selected unit; the mirror follows the new unit.
-        self.assertEqual(meeting.small_group_id, self.same_group.id)
+        # Anchor follows the selected unit; the stale old mirror is cleared and
+        # no new mirror is written.
+        self.assertIsNone(meeting.small_group_id)
         self.assertEqual(meeting.anchor_unit_id, self.same_group_unit.id)
+        self.assertEqual(
+            meeting.generation_key, f"normal-unit:{self.same_group_unit.id}"
+        )
 
     def test_manual_edit_duplicate_unit_is_rejected(self):
         self.set_language("en")
@@ -5999,13 +6032,17 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
         self.assertEqual(
-            set(meetings.values_list("small_group", flat=True)),
-            {self.group.id, self.same_group.id, self.other_group.id},
+            set(meetings.values_list("anchor_unit_id", flat=True)),
+            {self.group_unit.id, self.same_group_unit.id, self.other_group_unit.id},
         )
         for meeting in meetings:
-            self.assertIn(
-                meeting.small_group,
-                [self.group, self.same_group, self.other_group],
+            self.assertIsNone(meeting.small_group_id)
+            self.assertEqual(
+                meeting.generation_key, f"normal-unit:{meeting.anchor_unit_id}"
+            )
+            self.assertEqual(
+                list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
+                [meeting.anchor_unit_id],
             )
 
     def test_generate_meetings_with_audience_scope_is_idempotent(self):
@@ -6026,9 +6063,10 @@ class BibleStudyModuleTests(TestCase):
         meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
         self.assertEqual(meetings.count(), 2)
         self.assertEqual(
-            set(meetings.values_list("small_group", flat=True)),
-            {self.group.id, self.same_group.id},
+            set(meetings.values_list("anchor_unit_id", flat=True)),
+            {self.group_unit.id, self.same_group_unit.id},
         )
+        self.assertEqual(set(meetings.values_list("small_group_id", flat=True)), {None})
 
     def test_audience_scope_generation_rows_do_not_broaden_member_visibility(self):
         self.set_language("en")

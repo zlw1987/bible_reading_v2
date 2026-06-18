@@ -3073,16 +3073,17 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Legacy Small Groups")
         self.assertContains(response, "旧小组")
-        self.assertContains(response, "Bible Study generation and legacy BibleStudySession")
-        self.assertContains(
-            response, "ServiceEvent zero-row legacy fallback was retired in SE-RETIRE.1B"
-        )
+        self.assertContains(response, "Legacy bridge/archive model")
+        self.assertContains(response, "V1 legacy BibleStudySession")
+        self.assertContains(response, "Bible Study generation")
+        self.assertContains(response, "Migrated ordinary-member paths")
+        self.assertContains(response, "Zero-row ServiceEvents fail closed")
         self.assertContains(response, "Profile.small_group")
         self.assertContains(
             response,
-            "Bible Study v2 meeting visibility and role/worship pickers",
+            "Bible Study v2 audience rows and role/worship pickers",
         )
-        self.assertContains(response, "ServiceEvent audience rows also match")
+        self.assertContains(response, "ServiceEvent audience rows")
         self.assertContains(response, "active primary ChurchStructureMembership")
         self.assertContains(response, "Bridge mapping status")
 
@@ -3107,12 +3108,9 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(district_response, "Legacy Districts")
         self.assertContains(district_response, "旧区")
         self.assertContains(district_response, "Bible Study")
-        self.assertContains(
-            district_response,
-            "ServiceEvent zero-row legacy fallback was retired in SE-RETIRE.1B",
-        )
+        self.assertContains(district_response, "Zero-row ServiceEvents fail closed")
 
-    def test_church_structure_unit_admin_explains_future_foundation_status(self):
+    def test_church_structure_unit_admin_explains_structure_foundation_status(self):
         unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="RAINBOW4",
@@ -3126,12 +3124,13 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Church Structure Units")
         self.assertContains(response, "教会结构单元")
+        self.assertContains(response, "结构基础")
         self.assertContains(response, "flexible structure foundation")
         self.assertContains(response, "ServiceEvent audience rows use selected units")
         self.assertContains(response, "Bible Study still resolves selected units")
         self.assertContains(response, "Path label")
 
-    def test_church_structure_membership_admin_explains_future_belonging_status(self):
+    def test_church_structure_membership_admin_explains_belonging_status(self):
         user = User.objects.create_user(username="membership_admin_member")
         unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
@@ -3156,23 +3155,25 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Church Structure Memberships")
         self.assertContains(response, "教会结构归属")
+        self.assertContains(response, "归属基础")
         self.assertContains(
             response,
-            "runtime source for ServiceEvent audience-row matching after CS-CORE.2B-A "
-            "and Bible Study v2 meeting member visibility after CS-CORE.2C-B",
+            "runtime source for several ordinary-member visibility/access paths",
         )
         self.assertContains(
             response,
-            "Profile.small_group still drives reading/progress/privacy",
+            "Bible Study v2 audience rows and role/worship pickers",
         )
         self.assertContains(
             response,
-            "ServiceEvent zero-row legacy fallback "
-            "was retired in SE-RETIRE.1B",
+            "Profile.small_group remains legacy/admin/archive/audit/backfill/support data",
         )
+        self.assertContains(response, "V1 legacy BibleStudySession")
+        self.assertContains(response, "Zero-row ServiceEvents fail closed")
         self.assertContains(
             response,
-            "Membership does not grant permissions, roles, or TeamAssignment/My Serving",
+            "Membership does not grant staff capabilities, role assignments, or "
+            "TeamAssignment/My Serving",
         )
         self.assertContains(response, "Notes must stay operational and non-sensitive")
 

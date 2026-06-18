@@ -99,25 +99,25 @@ The core risk: staff must never believe an audience selector controls visibility
 
 ### Option B: Selector UI + runtime visibility migration in one milestone (legacy fallback when no rows)
 
-- Pros: no confusion window — the day the selector appears, it really controls visibility; fallback keeps old events unchanged.
+- Historical pros at Option B planning time: no confusion window — the day the selector appears, it really controls visibility; the then-active fallback kept old events unchanged.
 - Cons: one large milestone bundling a permission-affecting runtime change with new UI, forms, validation, and display; harder to review and QA in one slice; violates the project's small-slice discipline.
 - User/staff confusion risk: low.
 - Permission/visibility risk: medium — runtime change and UI bugs land together, so a selector bug can directly cause a visibility leak in the same release.
 - Migration complexity: highest single-release complexity.
-- Rollback: must roll back UI and runtime together; deleting audience rows restores legacy behavior per event.
+- Historical rollback at Option B planning time: UI and runtime would have needed rollback together; before SE-RETIRE.1B, deleting audience rows restored legacy behavior per event. Current behavior after SE-RETIRE.1B is different: zero-row events fail closed for ordinary users.
 - Verdict: acceptable but bundles too much.
 
 ### Option C (recommended): Keep selector hidden until runtime is ready; ship runtime first, then selector
 
 - Sequence: implement and fully test the new `can_be_seen_by` rule with legacy fallback first (SE-AS.4). Because nothing in the app creates `ServiceEventAudienceScope` rows yet, this change is behavior-inert at ship time: every event falls back to legacy fields, and targeted tests prove parity. Then ship the staff selector + display (SE-AS.5) on top of an already-proven runtime rule.
-- Pros: each release is narrow; the runtime rule is tested and live before any staff can create audience rows; when the selector appears it genuinely controls visibility from day one; per-event rollback is "delete the audience rows."
+- Pros: each release is narrow; the runtime rule is tested and live before any staff can create audience rows; when the selector appears it genuinely controls visibility from day one. Historical pre-SE-RETIRE.1B per-event rollback was "delete the audience rows"; current rollback to legacy ordinary visibility would require deliberate code rollback or another approved recovery slice.
 - Cons: the runtime code path for audience rows is briefly live but unexercised in production between SE-AS.4 and SE-AS.5 (mitigated by the test matrix in Section 10); two releases instead of one.
 - User/staff confusion risk: minimal — staff never see an inert selector.
 - Permission/visibility risk: lowest — the only release that changes visibility logic changes no observable behavior, and the only release that changes staff workflow reuses a proven rule.
 - Migration complexity: moderate, spread across two small slices.
-- Rollback strategy: SE-AS.4 can be reverted cleanly (no data depends on it); after SE-AS.5, removing an event's audience rows reverts that event to legacy behavior; disabling the selector reverts the workflow without data loss.
+- Historical rollback strategy: SE-AS.4 could be reverted cleanly (no data depended on it); after SE-AS.5 and before SE-RETIRE.1B, removing an event's audience rows reverted that event to legacy behavior; disabling the selector reverted the workflow without data loss. Current behavior after SE-RETIRE.1B is fail-closed for zero-row ordinary-user visibility.
 
-Decision: Option C, with the runtime rule shipped first as an inert, fallback-complete slice, then the selector. Option B's "fallback to legacy when no rows" rule is still adopted as the runtime rule itself.
+Historical decision: Option C originally shipped the zero-row legacy fallback runtime rule first at SE-AS.4 time, then the selector. That fallback was later retired by SE-RETIRE.1B, so the current runtime rule is audience rows when present and fail-closed for ordinary users when rows are absent.
 
 ## 5. Phased Milestones
 
@@ -184,7 +184,7 @@ Implemented by SE-AS.4. The runtime rule, in order:
 5. Otherwise (no audience rows): **as of SE-RETIRE.1B, ordinary users fail closed.** The legacy `scope_type` / `district` / `small_group` fields and `Profile.small_group` are no longer consulted for ordinary visibility. (Before SE-RETIRE.1B this step fell back to the legacy fields matched through `Profile.small_group`; that fallback is retired — see Section 14.)
 6. **Audience-row matching** consults active primary `ChurchStructureMembership` (CS-CORE.2B-A); requested/unapproved/inactive memberships never grant visibility. There is no longer a zero-row `Profile.small_group` matching path for ordinary users (retired in SE-RETIRE.1B). (The earlier statement that audience-row matching never consults membership applied only before CS-CORE.2B-A.)
 
-Justification: the fallback rule means the migration never has a flag-day; every existing event is untouched until staff (or an explicit backfill) give it audience rows, and removing rows restores legacy behavior per event.
+Historical justification at SE-AS.4 time: the then-active fallback rule meant the migration did not have a flag-day; every existing event was untouched until staff (or an explicit backfill) gave it audience rows, and removing rows restored legacy behavior per event. Current behavior is different after SE-RETIRE.1B: removing all audience rows no longer restores ordinary-user legacy visibility; a zero-row event fails closed for ordinary users.
 
 ## 7. Unit-to-User Resolution for Ordinary Users
 
@@ -204,14 +204,14 @@ Selected `ChurchStructureUnit` rows map to current users through the legacy mapp
 
 ## 8. Migration / Backfill Strategy
 
-Backfill is optional, not required for correctness: the fallback rule keeps every legacy event behaving identically with zero audience rows. Recommended only as a later convergence step (SE-AS.6), after the selector has been in real use.
+Historical SE-AS.6 planning context: before SE-RETIRE.1B, backfill was optional for correctness because the fallback rule kept every legacy event behaving identically with zero audience rows. Current behavior after SE-RETIRE.1B is different: zero-row ServiceEvents fail closed for ordinary users, so backfill/apply history should not be read as a current fallback guarantee.
 
 If/when a management command is approved (suggested name `backfill_service_event_audience_scopes`):
 
 - `scope_type=global` → one row pointing at the root unit, only if exactly one active root unit exists; otherwise skip.
 - `scope_type=district` → one row pointing at `district.church_structure_unit`, only if the mapping exists and the unit is active; otherwise skip.
 - `scope_type=small_group` → one row pointing at `small_group.church_structure_unit`, only if the mapping exists and the unit is active; otherwise skip.
-- Unmapped or ambiguous events: leave zero audience rows; legacy fallback keeps governing them. Report them in command output.
+- Historical pre-SE-RETIRE.1B strategy for unmapped or ambiguous events: leave zero audience rows and report them in command output. Current behavior after SE-RETIRE.1B: if such a zero-row event exists, it fails closed for ordinary users; legacy fallback no longer governs it.
 - Never create root or structure units; seeding stays exclusively in `seed_church_structure_units`.
 - Never mutate or clear legacy `scope_type` / `district` / `small_group` during backfill — non-destructive only.
 - Skip events that already have audience rows (idempotent; re-running changes nothing).
@@ -226,9 +226,9 @@ SE-AS.6A is a **docs-only planning checkpoint, not implementation**. It defines 
 
 ### 8A.1 Backfill is optional, not required for correctness
 
-- The SE-AS.4 fallback rule makes a ServiceEvent with **zero `ServiceEventAudienceScope` rows** behave exactly as it did under the legacy `scope_type` / `district` / `small_group` + `Profile.small_group` rule. Zero audience rows are therefore always safe.
-- Backfill is a **convergence / operational cleanup** step (moving legacy events onto explicit structure rows), not a prerequisite for ServiceEvent visibility correctness. The product is correct with no backfill ever run.
-- Nothing depends on backfill having been run. It can be deferred indefinitely, run partially (for example district/small-group events only), or skipped entirely.
+- Historical pre-SE-RETIRE.1B behavior: the SE-AS.4 fallback rule made a ServiceEvent with **zero `ServiceEventAudienceScope` rows** behave exactly as it did under the legacy `scope_type` / `district` / `small_group` + `Profile.small_group` rule. At that time, zero audience rows were safe.
+- Current behavior after SE-RETIRE.1B: zero-row ServiceEvents fail closed for ordinary users, and removing rows no longer restores legacy visibility.
+- Backfill was a **convergence / operational cleanup** step (moving legacy events onto explicit structure rows) before fallback retirement. The production apply has since run and enabled SE-RETIRE.1B; do not read this historical strategy as authorizing current zero-row fallback behavior.
 
 ### 8A.2 Future command contract (`backfill_service_event_audience_scopes`)
 
@@ -339,7 +339,7 @@ Before any implementation prompt may approve SE-AS.6C apply mode:
 2. The captured dry-run output has been reviewed by staff/development reviewers who understand the target data.
 3. A current recoverable database backup exists, or the backup process has been confirmed before any future apply discussion.
 4. Root ambiguity, unmapped rows, inactive mappings, and parity-mismatch rows have been reviewed event by event.
-5. Expected skipped rows are documented, including why each category is safe to leave on legacy fallback.
+5. Expected skipped rows are documented, including the historical pre-SE-RETIRE.1B reason each category was left on legacy fallback and the current consequence after SE-RETIRE.1B: a zero-row event is a diagnostic/safety state that fails closed for ordinary users.
 6. Any unexpected parity mismatch blocks apply until the data, mapping, or implementation plan is corrected and reviewed through another dry-run.
 
 ### 8B.2 Future apply-mode guardrails
@@ -360,7 +360,7 @@ If SE-AS.6C is later approved, apply mode must satisfy all of these guardrails:
 
 ### 8B.3 Rollback / recovery design
 
-Legacy fields remain preserved throughout SE-AS.6. Because an event with zero `ServiceEventAudienceScope` rows falls back to legacy `scope_type` / `district` / `small_group`, deleting the created audience rows for a specific event returns that event to legacy fallback behavior.
+Legacy fields remain preserved throughout SE-AS.6 for display/admin/backfill/audit/rollback context. Historically, before SE-RETIRE.1B, an event with zero `ServiceEventAudienceScope` rows fell back to legacy `scope_type` / `district` / `small_group`, so deleting the created audience rows for a specific event returned that event to legacy fallback behavior. Current behavior after SE-RETIRE.1B is different: deleting all audience rows no longer restores ordinary-user legacy visibility, and a zero-row ServiceEvent fails closed for ordinary users. Any rollback to legacy ordinary visibility would require a deliberate code rollback of SE-RETIRE.1B or another separately approved recovery slice, not merely deleting rows.
 
 Rollback must be manual and explicit, not automatic in SE-AS.6C. Any rollback command, bulk deletion helper, or production recovery procedure would require separate approval and its own review guardrails.
 
@@ -386,7 +386,7 @@ The parity invariant is binding on any future apply mode: post-backfill ordinary
   - Audience Scope / 适用范围 — the picker.
   - Host / Language Label / 主办/语言标签 — the existing `ministry_context` field, kept visually and textually separate (separate form section or distinct help text) so staff cannot read it as audience.
 - Because SE-AS.5 ships only after the runtime rule is live (Option C), the selector controls visibility from the day it appears. Do not ship the selector with "this does not affect visibility yet" copy — if the runtime rule is not live, do not show the selector at all.
-- Current help-text behavior (SE-AS.7A; supersedes the SE-AS.5-time "leaving it empty keeps the current legacy scope behavior" wording): selecting units controls which members can see this gathering; leaving the picker empty converts the fallback `scope_type` / `district` / `small_group` fields into a structure audience row when a valid, active structure mapping exists; saving requires that valid mapping (missing/inactive/ambiguous mappings reject the save with bilingual copy). The zero-row legacy fallback in `can_be_seen_by` remains runtime safety only and is not the normal write path.
+- Current help-text behavior (SE-AS.7A; supersedes the SE-AS.5-time "leaving it empty keeps the current legacy scope behavior" wording): selecting units controls which members can see this gathering; normal guarded write paths convert valid fallback `scope_type` / `district` / `small_group` fields into structure audience rows, or reject the save when the mapping is missing, inactive, or ambiguous. Since SE-RETIRE.1B, if a zero-row event exists through an import, Django Admin/manual edit, or other unguarded data state, it is an invalid/safety state and fails closed for ordinary users; `can_be_seen_by` no longer uses the zero-row legacy fallback.
 - Show a normalized effective-audience preview before save/publish; warn when the selection matches no ordinary users (custom/unmapped units).
 - Ordinary users see readable audience labels only (no codes, IDs, or architecture terms), consistent with the BS-AS.2 compact/chip display with root prefix omitted.
 - Batch-create applies one selection to all created events, mirroring required-teams batch behavior.

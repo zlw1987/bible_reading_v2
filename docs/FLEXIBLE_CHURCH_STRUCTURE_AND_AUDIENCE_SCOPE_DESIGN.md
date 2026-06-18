@@ -4,7 +4,7 @@
 
 This document records the CS-H.1 design direction for flexible church structure and audience scope. CS-H.2 has since added the model-only `ChurchStructureUnit` foundation without changing current product behavior, CS-H.2A hardens tree validation against indirect cycles, CS-H.3 records the mapping, membership, and signup/onboarding strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit idempotent seeding/mapping management command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models, CS-H.6 through CS-H.7E add requested-unit capture and staff approval/sync slices, CS-H.8 records the integrated request-flow checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint.
 
-DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is implemented (BS-AS.1, with BS-AS.2 picker/display/cancelled-cleanup and BS-AS.2A accessibility polish): the `BibleStudySeriesAudienceScope` join resolves selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation. Since CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility and the `/studies/` / Today meeting pre-filter use active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. ServiceEvent / Church Gatherings follows the same `ChurchStructureUnit` audience-scope foundation as a runtime consumer: SE-AS.4 makes `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, SE-AS.5 adds the staff audience picker, and CS-CORE.2B-A switches audience-row matching to active primary `ChurchStructureMembership`; events with zero audience rows fall back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`. Future Community Activities should reuse the same foundation in a later milestone and remains deferred and separately approved. This is not full legacy retirement: Bible Study generation still uses legacy `SmallGroup`, legacy `BibleStudySession` visibility remains unchanged, and ServiceEvent zero-row fallback still uses legacy fields.
+DOCS-AS.1 records the shared audience-scope direction. `ChurchStructureUnit` is the shared flexible structure foundation for future audience selection. App modules should use app-specific join models to `ChurchStructureUnit` rather than adding more legacy-only multi-select scope fields. Bible Study Schedule audience scope is implemented (BS-AS.1, with BS-AS.2 picker/display/cancelled-cleanup and BS-AS.2A accessibility polish): the `BibleStudySeriesAudienceScope` join resolves selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation. Since CS-CORE.2C-B and BS-STRUCT.2A, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility and the `/studies/` / Today meeting pre-filter use audience rows plus active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. ServiceEvent / Church Gatherings follows the same `ChurchStructureUnit` audience-scope foundation as a runtime consumer: SE-AS.4 made `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, SE-AS.5 added the staff audience picker, CS-CORE.2B-A switched audience-row matching to active primary `ChurchStructureMembership`, and SE-RETIRE.1B retired the zero-row legacy fallback so zero-row events now fail closed for ordinary users. Future Community Activities should reuse the same foundation in a later milestone and remains deferred and separately approved. This is not full legacy retirement: Bible Study generation still uses legacy `SmallGroup`, legacy `BibleStudySession` visibility remains unchanged, and ServiceEvent legacy scope fields remain stored/admin/display/audit data until field-level retirement.
 
 The current short-term bridge served pilot needs:
 - `MinistryContext`
@@ -64,7 +64,7 @@ Current fields:
 
 `Profile.small_group` stores the user's current primary small group.
 
-This is a short-term current-state field, not membership history. It is no longer the baseline for Bible Study v2 `BibleStudyMeeting` ordinary-member visibility after CS-CORE.2C-B, though Bible Study meeting generation still targets legacy `SmallGroup` rows. For ServiceEvent, it remains the legacy-fallback basis used only for events with no `ServiceEventAudienceScope` rows; events that have audience rows use those rows for ordinary-user visibility (SE-AS.4).
+This is a short-term current-state field, not membership history. It is no longer the baseline for Bible Study v2 `BibleStudyMeeting` ordinary-member visibility after CS-CORE.2C-B, though Bible Study meeting generation still targets legacy `SmallGroup` rows. For ServiceEvent, it no longer drives ordinary visibility: audience rows match active primary `ChurchStructureMembership`, and zero-row events fail closed for ordinary users after SE-RETIRE.1B. Legacy ServiceEvent scope fields remain stored/admin/display/audit data until field-level retirement.
 
 ### `BibleStudySeries` Scope Fields
 
@@ -94,7 +94,7 @@ Current scope fields:
 - `small_group`
 - `ministry_context`
 
-These legacy fields are now the fallback audience only: SE-AS.4 makes `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them (supporting multiple `ChurchStructureUnit` targets), and only events with zero audience rows use the legacy whole-church / one-district / one-small-group fields plus `Profile.small_group`. SE-AS.5 adds the staff picker that writes those rows. The legacy fields below remain editable fallback fields:
+These legacy fields are stored/admin/display/audit data while field-level retirement remains separate: SE-AS.4 made `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them (supporting multiple `ChurchStructureUnit` targets), CS-CORE.2B-A switched those rows to active primary `ChurchStructureMembership`, and SE-RETIRE.1B made zero-row events fail closed for ordinary users. SE-AS.5 adds the staff picker that writes audience rows. The legacy fields below remain editable compatibility fields:
 - whole church
 - one district
 - one small group
@@ -184,14 +184,14 @@ CS-H.2 implementation note:
 - `ChurchStructureUnit` exists as a model-only foundation.
 - CS-H.2A rejects indirect parent cycles and makes ancestor/path display safe against corrupted cycles.
 - No root, CM, EM, district, or small-group rows are created automatically by migrations or app startup.
-- Existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of current behavior.
+- At the CS-H.2 stage, existing `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remained the source of current behavior.
 - At the CS-H.2 stage, no audience selection or filtering used ChurchStructureUnit yet. Later, BS-AS.1 / BS-AS.2 / BS-AS.2A implemented Bible Study Schedule audience selection while still resolving generation to legacy `SmallGroup`; CS-CORE.2C-B later switched Bible Study v2 meeting ordinary visibility to active primary `ChurchStructureMembership`.
 - One active Whole Church root is the intended future system shape, but root uniqueness enforcement is deferred until root seeding/mapping policy is decided.
 
 CS-H.3 strategy note:
 - Long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
-- Short-term runtime behavior continues to use `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.3B adds nullable mapping fields from `MinistryContext`, `District`, and `SmallGroup` to `ChurchStructureUnit`, but they do not drive current behavior.
+- At the CS-H.3 stage, short-term runtime behavior continued to use `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.3B added nullable mapping fields from `MinistryContext`, `District`, and `SmallGroup` to `ChurchStructureUnit`; at that time they did not drive current behavior.
 - CS-H.3C adds `seed_church_structure_units` with dry-run/apply modes to seed a `CHURCH` root, mirror current structure units, and fill legacy mapping fields. It does not auto-run and still does not make `ChurchStructureUnit` drive runtime behavior.
 - CS-H.3D verifies the GoDaddy apply and clean second dry-run.
 - CS-H.3E records that the `Santa Clara 3` legacy data issue was handled and the seeded structure data QA item is closed, as long as final dry-run remains clean.
@@ -199,12 +199,12 @@ CS-H.3 strategy note:
 - CS-H.5A adds `ChurchStructureMembership` model/admin/tests only. It does not add signup flow, approval UI, backfill, audience selection, filtering, or consumer migration.
 - CS-H.5B adds helper/query hardening only. Requested, rejected, cancelled, and ended memberships still do not grant visibility.
 - CS-H.5C adds `backfill_church_structure_memberships` for explicit dry-run/apply membership backfill from mapped `Profile.small_group` values. It does not modify `Profile.small_group`, add signup or approval UI, add audience selection or filtering, or migrate any runtime consumer.
-- CS-H.5D records production/staging backfill verification as user-attested. Exact command-output counts were not recorded. No runtime source-of-truth switch is authorized.
-- CS-H.5E improves Django Admin clarity only. Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain current runtime source during transition and must not be deleted yet.
+- CS-H.5D records production/staging backfill verification as user-attested. Exact command-output counts were not recorded. At CS-H.5D time, no runtime source-of-truth switch was authorized.
+- CS-H.5E improves Django Admin clarity only. At CS-H.5E time, legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remained current runtime source during transition and could not be deleted yet.
 - CS-H.6/CS-H.6B/CS-H.6D add requested-unit capture from signup and Profile for staff review, not direct final self-assignment.
 - CS-H.7B/C/D/E add staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync.
 - CS-H.8 verified the integrated signup/Profile/staff approval flow. CS-H.9 membership request UX hardening is complete. CS-H.10 records the CMS hardening checkpoint, including deferred/accepted mobile nav polish and the root `AGENTS.md` verification policy.
-- Runtime consumers remain split by consumer. Since CS-CORE.2C-B, `/studies/` v2 meeting visibility uses active primary `ChurchStructureMembership`; reading progress, legacy `BibleStudySession`, legacy-fallback ServiceEvents, My Serving, and other legacy consumers still use `MinistryContext`, `District`, `SmallGroup`, and/or `Profile.small_group` unless separately migrated.
+- Runtime consumers remain split by consumer. Current switched consumers use active primary `ChurchStructureMembership` or structure snapshots for ServiceEvent audience rows, Bible Study v2 audience rows / `/studies/` / Today / role-worship pickers, Prayer group requests, group-progress roster/default/ordinary own-group access, and reflection read/write paths. Legacy V1 `BibleStudySession`, TeamAssignment/My Serving, staff capabilities, role assignments, and legacy fields/tables remain separate; requested memberships still grant nothing.
 - See `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`.
 
 ## 5. Membership Model
@@ -222,7 +222,7 @@ Future model concept:
 - `notes` optional, non-sensitive
 
 Rules:
-- `Profile.small_group` remains the current primary-small-group field in the short term.
+- `Profile.small_group` remains the legacy/admin/archive/audit/backfill/support primary-small-group field during transition.
 - Future membership history should support movement over time.
 - Current visibility can continue using current active membership until historical rules are explicitly needed.
 - Do not import sensitive/private data.
@@ -234,12 +234,12 @@ Membership should be planned separately from hierarchy. A structure unit can exi
 
 CS-H.4 design note:
 - `ChurchStructureMembership` should become the eventual belonging source.
-- `Profile.small_group` remains the runtime source during transition.
+- At CS-H.4 design time, `Profile.small_group` remained the runtime source during transition.
 - Requested membership must not grant visibility.
 - Only approved active membership may be considered by future consumers after explicit migration and tests.
-- CS-H.5A model-only foundation exists, but current runtime still uses `Profile.small_group`.
-- CS-H.5B query helpers are available for future phases, but no current consumer uses them.
-- CS-H.5C backfill command exists and CS-H.5D production/staging verification is recorded by user confirmation, but no current consumer uses membership yet.
+- CS-H.5A model-only foundation existed while current runtime still used `Profile.small_group`.
+- CS-H.5B query helpers were available for future phases, but no consumer used them at that time.
+- CS-H.5C backfill command exists and CS-H.5D production/staging verification is recorded by user confirmation; at that time no current consumer used membership yet. Current state is different: membership is now used by the explicitly switched consumers listed above, while requested memberships still grant nothing.
 - CS-H.5E admin clarity exists to reduce staff confusion.
 - CS-H.6/CS-H.6B/CS-H.6D requested-unit capture and CS-H.7B/C/D/E staff approval/sync slices exist, but consumer migration remains future.
 - See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
@@ -255,7 +255,7 @@ Possible generic name:
 Possible app-specific through models:
 
 - `BibleStudySeriesAudienceScope` — implemented for Bible Study Schedule.
-- `ServiceEventAudienceScope` — implemented for ServiceEvent; SE-AS.4 uses its rows as the ordinary-user visibility source when an event has them, with zero-row events falling back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group`. SE-AS.5 adds the staff picker.
+- `ServiceEventAudienceScope` — implemented for ServiceEvent; SE-AS.4 uses its rows as the ordinary-user visibility source when an event has them, CS-CORE.2B-A matches those rows through active primary `ChurchStructureMembership`, and SE-RETIRE.1B makes zero-row events fail closed for ordinary users. SE-AS.5 adds the staff picker.
 - `CommunityActivityAudienceScope` — future suggested direction for Community Activities if/when that module is approved.
 
 
@@ -379,17 +379,17 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 - Decide which model is source of truth during the bridge period.
 - CS-H.3B completed nullable mapping fields.
 - CS-H.3C completed explicit idempotent seeding/mapping through `python manage.py seed_church_structure_units`.
-- CS-H.3D completed production/staging seeding verification. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.3E completed seeded structure data QA closure. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.4 completed membership design. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.5A completed membership model-only foundation. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.5B completed membership helper/validation hardening. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.3D completed production/staging seeding verification. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.3E completed seeded structure data QA closure. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.4 completed membership design. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5A completed membership model-only foundation. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5B completed membership helper/validation hardening. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.5C completed the explicit membership backfill command.
-- CS-H.5D completed production/staging backfill verification by user-attested GoDaddy run; exact output counts were not recorded. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- CS-H.5E completed Django Admin clarity for legacy structure versus future structure/membership foundation. Runtime behavior still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5D completed production/staging backfill verification by user-attested GoDaddy run; exact output counts were not recorded. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
+- CS-H.5E completed Django Admin clarity for legacy structure versus future structure/membership foundation. At that time, runtime behavior still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
 - CS-H.6/CS-H.6B/CS-H.6D completed signup/Profile requested-unit capture. Request submission does not update `Profile.small_group`.
 - CS-H.7B/C/D/E completed staff request review, approve/reject actions, and narrow approval sync to `Profile.small_group`.
-- CS-H.8 integration checkpoint completed. Runtime consumers still use legacy structure models and `Profile.small_group`.
+- CS-H.8 integration checkpoint completed. At that time, runtime consumers still used legacy structure models and `Profile.small_group`; current switched consumers are listed above.
 - CS-H.9 membership request UX hardening completed.
 - CS-H.10 CMS hardening checkpoint completed. Mobile nav polish remains deferred/accepted for now, and root `AGENTS.md` verification policy has been added.
 
@@ -404,7 +404,7 @@ Mobile behavior should avoid a dense full-tree panel. A step-by-step drilldown o
 ### Later Phase: ServiceEvent and Community Activities Audience Scope
 
 - ServiceEvent / Church Gatherings now uses the same `ChurchStructureUnit` audience-scope foundation as a runtime consumer (SE-AS.4 visibility rule, SE-AS.5 staff picker); future Community Activities should follow the same foundation in a later milestone.
-- `ServiceEventAudienceScope` (SE-AS.2 model foundation) now drives ordinary-user ServiceEvent visibility when an event has rows (SE-AS.4); events with no rows fall back to legacy `scope_type` / `district` / `small_group` and `Profile.small_group`, which remain editable fallback fields.
+- `ServiceEventAudienceScope` (SE-AS.2 model foundation) now drives ordinary-user ServiceEvent visibility when an event has rows (SE-AS.4), matched through active primary `ChurchStructureMembership` after CS-CORE.2B-A. Events with no rows fail closed for ordinary users after SE-RETIRE.1B; legacy scope fields remain editable stored/admin/display/audit data until field-level retirement.
 - Future Community Activities should use a `ChurchStructureUnit`-based audience-scope design rather than inventing a separate legacy-only audience segment system.
 - Preserve safe `BibleStudyMeeting` visibility.
 - Avoid breaking generated meeting workflows.

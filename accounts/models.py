@@ -19,8 +19,10 @@ class MinistryContext(models.Model):
         blank=True,
         related_name="legacy_ministry_contexts",
         help_text=(
-            "Optional bridge to the future ChurchStructureUnit tree. "
-            "Not required and does not change current runtime behavior."
+            "Legacy-to-structure bridge for setup diagnostics and compatibility. "
+            "May affect Bible Study structure-audience resolution/generation; "
+            "does not directly edit memberships, audience rows, serving "
+            "assignments, permissions, or ServiceEvent audience matching."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -56,8 +58,11 @@ class District(models.Model):
         blank=True,
         related_name="legacy_districts",
         help_text=(
-            "Optional bridge to the future ChurchStructureUnit tree. "
-            "Not required and does not change current runtime behavior."
+            "Legacy-to-structure bridge for setup diagnostics and compatibility. "
+            "May affect Bible Study structure-audience resolution/generation "
+            "and generated legacy SmallGroup meetings; does not directly edit "
+            "memberships, audience rows, serving assignments, permissions, or "
+            "ServiceEvent audience matching."
         ),
     )
     is_active = models.BooleanField(default=True)
@@ -86,8 +91,11 @@ class SmallGroup(models.Model):
         blank=True,
         related_name="legacy_small_groups",
         help_text=(
-            "Optional bridge to the future ChurchStructureUnit tree. "
-            "Not required and does not change current runtime behavior."
+            "Legacy-to-structure bridge for setup diagnostics and compatibility. "
+            "May affect Bible Study structure-audience resolution/generation "
+            "and generated legacy SmallGroup meetings; does not directly edit "
+            "memberships, audience rows, serving assignments, permissions, or "
+            "ServiceEvent audience matching."
         ),
     )
     is_active = models.BooleanField(default=True)
@@ -438,11 +446,11 @@ class ChurchRoleAssignment(models.Model):
         on_delete=models.PROTECT,
         related_name="role_assignments",
         help_text=(
-            "Canonical future role scope (CS-CORE.2D-A). Optional during the "
-            "migration: global roles leave this null, and the legacy district / "
-            "small_group fields remain compatibility scope fields until the "
-            "group-progress permission switch. Additive only; it does not change "
-            "role behavior in this slice."
+            "Canonical structure scope for non-global role assignments. Leave "
+            "blank for global roles. District/small-group scoped roles require "
+            "an explicit active ChurchStructureUnit; legacy district / "
+            "small_group fields are compatibility/admin/display/audit/backfill/"
+            "rollback context only."
         ),
     )
     is_active = models.BooleanField(default=True)

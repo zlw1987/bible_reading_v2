@@ -69,7 +69,7 @@ CS-H.5D did not change:
 - filtering
 - permissions
 
-At the time of CS-H.5D, membership was not yet a runtime source. Current state: membership is now the runtime source only for the explicitly switched consumers — ServiceEvent structure-audience rows and Bible Study v2 `BibleStudyMeeting` visibility — while legacy `BibleStudySession`, reading progress/group progress/privacy, ServiceEvent zero-row legacy fallback, TeamAssignment / My Serving, permissions, roles, and legacy fields/tables remain legacy-driven.
+At the time of CS-H.5D, membership was not yet a runtime source. Current state: membership is now the runtime source only for explicitly switched consumers: ServiceEvent structure-audience rows, Bible Study v2 audience rows / `/studies/` / Today / role-worship pickers, Prayer group requests, group-progress roster/default/ordinary own-group access, and reflection read/write paths. Legacy `BibleStudySession`, TeamAssignment / My Serving, staff capabilities, role assignments, and legacy fields/tables remain separate. ServiceEvent zero-row events fail closed for ordinary users after SE-RETIRE.1B; legacy ServiceEvent scope fields remain stored/admin/display/audit data until field-level retirement.
 
 Requested membership still does not grant visibility.
 

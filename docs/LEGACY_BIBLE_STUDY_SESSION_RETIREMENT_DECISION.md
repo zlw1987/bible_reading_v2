@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Status
 
-This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (`BibleStudyMeeting` / the schedule, lesson, and meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior. CS-CORE.3F later froze the remaining V1 app-level edit/delete/worship mutation routes while preserving readable direct detail access. BS-V1-RETIRE.1A supersedes that readable-detail archive policy for app runtime: V1 app-level detail/list access now redirects for ordinary users and managers, and remaining V1 rows are pilot/archive data pending a later explicit purge slice.
+This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (`BibleStudyMeeting` / the schedule, lesson, and meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior. CS-CORE.3F later froze the remaining V1 app-level edit/delete/worship mutation routes while preserving readable direct detail access. BS-V1-RETIRE.1A supersedes that readable-detail archive policy for app runtime: V1 app-level detail/list access now redirects for ordinary users and managers, and remaining V1 rows are pilot/archive data. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for those rows and V1-only child rows, but runtime code does not run it automatically.
 
 CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
@@ -18,7 +18,7 @@ Related docs:
 2. **Legacy V1 `BibleStudySession` is retired from app-level runtime.** It should not be extended, promoted, or preserved as a parallel app archive product.
 3. **Do not migrate V1 `BibleStudySession` visibility to membership-core.** Migrating `BibleStudySession.can_be_seen_by()` to `ChurchStructureMembership` would revive a deprecated product path and create two competing Bible Study systems. Future Bible Study investment goes into V2 instead.
 4. **Do not add new audience-scope support to `BibleStudySession`.** New audience-scope and structure work belongs to the V2 stack only.
-5. **Existing V1 data is pilot/archive data.** BS-V1-RETIRE.1A does not delete it, but a later explicit guarded cleanup may purge V1 rows and V1-only dependent data. Django Admin emergency maintenance may remain until that purge slice.
+5. **Existing V1 data is pilot/archive data.** BS-V1-RETIRE.1A did not delete it. BS-V1-PURGE.1A adds explicit cleanup tooling that can purge V1 rows and V1-only dependent data only when staff run the guarded apply command. Django Admin emergency maintenance may remain until an explicit purge is performed and later schema cleanup is approved.
 
 This decision follows the existing architecture direction: legacy retire / new model as core, where `ChurchStructureUnit` is the canonical church structure tree, `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and legacy small group retirement is consumer-by-consumer. Legacy is not fully retired, `Profile.small_group` must remain until all legacy consumers are migrated or retired, and V2 is not fully structure-native yet.
 
@@ -62,7 +62,13 @@ Each remaining step below is future work requiring its own approval unless marke
 3. **Step 3:** Completed by CS-CORE.3D for app-level creation only: `studies/new/` redirects to `/studies/` with retirement messaging and no longer renders or processes the V1 creation form.
 4. **Step 4:** Completed by BS-V1-RETIRE.1A: retire direct V1 app detail/list runtime for ordinary users and managers. Existing V1 rows remain stored only as pilot/archive data pending explicit purge.
 5. **Step 5:** Continue reducing V2's legacy `SmallGroup` bridge in a later architecture slice (generation source and `BibleStudyMeeting.small_group` ownership; see `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` Section 12).
-6. **Step 6:** Later explicit cleanup may delete V1 pilot data through a guarded dry-run-first purge command. Do not silently delete V1 rows during unrelated tests or local command runs.
+6. **Step 6:** BS-V1-PURGE.1A adds the guarded dry-run-first purge command:
+
+   ```powershell
+   .venv\Scripts\python.exe manage.py purge_legacy_bible_study_v1_sessions --apply --confirm-v1-bible-study-retirement
+   ```
+
+   The command is not automatically run by runtime code. No V1 rows are deleted unless staff explicitly run the apply command above; this implementation task must not run `--apply` against the local/dev database. After a successful explicit purge, V1 `BibleStudySession` and V1-only child rows no longer block future field/table cleanup. The purge does not delete V2 `BibleStudyMeeting` data and does not change V2 behavior. It does not remove the V1 models/tables yet; schema cleanup remains a later migration slice.
 
 ## 5A. Historical CS-CORE.3D Runtime Freeze Status
 
@@ -134,6 +140,23 @@ BS-V1-RETIRE.1A fully retires legacy V1 `BibleStudySession` from app-level runti
 - V1 rows are pilot/archive data pending explicit purge. No V1 rows are deleted by this slice.
 - No V1-to-membership migration is planned, and no V1-to-V2 data migration is required unless a separate historical-content decision asks for one.
 
+## 5E. BS-V1-PURGE.1A Guarded Cleanup Command Status
+
+BS-V1-PURGE.1A adds `purge_legacy_bible_study_v1_sessions` as guarded cleanup tooling for retired V1 pilot data.
+
+- Dry-run is the default and reports matched V1 `BibleStudySession`, `BibleStudyGuide`, and `BibleStudyWorshipSong` rows without writing anything.
+- Destructive mode requires both `--apply` and `--confirm-v1-bible-study-retirement`.
+- The command is not called by runtime code and should not be run with `--apply` against the local/dev database during the implementation task.
+- The explicit apply command is:
+
+  ```powershell
+  .venv\Scripts\python.exe manage.py purge_legacy_bible_study_v1_sessions --apply --confirm-v1-bible-study-retirement
+  ```
+
+- The command does not delete `BibleStudySeries`, `BibleStudyLesson`, `BibleStudyMeeting`, `BibleStudyMeetingAudienceScope`, `BibleStudyMeetingRole`, `BibleStudyMeetingWorshipSong`, or church-structure rows, and it does not change V2 behavior.
+- Until the guarded apply succeeds, `audit_legacy_structure_retirement_readiness` counts purge-pending V1 rows as data/table-retirement blockers while keeping V1 app-runtime blocker counters at zero.
+- The V1 models/tables remain in schema after the purge tooling; schema cleanup is a later migration slice.
+
 ## 6. Non-Goals
 
 The historical and current slices have different boundaries:
@@ -153,6 +176,8 @@ BS-V1-RETIRE.1A does not include or authorize:
 - ServiceEvent fallback migration;
 - permissions/roles/ministry/team assignment migration;
 - any attempt to fully remove `SmallGroup` or `Profile.small_group`.
+
+BS-V1-PURGE.1A authorizes only explicit guarded cleanup tooling for V1 pilot rows and V1-only child rows. It still does not authorize V1 model/table removal, V2 behavior changes, membership-core migration of V1, or automatic runtime purge behavior.
 
 ## 7. Verification
 

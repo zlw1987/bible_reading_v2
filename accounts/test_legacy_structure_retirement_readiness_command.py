@@ -17,7 +17,11 @@ from accounts.models import (
     SmallGroup,
 )
 from events.models import ServiceEvent
-from studies.models import BibleStudySeries, BibleStudySession
+from studies.models import (
+    BibleStudySeries,
+    BibleStudySeriesAudienceScope,
+    BibleStudySession,
+)
 
 
 User = get_user_model()
@@ -213,3 +217,66 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertIn("bible_study_v1_pilot_records_present: 1", out.getvalue())
         self.assertIn("bible_study_v1_app_runtime_retired: 1", out.getvalue())
         self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())
+        self.assertIn(
+            "studies.management.commands.purge_legacy_bible_study_v1_sessions",
+            out.getvalue(),
+        )
+
+
+class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
+    def setUp(self):
+        self.now = timezone.now()
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+
+    def make_v1_only_purge_pending_session(self):
+        series = BibleStudySeries.objects.create(
+            title="Legacy Schedule With Audience",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.root,
+        )
+        return BibleStudySession.objects.create(
+            series=series,
+            title="Legacy Global Session",
+            study_datetime=self.now + timezone.timedelta(days=3),
+            scope_type=BibleStudySession.SCOPE_GLOBAL,
+            status=BibleStudySession.STATUS_PUBLISHED,
+        )
+
+    def test_v1_purge_pending_counts_as_data_retirement_blocker_not_runtime_blocker(self):
+        self.make_v1_only_purge_pending_session()
+
+        audit = run_audit(now=self.now)
+        stats = audit["stats"]
+
+        self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
+        self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
+        self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
+        self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
+        self.assertEqual(stats["bible_study_series_with_legacy_scope_fields_set"], 0)
+        self.assertEqual(stats["bible_study_v2_meetings_with_small_group_mirror"], 0)
+        self.assertEqual(stats["bible_study_v2_meetings_without_audience_rows"], 0)
+        self.assertEqual(stats["bible_study_v2_meeting_small_group_mirror_mismatches"], 0)
+        self.assertEqual(stats["bible_study_normal_meetings_missing_generation_key"], 0)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+
+    def test_fail_on_blockers_exits_nonzero_for_v1_purge_pending_data_blocker(self):
+        self.make_v1_only_purge_pending_session()
+
+        out = StringIO()
+        with self.assertRaises(CommandError) as context:
+            call_command(
+                "audit_legacy_structure_retirement_readiness",
+                "--fail-on-blockers",
+                stdout=out,
+            )
+
+        self.assertIn("bible_study_legacy_retirement_blockers=1", str(context.exception))
+        self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())
+        self.assertIn("bible_study_v1_app_runtime_legacy_blockers: 0", out.getvalue())

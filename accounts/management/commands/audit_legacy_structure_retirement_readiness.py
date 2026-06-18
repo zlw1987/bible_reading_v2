@@ -263,6 +263,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "backfill support for Bible Study meeting audience rows",
     ),
     (
+        "studies.management.commands.purge_legacy_bible_study_v1_sessions",
+        "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
+    ),
+    (
         "reading.management.commands.audit_reading_privacy_membership_readiness",
         "standing diagnostic/audit guard",
     ),
@@ -898,6 +902,7 @@ def _scan_bible_study(stats, details):
         + stats["bible_study_v2_meetings_without_audience_rows"]
         + stats["bible_study_v2_meeting_small_group_mirror_mismatches"]
         + stats["bible_study_normal_meetings_missing_generation_key"]
+        + stats["bible_study_v1_purge_pending"]
         + stats["bible_study_v1_app_runtime_legacy_blockers"]
     )
 

@@ -136,14 +136,15 @@ The active V2 stack (`studies/models.py`):
 - **`BibleStudyMeetingWorshipSong`** — per-meeting worship set (order, title,
   key, links, arrangement/support notes, worship-lead user/name fallback).
 
-Legacy V1 stack, frozen as archive (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`):
+Legacy V1 stack, retired from app runtime (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`):
 
 - **`BibleStudySession`** (+ `BibleStudyGuide` one-to-one, +
-  `BibleStudyWorshipSong`). Visibility still legacy-driven through
-  `Profile.small_group` / `scope_type` / `district` / `small_group`. App-level
-  create/edit/delete/worship routes are frozen and redirect with archive
-  messaging (CS-CORE.3D/3F). **Decision: do not migrate V1 to membership-core or
-  to structure audience; it is a retirement target, not part of this migration.**
+  `BibleStudyWorshipSong`). BS-V1-RETIRE.1A retires app-level V1 visibility for
+  ordinary users and managers; `Profile.small_group` / `scope_type` / `district`
+  / `small_group` no longer grant V1 app access. App-level create/detail/edit/
+  delete/worship routes redirect with retirement messaging. **Decision: do not
+  migrate V1 to membership-core or to structure audience; it is pilot/archive
+  data pending explicit purge, not part of this migration.**
 
 ### 1.2 How weekly guides / questions are represented
 
@@ -206,7 +207,7 @@ its meeting carries no `small_group` mirror (structure-native, warned).
 | --- | --- |
 | `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, or the manual-form source field.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; the secondary `(lesson, small_group)` idempotency constraint; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
 | `District` | `BibleStudySeries.district` / `BibleStudySession.district` legacy scope fields only. |
-| `Profile.small_group` | **No longer read by V2 meeting visibility or pickers.** Still read by V1 `BibleStudySession.can_be_seen_by()` and by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
+| `Profile.small_group` | **No longer read by V2 meeting visibility or pickers, and no longer grants V1 app access after BS-V1-RETIRE.1A.** Still read by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
 | `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, V2 runtime source of truth)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**; also the mapping target for `SmallGroup.church_structure_unit` used in generation/resolution and legacy mirror compatibility. |
 | `ChurchStructureMembership` | **The V2 runtime user-belonging source** for meeting visibility (`studies/visibility.py`, CS-CORE.2C-B) and for role/worship user pickers (CS-CORE.3B). Single active primary membership only; multiple/none fails closed. |
 
@@ -262,12 +263,14 @@ do not appear for ordinary users. `Profile.small_group` is not consulted.
   permissions yet (BS-V2.7 deferred). No automatic assignment, rotation,
   availability, swap, or reminders.
 
-### 1.8 Current V1 archived / frozen paths
+### 1.8 Current V1 retired app paths
 
-V1 `BibleStudySession` create/edit/delete/worship app routes redirect with
-archive messaging (CS-CORE.3D/3F); direct detail stays readable when legacy
-visibility allows; Django Admin is the emergency archival path. **Out of scope
-for this migration** — see Section 7 open question on V1 handling.
+V1 `BibleStudySession` create/detail/edit/delete/worship app routes redirect
+with retirement messaging after BS-V1-RETIRE.1A. Direct detail is no longer an
+app archive surface for ordinary users or managers. Django Admin remains the
+emergency maintenance path until a later explicit V1 pilot-data purge slice.
+**Out of scope for this migration** — see Section 7 open question on V1 data
+cleanup.
 
 ### 1.9 Remaining legacy consumers (the migration surface)
 
@@ -1145,9 +1148,9 @@ the meeting-identity decision (Section 4.5).
   ordinary candidates for zero-row meetings; the manage-list unit filter matches
   audience rows only while still tolerating legacy `?small_group=<id>` URLs as a
   mapping to `unit`. `BibleStudyMeeting.small_group` remains mirror/display/
-  backfill/history/idempotency compatibility only. V1 `BibleStudySession` legacy
-  visibility is unchanged and remains an archive/retirement target. No schema
-  field/model was deleted and no migration was created. Readiness reported 29
+  backfill/history/idempotency compatibility only. V1 `BibleStudySession` app
+  runtime was later retired in BS-V1-RETIRE.1A and remains a data cleanup target.
+  No schema field/model was deleted and no migration was created. Readiness reported 29
   meetings checked, 29 with audience rows, zero zero-row blockers,
   `db_data_blockers_clear = true`, `legacy_small_group_fallback_still_present =
   false`, and `runtime_zero_row_fallback_removed = true`.
@@ -1155,7 +1158,7 @@ the meeting-identity decision (Section 4.5).
   Bible Study `SmallGroup` bridge only after remaining compatibility consumers
   are resolved (coordinate with CS-CORE Section 12 legacy retirement). This does
   **not** mean V1 `BibleStudySession` should be migrated to membership-core; V1
-  remains an archive/retirement target.
+  remains retired app runtime and a later pilot-data purge target.
 
 The user-side resolver migration that ServiceEvent/Bible Study needed for
 *visibility* is **already done** for Bible Study (CS-CORE.2C-B / 3B), so this
@@ -1200,9 +1203,11 @@ plan's hard work is concentrated in the meeting-audience representation
    tests/suite pass. Higher-level/joint meetings can now leave it null. The
    field remains a compatibility mirror; later slices (1E/1F) move
    visibility/pickers off it onto audience rows before it is eventually retired.
-8. **Legacy V1 `BibleStudySession`.** Confirmed out of scope (retirement target);
-   this migration must not touch its visibility. Re-confirm no slice accidentally
-   couples V1 into the new audience model.
+8. **Legacy V1 `BibleStudySession`.** Retired from app-level runtime by
+   BS-V1-RETIRE.1A. V1 is still not migrated into the new audience model and
+   should not be coupled to `BibleStudyMeetingAudienceScope` or membership-core.
+   Remaining V1 rows are pilot/archive data pending an explicit guarded purge.
+   Future work is purge/data cleanup, not V1 visibility migration.
 9. **Group-specific guide customization.** Already exists (`group_direction` /
    `group_questions`); confirm whether the real workflow needs anything beyond
    these two fields before treating prep as "done for migration."
@@ -1212,7 +1217,7 @@ plan's hard work is concentrated in the meeting-audience representation
 
 ---
 
-## 8. Verification (docs-only)
+## 8. Verification (historical BS-STRUCT.1A docs-only slice)
 
 ```powershell
 cd E:\bible-reading\bible_reading_v2-claude
@@ -1220,5 +1225,8 @@ git diff --check
 git status --short
 ```
 
-No code, template, test, model, or migration changes; no makemigrations/check
-runs are required for a docs-only slice. (See final report for results.)
+For the original BS-STRUCT.1A docs-only design/audit slice, there were no code,
+template, test, model, or migration changes, so no makemigrations/check runs
+were required at that time. This section is historical verification for that
+slice only; this living plan now records later implemented runtime slices such
+as BS-STRUCT.1B/1E/1G/2A and BS-V1-RETIRE.1A.

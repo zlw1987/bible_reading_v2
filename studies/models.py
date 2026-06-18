@@ -4,11 +4,6 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit, District, MinistryContext, SmallGroup
-from accounts.permissions import (
-    CAP_MANAGE_BIBLE_STUDIES,
-    CAP_PUBLISH_BIBLE_STUDY_GUIDES,
-    has_capability,
-)
 from accounts.structure_selectors import (
     resolve_units_to_small_groups as resolve_structure_units_to_small_groups,
 )
@@ -279,8 +274,8 @@ class BibleStudySeriesAudienceScope(models.Model):
     Schedule. They resolve to legacy ``SmallGroup`` rows for meeting generation;
     they do not directly grant ordinary-member visibility. Since CS-CORE.2C-B,
     ordinary v2 ``BibleStudyMeeting`` visibility uses active primary
-    ``ChurchStructureMembership``. Legacy ``BibleStudySession`` visibility is
-    unchanged.
+    ``ChurchStructureMembership`` through meeting audience rows. Since
+    BS-V1-RETIRE.1A, legacy ``BibleStudySession`` app visibility is retired.
     """
 
     series = models.ForeignKey(
@@ -503,38 +498,8 @@ class BibleStudySession(models.Model):
         if not getattr(user, "is_authenticated", False):
             return False
 
-        if (
-            getattr(user, "is_staff", False)
-            or getattr(user, "is_superuser", False)
-            or has_capability(user, CAP_MANAGE_BIBLE_STUDIES)
-            or has_capability(user, CAP_PUBLISH_BIBLE_STUDY_GUIDES)
-        ):
-            return True
-
-        if self.status == self.STATUS_CANCELLED:
-            return False
-
-        if not self.is_published:
-            return False
-
-        if self.scope_type == self.SCOPE_GLOBAL:
-            return True
-
-        profile = getattr(user, "profile", None)
-        user_group = getattr(profile, "small_group", None)
-        if not user_group:
-            return False
-
-        if self.scope_type == self.SCOPE_DISTRICT:
-            return bool(
-                self.district_id
-                and user_group.district_id
-                and self.district_id == user_group.district_id
-            )
-
-        if self.scope_type == self.SCOPE_SMALL_GROUP:
-            return bool(self.small_group_id and self.small_group_id == user_group.id)
-
+        # BS-V1-RETIRE.1A: V1 app-level runtime is fully retired. Django Admin
+        # remains the emergency maintenance path for any remaining pilot rows.
         return False
 
 

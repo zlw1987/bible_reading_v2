@@ -2,7 +2,7 @@
 
 ## Current Status Summary
 
-LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It does not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior.
+LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for an explicit later data cleanup.
 
 New audit command:
 
@@ -22,7 +22,7 @@ Current runtime split:
 
 - `Profile.small_group` has no normal app-level write path after CS-RETIRE.1A, but remains stored legacy/admin/archive/audit data.
 - ServiceEvent ordinary-user visibility no longer uses zero-row legacy fallback; zero-row events are fail-closed safety states, while legacy `scope_type` / `district` / `small_group` fields remain stored/editable compatibility data.
-- Bible Study V2 meeting visibility, Today/landing, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; V1 `BibleStudySession` remains legacy/archive runtime and retirement work.
+- Bible Study V2 meeting visibility, Today/landing, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; V1 `BibleStudySession` app runtime is retired after BS-V1-RETIRE.1A and remaining V1 rows are pilot/archive data pending an explicit purge slice.
 - Reflection group read/write paths use `ReflectionComment.structure_unit_at_post` plus active primary `ChurchStructureMembership`; `small_group_at_post` remains a legacy compatibility/staff-display mirror.
 - Role runtime scope uses explicit `ChurchRoleAssignment.structure_unit`; legacy `district` / `small_group` role fields remain stored/admin/display/audit/backfill/rollback context only.
 
@@ -34,7 +34,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | --- | --- | --- | --- |
 | Switched ordinary ServiceEvent audience rows | `events.models.ServiceEvent._audience_scope_allows()` | already runtime-retired / historical only | Uses membership-core audience rows; legacy fields are not consulted when rows exist. |
 | ServiceEvent zero-row ordinary visibility | `events.models.ServiceEvent.can_be_seen_by()` | already runtime-retired / historical only | Zero-row events fail closed for ordinary users; they are safety states, not legacy ordinary visibility. |
-| V1 Bible Study session visibility | `studies.models.BibleStudySession.can_be_seen_by()` | current legacy/archive runtime blocker | Still reads `Profile.small_group`, `District`, `SmallGroup`, and `scope_type`; resolve/archive before retiring the compatibility layer. |
+| V1 Bible Study session visibility | `studies.models.BibleStudySession.can_be_seen_by()` | retired app runtime / pilot data pending purge | BS-V1-RETIRE.1A makes app-level V1 visibility fail closed for ordinary users and managers. `Profile.small_group`, `District`, `SmallGroup`, and `scope_type` no longer grant V1 app access. |
 | Bible Study schedule legacy scope / generation compatibility | `BibleStudySeries.get_eligible_small_groups()`, `BibleStudySeries.scope_type`, `ministry_context`, `district`, `small_group` | generation/idempotency bridge | Kept to support coexistence and historical scope data while structure audience rows drive the current V2 path. |
 | Bible Study V2 meeting `small_group` | `studies.models.BibleStudyMeeting.small_group` | stored mirror/display/history snapshot | No longer ordinary visibility source; still mirror/display/history and secondary compatibility identity. |
 | Bible Study V2 generation key / anchor bridge | `studies.services.normal_generation_key_for_unit()`, `anchor_unit`, `generation_key` | generation/idempotency bridge | Structure-native idempotency is present but still coexists with legacy mirrors and pre-bridge meeting recognition. |
@@ -149,11 +149,11 @@ Audit counters:
 - V2 meetings with/without audience rows
 - V2 mirror/audience mismatches
 - normal meetings missing `generation_key`
-- V1 `BibleStudySession` counts and legacy scope fields
+- V1 `BibleStudySession` counts, legacy scope fields, pilot records present, app-runtime-retired state, and purge-pending rows
 
 Blockers:
 
-- V1 `BibleStudySession` is the main current legacy/archive runtime blocker.
+- V1 `BibleStudySession` rows are no longer ordinary or manager app-runtime blockers after BS-V1-RETIRE.1A. They remain data/table-retirement blockers until an explicit guarded purge or retention decision handles the pilot rows and their dependent V1 guide/worship data.
 - V2 `BibleStudyMeeting.small_group` remains stored mirror/history/idempotency compatibility and blocks field removal even though it is no longer ordinary visibility authority.
 - Active series without audience rows and normal meetings without generation keys are generation/idempotency readiness blockers.
 
@@ -190,7 +190,7 @@ Blockers:
 
 ## Recommended Next Sequence
 
-1. Resolve/archive V1 `BibleStudySession` remaining legacy/archive runtime dependency.
+1. Plan the explicit V1 pilot-data purge slice for `BibleStudySession` rows and dependent V1-only data. A future purge command should be dry-run by default, require `--apply` plus a V1-retirement confirmation flag, and must not touch V2 `BibleStudyMeeting`.
 2. Harden Bible Study V2 generation/idempotency bridge: active schedules should carry audience rows, normal meetings should carry audience rows and generation keys, and mirror/audience mismatches should be zero.
 3. Plan ServiceEvent legacy scope field deprecation: stored data, forms, display, backfill/audit commands, rollback, and zero-row safety-state handling.
 4. Plan role legacy field retirement after confirming no scoped assignment lacks explicit valid `structure_unit` and no legacy-vs-structure mismatch remains.

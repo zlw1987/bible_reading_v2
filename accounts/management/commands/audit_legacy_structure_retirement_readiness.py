@@ -139,6 +139,10 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_normal_meetings_missing_generation_key",
                 "bible_study_v1_sessions_checked",
                 "bible_study_v1_sessions_with_legacy_scope_fields_set",
+                "bible_study_v1_pilot_records_present",
+                "bible_study_v1_app_runtime_retired",
+                "bible_study_v1_purge_pending",
+                "bible_study_v1_app_runtime_legacy_blockers",
                 "bible_study_legacy_retirement_blockers",
             ),
         ),
@@ -876,6 +880,17 @@ def _scan_bible_study(stats, details):
             ),
         )
 
+    stats["bible_study_v1_pilot_records_present"] = stats[
+        "bible_study_v1_sessions_checked"
+    ]
+    # BS-V1-RETIRE.1A: V1 app-level runtime is retired for ordinary users and
+    # managers. Remaining pilot rows are data-retirement/purge work, not app
+    # visibility blockers.
+    stats["bible_study_v1_app_runtime_retired"] = 1
+    stats["bible_study_v1_purge_pending"] = stats[
+        "bible_study_v1_sessions_checked"
+    ]
+    stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
     stats["bible_study_legacy_retirement_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
         + stats["bible_study_series_with_legacy_scope_fields_set"]
@@ -883,7 +898,7 @@ def _scan_bible_study(stats, details):
         + stats["bible_study_v2_meetings_without_audience_rows"]
         + stats["bible_study_v2_meeting_small_group_mirror_mismatches"]
         + stats["bible_study_normal_meetings_missing_generation_key"]
-        + stats["bible_study_v1_sessions_checked"]
+        + stats["bible_study_v1_app_runtime_legacy_blockers"]
     )
 
 

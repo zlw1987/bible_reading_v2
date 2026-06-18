@@ -2,7 +2,7 @@
 
 ## 1. Purpose and Status
 
-This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (the schedule/lesson/meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement/archive candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior. CS-CORE.3F later froze the remaining V1 app-level edit/delete/worship mutation routes while preserving readable direct detail access.
+This began as a docs-only decision record. It clarifies the boundary between Bible Study V1 (legacy `BibleStudySession`) and Bible Study V2 (`BibleStudyMeeting` / the schedule, lesson, and meeting stack), and records the decision that legacy V1 `BibleStudySession` is a retirement candidate while Bible Study V2 is the active product path. CS-CORE.3D later froze the app-level V1 creation route while preserving existing V1 records and direct legacy access paths. CS-CORE.3E later audited the remaining V1 app-level mutation surfaces and recorded a future freeze recommendation without changing runtime behavior. CS-CORE.3F later froze the remaining V1 app-level edit/delete/worship mutation routes while preserving readable direct detail access. BS-V1-RETIRE.1A supersedes that readable-detail archive policy for app runtime: V1 app-level detail/list access now redirects for ordinary users and managers, and remaining V1 rows are pilot/archive data pending a later explicit purge slice.
 
 CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
@@ -15,10 +15,10 @@ Related docs:
 ## 2. The Decision
 
 1. **`BibleStudySession` is Bible Study V1, not the current Bible Study V2 product path.** Bible Study V2 is the active product path.
-2. **Legacy V1 `BibleStudySession` is a retirement/archive candidate.** It should be frozen as legacy archive/fallback content, not extended and not promoted.
+2. **Legacy V1 `BibleStudySession` is retired from app-level runtime.** It should not be extended, promoted, or preserved as a parallel app archive product.
 3. **Do not migrate V1 `BibleStudySession` visibility to membership-core.** Migrating `BibleStudySession.can_be_seen_by()` to `ChurchStructureMembership` would revive a deprecated product path and create two competing Bible Study systems. Future Bible Study investment goes into V2 instead.
 4. **Do not add new audience-scope support to `BibleStudySession`.** New audience-scope and structure work belongs to the V2 stack only.
-5. **Existing V1 data must not be deleted.** Existing V1 direct access and admin behavior are not changed by this docs-only slice.
+5. **Existing V1 data is pilot/archive data.** BS-V1-RETIRE.1A does not delete it, but a later explicit guarded cleanup may purge V1 rows and V1-only dependent data. Django Admin emergency maintenance may remain until that purge slice.
 
 This decision follows the existing architecture direction: legacy retire / new model as core, where `ChurchStructureUnit` is the canonical church structure tree, `ChurchStructureMembership` is becoming the canonical ordinary-user belonging model, and legacy small group retirement is consumer-by-consumer. Legacy is not fully retired, `Profile.small_group` must remain until all legacy consumers are migrated or retired, and V2 is not fully structure-native yet.
 
@@ -37,34 +37,36 @@ Current V2 structure-model status (verified against the worktree on 2026-06-12):
 
 - **V2 schedule audience already uses `ChurchStructureUnit`** through `BibleStudySeriesAudienceScope` (`studies/models.py`, `BibleStudySeriesAudienceScope.unit`).
 - **V2 still has a legacy `SmallGroup` generation bridge.** Meeting generation and schedule eligibility resolve selected structure units to legacy `SmallGroup` rows through `resolve_units_to_small_groups` (`studies/models.py` wrapper over `accounts/structure_selectors.py`), and generated `BibleStudyMeeting` rows still attach to legacy `SmallGroup`.
-- **V2 ordinary-member meeting visibility already uses membership-core logic.** `BibleStudyMeeting.can_be_seen_by()` (`studies/models.py`) delegates to `studies/visibility.py`, matching the user's single active primary `ChurchStructureMembership` against the meeting legacy `SmallGroup`'s mapped small-group unit or a descendant (CS-CORE.2C-B). `Profile.small_group` alone grants nothing here.
-- **V2 role/worship user pickers use membership-core matching** for the meeting's legacy `SmallGroup` (CS-CORE.3B).
+- **V2 ordinary-member meeting visibility uses membership-core audience rows.** `BibleStudyMeeting.can_be_seen_by()` (`studies/models.py`) delegates to `studies/visibility.py`, matching the user's single active primary `ChurchStructureMembership` against `BibleStudyMeetingAudienceScope` rows after BS-STRUCT.2A. Zero-row V2 meetings fail closed for ordinary users. `Profile.small_group` and the `BibleStudyMeeting.small_group` mirror grant nothing here.
+- **V2 role/worship user pickers use membership-core audience-row matching** for the meeting's audience rows, while preserving the already-selected saved user on edit.
 
 So V2 is the structure-model investment target, but V2 is not fully structure-native yet: the generation bridge and the `BibleStudyMeeting.small_group` FK still depend on legacy `SmallGroup` rows and mappings.
 
-## 4. Current V1 State (verified against the worktree on 2026-06-12)
+## 4. V1 State History And Current Runtime
 
-V1 still exists but is no longer the promoted surface:
+V1 still exists in the schema and Django Admin, but it is no longer the promoted surface and is now retired from app-level runtime:
 
 - **`/studies/` keeps the historical view name `study_session_list`** (`studies/urls.py`), but the page now behaves as the V2 Bible Study landing surface: the view builds `get_v2_landing_context()` and the template (`templates/studies/study_session_list.html`) renders the user's V2 `BibleStudyMeeting` plus V2 staff links (schedules / weekly guides / meetings) only. The promoted member-facing UI shows V2 meetings, not legacy V1 sessions.
 - **Today uses V2 `BibleStudyMeeting`**, not legacy `BibleStudySession`: `reading/views.py` reuses `get_v2_landing_context()` and surfaces linked-user `BibleStudyMeetingRole` chips.
 - **Staff surfaces promote V2** schedules / guides / meetings: the staff overview counts `BibleStudySeries` / `BibleStudyLesson` / `BibleStudyMeeting` (`accounts/views.py`), and the `/studies/` staff links target the V2 manage lists. No promoted staff surface counts or links legacy V1 sessions.
-- **V1 direct routes still exist** (`studies/urls.py`): `studies/new/`, `studies/<int:session_id>/`, `studies/<int:session_id>/edit/`, `studies/<int:session_id>/delete/`, `studies/<int:session_id>/worship/` (plus V1 worship-song edit/delete routes).
-- **V1 forms/templates/admin/tests still exist**: `BibleStudySessionForm` (`studies/forms.py`), `templates/studies/study_session_detail.html` and `study_session_form.html`, `BibleStudySessionAdmin` (`studies/admin.py`), and `BibleStudySession` coverage in `studies/tests.py`.
-- **V1 visibility is still legacy-driven**: `BibleStudySession.can_be_seen_by()` (`studies/models.py`) still uses legacy `Profile.small_group` / `District` / `SmallGroup` `scope_type` semantics. Per this decision, that stays as-is until V1 is retired; do not migrate V1 `BibleStudySession` visibility to membership-core.
+- **V1 direct app routes still exist but are retired/frozen** (`studies/urls.py`): `studies/new/`, `studies/<int:session_id>/`, `studies/<int:session_id>/edit/`, `studies/<int:session_id>/delete/`, `studies/<int:session_id>/worship/` (plus V1 worship-song edit/delete routes) redirect to `/studies/` and do not render or mutate V1 app content.
+- **V1 forms/templates/admin/tests still exist**: `BibleStudySessionForm` (`studies/forms.py`), legacy templates, `BibleStudySessionAdmin` (`studies/admin.py`), and `BibleStudySession` coverage in `studies/tests.py`. The app no longer treats the legacy detail template as a normal archive product surface.
+- **V1 app visibility is retired, not migrated.** `BibleStudySession.can_be_seen_by()` (`studies/models.py`) now fails closed for app users. `Profile.small_group`, `District`, `SmallGroup`, and `scope_type` no longer grant V1 app access. V1 is not migrated to `ChurchStructureMembership`.
 
 ## 5. Recommended Future Implementation Path
 
-Each remaining step below is future work requiring its own approval. CS-CORE.3D is the only runtime step recorded here as complete.
+Each remaining step below is future work requiring its own approval unless marked complete.
 
 1. **Step 1:** Confirm no promoted normal/staff UI links create or manage new V1 sessions (the `/studies/` landing and staff overview already promote V2 only; re-verify before any runtime slice).
 2. **Step 2:** Convert any remaining promoted V1 entry points to V2 schedule/lesson/meeting flows.
 3. **Step 3:** Completed by CS-CORE.3D for app-level creation only: `studies/new/` redirects to `/studies/` with retirement messaging and no longer renders or processes the V1 creation form.
-4. **Step 4:** Keep existing V1 records readable until a data/archive policy is approved.
+4. **Step 4:** Completed by BS-V1-RETIRE.1A: retire direct V1 app detail/list runtime for ordinary users and managers. Existing V1 rows remain stored only as pilot/archive data pending explicit purge.
 5. **Step 5:** Continue reducing V2's legacy `SmallGroup` bridge in a later architecture slice (generation source and `BibleStudyMeeting.small_group` ownership; see `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` Section 12).
-6. **Step 6:** Do not delete V1 tables/models/data until the project has a formal data retirement policy.
+6. **Step 6:** Later explicit cleanup may delete V1 pilot data through a guarded dry-run-first purge command. Do not silently delete V1 rows during unrelated tests or local command runs.
 
-## 5A. CS-CORE.3D Runtime Freeze Status
+## 5A. Historical CS-CORE.3D Runtime Freeze Status
+
+This subsection is historical. BS-V1-RETIRE.1A later retired direct V1 app detail/list runtime for ordinary users and managers.
 
 CS-CORE.3D freezes new legacy V1 `BibleStudySession` creation through the app route only.
 
@@ -76,7 +78,9 @@ CS-CORE.3D freezes new legacy V1 `BibleStudySession` creation through the app ro
 - V1 visibility is still legacy-driven by `Profile.small_group` / legacy scope semantics.
 - V1 is not fully retired yet; no V1 data, model, table, or migration was removed by this slice.
 
-## 5B. CS-CORE.3E Archive Mutation Policy Audit
+## 5B. Historical CS-CORE.3E Archive Mutation Policy Audit
+
+This subsection is historical. BS-V1-RETIRE.1A supersedes the readable-detail archive recommendation by retiring app-level V1 runtime.
 
 CS-CORE.3E is a docs-only audit of the remaining legacy V1 mutation surfaces. It does not implement the freeze; it records the current state and the recommended next runtime slice.
 
@@ -103,7 +107,9 @@ Explicit non-goals for CS-CORE.3E:
 - no `BibleStudySession.can_be_seen_by()` migration to `ChurchStructureMembership`;
 - no reading/progress/privacy, ServiceEvent fallback, permissions, roles, ministry, TeamAssignment, My Serving, or `Profile.small_group` change.
 
-## 5C. CS-CORE.3F App Mutation Freeze Status
+## 5C. Historical CS-CORE.3F App Mutation Freeze Status
+
+This subsection is historical. BS-V1-RETIRE.1A later redirects V1 detail and mutation routes to `/studies/` for ordinary users and managers.
 
 CS-CORE.3F freezes the remaining legacy V1 `BibleStudySession` app-level mutation routes while preserving archive readability.
 
@@ -117,13 +123,32 @@ CS-CORE.3F freezes the remaining legacy V1 `BibleStudySession` app-level mutatio
 - V1 visibility remains legacy-driven by `BibleStudySession.can_be_seen_by()`; it was not migrated to membership-core.
 - V1 is still not fully retired.
 
+## 5D. BS-V1-RETIRE.1A App Runtime Retirement Status
+
+BS-V1-RETIRE.1A fully retires legacy V1 `BibleStudySession` from app-level runtime.
+
+- Ordinary users cannot open V1 detail even when their legacy `Profile.small_group` matches the V1 session's legacy scope fields.
+- Staff/managers also cannot use V1 detail/edit/delete/worship routes as a normal app archive path; the routes redirect to `/studies/` with retirement messaging and do not mutate V1 rows.
+- `/studies/` remains the active V2 `BibleStudyMeeting` landing. V2 `BibleStudyMeeting` behavior is unchanged.
+- Django Admin remains the emergency maintenance path for now.
+- V1 rows are pilot/archive data pending explicit purge. No V1 rows are deleted by this slice.
+- No V1-to-membership migration is planned, and no V1-to-V2 data migration is required unless a separate historical-content decision asks for one.
+
 ## 6. Non-Goals
 
-CS-CORE.3C did not include or authorize, and CS-CORE.3D/3E/3F still do not include or authorize:
+The historical and current slices have different boundaries:
 
-- any URL, form, model, schema, or migration change;
-- deletion of any V1 data;
-- removing V1 detail/edit/delete/worship routes, forms, templates, admin, model behavior, or legacy visibility;
+- CS-CORE.3C was docs-only and did not change URL, form, model, schema, migration, runtime, or data behavior.
+- CS-CORE.3D and CS-CORE.3F froze app-level V1 create/edit/delete/worship routes without deleting V1 rows.
+- BS-V1-RETIRE.1A does change app-level runtime/view/model-method behavior so V1 `BibleStudySession` app access is retired.
+
+BS-V1-RETIRE.1A does not include or authorize:
+
+- removing URL patterns, forms, models, templates, Django Admin access, schema, or migrations;
+- deleting V1 rows or silently purging pilot/archive data;
+- migrating V1 `BibleStudySession` visibility to membership-core;
+- migrating V1 rows to V2 `BibleStudyMeeting` records;
+- changing V2 `BibleStudyMeeting` behavior;
 - reading/progress/privacy migration;
 - ServiceEvent fallback migration;
 - permissions/roles/ministry/team assignment migration;

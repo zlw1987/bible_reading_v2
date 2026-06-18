@@ -120,6 +120,10 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(stats["profiles_with_small_group_no_active_primary_membership"], 1)
         self.assertEqual(stats["small_groups_without_church_structure_unit"], 1)
         self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
+        self.assertEqual(stats["bible_study_v1_pilot_records_present"], 1)
+        self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
+        self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
+        self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
         self.assertEqual(
             stats["service_event_zero_row_visible_active_safety_blockers"], 1
         )
@@ -206,3 +210,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(BibleStudySession.objects.count(), before_counts["sessions"])
         self.assertIn("data_mutated: false", out.getvalue())
         self.assertIn("apply_option_present: false", out.getvalue())
+        self.assertIn("bible_study_v1_pilot_records_present: 1", out.getvalue())
+        self.assertIn("bible_study_v1_app_runtime_retired: 1", out.getvalue())
+        self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())

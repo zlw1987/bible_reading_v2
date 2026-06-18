@@ -72,8 +72,12 @@ def study_ui_text(language, key):
                 "Study V2 schedule and meeting flow."
             ),
             "legacy_mutation_frozen": (
-                "Legacy Bible Study sessions are archived. App-level editing is "
+                "Legacy Bible Study sessions are retired in the app. App-level editing is "
                 "frozen. Please use the Bible Study V2 schedule and meeting flow."
+            ),
+            "legacy_app_runtime_retired": (
+                "Legacy Bible Study sessions are retired in the app. Please use the current "
+                "Bible Study schedule and meeting flow."
             ),
         },
         "zh": {
@@ -83,7 +87,8 @@ def study_ui_text(language, key):
             "cancelled": "查经安排已取消。",
             "schedule_saved": "查经安排已保存。",
             "legacy_create_retired": "旧版查经安排已停止创建，请使用新版查经排期与聚会流程。",
-            "legacy_mutation_frozen": "旧版查经安排已归档，应用内编辑已冻结。请使用新版查经排期与聚会流程。",
+            "legacy_mutation_frozen": "旧版查经安排已在应用中退役，应用内编辑已冻结。请使用新版查经排期与聚会流程。",
+            "legacy_app_runtime_retired": "旧版查经安排已在应用中退役，请使用当前的查经排期与聚会流程。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -98,9 +103,7 @@ def can_manage_bible_studies(user):
     )
 
 
-def redirect_legacy_session_archive(request, session):
-    if session.can_be_seen_by(request.user):
-        return redirect("study_session_detail", session_id=session.id)
+def redirect_legacy_session_runtime_retired(request):
     return redirect("study_session_list")
 
 
@@ -116,11 +119,7 @@ def get_visible_study_sessions(user):
         "created_by",
     ).order_by("-study_datetime")
 
-    if can_manage_bible_studies(user):
-        return sessions
-
-    visible_ids = [session.id for session in sessions if session.can_be_seen_by(user)]
-    return sessions.filter(id__in=visible_ids)
+    return sessions.none()
 
 
 def get_v2_landing_context(user):
@@ -1258,7 +1257,7 @@ def study_session_detail(request, session_id):
     if not session.can_be_seen_by(request.user):
         messages.error(
             request,
-            study_ui_text(get_user_language(request), "not_available"),
+            study_ui_text(get_user_language(request), "legacy_app_runtime_retired"),
         )
         return redirect("study_session_list")
 
@@ -1293,7 +1292,7 @@ def edit_study_session(request, session_id):
         messages.error(request, study_ui_text(language, "no_permission"))
     else:
         messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_archive(request, session)
+    return redirect_legacy_session_runtime_retired(request)
 
 
 @login_required
@@ -1305,7 +1304,7 @@ def delete_study_session(request, session_id):
         messages.error(request, study_ui_text(language, "no_permission"))
     else:
         messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_archive(request, session)
+    return redirect_legacy_session_runtime_retired(request)
 
 
 @login_required
@@ -1320,7 +1319,7 @@ def manage_worship_songs(request, session_id):
         messages.error(request, study_ui_text(language, "no_permission"))
     else:
         messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_archive(request, session)
+    return redirect_legacy_session_runtime_retired(request)
 
 
 @login_required
@@ -1335,7 +1334,7 @@ def edit_worship_song(request, song_id):
         messages.error(request, study_ui_text(language, "no_permission"))
     else:
         messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_archive(request, song.session)
+    return redirect_legacy_session_runtime_retired(request)
 
 
 @login_required
@@ -1347,4 +1346,4 @@ def delete_worship_song(request, song_id):
         messages.error(request, study_ui_text(language, "no_permission"))
     else:
         messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_archive(request, song.session)
+    return redirect_legacy_session_runtime_retired(request)

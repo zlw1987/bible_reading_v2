@@ -1,20 +1,24 @@
-"""SE-RETIRE.1A read-only retirement-readiness audit for the ServiceEvent
-zero-audience-row legacy fallback.
+"""Read-only ServiceEvent zero-row safety-state diagnostic.
 
-ServiceEvent ordinary-user visibility is membership-core when an event has
-``ServiceEventAudienceScope`` rows (CS-CORE.2B-A). Events with **zero** audience
-rows still fall back to the legacy ``scope_type`` / ``district`` /
-``small_group`` fields driven by ``Profile.small_group``
-(``ServiceEvent.can_be_seen_by``). This command answers a single question:
+SE-RETIRE.1A introduced this command as the retirement-readiness audit for the
+zero-audience-row legacy fallback. SE-RETIRE.1B later retired that ordinary-user
+runtime fallback: ``ServiceEvent.can_be_seen_by`` now fails closed for ordinary
+users when an event has zero ``ServiceEventAudienceScope`` rows. The legacy
+``scope_type`` / ``district`` / ``small_group`` fields remain stored/admin/
+display/backfill/audit/rollback context only.
 
-    "Can we safely remove or fail-closed that zero-row fallback yet?"
+This command now remains as a standing guard/diagnostic. It answers:
+
+    "Which events still have zero audience rows, what legacy scope data would
+    map them to for backfill/audit purposes, and which visible/active safety
+    states need review before legacy field retirement?"
 
 It is **read-only**. It has no ``--apply``. It never mutates any
 ``ServiceEvent``, ``ServiceEventAudienceScope``, legacy ``scope_type`` /
 ``district`` / ``small_group`` field, ``ChurchStructureUnit``,
 ``ChurchStructureMembership``, ``Profile``, ``SmallGroup``, ``District``, or
 ``MinistryContext`` row. It changes no ServiceEvent runtime behavior and does
-not remove the fallback; ``runtime_switched`` is always ``false`` and
+not switch runtime behavior; ``runtime_changed_by_this_audit`` is always ``false`` and
 ``legacy_fields_mutated`` is always ``0`` by construction.
 
 Backfillability is delegated to the existing
@@ -24,23 +28,21 @@ parity-safe ``would-create``, i.e. it can be converted into an equivalent
 ``ServiceEventAudienceScope`` row under the current membership-core runtime.
 Reusing that decision keeps this audit and the backfill in agreement.
 
-Blocker policy (what currently prevents fallback removal):
+Blocker policy (what currently prevents declaring this path clean):
 
-- A zero-row event is **blocking-visible** when removing the fallback would
-  change what an ordinary user sees: it is visible to ordinary users today
-  (status published or completed) and still active/upcoming (published, or an
-  upcoming start). Draft and cancelled events are never visible to ordinary
-  users, and purely past completed events are treated as harmless archive, so
-  those are not blockers.
+- A zero-row event is **blocking-visible** when its status/timing says it would
+  normally be ordinary-user-relevant if it had audience rows: status published,
+  or completed with an upcoming start. Since SE-RETIRE.1B such a row already
+  fails closed for ordinary users; the blocker means "safety state needing
+  review/backfill," not "legacy fallback currently grants access."
 - Among blocking-visible zero-row events, any that are **not backfillable**
   (unmapped / inactive / wrong-type / invalid / parity-mismatch legacy fields)
   are the hard blockers: they cannot even be converted to equivalent rows.
 
 A clean audit (zero blockers) means every ordinary-user-visible, active event
-already carries audience rows, so the zero-row fallback can be retired without
-changing any current audience. Backfillable-but-not-yet-backfilled events still
-block removal until ``backfill_service_event_audience_scopes --apply`` has been
-run and re-audited clean on the target data.
+already carries audience rows, and any zero-row events are draft/cancelled/past
+archive safety states. Backfillable-but-not-yet-backfilled safety states still
+need an approved data/backfill decision before legacy field retirement.
 """
 
 from django.contrib.auth import get_user_model
@@ -99,13 +101,13 @@ def _is_upcoming(event, now):
 
 
 def _is_blocking_visibility(event, now):
-    """Whether a zero-row event's audience would change if the fallback were
-    removed in a way that matters for ordinary users.
+    """Whether a zero-row event is ordinary-user-relevant enough to review.
 
-    Blocking when the event is ordinary-user-visible AND still active/upcoming:
-    a published event, or any visible event whose start is in the future.
-    Draft / cancelled (never visible) and purely past completed events
-    (harmless archive) are not blockers.
+    Blocking when the event has a visible/active status and is still active or
+    upcoming: a published event, or any completed event whose start is in the
+    future. Since SE-RETIRE.1B zero-row events already fail closed for ordinary
+    users; this is a safety-state review policy, not a runtime fallback gate.
+    Draft / cancelled and purely past completed events are not blockers.
     """
     if not _is_visible_to_ordinary(event):
         return False
@@ -201,12 +203,13 @@ def _scan(event_id=None):
                 _format_event_line(
                     event,
                     "has-audience-rows",
-                    "membership-core via audience rows; not on fallback",
+                    "membership-core via audience rows; not a zero-row safety state",
                 )
             )
             continue
 
-        # Zero-row event: it relies on the legacy fallback.
+        # Zero-row event: ordinary-user runtime fails closed after SE-RETIRE.1B.
+        # Legacy fields are inspected only as stored diagnostic/backfill context.
         stats["events_without_audience_rows"] += 1
         stats[_zero_row_scope_bucket(event)] += 1
 
@@ -241,7 +244,7 @@ def _scan(event_id=None):
                 else "blocker-backfillable"
             )
             line_reason = (
-                f"visible/active zero-row event blocks fallback removal; "
+                f"visible/active zero-row safety state needs review; "
                 f"backfillable={backfillable} ({reason})"
             )
         else:
@@ -268,12 +271,13 @@ def run_audit(event_id=None):
 
 class Command(BaseCommand):
     help = (
-        "SE-RETIRE.1A read-only retirement-readiness audit for the ServiceEvent "
-        "zero-audience-row legacy fallback. Reports which zero-row events still "
-        "rely on the legacy scope_type/district/small_group fallback, which are "
-        "backfillable into equivalent audience rows, and which currently block "
-        "fallback removal. Read-only: no --apply, no runtime change, no "
-        "migration, and no legacy field is ever mutated."
+        "Read-only ServiceEvent zero-row safety-state diagnostic. Reports which "
+        "events have zero audience rows, which stored legacy "
+        "scope_type/district/small_group fields can be mapped into equivalent "
+        "audience rows for audit/backfill context, and which visible/active "
+        "safety states need review before legacy field retirement. Read-only: "
+        "no --apply, no runtime change, no migration, and no legacy field is "
+        "ever mutated."
     )
 
     def add_arguments(self, parser):
@@ -312,9 +316,9 @@ class Command(BaseCommand):
 
         if options["fail_on_blockers"] and stats["blockers_total"] > 0:
             raise CommandError(
-                "ServiceEvent zero-row fallback NOT retirement-ready: "
+                "ServiceEvent zero-row safety-state blockers present: "
                 f"{stats['blocker_visible_zero_row_events']} visible/active "
-                "zero-row event(s) block fallback removal "
+                "zero-row event(s) need review "
                 f"({stats['blocker_not_backfillable_zero_row_events']} not "
                 "backfillable). Read-only audit; nothing was changed."
             )
@@ -323,8 +327,8 @@ class Command(BaseCommand):
         write = self.stdout.write
 
         write(
-            "ServiceEvent zero-row fallback retirement-readiness audit "
-            "(SE-RETIRE.1A, read-only)"
+            "ServiceEvent zero-row safety-state diagnostic "
+            "(SE-RETIRE.1A/1B, read-only)"
         )
         write("=" * 72)
         write(f"events checked                                : {stats['events_checked']}")
@@ -333,11 +337,11 @@ class Command(BaseCommand):
             f"{stats['events_with_audience_rows']}"
         )
         write(
-            f"  without audience rows (on fallback)         : "
+            f"  without audience rows (fail-closed safety) : "
             f"{stats['events_without_audience_rows']}"
         )
         write("")
-        write("zero-row events still visible to ordinary users:")
+        write("zero-row events with ordinary-visible status/timing:")
         write(
             f"  published without audience rows             : "
             f"{stats['published_without_audience_rows']}"
@@ -351,17 +355,17 @@ class Command(BaseCommand):
             f"{stats['active_visible_without_audience_rows']}"
         )
         write("")
-        write("zero-row events by legacy fallback scope:")
+        write("zero-row events by stored legacy scope fields:")
         write(
-            f"  global fallback                             : "
+            f"  global legacy scope                         : "
             f"{stats['zero_row_global_fallback']}"
         )
         write(
-            f"  district fallback                           : "
+            f"  district legacy scope                       : "
             f"{stats['zero_row_district_fallback']}"
         )
         write(
-            f"  small-group fallback                        : "
+            f"  small-group legacy scope                    : "
             f"{stats['zero_row_small_group_fallback']}"
         )
         write(
@@ -379,7 +383,7 @@ class Command(BaseCommand):
             f"{stats['zero_row_not_backfillable']}"
         )
         write("")
-        write("blockers (prevent zero-row fallback removal):")
+        write("blockers (visible/active zero-row safety states):")
         write(
             f"  visible/active zero-row events              : "
             f"{stats['blocker_visible_zero_row_events']}"
@@ -397,21 +401,21 @@ class Command(BaseCommand):
             f"legacy-fields-mutated (must be 0)             : "
             f"{stats['legacy_fields_mutated']}"
         )
-        write("runtime-switched (must be false)             : false")
+        write("runtime-changed-by-this-audit (must be false): false")
         write("")
         if stats["blockers_total"] == 0:
             write(
                 "Retirement-readiness: CLEAN. No visible/active zero-row events "
-                "block fallback removal on this data. The zero-row fallback is "
-                "NOT removed by this audit; removal is a separate approved slice."
+                "need safety-state review on this data. The zero-row ordinary-user "
+                "fallback is already retired; this audit changed nothing."
             )
         else:
             write(
                 "Retirement-readiness: BLOCKED. Visible/active zero-row events "
-                "still depend on the legacy fallback. Run "
-                "`backfill_service_event_audience_scopes --apply` for the "
-                "backfillable ones, resolve the not-backfillable ones, then "
-                "re-audit. The fallback is NOT removed by this audit."
+                "are fail-closed safety states that need review/backfill before "
+                "legacy field retirement confidence. Resolve the not-backfillable "
+                "ones, handle the backfillable ones under a separate approved "
+                "data run, then re-audit. This audit changed nothing."
             )
 
         if verbose:

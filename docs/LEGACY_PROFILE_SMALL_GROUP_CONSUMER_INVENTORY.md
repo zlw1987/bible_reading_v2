@@ -6,6 +6,12 @@ This is a post-CS-CORE.2B-A / post-CS-CORE.2C-B inventory of remaining runtime c
 
 This inventory does not authorize migrations, source-of-truth changes, permission changes, schema changes, data changes, or runtime behavior changes. It is an audit snapshot to help plan small future slices.
 
+## LEGACY-RETIRE.1A Retirement Readiness Foundation
+
+LEGACY-RETIRE.1A adds the comprehensive read-only command `audit_legacy_structure_retirement_readiness` and the execution tracker `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`. The command reports current data blockers across `Profile.small_group`, `SmallGroup`, `District`, `MinistryContext`, ServiceEvent legacy scope fields, Bible Study legacy fields / V1 sessions / generation bridges, reflection legacy snapshots, role legacy fields, and diagnostic/backfill tooling. It has `--verbose`, `--limit N`, and `--fail-on-blockers`; it has no `--apply`, writes no data, and changes no runtime behavior.
+
+Use the new execution plan as the current checklist for legacy-field/table retirement sequencing. Keep this consumer inventory as the detailed historical/current-state map of which consumers are switched, stored-only, diagnostic-only, or still legacy/archive runtime.
+
 ## Migration Status (CS-CORE.2D-B; CLOSE.1 superseded)
 
 **The Church Structure core migration is the current top priority and is being accelerated.** An earlier uncommitted CS-CORE.CLOSE.1 draft proposed "closing" the migration after CS-CORE.4G.1 and deferring the reflection read-path switch (citing demo/QA data as an insufficient gate); **that draft was superseded before commit** and is not current policy (`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` Section 1A). Do not treat the remaining legacy consumers below as permanently deferred or as a "closed" set — they are sequenced remaining work, each its own approved slice. They are still intentionally retained **for now** as a compatibility layer and are not unfinished bugs.
@@ -134,9 +140,9 @@ Completed after this inventory baseline: CS-CORE.3B moved Bible Study v2 role/wo
 
 ## Verification
 
-No Django tests are needed for this docs-only inventory.
+For the original CS-CORE.3A docs-only inventory, no Django tests were needed. For LEGACY-RETIRE.1A and later code-backed retirement-readiness updates, use the targeted verification listed in `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
 
-Run only:
+For that original docs-only pass, run only:
 
 ```powershell
 git diff --check

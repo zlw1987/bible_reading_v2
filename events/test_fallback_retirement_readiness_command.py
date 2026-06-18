@@ -331,7 +331,7 @@ class ServiceEventFallbackReadinessAuditTests(_ReadinessTestMixin, TestCase):
             )
         output = out.getvalue()
         self.assertIn("legacy-fields-mutated (must be 0)", output)
-        self.assertIn("runtime-switched (must be false)", output)
+        self.assertIn("runtime-changed-by-this-audit (must be false)", output)
         self.assertIn(": false", output)
 
     # -- output / option behavior --------------------------------------

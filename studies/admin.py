@@ -79,7 +79,7 @@ class BibleStudyLessonAdmin(admin.ModelAdmin):
 class BibleStudyMeetingAdmin(admin.ModelAdmin):
     list_display = (
         "lesson",
-        "small_group",
+        "structure_label",
         "meeting_datetime",
         "status",
         "discussion_leader_user",
@@ -99,6 +99,18 @@ class BibleStudyMeetingAdmin(admin.ModelAdmin):
     readonly_fields = ("created_at", "updated_at")
     ordering = ("-meeting_datetime",)
 
+    @admin.display(description="Audience Unit")
+    def structure_label(self, obj):
+        return obj.get_structure_display_label("en")
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("anchor_unit", "small_group")
+            .prefetch_related("audience_scope_links__unit")
+        )
+
 
 @admin.register(BibleStudyMeetingWorshipSong)
 class BibleStudyMeetingWorshipSongAdmin(admin.ModelAdmin):
@@ -115,6 +127,18 @@ class BibleStudyMeetingWorshipSongAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at")
     ordering = ("meeting", "sort_order", "id")
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "meeting",
+                "meeting__anchor_unit",
+                "meeting__small_group",
+            )
+            .prefetch_related("meeting__audience_scope_links__unit")
+        )
 
 
 @admin.register(BibleStudyMeetingRole)
@@ -133,6 +157,19 @@ class BibleStudyMeetingRoleAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("created_at", "updated_at")
     ordering = ("meeting", "role", "id")
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .select_related(
+                "meeting",
+                "meeting__anchor_unit",
+                "meeting__small_group",
+                "user",
+            )
+            .prefetch_related("meeting__audience_scope_links__unit")
+        )
 
 
 @admin.register(BibleStudyGuide)

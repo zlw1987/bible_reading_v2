@@ -149,9 +149,10 @@ def get_v2_landing_context(user):
     base_meetings = BibleStudyMeeting.objects.select_related(
         "lesson",
         "lesson__series",
+        "anchor_unit",
         "small_group",
     ).prefetch_related(
-        "audience_scope_links",
+        "audience_scope_links__unit",
     ).filter(
         meeting_datetime__gte=timezone.now(),
         status__in=visible_statuses,
@@ -438,8 +439,11 @@ def bible_study_lesson_detail(request, lesson_id):
             "meetings": lesson.meetings.exclude(
                 status=BibleStudyMeeting.STATUS_CANCELLED,
             ).select_related(
+                "anchor_unit",
                 "small_group",
                 "discussion_leader_user",
+            ).prefetch_related(
+                "audience_scope_links__unit",
             ),
             # Generation preview deliberately keeps counting cancelled meetings
             # as existing so they are skipped, not regenerated.
@@ -688,8 +692,11 @@ def bible_study_meeting_manage_list(request):
         status=BibleStudyMeeting.STATUS_CANCELLED,
     ).select_related(
         "lesson",
+        "anchor_unit",
         "small_group",
         "created_by",
+    ).prefetch_related(
+        "audience_scope_links__unit",
     )
 
     if status:
@@ -741,10 +748,13 @@ def bible_study_meeting_detail(request, meeting_id):
         BibleStudyMeeting.objects.select_related(
             "lesson",
             "lesson__series",
+            "anchor_unit",
             "small_group",
             "discussion_leader_user",
             "service_event",
             "created_by",
+        ).prefetch_related(
+            "audience_scope_links__unit",
         ),
         id=meeting_id,
     )
@@ -891,10 +901,13 @@ def edit_bible_study_meeting_preparation(request, meeting_id):
         BibleStudyMeeting.objects.select_related(
             "lesson",
             "lesson__series",
+            "anchor_unit",
             "small_group",
             "discussion_leader_user",
             "service_event",
             "created_by",
+        ).prefetch_related(
+            "audience_scope_links__unit",
         ),
         id=meeting_id,
     )
@@ -940,7 +953,10 @@ def manage_bible_study_meeting_roles(request, meeting_id):
         BibleStudyMeeting.objects.select_related(
             "lesson",
             "lesson__series",
+            "anchor_unit",
             "small_group",
+        ).prefetch_related(
+            "audience_scope_links__unit",
         ),
         id=meeting_id,
     )
@@ -988,8 +1004,11 @@ def edit_bible_study_meeting_role(request, role_id):
             "meeting",
             "meeting__lesson",
             "meeting__lesson__series",
+            "meeting__anchor_unit",
             "meeting__small_group",
             "user",
+        ).prefetch_related(
+            "meeting__audience_scope_links__unit",
         ),
         id=role_id,
     )
@@ -1068,7 +1087,10 @@ def manage_bible_study_meeting_worship_songs(request, meeting_id):
         BibleStudyMeeting.objects.select_related(
             "lesson",
             "lesson__series",
+            "anchor_unit",
             "small_group",
+        ).prefetch_related(
+            "audience_scope_links__unit",
         ),
         id=meeting_id,
     )
@@ -1127,8 +1149,11 @@ def edit_bible_study_meeting_worship_song(request, song_id):
             "meeting",
             "meeting__lesson",
             "meeting__lesson__series",
+            "meeting__anchor_unit",
             "meeting__small_group",
             "worship_lead_user",
+        ).prefetch_related(
+            "meeting__audience_scope_links__unit",
         ),
         id=song_id,
     )

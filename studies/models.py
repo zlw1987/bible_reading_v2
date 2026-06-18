@@ -715,7 +715,38 @@ class BibleStudyMeeting(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.lesson} - {self.small_group}"
+        return f"{self.lesson} - {self.get_structure_display_label()}"
+
+    def get_structure_display_label(self, language="zh", limit=3):
+        """Display-only structure label for V2 meeting surfaces.
+
+        This does not grant visibility and does not consult membership. It
+        prefers structure-native meeting data, retaining the legacy
+        ``small_group`` mirror only as a fallback for old or invalid rows.
+        """
+        if self.anchor_unit_id and self.anchor_unit and self.anchor_unit.is_active:
+            return self.anchor_unit.path_label(language)
+
+        audience_units = []
+        if self.pk:
+            audience_units = [
+                link.unit
+                for link in self.audience_scope_links.all()
+                if link.unit_id and link.unit
+            ]
+        if audience_units:
+            labels = [unit.path_label(language) for unit in audience_units]
+            if len(labels) <= limit:
+                return ", ".join(labels)
+            shown = ", ".join(labels[:limit])
+            remaining = len(labels) - limit
+            more = f"另 {remaining} 个" if language == "zh" else f"+ {remaining} more"
+            return f"{shown}, {more}"
+
+        if self.small_group_id and self.small_group:
+            return self.small_group.name
+
+        return "未指定 / Unassigned" if language == "zh" else "Unassigned / 未指定"
 
     def clean(self):
         super().clean()

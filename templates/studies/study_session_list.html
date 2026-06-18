@@ -48,8 +48,8 @@
         {{ meeting.meeting_datetime|member_datetime:language }}
     </p>
     <p>
-        <strong>{% if language == "zh" %}小组{% else %}Small Group{% endif %}:</strong>
-        {{ meeting.small_group }}
+        <strong>{% if language == "zh" %}适用单位{% else %}Audience Unit{% endif %}:</strong>
+        {{ meeting|study_meeting_structure_label:language }}
     </p>
     <p>
         <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>

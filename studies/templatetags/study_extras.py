@@ -167,6 +167,13 @@ def study_unit_path(unit, language):
 
 
 @register.filter
+def study_meeting_structure_label(meeting, language):
+    if not meeting:
+        return ""
+    return meeting.get_structure_display_label(language)
+
+
+@register.filter
 def study_lesson_pastor_guide(lesson, language):
     if not lesson:
         return ""

@@ -47,6 +47,10 @@ followed BS-STRUCT.1A are now implemented:
   for future `BibleStudyMeeting.small_group` mirror retirement, but does not
   change V2 visibility/runtime behavior and does not delete or alter
   `small_group`;
+- BS-V2-MIRROR.1A moves V2 member/staff display labels to
+  `anchor_unit` / meeting audience units first, with `small_group` retained only
+  as a legacy/invalid-data fallback label. It does not change visibility,
+  permissions, generation, forms, data, or schema;
 - obsolete small-group-keyed write/generation helpers were removed
   (`write_normal_meeting_audience_scope`, the compatibility-only
   `sync_normal_meeting_audience_scope`, and the never-produced
@@ -211,7 +215,7 @@ its meeting carries no `small_group` mirror (structure-native, warned).
 
 | Concept | Where used in `studies/` |
 | --- | --- |
-| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, or the manual-form source field.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; the secondary `(lesson, small_group)` idempotency constraint; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
+| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, the manual-form source field, or the preferred V2 display label source.** Now only a **compatibility mirror** on `BibleStudyMeeting.small_group` (nullable, `SET_NULL`), written by generation (BS-STRUCT.1L) and the manual form (BS-STRUCT.1O) when exactly one active legacy group maps to the target unit; retained as secondary `(lesson, small_group)` idempotency compatibility and as a display fallback for old/invalid rows; plus `BibleStudySeries.small_group` (legacy scope) and `BibleStudySession.small_group` (V1). |
 | `District` | `BibleStudySeries.district` / `BibleStudySession.district` legacy scope fields only. |
 | `Profile.small_group` | **No longer read by V2 meeting visibility or pickers, and no longer grants V1 app access after BS-V1-RETIRE.1A.** Still read by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
 | `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, V2 runtime source of truth)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**; also the mapping target for `SmallGroup.church_structure_unit` used in generation/resolution and legacy mirror compatibility. |
@@ -1192,6 +1196,17 @@ the meeting-identity decision (Section 4.5).
   meetings checked, 29 with audience rows, zero zero-row blockers,
   `db_data_blockers_clear = true`, `legacy_small_group_fallback_still_present =
   false`, and `runtime_zero_row_fallback_removed = true`.
+- **BS-V2-MIRROR.1A** — move V2 meeting display labels off the legacy
+  `BibleStudyMeeting.small_group` mirror. ✅ **implemented.** V2 member/staff
+  templates and the Django admin meeting list now call
+  `BibleStudyMeeting.get_structure_display_label()`, which prefers an active
+  `anchor_unit`, then one or more `BibleStudyMeetingAudienceScope.unit` labels,
+  then falls back to `small_group.name` only for legacy/invalid data, then a
+  bilingual unassigned label. `BibleStudyMeeting.small_group` remains stored and
+  is not removed, renamed, nulled, or stopped from being written in this slice.
+  Runtime visibility, permissions, generation, forms, audience rows, data, and
+  schema are unchanged. This prepares a later slice that can stop writing the
+  mirror and then clean existing mirror values after audit approval.
 - **BS-STRUCT.2+ future work** — field-level cleanup / retirement of the legacy
   Bible Study `SmallGroup` bridge only after remaining compatibility consumers
   are resolved (coordinate with CS-CORE Section 12 legacy retirement). This does

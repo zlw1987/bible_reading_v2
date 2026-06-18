@@ -120,7 +120,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>{% if language == "zh" %}小组{% else %}Small Group{% endif %}</th>
+                    <th>{% if language == "zh" %}适用单位{% else %}Audience Unit{% endif %}</th>
                     <th>{% if language == "zh" %}聚会时间{% else %}Meeting Time{% endif %}</th>
                     <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
                     <th>{% if language == "zh" %}地点{% else %}Location{% endif %}</th>
@@ -130,7 +130,7 @@
             <tbody>
                 {% for meeting in meetings %}
                 <tr>
-                    <td>{{ meeting.small_group }}</td>
+                    <td>{{ meeting|study_meeting_structure_label:language }}</td>
                     <td>{{ meeting.meeting_datetime }}</td>
                     <td>{{ meeting|study_status_label:language }}</td>
                     <td>{{ meeting|study_meeting_location:language|default:"-" }}</td>

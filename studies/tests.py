@@ -6105,6 +6105,76 @@ class BibleStudyModuleTests(TestCase):
     # BS-STRUCT.1E: meeting audience-row visibility + V2 landing read switch
     # ------------------------------------------------------------------
 
+    def test_meeting_structure_display_prefers_anchor_over_small_group(self):
+        meeting = self.create_meeting(
+            small_group=self.group,
+            anchor_unit=self.north_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(
+            meeting.get_structure_display_label("en"),
+            "Whole Church > Chinese Ministry > North",
+        )
+        self.assertNotEqual(
+            meeting.get_structure_display_label("en"),
+            meeting.small_group.name,
+        )
+
+    def test_meeting_structure_display_uses_anchor_with_null_small_group(self):
+        meeting = self.create_meeting(
+            small_group=None,
+            anchor_unit=self.group_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(
+            meeting.get_structure_display_label("en"),
+            "Whole Church > Chinese Ministry > North > Rainbow 4",
+        )
+
+    def test_meeting_structure_display_uses_single_audience_without_anchor(self):
+        meeting = self.create_meeting(small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        self.assertEqual(
+            meeting.get_structure_display_label("en"),
+            "Whole Church > Chinese Ministry > North > Rainbow 4",
+        )
+
+    def test_meeting_structure_display_joins_multiple_audience_units(self):
+        meeting = self.create_meeting(small_group=None)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.other_group_unit,
+        )
+
+        self.assertEqual(
+            meeting.get_structure_display_label("en"),
+            (
+                "Whole Church > Chinese Ministry > North > Rainbow 4, "
+                "Whole Church > English Ministry > South > Rainbow 5"
+            ),
+        )
+
+    def test_meeting_structure_display_falls_back_to_legacy_small_group(self):
+        meeting = self.create_meeting(small_group=self.group)
+
+        self.assertEqual(meeting.get_structure_display_label("en"), "Rainbow 4")
+
     def test_audience_row_membership_user_can_view_with_null_small_group(self):
         member = User.objects.create_user(
             username="bse_audience_member",
@@ -6303,6 +6373,10 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Audience Row Landing Guide")
+        self.assertContains(
+            response,
+            "Whole Church &gt; Chinese Ministry &gt; North &gt; Rainbow 4",
+        )
         self.assertContains(
             response,
             reverse("bible_study_meeting_detail", args=[meeting.id]),

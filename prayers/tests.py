@@ -3,16 +3,44 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import SmallGroup
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
 from prayers.forms import localized_visibility_choices
 from prayers.models import PrayerMark, PrayerReport, PrayerRequest
 from prayers.templatetags.prayer_extras import prayer_visibility_label
+
+
+def create_structure_unit(code, name, parent=None, is_active=True):
+    return ChurchStructureUnit.objects.create(
+        parent=parent,
+        unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+        code=code,
+        name=name,
+        name_en=name,
+        is_active=is_active,
+    )
+
+
+def create_primary_membership(user, unit):
+    return ChurchStructureMembership.objects.create(
+        user=user,
+        unit=unit,
+        status=ChurchStructureMembership.STATUS_ACTIVE,
+        is_primary=True,
+        start_date=timezone.localdate(),
+        membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+    )
 
 
 class PrayerRequestFlowTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
         self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+        self.group_unit = create_structure_unit("RAINBOW4", "Rainbow 4")
+        self.other_group_unit = create_structure_unit("RAINBOW5", "Rainbow 5")
+        self.group.church_structure_unit = self.group_unit
+        self.group.save(update_fields=["church_structure_unit"])
+        self.other_group.church_structure_unit = self.other_group_unit
+        self.other_group.save(update_fields=["church_structure_unit"])
 
         self.user = User.objects.create_user(
             username="levin",
@@ -20,6 +48,7 @@ class PrayerRequestFlowTests(TestCase):
         )
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        create_primary_membership(self.user, self.group_unit)
 
         self.same_group_user = User.objects.create_user(
             username="same_group",
@@ -27,6 +56,7 @@ class PrayerRequestFlowTests(TestCase):
         )
         self.same_group_user.profile.small_group = self.group
         self.same_group_user.profile.save()
+        create_primary_membership(self.same_group_user, self.group_unit)
 
         self.other_group_user = User.objects.create_user(
             username="other_group",
@@ -34,6 +64,7 @@ class PrayerRequestFlowTests(TestCase):
         )
         self.other_group_user.profile.small_group = self.other_group
         self.other_group_user.profile.save()
+        create_primary_membership(self.other_group_user, self.other_group_unit)
 
         self.staff_user = User.objects.create_user(
             username="staff",
@@ -106,7 +137,34 @@ class PrayerRequestFlowTests(TestCase):
 
         self.assertEqual(prayer.user, self.user)
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_GROUP)
+        self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
         self.assertEqual(prayer.small_group_at_post, self.group)
+
+    def test_group_prayer_creation_allows_null_legacy_mirror(self):
+        mirrorless_unit = create_structure_unit("MIRRORLESS", "Mirrorless Group")
+        mirrorless_user = User.objects.create_user(
+            username="mirrorless",
+            password="TestPass123!",
+        )
+        create_primary_membership(mirrorless_user, mirrorless_unit)
+
+        self.set_language("en")
+        self.client.login(username="mirrorless", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("prayer_list"),
+            {
+                "title": "Structure only group prayer",
+                "body": "Please pray.",
+                "visibility": PrayerRequest.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        prayer = PrayerRequest.objects.get(title="Structure only group prayer")
+        self.assertEqual(prayer.structure_unit_at_post, mirrorless_unit)
+        self.assertIsNone(prayer.small_group_at_post)
 
     def test_group_prayer_visible_to_same_group_user(self):
         PrayerRequest.objects.create(
@@ -115,6 +173,7 @@ class PrayerRequestFlowTests(TestCase):
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
 
         self.set_language("en")
@@ -131,6 +190,40 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Group prayer")
 
+    def test_group_prayer_visible_to_descendant_membership_user(self):
+        parent_unit = create_structure_unit("PARENTSG", "Parent Group")
+        child_unit = create_structure_unit(
+            "CHILDSG",
+            "Child Group",
+            parent=parent_unit,
+        )
+        child_user = User.objects.create_user(
+            username="child_member",
+            password="TestPass123!",
+        )
+        create_primary_membership(child_user, child_unit)
+        PrayerRequest.objects.create(
+            user=self.user,
+            title="Parent snapshot prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            structure_unit_at_post=parent_unit,
+        )
+
+        self.set_language("en")
+        self.client.login(username="child_member", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("prayer_list"),
+            {
+                "tab": "group",
+                "status": "open",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Parent snapshot prayer")
+
     def test_group_prayer_hidden_from_other_group_user(self):
         PrayerRequest.objects.create(
             user=self.user,
@@ -138,6 +231,7 @@ class PrayerRequestFlowTests(TestCase):
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
 
         self.set_language("en")
@@ -153,6 +247,111 @@ class PrayerRequestFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Hidden group prayer")
+
+    def test_legacy_profile_only_user_cannot_create_or_view_group_prayers(self):
+        legacy_only_user = User.objects.create_user(
+            username="legacy_only",
+            password="TestPass123!",
+        )
+        legacy_only_user.profile.small_group = self.group
+        legacy_only_user.profile.save()
+        PrayerRequest.objects.create(
+            user=self.user,
+            title="Membership only visible prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
+        )
+
+        self.set_language("en")
+        self.client.login(username="legacy_only", password="TestPass123!")
+
+        create_response = self.client.post(
+            reverse("prayer_list"),
+            {
+                "title": "Legacy profile should not post",
+                "body": "Please pray.",
+                "visibility": PrayerRequest.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        list_response = self.client.get(
+            reverse("prayer_list"),
+            {
+                "tab": "group",
+                "status": "open",
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 200)
+        self.assertFalse(
+            PrayerRequest.objects.filter(
+                title="Legacy profile should not post"
+            ).exists()
+        )
+        self.assertNotContains(list_response, "Membership only visible prayer")
+
+    def test_mismatched_profile_small_group_does_not_override_membership_visibility(self):
+        mismatch_user = User.objects.create_user(
+            username="mismatch",
+            password="TestPass123!",
+        )
+        mismatch_user.profile.small_group = self.other_group
+        mismatch_user.profile.save()
+        create_primary_membership(mismatch_user, self.group_unit)
+        PrayerRequest.objects.create(
+            user=self.user,
+            title="Membership wins prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.other_group,
+            structure_unit_at_post=self.group_unit,
+        )
+
+        self.set_language("en")
+        self.client.login(username="mismatch", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("prayer_list"),
+            {
+                "tab": "group",
+                "status": "open",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Membership wins prayer")
+
+    def test_legacy_only_group_prayer_snapshot_fails_closed_for_non_owner(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Legacy snapshot only prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+        )
+
+        self.assertFalse(prayer.can_be_seen_by(self.same_group_user))
+
+        self.set_language("en")
+        self.client.login(username="same_group", password="TestPass123!")
+        response = self.client.get(reverse("prayer_detail", args=[prayer.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("prayer_list"))
+
+    def test_owner_and_staff_can_still_see_group_prayer_without_snapshot(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Owner staff legacy prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+        )
+
+        self.assertTrue(prayer.can_be_seen_by(self.user))
+        self.assertTrue(prayer.can_be_seen_by(self.staff_user))
 
     def test_church_prayer_visible_to_other_group_user(self):
         PrayerRequest.objects.create(
@@ -217,6 +416,7 @@ class PrayerRequestFlowTests(TestCase):
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
 
         self.set_language("en")
@@ -244,6 +444,7 @@ class PrayerRequestFlowTests(TestCase):
             body="Old body",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
 
         self.set_language("en")
@@ -266,7 +467,67 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(prayer.title, "New title")
         self.assertEqual(prayer.body, "New body")
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_CHURCH)
+        self.assertIsNone(prayer.structure_unit_at_post)
+        self.assertIsNone(prayer.small_group_at_post)
         self.assertTrue(prayer.is_anonymous)
+
+    def test_edit_to_group_rebinds_current_membership_context(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Church to group",
+            body="Old body",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("edit_prayer_request", args=[prayer.id]),
+            {
+                "title": "Group now",
+                "body": "New body",
+                "visibility": PrayerRequest.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        prayer.refresh_from_db()
+        self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_GROUP)
+        self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
+        self.assertEqual(prayer.small_group_at_post, self.group)
+
+    def test_edit_to_private_clears_structure_and_legacy_snapshots(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Group to private",
+            body="Old body",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
+        )
+
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("edit_prayer_request", args=[prayer.id]),
+            {
+                "title": "Private now",
+                "body": "New body",
+                "visibility": PrayerRequest.VISIBILITY_PRIVATE,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        prayer.refresh_from_db()
+        self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_PRIVATE)
+        self.assertIsNone(prayer.structure_unit_at_post)
+        self.assertIsNone(prayer.small_group_at_post)
 
     def test_other_user_cannot_edit_prayer_request(self):
         prayer = PrayerRequest.objects.create(
@@ -946,6 +1207,15 @@ class PrayerListTabAudienceTests(TestCase):
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
         self.other_group = SmallGroup.objects.create(name="Rainbow 5")
+        self.group_unit = create_structure_unit("TABRAINBOW4", "Tab Rainbow 4")
+        self.other_group_unit = create_structure_unit(
+            "TABRAINBOW5",
+            "Tab Rainbow 5",
+        )
+        self.group.church_structure_unit = self.group_unit
+        self.group.save(update_fields=["church_structure_unit"])
+        self.other_group.church_structure_unit = self.other_group_unit
+        self.other_group.save(update_fields=["church_structure_unit"])
 
         self.user = User.objects.create_user(
             username="levin",
@@ -953,6 +1223,7 @@ class PrayerListTabAudienceTests(TestCase):
         )
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        create_primary_membership(self.user, self.group_unit)
 
         self.same_group_user = User.objects.create_user(
             username="same_group",
@@ -960,6 +1231,7 @@ class PrayerListTabAudienceTests(TestCase):
         )
         self.same_group_user.profile.small_group = self.group
         self.same_group_user.profile.save()
+        create_primary_membership(self.same_group_user, self.group_unit)
 
         self.other_group_user = User.objects.create_user(
             username="other_group",
@@ -967,6 +1239,7 @@ class PrayerListTabAudienceTests(TestCase):
         )
         self.other_group_user.profile.small_group = self.other_group
         self.other_group_user.profile.save()
+        create_primary_membership(self.other_group_user, self.other_group_unit)
 
         self.no_group_user = User.objects.create_user(
             username="no_group",
@@ -987,6 +1260,7 @@ class PrayerListTabAudienceTests(TestCase):
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
         self.own_church = PrayerRequest.objects.create(
             user=self.user,
@@ -1001,6 +1275,7 @@ class PrayerListTabAudienceTests(TestCase):
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
             small_group_at_post=self.group,
+            structure_unit_at_post=self.group_unit,
         )
         self.other_user_church = PrayerRequest.objects.create(
             user=self.other_group_user,
@@ -1146,12 +1421,16 @@ class PrayerListLabelRenderingTests(TestCase):
 
     def setUp(self):
         self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.group_unit = create_structure_unit("LABELRAINBOW4", "Label Rainbow 4")
+        self.group.church_structure_unit = self.group_unit
+        self.group.save(update_fields=["church_structure_unit"])
         self.user = User.objects.create_user(
             username="levin",
             password="TestPass123!",
         )
         self.user.profile.small_group = self.group
         self.user.profile.save()
+        create_primary_membership(self.user, self.group_unit)
         # A church-wide prayer so a card (and its scope badge) renders.
         PrayerRequest.objects.create(
             user=self.user,

@@ -3,6 +3,7 @@ from django import forms
 from accounts.language import normalize_language
 
 from .models import PrayerComment, PrayerReport, PrayerRequest
+from .structure_visibility import get_user_group_prayer_write_context
 
 
 PRAYER_FORM_TEXT = {
@@ -122,9 +123,9 @@ class PrayerRequestForm(forms.ModelForm):
         self.fields["visibility"].label = form_text(self.language, "visibility")
         self.fields["visibility"].choices = localized_visibility_choices(self.language)
         self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")
-        user_group = getattr(getattr(user, "profile", None), "small_group", None)
+        self.group_write_context = get_user_group_prayer_write_context(user)
 
-        if user_group:
+        if self.group_write_context.can_share_to_group:
             self.fields["visibility"].initial = PrayerRequest.VISIBILITY_GROUP
         else:
             self.fields["visibility"].initial = PrayerRequest.VISIBILITY_PRIVATE
@@ -140,9 +141,11 @@ class PrayerRequestForm(forms.ModelForm):
         cleaned_data = super().clean()
 
         visibility = cleaned_data.get("visibility")
-        user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
-        if visibility == PrayerRequest.VISIBILITY_GROUP and not user_group:
+        if (
+            visibility == PrayerRequest.VISIBILITY_GROUP
+            and not self.group_write_context.can_share_to_group
+        ):
             raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data
@@ -246,9 +249,9 @@ class PrayerRequestEditForm(forms.ModelForm):
         self.fields["visibility"].label = form_text(self.language, "visibility")
         self.fields["visibility"].choices = localized_visibility_choices(self.language)
         self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")
-        user_group = getattr(getattr(user, "profile", None), "small_group", None)
+        self.group_write_context = get_user_group_prayer_write_context(user)
 
-        if not user_group:
+        if not self.group_write_context.can_share_to_group:
             self.fields["visibility"].choices = [
                 choice
                 for choice in localized_visibility_choices(self.language)
@@ -259,9 +262,11 @@ class PrayerRequestEditForm(forms.ModelForm):
         cleaned_data = super().clean()
 
         visibility = cleaned_data.get("visibility")
-        user_group = getattr(getattr(self.user, "profile", None), "small_group", None)
 
-        if visibility == PrayerRequest.VISIBILITY_GROUP and not user_group:
+        if (
+            visibility == PrayerRequest.VISIBILITY_GROUP
+            and not self.group_write_context.can_share_to_group
+        ):
             raise forms.ValidationError(form_text(self.language, "group_required"))
 
         return cleaned_data

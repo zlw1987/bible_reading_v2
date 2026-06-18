@@ -19,6 +19,10 @@ from .forms import (
     PrayerStatusForm,
 )
 from .models import PrayerComment, PrayerMark, PrayerReport, PrayerRequest
+from .structure_visibility import (
+    get_user_group_prayer_write_context,
+    get_visible_group_prayer_snapshot_unit_ids,
+)
 
 
 MESSAGE_TEXT = {
@@ -81,10 +85,6 @@ def message_text(request, key):
     return MESSAGE_TEXT[get_user_language(request)][key]
 
 
-def get_user_small_group(user):
-    return getattr(getattr(user, "profile", None), "small_group", None)
-
-
 def get_safe_next_url(request):
     next_url = request.POST.get("next") or request.GET.get("next")
 
@@ -107,8 +107,6 @@ def redirect_back_or_prayer_list(request):
 
 
 def get_visible_prayer_filter(user):
-    user_group = get_user_small_group(user)
-
     if user.is_staff:
         return Q()
 
@@ -120,12 +118,13 @@ def get_visible_prayer_filter(user):
         visibility=PrayerRequest.VISIBILITY_CHURCH,
     )
 
-    if user_group:
+    visible_group_snapshot_ids = get_visible_group_prayer_snapshot_unit_ids(user)
+    if visible_group_snapshot_ids:
         visible_filter |= Q(
             is_deleted=False,
             is_hidden=False,
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=user_group,
+            structure_unit_at_post_id__in=visible_group_snapshot_ids,
         )
 
     return visible_filter
@@ -159,7 +158,12 @@ def prayer_list(request):
             prayer.user = request.user
 
             if prayer.visibility == PrayerRequest.VISIBILITY_GROUP:
-                prayer.small_group_at_post = get_user_small_group(request.user)
+                write_context = get_user_group_prayer_write_context(request.user)
+                prayer.structure_unit_at_post = write_context.structure_unit
+                prayer.small_group_at_post = write_context.legacy_small_group
+            else:
+                prayer.structure_unit_at_post = None
+                prayer.small_group_at_post = None
 
             prayer.save()
 
@@ -172,28 +176,28 @@ def prayer_list(request):
         PrayerRequest.objects
         .filter(get_visible_prayer_filter(request.user))
         .annotate(pray_count=Count("prayer_marks"))
-        .select_related("user", "small_group_at_post")
+        .select_related("user", "small_group_at_post", "structure_unit_at_post")
         .order_by("-created_at")
     )
 
     if status != "all":
         base_queryset = base_queryset.filter(status=status)
 
-    user_group = get_user_small_group(request.user)
+    visible_group_snapshot_ids = get_visible_group_prayer_snapshot_unit_ids(request.user)
 
     if tab == "my":
         prayers = base_queryset.filter(user=request.user)
 
     elif tab == "group":
         # Group tab is scoped strictly to group-visible prayers for the user's
-        # current small group. The user's own group prayers already match this
+        # current structure membership. The user's own group prayers already match this
         # condition; church-wide/private prayers they authored must not appear
-        # here just because they authored them. No small group => no group-scope
-        # prayers (use the "my" tab for own content).
-        if user_group:
+        # here just because they authored them. No valid membership-core group
+        # scope => no group-scope prayers (use the "my" tab for own content).
+        if visible_group_snapshot_ids:
             prayers = base_queryset.filter(
                 visibility=PrayerRequest.VISIBILITY_GROUP,
-                small_group_at_post=user_group,
+                structure_unit_at_post_id__in=visible_group_snapshot_ids,
             )
         else:
             prayers = base_queryset.none()
@@ -223,7 +227,7 @@ def prayer_detail(request, prayer_id):
     prayer = get_object_or_404(
         PrayerRequest.objects
         .annotate(pray_count=Count("prayer_marks"))
-        .select_related("user", "small_group_at_post"),
+        .select_related("user", "small_group_at_post", "structure_unit_at_post"),
         id=prayer_id,
     )
 
@@ -282,8 +286,11 @@ def edit_prayer_request(request, prayer_id):
             edited_prayer = form.save(commit=False)
 
             if edited_prayer.visibility == PrayerRequest.VISIBILITY_GROUP:
-                edited_prayer.small_group_at_post = get_user_small_group(request.user)
-            elif edited_prayer.visibility == PrayerRequest.VISIBILITY_PRIVATE:
+                write_context = get_user_group_prayer_write_context(request.user)
+                edited_prayer.structure_unit_at_post = write_context.structure_unit
+                edited_prayer.small_group_at_post = write_context.legacy_small_group
+            else:
+                edited_prayer.structure_unit_at_post = None
                 edited_prayer.small_group_at_post = None
 
             edited_prayer.save()
@@ -470,7 +477,11 @@ def delete_prayer_request(request, prayer_id):
 @login_required
 def report_prayer_request(request, prayer_id):
     prayer = get_object_or_404(
-        PrayerRequest.objects.select_related("user", "small_group_at_post"),
+        PrayerRequest.objects.select_related(
+            "user",
+            "small_group_at_post",
+            "structure_unit_at_post",
+        ),
         id=prayer_id,
     )
 
@@ -529,6 +540,7 @@ def staff_prayer_reports(request):
             "prayer_request",
             "prayer_request__user",
             "prayer_request__small_group_at_post",
+            "prayer_request__structure_unit_at_post",
             "reporter",
             "reviewed_by",
         )

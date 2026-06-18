@@ -10,6 +10,8 @@ class PrayerRequestAdmin(admin.ModelAdmin):
         "user",
         "visibility",
         "status",
+        "small_group_at_post",
+        "structure_unit_at_post",
         "is_anonymous",
         "is_hidden",
         "is_deleted",
@@ -28,9 +30,13 @@ class PrayerRequestAdmin(admin.ModelAdmin):
         "body",
         "user__username",
         "small_group_at_post__name",
+        "structure_unit_at_post__code",
+        "structure_unit_at_post__name",
+        "structure_unit_at_post__name_en",
         "hidden_reason",
     )
     readonly_fields = ("created_at", "updated_at", "hidden_at")
+    list_select_related = ("user", "small_group_at_post", "structure_unit_at_post")
 
 
 @admin.register(PrayerMark)

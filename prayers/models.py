@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from .structure_visibility import user_matches_group_prayer_snapshot
+
 
 class PrayerRequest(models.Model):
     VISIBILITY_PRIVATE = "private"
@@ -46,6 +48,18 @@ class PrayerRequest(models.Model):
         blank=True,
         related_name="prayer_requests",
     )
+    structure_unit_at_post = models.ForeignKey(
+        "accounts.ChurchStructureUnit",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="prayer_requests_at_post",
+        help_text=(
+            "Structure-native snapshot driving group prayer visibility. "
+            "small_group_at_post remains a legacy compatibility / display / "
+            "history mirror."
+        ),
+    )
 
     status = models.CharField(
         max_length=20,
@@ -76,6 +90,7 @@ class PrayerRequest(models.Model):
             models.Index(fields=["visibility", "status"]),
             models.Index(fields=["user", "status"]),
             models.Index(fields=["small_group_at_post", "status"]),
+            models.Index(fields=["structure_unit_at_post", "status"]),
         ]
 
     def __str__(self):
@@ -101,8 +116,7 @@ class PrayerRequest(models.Model):
             return True
 
         if self.visibility == self.VISIBILITY_GROUP:
-            user_group = getattr(getattr(user, "profile", None), "small_group", None)
-            return bool(user_group and self.small_group_at_post_id == user_group.id)
+            return user_matches_group_prayer_snapshot(user, self)
 
         return False
 

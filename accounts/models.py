@@ -456,31 +456,71 @@ class ChurchRoleAssignment(models.Model):
 
     def clean(self):
         errors = {}
+        structure_unit = None
+        if self.structure_unit_id:
+            try:
+                structure_unit = self.structure_unit
+            except ChurchStructureUnit.DoesNotExist:
+                structure_unit = None
 
         if self.scope_type == self.SCOPE_GLOBAL:
             if self.district_id:
                 errors["district"] = "Global roles cannot be scoped to a district."
             if self.small_group_id:
                 errors["small_group"] = "Global roles cannot be scoped to a small group."
+            if self.structure_unit_id:
+                errors["structure_unit"] = (
+                    "Global roles cannot be scoped to a structure unit."
+                )
         elif self.scope_type == self.SCOPE_DISTRICT:
-            if not self.district_id:
-                errors["district"] = "District-scoped roles require a district."
+            if not self.structure_unit_id:
+                errors["structure_unit"] = (
+                    "Scoped role assignments require a structure unit."
+                )
+            elif structure_unit is not None and not structure_unit.is_active:
+                errors["structure_unit"] = (
+                    "Scoped role assignments require an active structure unit."
+                )
+            elif (
+                structure_unit is not None
+                and structure_unit.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
+            ):
+                errors["structure_unit"] = (
+                    "District-scoped roles cannot use a small-group structure unit."
+                )
             if self.small_group_id:
                 errors["small_group"] = "District-scoped roles cannot also use a small group."
         elif self.scope_type == self.SCOPE_SMALL_GROUP:
-            if not self.small_group_id:
-                errors["small_group"] = "Small-group-scoped roles require a small group."
+            if not self.structure_unit_id:
+                errors["structure_unit"] = (
+                    "Scoped role assignments require a structure unit."
+                )
+            elif structure_unit is not None and not structure_unit.is_active:
+                errors["structure_unit"] = (
+                    "Scoped role assignments require an active structure unit."
+                )
+            elif (
+                structure_unit is not None
+                and structure_unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
+            ):
+                errors["structure_unit"] = (
+                    "Small-group-scoped roles require a small-group structure unit."
+                )
             if self.district_id:
                 errors["district"] = "Small-group-scoped roles cannot also use a district."
 
         if self.user_id and self.role and self.scope_type and self.is_active:
+            duplicate_filter = {
+                "user": self.user,
+                "role": self.role,
+                "scope_type": self.scope_type,
+                "is_active": True,
+            }
+            if self.scope_type != self.SCOPE_GLOBAL:
+                duplicate_filter["structure_unit"] = structure_unit
+
             duplicate = ChurchRoleAssignment.objects.filter(
-                user=self.user,
-                role=self.role,
-                scope_type=self.scope_type,
-                district=self.district,
-                small_group=self.small_group,
-                is_active=True,
+                **duplicate_filter,
             )
             if self.pk:
                 duplicate = duplicate.exclude(pk=self.pk)

@@ -24,8 +24,10 @@ followed BS-STRUCT.1A are now implemented:
   (BS-STRUCT.1E / 1F / 2A);
 - a read-only retirement-readiness audit command exists (BS-STRUCT.1J);
 - normal generation is **structure-unit-native**: it targets `ChurchStructureUnit`
-  leaf small-group units, keys idempotency on a per-unit `generation_key`, and
-  keeps `small_group` only as a compatibility mirror (BS-STRUCT.1L);
+  leaf small-group units and keys idempotency on a per-unit `generation_key`
+  (BS-STRUCT.1L). After BS-V2-MIRROR.1B, new generated normal meetings leave
+  `BibleStudyMeeting.small_group` null; old mirror values remain compatibility /
+  fallback-display / diagnostic cleanup blockers only;
 - normal generation now **requires** series structure audience rows: a schedule
   with zero `BibleStudySeriesAudienceScope` rows **fails closed** (no meetings,
   manager warning) instead of falling back to legacy `scope_type` / `district` /
@@ -38,9 +40,10 @@ followed BS-STRUCT.1A are now implemented:
 - the manual normal meeting create/edit form is **structure-unit-native**: it
   chooses an active `UNIT_SMALL_GROUP` `ChurchStructureUnit` (`audience_unit`)
   as the audience source of truth, writes the audience row + `anchor_unit` +
-  per-unit `generation_key`, keeps `small_group` only as a mirror when exactly
-  one active legacy group maps, and no longer exposes a legacy `small_group`
-  select (BS-STRUCT.1O);
+  per-unit `generation_key`, and no longer exposes a legacy `small_group`
+  select (BS-STRUCT.1O). After BS-V2-MIRROR.1B, new manual normal creates leave
+  `BibleStudyMeeting.small_group` null; manual edits preserve an existing old
+  mirror only if it still maps to the selected unit, and clear stale mismatches;
 - BS-V2-KEY.1A adds a dry-run-first backfill command for existing normal V2
   meetings that already have one safe small-group audience row but are missing
   the structure-native `generation_key` and/or null `anchor_unit`. It prepares
@@ -58,6 +61,14 @@ followed BS-STRUCT.1A are now implemented:
   bulk-cleared in this slice; old rows may still be recognized by compatibility
   detection, and `small_group` remains fallback display / diagnostic / old-row
   compatibility only;
+- BS-V2-MIRROR.1C adds the dry-run-first guarded cleanup command
+  `cleanup_bible_study_v2_small_group_mirrors` for existing V2
+  `BibleStudyMeeting.small_group` mirrors. Safe cleanup only clears rows that
+  already have correct structure-native identity: `generation_key`,
+  `anchor_unit`, and exactly one matching active small-group audience row. No
+  cleanup runs automatically; unsafe or mismatched rows remain blocked for
+  review. This does not remove the model field or DB constraint, and later
+  field/constraint cleanup remains a separate migration;
 - obsolete small-group-keyed write/generation helpers were removed
   (`write_normal_meeting_audience_scope`, the compatibility-only
   `sync_normal_meeting_audience_scope`, and the never-produced
@@ -303,8 +314,10 @@ paths:
    `ChurchStructureUnit` leaf `UNIT_SMALL_GROUP` targets via
    `resolve_normal_generation_targets()`, keys idempotency on the per-unit
    `generation_key` (`normal-unit:{unit_id}`), and writes one audience row +
-   `anchor_unit` per target. `small_group` is attached only as a compatibility
-   mirror (and may be `None` for a structure-native unit). **The series legacy
+   `anchor_unit` per target. After BS-V2-MIRROR.1B, new generated normal V2
+   meetings leave `BibleStudyMeeting.small_group` null; existing old mirror
+   values remain compatibility / fallback-display / diagnostic cleanup blockers
+   only. **The series legacy
    `scope_type` / `district` / `small_group` fields are no longer a generation
    source**: a series with zero `BibleStudySeriesAudienceScope` rows now **fails
    closed** — `resolve_normal_generation_targets()` returns no targets and a
@@ -317,14 +330,13 @@ paths:
 2. **Manual create/edit meeting form** — since BS-STRUCT.1O the normal manual
    `BibleStudyMeetingForm` is **structure-unit-native**. The visible source field
    is `audience_unit`, a single active `UNIT_SMALL_GROUP` `ChurchStructureUnit`
-   (path-labelled); the legacy `small_group` select is gone. Create/edit go
-   through `sync_normal_meeting_audience_scope_for_unit(meeting, unit)`, which
-   writes one `BibleStudyMeetingAudienceScope` row for the selected unit, sets
-   `anchor_unit`, sets `meeting_kind = normal`, sets the per-unit
-   `generation_key` (`normal-unit:{unit_id}`, shared with generation), and sets
-   `small_group` only as a mirror when **exactly one** active legacy group maps
-   to the unit (`None` for a structure-native unit with no legacy group or an
-   ambiguous many-to-one mapping). Duplicate prevention rejects a second meeting
+   (path-labelled); the legacy `small_group` select is gone. Create/edit go through `sync_normal_meeting_audience_scope_for_unit(meeting, unit)`,
+which writes one `BibleStudyMeetingAudienceScope` row for the selected unit, sets
+`anchor_unit`, sets `meeting_kind = normal`, and sets the per-unit
+`generation_key` (`normal-unit:{unit_id}`, shared with generation). After
+BS-V2-MIRROR.1B, this helper does not write a new legacy `small_group` mirror:
+new manual normal creates leave it null; edits preserve an existing old mirror
+only when it still maps to the selected unit and clear stale mismatches. Duplicate prevention rejects a second meeting
    for the same `(lesson, unit)` (by matching `generation_key` or an existing
    single-unit audience row) before save. On edit, the initial unit resolves in
    priority order: a single `UNIT_SMALL_GROUP` audience row → an active
@@ -510,10 +522,12 @@ Proposed (not implemented; safest direction):
 2. **Add optional `BibleStudyMeeting.anchor_unit = FK(ChurchStructureUnit,
    null=True, blank=True, on_delete=SET_NULL)`** — display/grouping/ownership
    only; never visibility.
-3. **Keep `BibleStudyMeeting.small_group` temporarily as a compatibility
-   mirror.** Make it **nullable** so higher-level/joint meetings (which map to no
-   single leaf group) are representable. Fill it only when a meeting maps
-   one-to-one to a legacy small group.
+3. **Keep `BibleStudyMeeting.small_group` temporarily as old-row compatibility
+   storage.** Make it **nullable** so higher-level/joint meetings (which map to
+   no single leaf group) are representable. Current normal generated/manual
+   creates leave it null; existing old mirror values remain fallback display,
+   diagnostics, and guarded-cleanup blockers until a later field/constraint
+   migration.
 4. **Do NOT replace `small_group` with a single `structure_unit` FK only** — that
    fails multi-unit joint meetings (Singles + Campus). The audience must be a
    set of units.
@@ -563,9 +577,9 @@ can be higher-level.
   Study units** under that scope (see Section 7 open question on "leaf unit").
 - Each generated meeting gets **one audience row = the leaf unit**.
 - `anchor_unit` = the leaf unit.
-- The legacy `small_group` mirror is filled **only** when the leaf unit maps
-  one-to-one to an active legacy small group; otherwise it stays null and the
-  audience row governs.
+- After BS-V2-MIRROR.1B, new generated normal meetings leave the legacy
+  `small_group` mirror null. Existing old mirror values remain only for
+  old-row compatibility, fallback display, diagnostics, and guarded cleanup.
 
 ### 5.2 Higher-level meeting (district / CM / EM)
 
@@ -665,8 +679,9 @@ the meeting-identity decision (Section 4.5).
     `BibleStudyMeetingAudienceScope(meeting, unit)` row (via `get_or_create`) and
     set `meeting.anchor_unit = unit` **when that anchor is currently null**
     (`save(update_fields=["anchor_unit", "updated_at"])`, so the `small_group`
-    column is never rewritten). `small_group` stays set as the compatibility
-    mirror and `meeting_kind` stays `normal`.
+    column is never rewritten). At the BS-STRUCT.1D slice time, `small_group`
+    stayed set as the compatibility mirror and `meeting_kind` stayed `normal`;
+    this new-write mirror behavior was later superseded by BS-V2-MIRROR.1B.
   - **Invalid mapping is fail-closed.** If the group has no valid active
     `UNIT_SMALL_GROUP` mapping (unmapped, inactive unit, or wrong unit type), the
     legacy meeting is **still created** exactly as before (unchanged generation
@@ -803,16 +818,19 @@ the meeting-identity decision (Section 4.5).
     `sync_normal_meeting_audience_scope(meeting)` handles the manual-form
     create/repair/realign case. No circular imports: `forms` → `services` →
     `models` / `visibility`.
-  - **Manual create now writes audience rows.** `BibleStudyMeetingForm` makes
-    `small_group` required, and `clean()` rejects (form invalid, nothing saved) a
-    selected group whose `church_structure_unit` is missing, inactive, or not
-    `UNIT_SMALL_GROUP`. On a valid save the create/edit views call
+  - **Historical BS-STRUCT.1H manual-create behavior:** at that slice time,
+    `BibleStudyMeetingForm` made `small_group` required, and `clean()` rejected
+    (form invalid, nothing saved) a selected group whose
+    `church_structure_unit` was missing, inactive, or not `UNIT_SMALL_GROUP`.
+    On a valid save the create/edit views called
     `sync_normal_meeting_audience_scope` inside a `transaction.atomic()`, which
-    creates exactly one `BibleStudyMeetingAudienceScope(meeting, mapped unit)`
-    row and sets `anchor_unit` when null. `small_group` stays set as the
-    compatibility mirror and `meeting_kind` stays `normal`. So a normal manual
-    meeting is never left as a legacy-only zero-row meeting, and an invalid
-    mapping fails validation instead of creating one.
+    created exactly one `BibleStudyMeetingAudienceScope(meeting, mapped unit)`
+    row and set `anchor_unit` when null. At the BS-STRUCT.1H slice time,
+    `small_group` stayed set as the compatibility mirror and `meeting_kind`
+    stayed `normal`; BS-V2-MIRROR.1B later superseded that new-write mirror
+    behavior so new manual normal creates leave `small_group` null. A normal
+    manual meeting is still never left as a legacy-only zero-row meeting, and an
+    invalid mapping fails validation instead of creating one.
   - **Manual edit repairs or realigns the normal audience row.** Editing a
     zero-row meeting with a valid group creates the missing row and sets the
     anchor when null. Changing the selected group updates the single normal
@@ -1230,6 +1248,15 @@ the meeting-identity decision (Section 4.5).
   or legacy mirror compatibility. A future guarded audit/cleanup slice should
   inventory and clear existing `BibleStudyMeeting.small_group` mirrors before
   later field/constraint cleanup.
+- **BS-V2-MIRROR.1C** — add guarded cleanup for existing V2
+  `BibleStudyMeeting.small_group` mirrors. ✅ **implemented.**
+  `cleanup_bible_study_v2_small_group_mirrors` is dry-run by default, and apply
+  mode requires `--apply --confirm-small-group-mirror-retirement`. It clears
+  only rows that already have correct structure-native identity:
+  `generation_key`, `anchor_unit`, and exactly one matching active small-group
+  audience row. Unsafe/mismatched rows remain blocked for review, no cleanup is
+  run automatically, and this slice does not remove the model field or DB
+  constraint. Later field/constraint cleanup remains a separate migration.
 - **BS-STRUCT.2+ future work** — field-level cleanup / retirement of the legacy
   Bible Study `SmallGroup` bridge only after remaining compatibility consumers
   are resolved (coordinate with CS-CORE Section 12 legacy retirement). This does

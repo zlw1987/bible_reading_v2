@@ -2,7 +2,7 @@
 
 ## Current Status Summary
 
-LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B adds the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows that already have `ServiceEventAudienceScope` rows, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate.
+LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B adds the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. SERVICE-EVENT-CONTEXT.1A adds a structure-derived Host / Language display fallback for `ServiceEvent.ministry_context`, stops normal app-level ServiceEvent create/edit and recurring saves from writing that FK, and adds dry-run-first guarded cleanup tooling for existing FK values whose derived context matches the stored legacy context. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows that already have `ServiceEventAudienceScope` rows or matched structure-derived display context, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate.
 
 New audit command:
 
@@ -96,13 +96,14 @@ match are skipped and reported. Both target FKs were verified nullable before
 implementation; a non-nullable target would be detected, reported via
 `skipped_not_nullable`, and left untouched.
 
-`ServiceEvent.ministry_context` is **not** cleared by this command. It is an
-editable staff/member "Host / Language Label" surfaced in the event detail/list
-and ministry assignment detail/list displays (via the
-`event_ministry_context_label` template filter), not pure hierarchy redundancy,
-so those rows are reported and conservatively skipped
-(`skipped_service_event_uncertain_display_context`). A later slice may add a
-display fallback/helper before retiring that FK.
+`ServiceEvent.ministry_context` is **not** cleared by this command. It is a
+staff/member "Host / Language Label" surfaced in the event detail/list and
+ministry assignment detail/list displays, not pure hierarchy redundancy, so
+those rows are reported and conservatively skipped
+(`skipped_service_event_uncertain_display_context`). SERVICE-EVENT-CONTEXT.1A
+now handles that FK separately with structure-derived display fallback, stopped
+normal app-level writes, and the guarded
+`cleanup_service_event_ministry_context_labels` command.
 
 Apply requires both explicit flags:
 
@@ -142,10 +143,50 @@ only prepares link cleanup where the relationship is already represented by
 `ChurchStructureUnit`. Final row/table/field deletion remains a later approved
 schema slice.
 
+ServiceEvent ministry-context label cleanup command:
+
+```powershell
+.venv\Scripts\python.exe manage.py cleanup_service_event_ministry_context_labels
+```
+
+SERVICE-EVENT-CONTEXT.1A keeps `ServiceEvent.ministry_context` as stored legacy
+display context only. It is not audience authority and does not control
+visibility, serving assignments, permissions, required teams, or
+TeamAssignment/My Serving behavior. Member/staff Host / Language displays now
+prefer the stored FK while it exists and otherwise derive a safe label from
+`ServiceEventAudienceScope` units by walking `ChurchStructureUnit.parent` to the
+nearest ministry-context unit. Root/zero-audience/custom-with-no-context rows
+render no derived label, and rows spanning multiple derived ministry contexts
+render a generic mixed-context label.
+
+The normal app-level ServiceEvent create/edit form and recurring-create form no
+longer expose or save `ServiceEvent.ministry_context`; forged POST values are
+ignored. Django Admin may still expose the field as a legacy/emergency
+maintenance surface while the model field exists. This slice does not remove
+the field, does not delete `MinistryContext` rows, and does not change
+ServiceEvent audience/runtime semantics.
+
+`cleanup_service_event_ministry_context_labels` is dry-run by default. It clears
+only `ServiceEvent.ministry_context = None`, and only when the structure-derived
+Host / Language fallback derives the same active ministry-context unit as the
+current legacy FK mapping. It never mutates `ServiceEventAudienceScope`,
+`ChurchStructureUnit`, `ChurchStructureMembership`, `SmallGroup`, `District`,
+`MinistryContext`, Bible Study, ReflectionComment, Profile, Role, ministry
+team/serving assignments, permissions, reading progress, runtime behavior, or
+schema. Apply requires both explicit flags:
+
+```powershell
+.venv\Scripts\python.exe manage.py cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup
+```
+
+Do not run that `--apply` command without first reviewing the dry-run output for
+the exact target database. Field/schema/table retirement remains a later
+approved slice after cleanup and audit blockers are reviewed.
+
 Current runtime split:
 
 - `Profile.small_group` has no normal app-level write path after CS-RETIRE.1A, but remains stored legacy/admin/archive/audit data. PROFILE-SG.1B adds guarded cleanup tooling only; it can clear the field only for rows whose single active primary membership already safely represents the same mapped active small-group unit, and it does not run automatically.
-- ServiceEvent ordinary-user visibility no longer uses zero-row legacy fallback; zero-row events are fail-closed safety states, and SE-SCOPE.1A stops normal app-level writes to legacy `scope_type` / `district` / `small_group`. SE-SCOPE.1B adds guarded cleanup tooling for existing stored values, but cleanup is explicit and not automatic.
+- ServiceEvent ordinary-user visibility no longer uses zero-row legacy fallback; zero-row events are fail-closed safety states, and SE-SCOPE.1A stops normal app-level writes to legacy `scope_type` / `district` / `small_group`. SE-SCOPE.1B adds guarded cleanup tooling for existing stored values, but cleanup is explicit and not automatic. SERVICE-EVENT-CONTEXT.1A separately stops normal app writes to `ServiceEvent.ministry_context` and adds structure-derived Host / Language display plus guarded cleanup for matching stored FK values.
 - Bible Study V2 meeting visibility, Today/landing, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; V2 display labels now prefer `anchor_unit` / meeting audience units after BS-V2-MIRROR.1A, and BS-V2-MIRROR.1B stops new normal meeting writes from setting `BibleStudyMeeting.small_group`. BS-V2-MIRROR.1C adds `cleanup_bible_study_v2_small_group_mirrors`, a dry-run-first command that can clear existing mirrors only when `generation_key`, `anchor_unit`, and exactly one matching active small-group audience row already prove structure-native identity. Normal V2 schedule saves now write `BibleStudySeriesAudienceScope` rows without writing/updating legacy series scope fields; generation/preview read those audience rows and fail closed with zero rows. BS-SERIES-SCOPE.1B adds `cleanup_bible_study_series_legacy_scope_fields`, a dry-run-first command that can clear existing series legacy scope values only when the series already has valid `BibleStudySeriesAudienceScope` rows. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains a separate migration. V1 `BibleStudySession` app runtime is retired after BS-V1-RETIRE.1A and remaining V1 rows are pilot/archive data removable only by the explicit guarded BS-V1-PURGE.1A command.
 - Reflection group read/write paths use `ReflectionComment.structure_unit_at_post` plus active primary `ChurchStructureMembership`; `small_group_at_post` remains a legacy compatibility/staff-display mirror. REFLECTION-MIRROR.1D stops normal app-level writes to `small_group_at_post` (create, reply, and edit-into-group paths leave it null; group→group Policy C edits preserve the existing value without re-stamping it), and the passage-wall group label now prefers `structure_unit_at_post` with legacy `small_group_at_post` fallback only for old rows. It does not clear existing stored values and does not remove the field. REFLECTION-MIRROR.1E adds `cleanup_reflection_small_group_mirrors`, a dry-run-first command that clears existing stored `small_group_at_post` values only when doing so cannot change visibility or display: group rows whose matching active small-group `structure_unit_at_post` already drives visibility (including hidden/deleted rows), and non-group rows that carry a `structure_unit_at_post`. Non-group rows with no structure snapshot (the legacy mirror is still the passage-wall display label) and group rows with a missing/inactive/wrong-type/unmapped/mismatched snapshot are skipped. It requires `--apply` plus `--confirm-reflection-small-group-mirror-cleanup`, performs no schema migration or runtime source switch, and does not remove the field; field/schema retirement remains a separate later slice. REFLECTION-MIRROR.1F adds `cleanup_reflection_nongroup_display_mirrors`, a dry-run-first command that finishes the non-group case the 1E command conservatively skipped: for non-group rows whose only remaining display context is the legacy mirror (`small_group_at_post` set, `visibility != group`, `structure_unit_at_post` null) and whose legacy group maps to a valid active small-group unit, it sets `structure_unit_at_post` to that unit and clears `small_group_at_post`, preserving the passage-wall label while removing the legacy `SmallGroup` FK. It requires `--apply` plus `--confirm-reflection-nongroup-display-mirror-cleanup`, never changes `visibility`/`parent`/`body`, does not infer anything from parent (replies use only their own mapping), performs no schema migration or runtime source switch, and does not remove the field; field/schema retirement remains a separate later slice.
 - Role runtime scope uses explicit `ChurchRoleAssignment.structure_unit`; legacy `district` / `small_group` role fields remain stored/admin/display/audit/backfill/rollback context only.
@@ -169,7 +210,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | Role explicit structure scope | `ChurchRoleAssignment.structure_unit` | already runtime-retired / historical only | Current non-global role runtime scope source; membership is not used to infer role scope. |
 | Legacy bridge mappings | `MinistryContext.church_structure_unit`, `District.church_structure_unit`, `SmallGroup.church_structure_unit` | generation/idempotency bridge | Still needed for setup diagnostics, Bible Study resolution/generation, and backfill/audit comparison. |
 | Legacy structure parent/context links | `SmallGroup.district`, `District.ministry_context` | stored hierarchy duplicate and table-retirement blocker | Redundant with `ChurchStructureUnit.parent` for the migrated runtime. LEGACY-OBJECT-LINKS.1A adds dry-run-first `cleanup_legacy_structure_parent_links`, which nulls these FKs only when the child unit's `parent` already equals the parent legacy object's mapped active unit. The legacy-parity resolver `resolve_units_to_small_groups()` still matches eligible groups through hierarchy descendants. Field/table retirement remains a later slice. |
-| ServiceEvent ministry-context label | `ServiceEvent.ministry_context`, `events.templatetags.event_extras.event_ministry_context_label` | stored editable display label | Editable "Host / Language Label" shown on event detail/list and ministry assignment detail/list. Not pure hierarchy redundancy, so LEGACY-OBJECT-LINKS.1A reports it but conservatively skips it; a later slice may add a display fallback before retiring the FK. |
+| ServiceEvent ministry-context label | `ServiceEvent.ministry_context`, `events.templatetags.event_extras.event_host_language_label`, `events.ministry_context_display`, `cleanup_service_event_ministry_context_labels` | stored display label and audit/cleanup blocker | "Host / Language" display now derives from `ServiceEventAudienceScope` / `ChurchStructureUnit.parent` when the legacy FK is null. Normal app create/edit/recurring flows no longer expose or save the FK; Django Admin remains legacy/emergency maintenance while the field exists. SERVICE-EVENT-CONTEXT.1A adds guarded dry-run-first cleanup for existing FK values only when the derived context matches the stored mapping. The field is not removed, `MinistryContext` rows are not deleted, and field/table retirement remains later. |
 | `Profile.small_group` stored field | `accounts.models.Profile.small_group`, `ProfileAdmin` | admin/emergency-maintenance surface | No normal app-level write remains, but admin/emergency/archive display remains until full retirement. |
 | Staff legacy displays | staff user list, password reset, membership request detail/list, structure map | admin/emergency-maintenance surface | Read-only context only; not runtime authority. |
 | Legacy retirement/audit/backfill/cleanup commands | `audit_structure_belonging`, `audit_structure_role_scopes`, `audit_service_event_fallback_retirement_readiness`, `cleanup_service_event_legacy_scope_fields`, `cleanup_profile_small_group`, `cleanup_reflection_snapshot_blockers`, `cleanup_reflection_small_group_mirrors`, `cleanup_reflection_nongroup_display_mirrors`, `audit_bible_study_structure_retirement_readiness`, reading/reflection audits, related backfills/cleanups | diagnostic/audit/backfill/cleanup tooling | Support tooling is intentionally allowed to read legacy fields and does not by itself block runtime retirement. Cleanup tooling is dry-run-first and must not run apply without explicit approval. |
@@ -246,8 +287,8 @@ Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wron
 Blockers:
 
 - Existing rows and references block table retirement.
-- ServiceEvent `ministry_context` is label/context data, not audience authority, but it is still a FK reference that must be handled before table retirement.
-- `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` is reported but conservatively **skipped** by that command because it is an editable staff/member display label; retiring it needs a separate display-fallback slice.
+- ServiceEvent `ministry_context` is label/context data, not audience authority, but it is still a FK reference that must be cleaned or otherwise approved before table retirement.
+- `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` is handled separately by SERVICE-EVENT-CONTEXT.1A: normal app writes are stopped, display falls back to structure-derived Host / Language labels, and `cleanup_service_event_ministry_context_labels` can clear matching stored FK values after dry-run review and explicit apply approval. The field and `MinistryContext` rows remain.
 
 ### ServiceEvent Legacy Scope Fields
 
@@ -332,8 +373,9 @@ Blockers:
 4. Run reflection snapshot cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_reflection_snapshot_blockers`, review the per-row decisions/blockers, then run `cleanup_reflection_snapshot_blockers --apply --confirm-reflection-snapshot-cleanup` only after explicit approval. It backfills mapped group snapshots and demotes safe top-level orphan group rows to private; orphan replies, orphans with replies, and unmapped/inactive/wrong-type rows stay blocked for review. `small_group_at_post` field/schema deprecation remains a later separate plan.
 5. Plan role legacy field retirement after confirming no scoped assignment lacks explicit valid `structure_unit` and no legacy-vs-structure mismatch remains.
 6. Run `Profile.small_group` cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_profile_small_group`, review skipped rows/output, then run `cleanup_profile_small_group --apply --confirm-profile-small-group-cleanup` only after explicit approval. Field/schema deprecation remains a later plan covering admin display, fallback/audit references, rollback, and model/table removal.
-7. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`; `ServiceEvent.ministry_context` is conservatively skipped pending a separate display-fallback slice. It deletes no rows and removes no fields.
-8. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references (including the conservatively-skipped `ServiceEvent.ministry_context` label) and bridge consumers are gone or explicitly archived.
+7. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`; `ServiceEvent.ministry_context` has its own SERVICE-EVENT-CONTEXT.1A display-fallback cleanup path. It deletes no rows and removes no fields.
+8. Run ServiceEvent ministry-context label cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_service_event_ministry_context_labels`, review matching/skip categories, then run `cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup` only after explicit approval. This clears only matching `ServiceEvent.ministry_context` FK values; field/schema deprecation and `MinistryContext` row/table retirement remain later.
+9. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
 
 ## Verification for LEGACY-RETIRE.1A
 

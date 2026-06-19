@@ -1453,33 +1453,19 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIsNone(event.ministry_context)
 
-    def test_service_event_form_clarifies_ministry_context_is_label_only(self):
+    def test_service_event_form_derives_host_language_from_audience_scope(self):
         english_form = ServiceEventForm(language="en")
         chinese_form = ServiceEventForm(language="zh")
 
-        self.assertEqual(
-            english_form.fields["ministry_context"].label,
-            "Host / Language Label",
+        self.assertNotIn("ministry_context", english_form.fields)
+        self.assertNotIn("ministry_context", chinese_form.fields)
+        self.assertIn(
+            "Host / Language display is derived from the selected audience",
+            english_form.fields["audience_units"].help_text,
         )
         self.assertIn(
-            "label-only",
-            english_form.fields["ministry_context"].help_text,
-        )
-        self.assertIn(
-            "does not control visibility, serving assignment, or permissions",
-            english_form.fields["ministry_context"].help_text,
-        )
-        self.assertEqual(
-            chinese_form.fields["ministry_context"].label,
-            "主办/语言标签（可选）",
-        )
-        self.assertNotEqual(
-            chinese_form.fields["ministry_context"].label,
-            "事工范围",
-        )
-        self.assertIn(
-            "不会控制可见范围、服事分配或用户权限",
-            chinese_form.fields["ministry_context"].help_text,
+            "主办/语言显示会在有对应范围时由所选范围推导",
+            chinese_form.fields["audience_units"].help_text,
         )
 
     def test_service_event_form_clarifies_rotation_anchor_is_scheduling_hint_only(self):
@@ -1519,8 +1505,9 @@ class ServiceEventFoundationTests(TestCase):
             self.assertNotIn("scope_type", form.fields)
             self.assertNotIn("district", form.fields)
             self.assertNotIn("small_group", form.fields)
+            self.assertNotIn("ministry_context", form.fields)
 
-    def test_ministry_context_label_can_be_saved_without_changing_visibility(self):
+    def test_existing_ministry_context_label_still_displays_without_changing_visibility(self):
         self.set_language("en")
         event = self.create_visible_event(
             title_en="CM Sunday Service",
@@ -1533,7 +1520,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "CM - Chinese Ministry")
 
-    def test_manager_can_create_event_with_ministry_context_label(self):
+    def test_manager_create_does_not_accept_ministry_context_label(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -1544,7 +1531,27 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertEqual(event.ministry_context, self.em)
+        self.assertIsNone(event.ministry_context)
+
+    def test_manager_edit_does_not_reintroduce_cleared_ministry_context_label(self):
+        self.set_language("en")
+        event = self.create_event(ministry_context=None)
+        self.add_audience(event, self.root_unit)
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_service_event", args=[event.id]),
+            self.event_post_data(
+                title="更新聚会",
+                title_en="Updated Meeting",
+                ministry_context=self.em.id,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title_en, "Updated Meeting")
+        self.assertIsNone(event.ministry_context)
 
     def test_manager_create_does_not_accept_legacy_district_scope(self):
         self.set_language("en")
@@ -2228,23 +2235,14 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Preview")
         self.assertContains(response, "Create Events")
 
-    def test_recurring_form_includes_optional_ministry_context_label(self):
+    def test_recurring_form_excludes_ministry_context_label(self):
         english_form = RecurringServiceEventForm(language="en")
         chinese_form = RecurringServiceEventForm(language="zh")
 
-        self.assertIn("ministry_context", english_form.fields)
-        self.assertFalse(english_form.fields["ministry_context"].required)
-        self.assertEqual(
-            english_form.fields["ministry_context"].label,
-            "Host / Language Label",
-        )
-        self.assertFalse(chinese_form.fields["ministry_context"].required)
-        self.assertEqual(
-            chinese_form.fields["ministry_context"].label,
-            "主办/语言标签（可选）",
-        )
+        self.assertNotIn("ministry_context", english_form.fields)
+        self.assertNotIn("ministry_context", chinese_form.fields)
 
-    def test_recurring_create_applies_same_ministry_context_to_each_event(self):
+    def test_recurring_create_does_not_accept_ministry_context_label(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2260,7 +2258,7 @@ class ServiceEventFoundationTests(TestCase):
         events = ServiceEvent.objects.filter(title_en="Sunday Service")
         self.assertEqual(events.count(), 3)
         for event in events:
-            self.assertEqual(event.ministry_context, self.em)
+            self.assertIsNone(event.ministry_context)
 
     def test_recurring_create_with_blank_ministry_context_keeps_events_blank(self):
         self.set_language("en")
@@ -2277,7 +2275,7 @@ class ServiceEventFoundationTests(TestCase):
         for event in events:
             self.assertIsNone(event.ministry_context)
 
-    def test_recurring_create_required_teams_unchanged_with_ministry_context(self):
+    def test_recurring_create_required_teams_unchanged_with_forged_ministry_context(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2297,7 +2295,7 @@ class ServiceEventFoundationTests(TestCase):
         events = ServiceEvent.objects.filter(title_en="Sunday Service")
         self.assertEqual(events.count(), 3)
         for event in events:
-            self.assertEqual(event.ministry_context, self.em)
+            self.assertIsNone(event.ministry_context)
             self.assertEqual(
                 set(event.required_teams.values_list("id", flat=True)),
                 {self.required_team.id, self.other_required_team.id},

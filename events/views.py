@@ -221,9 +221,8 @@ def create_recurring_events(cleaned_data, user):
     created_count = 0
     required_teams = cleaned_data.get("required_teams")
     rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
-    ministry_context = cleaned_data.get("ministry_context")
-    # SE-SCOPE.1A: recurring app creates use structure audience rows only.
-    # Legacy scope fields remain at model defaults for newly generated events.
+    # SE-SCOPE.1A/SE-CTX.1A: recurring app creates use structure audience rows
+    # only. Legacy scope/context fields remain at model defaults.
     audience_units = list(cleaned_data.get("audience_units") or [])
 
     with transaction.atomic():
@@ -248,7 +247,6 @@ def create_recurring_events(cleaned_data, user):
                 end_datetime=end_datetime,
                 location=cleaned_data.get("location") or "",
                 meeting_link=cleaned_data.get("meeting_link") or "",
-                ministry_context=ministry_context,
                 rotation_anchor_team=rotation_anchor_team,
                 status=cleaned_data["status"],
                 created_by=user,

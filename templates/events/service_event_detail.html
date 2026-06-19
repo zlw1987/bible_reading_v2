@@ -52,12 +52,14 @@
     </p>
     {% endif %}
 
-    {% if event.ministry_context_id %}
+    {% with host_language_label=event|event_host_language_label:language %}
+    {% if host_language_label %}
     <p>
         <strong>{% if language == "zh" %}主办/语言{% else %}Host / Language{% endif %}:</strong>
-        {{ event|event_ministry_context_label:language }}
+        {{ host_language_label }}
     </p>
     {% endif %}
+    {% endwith %}
 
     {% if event|event_description:language %}
     <p>{{ event|event_description:language|linebreaksbr }}</p>

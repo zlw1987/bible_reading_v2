@@ -70,6 +70,9 @@ def assignment_coverage_queryset():
         "ministry_team",
     ).prefetch_related(
         assignment_member_prefetch(),
+        # SE-CTX.1A: host/language label falls back to audience-row-derived
+        # ministry context when the legacy FK is null; batch the audience rows.
+        "service_event__audience_scope_links__unit",
     ).order_by(
         "service_event__start_datetime",
         "ministry_team__name",
@@ -85,6 +88,9 @@ def events_with_coverage_queryset():
         "created_by",
     ).prefetch_related(
         required_team_prefetch(),
+        # SE-CTX.1A: host/language label falls back to audience-row-derived
+        # ministry context when the legacy FK is null; batch the audience rows.
+        "audience_scope_links__unit",
     )
 
 

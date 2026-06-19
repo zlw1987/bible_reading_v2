@@ -87,12 +87,14 @@
     {% for group in event_groups %}
     <div class="card assignment-event-group">
         <h2 class="card-title">{{ group.event|event_title:language }}</h2>
-        {% if group.event.ministry_context_id %}
+        {% with host_language_label=group.event|event_host_language_label:language %}
+        {% if host_language_label %}
         <p class="muted">
             <strong>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}:</strong>
-            {{ group.event|event_ministry_context_label:language }}
+            {{ host_language_label }}
         </p>
         {% endif %}
+        {% endwith %}
         <p class="muted">
             {{ group.event.start_datetime|date:"Y-m-d H:i" }}
             {% if group.event.location %}

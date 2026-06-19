@@ -4,7 +4,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, MinistryContext
+from accounts.models import ChurchStructureUnit
 from ministry.models import MinistryTeam
 
 from .models import ServiceEvent, ServiceEventAudienceScope
@@ -21,13 +21,13 @@ FORM_TEXT = {
         "end_datetime": "End Time",
         "location": "Location",
         "meeting_link": "Meeting Link",
-        "ministry_context": "Host / Language Label",
         "rotation_anchor_team": "Rotation Anchor Team",
         "required_teams": "Required Ministry Teams",
         "audience_units": "Audience Scope",
         "audience_units_help": (
             "Selected units control which ordinary users can see this gathering. "
-            "Select one or more units before saving."
+            "Select one or more units before saving. Host / Language display is "
+            "derived from the selected audience when a matching context exists."
         ),
         "audience_scope_root_combo": "Whole Church cannot be combined with other units.",
         "audience_scope_ancestor_combo": (
@@ -42,11 +42,6 @@ FORM_TEXT = {
         "baptism": "Baptism",
         "other": "Other",
         "global": "Global",
-        "ministry_context_help": (
-            "Optional label for the host, language, or similar ministry context. "
-            "Blank can mean whole-church, combined, legacy, or uncategorized. "
-            "This is label-only and does not control visibility, serving assignment, or permissions."
-        ),
         "rotation_anchor_team_help": (
             "Optional scheduling hint for future copy-forward suggestions, such as Worship C1/C2/C3/A. "
             "This does not make the team required and does not control coverage, audience, visibility, or permissions."
@@ -78,7 +73,7 @@ FORM_TEXT = {
         "audience_units": "适用范围",
         "audience_units_help": (
             "选择的教会结构单元会决定普通用户能否看到这个聚会。"
-            "保存前请至少选择一个单元。"
+            "保存前请至少选择一个单元。主办/语言显示会在有对应范围时由所选范围推导。"
         ),
         "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
         "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
@@ -340,7 +335,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             "end_datetime",
             "location",
             "meeting_link",
-            "ministry_context",
             "rotation_anchor_team",
             "required_teams",
             "status",
@@ -365,14 +359,8 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         if language == "zh":
             text = {
                 **text,
-                "ministry_context": "主办/语言标签（可选）",
                 "rotation_anchor_team": "配搭参考团队",
                 "required_teams": "需要的事工团队",
-                "ministry_context_help": (
-                    "仅用于标记主办、语言或类似事工背景。"
-                    "留空可以表示全教会、联合、旧数据或未分类。"
-                    "这是标签用途，不会控制可见范围、服事分配或用户权限。"
-                ),
                 "required_teams_help": (
                     "选择这个聚会预期需要的事工团队。"
                     "这里只记录需要，不会自动建立服事排班。"
@@ -421,17 +409,10 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         self.fields["meeting_link"].widget.attrs.update(
             {"placeholder": text["meeting_link_placeholder"]}
         )
-        self.fields["ministry_context"].help_text = text["ministry_context_help"]
         self.fields["rotation_anchor_team"].help_text = text["rotation_anchor_team_help"]
         self.fields["rotation_anchor_team"].language = language
         self.fields["required_teams"].help_text = text["required_teams_help"]
         self.fields["required_teams"].language = language
-        ministry_context_filter = Q(is_active=True)
-        if self.instance.ministry_context_id:
-            ministry_context_filter |= Q(id=self.instance.ministry_context_id)
-        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
-            ministry_context_filter,
-        )
         rotation_anchor_filter = Q(is_active=True)
         if self.instance.rotation_anchor_team_id:
             rotation_anchor_filter |= Q(id=self.instance.rotation_anchor_team_id)
@@ -504,10 +485,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
     )
     location = forms.CharField(max_length=180, required=False)
     meeting_link = forms.URLField(max_length=500, required=False)
-    ministry_context = forms.ModelChoiceField(
-        queryset=MinistryContext.objects.none(),
-        required=False,
-    )
     status = forms.ChoiceField(choices=ServiceEvent.STATUS_CHOICES)
     required_teams = RequiredTeamChoiceField(
         queryset=MinistryTeam.objects.none(),
@@ -559,15 +536,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
             self.fields[field_name].label = label
 
         service_event_form = ServiceEventForm(language=language)
-        self.fields["ministry_context"].label = service_event_form.fields[
-            "ministry_context"
-        ].label
-        self.fields["ministry_context"].help_text = service_event_form.fields[
-            "ministry_context"
-        ].help_text
-        self.fields["ministry_context"].queryset = MinistryContext.objects.filter(
-            is_active=True,
-        )
         self.fields["event_type"].choices = service_event_form.fields[
             "event_type"
         ].choices

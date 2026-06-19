@@ -271,6 +271,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "guarded cleanup tooling for ServiceEvent legacy scope fields; dry-run by default",
     ),
     (
+        "events.management.commands.cleanup_service_event_ministry_context_labels",
+        (
+            "guarded cleanup tooling for ServiceEvent.ministry_context display "
+            "links where the structure-native host/language fallback derives the "
+            "same ministry-context unit; dry-run by default"
+        ),
+    ),
+    (
         "studies.management.commands.audit_bible_study_structure_retirement_readiness",
         "standing diagnostic/audit guard",
     ),

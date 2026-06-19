@@ -1,5 +1,11 @@
 from django import template
 
+from events.ministry_context_display import (
+    derive_ministry_context_units,
+    ministry_context_unit_label,
+    multiple_contexts_label,
+)
+
 register = template.Library()
 
 
@@ -184,6 +190,33 @@ def event_ministry_context_label(event, language):
     if context.code:
         return f"{context.code} - {name}"
     return name
+
+
+@register.filter
+def event_host_language_label(event, language):
+    """Host/language ("ministry context") label with structure-native fallback.
+
+    SE-CTX.1A. When the legacy ``ServiceEvent.ministry_context`` FK is still set,
+    the existing label is kept verbatim. Otherwise the label is derived from the
+    event's ``ServiceEventAudienceScope`` rows via the nearest ministry-context
+    ancestor of each audience unit (``ChurchStructureUnit.parent`` ancestry). A
+    single derived context renders its label, several derived contexts render a
+    safe generic "multiple" label, and no derived context renders an empty
+    string (existing generic/blank behavior). This is display only; it never
+    affects audience visibility.
+    """
+    if not event:
+        return ""
+
+    if event.ministry_context_id:
+        return event_ministry_context_label(event, language)
+
+    derived = derive_ministry_context_units(_audience_units(event))
+    if len(derived) == 1:
+        return ministry_context_unit_label(derived[0], language)
+    if len(derived) > 1:
+        return multiple_contexts_label(language)
+    return ""
 
 
 @register.filter

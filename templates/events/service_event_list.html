@@ -62,12 +62,14 @@
             <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
             {{ event.start_datetime|member_datetime:language }}
         </p>
-        {% if event.ministry_context_id %}
+        {% with host_language_label=event|event_host_language_label:language %}
+        {% if host_language_label %}
         <p>
             <strong>{% if language == "zh" %}主办/语言{% else %}Host / Language{% endif %}:</strong>
-            {{ event|event_ministry_context_label:language }}
+            {{ host_language_label }}
         </p>
         {% endif %}
+        {% endwith %}
         {% if event.location %}
         <p>
             <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>

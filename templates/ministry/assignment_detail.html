@@ -43,12 +43,14 @@
             <dt>{% if language == "zh" %}聚会事件{% else %}Service Event{% endif %}</dt>
             <dd>{{ assignment.service_event|event_title:language }}</dd>
         </div>
-        {% if assignment.service_event.ministry_context_id %}
+        {% with host_language_label=assignment.service_event|event_host_language_label:language %}
+        {% if host_language_label %}
         <div class="serving-card-meta-item">
             <dt>{% if language == "zh" %}主办/语言标签（可选）{% else %}Host / Language Label{% endif %}</dt>
-            <dd>{{ assignment.service_event|event_ministry_context_label:language }}</dd>
+            <dd>{{ host_language_label }}</dd>
         </div>
         {% endif %}
+        {% endwith %}
         <div class="serving-card-meta-item">
             <dt>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}</dt>
             <dd>{{ assignment.service_event.start_datetime|member_datetime:language }}</dd>

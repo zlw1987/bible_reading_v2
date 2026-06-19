@@ -302,6 +302,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.backfill_reflection_structure_snapshots",
         "backfill support for reflection structure snapshots",
     ),
+    (
+        "reading.management.commands.cleanup_reflection_snapshot_blockers",
+        "guarded cleanup tooling for remaining reflection snapshot blockers; dry-run by default",
+    ),
 )
 
 

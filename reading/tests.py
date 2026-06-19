@@ -63,6 +63,13 @@ from reading.structure_runtime_readiness import (
 from reading.management.commands.backfill_reflection_structure_snapshots import (
     run_backfill as run_reflection_snapshot_backfill,
 )
+from reading.management.commands.cleanup_reflection_snapshot_blockers import (
+    apply_cleanup as apply_reflection_snapshot_cleanup,
+    run_cleanup as run_reflection_snapshot_cleanup,
+)
+from accounts.management.commands.audit_legacy_structure_retirement_readiness import (
+    run_audit as run_legacy_structure_retirement_audit,
+)
 from reading.group_progress_shadow import (
     GroupProgressShadow,
     REASON_DEFAULT_SAME,
@@ -7900,3 +7907,284 @@ class ReflectionStructureSnapshotBackfillCommandTests(TestCase):
         self.assertEqual(write_sql, [])
         self.assertIn("mode: DRY-RUN (read-only)", output)
         self.assertNotIn("SECRET_BACKFILL_BODY", output)
+
+
+class ReflectionSnapshotBlockerCleanupCommandTests(TestCase):
+    """REFLECTION-SNAPSHOT.1C guarded cleanup command tests.
+
+    Dry-run is the default. Apply requires both ``--apply`` and
+    ``--confirm-reflection-snapshot-cleanup``. The command backfills
+    ``structure_unit_at_post`` for mapped group rows (Category A, including hidden
+    rows) and demotes safe top-level orphan group rows to private (Category B). It
+    performs no schema migration, no runtime source switch, and never prints
+    reflection body text.
+    """
+
+    plan_counter = 0
+
+    def run_cleanup_command(self, *args):
+        output = StringIO()
+        call_command(
+            "cleanup_reflection_snapshot_blockers",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_group_reflection(
+        self,
+        *,
+        small_group=None,
+        structure_unit=None,
+        body,
+        parent=None,
+        is_hidden=False,
+        is_deleted=False,
+        visibility=ReflectionComment.VISIBILITY_GROUP,
+    ):
+        type(self).plan_counter += 1
+        plan = ReadingPlan.objects.create(
+            name=f"Cleanup Plan {self.plan_counter}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        author = User.objects.create_user(
+            username=f"cleanup_author_{self.plan_counter}"
+        )
+        return ReflectionComment.objects.create(
+            user=author,
+            plan_day=day,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=visibility,
+            small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
+            parent=parent,
+            is_hidden=is_hidden,
+            is_deleted=is_deleted,
+            body=body,
+        )
+
+    # --- Category A: backfillable snapshot rows ------------------------------
+
+    def test_dry_run_reports_backfill_candidate_without_mutating(self):
+        unit = self.create_unit("CL-DRY")
+        group = self.create_group("Cleanup Dry Group", unit=unit)
+        comment = self.create_group_reflection(small_group=group, body="dry body")
+
+        stats, _lines = run_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["reflections_checked"], 1)
+        self.assertEqual(stats["snapshot_backfill_candidates"], 1)
+        self.assertEqual(stats["would_backfill_snapshot"], 1)
+        self.assertEqual(stats["backfilled_snapshot"], 0)
+        self.assertEqual(stats["remaining_blockers_after_operation"], 1)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
+
+    def test_apply_without_confirmation_refuses_and_does_not_mutate(self):
+        unit = self.create_unit("CL-NOCONFIRM")
+        group = self.create_group("No Confirm Group", unit=unit)
+        comment = self.create_group_reflection(small_group=group, body="noconfirm body")
+
+        with self.assertRaises(CommandError):
+            self.run_cleanup_command("--apply")
+
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_confirmation_without_apply_remains_dry_run(self):
+        unit = self.create_unit("CL-CONFONLY")
+        group = self.create_group("Confirm Only Group", unit=unit)
+        comment = self.create_group_reflection(small_group=group, body="confonly body")
+
+        output = self.run_cleanup_command("--confirm-reflection-snapshot-cleanup")
+
+        self.assertIn("mode: dry-run", output)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_apply_backfills_mapped_group_rows_including_hidden(self):
+        unit = self.create_unit("CL-APPLY")
+        group = self.create_group("Cleanup Apply Group", unit=unit)
+        visible = self.create_group_reflection(small_group=group, body="visible body")
+        hidden = self.create_group_reflection(
+            small_group=group, body="hidden body", is_hidden=True
+        )
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["backfilled_snapshot"], 2)
+        self.assertEqual(stats["would_backfill_snapshot"], 0)
+        self.assertEqual(stats["remaining_blockers_after_operation"], 0)
+        visible.refresh_from_db()
+        hidden.refresh_from_db()
+        self.assertEqual(visible.structure_unit_at_post_id, unit.id)
+        self.assertEqual(hidden.structure_unit_at_post_id, unit.id)
+        # Legacy mirror and hidden flag untouched.
+        self.assertEqual(hidden.small_group_at_post_id, group.id)
+        self.assertTrue(hidden.is_hidden)
+        self.assertEqual(visible.visibility, ReflectionComment.VISIBILITY_GROUP)
+
+    # --- Category B: orphan group reflections --------------------------------
+
+    def test_apply_demotes_top_level_orphan_group_to_private(self):
+        orphan = self.create_group_reflection(small_group=None, body="orphan body")
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["orphan_group_candidates"], 1)
+        self.assertEqual(stats["demoted_orphan_to_private"], 1)
+        self.assertEqual(stats["remaining_blockers_after_operation"], 0)
+        orphan.refresh_from_db()
+        self.assertEqual(orphan.visibility, ReflectionComment.VISIBILITY_PRIVATE)
+        self.assertIsNone(orphan.small_group_at_post_id)
+        self.assertIsNone(orphan.structure_unit_at_post_id)
+
+    def test_orphan_reply_is_skipped(self):
+        parent = self.create_group_reflection(
+            small_group=None,
+            body="parent body",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+        )
+        # Make the parent non-orphan so only the reply is the orphan under test.
+        unit = self.create_unit("CL-REPLY")
+        parent.structure_unit_at_post = unit
+        parent.save(update_fields=["structure_unit_at_post"])
+        reply = self.create_group_reflection(
+            small_group=None, body="reply body", parent=parent
+        )
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["skipped_reply_orphan"], 1)
+        self.assertEqual(stats["demoted_orphan_to_private"], 0)
+        reply.refresh_from_db()
+        self.assertEqual(reply.visibility, ReflectionComment.VISIBILITY_GROUP)
+
+    def test_top_level_orphan_with_replies_is_skipped(self):
+        parent = self.create_group_reflection(small_group=None, body="parent orphan")
+        self.create_group_reflection(
+            small_group=None, body="child reply", parent=parent
+        )
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["skipped_orphan_with_replies"], 1)
+        self.assertEqual(stats["demoted_orphan_to_private"], 0)
+        parent.refresh_from_db()
+        self.assertEqual(parent.visibility, ReflectionComment.VISIBILITY_GROUP)
+
+    # --- Category A skip reasons ---------------------------------------------
+
+    def test_missing_mapping_is_skipped(self):
+        group = self.create_group("Unmapped Cleanup Group", unit=None)
+        comment = self.create_group_reflection(small_group=group, body="unmapped body")
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["skipped_missing_mapping"], 1)
+        self.assertEqual(stats["backfilled_snapshot"], 0)
+        self.assertEqual(stats["remaining_blockers_after_operation"], 1)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_inactive_unit_is_skipped(self):
+        inactive_unit = self.create_unit("CL-INACT", is_active=False)
+        group = self.create_group("Inactive Cleanup Group", unit=inactive_unit)
+        comment = self.create_group_reflection(small_group=group, body="inactive body")
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["skipped_inactive_unit"], 1)
+        self.assertEqual(stats["backfilled_snapshot"], 0)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    def test_wrong_unit_type_is_skipped(self):
+        district_unit = self.create_unit(
+            "CL-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        group = self.create_group("Wrong Type Cleanup Group", unit=district_unit)
+        comment = self.create_group_reflection(small_group=group, body="wrong type body")
+
+        stats, _lines = apply_reflection_snapshot_cleanup()
+
+        self.assertEqual(stats["skipped_wrong_unit_type"], 1)
+        self.assertEqual(stats["backfilled_snapshot"], 0)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- Output / idempotency ------------------------------------------------
+
+    def test_body_text_is_not_printed_in_verbose(self):
+        unit = self.create_unit("CL-RO")
+        group = self.create_group("Read Only Cleanup Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="SECRET_CLEANUP_BODY")
+        self.create_group_reflection(small_group=None, body="SECRET_ORPHAN_BODY")
+
+        with CaptureQueriesContext(connection) as queries:
+            output = self.run_cleanup_command("--verbose", "--limit", "20")
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertIn("mode: dry-run", output)
+        self.assertNotIn("SECRET_CLEANUP_BODY", output)
+        self.assertNotIn("SECRET_ORPHAN_BODY", output)
+
+    def test_second_dry_run_after_apply_is_a_no_op(self):
+        unit = self.create_unit("CL-IDEM")
+        group = self.create_group("Idempotent Cleanup Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="idem backfill body")
+        self.create_group_reflection(small_group=None, body="idem orphan body")
+
+        apply_stats, _lines = apply_reflection_snapshot_cleanup()
+        self.assertEqual(apply_stats["backfilled_snapshot"], 1)
+        self.assertEqual(apply_stats["demoted_orphan_to_private"], 1)
+        self.assertEqual(apply_stats["remaining_blockers_after_operation"], 0)
+
+        second_stats, _lines = run_reflection_snapshot_cleanup()
+        self.assertEqual(second_stats["would_backfill_snapshot"], 0)
+        self.assertEqual(second_stats["would_demote_orphan_to_private"], 0)
+        self.assertEqual(second_stats["remaining_blockers_after_operation"], 0)
+
+    def test_audit_blocker_clears_after_apply(self):
+        unit = self.create_unit("CL-AUDIT")
+        group = self.create_group("Audit Cleanup Group", unit=unit)
+        self.create_group_reflection(small_group=group, body="audit backfill body")
+        self.create_group_reflection(small_group=None, body="audit orphan body")
+
+        before = run_legacy_structure_retirement_audit()
+        self.assertEqual(
+            before["stats"]["reflection_small_group_at_post_removal_blockers"], 2
+        )
+
+        apply_reflection_snapshot_cleanup()
+
+        after = run_legacy_structure_retirement_audit()
+        self.assertEqual(
+            after["stats"]["reflection_small_group_at_post_removal_blockers"], 0
+        )

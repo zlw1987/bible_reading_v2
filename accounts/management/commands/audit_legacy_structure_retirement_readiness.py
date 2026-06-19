@@ -306,6 +306,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.cleanup_reflection_snapshot_blockers",
         "guarded cleanup tooling for remaining reflection snapshot blockers; dry-run by default",
     ),
+    (
+        "reading.management.commands.cleanup_reflection_small_group_mirrors",
+        "guarded cleanup tooling for existing reflection small_group_at_post mirrors; dry-run by default",
+    ),
 )
 
 

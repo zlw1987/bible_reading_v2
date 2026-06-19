@@ -18,6 +18,28 @@ Options:
 
 The command has no `--apply`, writes nothing, and reports `runtime_mutated: false`, `data_mutated: false`, and `apply_option_present: false`.
 
+Object-row retirement inventory command:
+
+```powershell
+.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement
+```
+
+ROW-RETIRE.1A adds this second read-only command for the final legacy
+`SmallGroup` / `District` / `MinistryContext` row-retirement decision. It
+classifies live consumers into exactly one retirement category, counts the
+remaining object rows and their `church_structure_unit` mappings, and prints
+capped non-sensitive examples with a final-retirement recommendation. It has
+`--verbose`, `--limit N`, and `--fail-on-blockers`; it has no `--apply`, writes
+no data, changes no schema, and changes no runtime behavior.
+
+Current local/dev row-retirement state after ServiceEvent Host / Language
+cleanup: remaining blockers are the legacy object rows themselves and their
+bridge/admin/diagnostic role, not ordinary-member runtime visibility authority.
+`ChurchStructureUnit` is the canonical structure tree, and
+`ChurchStructureMembership` is the canonical belonging source for migrated
+ordinary-member paths. The legacy rows must not be used as ordinary-member
+visibility authority. Final table/field deletion is not approved yet.
+
 Profile legacy group cleanup command:
 
 ```powershell
@@ -230,6 +252,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | Role legacy scope fields | `ChurchRoleAssignment.district`, `ChurchRoleAssignment.small_group` | stored mirror/display/history snapshot | Runtime fallback is retired; fields remain display/audit/backfill/rollback context until field-level retirement. |
 | Role explicit structure scope | `ChurchRoleAssignment.structure_unit` | already runtime-retired / historical only | Current non-global role runtime scope source; membership is not used to infer role scope. |
 | Legacy bridge mappings | `MinistryContext.church_structure_unit`, `District.church_structure_unit`, `SmallGroup.church_structure_unit` | generation/idempotency bridge | Still needed for setup diagnostics, Bible Study resolution/generation, and backfill/audit comparison. |
+| Legacy object-row retirement inventory | `accounts.management.commands.audit_legacy_structure_object_row_retirement` | diagnostic/audit/backfill/cleanup tooling | Read-only inventory for remaining `SmallGroup`, `District`, and `MinistryContext` rows. It classifies consumers, reports mapped/unmapped/inactive/wrong-type rows, and highlights the `UNASSIGNED-GROUPS` custom-unit placeholder decision without deleting rows or changing schema/runtime behavior. |
 | Legacy structure parent/context links | `SmallGroup.district`, `District.ministry_context` | stored hierarchy duplicate and table-retirement blocker | Redundant with `ChurchStructureUnit.parent` for the migrated runtime. LEGACY-OBJECT-LINKS.1A adds dry-run-first `cleanup_legacy_structure_parent_links`, which nulls these FKs only when the child unit's `parent` already equals the parent legacy object's mapped active unit. The legacy-parity resolver `resolve_units_to_small_groups()` still matches eligible groups through hierarchy descendants. Field/table retirement remains a later slice. |
 | ServiceEvent ministry-context label | `ServiceEvent.ministry_context`, `ServiceEvent.host_language_unit`, `events.templatetags.event_extras.event_host_language_label`, `events.ministry_context_display`, `backfill_service_event_host_language_units`, `cleanup_service_event_ministry_context_labels` | stored display label and audit/cleanup blocker | "Host / Language" display now uses the legacy FK while present, then structure-native `host_language_unit`, then an audience-derived `ChurchStructureUnit.parent` fallback. `host_language_unit` is display-only and does not control audience/visibility. Normal app create/edit/recurring flows no longer expose or save either display field; Django Admin remains maintenance-only while the fields exist. SERVICE-EVENT-CONTEXT.1B adds guarded dry-run-first backfill for `host_language_unit`; cleanup can then clear matching legacy FK values. `ServiceEvent.ministry_context` is not removed, `MinistryContext` rows are not deleted, and field/table retirement remains later. |
 | `Profile.small_group` stored field | `accounts.models.Profile.small_group`, `ProfileAdmin` | admin/emergency-maintenance surface | No normal app-level write remains, but admin/emergency/archive display remains until full retirement. |
@@ -280,6 +303,10 @@ Blockers:
 - Existing `SmallGroup` rows and FK references block table retirement.
 - Unmapped/inactive/wrong-type bridge mappings are readiness blockers for any non-lossy migration or final archive step.
 - `SmallGroup.district` parent links are redundant with `ChurchStructureUnit.parent`. LEGACY-OBJECT-LINKS.1A adds dry-run-first `cleanup_legacy_structure_parent_links` to clear eligible links (child unit `parent` equals the district's mapped active district unit); unsafe/mismatched links stay set. This does not delete `SmallGroup` rows or remove the field.
+- ROW-RETIRE.1A separately counts the remaining `SmallGroup` rows as future
+  archive candidates when they map to active small-group units, but it does not
+  approve deletion. If a dedicated compatibility/mapping model replaces the old
+  model rows, migrate that bridge explicitly before dropping the table.
 
 ### `District`
 
@@ -296,6 +323,13 @@ Blockers:
 - Existing rows and FK references block table retirement.
 - Wrong/missing bridge mappings block safe bridge-based backfill, audit, or final archive decisions.
 - `District.ministry_context` parent links are redundant with `ChurchStructureUnit.parent`. LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links` clears eligible links (district unit `parent` equals the ministry context's mapped active ministry-context unit); unsafe/mismatched links stay set. It does not delete `District` rows or remove the field.
+- ROW-RETIRE.1A highlights `District #13 未分配小组` mapped to
+  `#22 UNASSIGNED-GROUPS` as special handling: the mapped unit is `custom`, not
+  `district`, so it is likely a legacy placeholder/holding bucket. Do not
+  "fix" this by converting it into a district unit during row inventory. The
+  final retirement decision should choose whether to archive/delete the legacy
+  row, keep it as an explicit bridge, or replace it with a dedicated
+  compatibility/mapping model.
 
 ### `MinistryContext`
 
@@ -310,6 +344,9 @@ Blockers:
 - Existing rows and references block table retirement.
 - ServiceEvent `ministry_context` is label/context data, not audience authority, but it is still a FK reference that must be cleaned or otherwise approved before table retirement.
 - `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` is handled separately by SERVICE-EVENT-CONTEXT.1B: normal app writes are stopped, display uses structure-native `host_language_unit` (then the existing audience-derived fallback when no explicit display unit exists), `backfill_service_event_host_language_units` can populate the display-only unit from valid legacy mappings, and `cleanup_service_event_ministry_context_labels` can clear matching stored FK values after dry-run review and explicit apply approval. The legacy field and `MinistryContext` rows remain.
+- ROW-RETIRE.1A counts all remaining `MinistryContext` rows as bridge/admin/
+  diagnostic row-retirement blockers until the Host / Language display cleanup,
+  mapping bridge, and final table-retirement path are explicitly approved.
 
 ### ServiceEvent Legacy Scope Fields
 
@@ -396,7 +433,15 @@ Blockers:
 6. Run `Profile.small_group` cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_profile_small_group`, review skipped rows/output, then run `cleanup_profile_small_group --apply --confirm-profile-small-group-cleanup` only after explicit approval. Field/schema deprecation remains a later plan covering admin display, fallback/audit references, rollback, and model/table removal.
 7. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`; `ServiceEvent.ministry_context` has its own SERVICE-EVENT-CONTEXT.1B display-context backfill/cleanup path. It deletes no rows and removes no fields.
 8. Run ServiceEvent Host / Language display backfill and ministry-context label cleanup only when staff intentionally approve it for the target DB: dry-run `backfill_service_event_host_language_units`, review mapping skip categories, run `backfill_service_event_host_language_units --apply --confirm-service-event-host-language-unit-backfill` only after explicit approval, then dry-run `cleanup_service_event_ministry_context_labels`, review matching/skip categories, and run `cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup` only after separate explicit approval. Backfill sets only display-only `host_language_unit`; cleanup clears only matching `ServiceEvent.ministry_context` FK values. Field/schema deprecation and `MinistryContext` row/table retirement remain later.
-9. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
+9. Run `audit_legacy_structure_object_row_retirement --verbose --limit 30`
+   before proposing any final row/table action. Use it to decide between:
+   archive/delete rows later, keep rows temporarily as the mapping bridge,
+   replace bridge fields with a dedicated compatibility/mapping model, or remove
+   old models/tables only after all code/admin/backfill/seed dependencies are
+   handled. The current recommendation is conservative: keep the rows as a
+   bridge until a separate final-retirement slice is approved, and treat
+   `UNASSIGNED-GROUPS` as a special placeholder decision.
+10. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
 
 ## Verification for LEGACY-RETIRE.1A
 
@@ -416,6 +461,13 @@ For LEGACY-OBJECT-LINKS.1A, also run:
 ```powershell
 .venv\Scripts\python.exe manage.py test accounts.test_cleanup_legacy_structure_parent_links_command -v 2
 .venv\Scripts\python.exe manage.py cleanup_legacy_structure_parent_links --verbose --limit 30
+```
+
+For ROW-RETIRE.1A, also run:
+
+```powershell
+.venv\Scripts\python.exe manage.py test accounts.test_legacy_structure_object_row_retirement_command -v 2
+.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 30
 ```
 
 Do not run full app suites for this slice unless a later reviewer explicitly asks.

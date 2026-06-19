@@ -310,6 +310,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.cleanup_reflection_small_group_mirrors",
         "guarded cleanup tooling for existing reflection small_group_at_post mirrors; dry-run by default",
     ),
+    (
+        "reading.management.commands.cleanup_reflection_nongroup_display_mirrors",
+        "guarded migration of non-group reflection display context off small_group_at_post; dry-run by default",
+    ),
 )
 
 

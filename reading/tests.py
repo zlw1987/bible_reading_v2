@@ -71,6 +71,10 @@ from reading.management.commands.cleanup_reflection_small_group_mirrors import (
     apply_cleanup as apply_reflection_small_group_mirror_cleanup,
     run_cleanup as run_reflection_small_group_mirror_cleanup,
 )
+from reading.management.commands.cleanup_reflection_nongroup_display_mirrors import (
+    apply_cleanup as apply_reflection_nongroup_display_mirror_cleanup,
+    run_cleanup as run_reflection_nongroup_display_mirror_cleanup,
+)
 from accounts.management.commands.audit_legacy_structure_retirement_readiness import (
     run_audit as run_legacy_structure_retirement_audit,
 )
@@ -8693,6 +8697,472 @@ class ReflectionSmallGroupMirrorCleanupCommandTests(TestCase):
         # is conservatively retained.
         self.assertEqual(
             after["stats"]["reflection_small_group_at_post_references"], 1
+        )
+        self.assertEqual(
+            after["stats"]["small_group_retirement_blocker_references"],
+            before_blockers - 1,
+        )
+
+
+class ReflectionNonGroupDisplayMirrorCleanupCommandTests(TestCase):
+    """REFLECTION-MIRROR.1F guarded non-group display-mirror migration tests.
+
+    Dry-run is the default. Apply requires both ``--apply`` and
+    ``--confirm-reflection-nongroup-display-mirror-cleanup``. For non-group rows
+    whose only display context is the legacy ``small_group_at_post`` mirror (no
+    ``structure_unit_at_post`` yet) and whose legacy group maps to a valid active
+    small-group unit, the command sets ``structure_unit_at_post`` to that unit and
+    clears ``small_group_at_post``. Group-visibility rows and non-group rows that
+    already carry a structure snapshot are skipped (owned by
+    ``cleanup_reflection_small_group_mirrors``). It performs no schema migration,
+    no runtime source switch, never touches ``visibility`` / ``parent`` / ``body``,
+    and never prints body text.
+    """
+
+    plan_counter = 0
+
+    def run_cleanup_command(self, *args):
+        output = StringIO()
+        call_command(
+            "cleanup_reflection_nongroup_display_mirrors",
+            *args,
+            stdout=output,
+        )
+        return output.getvalue()
+
+    def create_unit(self, code, *, unit_type=None, is_active=True):
+        return ChurchStructureUnit.objects.create(
+            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            is_active=is_active,
+        )
+
+    def create_group(self, name, *, unit=None):
+        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
+
+    def create_reflection(
+        self,
+        *,
+        small_group=None,
+        structure_unit=None,
+        body,
+        parent=None,
+        is_hidden=False,
+        is_deleted=False,
+        visibility=ReflectionComment.VISIBILITY_CHURCH,
+    ):
+        type(self).plan_counter += 1
+        plan = ReadingPlan.objects.create(
+            name=f"NonGroup Mirror Plan {self.plan_counter}",
+            is_active=True,
+        )
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+            memory_verse="John 1:1",
+        )
+        author = User.objects.create_user(
+            username=f"nongroup_author_{self.plan_counter}"
+        )
+        return ReflectionComment.objects.create(
+            user=author,
+            plan_day=day,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=visibility,
+            small_group_at_post=small_group,
+            structure_unit_at_post=structure_unit,
+            parent=parent,
+            is_hidden=is_hidden,
+            is_deleted=is_deleted,
+            body=body,
+        )
+
+    # --- 1. Dry-run reports eligible row without mutating ----------------------
+
+    def test_dry_run_reports_eligible_row_without_mutating(self):
+        unit = self.create_unit("ND-DRY")
+        group = self.create_group("NonGroup Dry Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="dry body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        with CaptureQueriesContext(connection) as queries:
+            stats, _lines = run_reflection_nongroup_display_mirror_cleanup()
+
+        write_sql = [
+            query["sql"]
+            for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        self.assertEqual(write_sql, [])
+        self.assertEqual(stats["legacy_mirror_references_before"], 1)
+        self.assertEqual(stats["candidates"], 1)
+        self.assertEqual(stats["eligible_to_migrate_and_clear"], 1)
+        self.assertEqual(stats["would_migrate_and_clear_count"], 1)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        self.assertEqual(
+            stats["remaining_legacy_mirror_references_after_operation"], 1
+        )
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 2. Apply without confirmation refuses --------------------------------
+
+    def test_apply_without_confirmation_refuses_and_does_not_mutate(self):
+        unit = self.create_unit("ND-NOCONFIRM")
+        group = self.create_group("NonGroup No Confirm Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="noconfirm body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        with self.assertRaises(CommandError):
+            self.run_cleanup_command("--apply")
+
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 3. Confirmation without apply remains dry-run ------------------------
+
+    def test_confirmation_without_apply_remains_dry_run(self):
+        unit = self.create_unit("ND-CONFONLY")
+        group = self.create_group("NonGroup Confirm Only Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="confonly body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        output = self.run_cleanup_command(
+            "--confirm-reflection-nongroup-display-mirror-cleanup"
+        )
+
+        self.assertIn("mode: dry-run", output)
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 4./5. Apply migrates snapshot and clears mirror; visibility intact ---
+
+    def test_apply_migrates_structure_unit_and_clears_mirror(self):
+        unit = self.create_unit("ND-APPLY")
+        group = self.create_group("NonGroup Apply Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="apply body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["eligible_to_migrate_and_clear"], 1)
+        self.assertEqual(stats["migrated_and_cleared_count"], 1)
+        self.assertEqual(
+            stats["remaining_legacy_mirror_references_after_operation"], 0
+        )
+        comment.refresh_from_db()
+        self.assertIsNone(comment.small_group_at_post_id)
+        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
+        # Visibility unchanged.
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_CHURCH)
+
+    def test_private_visibility_row_is_migrated(self):
+        unit = self.create_unit("ND-PRIV")
+        group = self.create_group("NonGroup Private Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="private body",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+        )
+
+        apply_reflection_nongroup_display_mirror_cleanup()
+
+        comment.refresh_from_db()
+        self.assertIsNone(comment.small_group_at_post_id)
+        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
+        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_PRIVATE)
+
+    # --- 6. Body text unchanged and never printed -----------------------------
+
+    def test_body_text_unchanged_and_not_printed(self):
+        unit = self.create_unit("ND-BODY")
+        group = self.create_group("NonGroup Body Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="SECRET_NONGROUP_BODY",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        output = self.run_cleanup_command("--verbose", "--limit", "20")
+        self.assertIn("mode: dry-run", output)
+        self.assertNotIn("SECRET_NONGROUP_BODY", output)
+
+        apply_reflection_nongroup_display_mirror_cleanup()
+        comment.refresh_from_db()
+        self.assertEqual(comment.body, "SECRET_NONGROUP_BODY")
+
+    # --- 7. Parent unchanged --------------------------------------------------
+
+    def test_parent_unchanged_for_reply(self):
+        unit = self.create_unit("ND-PARENT")
+        group = self.create_group("NonGroup Parent Group", unit=unit)
+        parent = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="parent body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+        reply = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="reply body",
+            parent=parent,
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        apply_reflection_nongroup_display_mirror_cleanup()
+
+        reply.refresh_from_db()
+        self.assertEqual(reply.parent_id, parent.id)
+        self.assertIsNone(reply.small_group_at_post_id)
+        self.assertEqual(reply.structure_unit_at_post_id, unit.id)
+
+    # --- 8. Group-visibility rows are skipped ---------------------------------
+
+    def test_group_visibility_row_is_skipped(self):
+        unit = self.create_unit("ND-GROUP")
+        group = self.create_group("NonGroup Group Visibility Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="group body",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["skipped_group_visibility"], 1)
+        self.assertEqual(stats["candidates"], 0)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 9. Non-group rows with existing structure snapshot are skipped -------
+
+    def test_nongroup_row_with_existing_structure_snapshot_is_skipped(self):
+        unit = self.create_unit("ND-EXISTING")
+        other_unit = self.create_unit("ND-EXISTING-OTHER")
+        group = self.create_group("NonGroup Existing Group", unit=unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=other_unit,
+            body="existing body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["skipped_existing_structure_snapshot"], 1)
+        self.assertEqual(stats["candidates"], 0)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        comment.refresh_from_db()
+        # Untouched: this row is owned by cleanup_reflection_small_group_mirrors.
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertEqual(comment.structure_unit_at_post_id, other_unit.id)
+
+    # --- 10. Missing legacy mapping is skipped --------------------------------
+
+    def test_legacy_group_unmapped_is_skipped(self):
+        group = self.create_group("NonGroup Unmapped Group", unit=None)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="unmapped body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["candidates"], 1)
+        self.assertEqual(stats["skipped_legacy_group_unmapped"], 1)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 11. Inactive mapped unit is skipped ----------------------------------
+
+    def test_inactive_mapped_unit_is_skipped(self):
+        inactive_unit = self.create_unit("ND-INACT", is_active=False)
+        group = self.create_group("NonGroup Inactive Group", unit=inactive_unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="inactive body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["candidates"], 1)
+        self.assertEqual(stats["skipped_inactive_mapped_unit"], 1)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 12. Wrong-type mapped unit is skipped --------------------------------
+
+    def test_wrong_mapped_unit_type_is_skipped(self):
+        district_unit = self.create_unit(
+            "ND-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
+        )
+        group = self.create_group("NonGroup Wrong Type Group", unit=district_unit)
+        comment = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="wrong type body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["candidates"], 1)
+        self.assertEqual(stats["skipped_wrong_mapped_unit_type"], 1)
+        self.assertEqual(stats["migrated_and_cleared_count"], 0)
+        comment.refresh_from_db()
+        self.assertEqual(comment.small_group_at_post_id, group.id)
+        self.assertIsNone(comment.structure_unit_at_post_id)
+
+    # --- 13. Hidden / deleted eligible rows are handled safely ----------------
+
+    def test_hidden_and_deleted_rows_are_eligible(self):
+        unit = self.create_unit("ND-HIDDEN")
+        group = self.create_group("NonGroup Hidden Group", unit=unit)
+        hidden = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="hidden body",
+            is_hidden=True,
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+        deleted = self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="deleted body",
+            is_deleted=True,
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+
+        self.assertEqual(stats["eligible_to_migrate_and_clear"], 2)
+        self.assertEqual(stats["migrated_and_cleared_count"], 2)
+        hidden.refresh_from_db()
+        deleted.refresh_from_db()
+        self.assertIsNone(hidden.small_group_at_post_id)
+        self.assertIsNone(deleted.small_group_at_post_id)
+        self.assertEqual(hidden.structure_unit_at_post_id, unit.id)
+        self.assertEqual(deleted.structure_unit_at_post_id, unit.id)
+        # Hidden/deleted state untouched.
+        self.assertTrue(hidden.is_hidden)
+        self.assertTrue(deleted.is_deleted)
+
+    # --- 14. Replies handled only from their own mapping (no parent inference) -
+
+    def test_reply_uses_only_its_own_mapping(self):
+        unit = self.create_unit("ND-REPLY")
+        other_unit = self.create_unit("ND-REPLY-OTHER")
+        parent_group = self.create_group("NonGroup Reply Parent Group", unit=unit)
+        reply_group = self.create_group(
+            "NonGroup Reply Own Group", unit=other_unit
+        )
+        parent = self.create_reflection(
+            small_group=parent_group,
+            structure_unit=None,
+            body="reply parent body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+        reply = self.create_reflection(
+            small_group=reply_group,
+            structure_unit=None,
+            body="reply own body",
+            parent=parent,
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        apply_reflection_nongroup_display_mirror_cleanup()
+
+        reply.refresh_from_db()
+        # Reply migrated to its own group's unit, not the parent's.
+        self.assertIsNone(reply.small_group_at_post_id)
+        self.assertEqual(reply.structure_unit_at_post_id, other_unit.id)
+
+    # --- 15. Idempotency ------------------------------------------------------
+
+    def test_second_dry_run_after_apply_is_a_no_op(self):
+        unit = self.create_unit("ND-IDEM")
+        group = self.create_group("NonGroup Idempotent Group", unit=unit)
+        self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="idem body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        apply_stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
+        self.assertEqual(apply_stats["migrated_and_cleared_count"], 1)
+        self.assertEqual(
+            apply_stats["remaining_legacy_mirror_references_after_operation"], 0
+        )
+
+        second_stats, _lines = run_reflection_nongroup_display_mirror_cleanup()
+        self.assertEqual(second_stats["legacy_mirror_references_before"], 0)
+        self.assertEqual(second_stats["candidates"], 0)
+        self.assertEqual(second_stats["would_migrate_and_clear_count"], 0)
+        self.assertEqual(
+            second_stats["remaining_legacy_mirror_references_after_operation"], 0
+        )
+
+    # --- 16. Audit blockers reduced after apply -------------------------------
+
+    def test_audit_reference_blockers_cleared_after_apply(self):
+        unit = self.create_unit("ND-AUDIT")
+        group = self.create_group("NonGroup Audit Group", unit=unit)
+        # The lone non-group display-context row (no structure snapshot yet).
+        self.create_reflection(
+            small_group=group,
+            structure_unit=None,
+            body="audit body",
+            visibility=ReflectionComment.VISIBILITY_CHURCH,
+        )
+
+        before = run_legacy_structure_retirement_audit()
+        before_refs = before["stats"]["reflection_small_group_at_post_references"]
+        before_blockers = before["stats"]["small_group_retirement_blocker_references"]
+        self.assertEqual(before_refs, 1)
+
+        apply_reflection_nongroup_display_mirror_cleanup()
+
+        after = run_legacy_structure_retirement_audit()
+        self.assertEqual(
+            after["stats"]["reflection_small_group_at_post_references"], 0
         )
         self.assertEqual(
             after["stats"]["small_group_retirement_blocker_references"],

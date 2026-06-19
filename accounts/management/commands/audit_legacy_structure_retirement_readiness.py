@@ -243,6 +243,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "setup/backfill support for legacy-to-structure mappings",
     ),
     (
+        "accounts.management.commands.cleanup_legacy_structure_parent_links",
+        (
+            "guarded cleanup tooling for legacy SmallGroup.district / "
+            "District.ministry_context parent links already represented by "
+            "ChurchStructureUnit.parent; dry-run by default"
+        ),
+    ),
+    (
         "accounts.management.commands.audit_structure_role_scopes",
         "diagnostic/audit/backfill support",
     ),

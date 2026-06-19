@@ -34,10 +34,13 @@ followed BS-STRUCT.1A are now implemented:
   `small_group` (BS-STRUCT.1M);
 - BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit
   saves from writing legacy `BibleStudySeries.scope_type` /
-  `ministry_context` / `district` / `small_group` values. Existing populated
-  legacy series scope fields are not bulk-cleared in this slice; they remain
-  stored audit blockers until a future guarded cleanup, and field/schema removal
-  is later;
+  `ministry_context` / `district` / `small_group` values. BS-SERIES-SCOPE.1B
+  adds the guarded dry-run-first
+  `cleanup_bible_study_series_legacy_scope_fields` command for existing values:
+  safe cleanup only clears rows that already have valid
+  `BibleStudySeriesAudienceScope` rows. No cleanup runs automatically;
+  unsafe/mismatched rows remain blocked for review, and field/schema removal is
+  later;
 - the staff meeting manage-list filter is **structure-audience aware**: it
   filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
   (unit-or-descendant), matches audience rows only, and no longer exposes a
@@ -75,6 +78,14 @@ followed BS-STRUCT.1A are now implemented:
   cleanup runs automatically; unsafe or mismatched rows remain blocked for
   review. This does not remove the model field or DB constraint, and later
   field/constraint cleanup remains a separate migration;
+- BS-SERIES-SCOPE.1B adds the dry-run-first guarded cleanup command
+  `cleanup_bible_study_series_legacy_scope_fields` for existing
+  `BibleStudySeries.scope_type` / `ministry_context` / `district` /
+  `small_group` values. Safe cleanup only clears series rows that already have
+  valid `BibleStudySeriesAudienceScope` rows. No cleanup runs automatically;
+  unsafe/mismatched rows remain blocked for review. This does not remove the
+  model fields or DB constraints, and later field/schema cleanup remains a
+  separate migration;
 - obsolete small-group-keyed write/generation helpers were removed
   (`write_normal_meeting_audience_scope`, the compatibility-only
   `sync_normal_meeting_audience_scope`, and the never-produced
@@ -382,9 +393,12 @@ only when it still maps to the selected unit and clear stale mismatches. Duplica
    are no longer a generation source** (generation requires audience rows and
    fails closed with zero rows). **Since BS-SERIES-SCOPE.1A, normal app-level
    schedule create/edit saves no longer call the legacy mirror helper and no
-   longer write/update those legacy series scope fields.** Existing populated
-   legacy series scope values are not bulk-cleared here; they remain stored
-   audit blockers for a later guarded cleanup, and field/schema removal is a
+   longer write/update those legacy series scope fields.** BS-SERIES-SCOPE.1B
+   adds `cleanup_bible_study_series_legacy_scope_fields`, a dry-run-first
+   guarded cleanup command for existing populated values. It only clears rows
+   that already have valid `BibleStudySeriesAudienceScope` rows, does not run
+   automatically, leaves unsafe/mismatched rows blocked for review, and does not
+   remove the model fields or DB constraints. Field/schema removal remains a
    separate future migration slice.
 6. **V1 `BibleStudySession`** — legacy-only, retirement target (excluded).
 
@@ -1270,6 +1284,16 @@ the meeting-identity decision (Section 4.5).
   audience row. Unsafe/mismatched rows remain blocked for review, no cleanup is
   run automatically, and this slice does not remove the model field or DB
   constraint. Later field/constraint cleanup remains a separate migration.
+- **BS-SERIES-SCOPE.1B** — add guarded cleanup for existing
+  `BibleStudySeries` legacy scope fields. ✅ **implemented.**
+  `cleanup_bible_study_series_legacy_scope_fields` is dry-run by default, and
+  apply mode requires
+  `--apply --confirm-series-legacy-scope-retirement`. It clears only rows that
+  already have valid `BibleStudySeriesAudienceScope` rows: active units, no
+  whole-church root combined with other units, and no ancestor/descendant
+  combination. Unsafe/mismatched rows remain blocked for review, no cleanup is
+  run automatically, and this slice does not remove the model fields or DB
+  constraints. Later field/schema cleanup remains a separate migration.
 - **BS-STRUCT.2+ future work** — field-level cleanup / retirement of the legacy
   Bible Study `SmallGroup` bridge only after remaining compatibility consumers
   are resolved (coordinate with CS-CORE Section 12 legacy retirement). This does

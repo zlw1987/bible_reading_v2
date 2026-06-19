@@ -267,6 +267,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "backfill support for Bible Study V2 generation keys; dry-run by default",
     ),
     (
+        "studies.management.commands.cleanup_bible_study_v2_small_group_mirrors",
+        "guarded cleanup tooling for V2 meeting small_group mirrors; dry-run by default",
+    ),
+    (
+        "studies.management.commands.cleanup_bible_study_series_legacy_scope_fields",
+        "guarded cleanup tooling for BibleStudySeries legacy scope fields; dry-run by default",
+    ),
+    (
         "studies.management.commands.purge_legacy_bible_study_v1_sessions",
         "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
     ),

@@ -84,6 +84,17 @@ class ServiceEvent(models.Model):
         on_delete=models.SET_NULL,
         related_name="service_events",
     )
+    host_language_unit = models.ForeignKey(
+        "accounts.ChurchStructureUnit",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="host_language_service_events",
+        help_text=(
+            "Display-only Host / Language context. Does not control audience "
+            "or visibility."
+        ),
+    )
     rotation_anchor_team = models.ForeignKey(
         "ministry.MinistryTeam",
         null=True,

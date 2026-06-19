@@ -1,13 +1,11 @@
 """Guarded cleanup for existing ServiceEvent.ministry_context display links.
 
-SE-CTX.1A. ``ServiceEvent.ministry_context`` is a display-only host/language
-label, not audience authority. The structure-native display fallback
-(``event_host_language_label`` / ``events.ministry_context_display``) derives an
-equivalent label from the event's ``ServiceEventAudienceScope`` rows. This
-command clears the legacy FK only where that fallback derives the *same*
-ministry-context unit, so the displayed host/language label is preserved (apart
-from the accepted wording shift from the legacy context object name to the
-equivalent structure-unit label).
+``ServiceEvent.ministry_context`` is a display-only host/language label, not
+audience authority. The structure-native ``ServiceEvent.host_language_unit``
+field carries that display context without narrowing audience rows. This command
+clears the legacy FK only where the structure-native display context, or the
+older audience-derived fallback when no explicit display context exists, maps to
+the same ministry-context unit.
 
 Dry-run is the default. Apply mode requires BOTH ``--apply`` and
 ``--confirm-service-event-ministry-context-label-cleanup``. The only field this
@@ -35,12 +33,16 @@ from events.models import ServiceEvent, ServiceEventAudienceScope
 _STAT_KEYS = (
     "service_events_checked",
     "links_present",
+    "events_with_host_language_unit",
     "events_with_audience_rows",
     "events_without_audience_rows",
     "eligible_to_clear",
     "would_clear_count",
     "cleared_count",
     "skipped_zero_audience_rows",
+    "skipped_missing_host_language_unit",
+    "skipped_inactive_host_language_unit",
+    "skipped_wrong_host_language_unit_type",
     "skipped_missing_mapped_context_unit",
     "skipped_inactive_mapped_context_unit",
     "skipped_wrong_mapped_context_unit_type",
@@ -65,6 +67,7 @@ class DecisionLine:
     start: str
     current_context: str
     mapped_unit: str
+    host_language_unit: str
     derived_unit: str
     audience_units: str
     category: str
@@ -109,7 +112,9 @@ def _format_decision_line(line):
     return (
         f"  event #{line.event_id} | title: {line.title!r} | status: {line.status} "
         f"| start: {start} | current ministry_context: {line.current_context} "
-        f"| mapped unit: {line.mapped_unit} | derived unit: {line.derived_unit} "
+        f"| mapped unit: {line.mapped_unit} "
+        f"| host_language_unit: {line.host_language_unit} "
+        f"| derived unit: {line.derived_unit} "
         f"| audience units: {line.audience_units} | decision: {line.category} "
         f"| reason: {line.reason}"
     )
@@ -120,6 +125,7 @@ def _event_queryset(*, lock=False):
         ServiceEvent.objects.select_related(
             "ministry_context",
             "ministry_context__church_structure_unit",
+            "host_language_unit",
         )
         .prefetch_related("audience_scope_links__unit")
         .order_by("id")
@@ -150,6 +156,7 @@ def _decision_line(event, *, audience_units, derived_unit, category, reason):
         start=_start_label(event),
         current_context=_context_label(event.ministry_context),
         mapped_unit=_unit_label(mapped_unit),
+        host_language_unit=_unit_label(event.host_language_unit),
         derived_unit=_unit_label(derived_unit),
         audience_units=_audience_units_label(audience_units),
         category=category,
@@ -160,21 +167,8 @@ def _decision_line(event, *, audience_units, derived_unit, category, reason):
 def _classify_event(event, stats, *, audience_row_count, apply_mode):
     """Classify one candidate event (ministry_context is set)."""
     audience_units = [link.unit for link in event.audience_scope_links.all()]
-
-    if audience_row_count < 1:
-        stats["skipped_zero_audience_rows"] += 1
-        return (
-            _decision_line(
-                event,
-                audience_units=audience_units,
-                derived_unit=None,
-                category="skipped_zero_audience_rows",
-                reason="candidate has a ministry_context link but no audience rows",
-            ),
-            None,
-        )
-
     mapped_unit = event.ministry_context.church_structure_unit
+
     if mapped_unit is None:
         stats["skipped_missing_mapped_context_unit"] += 1
         return (
@@ -214,9 +208,76 @@ def _classify_event(event, stats, *, audience_row_count, apply_mode):
             None,
         )
 
+    host_language_unit = event.host_language_unit
+    if host_language_unit is not None:
+        if not host_language_unit.is_active:
+            stats["skipped_inactive_host_language_unit"] += 1
+            return (
+                _decision_line(
+                    event,
+                    audience_units=audience_units,
+                    derived_unit=None,
+                    category="skipped_inactive_host_language_unit",
+                    reason="host_language_unit is inactive",
+                ),
+                None,
+            )
+
+        if host_language_unit.unit_type != ChurchStructureUnit.UNIT_MINISTRY_CONTEXT:
+            stats["skipped_wrong_host_language_unit_type"] += 1
+            return (
+                _decision_line(
+                    event,
+                    audience_units=audience_units,
+                    derived_unit=None,
+                    category="skipped_wrong_host_language_unit_type",
+                    reason="host_language_unit is not a ministry_context unit",
+                ),
+                None,
+            )
+
+        if host_language_unit.id != mapped_unit.id:
+            stats["skipped_context_mismatch"] += 1
+            return (
+                _decision_line(
+                    event,
+                    audience_units=audience_units,
+                    derived_unit=host_language_unit,
+                    category="skipped_context_mismatch",
+                    reason="host_language_unit differs from mapped ministry_context unit",
+                ),
+                None,
+            )
+
+        return _eligible_decision(
+            event,
+            stats,
+            audience_units=audience_units,
+            display_unit=host_language_unit,
+            apply_mode=apply_mode,
+        )
+
+    if audience_row_count < 1:
+        stats["skipped_zero_audience_rows"] += 1
+        stats["skipped_missing_host_language_unit"] += 1
+        return (
+            _decision_line(
+                event,
+                audience_units=audience_units,
+                derived_unit=None,
+                category="skipped_zero_audience_rows",
+                reason=(
+                    "candidate has no host_language_unit and no audience rows "
+                    "for display fallback"
+                ),
+            ),
+            None,
+        )
+
     derived = derive_ministry_context_units(audience_units)
     if len(derived) == 0:
         stats["skipped_no_derived_context"] += 1
+        stats["skipped_missing_host_language_unit"] += 1
         return (
             _decision_line(
                 event,
@@ -255,8 +316,19 @@ def _classify_event(event, stats, *, audience_row_count, apply_mode):
             None,
         )
 
-    # Eligible: the structure-native fallback derives the same ministry-context
-    # unit, so the displayed host/language label is preserved.
+    return _eligible_decision(
+        event,
+        stats,
+        audience_units=audience_units,
+        display_unit=derived_unit,
+        apply_mode=apply_mode,
+    )
+
+
+def _eligible_decision(event, stats, *, audience_units, display_unit, apply_mode):
+    # Eligible: the structure-native display context, or the audience-derived
+    # fallback when no explicit display context exists, maps to the same
+    # ministry-context unit, so the displayed host/language label is preserved.
     stats["eligible_to_clear"] += 1
     if apply_mode:
         category = "cleared"
@@ -270,7 +342,7 @@ def _classify_event(event, stats, *, audience_row_count, apply_mode):
         _decision_line(
             event,
             audience_units=audience_units,
-            derived_unit=derived_unit,
+            derived_unit=display_unit,
             category=category,
             reason=reason,
         ),
@@ -291,6 +363,8 @@ def _scan_events(*, lock=False, apply_mode=False):
             stats["events_with_audience_rows"] += 1
         else:
             stats["events_without_audience_rows"] += 1
+        if event.host_language_unit_id:
+            stats["events_with_host_language_unit"] += 1
 
         if not event.ministry_context_id:
             continue
@@ -339,9 +413,10 @@ def apply_cleanup():
 class Command(BaseCommand):
     help = (
         "Dry-run-first cleanup for existing ServiceEvent.ministry_context "
-        "display links (SE-CTX.1A). Apply mode clears only ServiceEvent rows "
-        "where the structure-native host/language fallback derives the same "
-        "ministry-context unit, preserving the displayed label. It never "
+        "display links (SE-CTX.1B). Apply mode clears only ServiceEvent rows "
+        "where host_language_unit, or the audience-derived fallback when that "
+        "field is blank, maps to the same ministry-context unit, preserving "
+        "the displayed label. It never "
         "changes audience rows, audience visibility, ChurchStructureUnit, "
         "memberships, MinistryContext rows, legacy structure rows, Bible "
         "Study, reflections, roles, serving assignments, permissions, reading "
@@ -414,6 +489,8 @@ class Command(BaseCommand):
 
         blocker_total = (
             stats["skipped_zero_audience_rows"]
+            + stats["skipped_inactive_host_language_unit"]
+            + stats["skipped_wrong_host_language_unit_type"]
             + stats["skipped_missing_mapped_context_unit"]
             + stats["skipped_inactive_mapped_context_unit"]
             + stats["skipped_wrong_mapped_context_unit_type"]
@@ -444,12 +521,12 @@ class Command(BaseCommand):
         if apply_mode:
             write(
                 "ServiceEvent ministry_context label cleanup "
-                "(SE-CTX.1A, APPLY mode)"
+                "(SE-CTX.1B, APPLY mode)"
             )
         else:
             write(
                 "ServiceEvent ministry_context label cleanup "
-                "(SE-CTX.1A, dry-run only)"
+                "(SE-CTX.1B, dry-run only)"
             )
         write("=" * 78)
         write(f"mode: {'apply' if apply_mode else 'dry-run'}")
@@ -461,19 +538,19 @@ class Command(BaseCommand):
             write(f"{key}: {stats[key]}")
         write(f"data_mutated: {str(data_mutated).lower()}")
         # Runtime label/template behavior is unchanged by running this command:
-        # the structure-native fallback already renders the same host/language
-        # label whether or not the legacy FK is set.
+        # host_language_unit or the fallback already renders the same
+        # host/language label whether or not the legacy FK is set.
         write("runtime_mutated: false")
         write("schema_mutated: false")
         write("")
         if apply_mode:
             write(
                 "Apply mode: cleared only ServiceEvent.ministry_context for safe "
-                "rows whose structure-native host/language fallback derives the "
-                "same ministry-context unit. Audience rows, audience visibility, "
-                "ChurchStructureUnit, MinistryContext rows, memberships, legacy "
-                "structure rows, serving assignments, and all other modules were "
-                "not changed."
+                "rows whose host_language_unit, or audience-derived fallback "
+                "when that field is blank, maps to the same ministry-context "
+                "unit. Audience rows, audience visibility, ChurchStructureUnit, "
+                "MinistryContext rows, memberships, legacy structure rows, "
+                "serving assignments, and all other modules were not changed."
             )
         else:
             write(

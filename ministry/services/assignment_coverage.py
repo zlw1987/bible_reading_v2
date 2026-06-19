@@ -82,6 +82,7 @@ def assignment_coverage_queryset():
 def events_with_coverage_queryset():
     return ServiceEvent.objects.select_related(
         "district",
+        "host_language_unit",
         "ministry_context",
         "rotation_anchor_team",
         "small_group",

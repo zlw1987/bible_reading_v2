@@ -1,4 +1,4 @@
-"""SE-CTX.1A tests for cleanup_service_event_ministry_context_labels."""
+"""SE-CTX.1B tests for ServiceEvent Host / Language cleanup commands."""
 
 from io import StringIO
 
@@ -101,6 +101,115 @@ class CleanupServiceEventMinistryContextLabelsCommandTests(TestCase):
         )
         return out.getvalue()
 
+    def run_backfill_command(self, *args):
+        out = StringIO()
+        call_command(
+            "backfill_service_event_host_language_units",
+            *args,
+            stdout=out,
+        )
+        return out.getvalue()
+
+    def test_backfill_dry_run_reports_eligible_and_writes_nothing(self):
+        event = self.make_event(ministry_context=self.cm_context)
+        self.add_audience(event, self.root)
+
+        output = self.run_backfill_command()
+
+        event.refresh_from_db()
+        self.assertIsNone(event.host_language_unit_id)
+        self.assertEqual(event.ministry_context_id, self.cm_context.id)
+        self.assertIn("mode: dry-run", output)
+        self.assertIn("candidate_events: 1", output)
+        self.assertIn("eligible_to_backfill: 1", output)
+        self.assertIn("would_update_count: 1", output)
+        self.assertIn("data_mutated: false", output)
+        self.assertIn("runtime_mutated: false", output)
+        self.assertIn("schema_mutated: false", output)
+
+    def test_backfill_apply_without_confirmation_fails_and_mutates_nothing(self):
+        event = self.make_event(ministry_context=self.cm_context)
+
+        with self.assertRaises(CommandError):
+            self.run_backfill_command("--apply")
+
+        event.refresh_from_db()
+        self.assertIsNone(event.host_language_unit_id)
+        self.assertEqual(event.ministry_context_id, self.cm_context.id)
+
+    def test_backfill_apply_sets_host_language_unit_from_valid_mapping(self):
+        event = self.make_event(ministry_context=self.cm_context)
+        self.add_audience(event, self.root)
+
+        output = self.run_backfill_command(
+            "--apply",
+            "--confirm-service-event-host-language-unit-backfill",
+        )
+
+        event.refresh_from_db()
+        self.assertEqual(event.host_language_unit_id, self.cm_unit.id)
+        self.assertEqual(event.ministry_context_id, self.cm_context.id)
+        self.assertIn("mode: apply", output)
+        self.assertIn("eligible_to_backfill: 1", output)
+        self.assertIn("updated_count: 1", output)
+        self.assertIn("data_mutated: true", output)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+        self.assertTrue(MinistryContext.objects.filter(id=self.cm_context.id).exists())
+
+    def test_backfill_skips_missing_inactive_and_wrong_type_mappings(self):
+        missing_context = MinistryContext.objects.create(
+            code="UNMAPPED",
+            name="Unmapped",
+            church_structure_unit=None,
+        )
+        inactive_context = MinistryContext.objects.create(
+            code="INACTIVE",
+            name="Inactive",
+            church_structure_unit=self.cm_unit,
+        )
+        self.cm_unit.is_active = False
+        self.cm_unit.save()
+        wrong_type_context = MinistryContext.objects.create(
+            code="WRONG",
+            name="Wrong Type",
+            church_structure_unit=self.district_unit,
+        )
+        missing_event = self.make_event(ministry_context=missing_context)
+        inactive_event = self.make_event(
+            ministry_context=inactive_context,
+            title="Inactive Host",
+        )
+        wrong_type_event = self.make_event(
+            ministry_context=wrong_type_context,
+            title="Wrong Host",
+        )
+
+        output = self.run_backfill_command(
+            "--apply",
+            "--confirm-service-event-host-language-unit-backfill",
+        )
+
+        for event in (missing_event, inactive_event, wrong_type_event):
+            event.refresh_from_db()
+            self.assertIsNone(event.host_language_unit_id)
+        self.assertIn("skipped_missing_mapped_context_unit: 1", output)
+        self.assertIn("skipped_inactive_mapped_context_unit: 1", output)
+        self.assertIn("skipped_wrong_mapped_context_unit_type: 1", output)
+        self.assertIn("updated_count: 0", output)
+
+    def test_backfill_verbose_does_not_print_sensitive_text(self):
+        event = self.make_event(
+            ministry_context=self.cm_context,
+            description="SECRET private description body",
+            description_en="SECRET private english body",
+        )
+        self.add_audience(event, self.root)
+
+        output = self.run_backfill_command("--verbose", "--limit", "20")
+
+        self.assertNotIn("SECRET", output)
+        self.assertIn("decision: would_update", output)
+
     def test_dry_run_reports_eligible_and_writes_nothing(self):
         event = self.make_event(ministry_context=self.cm_context)
         self.add_audience(event, self.cm_unit)
@@ -163,6 +272,26 @@ class CleanupServiceEventMinistryContextLabelsCommandTests(TestCase):
         self.assertIn("data_mutated: true", output)
         # MinistryContext rows and audience rows are preserved.
         self.assertTrue(MinistryContext.objects.filter(id=self.cm_context.id).exists())
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+
+    def test_apply_clears_root_audience_when_host_language_unit_matches(self):
+        event = self.make_event(
+            ministry_context=self.cm_context,
+            host_language_unit=self.cm_unit,
+        )
+        self.add_audience(event, self.root)
+
+        output = self.run_command(
+            "--apply",
+            "--confirm-service-event-ministry-context-label-cleanup",
+        )
+
+        event.refresh_from_db()
+        self.assertIsNone(event.ministry_context_id)
+        self.assertEqual(event.host_language_unit_id, self.cm_unit.id)
+        self.assertIn("events_with_host_language_unit: 1", output)
+        self.assertIn("eligible_to_clear: 1", output)
+        self.assertIn("cleared_count: 1", output)
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
 
     def test_zero_audience_event_is_skipped(self):
@@ -260,6 +389,24 @@ class CleanupServiceEventMinistryContextLabelsCommandTests(TestCase):
         self.assertIn("skipped_context_mismatch: 1", output)
         self.assertIn("cleared_count: 0", output)
 
+    def test_host_language_unit_mismatch_is_skipped(self):
+        event = self.make_event(
+            ministry_context=self.cm_context,
+            host_language_unit=self.em_unit,
+        )
+        self.add_audience(event, self.root)
+
+        output = self.run_command(
+            "--apply",
+            "--confirm-service-event-ministry-context-label-cleanup",
+        )
+
+        event.refresh_from_db()
+        self.assertEqual(event.ministry_context_id, self.cm_context.id)
+        self.assertEqual(event.host_language_unit_id, self.em_unit.id)
+        self.assertIn("skipped_context_mismatch: 1", output)
+        self.assertIn("cleared_count: 0", output)
+
     def test_multiple_derived_contexts_is_skipped(self):
         event = self.make_event(ministry_context=self.cm_context)
         self.add_audience(event, self.cm_unit)
@@ -319,6 +466,39 @@ class CleanupServiceEventMinistryContextLabelsCommandTests(TestCase):
             "--confirm-service-event-ministry-context-label-cleanup",
         )
 
+        after = run_legacy_retirement_audit(
+            target_date=self.today,
+            now=timezone.now(),
+        )["stats"]
+        self.assertEqual(after["service_events_with_ministry_context"], 0)
+        self.assertEqual(
+            before["ministry_context_retirement_blocker_references"]
+            - after["ministry_context_retirement_blocker_references"],
+            1,
+        )
+
+    def test_backfill_then_cleanup_reduces_audit_for_root_audience_event(self):
+        event = self.make_event(ministry_context=self.cm_context)
+        self.add_audience(event, self.root)
+
+        before = run_legacy_retirement_audit(
+            target_date=self.today,
+            now=timezone.now(),
+        )["stats"]
+        self.assertEqual(before["service_events_with_ministry_context"], 1)
+
+        self.run_backfill_command(
+            "--apply",
+            "--confirm-service-event-host-language-unit-backfill",
+        )
+        self.run_command(
+            "--apply",
+            "--confirm-service-event-ministry-context-label-cleanup",
+        )
+
+        event.refresh_from_db()
+        self.assertIsNone(event.ministry_context_id)
+        self.assertEqual(event.host_language_unit_id, self.cm_unit.id)
         after = run_legacy_retirement_audit(
             target_date=self.today,
             now=timezone.now(),

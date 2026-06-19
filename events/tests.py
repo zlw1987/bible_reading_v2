@@ -1459,6 +1459,8 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertNotIn("ministry_context", english_form.fields)
         self.assertNotIn("ministry_context", chinese_form.fields)
+        self.assertNotIn("host_language_unit", english_form.fields)
+        self.assertNotIn("host_language_unit", chinese_form.fields)
         self.assertIn(
             "Host / Language display is derived from the selected audience",
             english_form.fields["audience_units"].help_text,
@@ -1506,6 +1508,7 @@ class ServiceEventFoundationTests(TestCase):
             self.assertNotIn("district", form.fields)
             self.assertNotIn("small_group", form.fields)
             self.assertNotIn("ministry_context", form.fields)
+            self.assertNotIn("host_language_unit", form.fields)
 
     def test_existing_ministry_context_label_still_displays_without_changing_visibility(self):
         self.set_language("en")
@@ -1526,12 +1529,16 @@ class ServiceEventFoundationTests(TestCase):
 
         response = self.client.post(
             reverse("create_service_event"),
-            self.event_post_data(ministry_context=self.em.id),
+            self.event_post_data(
+                ministry_context=self.em.id,
+                host_language_unit=self.north_unit.id,
+            ),
         )
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
         self.assertIsNone(event.ministry_context)
+        self.assertIsNone(event.host_language_unit)
 
     def test_manager_edit_does_not_reintroduce_cleared_ministry_context_label(self):
         self.set_language("en")
@@ -1545,6 +1552,7 @@ class ServiceEventFoundationTests(TestCase):
                 title="更新聚会",
                 title_en="Updated Meeting",
                 ministry_context=self.em.id,
+                host_language_unit=self.north_unit.id,
             ),
         )
 
@@ -1552,6 +1560,7 @@ class ServiceEventFoundationTests(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.title_en, "Updated Meeting")
         self.assertIsNone(event.ministry_context)
+        self.assertIsNone(event.host_language_unit)
 
     def test_manager_create_does_not_accept_legacy_district_scope(self):
         self.set_language("en")
@@ -2251,6 +2260,7 @@ class ServiceEventFoundationTests(TestCase):
             self.recurring_post_data(
                 create="1",
                 ministry_context=self.em.id,
+                host_language_unit=self.north_unit.id,
             ),
         )
 
@@ -2259,6 +2269,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(events.count(), 3)
         for event in events:
             self.assertIsNone(event.ministry_context)
+            self.assertIsNone(event.host_language_unit)
 
     def test_recurring_create_with_blank_ministry_context_keeps_events_blank(self):
         self.set_language("en")
@@ -2284,6 +2295,7 @@ class ServiceEventFoundationTests(TestCase):
             self.recurring_post_data(
                 create="1",
                 ministry_context=self.em.id,
+                host_language_unit=self.north_unit.id,
                 required_teams=[
                     self.required_team.id,
                     self.other_required_team.id,
@@ -2296,6 +2308,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(events.count(), 3)
         for event in events:
             self.assertIsNone(event.ministry_context)
+            self.assertIsNone(event.host_language_unit)
             self.assertEqual(
                 set(event.required_teams.values_list("id", flat=True)),
                 {self.required_team.id, self.other_required_team.id},

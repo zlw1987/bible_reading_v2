@@ -82,7 +82,10 @@ class HostLanguageDisplayFallbackTests(TestCase):
         )
 
     def test_existing_ministry_context_label_unchanged(self):
-        event = self.make_event(ministry_context=self.cm_context)
+        event = self.make_event(
+            ministry_context=self.cm_context,
+            host_language_unit=self.em_unit,
+        )
         self.add_audience(event, self.em_unit)  # audience differs from FK
 
         # The legacy FK label is preserved verbatim while the FK is set.
@@ -90,6 +93,22 @@ class HostLanguageDisplayFallbackTests(TestCase):
             event_host_language_label(event, "en"),
             event_ministry_context_label(event, "en"),
         )
+        self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
+        self.assertEqual(event_host_language_label(event, "zh"), "CM - 中文事工")
+
+    def test_host_language_unit_field_accepts_ministry_context_unit(self):
+        event = self.make_event(host_language_unit=self.cm_unit)
+
+        self.assertEqual(event.host_language_unit, self.cm_unit)
+        self.assertIn(event, self.cm_unit.host_language_service_events.all())
+
+    def test_null_legacy_fk_uses_host_language_unit_before_audience_rows(self):
+        event = self.make_event(
+            ministry_context=None,
+            host_language_unit=self.cm_unit,
+        )
+        self.add_audience(event, self.em_unit)  # audience differs from display label
+
         self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
         self.assertEqual(event_host_language_label(event, "zh"), "CM - 中文事工")
 
@@ -125,6 +144,15 @@ class HostLanguageDisplayFallbackTests(TestCase):
             "Multiple ministry contexts",
         )
         self.assertEqual(event_host_language_label(event, "zh"), "多个事工/语言范围")
+
+    def test_root_audience_with_host_language_unit_displays_context_label(self):
+        event = self.make_event(
+            ministry_context=None,
+            host_language_unit=self.cm_unit,
+        )
+        self.add_audience(event, self.root)
+
+        self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
 
     def test_no_audience_or_no_context_ancestor_falls_back_to_empty(self):
         no_audience = self.make_event(ministry_context=None)

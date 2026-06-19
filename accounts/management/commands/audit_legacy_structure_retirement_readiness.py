@@ -271,11 +271,20 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "guarded cleanup tooling for ServiceEvent legacy scope fields; dry-run by default",
     ),
     (
+        "events.management.commands.backfill_service_event_host_language_units",
+        (
+            "backfill support for ServiceEvent.host_language_unit display "
+            "context from legacy ServiceEvent.ministry_context mappings; "
+            "dry-run by default"
+        ),
+    ),
+    (
         "events.management.commands.cleanup_service_event_ministry_context_labels",
         (
             "guarded cleanup tooling for ServiceEvent.ministry_context display "
-            "links where the structure-native host/language fallback derives the "
-            "same ministry-context unit; dry-run by default"
+            "links where host_language_unit, or the audience-derived fallback "
+            "when that field is blank, maps to the same ministry-context unit; "
+            "dry-run by default"
         ),
     ),
     (

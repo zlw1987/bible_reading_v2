@@ -1,5 +1,7 @@
 from django.contrib import admin
 
+from accounts.models import ChurchStructureUnit
+
 from .models import ServiceEvent, ServiceEventRequiredTeam
 
 
@@ -17,6 +19,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "event_type",
         "start_datetime",
         "ministry_context",
+        "host_language_unit",
         "rotation_anchor_team",
         "scope_type",
         "status",
@@ -27,6 +30,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "status",
         "scope_type",
         "ministry_context",
+        "host_language_unit",
         "rotation_anchor_team",
         "start_datetime",
     )
@@ -39,6 +43,9 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "ministry_context__code",
         "ministry_context__name",
         "ministry_context__name_en",
+        "host_language_unit__code",
+        "host_language_unit__name",
+        "host_language_unit__name_en",
         "rotation_anchor_team__name",
         "rotation_anchor_team__name_en",
     )
@@ -51,6 +58,16 @@ class ServiceEventAdmin(admin.ModelAdmin):
             formfield.help_text = (
                 "Optional label for the host, language, or similar ministry context. "
                 "This is label-only and does not control visibility, serving assignment, or permissions."
+            )
+        if db_field.name == "host_language_unit":
+            formfield.label = "Host / Language Unit"
+            formfield.queryset = ChurchStructureUnit.objects.filter(
+                is_active=True,
+                unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            ).order_by("sort_order", "code", "name")
+            formfield.help_text = (
+                "Structure-native display-only Host / Language context. "
+                "This does not control visibility, serving assignment, or permissions."
             )
         if db_field.name == "rotation_anchor_team":
             formfield.label = "Rotation Anchor Team"

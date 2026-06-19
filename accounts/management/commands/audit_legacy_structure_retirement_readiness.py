@@ -255,6 +255,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "backfill support for ServiceEvent audience rows",
     ),
     (
+        "events.management.commands.cleanup_service_event_legacy_scope_fields",
+        "guarded cleanup tooling for ServiceEvent legacy scope fields; dry-run by default",
+    ),
+    (
         "studies.management.commands.audit_bible_study_structure_retirement_readiness",
         "standing diagnostic/audit guard",
     ),

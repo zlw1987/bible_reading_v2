@@ -8,6 +8,8 @@ Status: CS-CORE.0A is complete with this document. CS-CORE.0B.1, CS-CORE.1A, CS-
 
 DOCS-STRUCT.3A current-state update: after PRAYER-STRUCT.1A, ordinary group-prayer access uses `PrayerRequest.structure_unit_at_post` plus active primary `ChurchStructureMembership`; `PrayerRequest.small_group_at_post` is legacy mirror/history only and `Profile.small_group` no longer grants ordinary group-prayer access. After BS-STRUCT.2A, Bible Study v2 meeting visibility, `/studies/` / Today, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary membership; zero-row V2 meetings fail closed for ordinary users; `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only. After BS-V1-RETIRE.1A, V1 `BibleStudySession` app runtime is retired rather than migrated to membership-core; remaining V1 rows are pilot/archive data pending explicit purge.
 
+PROFILE-SG.1B adds guarded cleanup tooling only: `cleanup_profile_small_group` is dry-run by default and can clear existing `Profile.small_group` values only with `--apply --confirm-profile-small-group-cleanup` when the user's single active primary membership safely represents the same mapped active small-group unit. It does not remove the field or `SmallGroup`, does not change normal profile display or membership requests, does not change runtime behavior, and does not run automatically. Field/schema retirement remains a separate approved slice.
+
 This document is the primary CS-CORE plan. It builds on, and where noted supersedes, the transitional-era statements in:
 
 - `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md` (CS-H.3/CS-H.4/CS-H.5 era)

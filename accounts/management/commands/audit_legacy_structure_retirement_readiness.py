@@ -235,6 +235,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "backfill support; mutation only when explicitly run with its apply option",
     ),
     (
+        "accounts.management.commands.cleanup_profile_small_group",
+        "guarded cleanup tooling for Profile.small_group; dry-run by default",
+    ),
+    (
         "accounts.management.commands.seed_church_structure_units",
         "setup/backfill support for legacy-to-structure mappings",
     ),

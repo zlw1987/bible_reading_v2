@@ -137,6 +137,27 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertGreater(stats["bible_study_legacy_retirement_blockers"], 0)
         self.assertGreater(stats["role_legacy_field_retirement_blockers"], 0)
 
+    def test_bible_study_series_legacy_scope_fields_remain_retirement_blockers(self):
+        series = BibleStudySeries.objects.create(
+            title="Legacy-scoped Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+
+        audit = run_audit(target_date=self.today, now=self.now)
+        stats = audit["stats"]
+
+        self.assertEqual(stats["bible_study_series_with_audience_rows"], 1)
+        self.assertEqual(stats["bible_study_series_without_audience_rows"], 0)
+        self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
+        self.assertEqual(stats["bible_study_series_with_legacy_scope_fields_set"], 1)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+
     def test_fail_on_blockers_exits_nonzero(self):
         self.make_user("blocked", small_group=self.group)
 

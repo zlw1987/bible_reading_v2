@@ -369,8 +369,6 @@ class BibleStudySeriesForm(forms.ModelForm):
         self._selected_audience_units = list(
             self.cleaned_data.get("audience_units") or []
         )
-        if self._selected_audience_units:
-            instance.apply_audience_legacy_fallback(self._selected_audience_units)
         if commit:
             instance.save()
             self.save_audience_units(instance)

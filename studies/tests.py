@@ -394,6 +394,12 @@ class BibleStudyModuleTests(TestCase):
         data.update(overrides)
         return data
 
+    def assert_series_legacy_scope_fields_clear(self, series):
+        self.assertEqual(series.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assertIsNone(series.ministry_context)
+        self.assertIsNone(series.district)
+        self.assertIsNone(series.small_group)
+
     def lesson_post_data(self, **overrides):
         data = {
             "series": self.series.id,
@@ -510,10 +516,7 @@ class BibleStudyModuleTests(TestCase):
         )
         self.assertEqual(schedule.title_en, "Spring Bible Study Schedule")
         self.assertEqual(schedule.status, BibleStudySeries.STATUS_PUBLISHED)
-        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_GLOBAL)
-        self.assertIsNone(schedule.ministry_context)
-        self.assertIsNone(schedule.district)
-        self.assertIsNone(schedule.small_group)
+        self.assert_series_legacy_scope_fields_clear(schedule)
         self.assertIsNotNone(schedule.published_at)
         self.assertEqual(schedule.created_by, self.staff)
         self.assertTrue(schedule.is_active)
@@ -541,11 +544,7 @@ class BibleStudyModuleTests(TestCase):
             list(schedule.get_audience_scope_units()),
             [self.north_unit],
         )
-        # Legacy fallback mirrors the single mapped district.
-        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_DISTRICT)
-        self.assertIsNone(schedule.ministry_context)
-        self.assertEqual(schedule.district, self.north)
-        self.assertIsNone(schedule.small_group)
+        self.assert_series_legacy_scope_fields_clear(schedule)
 
     def test_staff_can_create_bible_study_schedule_with_ministry_context_scope(self):
         self.set_language("en")
@@ -566,10 +565,7 @@ class BibleStudyModuleTests(TestCase):
             list(schedule.get_audience_scope_units()),
             [self.cm_unit],
         )
-        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_MINISTRY_CONTEXT)
-        self.assertEqual(schedule.ministry_context, self.cm)
-        self.assertIsNone(schedule.district)
-        self.assertIsNone(schedule.small_group)
+        self.assert_series_legacy_scope_fields_clear(schedule)
 
     def test_staff_can_create_bible_study_schedule_with_small_group_scope(self):
         self.set_language("en")
@@ -590,10 +586,7 @@ class BibleStudyModuleTests(TestCase):
             list(schedule.get_audience_scope_units()),
             [self.group_unit],
         )
-        self.assertEqual(schedule.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
-        self.assertIsNone(schedule.ministry_context)
-        self.assertEqual(schedule.small_group, self.group)
-        self.assertIsNone(schedule.district)
+        self.assert_series_legacy_scope_fields_clear(schedule)
 
     def test_staff_can_edit_bible_study_schedule(self):
         self.set_language("en")
@@ -622,7 +615,7 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(self.series.start_date, start_date)
         self.assertEqual(self.series.end_date, end_date)
         self.assertEqual(self.series.status, BibleStudySeries.STATUS_COMPLETED)
-        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_GLOBAL)
+        self.assert_series_legacy_scope_fields_clear(self.series)
         self.assertEqual(self.series.created_by, original_created_by)
         self.assertFalse(self.series.is_active)
 
@@ -645,9 +638,34 @@ class BibleStudyModuleTests(TestCase):
             list(self.series.get_audience_scope_units()),
             [self.north_unit],
         )
-        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_DISTRICT)
-        self.assertEqual(self.series.district, self.north)
-        self.assertIsNone(self.series.small_group)
+        self.assert_series_legacy_scope_fields_clear(self.series)
+
+    def test_staff_edit_does_not_update_existing_legacy_series_scope_fields(self):
+        self.set_language("en")
+        self.client.login(username="study_staff", password="testpass123")
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.group
+        self.series.save()
+
+        response = self.client.post(
+            reverse("edit_bible_study_schedule", args=[self.series.id]),
+            self.schedule_post_data(
+                title=self.series.title,
+                title_en=self.series.title_en,
+                audience_units=[self.north_unit.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(
+            list(self.series.get_audience_scope_units()),
+            [self.north_unit],
+        )
+        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
+        self.assertEqual(self.series.small_group, self.group)
+        self.assertIsNone(self.series.ministry_context)
+        self.assertIsNone(self.series.district)
 
     def test_staff_can_edit_bible_study_schedule_to_small_group_scope(self):
         self.set_language("en")
@@ -668,9 +686,7 @@ class BibleStudyModuleTests(TestCase):
             list(self.series.get_audience_scope_units()),
             [self.group_unit],
         )
-        self.assertEqual(self.series.scope_type, BibleStudySeries.SCOPE_SMALL_GROUP)
-        self.assertEqual(self.series.small_group, self.group)
-        self.assertIsNone(self.series.district)
+        self.assert_series_legacy_scope_fields_clear(self.series)
 
     def test_schedule_detail_shows_related_weekly_guides(self):
         self.set_language("en")
@@ -1684,7 +1700,9 @@ class BibleStudyModuleTests(TestCase):
 
     def test_generate_meetings_uses_small_group_scope(self):
         self.set_language("en")
-        # BS-STRUCT.1M: a single small-group-unit audience row => one meeting.
+        # BS-STRUCT.1M / BS-SERIES-SCOPE.1A: a single small-group-unit
+        # audience row generates one meeting without needing legacy series FKs.
+        self.assert_series_legacy_scope_fields_clear(self.series)
         BibleStudySeriesAudienceScope.objects.create(
             series=self.series, unit=self.group_unit
         )
@@ -1706,6 +1724,30 @@ class BibleStudyModuleTests(TestCase):
             list(meeting.audience_scope_links.values_list("unit_id", flat=True)),
             [self.group_unit.id],
         )
+
+    def test_generate_meetings_ignores_legacy_series_scope_when_audience_rows_exist(self):
+        self.set_language("en")
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.other_group
+        self.series.save()
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series, unit=self.group_unit
+        )
+        lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.post(
+            reverse("generate_bible_study_meetings", args=[lesson.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meetings = BibleStudyMeeting.objects.filter(lesson=lesson)
+        self.assertEqual(meetings.count(), 1)
+        meeting = meetings.get()
+        self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
+        self.assertNotEqual(meeting.anchor_unit_id, self.other_group_unit.id)
+        self.assertIsNone(meeting.small_group_id)
+        self.assertEqual(meeting.generation_key, f"normal-unit:{self.group_unit.id}")
 
     def test_generate_meetings_excludes_inactive_units(self):
         self.set_language("en")
@@ -2013,9 +2055,12 @@ class BibleStudyModuleTests(TestCase):
     # ------------------------------------------------------------------
     def test_generate_meetings_without_series_audience_fails_closed(self):
         self.set_language("en")
-        # self.series carries the legacy default scope but has zero
+        # self.series carries populated legacy fields but has zero
         # BibleStudySeriesAudienceScope rows: generation must create nothing and
         # warn the manager, never falling back to legacy global/district/group.
+        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
+        self.series.small_group = self.group
+        self.series.save()
         self.assertFalse(self.series.audience_scope_links.exists())
         lesson = self.create_lesson(status=BibleStudyLesson.STATUS_PUBLISHED)
         self.client.login(username="study_staff", password="testpass123")

@@ -32,6 +32,12 @@ followed BS-STRUCT.1A are now implemented:
   with zero `BibleStudySeriesAudienceScope` rows **fails closed** (no meetings,
   manager warning) instead of falling back to legacy `scope_type` / `district` /
   `small_group` (BS-STRUCT.1M);
+- BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit
+  saves from writing legacy `BibleStudySeries.scope_type` /
+  `ministry_context` / `district` / `small_group` values. Existing populated
+  legacy series scope fields are not bulk-cleared in this slice; they remain
+  stored audit blockers until a future guarded cleanup, and field/schema removal
+  is later;
 - the staff meeting manage-list filter is **structure-audience aware**: it
   filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
   (unit-or-descendant), matches audience rows only, and no longer exposes a
@@ -373,9 +379,13 @@ only when it still maps to the selected unit and clear stale mismatches. Duplica
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
    `district` / `small_group`) + `apply_audience_legacy_fallback()` — still
    exist for compatibility / display / coexistence, but **since BS-STRUCT.1M they
-   are no longer a generation source** (generation requires audience rows). The
-   fields remain (no schema change) and `apply_audience_legacy_fallback()` still
-   mirrors selected units into them for any code that still reads legacy scope.
+   are no longer a generation source** (generation requires audience rows and
+   fails closed with zero rows). **Since BS-SERIES-SCOPE.1A, normal app-level
+   schedule create/edit saves no longer call the legacy mirror helper and no
+   longer write/update those legacy series scope fields.** Existing populated
+   legacy series scope values are not bulk-cleared here; they remain stored
+   audit blockers for a later guarded cleanup, and field/schema removal is a
+   separate future migration slice.
 6. **V1 `BibleStudySession`** — legacy-only, retirement target (excluded).
 
 Note: the runtime reads are **already** membership-core in their *user*
@@ -419,9 +429,11 @@ FK — that cannot express multi-unit joint meetings.
 - Must support **group-level, district-level, CM/EM-level, and multi-unit joint
   meetings** — i.e. the meeting's audience is no longer "exactly one
   `SmallGroup`."
-- **`small_group` becomes a temporary compatibility mirror** (nullable), not the
-  source of truth (Section 4). Keep it filled only when a meeting maps
-  one-to-one to a legacy group, for legacy reads during the transition.
+- **`small_group` is temporary old-row compatibility storage** (nullable), not
+  the source of truth (Section 4). New generated/manual normal V2 meetings leave
+  it null after BS-V2-MIRROR.1B. Existing old values remain only for old-row
+  compatibility, fallback display, diagnostics, and guarded cleanup until a
+  later field/constraint migration.
 
 ### 2.4 BibleStudyMeetingAudienceScope (new)
 
@@ -1010,9 +1022,10 @@ the meeting-identity decision (Section 4.5).
     `ChurchStructureUnit` leaf. With series audience rows, each selected unit
     expands to its active descendant-or-self small-group units (one target each,
     including structure-native units with no legacy mirror). With zero audience
-    rows it falls back to `get_eligible_small_groups()` and converts each
-    eligible group to its mapped active small-group unit. Targets are
-    deduplicated by unit id and deterministically ordered by unit
+    rows it originally fell back to `get_eligible_small_groups()` and converted
+    each eligible group to its mapped active small-group unit; **that historical
+    fallback was superseded by BS-STRUCT.1M**, so current generation fails closed
+    when zero audience rows exist. Targets are deduplicated by unit id and deterministically ordered by unit
     `sort_order` / `code` / `name` / `id`. The legacy `small_group` mirror is
     attached only when **exactly one** active legacy group maps to the unit;
     ambiguous (many-to-one) units get no mirror (warned), and duplicate eligible

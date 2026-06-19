@@ -202,9 +202,6 @@ def build_recurring_event_preview(cleaned_data):
                 "start_datetime": start_datetime,
                 "event_type": cleaned_data["event_type"],
                 "title": cleaned_data["title"],
-                "scope_type": cleaned_data["scope_type"],
-                "district": cleaned_data.get("district"),
-                "small_group": cleaned_data.get("small_group"),
             }
             if (
                 ServiceEvent.objects.filter(**duplicate_filter)
@@ -225,14 +222,9 @@ def create_recurring_events(cleaned_data, user):
     required_teams = cleaned_data.get("required_teams")
     rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
     ministry_context = cleaned_data.get("ministry_context")
-    # SE-AS.7A: use the resolved audience units (selected units, or the legacy
-    # scope fields converted into a structure unit) so every created event gets
-    # audience rows instead of dropping into the zero-row legacy fallback.
-    audience_units = list(
-        cleaned_data.get("resolved_audience_units")
-        or cleaned_data.get("audience_units")
-        or []
-    )
+    # SE-SCOPE.1A: recurring app creates use structure audience rows only.
+    # Legacy scope fields remain at model defaults for newly generated events.
+    audience_units = list(cleaned_data.get("audience_units") or [])
 
     with transaction.atomic():
         for event_date in dates_to_create:
@@ -258,9 +250,6 @@ def create_recurring_events(cleaned_data, user):
                 meeting_link=cleaned_data.get("meeting_link") or "",
                 ministry_context=ministry_context,
                 rotation_anchor_team=rotation_anchor_team,
-                scope_type=cleaned_data["scope_type"],
-                district=cleaned_data.get("district"),
-                small_group=cleaned_data.get("small_group"),
                 status=cleaned_data["status"],
                 created_by=user,
             )

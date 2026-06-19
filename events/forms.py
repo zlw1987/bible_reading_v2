@@ -27,50 +27,12 @@ FORM_TEXT = {
         "audience_units": "Audience Scope",
         "audience_units_help": (
             "Selected units control which ordinary users can see this gathering. "
-            "Leave this empty to convert the Whole Church / District / Small Group settings "
-            "below into a structure audience row; saving requires a valid, active structure mapping."
+            "Select one or more units before saving."
         ),
         "audience_scope_root_combo": "Whole Church cannot be combined with other units.",
         "audience_scope_ancestor_combo": (
             "Do not select both a unit and one of its parent or child units."
         ),
-        "audience_fallback_errors": {
-            "global_root": (
-                "Leaving the audience empty needs exactly one active Whole Church (root) "
-                "unit to convert into. None or several active root units exist, so select "
-                "an audience unit above instead."
-            ),
-            "district_missing": (
-                "Select a district, or select an audience unit above. The audience cannot "
-                "be left empty without a valid structure mapping."
-            ),
-            "district_unmapped": (
-                "This district is not linked to a church structure unit yet, so an empty "
-                "audience cannot be converted. Select an audience unit above."
-            ),
-            "district_inactive": (
-                "This district's church structure unit is inactive, so an empty audience "
-                "cannot be converted. Select an active audience unit above."
-            ),
-            "small_group_missing": (
-                "Select a small group, or select an audience unit above. The audience "
-                "cannot be left empty without a valid structure mapping."
-            ),
-            "small_group_unmapped": (
-                "This small group is not linked to a church structure unit yet, so an empty "
-                "audience cannot be converted. Select an audience unit above."
-            ),
-            "small_group_inactive": (
-                "This small group's church structure unit is inactive, so an empty audience "
-                "cannot be converted. Select an active audience unit above."
-            ),
-            "unknown_scope": (
-                "Unrecognized audience scope. Select an audience unit above."
-            ),
-        },
-        "scope_type": "Audience Scope",
-        "district": "District",
-        "small_group": "Small Group",
         "status": "Status",
         "sunday_service": "Sunday Service",
         "bible_study": "Bible Study",
@@ -80,8 +42,6 @@ FORM_TEXT = {
         "baptism": "Baptism",
         "other": "Other",
         "global": "Global",
-        "scope_district": "District",
-        "scope_small_group": "Small Group",
         "ministry_context_help": (
             "Optional label for the host, language, or similar ministry context. "
             "Blank can mean whole-church, combined, legacy, or uncategorized. "
@@ -95,13 +55,6 @@ FORM_TEXT = {
             "Select teams expected for this event. "
             "This records expectations only and does not create team assignments."
         ),
-        "scope_type_help": (
-            "Current version supports Whole Church, one District, or one Small Group. "
-            "Selecting District binds the event at the district level; it does not expand into child small-group selection. "
-            "Multi-level and multi-select audience selection belongs to future Church Structure work."
-        ),
-        "district_help": "Use only when Audience Scope is District.",
-        "small_group_help": "Use only when Audience Scope is Small Group.",
         "draft": "Draft",
         "published": "Published",
         "completed": "Completed",
@@ -125,40 +78,11 @@ FORM_TEXT = {
         "audience_units": "适用范围",
         "audience_units_help": (
             "选择的教会结构单元会决定普通用户能否看到这个聚会。"
-            "留空则会根据下方的全教会 / 区 / 小组设置自动转换为一条结构适用范围记录；"
-            "保存时需要存在有效且启用的结构映射。"
+            "保存前请至少选择一个单元。"
         ),
         "audience_scope_root_combo": "全教会不能与其他单元同时选择。",
         "audience_scope_ancestor_combo": "不要同时选择一个单元及其上级或下级单元。",
-        "audience_fallback_errors": {
-            "global_root": (
-                "留空适用范围时，需要存在且仅存在一个启用的全教会（根）单元用于转换。"
-                "当前没有或存在多个启用的根单元，请改为在上方选择适用范围。"
-            ),
-            "district_missing": (
-                "请选择一个区，或在上方选择适用范围。没有有效的结构映射时不能留空适用范围。"
-            ),
-            "district_unmapped": (
-                "该区尚未关联教会结构单元，无法转换空的适用范围。请在上方选择适用范围。"
-            ),
-            "district_inactive": (
-                "该区关联的教会结构单元已停用，无法转换空的适用范围。请在上方选择一个启用的适用范围。"
-            ),
-            "small_group_missing": (
-                "请选择一个小组，或在上方选择适用范围。没有有效的结构映射时不能留空适用范围。"
-            ),
-            "small_group_unmapped": (
-                "该小组尚未关联教会结构单元，无法转换空的适用范围。请在上方选择适用范围。"
-            ),
-            "small_group_inactive": (
-                "该小组关联的教会结构单元已停用，无法转换空的适用范围。请在上方选择一个启用的适用范围。"
-            ),
-            "unknown_scope": "无法识别的适用范围设置。请在上方选择适用范围。",
-        },
-        "scope_type": "范围",
         "required_teams": "需要的事工团队",
-        "district": "区",
-        "small_group": "小组",
         "status": "状态",
         "sunday_service": "主日崇拜",
         "bible_study": "查经",
@@ -168,8 +92,6 @@ FORM_TEXT = {
         "baptism": "洗礼",
         "other": "其他",
         "global": "全教会",
-        "scope_district": "区",
-        "scope_small_group": "小组",
         "draft": "草稿",
         "published": "已发布",
         "completed": "已完成",
@@ -250,78 +172,6 @@ def save_service_event_audience_units(event, units):
             ServiceEventAudienceScope.objects.create(service_event=event, unit=unit)
 
 
-class LegacyScopeResolutionError(Exception):
-    """Raised when legacy scope fields cannot convert to a structure unit.
-
-    ``code`` is a stable key into the bilingual fallback-error copy so callers
-    can show a clear message instead of silently saving zero audience rows.
-    """
-
-    def __init__(self, code):
-        self.code = code
-        super().__init__(code)
-
-
-def resolve_legacy_service_event_scope_to_structure_units(
-    scope_type, district, small_group
-):
-    """Convert legacy ServiceEvent scope fields into structure audience units.
-
-    Used by the create/edit/recurring write paths (SE-AS.7A) when staff leave
-    the audience picker empty: the empty selection is converted from the legacy
-    ``scope_type`` / ``district`` / ``small_group`` fields so the event still
-    saves at least one ``ServiceEventAudienceScope`` row instead of dropping
-    into the zero-row legacy fallback. The mapping mirrors the SE-AS.6 backfill
-    rules:
-
-    * ``global`` -> the single active root unit;
-    * ``district`` -> ``district.church_structure_unit`` when present and active;
-    * ``small_group`` -> ``small_group.church_structure_unit`` when present and active.
-
-    Raises ``LegacyScopeResolutionError`` with a stable code when the required
-    mapping is missing, inactive, or the root is missing/ambiguous, so the
-    caller never silently persists zero audience rows. This is read-only: it
-    inspects mapping fields and never mutates any legacy field, unit, or row.
-    """
-    if scope_type == ServiceEvent.SCOPE_GLOBAL:
-        active_roots = list(
-            ChurchStructureUnit.objects.filter(
-                unit_type=ChurchStructureUnit.UNIT_ROOT,
-                is_active=True,
-            )[:2]
-        )
-        if len(active_roots) != 1:
-            raise LegacyScopeResolutionError("global_root")
-        return [active_roots[0]]
-
-    if scope_type == ServiceEvent.SCOPE_DISTRICT:
-        if district is None:
-            raise LegacyScopeResolutionError("district_missing")
-        unit = district.church_structure_unit
-        if unit is None:
-            raise LegacyScopeResolutionError("district_unmapped")
-        if not unit.is_active:
-            raise LegacyScopeResolutionError("district_inactive")
-        return [unit]
-
-    if scope_type == ServiceEvent.SCOPE_SMALL_GROUP:
-        if small_group is None:
-            raise LegacyScopeResolutionError("small_group_missing")
-        unit = small_group.church_structure_unit
-        if unit is None:
-            raise LegacyScopeResolutionError("small_group_unmapped")
-        if not unit.is_active:
-            raise LegacyScopeResolutionError("small_group_inactive")
-        return [unit]
-
-    raise LegacyScopeResolutionError("unknown_scope")
-
-
-def audience_fallback_error_text(text, code):
-    errors = text.get("audience_fallback_errors", FORM_TEXT["en"]["audience_fallback_errors"])
-    return errors.get(code, errors["unknown_scope"])
-
-
 class AudienceUnitOptionsMixin:
     language = "en"
 
@@ -334,7 +184,7 @@ class AudienceUnitOptionsMixin:
                 "code",
                 "name",
             ),
-            required=False,
+            required=True,
             label=text["audience_units"],
             help_text=text["audience_units_help"],
         )
@@ -353,49 +203,11 @@ class AudienceUnitOptionsMixin:
             text,
         )
 
-    def clean_resolved_audience_units(self, cleaned_data, text):
-        """Resolve the audience units this submission will persist (SE-AS.7A).
-
-        When staff selected units, those are kept. When the selection is empty,
-        the legacy scope fields are converted into a structure audience unit so
-        the event never saves with zero audience rows. The resolved list is
-        stashed on ``cleaned_data["resolved_audience_units"]`` for the save
-        step. On a missing/inactive/ambiguous legacy mapping a bilingual error
-        is added to ``audience_units`` and nothing is stashed, so the form is
-        invalid and no zero-row event is written.
-        """
-        selected = list(cleaned_data.get("audience_units") or [])
-        if selected:
-            cleaned_data["resolved_audience_units"] = selected
-            return
-
-        scope_type = cleaned_data.get("scope_type")
-        if not scope_type:
-            # scope_type itself failed field validation; its own error stands.
-            return
-
-        try:
-            cleaned_data["resolved_audience_units"] = (
-                resolve_legacy_service_event_scope_to_structure_units(
-                    scope_type,
-                    cleaned_data.get("district"),
-                    cleaned_data.get("small_group"),
-                )
-            )
-        except LegacyScopeResolutionError as exc:
-            self.add_error(
-                "audience_units",
-                audience_fallback_error_text(text, exc.code),
-            )
-
-    def resolved_audience_units(self):
-        units = self.cleaned_data.get("resolved_audience_units")
-        if units is None:
-            units = list(self.cleaned_data.get("audience_units") or [])
-        return units
-
     def save_audience_units(self, event):
-        save_service_event_audience_units(event, self.resolved_audience_units())
+        save_service_event_audience_units(
+            event,
+            list(self.cleaned_data.get("audience_units") or []),
+        )
 
     def audience_selected_ids(self):
         raw = self["audience_units"].value() or []
@@ -531,9 +343,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             "ministry_context",
             "rotation_anchor_team",
             "required_teams",
-            "scope_type",
-            "district",
-            "small_group",
             "status",
         ]
         widgets = {
@@ -559,9 +368,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
                 "ministry_context": "主办/语言标签（可选）",
                 "rotation_anchor_team": "配搭参考团队",
                 "required_teams": "需要的事工团队",
-                "scope_type": "覆盖对象",
-                "district": "适用区",
-                "small_group": "适用小组",
                 "ministry_context_help": (
                     "仅用于标记主办、语言或类似事工背景。"
                     "留空可以表示全教会、联合、旧数据或未分类。"
@@ -575,13 +381,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
                     "可选，用于以后提供复制排班建议，例如 Worship C1/C2/C3/A。"
                     "这不是需要的事工团队，不会控制服事覆盖、覆盖对象、可见范围或用户权限。"
                 ),
-                "scope_type_help": (
-                    "当前版本支持全教会、单一区或单一小组。"
-                    "选择“区”表示此聚会事件绑定在区这一层级，不会继续展开下属小组。"
-                    "多层级、多选覆盖对象属于后续 Church Structure 工作。"
-                ),
-                "district_help": "仅在覆盖对象为“区”时使用。",
-                "small_group_help": "仅在覆盖对象为“小组”时使用。",
             }
 
         self.add_audience_units_field(text)
@@ -600,11 +399,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             (ServiceEvent.EVENT_GOSPEL_MUSIC, text["gospel_music"]),
             (ServiceEvent.EVENT_BAPTISM, text["baptism"]),
             (ServiceEvent.EVENT_OTHER, text["other"]),
-        ]
-        self.fields["scope_type"].choices = [
-            (ServiceEvent.SCOPE_GLOBAL, text["global"]),
-            (ServiceEvent.SCOPE_DISTRICT, text["scope_district"]),
-            (ServiceEvent.SCOPE_SMALL_GROUP, text["scope_small_group"]),
         ]
         if self.instance.status == ServiceEvent.STATUS_CANCELLED:
             status_choices = [(ServiceEvent.STATUS_CANCELLED, text["cancelled"])]
@@ -632,9 +426,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         self.fields["rotation_anchor_team"].language = language
         self.fields["required_teams"].help_text = text["required_teams_help"]
         self.fields["required_teams"].language = language
-        self.fields["scope_type"].help_text = text["scope_type_help"]
-        self.fields["district"].help_text = text["district_help"]
-        self.fields["small_group"].help_text = text["small_group_help"]
         ministry_context_filter = Q(is_active=True)
         if self.instance.ministry_context_id:
             ministry_context_filter |= Q(id=self.instance.ministry_context_id)
@@ -664,7 +455,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         cleaned_data = super().clean()
         text = form_text(self.language)
         self.clean_audience_units_combination(cleaned_data, text)
-        self.clean_resolved_audience_units(cleaned_data, text)
         return cleaned_data
 
     def clean_status(self):
@@ -718,15 +508,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
         queryset=MinistryContext.objects.none(),
         required=False,
     )
-    scope_type = forms.ChoiceField(choices=ServiceEvent.SCOPE_CHOICES)
-    district = forms.ModelChoiceField(
-        queryset=ServiceEvent._meta.get_field("district").remote_field.model.objects.all(),
-        required=False,
-    )
-    small_group = forms.ModelChoiceField(
-        queryset=ServiceEvent._meta.get_field("small_group").remote_field.model.objects.all(),
-        required=False,
-    )
     status = forms.ChoiceField(choices=ServiceEvent.STATUS_CHOICES)
     required_teams = RequiredTeamChoiceField(
         queryset=MinistryTeam.objects.none(),
@@ -771,9 +552,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
             "meeting_link",
             "rotation_anchor_team",
             "required_teams",
-            "scope_type",
-            "district",
-            "small_group",
             "status",
         ]:
             self.fields[field_name].label = text[field_name]
@@ -793,17 +571,9 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
         self.fields["event_type"].choices = service_event_form.fields[
             "event_type"
         ].choices
-        self.fields["scope_type"].choices = service_event_form.fields[
-            "scope_type"
-        ].choices
         self.fields["status"].choices = service_event_form.fields[
             "status"
         ].choices
-        for field_name in ["scope_type", "district", "small_group"]:
-            self.fields[field_name].label = service_event_form.fields[field_name].label
-            self.fields[field_name].help_text = service_event_form.fields[
-                field_name
-            ].help_text
         self.fields["rotation_anchor_team"].label = service_event_form.fields[
             "rotation_anchor_team"
         ].label
@@ -834,7 +604,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
             self.fields["weekday"].initial = 6
             self.fields["start_time"].initial = "10:00"
             self.fields["end_time"].initial = "11:30"
-            self.fields["scope_type"].initial = ServiceEvent.SCOPE_GLOBAL
             self.fields["status"].initial = ServiceEvent.STATUS_PUBLISHED
 
     def clean(self):
@@ -860,9 +629,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
             description_en=cleaned_data.get("description_en") or "",
             event_type=cleaned_data.get("event_type") or ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=cleaned_data.get("scope_type") or ServiceEvent.SCOPE_GLOBAL,
-            district=cleaned_data.get("district"),
-            small_group=cleaned_data.get("small_group"),
             status=cleaned_data.get("status") or ServiceEvent.STATUS_PUBLISHED,
         )
         try:
@@ -873,7 +639,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
 
         text = form_text(self.language)
         self.clean_audience_units_combination(cleaned_data, text)
-        self.clean_resolved_audience_units(cleaned_data, text)
         return cleaned_data
 
 

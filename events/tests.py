@@ -44,9 +44,7 @@ class ServiceEventFoundationTests(TestCase):
             name="English Ministry",
             name_en="English Ministry",
         )
-        # SE-AS.7A: a single active root plus mapped district/group structure
-        # units so the create/edit/recurring write paths can convert an empty
-        # audience selection into structure rows instead of saving zero rows.
+        # Structure units used by the normal ServiceEvent audience picker.
         self.root_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
             code="CHURCH",
@@ -223,6 +221,7 @@ class ServiceEventFoundationTests(TestCase):
             "ministry_context": "",
             "rotation_anchor_team": "",
             "required_teams": [],
+            "audience_units": [self.root_unit.id],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "status": ServiceEvent.STATUS_PUBLISHED,
         }
@@ -281,6 +280,7 @@ class ServiceEventFoundationTests(TestCase):
             "meeting_link": "",
             "rotation_anchor_team": "",
             "required_teams": [],
+            "audience_units": [self.root_unit.id],
             "scope_type": ServiceEvent.SCOPE_GLOBAL,
             "district": "",
             "small_group": "",
@@ -703,31 +703,37 @@ class ServiceEventFoundationTests(TestCase):
 
         self.assertIn(self.inactive_required_team.id, team_ids)
 
-    def test_service_event_form_includes_optional_audience_units(self):
+    def test_service_event_form_requires_audience_units(self):
         english_form = ServiceEventForm(language="en")
         chinese_form = ServiceEventForm(language="zh")
 
         self.assertIn("audience_units", english_form.fields)
-        self.assertFalse(english_form.fields["audience_units"].required)
+        self.assertTrue(english_form.fields["audience_units"].required)
         self.assertEqual(english_form.fields["audience_units"].label, "Audience Scope")
         self.assertIn(
-            "Leave this empty to convert the Whole Church / District / Small Group settings",
+            "Selected units control which ordinary users can see this gathering.",
             english_form.fields["audience_units"].help_text,
         )
         self.assertIn(
-            "saving requires a valid, active structure mapping",
+            "Select one or more units before saving",
             english_form.fields["audience_units"].help_text,
         )
+        self.assertNotIn("scope_type", english_form.fields)
+        self.assertNotIn("district", english_form.fields)
+        self.assertNotIn("small_group", english_form.fields)
         self.assertIn("audience_units", chinese_form.fields)
         self.assertEqual(chinese_form.fields["audience_units"].label, "适用范围")
         self.assertIn(
-            "留空则会根据下方的全教会 / 区 / 小组设置自动转换",
+            "选择的教会结构单元会决定普通用户能否看到这个聚会。",
             chinese_form.fields["audience_units"].help_text,
         )
         self.assertIn(
-            "保存时需要存在有效且启用的结构映射",
+            "保存前请至少选择一个单元",
             chinese_form.fields["audience_units"].help_text,
         )
+        self.assertNotIn("scope_type", chinese_form.fields)
+        self.assertNotIn("district", chinese_form.fields)
+        self.assertNotIn("small_group", chinese_form.fields)
 
     def test_service_event_create_form_keeps_audience_picker_section_visible(self):
         root = ChurchStructureUnit.objects.create(
@@ -831,33 +837,29 @@ class ServiceEventFoundationTests(TestCase):
         self.assertIn("checked", content)
         self.assertContains(response, "expandAncestors(optionEl(checkbox))")
 
-    def test_service_event_form_uses_clearer_fallback_wording_in_both_languages(self):
+    def test_service_event_form_omits_legacy_scope_controls_in_both_languages(self):
         self.client.login(username="pastor_event", password="testpass123")
         self.set_language("en")
 
         english_response = self.client.get(reverse("create_service_event"))
 
-        self.assertContains(
+        self.assertContains(english_response, "Audience Scope")
+        self.assertNotContains(
             english_response,
             "Converted when no structure audience is selected",
         )
-        self.assertContains(
-            english_response,
-            "these Whole Church / District / Small Group settings are converted into a structure audience row when you save.",
-        )
-        self.assertContains(
-            english_response,
-            "Saving requires a valid, active structure mapping.",
-        )
+        self.assertNotContains(english_response, 'name="scope_type"')
+        self.assertNotContains(english_response, 'name="district"')
+        self.assertNotContains(english_response, 'name="small_group"')
         self.set_language("zh")
 
         chinese_response = self.client.get(reverse("create_service_event"))
 
-        self.assertContains(chinese_response, "未选择上方范围时用于转换")
-        self.assertContains(
-            chinese_response,
-            "保存时系统会把这里的全教会 / 区 / 小组设置转换为一条结构适用范围记录。",
-        )
+        self.assertContains(chinese_response, "适用范围")
+        self.assertNotContains(chinese_response, "未选择上方范围时用于转换")
+        self.assertNotContains(chinese_response, 'name="scope_type"')
+        self.assertNotContains(chinese_response, 'name="district"')
+        self.assertNotContains(chinese_response, 'name="small_group"')
 
     def test_service_event_form_hides_cancelled_status_for_active_event(self):
         event = self.create_event(status=ServiceEvent.STATUS_PUBLISHED)
@@ -914,40 +916,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
-    def test_manager_create_empty_audience_global_converts_to_root_row(self):
-        # SE-AS.7A: empty audience + global converts to the single active root.
-        self.set_language("en")
-        self.client.login(username="pastor_event", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_service_event"),
-            self.event_post_data(scope_type=ServiceEvent.SCOPE_GLOBAL),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertEqual(list(event.get_audience_scope_units()), [self.root_unit])
-
-    def test_manager_create_empty_audience_district_converts_to_structure_row(self):
-        # SE-AS.7A: empty audience + mapped active district converts to its unit.
-        self.set_language("en")
-        self.client.login(username="pastor_event", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_service_event"),
-            self.event_post_data(
-                scope_type=ServiceEvent.SCOPE_DISTRICT,
-                district=self.north.id,
-                small_group="",
-            ),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertEqual(list(event.get_audience_scope_units()), [self.north_unit])
-
-    def test_manager_create_empty_audience_small_group_converts_to_structure_row(self):
-        # SE-AS.7A: empty audience + mapped active small group converts to unit.
+    def test_manager_create_with_audience_units_does_not_write_legacy_scope_fields(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -957,16 +926,36 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
                 district="",
                 small_group=self.group.id,
+                audience_units=[self.group_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
         self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+        self.assertIsNone(event.district)
+        self.assertIsNone(event.small_group)
 
-    def test_manager_create_empty_audience_unmapped_district_rejects_save(self):
-        # SE-AS.7A: a missing structure mapping must reject the save and create
-        # neither the event nor any audience rows (no silent zero-row fallback).
+    def test_manager_create_without_audience_is_rejected_without_legacy_write(self):
+        self.set_language("en")
+        self.client.login(username="pastor_event", password="testpass123")
+
+        response = self.client.post(
+            reverse("create_service_event"),
+            self.event_post_data(
+                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+                district="",
+                small_group=self.group.id,
+                audience_units=[],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+
+    def test_manager_create_ignores_unmapped_legacy_scope_post_keys(self):
         self.set_language("en")
         unmapped = District.objects.create(name="Unmapped District")
         self.client.login(username="pastor_event", password="testpass123")
@@ -977,68 +966,16 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_DISTRICT,
                 district=unmapped.id,
                 small_group="",
+                audience_units=[self.root_unit.id],
             ),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "This district is not linked to a church structure unit yet",
-        )
-        self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
-        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
-
-    def test_manager_create_empty_audience_inactive_mapping_rejects_save(self):
-        # SE-AS.7A: an inactive mapped unit must reject the save as well.
-        self.set_language("en")
-        inactive_unit = self.create_structure_unit(
-            "INACTSG",
-            "Inactive Group Unit",
-            is_active=False,
-        )
-        inactive_group = SmallGroup.objects.create(
-            name="Inactive Mapped Group",
-            district=self.north,
-            church_structure_unit=inactive_unit,
-        )
-        self.client.login(username="pastor_event", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_service_event"),
-            self.event_post_data(
-                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
-                district="",
-                small_group=inactive_group.id,
-            ),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "church structure unit is inactive",
-        )
-        self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
-        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
-
-    def test_manager_create_empty_audience_ambiguous_root_rejects_save(self):
-        # SE-AS.7A: global needs exactly one active root; a second active root
-        # makes resolution ambiguous and must reject rather than guess.
-        self.set_language("en")
-        ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_ROOT,
-            code="CHURCH2",
-            name="Second Root",
-        )
-        self.client.login(username="pastor_event", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_service_event"),
-            self.event_post_data(scope_type=ServiceEvent.SCOPE_GLOBAL),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(ServiceEvent.objects.filter(title_en="Special Meeting").exists())
-        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title_en="Special Meeting")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.root_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+        self.assertIsNone(event.district)
+        self.assertIsNone(event.small_group)
 
     def test_manager_create_with_audience_units_saves_rows_and_controls_visibility(self):
         self.set_language("en")
@@ -1138,7 +1075,10 @@ class ServiceEventFoundationTests(TestCase):
 
     def test_manager_edit_replaces_audience_rows(self):
         self.set_language("en")
-        event = self.create_event()
+        event = self.create_event(
+            scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
+            small_group=self.group,
+        )
         first_unit = self.create_structure_unit("R4", "Rainbow 4")
         second_unit = self.create_structure_unit("R5", "Rainbow 5")
         ServiceEventAudienceScope.objects.create(service_event=event, unit=first_unit)
@@ -1156,17 +1096,19 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(list(event.get_audience_scope_units()), [second_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_SMALL_GROUP)
+        self.assertEqual(event.small_group, self.group)
+        self.assertIsNone(event.district)
 
-    def test_manager_edit_clearing_audience_converts_legacy_fields_to_structure_row(self):
-        # SE-AS.7A: clearing the audience selection on edit converts the legacy
-        # scope fields into a structure row instead of leaving zero rows.
+    def test_manager_edit_ignores_legacy_scope_post_keys(self):
         self.set_language("en")
         event = self.create_event(
             scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
             small_group=self.group,
         )
-        stale_unit = self.create_structure_unit("STALE", "Stale Audience Unit")
-        ServiceEventAudienceScope.objects.create(service_event=event, unit=stale_unit)
+        existing_unit = self.create_structure_unit("KEEP", "Keep Audience Unit")
+        replacement_unit = self.create_structure_unit("NEW", "New Audience Unit")
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=existing_unit)
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.post(
@@ -1174,28 +1116,25 @@ class ServiceEventFoundationTests(TestCase):
             self.event_post_data(
                 title="更新后的聚会",
                 title_en="Updated Event",
-                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
-                district="",
-                small_group=self.group.id,
-                audience_units=[],
+                scope_type=ServiceEvent.SCOPE_DISTRICT,
+                district=self.south.id,
+                small_group="",
+                audience_units=[replacement_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
-        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(list(event.get_audience_scope_units()), [replacement_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_SMALL_GROUP)
+        self.assertEqual(event.small_group, self.group)
+        self.assertIsNone(event.district)
 
-    def test_manager_edit_clearing_audience_unmapped_group_rejects_save(self):
-        # SE-AS.7A: clearing audience cannot drop an event to zero rows when the
-        # legacy mapping is missing; the edit save is rejected and rows persist.
+    def test_manager_edit_clearing_audience_preserves_existing_legacy_fields(self):
         self.set_language("en")
-        unmapped_group = SmallGroup.objects.create(
-            name="Unmapped Edit Group",
-            district=self.north,
-        )
         event = self.create_event(
             scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
-            small_group=unmapped_group,
+            small_group=self.group,
         )
         existing_unit = self.create_structure_unit("KEEP", "Keep Audience Unit")
         ServiceEventAudienceScope.objects.create(service_event=event, unit=existing_unit)
@@ -1205,20 +1144,16 @@ class ServiceEventFoundationTests(TestCase):
             reverse("edit_service_event", args=[event.id]),
             self.event_post_data(
                 title_en="Updated Event",
-                scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
-                district="",
-                small_group=unmapped_group.id,
                 audience_units=[],
             ),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "This small group is not linked to a church structure unit yet",
-        )
         event.refresh_from_db()
         self.assertEqual(list(event.get_audience_scope_units()), [existing_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_SMALL_GROUP)
+        self.assertEqual(event.small_group, self.group)
+        self.assertIsNone(event.district)
 
     def test_ancestor_descendant_audience_selection_is_rejected_without_partial_save(self):
         self.set_language("en")
@@ -1576,26 +1511,14 @@ class ServiceEventFoundationTests(TestCase):
             chinese_form.fields["rotation_anchor_team"].help_text,
         )
 
-    def test_service_event_scope_form_labels_are_audience_specific(self):
+    def test_service_event_form_excludes_legacy_scope_fields(self):
         english_form = ServiceEventForm(language="en")
         chinese_form = ServiceEventForm(language="zh")
 
-        self.assertEqual(english_form.fields["scope_type"].label, "Audience Scope")
-        self.assertEqual(chinese_form.fields["scope_type"].label, "覆盖对象")
-        self.assertEqual(chinese_form.fields["district"].label, "适用区")
-        self.assertEqual(chinese_form.fields["small_group"].label, "适用小组")
-        self.assertIn(
-            "does not expand into child small-group selection",
-            english_form.fields["scope_type"].help_text,
-        )
-        self.assertIn(
-            "Multi-level and multi-select audience selection belongs to future",
-            english_form.fields["scope_type"].help_text,
-        )
-        self.assertIn(
-            "不会继续展开下属小组",
-            chinese_form.fields["scope_type"].help_text,
-        )
+        for form in (english_form, chinese_form):
+            self.assertNotIn("scope_type", form.fields)
+            self.assertNotIn("district", form.fields)
+            self.assertNotIn("small_group", form.fields)
 
     def test_ministry_context_label_can_be_saved_without_changing_visibility(self):
         self.set_language("en")
@@ -1623,7 +1546,7 @@ class ServiceEventFoundationTests(TestCase):
         event = ServiceEvent.objects.get(title_en="Special Meeting")
         self.assertEqual(event.ministry_context, self.em)
 
-    def test_manager_can_create_event_with_existing_district_scope(self):
+    def test_manager_create_does_not_accept_legacy_district_scope(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -1633,15 +1556,18 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_DISTRICT,
                 district=self.north.id,
                 small_group="",
+                audience_units=[self.north_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_DISTRICT)
-        self.assertEqual(event.district, self.north)
+        self.assertEqual(list(event.get_audience_scope_units()), [self.north_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+        self.assertIsNone(event.district)
+        self.assertIsNone(event.small_group)
 
-    def test_manager_can_create_event_with_existing_small_group_scope(self):
+    def test_manager_create_does_not_accept_legacy_small_group_scope(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -1651,13 +1577,16 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_SMALL_GROUP,
                 district="",
                 small_group=self.group.id,
+                audience_units=[self.group_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_SMALL_GROUP)
-        self.assertEqual(event.small_group, self.group)
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+        self.assertIsNone(event.district)
+        self.assertIsNone(event.small_group)
 
     def test_chinese_list_and_detail_pages_show_chinese_labels(self):
         self.set_language("zh")
@@ -2012,10 +1941,11 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(events.count(), 3)
         for event in events:
             self.assertEqual(list(event.get_audience_scope_units()), [unit])
+            self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+            self.assertIsNone(event.district)
+            self.assertIsNone(event.small_group)
 
-    def test_recurring_create_empty_audience_converts_legacy_fields_for_all_events(self):
-        # SE-AS.7A: empty audience on recurring create converts the legacy
-        # scope fields into a structure row for every created event.
+    def test_recurring_create_ignores_legacy_scope_post_keys_for_all_events(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2026,6 +1956,7 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_DISTRICT,
                 district=self.north.id,
                 small_group="",
+                audience_units=[self.north_unit.id],
             ),
         )
 
@@ -2034,26 +1965,28 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(events.count(), 3)
         for event in events:
             self.assertEqual(list(event.get_audience_scope_units()), [self.north_unit])
+            self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+            self.assertIsNone(event.district)
+            self.assertIsNone(event.small_group)
 
-    def test_recurring_create_empty_audience_global_converts_to_root_for_all_events(self):
-        # SE-AS.7A: empty audience + global recurring create converts to root.
+    def test_recurring_create_empty_audience_is_rejected_without_legacy_write(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.post(
             reverse("create_recurring_service_events"),
-            self.recurring_post_data(create="1", scope_type=ServiceEvent.SCOPE_GLOBAL),
+            self.recurring_post_data(
+                create="1",
+                scope_type=ServiceEvent.SCOPE_GLOBAL,
+                audience_units=[],
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
-        events = ServiceEvent.objects.filter(title_en="Sunday Service")
-        self.assertEqual(events.count(), 3)
-        for event in events:
-            self.assertEqual(list(event.get_audience_scope_units()), [self.root_unit])
+        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
-    def test_recurring_create_empty_audience_unmapped_district_rejects_save(self):
-        # SE-AS.7A: a missing structure mapping rejects the recurring save and
-        # creates no events or audience rows.
+    def test_recurring_create_ignores_unmapped_legacy_scope_post_keys(self):
         self.set_language("en")
         unmapped = District.objects.create(name="Unmapped Recurring District")
         self.client.login(username="pastor_event", password="testpass123")
@@ -2065,20 +1998,21 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_DISTRICT,
                 district=unmapped.id,
                 small_group="",
+                audience_units=[self.root_unit.id],
             ),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response,
-            "This district is not linked to a church structure unit yet",
-        )
-        self.assertEqual(ServiceEvent.objects.filter(title_en="Sunday Service").count(), 0)
-        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+        events = ServiceEvent.objects.filter(title_en="Sunday Service")
+        self.assertEqual(events.count(), 3)
+        for event in events:
+            self.assertEqual(list(event.get_audience_scope_units()), [self.root_unit])
+            self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
+            self.assertIsNone(event.district)
+            self.assertIsNone(event.small_group)
 
     def test_recurring_preview_empty_audience_creates_no_rows(self):
-        # SE-AS.7A: preview never writes events or audience rows, even though
-        # the empty-audience conversion validation runs.
+        # Preview never writes events or audience rows.
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2089,11 +2023,12 @@ class ServiceEventFoundationTests(TestCase):
                 scope_type=ServiceEvent.SCOPE_DISTRICT,
                 district=self.north.id,
                 small_group="",
+                audience_units=[],
             ),
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Events to Create")
+        self.assertNotContains(response, "Events to Create")
         self.assertEqual(ServiceEvent.objects.count(), 0)
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 
@@ -2102,9 +2037,7 @@ class ServiceEventFoundationTests(TestCase):
         # ServiceEvent created directly (not via the guarded form) with zero
         # audience rows is now an invalid/safety state for ordinary visibility:
         # ordinary users fail closed regardless of legacy fields or
-        # Profile.small_group, while managers/staff keep their override. (The
-        # SE-AS.7A write-path guard still prevents the normal forms from
-        # creating such events.)
+        # Profile.small_group, while managers/staff keep their override.
         event = self.create_event(
             scope_type=ServiceEvent.SCOPE_DISTRICT,
             district=self.north,
@@ -2668,8 +2601,8 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
     Events with ServiceEventAudienceScope rows use those rows as the
     ordinary-user audience source, matched by active primary
     ChurchStructureMembership (membership-core); Profile.small_group alone
-    grants nothing there. Events with no rows keep the legacy scope_type /
-    district / small_group behavior exactly, driven by Profile.small_group.
+    grants nothing there. Events with no rows fail closed for ordinary users;
+    legacy scope_type / district / small_group fields are not consulted.
     """
 
     def setUp(self):
@@ -3166,7 +3099,7 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
     def test_audience_selector_ui_is_available_after_runtime_migration(self):
         form = ServiceEventForm(language="en")
         self.assertIn("audience_units", form.fields)
-        self.assertFalse(form.fields["audience_units"].required)
+        self.assertTrue(form.fields["audience_units"].required)
 
         self.set_language("en")
         self.client.login(username="audience_staff", password="testpass123")
@@ -3174,4 +3107,7 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data-audience-picker")
-        self.assertContains(response, "Converted when no structure audience is selected")
+        self.assertNotContains(response, "Converted when no structure audience is selected")
+        self.assertNotContains(response, 'name="scope_type"')
+        self.assertNotContains(response, 'name="district"')
+        self.assertNotContains(response, 'name="small_group"')

@@ -1352,6 +1352,7 @@ def passage_wall(request):
             "user",
             "active_plan",
             "plan_day",
+            "structure_unit_at_post",
             "small_group_at_post",
         )
         .order_by("-created_at")

@@ -1211,7 +1211,11 @@ class ReflectionPrivacyInvariantTests(TestCase):
         )
         self.assertEqual(self.passage_wall_group_ids_for(ambiguous_user), set())
 
-    def test_new_group_reflection_stamps_legacy_group_and_structure_unit(self):
+    def test_new_group_reflection_stamps_structure_unit_and_leaves_legacy_null(self):
+        # REFLECTION-MIRROR.1D: a new group reflection stamps structure_unit_at_post
+        # from the author's active primary membership and leaves the legacy
+        # small_group_at_post mirror null, while remaining visible to the same
+        # membership group and hidden from other groups.
         self.client.login(username=self.author.username, password="TestPass123!")
         response = self.client.post(
             reverse("add_comment", args=[self.active_plan.id, self.day.id, 0]),
@@ -1225,7 +1229,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         comment = ReflectionComment.objects.get(body="Mapped group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-        self.assertEqual(comment.small_group_at_post, self.old_group)
+        self.assertIsNone(comment.small_group_at_post)
         self.assertEqual(comment.structure_unit_at_post, self.old_unit)
         self.assertTrue(comment.can_be_seen_by(self.old_group_member))
         self.assertFalse(comment.can_be_seen_by(self.new_group_member))
@@ -1291,7 +1295,8 @@ class ReflectionPrivacyInvariantTests(TestCase):
                     body=f"{visibility} reflection structure companion",
                 )
                 self.assertEqual(comment.visibility, visibility)
-                self.assertEqual(comment.small_group_at_post, self.old_group)
+                # REFLECTION-MIRROR.1D: legacy mirror stays null on new posts.
+                self.assertIsNone(comment.small_group_at_post)
                 self.assertEqual(comment.structure_unit_at_post, self.old_unit)
                 self.assertTrue(comment.can_be_seen_by(self.author))
                 self.assertEqual(
@@ -1320,7 +1325,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
         reply = ReflectionComment.objects.get(parent=parent, body="Inherited reply")
 
         self.assertEqual(reply.visibility, parent.visibility)
-        self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        # REFLECTION-MIRROR.1D: replies inherit the parent structure snapshot but
+        # no longer inherit the legacy small_group_at_post mirror.
+        self.assertIsNone(reply.small_group_at_post)
         self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertTrue(parent.can_be_seen_by(self.same_group_user))
         self.assertTrue(reply.can_be_seen_by(self.same_group_user))
@@ -1340,7 +1347,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(reply.body, "Edited inherited reply")
         self.assertEqual(reply.visibility, parent.visibility)
-        self.assertEqual(reply.small_group_at_post, parent.small_group_at_post)
+        # REFLECTION-MIRROR.1D: editing a reply preserves its own (null) legacy
+        # mirror and never re-inherits the parent's small_group_at_post.
+        self.assertIsNone(reply.small_group_at_post)
         self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertFalse(reply.can_be_seen_by(self.other_group_user))
 
@@ -1418,6 +1427,38 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
 
+    def test_migrated_group_post_group_edit_does_not_reintroduce_legacy_mirror(self):
+        # REFLECTION-MIRROR.1D: a group post that already has a null legacy mirror
+        # (structure-native row) keeps small_group_at_post null after a group->group
+        # edit. Policy C preserves structure_unit_at_post and never re-stamps the
+        # legacy mirror from the author's current membership.
+        post = self.make_reflection(
+            user=self.author,
+            body="Migrated group source",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=None,
+            structure_unit=self.old_unit,
+        )
+        self.assertIsNone(post.small_group_at_post)
+
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.post(
+            reverse("edit_comment", args=[post.id]),
+            {
+                "body": "Migrated group edit stays structure-native",
+                "visibility": ReflectionComment.VISIBILITY_GROUP,
+                "is_anonymous": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        post.refresh_from_db()
+
+        self.assertEqual(post.body, "Migrated group edit stays structure-native")
+        self.assertIsNone(post.small_group_at_post)
+        self.assertEqual(post.structure_unit_at_post, self.old_unit)
+        self.assertTrue(post.can_be_seen_by(self.old_group_member))
+        self.assertFalse(post.can_be_seen_by(self.new_group_member))
+
     def test_top_level_private_or_church_edit_to_group_stamps_membership_unit(self):
         # CS-CORE.4G.3 (coverage 8): editing a non-group top-level post into group
         # stamps the snapshot from the author's active primary membership unit, not
@@ -1455,7 +1496,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
                 self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_GROUP)
                 self.assertEqual(post.structure_unit_at_post, self.new_unit)
-                self.assertEqual(post.small_group_at_post, self.new_group)
+                # REFLECTION-MIRROR.1D: entering group visibility leaves the legacy
+                # mirror null even when a legacy SmallGroup maps to the new unit.
+                self.assertIsNone(post.small_group_at_post)
                 self.assertTrue(post.can_be_seen_by(self.new_group_member))
                 self.assertFalse(post.can_be_seen_by(self.old_group_member))
                 self.assertTrue(post.can_be_seen_by(self.author))
@@ -1581,10 +1624,11 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertFalse(profile_form.is_valid())
 
     def test_membership_user_creates_group_reflection_with_structure_snapshot(self):
-        # CS-CORE.4G.3 (coverage 2 + 6): a membership-only user creates a group
-        # reflection whose structure_unit_at_post is the membership unit and whose
-        # small_group_at_post is the lone active legacy mirror; the post is visible
-        # through the 4G.2 read path to a matching member.
+        # CS-CORE.4G.3 (coverage 2 + 6) + REFLECTION-MIRROR.1D: a membership-only
+        # user creates a group reflection whose structure_unit_at_post is the
+        # membership unit; small_group_at_post stays null (the create path no
+        # longer writes the legacy mirror even when one resolves). The post is
+        # visible through the 4G.2 read path to a matching member.
         author = self.create_user(
             "invariant_membership_author",
             membership_unit=self.old_unit,
@@ -1605,7 +1649,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         comment = ReflectionComment.objects.get(body="Membership group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
         self.assertEqual(comment.structure_unit_at_post, self.old_unit)
-        self.assertEqual(comment.small_group_at_post, self.old_group)
+        self.assertIsNone(comment.small_group_at_post)
         self.assertTrue(comment.can_be_seen_by(self.old_group_member))
         self.assertFalse(comment.can_be_seen_by(self.new_group_member))
 
@@ -1762,6 +1806,36 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
+
+    def test_passage_wall_label_prefers_structure_unit_with_legacy_fallback(self):
+        # REFLECTION-MIRROR.1D: the passage wall group label prefers the structure
+        # unit name (structure-native rows) and falls back to the legacy
+        # small_group_at_post name only for old rows that lack a structure snapshot.
+        self.make_reflection(
+            user=self.author,
+            body="Structure-native labelled post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=None,
+            structure_unit=self.old_unit,
+        )
+        self.make_reflection(
+            user=self.author,
+            body="Legacy-only labelled post",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.old_group,
+            structure_unit=None,
+        )
+
+        self.client.login(username=self.author.username, password="TestPass123!")
+        response = self.client.get(
+            reverse("passage_wall"),
+            {"ref": "John 1", "tab": "my"},
+        )
+        self.assertEqual(response.status_code, 200)
+        # Structure-native row shows the unit name; legacy-only row falls back to
+        # the SmallGroup name. The two fixtures use distinct names.
+        self.assertContains(response, self.old_unit.name)
+        self.assertContains(response, self.old_group.name)
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):
@@ -5591,7 +5665,10 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(comment.plan_day, self.day1)
         self.assertEqual(comment.scripture_ref_key, "John 1")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-        self.assertEqual(comment.small_group_at_post, self.group)
+        # REFLECTION-MIRROR.1D: the create path no longer writes the legacy mirror;
+        # visibility is carried by structure_unit_at_post.
+        self.assertIsNone(comment.small_group_at_post)
+        self.assertEqual(comment.structure_unit_at_post, self.group_unit)
 
 
     def test_private_reflection_is_not_visible_to_other_user(self):

@@ -72,7 +72,9 @@
             {% if reflection.active_plan %}
             · {{ reflection.active_plan }}
             {% endif %}
-            {% if reflection.small_group_at_post %}
+            {% if reflection.structure_unit_at_post %}
+            · {{ reflection.structure_unit_at_post.name }}
+            {% elif reflection.small_group_at_post %}
             · {{ reflection.small_group_at_post.name }}
             {% endif %}
         </p>

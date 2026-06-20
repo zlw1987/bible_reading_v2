@@ -77,12 +77,16 @@ snapshot, so the mirror carries no live runtime authority of its own and is now
 legacy display/history/admin/cleanup context only, not an access source. New
 group prayers leave `small_group_at_post` null; existing stored mirror values
 are preserved on ordinary edit (not re-stamped, not cleared) and are **not**
-cleared in this slice. After PRAYER-MIRROR.1A the schema-prep audit reclassifies
-the candidate away from `blocked_by_app_write` (to `blocked_by_data` while rows
-remain populated, or `blocked_by_display_or_admin` once data is cleared). A later
-PRAYER-MIRROR.1B should add guarded dry-run-first cleanup/backfill of stored
-values if appropriate, then remove admin/display/diagnostic surfaces before any
-field or table removal. No field/table removal is approved by schema-prep.
+cleared by PRAYER-MIRROR.1A. After PRAYER-MIRROR.1A the schema-prep audit
+reclassifies the candidate away from `blocked_by_app_write` (to `blocked_by_data`
+while rows remain populated, or `blocked_by_display_or_admin` once data is
+cleared). PRAYER-MIRROR.1B adds the guarded dry-run-first
+`cleanup_prayer_small_group_mirrors` command (dry-run by default; apply requires
+`--apply` plus `--confirm-prayer-small-group-mirror-cleanup`) that clears only
+the safe stored mirror values where doing so cannot change visibility or display;
+it does not remove the field/table. Admin/display/diagnostic surface removal and
+any field or table removal remain later, separately approved slices. No
+field/table removal is approved by schema-prep.
 
 Docs-only later-cleanup notes (not changed in this slice): `reading/views.py`
 still imports `accounts.models.SmallGroup` although the only remaining reference
@@ -326,7 +330,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | Bible Study V2 generation key / anchor bridge | `studies.services.normal_generation_key_for_unit()`, `anchor_unit`, `generation_key`, `backfill_bible_study_v2_generation_keys` | generation/idempotency bridge | Structure-native idempotency is present; BS-V2-KEY.1A adds dry-run-first support to backfill missing safe keys/anchors without changing runtime behavior, audience rows, or the `small_group` mirror. |
 | Reflection legacy small-group snapshot | `comments.models.ReflectionComment.small_group_at_post` | stored mirror/display/history snapshot | No longer grants ordinary group visibility. REFLECTION-MIRROR.1D stops normal app-level writes (create/reply/edit-into-group leave it null; Policy C group→group edits preserve existing values without re-stamping). REFLECTION-MIRROR.1E adds guarded dry-run-first cleanup (`cleanup_reflection_small_group_mirrors`) that clears existing stored values only when clearing cannot change visibility/display (group rows matching a valid active small-group `structure_unit_at_post`; non-group rows that carry a structure snapshot). REFLECTION-MIRROR.1F adds guarded dry-run-first migration (`cleanup_reflection_nongroup_display_mirrors`) that, for non-group rows whose only display context is the legacy mirror and which map to a valid active small-group unit, sets `structure_unit_at_post` to that unit and clears `small_group_at_post`. Unsafe rows stay blocked; field/table removal still requires a later schema slice. |
 | Reflection structure snapshot | `ReflectionComment.structure_unit_at_post` | already runtime-retired / historical only | Canonical group reflection read/write snapshot after CS-CORE.4G.2/4G.3. |
-| Prayer legacy small-group mirror | `prayers.models.PrayerRequest.small_group_at_post`, `prayers.structure_visibility.resolve_legacy_small_group_mirror` (diagnostic/admin/cleanup only), `PrayerRequestAdmin` | stored mirror/display/history/admin/cleanup context | No longer ordinary visibility authority (`structure_unit_at_post` plus active primary membership drive group prayer visibility). PRAYER-MIRROR.1A stopped the normal app-level write: the prayer group create/edit path no longer stamps or re-stamps the mirror, new group prayers leave it null, and existing stored values are preserved on edit and not cleared. The schema-prep audit reclassifies it from `blocked_by_app_write` to `blocked_by_data` (while rows remain populated) / `blocked_by_display_or_admin`; the remaining blocker is stored data plus admin/display/cleanup surfaces, not an app-level write. A later PRAYER-MIRROR.1B adds guarded dry-run-first cleanup of stored values if appropriate; field/table retirement remains a later slice. |
+| Prayer legacy small-group mirror | `prayers.models.PrayerRequest.small_group_at_post`, `prayers.structure_visibility.resolve_legacy_small_group_mirror` (diagnostic/admin/cleanup only), `cleanup_prayer_small_group_mirrors`, `PrayerRequestAdmin` | stored mirror/display/history/admin/cleanup context | No longer ordinary visibility authority (`structure_unit_at_post` plus active primary membership drive group prayer visibility). PRAYER-MIRROR.1A stopped the normal app-level write: the prayer group create/edit path no longer stamps or re-stamps the mirror, new group prayers leave it null, and existing stored values are preserved on edit and not cleared. The schema-prep audit reclassifies it from `blocked_by_app_write` to `blocked_by_data` (while rows remain populated) / `blocked_by_display_or_admin`; the remaining blocker is stored data plus admin/display/cleanup surfaces, not an app-level write. PRAYER-MIRROR.1B adds guarded dry-run-first cleanup (`cleanup_prayer_small_group_mirrors`, requires `--apply` plus `--confirm-prayer-small-group-mirror-cleanup`) that clears stored values only where clearing cannot change visibility/display (group and non-group rows matching a valid active small-group `structure_unit_at_post`); non-group rows with no structure snapshot stay blocked. It performs no schema migration or runtime source switch and does not remove the field; field/table retirement remains a later slice. |
 | Role legacy scope fields | `ChurchRoleAssignment.district`, `ChurchRoleAssignment.small_group` | stored mirror/display/history snapshot | Runtime fallback is retired; fields remain display/audit/backfill/rollback context until field-level retirement. |
 | Role explicit structure scope | `ChurchRoleAssignment.structure_unit` | already runtime-retired / historical only | Current non-global role runtime scope source; membership is not used to infer role scope. |
 | Legacy bridge mappings | `MinistryContext.church_structure_unit`, `District.church_structure_unit`, `SmallGroup.church_structure_unit` | generation/idempotency bridge | Still needed for setup diagnostics, Bible Study resolution/generation, and backfill/audit comparison. |
@@ -511,13 +515,42 @@ Status: **PRAYER-MIRROR.1A stops normal app-level writes to
   Existing stored mirror values are **not** cleared in this slice.
 - The schema-prep audit no longer classifies this candidate
   `blocked_by_app_write`. It reports `blocked_by_data` while mirror rows remain
-  populated (data counter `prayer_request_small_group_at_post`), and would fall
-  back to `blocked_by_display_or_admin` once those rows are cleared.
-- A later PRAYER-MIRROR.1B should add a guarded dry-run-first cleanup/backfill of
-  stored mirror values if appropriate (mirroring the reflection cleanup
-  pattern), then remove admin/display/diagnostic surfaces before any field or
-  table removal. Field/schema retirement remains a later, separately approved
-  slice.
+  populated (data counter `prayer_request_small_group_at_post`), and falls back
+  to `blocked_by_display_or_admin` once those rows are cleared.
+- PRAYER-MIRROR.1B adds the guarded dry-run-first cleanup command
+  `cleanup_prayer_small_group_mirrors` (mirroring the reflection cleanup
+  pattern). It clears existing stored `small_group_at_post` values only where
+  doing so cannot change visibility or display: group rows whose
+  `structure_unit_at_post` is non-null, active, a small-group unit, and equal to
+  the mapped legacy unit (decision `eligible_clear_group_matching_snapshot`), and
+  non-group rows that satisfy the same full matching checks (decision
+  `eligible_clear_nongroup_matching_snapshot`). Non-group rows with no
+  `structure_unit_at_post` are skipped conservatively
+  (`skipped_display_context_uncertain`) for a later separate display-mirror
+  migration, and group rows with missing/inactive/wrong-type/unmapped/mismatched
+  snapshots are skipped. The only field it mutates is `small_group_at_post`
+  (set to null); it never touches `visibility`, `structure_unit_at_post`,
+  `status`, `title`/`body`/`answer_note`, author, or hidden/deleted state, never
+  deletes rows, performs no schema migration or runtime source switch, and never
+  prints prayer free text. It requires `--apply` plus
+  `--confirm-prayer-small-group-mirror-cleanup` and supports `--verbose`,
+  `--limit N`, and optional `--prayer-id ID` (verbose-only filters). It does not
+  remove the field/table; admin/display/diagnostic surface removal and any
+  field/schema retirement remain later, separately approved slices.
+
+```powershell
+.venv\Scripts\python.exe manage.py cleanup_prayer_small_group_mirrors
+```
+
+`cleanup_prayer_small_group_mirrors` is dry-run by default. Apply requires both
+explicit flags:
+
+```powershell
+.venv\Scripts\python.exe manage.py cleanup_prayer_small_group_mirrors --apply --confirm-prayer-small-group-mirror-cleanup
+```
+
+Do not run that `--apply` command against the local/dev database during the
+PRAYER-MIRROR.1B implementation task. Field/schema cleanup remains later.
 
 ### Role Legacy Fields
 
@@ -540,17 +573,18 @@ Blockers:
 2. Harden Bible Study V2 generation/idempotency bridge: active schedules should carry audience rows, normal meetings should carry audience rows and generation keys, legacy series scope fields should be cleared only by a future guarded cleanup after audit, and mirror/audience mismatches should be zero. Run `backfill_bible_study_v2_generation_keys` in dry-run mode first; apply only when intentionally approved.
 3. Run ServiceEvent legacy scope cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_service_event_legacy_scope_fields`, review zero-row blockers/output, then run `cleanup_service_event_legacy_scope_fields --apply --confirm-service-event-legacy-scope-cleanup` only after explicit approval. Field/schema deprecation remains a later plan covering forms, display, backfill/audit commands, rollback, and zero-row safety-state handling.
 4. Run reflection snapshot cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_reflection_snapshot_blockers`, review the per-row decisions/blockers, then run `cleanup_reflection_snapshot_blockers --apply --confirm-reflection-snapshot-cleanup` only after explicit approval. It backfills mapped group snapshots and demotes safe top-level orphan group rows to private; orphan replies, orphans with replies, and unmapped/inactive/wrong-type rows stay blocked for review. `small_group_at_post` field/schema deprecation remains a later separate plan.
-5. Plan role legacy field retirement after confirming no scoped assignment lacks explicit valid `structure_unit` and no legacy-vs-structure mismatch remains.
-6. Run `Profile.small_group` cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_profile_small_group`, review skipped rows/output, then run `cleanup_profile_small_group --apply --confirm-profile-small-group-cleanup` only after explicit approval. Field/schema deprecation remains a later plan covering admin display, fallback/audit references, rollback, and model/table removal.
-7. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`; `ServiceEvent.ministry_context` has its own SERVICE-EVENT-CONTEXT.1B display-context backfill/cleanup path. It deletes no rows and removes no fields.
-8. Run ServiceEvent Host / Language display backfill and ministry-context label cleanup only when staff intentionally approve it for the target DB: dry-run `backfill_service_event_host_language_units`, review mapping skip categories, run `backfill_service_event_host_language_units --apply --confirm-service-event-host-language-unit-backfill` only after explicit approval, then dry-run `cleanup_service_event_ministry_context_labels`, review matching/skip categories, and run `cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup` only after separate explicit approval. Backfill sets only display-only `host_language_unit`; cleanup clears only matching `ServiceEvent.ministry_context` FK values. Field/schema deprecation and `MinistryContext` row/table retirement remain later.
-9. Run `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50`
+5. Run prayer legacy small-group mirror cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_prayer_small_group_mirrors`, review the per-prayer decisions/blockers, then run `cleanup_prayer_small_group_mirrors --apply --confirm-prayer-small-group-mirror-cleanup` only after explicit approval. It clears `PrayerRequest.small_group_at_post` only for group and non-group rows whose matching active small-group `structure_unit_at_post` already carries the structure identity; non-group rows with no structure snapshot and group rows with missing/inactive/wrong-type/unmapped/mismatched snapshots stay blocked. It changes no visibility or structure snapshot and removes no field. `small_group_at_post` field/schema and `SmallGroup` table retirement remain later separate plans.
+6. Plan role legacy field retirement after confirming no scoped assignment lacks explicit valid `structure_unit` and no legacy-vs-structure mismatch remains.
+7. Run `Profile.small_group` cleanup only when staff intentionally approve it for the target DB: dry-run `cleanup_profile_small_group`, review skipped rows/output, then run `cleanup_profile_small_group --apply --confirm-profile-small-group-cleanup` only after explicit approval. Field/schema deprecation remains a later plan covering admin display, fallback/audit references, rollback, and model/table removal.
+8. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`; `ServiceEvent.ministry_context` has its own SERVICE-EVENT-CONTEXT.1B display-context backfill/cleanup path. It deletes no rows and removes no fields.
+9. Run ServiceEvent Host / Language display backfill and ministry-context label cleanup only when staff intentionally approve it for the target DB: dry-run `backfill_service_event_host_language_units`, review mapping skip categories, run `backfill_service_event_host_language_units --apply --confirm-service-event-host-language-unit-backfill` only after explicit approval, then dry-run `cleanup_service_event_ministry_context_labels`, review matching/skip categories, and run `cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup` only after separate explicit approval. Backfill sets only display-only `host_language_unit`; cleanup clears only matching `ServiceEvent.ministry_context` FK values. Field/schema deprecation and `MinistryContext` row/table retirement remain later.
+10. Run `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50`
    before proposing any field/table removal. Use it to identify which legacy
    fields are blocked by stored data, app writes, admin/display references,
    diagnostic cleanup tooling, bridge decisions, or only historical migrations.
    This command is schema-removal preparation only; no removal is approved by
    its output.
-10. Run `audit_legacy_structure_object_row_retirement --verbose --limit 30`
+11. Run `audit_legacy_structure_object_row_retirement --verbose --limit 30`
    before proposing any final row/table action. Use it to decide between:
    archive/delete rows later, keep rows temporarily as the mapping bridge,
    replace bridge fields with a dedicated compatibility/mapping model, or remove
@@ -558,7 +592,7 @@ Blockers:
    handled. The current recommendation is conservative: keep the rows as a
    bridge until a separate final-retirement slice is approved, and treat
    `UNASSIGNED-GROUPS` as a special placeholder decision.
-11. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
+12. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
 
 ## Verification for LEGACY-RETIRE.1A
 

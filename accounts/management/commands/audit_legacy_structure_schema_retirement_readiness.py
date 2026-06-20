@@ -669,6 +669,8 @@ CANDIDATE_DEFINITIONS = (
             "prayer list/detail legacy small_group label (display only)",
         ),
         "diagnostic_cleanup_references": _refs(
+            "cleanup_prayer_small_group_mirrors "
+            "(guarded dry-run-first cleanup of stored mirror values)",
             "prayers.structure_visibility.resolve_legacy_small_group_mirror "
             "(diagnostic/admin/future-cleanup helper, no longer a write path)",
         ),
@@ -682,10 +684,11 @@ CANDIDATE_DEFINITIONS = (
             "SmallGroup mirror; ordinary group-prayer visibility uses "
             "PrayerRequest.structure_unit_at_post plus active primary membership. "
             "The mirror is now legacy display/history/admin/cleanup context only. "
-            "A later PRAYER-MIRROR.1B should add guarded dry-run-first cleanup of "
-            "stored values if appropriate, then remove admin/display/diagnostic "
-            "surfaces before any field/table removal. Do not clear existing rows "
-            "or remove the field in this slice."
+            "PRAYER-MIRROR.1B adds the guarded dry-run-first "
+            "cleanup_prayer_small_group_mirrors command that clears stored values "
+            "only where doing so cannot change visibility/display; run it (apply "
+            "only with explicit approval) to drain stored data, then remove "
+            "admin/display/diagnostic surfaces before any field/table removal."
         ),
         "suggested_removal_phase": "phase 1 then phase 2 then phase 4",
     },

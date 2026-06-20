@@ -2,7 +2,7 @@
 
 ## Current Status Summary
 
-LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B adds the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. SERVICE-EVENT-CONTEXT.1A added an audience-derived Host / Language display fallback for `ServiceEvent.ministry_context` and stopped normal app-level writes to that FK; SERVICE-EVENT-CONTEXT.1B adds display-only `ServiceEvent.host_language_unit`, dry-run-first `backfill_service_event_host_language_units`, and cleanup support so matching legacy FK values can be cleared after the structure-native display context is populated. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows with matching structure-native Host / Language display context, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate.
+LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B adds the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. STRUCTURE-BRIDGE.1A adds the read-only `audit_bible_study_generation_bridge_retirement` inventory: ordinary Bible Study V2 visibility is already audience-row + membership-core, normal generation is already structure-unit-native, and the remaining legacy `SmallGroup` dependencies are old-row idempotency, stored mirrors, fallback display, admin, and diagnostic/cleanup support. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. SERVICE-EVENT-CONTEXT.1A added an audience-derived Host / Language display fallback for `ServiceEvent.ministry_context` and stopped normal app-level writes to that FK; SERVICE-EVENT-CONTEXT.1B adds display-only `ServiceEvent.host_language_unit`, dry-run-first `backfill_service_event_host_language_units`, and cleanup support so matching legacy FK values can be cleared after the structure-native display context is populated. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows with matching structure-native Host / Language display context, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate.
 
 New audit command:
 
@@ -95,6 +95,30 @@ intentionally narrow the matching rows.
 
 Do not run that `--apply` command against the local/dev database during the
 BS-V2-KEY.1A implementation task. Field/schema cleanup remains later.
+
+Bible Study generation bridge retirement inventory:
+
+```powershell
+.venv\Scripts\python.exe manage.py audit_bible_study_generation_bridge_retirement
+```
+
+STRUCTURE-BRIDGE.1A adds this read-only command for the remaining V2 generation
+/ idempotency bridge decision. It has `--verbose`, `--limit N`, and
+`--fail-on-blockers`; it has no `--apply`, writes no data, changes no schema,
+and changes no runtime behavior. Its counters distinguish series audience-row
+coverage, legacy series scope fields, meeting `generation_key` / `anchor_unit`
+coverage, meeting audience rows, `BibleStudyMeeting.small_group` mirrors,
+mirror-to-anchor mapping agreement, static consumer categories, and
+`blockers_for_small_group_table_retirement`.
+
+The current code state is important: normal V2 generation now targets active
+small-group `ChurchStructureUnit` leaves, writes `normal-unit:{unit_id}`,
+`anchor_unit`, and `BibleStudyMeetingAudienceScope` rows, and leaves the legacy
+`small_group` mirror unset for new normal generated rows. Remaining legacy
+`SmallGroup` dependencies are compatibility blockers for final table/field
+retirement: old-row idempotency matching, stored mirrors, fallback display,
+admin maintenance, and diagnostic/backfill/cleanup tooling. No deletion,
+field removal, mirror cleanup, or replacement bridge is approved by this slice.
 
 Legacy structure parent/context link cleanup command:
 
@@ -387,7 +411,7 @@ Blockers:
 - The audit preserves that split: `bible_study_v1_app_runtime_legacy_blockers` remains `0`, while `bible_study_v1_purge_pending` contributes to `bible_study_legacy_retirement_blockers` as a data/table-retirement blocker.
 - BS-V1-PURGE.1A does not delete V2 `BibleStudyMeeting` data, does not change V2 behavior, and does not remove V1 models/tables. Schema cleanup remains a later migration slice.
 - V2 `BibleStudyMeeting.small_group` remains stored mirror/history/idempotency compatibility and blocks field removal even though it is no longer ordinary visibility authority or the preferred member/staff display label.
-- Active series without audience rows, populated `BibleStudySeries` legacy scope fields, and normal meetings without generation keys are generation/idempotency or field-retirement readiness blockers. BS-SERIES-SCOPE.1A stops new normal app schedule saves from adding/updating the legacy series scope blockers. BS-SERIES-SCOPE.1B adds a guarded dry-run-first cleanup command for existing populated series values, but no cleanup runs automatically and unsafe/mismatched rows stay blocked for review. BS-V2-KEY.1A support can reduce `bible_study_normal_meetings_missing_generation_key` after a separately approved future `--apply` run.
+- Active series without audience rows, populated `BibleStudySeries` legacy scope fields, normal meetings without generation keys, normal meetings without `anchor_unit`, and any remaining `BibleStudyMeeting.small_group` mirror rows are generation/idempotency or field-retirement readiness blockers. BS-SERIES-SCOPE.1A stops new normal app schedule saves from adding/updating the legacy series scope blockers. BS-SERIES-SCOPE.1B adds a guarded dry-run-first cleanup command for existing populated series values, but no cleanup runs automatically and unsafe/mismatched rows stay blocked for review. BS-V2-KEY.1A support can reduce `bible_study_normal_meetings_missing_generation_key` after a separately approved future `--apply` run. STRUCTURE-BRIDGE.1A does not change those rows; it inventories which blockers remain before final `SmallGroup` table retirement or a replacement compatibility bridge can be planned.
 
 ### Reflection Legacy Snapshots
 
@@ -468,6 +492,13 @@ For ROW-RETIRE.1A, also run:
 ```powershell
 .venv\Scripts\python.exe manage.py test accounts.test_legacy_structure_object_row_retirement_command -v 2
 .venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 30
+```
+
+For STRUCTURE-BRIDGE.1A, also run:
+
+```powershell
+.venv\Scripts\python.exe manage.py test studies.test_bible_study_generation_bridge_retirement_command -v 2
+.venv\Scripts\python.exe manage.py audit_bible_study_generation_bridge_retirement --verbose --limit 30
 ```
 
 Do not run full app suites for this slice unless a later reviewer explicitly asks.

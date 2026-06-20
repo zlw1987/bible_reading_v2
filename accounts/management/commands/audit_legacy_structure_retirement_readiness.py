@@ -308,6 +308,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "guarded cleanup tooling for BibleStudySeries legacy scope fields; dry-run by default",
     ),
     (
+        "studies.management.commands.audit_bible_study_generation_bridge_retirement",
+        "standing diagnostic/audit guard for Bible Study generation bridge retirement",
+    ),
+    (
         "studies.management.commands.purge_legacy_bible_study_v1_sessions",
         "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
     ),

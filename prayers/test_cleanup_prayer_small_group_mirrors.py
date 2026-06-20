@@ -21,7 +21,7 @@ from django.test.utils import CaptureQueriesContext
 
 from accounts.management.commands.audit_legacy_structure_schema_retirement_readiness import (
     STATUS_DATA,
-    STATUS_DISPLAY,
+    STATUS_DIAGNOSTIC,
     run_audit,
 )
 from accounts.models import ChurchStructureUnit, SmallGroup
@@ -352,7 +352,7 @@ class PrayerSmallGroupMirrorCleanupCommandTests(TestCase):
             second_stats["remaining_mirror_references_after_operation"], 0
         )
 
-    def test_audit_reclassifies_away_from_blocked_by_data_after_cleanup(self):
+    def test_audit_reclassifies_to_diagnostic_only_after_cleanup(self):
         unit = self.create_unit("PR-AUDIT")
         group = self.create_group("Prayer Audit Group", unit=unit)
         self.create_prayer(small_group=group, structure_unit=unit)
@@ -377,6 +377,10 @@ class PrayerSmallGroupMirrorCleanupCommandTests(TestCase):
             if c["candidate_name"] == "PrayerRequest.small_group_at_post"
         )
         self.assertEqual(after_count, 0)
-        # With no populated rows the candidate falls back to the display/admin
-        # classification, not blocked_by_data and not ready for removal.
-        self.assertEqual(after_candidate["schema_removal_status"], STATUS_DISPLAY)
+        # With no populated rows and the PRAYER-MIRROR.1C admin/display surface
+        # removal, the candidate is classified as diagnostic-tooling-only (the
+        # guarded cleanup command still references it), not blocked_by_data and
+        # not ready for removal.
+        self.assertEqual(
+            after_candidate["schema_removal_status"], STATUS_DIAGNOSTIC
+        )

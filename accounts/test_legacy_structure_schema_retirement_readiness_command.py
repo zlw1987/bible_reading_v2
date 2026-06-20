@@ -276,17 +276,27 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             0,
         )
 
-    def test_prayer_request_mirror_is_no_longer_app_write_blocker(self):
-        # PRAYER-MIRROR.1A stopped the normal app-level mirror write, so the
-        # candidate must no longer be classified as blocked_by_app_write. With
-        # no stored mirror rows in this fixture, it falls back to the
-        # display/admin classification and remains a removal candidate.
+    def test_prayer_request_mirror_is_diagnostic_only_after_display_admin_removal(self):
+        # PRAYER-MIRROR.1A stopped the normal app-level mirror write and 1B/1C
+        # cleared stored data and removed the prayers.views display
+        # select_related plus the PrayerRequestAdmin list/search/select_related
+        # surfaces. With no stored mirror rows in this fixture and no
+        # app_read/admin/template references remaining, the candidate is now
+        # classified as diagnostic-tooling-only, not display/admin blocked.
         audit = run_audit()
         candidate = _candidate(audit, "PrayerRequest.small_group_at_post")
 
         self.assertEqual(candidate["app_write_references"], ())
-        self.assertEqual(candidate["schema_removal_status"], STATUS_DISPLAY)
+        self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["admin_references"], ())
+        self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["data_blocker_count"], 0)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
+        self.assertNotEqual(candidate["schema_removal_status"], STATUS_DISPLAY)
         self.assertNotEqual(candidate["schema_removal_status"], STATUS_WRITE)
+        # Guarded cleanup/diagnostic tooling still references the field, so it is
+        # not yet ready for schema removal.
+        self.assertTrue(candidate["diagnostic_cleanup_references"])
         # Ordinary group-prayer visibility is structure-native, so the legacy
         # mirror carries no live runtime authority of its own.
         self.assertEqual(candidate["live_runtime_references"], ())

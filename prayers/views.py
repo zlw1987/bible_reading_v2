@@ -178,7 +178,7 @@ def prayer_list(request):
         PrayerRequest.objects
         .filter(get_visible_prayer_filter(request.user))
         .annotate(pray_count=Count("prayer_marks"))
-        .select_related("user", "small_group_at_post", "structure_unit_at_post")
+        .select_related("user", "structure_unit_at_post")
         .order_by("-created_at")
     )
 
@@ -229,7 +229,7 @@ def prayer_detail(request, prayer_id):
     prayer = get_object_or_404(
         PrayerRequest.objects
         .annotate(pray_count=Count("prayer_marks"))
-        .select_related("user", "small_group_at_post", "structure_unit_at_post"),
+        .select_related("user", "structure_unit_at_post"),
         id=prayer_id,
     )
 
@@ -484,7 +484,6 @@ def report_prayer_request(request, prayer_id):
     prayer = get_object_or_404(
         PrayerRequest.objects.select_related(
             "user",
-            "small_group_at_post",
             "structure_unit_at_post",
         ),
         id=prayer_id,
@@ -544,7 +543,6 @@ def staff_prayer_reports(request):
         .select_related(
             "prayer_request",
             "prayer_request__user",
-            "prayer_request__small_group_at_post",
             "prayer_request__structure_unit_at_post",
             "reporter",
             "reviewed_by",

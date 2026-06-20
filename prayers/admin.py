@@ -5,12 +5,16 @@ from .models import PrayerComment, PrayerMark, PrayerReport, PrayerRequest
 
 @admin.register(PrayerRequest)
 class PrayerRequestAdmin(admin.ModelAdmin):
+    # PRAYER-MIRROR.1C: the legacy ``small_group_at_post`` mirror is no longer
+    # surfaced in admin list/search/select_related. Group-prayer context is
+    # shown via the structure-native ``structure_unit_at_post`` snapshot. The
+    # model field still physically exists and is kept only for guarded
+    # cleanup/diagnostic tooling until a later field-removal slice.
     list_display = (
         "title",
         "user",
         "visibility",
         "status",
-        "small_group_at_post",
         "structure_unit_at_post",
         "is_anonymous",
         "is_hidden",
@@ -29,14 +33,13 @@ class PrayerRequestAdmin(admin.ModelAdmin):
         "title",
         "body",
         "user__username",
-        "small_group_at_post__name",
         "structure_unit_at_post__code",
         "structure_unit_at_post__name",
         "structure_unit_at_post__name_en",
         "hidden_reason",
     )
     readonly_fields = ("created_at", "updated_at", "hidden_at")
-    list_select_related = ("user", "small_group_at_post", "structure_unit_at_post")
+    list_select_related = ("user", "structure_unit_at_post")
 
 
 @admin.register(PrayerMark)

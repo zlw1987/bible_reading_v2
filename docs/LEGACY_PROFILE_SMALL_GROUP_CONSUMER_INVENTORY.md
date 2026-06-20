@@ -55,8 +55,19 @@ matching active small-group `structure_unit_at_post` already carries the
 structure identity. It requires `--apply` plus
 `--confirm-prayer-small-group-mirror-cleanup`, only ever mutates
 `small_group_at_post`, performs no schema migration or runtime source switch, and
-never prints prayer free text. Admin/display/diagnostic surface removal and any
-field or table removal remain later, separately approved slices; no field/table
+never prints prayer free text. **PRAYER-MIRROR.1C** then removed the remaining
+admin/display read surfaces now that local/dev apply cleared the stored data
+blockers: the `prayers.views` list/detail/report querysets no longer
+`select_related` `small_group_at_post` (no prayer template ever displayed it),
+and `PrayerRequestAdmin` no longer lists, searches, or `list_select_related`s the
+mirror (the structure-native `structure_unit_at_post` snapshot is the admin
+surface). With admin/display gone and stored data cleared, the schema-prep audit
+reclassifies the candidate from `blocked_by_display_or_admin` to
+`blocked_by_diagnostic_tooling`: only the guarded
+`cleanup_prayer_small_group_mirrors` command and the
+`resolve_legacy_small_group_mirror` diagnostic helper still reference it. The
+field is still physically present. Cleanup/audit tooling may keep referencing it
+until a later, separately approved field/table-removal slice; no field/table
 removal is approved by schema-prep.
 
 Use the new execution plan as the current checklist for legacy-field/table retirement sequencing. Keep this consumer inventory as the detailed historical/current-state map of which consumers are switched, stored-only, diagnostic-only, retired app runtime, or still legacy bridge/runtime.
@@ -85,7 +96,7 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | Consumer | Current source | Notes |
 | --- | --- | --- |
 | ServiceEvent audience rows | Active primary `ChurchStructureMembership` | `events.models.ServiceEvent.can_be_seen_by()` delegates to `ServiceEvent._audience_scope_allows()` when `ServiceEventAudienceScope` rows exist, and the selector layer uses membership-core matching after CS-CORE.2B-A. |
-| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. After **PRAYER-MIRROR.1A** the normal prayer group create/edit path no longer writes `PrayerRequest.small_group_at_post` (new group prayers leave it null; existing values preserved on edit, not cleared); `prayers.structure_visibility.resolve_legacy_small_group_mirror` is no longer on the runtime write path and is diagnostic/admin/future-cleanup support only. The mirror is now legacy display/history/admin/cleanup context with no ordinary runtime authority; the schema-prep audit reclassifies it from `blocked_by_app_write` to `blocked_by_data` (while rows remain) / `blocked_by_display_or_admin`. **PRAYER-MIRROR.1B** adds the guarded dry-run-first `cleanup_prayer_small_group_mirrors` command that clears stored values only where clearing cannot change visibility/display, before any field/table retirement. `Profile.small_group` no longer grants ordinary group-prayer access. |
+| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. After **PRAYER-MIRROR.1A** the normal prayer group create/edit path no longer writes `PrayerRequest.small_group_at_post` (new group prayers leave it null; existing values preserved on edit, not cleared); `prayers.structure_visibility.resolve_legacy_small_group_mirror` is no longer on the runtime write path and is diagnostic/admin/future-cleanup support only. The mirror is now legacy display/history/admin/cleanup context with no ordinary runtime authority. **PRAYER-MIRROR.1B** added the guarded dry-run-first `cleanup_prayer_small_group_mirrors` command that clears stored values only where clearing cannot change visibility/display, and local/dev apply cleared the data blockers. **PRAYER-MIRROR.1C** removed the `prayers.views` display `select_related` and the `PrayerRequestAdmin` list/search/select_related surfaces, so the schema-prep audit reclassifies it from `blocked_by_display_or_admin` to `blocked_by_diagnostic_tooling` (only guarded cleanup/diagnostic tooling still references it), before any field/table retirement. `Profile.small_group` no longer grants ordinary group-prayer access. |
 | Bible Study v2 `BibleStudyMeeting` ordinary-member visibility | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | After BS-STRUCT.2A, `studies.models.BibleStudyMeeting.can_be_seen_by()` treats audience rows as the V2 runtime source of truth. Zero-row V2 meetings fail closed for ordinary users; `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only; `Profile.small_group` alone grants no v2 meeting visibility. |
 | `/studies/` and Today v2 meeting pre-filter | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `studies.views.get_v2_landing_context()` filters through audience rows before the final `BibleStudyMeeting.can_be_seen_by()` gate. Today reuses this context through `reading.views`; zero-row V2 meetings are not surfaced to ordinary users. |
 | Bible Study v2 role and worship user pickers | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` use membership-core matching against the meeting audience rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates. |

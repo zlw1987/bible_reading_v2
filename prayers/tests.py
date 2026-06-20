@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+from prayers.admin import PrayerRequestAdmin
 from prayers.forms import localized_visibility_choices
 from prayers.models import PrayerMark, PrayerReport, PrayerRequest
 from prayers.templatetags.prayer_extras import prayer_visibility_label
@@ -1446,6 +1447,47 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         )
 
         self.assertFalse(prayer.can_be_seen_by(ambiguous))
+
+    def test_admin_no_longer_exposes_legacy_mirror_field(self):
+        # PRAYER-MIRROR.1C: the admin maintenance surface no longer lists,
+        # searches, or select_relateds the legacy small_group_at_post mirror.
+        self.assertNotIn("small_group_at_post", PrayerRequestAdmin.list_display)
+        self.assertNotIn(
+            "small_group_at_post__name", PrayerRequestAdmin.search_fields
+        )
+        self.assertNotIn(
+            "small_group_at_post", PrayerRequestAdmin.list_select_related
+        )
+        # The structure-native snapshot remains the admin display/search surface.
+        self.assertIn("structure_unit_at_post", PrayerRequestAdmin.list_display)
+
+    def test_prayer_list_and_detail_render_without_mirror(self):
+        # A group prayer whose legacy mirror is null still renders in both the
+        # list and detail views, proving normal display no longer depends on
+        # the small_group_at_post select_related.
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Mirrorless display prayer",
+            body="Please pray.",
+            visibility=PrayerRequest.VISIBILITY_GROUP,
+            structure_unit_at_post=self.group_unit,
+        )
+        self.assertIsNone(prayer.small_group_at_post)
+
+        self.client.login(username="mirror_viewer", password="TestPass123!")
+
+        list_response = self.client.get(
+            reverse("prayer_list"),
+            {"tab": "group", "status": "open"},
+        )
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "Mirrorless display prayer")
+
+        detail_response = self.client.get(
+            reverse("prayer_detail", args=[prayer.id]),
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Mirrorless display prayer")
 
 
 class PrayerListTabAudienceTests(TestCase):

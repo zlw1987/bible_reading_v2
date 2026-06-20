@@ -659,15 +659,6 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "prayers.PrayerRequest",
         "field_name": "small_group_at_post",
         "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "prayers.views list/detail select_related legacy mirror display",
-        ),
-        "admin_references": _refs(
-            "prayers.admin.PrayerRequestAdmin list/search/select_related",
-        ),
-        "template_display_references": _refs(
-            "prayer list/detail legacy small_group label (display only)",
-        ),
         "diagnostic_cleanup_references": _refs(
             "cleanup_prayer_small_group_mirrors "
             "(guarded dry-run-first cleanup of stored mirror values)",
@@ -683,14 +674,16 @@ CANDIDATE_DEFINITIONS = (
             "PRAYER-MIRROR.1A stopped the normal app-level write to this legacy "
             "SmallGroup mirror; ordinary group-prayer visibility uses "
             "PrayerRequest.structure_unit_at_post plus active primary membership. "
-            "The mirror is now legacy display/history/admin/cleanup context only. "
-            "PRAYER-MIRROR.1B adds the guarded dry-run-first "
-            "cleanup_prayer_small_group_mirrors command that clears stored values "
-            "only where doing so cannot change visibility/display; run it (apply "
-            "only with explicit approval) to drain stored data, then remove "
-            "admin/display/diagnostic surfaces before any field/table removal."
+            "PRAYER-MIRROR.1B added the guarded dry-run-first "
+            "cleanup_prayer_small_group_mirrors command and local/dev apply "
+            "cleared the remaining stored mirror data blockers. PRAYER-MIRROR.1C "
+            "removed the prayers.views display select_related and the "
+            "PrayerRequestAdmin list/search/select_related surfaces, so only "
+            "guarded cleanup/diagnostic tooling now references the field. Keep "
+            "the field physically present until that cleanup/audit tooling is "
+            "retired; then remove it in a separate field/table-removal slice."
         ),
-        "suggested_removal_phase": "phase 1 then phase 2 then phase 4",
+        "suggested_removal_phase": "phase 3 then phase 4",
     },
     {
         "candidate_name": "Legacy diagnostic and cleanup command surfaces",

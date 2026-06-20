@@ -21,6 +21,32 @@ custom-unit placeholder decision. It has `--verbose`, `--limit N`, and
 `--fail-on-blockers`; it has no `--apply`, writes no data, changes no schema,
 and changes no runtime behavior.
 
+LEGACY-SCHEMA-PREP.1A adds the read-only command
+`audit_legacy_structure_schema_retirement_readiness` for field/table retirement
+planning. It inventories candidate legacy fields/tables across Accounts,
+ServiceEvent, Bible Study, and Reflection with data counts and code-reference
+categories, while keeping diagnostics, admin/display references, tests/fixtures,
+and migration history separate from runtime blockers. It has `--verbose`,
+`--limit N`, and `--fail-on-blockers`; it has no `--apply`, writes no data,
+changes no schema, changes no runtime behavior, and does not approve field or
+table removal. Cleanup tooling should remain until target DBs are audited after
+any separately approved cleanup apply, and legacy object tables remain last.
+
+The schema-prep candidate list includes `PrayerRequest.small_group_at_post`
+(`blocked_by_app_write`, data counter `prayer_request_small_group_at_post`).
+Unlike the reflection mirror, the normal prayer group create/edit path still
+writes this legacy `SmallGroup` FK mirror (`prayers.views` via
+`prayers.structure_visibility.resolve_legacy_small_group_mirror`), so it is a
+remaining `SmallGroup` mirror/write surface that **blocks final `SmallGroup`
+table retirement**. Ordinary group-prayer visibility is already structure-native
+(`PrayerRequest.structure_unit_at_post` plus active primary
+`ChurchStructureMembership`), so the mirror carries no live runtime authority of
+its own. LEGACY-SCHEMA-PREP.1A does not remove it, stop the write, or add
+cleanup; a later **PRAYER-MIRROR** slice should first stop the normal app-level
+mirror write (mirroring REFLECTION-MIRROR.1D), then add guarded cleanup if
+appropriate, then remove admin/display/diagnostic surfaces before any field or
+table removal. No field/table removal is approved by schema-prep.
+
 Use the new execution plan as the current checklist for legacy-field/table retirement sequencing. Keep this consumer inventory as the detailed historical/current-state map of which consumers are switched, stored-only, diagnostic-only, retired app runtime, or still legacy bridge/runtime.
 
 ## Migration Status (CS-CORE.2D-B; CLOSE.1 superseded)
@@ -47,7 +73,7 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | Consumer | Current source | Notes |
 | --- | --- | --- |
 | ServiceEvent audience rows | Active primary `ChurchStructureMembership` | `events.models.ServiceEvent.can_be_seen_by()` delegates to `ServiceEvent._audience_scope_allows()` when `ServiceEventAudienceScope` rows exist, and the selector layer uses membership-core matching after CS-CORE.2B-A. |
-| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. `PrayerRequest.small_group_at_post` is legacy mirror/history only, and `Profile.small_group` no longer grants ordinary group-prayer access. |
+| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. `PrayerRequest.small_group_at_post` carries no ordinary runtime authority, but unlike the reflection mirror the normal prayer group create/edit path **still writes** this legacy `SmallGroup` FK mirror (`prayers.views` via `prayers.structure_visibility.resolve_legacy_small_group_mirror`), so it remains a `SmallGroup` table-retirement blocker (`blocked_by_app_write` in LEGACY-SCHEMA-PREP.1A) pending a later PRAYER-MIRROR slice that stops the write before adding cleanup. `Profile.small_group` no longer grants ordinary group-prayer access. |
 | Bible Study v2 `BibleStudyMeeting` ordinary-member visibility | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | After BS-STRUCT.2A, `studies.models.BibleStudyMeeting.can_be_seen_by()` treats audience rows as the V2 runtime source of truth. Zero-row V2 meetings fail closed for ordinary users; `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only; `Profile.small_group` alone grants no v2 meeting visibility. |
 | `/studies/` and Today v2 meeting pre-filter | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `studies.views.get_v2_landing_context()` filters through audience rows before the final `BibleStudyMeeting.can_be_seen_by()` gate. Today reuses this context through `reading.views`; zero-row V2 meetings are not surfaced to ordinary users. |
 | Bible Study v2 role and worship user pickers | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` use membership-core matching against the meeting audience rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates. |
@@ -107,6 +133,7 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | Membership backfill command | `accounts.management.commands.backfill_church_structure_memberships` | Reads `Profile.small_group` to create active primary memberships when `--apply` is used | Historical/backfill bridge from legacy profile group to membership-core | Yes as migration tooling; do not run casually | Medium | Use only under explicit data-migration approval |
 | Profile legacy group cleanup command (PROFILE-SG.1B) | `accounts.management.commands.cleanup_profile_small_group` | Reads `Profile.small_group`, its mapped `ChurchStructureUnit`, and the user's active primary `ChurchStructureMembership`; clears only `Profile.small_group` when `--apply --confirm-profile-small-group-cleanup` is explicitly used and the membership safely represents the same active small-group unit | Dry-run-first cleanup of existing stored legacy profile group values; skips/preserves no-membership, multiple-primary, unmapped, inactive-unit, wrong-type, and mismatch blockers | Yes as guarded cleanup tooling; no runtime behavior, membership request, normal profile display, schema, `SmallGroup`, `District`, or `MinistryContext` change | Low / medium | Run dry-run and review per target DB before any approved apply; field/schema retirement remains separate and no cleanup runs automatically |
 | Legacy object-row retirement inventory command (ROW-RETIRE.1A) | `accounts.management.commands.audit_legacy_structure_object_row_retirement` | Reads `SmallGroup`, `District`, `MinistryContext`, and their `church_structure_unit` mappings; also reports a static live-consumer inventory | Read-only final row-retirement planning for object rows and mapping bridge decisions | Yes. It has no `--apply` and confirms no ordinary-member runtime consumer category is present | Low | Run before any final row/table action; decide whether to archive/delete rows later, keep them temporarily as a mapping bridge, or replace bridge fields with a dedicated compatibility/mapping model |
+| Legacy schema-retirement readiness inventory command (LEGACY-SCHEMA-PREP.1A) | `accounts.management.commands.audit_legacy_structure_schema_retirement_readiness` | Reads current candidate data counts and reports curated code-reference categories for legacy fields/tables | Read-only field/table removal sequencing; distinguishes data, app write/read, admin/display, diagnostic cleanup, tests/fixtures, and migration history | Yes. It has no `--apply`, does not mutate data/schema/runtime, and does not approve removal | Low | Run before any field/table proposal; use it to decide whether blockers are data, admin/display, diagnostic tooling, bridge decisions, or historical-only references |
 
 ### Permissions, Roles, Ministry, and Serving
 
@@ -161,7 +188,7 @@ Completed after this inventory baseline: CS-CORE.3B moved Bible Study v2 role/wo
 
 ## Verification
 
-For the original CS-CORE.3A docs-only inventory, no Django tests were needed. For LEGACY-RETIRE.1A, ROW-RETIRE.1A, and later code-backed retirement-readiness updates, use the targeted verification listed in `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
+For the original CS-CORE.3A docs-only inventory, no Django tests were needed. For LEGACY-RETIRE.1A, ROW-RETIRE.1A, LEGACY-SCHEMA-PREP.1A, and later code-backed retirement-readiness updates, use the targeted verification listed in `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
 
 For that original docs-only pass, run only:
 

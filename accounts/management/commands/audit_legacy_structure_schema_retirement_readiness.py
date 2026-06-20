@@ -108,12 +108,10 @@ CANDIDATE_DEFINITIONS = (
         "template_display_references": _refs(
             "reading/group_progress selected group display",
             "Bible Study fallback meeting labels for old rows",
-            "reflection legacy fallback labels for old rows",
         ),
         "diagnostic_cleanup_references": _refs(
             "cleanup_profile_small_group",
             "cleanup_bible_study_v2_small_group_mirrors",
-            "cleanup_reflection_small_group_mirrors",
             "cleanup_legacy_structure_parent_links",
             "audit_legacy_structure_object_row_retirement",
         ),
@@ -164,7 +162,6 @@ CANDIDATE_DEFINITIONS = (
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
             "cleanup_profile_small_group",
-            "cleanup_reflection_*",
             "audit_bible_study_generation_bridge_retirement",
         ),
         "test_fixture_references": _refs("mapping bridge fixtures"),
@@ -604,35 +601,29 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "phase 5",
     },
     {
-        "candidate_name": "ReflectionComment.small_group_at_post",
+        "candidate_name": "ReflectionComment.small_group_at_post (removed)",
         "model_table": "comments.ReflectionComment",
         "field_name": "small_group_at_post",
-        "candidate_type": "display-field",
-        # REFLECTION-MIRROR.1G removed the normal app display/read surfaces:
-        # the passage-wall legacy fallback label (template + view select_related)
-        # and the dead comments-view display select_related. There is no admin
-        # surface to remove (ReflectionCommentAdmin never listed/searched the
-        # field). The only remaining live-code references are guarded
-        # diagnostic/cleanup tooling, so once stored data is clean the candidate
-        # classifies as blocked_by_diagnostic_tooling, ready for a follow-up
-        # REFLECTION-MIRROR.1H field-removal slice.
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_reflection_small_group_mirrors",
-            "cleanup_reflection_nongroup_display_mirrors",
-            "audit_legacy_structure_retirement_readiness",
+        "candidate_type": "field",
+        "migration_history_references": _refs(
+            "comments migrations (field added then removed)",
         ),
-        "test_fixture_references": _refs("reflection snapshot/mirror fixtures"),
-        "migration_history_references": _refs("comments migrations"),
-        "data_counter": "reflection_small_group_at_post",
         "recommended_next_action": (
-            "REFLECTION-MIRROR.1G removed the passage-wall legacy fallback "
-            "display and the dead app read/display select_related; there is no "
-            "admin surface. The field is now diagnostic-cleanup-only. After the "
-            "target DB cleanup/audit confirms zero stored mirror values, retire "
-            "the cleanup/diagnostic tooling, then remove the model field and add "
-            "a migration in a separate REFLECTION-MIRROR.1H slice."
+            "Completed. REFLECTION-MIRROR.1H removed the "
+            "ReflectionComment.small_group_at_post model field (migration "
+            "comments/0007) after REFLECTION-MIRROR.1D-1G retired its "
+            "write/display/admin surfaces and the guarded cleanup cleared stored "
+            "mirror data. Ordinary group-reflection visibility uses "
+            "ReflectionComment.structure_unit_at_post plus active primary "
+            "ChurchStructureMembership. The reflection mirror cleanup commands "
+            "(cleanup_reflection_small_group_mirrors, "
+            "cleanup_reflection_nongroup_display_mirrors) and the legacy-mirror "
+            "backfill/recovery/shadow tooling were retired with the field. Only "
+            "immutable historical migrations still name it; no active schema "
+            "blocker remains. This was a reflection-only field removal and did "
+            "not remove the SmallGroup table or affect other modules."
         ),
-        "suggested_removal_phase": "phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "ReflectionComment.structure_unit_at_post",
@@ -648,9 +639,7 @@ CANDIDATE_DEFINITIONS = (
         "admin_references": _refs("comments.admin.ReflectionCommentAdmin"),
         "template_display_references": _refs("passage-wall preferred group label"),
         "diagnostic_cleanup_references": _refs(
-            "backfill_reflection_structure_snapshots",
-            "cleanup_reflection_snapshot_blockers",
-            "cleanup_reflection_nongroup_display_mirrors",
+            "audit_reading_structure_runtime_readiness",
         ),
         "test_fixture_references": _refs("reflection membership-core fixtures"),
         "migration_history_references": _refs("comments migrations"),
@@ -781,14 +770,12 @@ def _data_counts():
         .exclude(generation_key="")
         .count(),
         "v1_sessions": BibleStudySession.objects.count(),
-        "reflection_small_group_at_post": ReflectionComment.objects.filter(
-            small_group_at_post__isnull=False
-        ).count(),
         "reflection_structure_unit_at_post": ReflectionComment.objects.filter(
             structure_unit_at_post__isnull=False
         ).count(),
+        # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post and
         # PRAYER-MIRROR.1D removed PrayerRequest.small_group_at_post, so there is
-        # no longer a queryable data counter for it.
+        # no longer a queryable data counter for either.
     }
 
 

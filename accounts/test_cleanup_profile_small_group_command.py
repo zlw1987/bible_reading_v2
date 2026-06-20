@@ -351,7 +351,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
             plan_day=day,
             user=user,
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
             body="Reflection",
         )
@@ -436,7 +435,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
         self.assertEqual(session.small_group_id, self.group.id)
         self.assertEqual(prayer.structure_unit_at_post_id, self.group_unit.id)
         self.assertEqual(guide.author_id, user.id)
-        self.assertEqual(reflection.small_group_at_post_id, self.group.id)
         self.assertEqual(reflection.structure_unit_at_post_id, self.group_unit.id)
         self.assertEqual(team_membership.user_id, user.id)
         self.assertEqual(assignment.service_event_id, event.id)

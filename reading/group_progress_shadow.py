@@ -28,8 +28,7 @@ no-go rules):
 The candidate fails closed on ambiguity (no active primary membership, multiple
 active primary memberships, an unmapped selected legacy group, or a membership unit
 that is not a mapped small-group unit), mirroring the conservatism of the existing
-membership-core selectors in ``accounts/structure_selectors.py`` and the
-``audit_reading_privacy_membership_readiness`` command.
+membership-core selectors in ``accounts/structure_selectors.py``.
 """
 
 from collections import defaultdict

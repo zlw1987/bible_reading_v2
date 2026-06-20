@@ -101,8 +101,9 @@ def get_visible_reflection_filter(user):
     # CS-CORE.4G.2: ordinary group visibility is structure-native. Group posts
     # are admitted only when their structure_unit_at_post matches the viewer's
     # active primary membership unit or an ancestor of it (query-level mirror of
-    # ReflectionComment.can_be_seen_by). Profile.small_group / small_group_at_post
-    # no longer grant ordinary group visibility.
+    # ReflectionComment.can_be_seen_by). Profile.small_group does not grant
+    # ordinary group visibility (the legacy small_group_at_post mirror was removed
+    # in REFLECTION-MIRROR.1H).
     allowed_unit_ids = get_visible_group_reflection_snapshot_unit_ids(user)
     if allowed_unit_ids:
         visibility_filter |= Q(

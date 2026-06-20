@@ -10,8 +10,10 @@ from reading.models import ActivePlan, PlanEnrollment, ReadingPlan, ReadingPlanD
 
 
 class ReflectionCommentAdminLegacyMirrorTests(TestCase):
-    """REFLECTION-MIRROR.1G: the admin must not expose or search the legacy
-    ``small_group_at_post`` mirror. The structure-native snapshot stays usable.
+    """REFLECTION-MIRROR.1G/1H: the admin must not expose or search the legacy
+    ``small_group_at_post`` mirror. The field was removed from the model in
+    REFLECTION-MIRROR.1H; this remains a regression guard against reintroducing
+    any admin reference to it. The structure-native snapshot stays usable.
     """
 
     def setUp(self):

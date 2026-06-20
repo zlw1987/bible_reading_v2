@@ -67,7 +67,6 @@ SECTION_KEYS = OrderedDict(
                 "profile_small_group_references",
                 "bible_study_v2_meeting_small_group_references",
                 "bible_study_v1_session_small_group_references",
-                "reflection_small_group_at_post_references",
                 "service_event_small_group_references",
                 "bible_study_series_small_group_references",
                 "small_group_retirement_blocker_references",
@@ -145,17 +144,14 @@ SECTION_KEYS = OrderedDict(
             ),
         ),
         (
-            "Reflection legacy snapshots",
+            "Reflection structure snapshots",
             (
                 "reflection_group_comments_checked",
-                "reflection_group_comments_with_small_group_at_post",
                 "reflection_group_comments_with_structure_unit_at_post",
                 "reflection_group_comments_missing_structure_unit_at_post",
                 "reflection_group_comments_structure_unit_inactive",
                 "reflection_group_comments_structure_unit_wrong_type",
-                "reflection_group_comments_small_group_unmapped",
-                "reflection_group_comments_snapshot_mismatch",
-                "reflection_small_group_at_post_removal_blockers",
+                "reflection_structure_snapshot_readiness_blockers",
             ),
         ),
         (
@@ -189,7 +185,7 @@ BLOCKER_KEYS = (
     "service_event_legacy_scope_field_retirement_blockers",
     "service_event_zero_row_visible_active_safety_blockers",
     "bible_study_legacy_retirement_blockers",
-    "reflection_small_group_at_post_removal_blockers",
+    "reflection_structure_snapshot_readiness_blockers",
     "role_scoped_assignments_structure_unit_retirement_blockers",
 )
 
@@ -214,7 +210,6 @@ DETAIL_KEYS = (
     "bible_study_v2_meeting_mirror_mismatch",
     "bible_study_generation_key_missing",
     "reflection_missing_structure_snapshot",
-    "reflection_snapshot_mismatch",
     "role_scoped_assignment_missing_structure_unit",
 )
 
@@ -305,10 +300,6 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
     ),
     (
-        "reading.management.commands.audit_reading_privacy_membership_readiness",
-        "standing diagnostic/audit guard",
-    ),
-    (
         "reading.management.commands.audit_reading_structure_runtime_readiness",
         "standing diagnostic/audit guard",
     ),
@@ -316,23 +307,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.audit_group_progress_shadow",
         "shadow diagnostic; not an ordinary runtime blocker",
     ),
-    (
-        "reading.management.commands.backfill_reflection_structure_snapshots",
-        "backfill support for reflection structure snapshots",
-    ),
-    (
-        "reading.management.commands.cleanup_reflection_snapshot_blockers",
-        "guarded cleanup tooling for remaining reflection snapshot blockers; dry-run by default",
-    ),
-    (
-        "reading.management.commands.cleanup_reflection_small_group_mirrors",
-        "guarded cleanup tooling for existing reflection small_group_at_post mirrors; dry-run by default",
-    ),
-    (
-        "reading.management.commands.cleanup_reflection_nongroup_display_mirrors",
-        "guarded migration of non-group reflection display context off small_group_at_post; dry-run by default",
-    ),
-    # PRAYER-MIRROR.1D removed prayers.management.commands.
+    # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post together
+    # with the reflection mirror cleanup commands
+    # (cleanup_reflection_small_group_mirrors,
+    # cleanup_reflection_nongroup_display_mirrors) and the legacy-mirror
+    # backfill/recovery/shadow tooling
+    # (backfill_reflection_structure_snapshots, cleanup_reflection_snapshot_blockers,
+    # audit_reading_privacy_membership_readiness), so they are no longer listed here.
+    # PRAYER-MIRROR.1D likewise removed prayers.management.commands.
     # cleanup_prayer_small_group_mirrors together with the
     # PrayerRequest.small_group_at_post field, so it is no longer listed here.
 )
@@ -590,9 +572,8 @@ def _scan_small_groups(stats, details):
     stats["bible_study_v1_session_small_group_references"] = (
         BibleStudySession.objects.filter(small_group__isnull=False).count()
     )
-    stats["reflection_small_group_at_post_references"] = (
-        ReflectionComment.objects.filter(small_group_at_post__isnull=False).count()
-    )
+    # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post, so the
+    # SmallGroup table no longer has any reflection inbound reference to count.
     stats["service_event_small_group_references"] = (
         ServiceEvent.objects.filter(small_group__isnull=False).count()
     )
@@ -604,7 +585,6 @@ def _scan_small_groups(stats, details):
         + stats["profile_small_group_references"]
         + stats["bible_study_v2_meeting_small_group_references"]
         + stats["bible_study_v1_session_small_group_references"]
-        + stats["reflection_small_group_at_post_references"]
         + stats["service_event_small_group_references"]
         + stats["bible_study_series_small_group_references"]
     )
@@ -939,23 +919,21 @@ def _scan_bible_study(stats, details):
 
 
 def _scan_reflections(stats, details):
+    # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post. Ordinary
+    # group-reflection visibility is structure-native (CS-CORE.4G.2): it keys off
+    # structure_unit_at_post plus active primary ChurchStructureMembership. This
+    # scan now measures only structure-snapshot readiness; the legacy mirror and
+    # its mirror-vs-snapshot comparison counters were retired with the field.
     comments = (
         ReflectionComment.objects.filter(
             visibility=ReflectionComment.VISIBILITY_GROUP
         )
-        .select_related(
-            "small_group_at_post",
-            "small_group_at_post__church_structure_unit",
-            "structure_unit_at_post",
-        )
+        .select_related("structure_unit_at_post")
         .order_by("id")
     )
     for comment in comments:
         stats["reflection_group_comments_checked"] += 1
-        small_group = comment.small_group_at_post
         structure_unit = comment.structure_unit_at_post
-        if small_group is not None:
-            stats["reflection_group_comments_with_small_group_at_post"] += 1
         if structure_unit is not None:
             stats["reflection_group_comments_with_structure_unit_at_post"] += 1
         else:
@@ -963,7 +941,7 @@ def _scan_reflections(stats, details):
             _append(
                 details,
                 "reflection_missing_structure_snapshot",
-                f"comment_id={comment.id} small_group_at_post={_group_label(small_group)}",
+                f"comment_id={comment.id}",
             )
 
         if structure_unit is not None and not structure_unit.is_active:
@@ -974,37 +952,10 @@ def _scan_reflections(stats, details):
         ):
             stats["reflection_group_comments_structure_unit_wrong_type"] += 1
 
-        small_group_unit = (
-            small_group.church_structure_unit if small_group is not None else None
-        )
-        if small_group is not None and small_group_unit is None:
-            stats["reflection_group_comments_small_group_unmapped"] += 1
-        if (
-            small_group_unit is not None
-            and structure_unit is not None
-            and small_group_unit.id != structure_unit.id
-        ):
-            stats["reflection_group_comments_snapshot_mismatch"] += 1
-            _append(
-                details,
-                "reflection_snapshot_mismatch",
-                (
-                    "comment_id={comment_id} small_group_at_post={small_group} "
-                    "small_group_unit={small_group_unit} structure_unit_at_post={structure_unit}"
-                ).format(
-                    comment_id=comment.id,
-                    small_group=_group_label(small_group),
-                    small_group_unit=_unit_label(small_group_unit),
-                    structure_unit=_unit_label(structure_unit),
-                ),
-            )
-
-    stats["reflection_small_group_at_post_removal_blockers"] = (
+    stats["reflection_structure_snapshot_readiness_blockers"] = (
         stats["reflection_group_comments_missing_structure_unit_at_post"]
         + stats["reflection_group_comments_structure_unit_inactive"]
         + stats["reflection_group_comments_structure_unit_wrong_type"]
-        + stats["reflection_group_comments_small_group_unmapped"]
-        + stats["reflection_group_comments_snapshot_mismatch"]
     )
 
 

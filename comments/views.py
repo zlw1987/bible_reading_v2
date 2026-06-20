@@ -160,11 +160,9 @@ def add_comment(request, active_plan_id, plan_day_id, passage_index):
             messages.error(request, message_text(request, "reflection_form_error"))
             return redirect_back_or_home(request)
 
+        # Visibility is driven entirely by structure_unit_at_post; the legacy
+        # small_group_at_post mirror was removed in REFLECTION-MIRROR.1H.
         comment.structure_unit_at_post = write_context.structure_unit
-        # REFLECTION-MIRROR.1D: stop writing the legacy small_group_at_post
-        # mirror. Visibility is driven entirely by structure_unit_at_post; the
-        # legacy field stays null on new posts (existing rows are untouched).
-        comment.small_group_at_post = None
         comment.save()
 
         messages.success(request, message_text(request, "reflection_posted"))
@@ -209,9 +207,7 @@ def add_reply(request, comment_id):
         reply.scripture_display_zh = parent.scripture_display_zh
         reply.scripture_display_en = parent.scripture_display_en
         reply.visibility = parent.visibility
-        # REFLECTION-MIRROR.1D: replies inherit the parent structure snapshot for
-        # visibility but no longer inherit the legacy small_group_at_post mirror.
-        reply.small_group_at_post = None
+        # Replies inherit the parent structure snapshot for visibility.
         reply.structure_unit_at_post = parent.structure_unit_at_post
         reply.save()
 
@@ -258,10 +254,8 @@ def edit_comment(request, comment_id):
             edited_comment = form.save(commit=False)
 
             if is_reply:
-                # Replies inherit the parent reflection's context for visibility.
-                # REFLECTION-MIRROR.1D: inherit structure_unit_at_post but do not
-                # re-write the legacy small_group_at_post mirror; the reply keeps
-                # its own stored (legacy or null) value unchanged.
+                # Replies inherit the parent reflection's context for visibility
+                # via structure_unit_at_post.
                 edited_comment.visibility = comment.parent.visibility
                 edited_comment.structure_unit_at_post = comment.parent.structure_unit_at_post
                 edited_comment.scripture_ref_key = comment.parent.scripture_ref_key
@@ -272,19 +266,14 @@ def edit_comment(request, comment_id):
                     if pre_edit_visibility == ReflectionComment.VISIBILITY_GROUP:
                         # Policy C: preserve the original group snapshot; never
                         # re-home an existing group post to current membership.
-                        # REFLECTION-MIRROR.1D: preserve structure_unit_at_post and
-                        # leave the existing small_group_at_post value untouched
-                        # (no new write / reintroduction of the legacy mirror).
                         edited_comment.structure_unit_at_post = pre_edit_structure_unit_at_post
                     else:
                         # CS-CORE.4G.3: newly entering group visibility stamps the
                         # snapshot from the membership-core write context, not
                         # Profile.small_group. The form rejects this transition
                         # without a valid context, so structure_unit is set here.
-                        # REFLECTION-MIRROR.1D: leave small_group_at_post null.
                         write_context = get_user_group_reflection_write_context(request.user)
                         edited_comment.structure_unit_at_post = write_context.structure_unit
-                        edited_comment.small_group_at_post = None
 
             edited_comment.save()
 

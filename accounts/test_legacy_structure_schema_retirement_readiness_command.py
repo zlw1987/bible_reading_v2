@@ -319,28 +319,28 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("role_district", audit["data_counts"])
         self.assertNotIn("role_small_group", audit["data_counts"])
 
-    def test_reflection_mirror_is_diagnostic_only_after_display_admin_removal(self):
-        # REFLECTION-MIRROR.1G removed the passage-wall legacy fallback display
-        # (template + view select_related), the dead comments-view display
-        # select_related, and confirmed there is no admin surface. With stored
-        # mirror data clean, the only remaining live-code references are guarded
-        # diagnostic/cleanup tooling, so the candidate is now classified as
-        # blocked_by_diagnostic_tooling (ready for a follow-up field-removal
-        # slice) rather than blocked_by_display_or_admin.
+    def test_reflection_mirror_is_historical_after_field_removal(self):
+        # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post
+        # model field (migration comments/0007) after 1D-1G retired its
+        # write/display/admin surfaces and the guarded cleanup cleared stored
+        # data. The reflection mirror cleanup commands and the legacy-mirror
+        # backfill/recovery/shadow tooling were retired with the field. Only
+        # immutable historical migrations still name it, so the candidate is now
+        # classified as historical-only with no active schema blocker.
         audit = run_audit()
-        candidate = _candidate(audit, "ReflectionComment.small_group_at_post")
+        candidate = _candidate(audit, "ReflectionComment.small_group_at_post (removed)")
 
         self.assertEqual(candidate["live_runtime_references"], ())
         self.assertEqual(candidate["app_write_references"], ())
         self.assertEqual(candidate["app_read_references"], ())
         self.assertEqual(candidate["admin_references"], ())
         self.assertEqual(candidate["template_display_references"], ())
-        self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
         self.assertEqual(candidate["data_blocker_count"], 0)
-        self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
-        # The model field is intentionally still present; its data counter
-        # remains queryable until the REFLECTION-MIRROR.1H field-removal slice.
-        self.assertIn("reflection_small_group_at_post", audit["data_counts"])
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+        # The removed field no longer has a queryable data counter.
+        self.assertNotIn("reflection_small_group_at_post", audit["data_counts"])
 
     def test_command_does_not_mutate_prayer_request(self):
         prayer = self.make_group_prayer(title="READONLY_PRAYER")

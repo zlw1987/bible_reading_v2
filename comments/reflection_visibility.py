@@ -3,7 +3,8 @@
 Group-shared ``ReflectionComment`` visibility for ordinary members now uses the
 structure-native snapshot (``structure_unit_at_post``) plus the viewer's single
 active primary ``ChurchStructureMembership``, replacing legacy
-``Profile.small_group`` + ``ReflectionComment.small_group_at_post``.
+``Profile.small_group`` (the legacy ``ReflectionComment.small_group_at_post``
+mirror was removed in REFLECTION-MIRROR.1H).
 
 Matching rule: a viewer can see a group-shared reflection when the viewer's
 active primary membership unit is the post's ``structure_unit_at_post`` snapshot
@@ -13,9 +14,8 @@ rule (``studies.visibility``).
 
 Fail-closed for ordinary users: missing / inactive / wrong-type snapshot, no
 active primary membership, or multiple active primary memberships all deny
-group visibility. ``small_group_at_post`` and ``Profile.small_group`` no longer
-grant ordinary group reflection visibility; they remain stored legacy
-compatibility data.
+group visibility. ``Profile.small_group`` no longer grants ordinary group
+reflection visibility.
 
 Two helpers stay in lockstep on purpose:
 
@@ -34,7 +34,7 @@ on the snapshot unit.
 
 from dataclasses import dataclass
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit
 from accounts.structure_selectors import (
     _collect_unit_and_descendant_ids,
     get_user_primary_membership_unit,
@@ -60,8 +60,7 @@ def user_matches_group_reflection_snapshot(user, comment, target_date=None):
 
     Fail-closed: missing/inactive/wrong-type ``structure_unit_at_post``, no
     active primary membership, or multiple active primary memberships all return
-    ``False``. ``Profile.small_group`` and ``small_group_at_post`` are never
-    consulted here.
+    ``False``. ``Profile.small_group`` is never consulted here.
     """
     if not getattr(user, "is_authenticated", False):
         return False
@@ -82,42 +81,18 @@ class GroupReflectionWriteContext:
     """Resolved membership-core context for stamping a group reflection.
 
     ``structure_unit`` is the canonical group reflection snapshot source; it is
-    set only when the author has a valid write context. ``legacy_small_group``
-    is the optional compatibility mirror written to ``small_group_at_post`` and
-    is ``None`` unless exactly one active legacy ``SmallGroup`` maps to the
-    structure unit. ``reason_code`` records why the context resolved the way it
-    did, for diagnostics.
+    set only when the author has a valid write context. ``reason_code`` records
+    why the context resolved the way it did, for diagnostics. (The legacy
+    ``small_group_at_post`` mirror and its resolver were removed in
+    REFLECTION-MIRROR.1H.)
     """
 
     structure_unit: "ChurchStructureUnit | None" = None
-    legacy_small_group: "SmallGroup | None" = None
     reason_code: str = "no_context"
 
     @property
     def can_share_to_group(self):
         return self.structure_unit is not None
-
-
-def resolve_legacy_small_group_mirror(unit):
-    """Return the lone active legacy SmallGroup mapped to ``unit`` or ``None``.
-
-    The legacy mirror is optional. It resolves only when exactly one active
-    ``SmallGroup`` maps directly to the structure unit; zero or multiple active
-    mappings resolve to ``None`` and never block group sharing (the 4G.2 read
-    path keys off ``structure_unit_at_post``, not the mirror).
-    """
-    if unit is None or unit.id is None:
-        return None
-
-    groups = list(
-        SmallGroup.objects.filter(
-            church_structure_unit_id=unit.id,
-            is_active=True,
-        )[:2]
-    )
-    if len(groups) != 1:
-        return None
-    return groups[0]
 
 
 def get_user_group_reflection_write_context(user, target_date=None):
@@ -147,7 +122,6 @@ def get_user_group_reflection_write_context(user, target_date=None):
 
     return GroupReflectionWriteContext(
         structure_unit=membership_unit,
-        legacy_small_group=resolve_legacy_small_group_mirror(membership_unit),
         reason_code="ok",
     )
 

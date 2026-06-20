@@ -1,21 +1,24 @@
 """Read-only Reading / Reflection / Progress structure-runtime readiness audit.
 
 READING-STRUCT.1A diagnostic helpers. This is an *inventory + blocker* audit,
-complementary to the two existing membership-core drift comparators
-(``audit_reading_privacy_membership_readiness`` / CS-CORE.4B and
-``audit_group_progress_shadow`` / CS-CORE.4E.1). Those compare legacy vs
+complementary to the membership-core drift comparator
+``audit_group_progress_shadow`` (CS-CORE.4E.1). That one compares legacy vs
 membership-core answers row-by-row; this one instead measures, in absolute
 terms, how *resolvable* the remaining legacy small-group data is to active
 ``ChurchStructureUnit`` rows and whether anything blocks retiring the last
-legacy ``Profile.small_group`` reads in the reading runtime.
+legacy ``Profile.small_group`` reads in the reading runtime. (The reflection
+half of the former CS-CORE.4B comparator ``audit_reading_privacy_membership_readiness``
+was retired in REFLECTION-MIRROR.1H together with the removed
+``ReflectionComment.small_group_at_post`` mirror.)
 
 Current runtime state this audit is written against (verified in the worktree):
 
 - Group-shared ``ReflectionComment`` visibility (read + write) is already
   structure-native (CS-CORE.4G.2): it keys off ``structure_unit_at_post`` plus
   the viewer's single active primary ``ChurchStructureMembership``.
-  ``small_group_at_post`` / ``Profile.small_group`` are legacy compatibility /
-  mirror data only.
+  ``Profile.small_group`` is legacy compatibility data only (the legacy
+  ``ReflectionComment.small_group_at_post`` mirror was removed in
+  REFLECTION-MIRROR.1H).
 - Group-progress roster is membership-core (CS-CORE.4F.1) and the no-``?group=``
   default is a permission-fenced membership-core candidate (CS-CORE.4F.2). Since
   READING-STRUCT.1D the legacy ``Profile.small_group`` default fallback has been
@@ -56,13 +59,12 @@ REASON_WRONG_UNIT_TYPE = "wrong_unit_type"
 
 REFLECTION_COUNTER_KEYS = (
     "group_visible_reflections",
-    "reflections_with_legacy_small_group",
     "reflections_with_structure_snapshot",
     "reflections_snapshot_resolvable",
     "reflections_snapshot_missing",
     "reflections_snapshot_inactive_unit",
     "reflections_snapshot_wrong_unit_type",
-    "reflections_legacy_only_no_valid_snapshot",
+    "reflections_group_visible_no_valid_snapshot",
 )
 
 PROGRESS_COUNTER_KEYS = (
@@ -86,7 +88,7 @@ MEMBERSHIP_COUNTER_KEYS = (
 # Nonzero values for any of these mean a switch / legacy-retirement is not yet
 # clean. They are surfaced together by the command's ``--fail-on-blockers`` flag.
 BLOCKER_KEYS = (
-    "reflections_legacy_only_no_valid_snapshot",
+    "reflections_group_visible_no_valid_snapshot",
     "progress_groups_missing_mapping",
     "progress_groups_inactive_unit",
     "progress_groups_wrong_unit_type",
@@ -98,7 +100,7 @@ VERBOSE_DETAIL_KEYS = (
     "reflections_snapshot_missing",
     "reflections_snapshot_inactive_unit",
     "reflections_snapshot_wrong_unit_type",
-    "reflections_legacy_only_no_valid_snapshot",
+    "reflections_group_visible_no_valid_snapshot",
     "progress_groups_missing_mapping",
     "progress_groups_inactive_unit",
     "progress_groups_wrong_unit_type",
@@ -183,14 +185,11 @@ def run_audit(target_date=None):
             is_hidden=False,
             is_deleted=False,
         )
-        .select_related("structure_unit_at_post", "small_group_at_post")
+        .select_related("structure_unit_at_post")
         .order_by("id")
     )
     for comment in reflections.iterator():
         stats["group_visible_reflections"] += 1
-        has_legacy = comment.small_group_at_post_id is not None
-        if has_legacy:
-            stats["reflections_with_legacy_small_group"] += 1
 
         snapshot_unit = comment.structure_unit_at_post
         if comment.structure_unit_at_post_id is not None:
@@ -202,8 +201,7 @@ def run_audit(target_date=None):
         elif reason == REASON_MISSING_MAPPING:
             stats["reflections_snapshot_missing"] += 1
             details["reflections_snapshot_missing"].append(
-                f"  comment_id={comment.id} | legacy_small_group="
-                f"{_group_label(comment.small_group_at_post)}"
+                f"  comment_id={comment.id} | snapshot_unit=(none)"
             )
         elif reason == REASON_INACTIVE_UNIT:
             stats["reflections_snapshot_inactive_unit"] += 1
@@ -216,14 +214,14 @@ def run_audit(target_date=None):
                 f"  comment_id={comment.id} | snapshot_unit={_unit_label(snapshot_unit)}"
             )
 
-        # A legacy group-shared post that has no *valid* structure snapshot is
-        # already invisible under the live CS-CORE.4G.2 gate (it keys off the
-        # snapshot, not the legacy group). That is the headline blocker.
-        if has_legacy and reason != RESOLVABLE:
-            stats["reflections_legacy_only_no_valid_snapshot"] += 1
-            details["reflections_legacy_only_no_valid_snapshot"].append(
-                f"  comment_id={comment.id} | legacy_small_group="
-                f"{_group_label(comment.small_group_at_post)} | snapshot_reason={reason}"
+        # A group-shared post with no *valid* structure snapshot is invisible to
+        # ordinary viewers under the live CS-CORE.4G.2 gate (it keys off the
+        # snapshot). That is the headline reflection blocker. (The legacy
+        # small_group_at_post mirror was removed in REFLECTION-MIRROR.1H.)
+        if reason != RESOLVABLE:
+            stats["reflections_group_visible_no_valid_snapshot"] += 1
+            details["reflections_group_visible_no_valid_snapshot"].append(
+                f"  comment_id={comment.id} | snapshot_reason={reason}"
             )
 
     # --- Active legacy progress-group resolvability inventory --------------------

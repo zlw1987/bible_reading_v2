@@ -263,6 +263,32 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             out.getvalue(),
         )
 
+    def test_reflection_mirror_commands_no_longer_listed(self):
+        # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post
+        # together with the reflection mirror cleanup commands and the
+        # legacy-mirror backfill/recovery/shadow tooling, so none of them may
+        # appear in the diagnostic/backfill command list.
+        out = StringIO()
+        call_command("audit_legacy_structure_retirement_readiness", stdout=out)
+        output = out.getvalue()
+
+        for command in (
+            "reading.management.commands.cleanup_reflection_small_group_mirrors",
+            "reading.management.commands.cleanup_reflection_nongroup_display_mirrors",
+            "reading.management.commands.backfill_reflection_structure_snapshots",
+            "reading.management.commands.cleanup_reflection_snapshot_blockers",
+            "reading.management.commands.audit_reading_privacy_membership_readiness",
+        ):
+            self.assertNotIn(command, output)
+
+        # The structure-snapshot readiness counters survive; the legacy mirror
+        # counters that queried small_group_at_post are gone.
+        self.assertIn("reflection_structure_snapshot_readiness_blockers", output)
+        self.assertNotIn(
+            "reflection_group_comments_with_small_group_at_post", output
+        )
+        self.assertNotIn("reflection_small_group_at_post_removal_blockers", output)
+
     def test_backfill_structure_role_scopes_command_no_longer_listed(self):
         # ROLE-FIELD-RETIRE.1A retired the backfill command together with the
         # ChurchRoleAssignment.district / small_group fields (its only source),

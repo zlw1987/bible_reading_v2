@@ -65,13 +65,6 @@ class ReflectionComment(models.Model):
     )
     is_anonymous = models.BooleanField(default=False)
 
-    small_group_at_post = models.ForeignKey(
-        "accounts.SmallGroup",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="reflection_comments",
-    )
     structure_unit_at_post = models.ForeignKey(
         "accounts.ChurchStructureUnit",
         null=True,
@@ -82,8 +75,8 @@ class ReflectionComment(models.Model):
             "Structure snapshot driving group reflection visibility since "
             "CS-CORE.4G.2: ordinary group read visibility matches this snapshot "
             "unit against the viewer's active primary ChurchStructureMembership. "
-            "small_group_at_post remains legacy compatibility / staff-display / "
-            "write-path data."
+            "This is the canonical structure-native group snapshot; the legacy "
+            "small_group_at_post mirror was removed in REFLECTION-MIRROR.1H."
         ),
     )
 
@@ -107,7 +100,6 @@ class ReflectionComment(models.Model):
             models.Index(fields=["active_plan", "plan_day", "scripture_ref_key"]),
             models.Index(fields=["scripture_ref_key", "visibility"]),
             models.Index(fields=["user", "scripture_ref_key"]),
-            models.Index(fields=["small_group_at_post", "scripture_ref_key"]),
         ]
 
     def __str__(self):
@@ -136,8 +128,9 @@ class ReflectionComment(models.Model):
             # CS-CORE.4G.2: ordinary group visibility is structure-native. The
             # post must carry a valid structure_unit_at_post snapshot and the
             # viewer must have a single active primary ChurchStructureMembership
-            # in that unit or a descendant. Profile.small_group /
-            # small_group_at_post no longer grant ordinary group visibility.
+            # in that unit or a descendant. Profile.small_group no longer grants
+            # ordinary group visibility (the legacy small_group_at_post mirror was
+            # removed in REFLECTION-MIRROR.1H).
             from comments.reflection_visibility import (
                 user_matches_group_reflection_snapshot,
             )

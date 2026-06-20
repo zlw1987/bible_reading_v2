@@ -53,27 +53,8 @@ from studies.models import (
     BibleStudySeries,
     BibleStudySession,
 )
-from reading.management.commands.audit_reading_privacy_membership_readiness import (
-    Command as ReadingPrivacyAuditCommand,
-    run_audit,
-)
 from reading.structure_runtime_readiness import (
     run_audit as run_reading_structure_runtime_audit,
-)
-from reading.management.commands.backfill_reflection_structure_snapshots import (
-    run_backfill as run_reflection_snapshot_backfill,
-)
-from reading.management.commands.cleanup_reflection_snapshot_blockers import (
-    apply_cleanup as apply_reflection_snapshot_cleanup,
-    run_cleanup as run_reflection_snapshot_cleanup,
-)
-from reading.management.commands.cleanup_reflection_small_group_mirrors import (
-    apply_cleanup as apply_reflection_small_group_mirror_cleanup,
-    run_cleanup as run_reflection_small_group_mirror_cleanup,
-)
-from reading.management.commands.cleanup_reflection_nongroup_display_mirrors import (
-    apply_cleanup as apply_reflection_nongroup_display_mirror_cleanup,
-    run_cleanup as run_reflection_nongroup_display_mirror_cleanup,
 )
 from accounts.management.commands.audit_legacy_structure_retirement_readiness import (
     run_audit as run_legacy_structure_retirement_audit,
@@ -470,7 +451,6 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
             visibility=visibility,
             is_hidden=is_hidden,
             is_anonymous=is_anonymous,
-            small_group_at_post=small_group,
             structure_unit_at_post=structure_unit,
             body=body,
         )
@@ -695,13 +675,14 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 class ReflectionPrivacyInvariantTests(TestCase):
     """Reflection privacy invariants.
 
-    CS-CORE.4C originally locked the legacy (`Profile.small_group` /
-    `small_group_at_post`) reflection privacy behavior. CS-CORE.4G.2 switched the
-    ordinary-member group read path to `structure_unit_at_post` + active primary
-    `ChurchStructureMembership`, and these tests now assert that membership-core
-    behavior (fail-closed on missing/inactive/wrong-type snapshot, no/multiple
-    active primary memberships). Staff/author/church/private/hidden/deleted
-    behavior is unchanged.
+    CS-CORE.4C originally locked the legacy reflection privacy behavior (driven by
+    `Profile.small_group` and the since-removed `small_group_at_post` mirror).
+    CS-CORE.4G.2 switched the ordinary-member group read path to
+    `structure_unit_at_post` + active primary `ChurchStructureMembership`, and these
+    tests now assert that membership-core behavior (fail-closed on
+    missing/inactive/wrong-type snapshot, no/multiple active primary memberships).
+    The legacy `small_group_at_post` mirror was removed in REFLECTION-MIRROR.1H.
+    Staff/author/church/private/hidden/deleted behavior is unchanged.
     """
 
     def setUp(self):
@@ -831,7 +812,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         structure_unit="__from_group__",
     ):
         # CS-CORE.4G.2: group visibility is driven by the structure snapshot, so
-        # by default stamp the snapshot from the legacy group's mapped unit, the
+        # by default stamp the snapshot from the fixture group's mapped unit, the
         # same way the live create path does. Tests pass an explicit unit (or
         # None) to exercise mismatch / missing-snapshot fail-closed cases.
         if structure_unit == "__from_group__":
@@ -847,7 +828,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=visibility,
-            small_group_at_post=small_group,
             structure_unit_at_post=structure_unit,
             is_hidden=is_hidden,
             is_deleted=is_deleted,
@@ -937,27 +917,25 @@ class ReflectionPrivacyInvariantTests(TestCase):
     def test_struct_1c_snapshot_row_first_precedence_no_legacy_fallback(self):
         # READING-STRUCT.1C guard: reflection group visibility is structure
         # snapshot row-first (snapshot-only). When a valid snapshot exists it is
-        # the sole audience source (legacy Profile.small_group / small_group_at_post
-        # never override it); when no valid snapshot exists the post fails closed
-        # for ordinary viewers -- no legacy fallback was re-added. Holds for the
-        # per-row gate, the list/feed filter, and the passage_wall group tab.
+        # the sole audience source (legacy Profile.small_group never overrides it);
+        # when no valid snapshot exists the post fails closed for ordinary viewers
+        # -- no legacy fallback was re-added. Holds for the per-row gate, the
+        # list/feed filter, and the passage_wall group tab.
         snapshot_post = self.make_reflection(
             user=self.author,
-            body="Snapshot wins over legacy group",
+            body="Snapshot wins over membership group",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=self.old_group,  # legacy mirror points at old_unit
             structure_unit=self.new_unit,  # snapshot points at new_unit
         )
         no_snapshot_post = self.make_reflection(
             user=self.author,
-            body="Legacy only, no snapshot",
+            body="No snapshot",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=self.old_group,
             structure_unit=None,
         )
 
-        # Snapshot wins: the new_unit member sees it; the old (legacy-matching)
-        # member does not -- legacy small_group does not override the snapshot.
+        # Snapshot wins: the new_unit member sees it; the old member does not --
+        # Profile.small_group does not override the snapshot.
         self.assertTrue(snapshot_post.can_be_seen_by(self.new_group_member))
         self.assertFalse(snapshot_post.can_be_seen_by(self.old_group_member))
         self.assertIn(
@@ -973,7 +951,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
             {snapshot_post.id},
         )
 
-        # No snapshot: fail closed for the legacy-matching member -- no fallback.
+        # No snapshot: fail closed for the membership-matching member -- no fallback.
         self.assertFalse(no_snapshot_post.can_be_seen_by(self.old_group_member))
         self.assertNotIn(
             no_snapshot_post.id,
@@ -1059,15 +1037,14 @@ class ReflectionPrivacyInvariantTests(TestCase):
                 self.assertTrue(reflection.can_be_seen_by(viewer))
 
     def test_structure_unit_snapshot_drives_group_visibility(self):
-        # CS-CORE.4G.2: the structure snapshot now drives group visibility. A post
-        # whose structure_unit_at_post is new_unit but whose legacy
-        # small_group_at_post is old_group is visible to the new-unit member and
-        # hidden from the old-unit member -- the inverse of pre-4G.2 behavior.
+        # CS-CORE.4G.2: the structure snapshot drives group visibility. A post
+        # whose structure_unit_at_post is new_unit is visible to the new-unit
+        # member and hidden from the old-unit member, regardless of the author's
+        # or viewers' Profile.small_group.
         mismatched_snapshot_post = self.make_reflection(
             user=self.author,
             body="Mismatched structure snapshot",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=self.old_group,
             structure_unit=self.new_unit,
         )
 
@@ -1219,10 +1196,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
         )
         self.assertEqual(self.passage_wall_group_ids_for(ambiguous_user), set())
 
-    def test_new_group_reflection_stamps_structure_unit_and_leaves_legacy_null(self):
-        # REFLECTION-MIRROR.1D: a new group reflection stamps structure_unit_at_post
-        # from the author's active primary membership and leaves the legacy
-        # small_group_at_post mirror null, while remaining visible to the same
+    def test_new_group_reflection_stamps_structure_unit(self):
+        # CS-CORE.4G.2: a new group reflection stamps structure_unit_at_post from
+        # the author's active primary membership, remaining visible to the same
         # membership group and hidden from other groups.
         self.client.login(username=self.author.username, password="TestPass123!")
         response = self.client.post(
@@ -1237,7 +1213,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         comment = ReflectionComment.objects.get(body="Mapped group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-        self.assertIsNone(comment.small_group_at_post)
         self.assertEqual(comment.structure_unit_at_post, self.old_unit)
         self.assertTrue(comment.can_be_seen_by(self.old_group_member))
         self.assertFalse(comment.can_be_seen_by(self.new_group_member))
@@ -1246,7 +1221,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         # CS-CORE.4G.3 (coverage 7): a member of a small-group unit that has no
         # legacy SmallGroup mapping can still share to group. structure_unit_at_post
         # is stamped from the membership unit and is visible through the 4G.2 read
-        # path, while small_group_at_post stays None (no legacy mirror resolves).
+        # path.
         nolegacy_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="INV_NO_LEGACY",
@@ -1277,7 +1252,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         comment = ReflectionComment.objects.get(body="No-legacy group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
         self.assertEqual(comment.structure_unit_at_post, nolegacy_unit)
-        self.assertIsNone(comment.small_group_at_post)
         self.assertTrue(comment.can_be_seen_by(viewer))
         self.assertFalse(comment.can_be_seen_by(self.old_group_member))
 
@@ -1303,8 +1277,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
                     body=f"{visibility} reflection structure companion",
                 )
                 self.assertEqual(comment.visibility, visibility)
-                # REFLECTION-MIRROR.1D: legacy mirror stays null on new posts.
-                self.assertIsNone(comment.small_group_at_post)
+                # CS-CORE.4G.2: new posts record the structure snapshot companion.
                 self.assertEqual(comment.structure_unit_at_post, self.old_unit)
                 self.assertTrue(comment.can_be_seen_by(self.author))
                 self.assertEqual(
@@ -1333,9 +1306,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         reply = ReflectionComment.objects.get(parent=parent, body="Inherited reply")
 
         self.assertEqual(reply.visibility, parent.visibility)
-        # REFLECTION-MIRROR.1D: replies inherit the parent structure snapshot but
-        # no longer inherit the legacy small_group_at_post mirror.
-        self.assertIsNone(reply.small_group_at_post)
+        # CS-CORE.4G.2: replies inherit the parent structure snapshot.
         self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertTrue(parent.can_be_seen_by(self.same_group_user))
         self.assertTrue(reply.can_be_seen_by(self.same_group_user))
@@ -1355,9 +1326,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(reply.body, "Edited inherited reply")
         self.assertEqual(reply.visibility, parent.visibility)
-        # REFLECTION-MIRROR.1D: editing a reply preserves its own (null) legacy
-        # mirror and never re-inherits the parent's small_group_at_post.
-        self.assertIsNone(reply.small_group_at_post)
+        # CS-CORE.4G.2: editing a reply preserves the inherited parent snapshot.
         self.assertEqual(reply.structure_unit_at_post, parent.structure_unit_at_post)
         self.assertFalse(reply.can_be_seen_by(self.other_group_user))
 
@@ -1373,7 +1342,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.author.profile.save()
 
         post.refresh_from_db()
-        self.assertEqual(post.small_group_at_post, self.old_group)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
@@ -1401,7 +1369,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertEqual(response.status_code, 302)
         post.refresh_from_db()
 
-        self.assertEqual(post.small_group_at_post, self.old_group)
         self.assertEqual(post.structure_unit_at_post, self.old_unit)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
@@ -1430,16 +1397,14 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(post.body, "Body edit stays in original group")
         self.assertTrue(post.is_anonymous)
-        self.assertEqual(post.small_group_at_post, self.old_group)
         self.assertEqual(post.structure_unit_at_post, self.old_unit)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
 
-    def test_migrated_group_post_group_edit_does_not_reintroduce_legacy_mirror(self):
-        # REFLECTION-MIRROR.1D: a group post that already has a null legacy mirror
-        # (structure-native row) keeps small_group_at_post null after a group->group
-        # edit. Policy C preserves structure_unit_at_post and never re-stamps the
-        # legacy mirror from the author's current membership.
+    def test_migrated_group_post_group_edit_preserves_structure_snapshot(self):
+        # CS-CORE.4G.2 / Policy C: a structure-native group post keeps its original
+        # structure_unit_at_post after a group->group edit and is never re-homed to
+        # the author's current membership.
         post = self.make_reflection(
             user=self.author,
             body="Migrated group source",
@@ -1447,7 +1412,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             small_group=None,
             structure_unit=self.old_unit,
         )
-        self.assertIsNone(post.small_group_at_post)
 
         self.client.login(username=self.author.username, password="TestPass123!")
         response = self.client.post(
@@ -1462,7 +1426,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         post.refresh_from_db()
 
         self.assertEqual(post.body, "Migrated group edit stays structure-native")
-        self.assertIsNone(post.small_group_at_post)
         self.assertEqual(post.structure_unit_at_post, self.old_unit)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
@@ -1506,7 +1469,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
                 self.assertEqual(post.structure_unit_at_post, self.new_unit)
                 # REFLECTION-MIRROR.1D: entering group visibility leaves the legacy
                 # mirror null even when a legacy SmallGroup maps to the new unit.
-                self.assertIsNone(post.small_group_at_post)
                 self.assertTrue(post.can_be_seen_by(self.new_group_member))
                 self.assertFalse(post.can_be_seen_by(self.old_group_member))
                 self.assertTrue(post.can_be_seen_by(self.author))
@@ -1581,7 +1543,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(post.body, "No-group private edit source")
         self.assertEqual(post.visibility, ReflectionComment.VISIBILITY_PRIVATE)
-        self.assertIsNone(post.small_group_at_post)
         self.assertIsNone(post.structure_unit_at_post)
 
     def _group_choice_values(self, form):
@@ -1632,11 +1593,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertFalse(profile_form.is_valid())
 
     def test_membership_user_creates_group_reflection_with_structure_snapshot(self):
-        # CS-CORE.4G.3 (coverage 2 + 6) + REFLECTION-MIRROR.1D: a membership-only
-        # user creates a group reflection whose structure_unit_at_post is the
-        # membership unit; small_group_at_post stays null (the create path no
-        # longer writes the legacy mirror even when one resolves). The post is
-        # visible through the 4G.2 read path to a matching member.
+        # CS-CORE.4G.3 (coverage 2 + 6): a membership-only user creates a group
+        # reflection whose structure_unit_at_post is the membership unit. The post
+        # is visible through the 4G.2 read path to a matching member.
         author = self.create_user(
             "invariant_membership_author",
             membership_unit=self.old_unit,
@@ -1657,7 +1616,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         comment = ReflectionComment.objects.get(body="Membership group reflection")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
         self.assertEqual(comment.structure_unit_at_post, self.old_unit)
-        self.assertIsNone(comment.small_group_at_post)
         self.assertTrue(comment.can_be_seen_by(self.old_group_member))
         self.assertFalse(comment.can_be_seen_by(self.new_group_member))
 
@@ -1783,8 +1741,8 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
     def test_existing_group_edit_preserves_snapshot_after_membership_transfer(self):
         # CS-CORE.4G.3 (coverage 9): an existing group post edited group -> group
-        # preserves its original structure_unit_at_post and small_group_at_post under
-        # Policy C, even after the author's active primary membership transfers.
+        # preserves its original structure_unit_at_post under Policy C, even after
+        # the author's active primary membership transfers.
         post = self.make_reflection(
             user=self.author,
             body="Existing group snapshot preserved",
@@ -1810,37 +1768,32 @@ class ReflectionPrivacyInvariantTests(TestCase):
 
         self.assertEqual(post.body, "Existing group edited after transfer")
         self.assertEqual(post.structure_unit_at_post, self.old_unit)
-        self.assertEqual(post.small_group_at_post, self.old_group)
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
 
     def test_passage_wall_label_uses_structure_unit_without_legacy_fallback(self):
-        # REFLECTION-MIRROR.1G: the passage wall group label relies solely on the
-        # structure snapshot. The legacy small_group_at_post fallback branch was
-        # removed, so a structure-native row (no legacy mirror) renders its unit
-        # name, a row that lacks the structure snapshot renders no group label,
-        # and a row whose legacy mirror is still populated never renders the
-        # legacy SmallGroup name when a structure label is available.
+        # REFLECTION-MIRROR.1G/1H: the passage wall group label relies solely on the
+        # structure snapshot. There is no legacy SmallGroup fallback, so a
+        # structure-native row renders its unit name and a row that lacks the
+        # structure snapshot renders no group label. Legacy SmallGroup names are
+        # never rendered.
         self.make_reflection(
             user=self.author,
             body="Structure-native labelled post",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=None,
             structure_unit=self.old_unit,
         )
         self.make_reflection(
             user=self.author,
-            body="Legacy-only post with no structure snapshot",
+            body="Post with no structure snapshot",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=self.old_group,
             structure_unit=None,
         )
         self.make_reflection(
             user=self.author,
-            body="Structure snapshot wins over a populated legacy mirror",
+            body="Another structure-native labelled post",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group=self.other_group,
             structure_unit=self.new_unit,
         )
 
@@ -1850,12 +1803,10 @@ class ReflectionPrivacyInvariantTests(TestCase):
             {"ref": "John 1", "tab": "my"},
         )
         self.assertEqual(response.status_code, 200)
-        # Structure-native rows render their unit name (including the row whose
-        # legacy mirror is still populated).
+        # Structure-native rows render their unit name.
         self.assertContains(response, self.old_unit.name)
         self.assertContains(response, self.new_unit.name)
-        # The removed legacy fallback never renders a SmallGroup name, whether the
-        # row lacks a structure snapshot or still carries a populated legacy mirror.
+        # A legacy SmallGroup name is never rendered as a group label.
         self.assertNotContains(response, self.old_group.name)
         self.assertNotContains(response, self.other_group.name)
 
@@ -4107,7 +4058,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
         )
 
         self.client.login(username="levin", password="testpass123")
@@ -4132,7 +4082,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
         )
 
         self.client.login(username="other", password="testpass123")
@@ -4157,7 +4106,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
         )
 
         self.client.login(username="admin", password="testpass123")
@@ -5682,7 +5630,6 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
         # REFLECTION-MIRROR.1D: the create path no longer writes the legacy mirror;
         # visibility is carried by structure_unit_at_post.
-        self.assertIsNone(comment.small_group_at_post)
         self.assertEqual(comment.structure_unit_at_post, self.group_unit)
 
 
@@ -5737,7 +5684,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
             body="Group reflection.",
         )
@@ -5775,7 +5721,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             body="Hidden group reflection.",
         )
 
@@ -6090,7 +6035,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             body="Old reflection.",
         )
 
@@ -6185,7 +6129,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             body="Parent reflection.",
         )
 
@@ -6198,7 +6141,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             body="Old reply.",
         )
 
@@ -6320,7 +6262,6 @@ class BibleReadingFlowTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
             body="Other user's reflection.",
         )
@@ -6943,592 +6884,6 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Decline role")
 
 
-class ReadingPrivacyMembershipReadinessAuditCommandTests(TestCase):
-    """CS-CORE.4B readiness audit command tests. The command is read-only."""
-
-    def run_audit_command(self, *args):
-        output = StringIO()
-        call_command(
-            "audit_reading_privacy_membership_readiness",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, parent=None):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            parent=parent,
-        )
-
-    def create_mapped_group(self, name, *, unit=None):
-        unit = unit or self.create_unit(name.upper().replace(" ", "-")[:32])
-        group = SmallGroup.objects.create(name=name, church_structure_unit=unit)
-        return group, unit
-
-    def create_user(self, username, *, group=None):
-        user = User.objects.create_user(username=username)
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
-        return user
-
-    def create_membership(self, user, unit, **overrides):
-        defaults = {
-            "user": user,
-            "unit": unit,
-            "status": ChurchStructureMembership.STATUS_ACTIVE,
-            "is_primary": True,
-            "start_date": timezone.localdate(),
-        }
-        defaults.update(overrides)
-        return ChurchStructureMembership.objects.create(**defaults)
-
-    def create_reflection(self, group, *, user=None, **overrides):
-        plan = ReadingPlan.objects.create(
-            name=f"Audit Plan {ReadingPlan.objects.count() + 1}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        user = user or self.create_user(
-            f"audit_author_{User.objects.count() + 1}",
-            group=group,
-        )
-        defaults = {
-            "user": user,
-            "plan_day": day,
-            "scripture_ref_key": "John 1",
-            "scripture_display_zh": "约翰福音 第 1 章",
-            "scripture_display_en": "John 1",
-            "visibility": ReflectionComment.VISIBILITY_GROUP,
-            "small_group_at_post": group,
-            "body": "Audit reflection",
-        }
-        defaults.update(overrides)
-        return ReflectionComment.objects.create(**defaults)
-
-    def create_duplicate_active_primaries(self, user, first_unit, second_unit):
-        today = timezone.localdate()
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=user,
-                    unit=first_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-                ChurchStructureMembership(
-                    user=user,
-                    unit=second_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-            ]
-        )
-
-    def assert_summary_count(self, output, category, count):
-        self.assertIn(f"{category}: {count}", output)
-
-    def test_command_runs_writes_nothing_and_has_no_apply_option(self):
-        group, unit = self.create_mapped_group("Audit Read Only")
-        user = self.create_user("audit_read_only", group=group)
-        self.create_membership(user, unit)
-        self.create_reflection(group, user=user)
-        before_counts = {
-            "comments": ReflectionComment.objects.count(),
-            "memberships": ChurchStructureMembership.objects.count(),
-            "groups": SmallGroup.objects.count(),
-            "units": ChurchStructureUnit.objects.count(),
-            "users": User.objects.count(),
-            "plans": ReadingPlan.objects.count(),
-            "days": ReadingPlanDay.objects.count(),
-        }
-
-        parser = ReadingPrivacyAuditCommand().create_parser(
-            "manage.py",
-            "audit_reading_privacy_membership_readiness",
-        )
-        option_strings = {
-            option
-            for action in parser._actions
-            for option in action.option_strings
-        }
-        self.assertNotIn("--apply", option_strings)
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_audit_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(
-                ("INSERT", "UPDATE", "DELETE")
-            )
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("Audit only:", output)
-        self.assertEqual(
-            before_counts,
-            {
-                "comments": ReflectionComment.objects.count(),
-                "memberships": ChurchStructureMembership.objects.count(),
-                "groups": SmallGroup.objects.count(),
-                "units": ChurchStructureUnit.objects.count(),
-                "users": User.objects.count(),
-                "plans": ReadingPlan.objects.count(),
-                "days": ReadingPlanDay.objects.count(),
-            },
-        )
-
-    def test_in_sync_case_reports_same_and_no_drift(self):
-        group, unit = self.create_mapped_group("Audit In Sync")
-        user = self.create_user("audit_in_sync", group=group)
-        self.create_membership(user, unit)
-        self.create_reflection(group, user=user)
-
-        output = self.run_audit_command("--fail-on-drift")
-
-        self.assert_summary_count(output, "same_visible", 1)
-        self.assert_summary_count(output, "same_in_roster", 1)
-        self.assert_summary_count(output, "would_gain", 0)
-        self.assert_summary_count(output, "would_lose", 0)
-        self.assert_summary_count(output, "user_profile_membership_mismatch", 0)
-
-    def test_profile_only_case_reports_would_lose(self):
-        group, _unit = self.create_mapped_group("Audit Profile Only")
-        user = self.create_user("audit_profile_only", group=group)
-        self.create_reflection(group, user=user)
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "same_visible", 0)
-        self.assert_summary_count(output, "same_in_roster", 0)
-        self.assert_summary_count(output, "would_lose", 1)
-        self.assert_summary_count(
-            output, "user_profile_without_active_primary_membership", 1
-        )
-
-    def test_membership_only_case_reports_would_gain(self):
-        group, unit = self.create_mapped_group("Audit Membership Only")
-        user = self.create_user("audit_membership_only")
-        self.create_membership(user, unit)
-        self.create_reflection(group, user=user)
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "would_gain", 1)
-        self.assert_summary_count(
-            output, "user_active_primary_without_profile_group", 1
-        )
-
-    def test_mismatch_reports_gain_loss_and_mismatch(self):
-        group_a, unit_a = self.create_mapped_group("Audit Group A")
-        group_b, unit_b = self.create_mapped_group("Audit Group B")
-        user = self.create_user("audit_mismatch", group=group_a)
-        self.create_membership(user, unit_b)
-        self.create_reflection(group_a, user=user)
-        self.create_reflection(group_b, user=user)
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "would_gain", 1)
-        self.assert_summary_count(output, "would_lose", 1)
-        self.assert_summary_count(output, "user_profile_membership_mismatch", 1)
-        self.assertNotEqual(unit_a, unit_b)
-
-    def test_unmapped_group_fails_closed_and_reports_unmapped(self):
-        group = SmallGroup.objects.create(name="Audit Unmapped")
-        user = self.create_user("audit_unmapped", group=group)
-        self.create_reflection(group, user=user)
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "reflection_group_unmapped", 1)
-        self.assert_summary_count(output, "progress_group_unmapped", 1)
-        self.assert_summary_count(output, "would_lose", 1)
-
-    def test_multiple_active_primary_memberships_fail_closed(self):
-        group, unit = self.create_mapped_group("Audit Multi Primary")
-        other_unit = self.create_unit("AUDIT-MULTI-OTHER")
-        user = self.create_user("audit_multi_primary", group=group)
-        self.create_duplicate_active_primaries(user, unit, other_unit)
-        self.create_reflection(group, user=user)
-
-        output = self.run_audit_command("--verbose")
-
-        self.assert_summary_count(output, "multiple_active_primary_memberships", 1)
-        self.assert_summary_count(output, "would_lose", 1)
-        self.assertIn("active_primary_membership_ids=", output)
-
-    def test_non_active_memberships_do_not_grant_candidate_membership(self):
-        group, unit = self.create_mapped_group("Audit Inactive States")
-        today = timezone.localdate()
-        requested = self.create_user("audit_requested", group=group)
-        ended = self.create_user("audit_ended", group=group)
-        future = self.create_user("audit_future", group=group)
-        self.create_reflection(group, user=requested)
-        ChurchStructureMembership.objects.create(
-            user=requested,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_REQUESTED,
-            is_primary=True,
-            start_date=today,
-        )
-        ChurchStructureMembership.objects.create(
-            user=ended,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ENDED,
-            is_primary=True,
-            start_date=today - timedelta(days=10),
-            end_date=today - timedelta(days=1),
-        )
-        ChurchStructureMembership.objects.create(
-            user=future,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=today + timedelta(days=1),
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "would_lose", 3)
-        self.assert_summary_count(
-            output, "user_profile_without_active_primary_membership", 3
-        )
-        self.assert_summary_count(output, "multiple_active_primary_memberships", 0)
-
-    def test_fail_on_drift_raises_only_when_risky_drift_exists(self):
-        group, unit = self.create_mapped_group("Audit Clean")
-        synced = self.create_user("audit_clean_synced", group=group)
-        self.create_membership(synced, unit)
-        self.create_user("audit_clean_nobody")
-        self.create_reflection(group, user=synced)
-
-        clean_output = self.run_audit_command("--fail-on-drift")
-        self.assert_summary_count(clean_output, "same_visible", 1)
-        self.assert_summary_count(clean_output, "same_out_of_roster", 1)
-
-        drift_group, _drift_unit = self.create_mapped_group("Audit Drift")
-        self.create_user("audit_drift", group=drift_group)
-
-        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
-            self.run_audit_command("--fail-on-drift")
-
-    def test_verbose_limit_outputs_representative_rows(self):
-        group, _unit = self.create_mapped_group("Audit Verbose Limit")
-        first = self.create_user("audit_limit_one", group=group)
-        self.create_user("audit_limit_two", group=group)
-        self.create_reflection(group, user=first)
-
-        output = self.run_audit_command("--verbose", "--limit", "1")
-
-        self.assertIn("details (drift and risk categories only):", output)
-        self.assertIn("(verbose output stopped at --limit 1)", output)
-        self.assertEqual(output.count("classification=would_lose"), 1)
-
-
-class ReflectionPrivacySnapshotReadinessAuditCommandTests(TestCase):
-    """CS-CORE.4G.1 reflection-privacy structure-snapshot readiness audit tests.
-
-    The audit only reports whether group-shared ``ReflectionComment`` rows carry
-    stable ``structure_unit_at_post`` data for a *future* visibility shadow/switch.
-    It is strictly read-only, never changes ``can_be_seen_by`` /
-    ``get_visible_reflection_filter`` / ``passage_wall`` group filtering, and never
-    prints reflection body text.
-    """
-
-    def run_audit_command(self, *args):
-        output = StringIO()
-        call_command(
-            "audit_reading_privacy_membership_readiness",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, is_active=True):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            is_active=is_active,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_reflection(self, *, small_group, structure_unit, visibility, body):
-        plan = ReadingPlan.objects.create(
-            name=f"Snapshot Plan {ReadingPlan.objects.count() + 1}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        user = User.objects.create_user(
-            username=f"snapshot_author_{User.objects.count() + 1}",
-        )
-        return ReflectionComment.objects.create(
-            user=user,
-            plan_day=day,
-            scripture_ref_key="John 1",
-            scripture_display_zh="约翰福音 第 1 章",
-            scripture_display_en="John 1",
-            visibility=visibility,
-            small_group_at_post=small_group,
-            structure_unit_at_post=structure_unit,
-            body=body,
-        )
-
-    def assert_summary_count(self, output, key, count):
-        self.assertIn(f"{key}: {count}", output)
-
-    def test_command_is_read_only(self):
-        unit = self.create_unit("SNAP-RO")
-        group = self.create_group("Snapshot Read Only", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot read only body",
-        )
-        before = {
-            "comments": ReflectionComment.objects.count(),
-            "groups": SmallGroup.objects.count(),
-            "units": ChurchStructureUnit.objects.count(),
-            "users": User.objects.count(),
-        }
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_audit_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(
-                ("INSERT", "UPDATE", "DELETE")
-            )
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn(
-            "Reflection privacy structure-snapshot readiness "
-            "(CS-CORE.4G.1, read-only)",
-            output,
-        )
-        self.assertEqual(
-            before,
-            {
-                "comments": ReflectionComment.objects.count(),
-                "groups": SmallGroup.objects.count(),
-                "units": ChurchStructureUnit.objects.count(),
-                "users": User.objects.count(),
-            },
-        )
-
-    def test_matching_snapshot_increments_match_counter(self):
-        unit = self.create_unit("SNAP-MATCH")
-        group = self.create_group("Snapshot Match", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot match body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "group_reflections_checked", 1)
-        self.assert_summary_count(
-            output, "group_reflections_with_structure_snapshot", 1
-        )
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_matches_legacy_group_mapping",
-            1,
-        )
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_mismatch_legacy_group_mapping",
-            0,
-        )
-
-    def test_missing_snapshot_increments_missing_counter(self):
-        unit = self.create_unit("SNAP-MISSING")
-        group = self.create_group("Snapshot Missing", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot missing body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(
-            output, "group_reflections_missing_structure_snapshot", 1
-        )
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_matches_legacy_group_mapping",
-            0,
-        )
-
-    def test_unmapped_legacy_group_increments_unmapped_counter(self):
-        group = self.create_group("Snapshot Unmapped", unit=None)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot unmapped body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(
-            output, "group_reflections_legacy_group_unmapped", 1
-        )
-        self.assert_summary_count(output, "group_reflections_with_legacy_group", 1)
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_matches_legacy_group_mapping",
-            0,
-        )
-
-    def test_mismatch_snapshot_increments_mismatch_counter(self):
-        unit_a = self.create_unit("SNAP-MIS-A")
-        unit_b = self.create_unit("SNAP-MIS-B")
-        group = self.create_group("Snapshot Mismatch", unit=unit_a)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit_b,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot mismatch body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_mismatch_legacy_group_mapping",
-            1,
-        )
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_matches_legacy_group_mapping",
-            0,
-        )
-
-    def test_wrong_type_snapshot_increments_wrong_type_counter(self):
-        unit = self.create_unit("SNAP-WT-SG")
-        wrong_type_unit = self.create_unit(
-            "SNAP-WT-FEL",
-            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
-        )
-        group = self.create_group("Snapshot Wrong Type", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=wrong_type_unit,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="snapshot wrong type body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(
-            output, "group_reflections_structure_snapshot_wrong_type", 1
-        )
-
-    def test_non_group_visibility_reflections_not_counted(self):
-        unit = self.create_unit("SNAP-NONGROUP")
-        group = self.create_group("Snapshot Non Group", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            visibility=ReflectionComment.VISIBILITY_PRIVATE,
-            body="snapshot private body",
-        )
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-            body="snapshot church body",
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "group_reflections_checked", 0)
-        self.assert_summary_count(
-            output,
-            "group_reflections_snapshot_matches_legacy_group_mapping",
-            0,
-        )
-
-    def test_verbose_does_not_print_reflection_body(self):
-        unit_a = self.create_unit("SNAP-V-A")
-        unit_b = self.create_unit("SNAP-V-B")
-        wrong_type_unit = self.create_unit(
-            "SNAP-V-FEL",
-            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
-        )
-        mapped_group = self.create_group("Snapshot Verbose Mapped", unit=unit_a)
-        unmapped_group = self.create_group("Snapshot Verbose Unmapped", unit=None)
-
-        self.create_reflection(
-            small_group=mapped_group,
-            structure_unit=None,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="SECRET_MISSING_BODY",
-        )
-        self.create_reflection(
-            small_group=mapped_group,
-            structure_unit=unit_b,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="SECRET_MISMATCH_BODY",
-        )
-        self.create_reflection(
-            small_group=unmapped_group,
-            structure_unit=None,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="SECRET_UNMAPPED_BODY",
-        )
-        self.create_reflection(
-            small_group=mapped_group,
-            structure_unit=wrong_type_unit,
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            body="SECRET_WRONGTYPE_BODY",
-        )
-
-        output = self.run_audit_command("--verbose")
-
-        self.assertIn(
-            "structure-snapshot examples (diagnostic categories only):", output
-        )
-        self.assertIn("reason=missing_structure_snapshot", output)
-        self.assertIn("reason=snapshot_mismatch_legacy_group_mapping", output)
-        self.assertIn("reason=legacy_group_unmapped", output)
-        self.assertIn("reason=structure_snapshot_wrong_type", output)
-        for secret in (
-            "SECRET_MISSING_BODY",
-            "SECRET_MISMATCH_BODY",
-            "SECRET_UNMAPPED_BODY",
-            "SECRET_WRONGTYPE_BODY",
-        ):
-            self.assertNotIn(secret, output)
-
-
 class ReadingStructureRuntimeReadinessAuditTests(TestCase):
     """READING-STRUCT.1A read-only structure-runtime readiness inventory tests.
 
@@ -7560,7 +6915,7 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
     def create_group(self, name, *, unit=None):
         return SmallGroup.objects.create(name=name, church_structure_unit=unit)
 
-    def create_group_reflection(self, *, small_group, structure_unit, body):
+    def create_group_reflection(self, *, structure_unit, body):
         type(self).plan_counter += 1
         plan = ReadingPlan.objects.create(
             name=f"Runtime Plan {self.plan_counter}",
@@ -7580,7 +6935,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
             scripture_display_zh="约翰福音 第 1 章",
             scripture_display_en="John 1",
             visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=small_group,
             structure_unit_at_post=structure_unit,
             body=body,
         )
@@ -7597,9 +6951,7 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
     def test_clean_mapped_data_has_no_blockers(self):
         unit = self.create_unit("CLEAN-SG")
         group = self.create_group("Clean Group", unit=unit)
-        self.create_group_reflection(
-            small_group=group, structure_unit=unit, body="clean body"
-        )
+        self.create_group_reflection(structure_unit=unit, body="clean body")
         member = User.objects.create_user(username="clean_member")
         member.profile.small_group = group
         member.profile.save()
@@ -7610,7 +6962,7 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
         self.assertEqual(stats["group_visible_reflections"], 1)
         self.assertEqual(stats["reflections_snapshot_resolvable"], 1)
-        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 0)
+        self.assertEqual(stats["reflections_group_visible_no_valid_snapshot"], 0)
         self.assertEqual(stats["progress_groups_total"], 1)
         self.assertEqual(stats["progress_groups_resolvable"], 1)
         self.assertEqual(stats["users_with_single_active_primary_membership"], 1)
@@ -7620,22 +6972,21 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         # --fail-on-blockers must succeed (no error) on clean data.
         self.run_audit_command("--fail-on-blockers")
 
-    def test_missing_snapshot_legacy_only_is_blocker(self):
-        unit = self.create_unit("MISS-SG")
-        group = self.create_group("Missing Snapshot Group", unit=unit)
-        # Legacy group set, but no structure snapshot: invisible under 4G.2.
-        self.create_group_reflection(
-            small_group=group, structure_unit=None, body="SECRET_MISSING"
-        )
+    def test_missing_snapshot_group_post_is_blocker(self):
+        self.create_group("Missing Snapshot Group", unit=self.create_unit("MISS-SG"))
+        # Group-visible post with no structure snapshot: invisible under 4G.2.
+        self.create_group_reflection(structure_unit=None, body="SECRET_MISSING")
 
         audit = run_reading_structure_runtime_audit()
         stats = audit["stats"]
 
-        self.assertEqual(stats["reflections_with_legacy_small_group"], 1)
+        self.assertEqual(stats["group_visible_reflections"], 1)
         self.assertEqual(stats["reflections_with_structure_snapshot"], 0)
         self.assertEqual(stats["reflections_snapshot_missing"], 1)
-        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 1)
-        self.assertIn("reflections_legacy_only_no_valid_snapshot", audit["blockers"])
+        self.assertEqual(stats["reflections_group_visible_no_valid_snapshot"], 1)
+        self.assertIn(
+            "reflections_group_visible_no_valid_snapshot", audit["blockers"]
+        )
 
         with self.assertRaises(CommandError):
             self.run_audit_command("--fail-on-blockers")
@@ -7645,9 +6996,9 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
     def test_inactive_snapshot_unit_is_unresolved(self):
         inactive_unit = self.create_unit("INACT-SG", is_active=False)
-        group = self.create_group("Inactive Unit Group", unit=inactive_unit)
+        self.create_group("Inactive Unit Group", unit=inactive_unit)
         self.create_group_reflection(
-            small_group=group, structure_unit=inactive_unit, body="inactive body"
+            structure_unit=inactive_unit, body="inactive body"
         )
 
         audit = run_reading_structure_runtime_audit()
@@ -7656,16 +7007,16 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         self.assertEqual(stats["reflections_snapshot_inactive_unit"], 1)
         self.assertEqual(stats["reflections_snapshot_resolvable"], 0)
         self.assertEqual(stats["progress_groups_inactive_unit"], 1)
-        self.assertEqual(stats["reflections_legacy_only_no_valid_snapshot"], 1)
+        self.assertEqual(stats["reflections_group_visible_no_valid_snapshot"], 1)
         self.assertIn("progress_groups_inactive_unit", audit["blockers"])
 
     def test_wrong_unit_type_snapshot_is_unresolved(self):
         district_unit = self.create_unit(
             "WRONG-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
         )
-        group = self.create_group("Wrong Type Group", unit=district_unit)
+        self.create_group("Wrong Type Group", unit=district_unit)
         self.create_group_reflection(
-            small_group=group, structure_unit=district_unit, body="wrong type body"
+            structure_unit=district_unit, body="wrong type body"
         )
 
         audit = run_reading_structure_runtime_audit()
@@ -7738,9 +7089,7 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
     def test_command_is_read_only(self):
         unit = self.create_unit("RO-SG")
         group = self.create_group("Read Only Group", unit=unit)
-        self.create_group_reflection(
-            small_group=group, structure_unit=unit, body="read only body"
-        )
+        self.create_group_reflection(structure_unit=unit, body="read only body")
         member = User.objects.create_user(username="ro_member")
         member.profile.small_group = group
         member.profile.save()
@@ -7778,1400 +7127,3 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
             output,
         )
         self.assertIn("READ-ONLY: no reflection", output)
-
-
-class ReflectionStructureSnapshotBackfillCommandTests(TestCase):
-    """READING-STRUCT.1B backfill command tests.
-
-    The command backfills ``ReflectionComment.structure_unit_at_post`` for
-    group-visible reflections whose legacy ``small_group_at_post`` resolves to an
-    active small-group unit. Dry-run by default; ``--apply`` writes; it never
-    overwrites an existing snapshot, never mutates legacy fields, and never
-    changes runtime visibility.
-    """
-
-    plan_counter = 0
-
-    def run_backfill_command(self, *args):
-        output = StringIO()
-        call_command(
-            "backfill_reflection_structure_snapshots",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, is_active=True):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            is_active=is_active,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_group_reflection(self, *, small_group, structure_unit=None, body):
-        type(self).plan_counter += 1
-        plan = ReadingPlan.objects.create(
-            name=f"Backfill Plan {self.plan_counter}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        author = User.objects.create_user(username=f"backfill_author_{self.plan_counter}")
-        return ReflectionComment.objects.create(
-            user=author,
-            plan_day=day,
-            scripture_ref_key="John 1",
-            scripture_display_zh="约翰福音 第 1 章",
-            scripture_display_en="John 1",
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-            small_group_at_post=small_group,
-            structure_unit_at_post=structure_unit,
-            body=body,
-        )
-
-    def test_dry_run_reports_would_backfill_without_mutating(self):
-        unit = self.create_unit("BF-DRY")
-        group = self.create_group("Backfill Dry Group", unit=unit)
-        comment = self.create_group_reflection(small_group=group, body="dry body")
-
-        result = run_reflection_snapshot_backfill()
-        stats = result["stats"]
-
-        self.assertEqual(stats["reflections_checked"], 1)
-        self.assertEqual(stats["would_backfill"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertEqual(stats["legacy_fields_mutated"], 0)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-        # Legacy mirror untouched.
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    def test_apply_fills_structure_unit_at_post(self):
-        unit = self.create_unit("BF-APPLY")
-        group = self.create_group("Backfill Apply Group", unit=unit)
-        comment = self.create_group_reflection(small_group=group, body="apply body")
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["backfilled"], 1)
-        self.assertEqual(stats["would_backfill"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
-        # Legacy mirror untouched; visibility unchanged.
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    def test_apply_is_idempotent(self):
-        unit = self.create_unit("BF-IDEM")
-        group = self.create_group("Backfill Idempotent Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="idem body")
-
-        first = run_reflection_snapshot_backfill(apply=True)
-        self.assertEqual(first["stats"]["backfilled"], 1)
-
-        second = run_reflection_snapshot_backfill(apply=True)
-        self.assertEqual(second["stats"]["backfilled"], 0)
-        self.assertEqual(second["stats"]["would_backfill"], 0)
-        self.assertEqual(second["stats"]["skipped_existing_snapshot"], 1)
-
-        # A follow-up dry-run is also a no-op.
-        third = run_reflection_snapshot_backfill()
-        self.assertEqual(third["stats"]["would_backfill"], 0)
-        self.assertEqual(third["stats"]["skipped_existing_snapshot"], 1)
-
-    def test_missing_legacy_group_is_reported_not_backfilled(self):
-        comment = self.create_group_reflection(small_group=None, body="no group body")
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["missing_legacy_group"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertIn("missing_legacy_group", result["issues"])
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_missing_mapping_is_reported_not_backfilled(self):
-        group = self.create_group("Unmapped Group", unit=None)
-        comment = self.create_group_reflection(small_group=group, body="unmapped body")
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["missing_mapping"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertIn("missing_mapping", result["issues"])
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_inactive_unit_is_reported_not_backfilled(self):
-        inactive_unit = self.create_unit("BF-INACT", is_active=False)
-        group = self.create_group("Inactive Unit Group", unit=inactive_unit)
-        comment = self.create_group_reflection(small_group=group, body="inactive body")
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["inactive_unit"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertIn("inactive_unit", result["issues"])
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_wrong_unit_type_is_reported_not_backfilled(self):
-        district_unit = self.create_unit(
-            "BF-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
-        )
-        group = self.create_group("Wrong Type Group", unit=district_unit)
-        comment = self.create_group_reflection(small_group=group, body="wrong type body")
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["wrong_unit_type"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertIn("wrong_unit_type", result["issues"])
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_existing_snapshot_is_not_overwritten(self):
-        unit_a = self.create_unit("BF-EXIST-A")
-        unit_b = self.create_unit("BF-EXIST-B")
-        group_b = self.create_group("Existing Snapshot Group", unit=unit_b)
-        # Snapshot already points at unit_a; legacy group maps to unit_b.
-        comment = self.create_group_reflection(
-            small_group=group_b, structure_unit=unit_a, body="existing body"
-        )
-
-        result = run_reflection_snapshot_backfill(apply=True)
-        stats = result["stats"]
-
-        self.assertEqual(stats["skipped_existing_snapshot"], 1)
-        self.assertEqual(stats["backfilled"], 0)
-        self.assertEqual(stats["would_backfill"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.structure_unit_at_post_id, unit_a.id)
-
-    def test_fail_on_issues_raises_on_unresolved(self):
-        group = self.create_group("Unmapped Group", unit=None)
-        self.create_group_reflection(small_group=group, body="issue body")
-
-        with self.assertRaises(CommandError):
-            self.run_backfill_command("--fail-on-issues")
-
-    def test_fail_on_issues_clean_after_apply(self):
-        unit = self.create_unit("BF-CLEAN")
-        group = self.create_group("Clean Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="clean body")
-
-        # No issue buckets -> --fail-on-issues exits 0 even though a row is
-        # backfillable (would_backfill is not an issue).
-        self.run_backfill_command("--apply", "--fail-on-issues")
-        self.assertEqual(
-            ReflectionComment.objects.filter(
-                structure_unit_at_post=unit
-            ).count(),
-            1,
-        )
-
-    def test_command_is_read_only_in_dry_run(self):
-        unit = self.create_unit("BF-RO")
-        group = self.create_group("Read Only Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="SECRET_BACKFILL_BODY")
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_backfill_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("mode: DRY-RUN (read-only)", output)
-        self.assertNotIn("SECRET_BACKFILL_BODY", output)
-
-
-class ReflectionSnapshotBlockerCleanupCommandTests(TestCase):
-    """REFLECTION-SNAPSHOT.1C guarded cleanup command tests.
-
-    Dry-run is the default. Apply requires both ``--apply`` and
-    ``--confirm-reflection-snapshot-cleanup``. The command backfills
-    ``structure_unit_at_post`` for mapped group rows (Category A, including hidden
-    rows) and demotes safe top-level orphan group rows to private (Category B). It
-    performs no schema migration, no runtime source switch, and never prints
-    reflection body text.
-    """
-
-    plan_counter = 0
-
-    def run_cleanup_command(self, *args):
-        output = StringIO()
-        call_command(
-            "cleanup_reflection_snapshot_blockers",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, is_active=True):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            is_active=is_active,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_group_reflection(
-        self,
-        *,
-        small_group=None,
-        structure_unit=None,
-        body,
-        parent=None,
-        is_hidden=False,
-        is_deleted=False,
-        visibility=ReflectionComment.VISIBILITY_GROUP,
-    ):
-        type(self).plan_counter += 1
-        plan = ReadingPlan.objects.create(
-            name=f"Cleanup Plan {self.plan_counter}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        author = User.objects.create_user(
-            username=f"cleanup_author_{self.plan_counter}"
-        )
-        return ReflectionComment.objects.create(
-            user=author,
-            plan_day=day,
-            scripture_ref_key="John 1",
-            scripture_display_zh="约翰福音 第 1 章",
-            scripture_display_en="John 1",
-            visibility=visibility,
-            small_group_at_post=small_group,
-            structure_unit_at_post=structure_unit,
-            parent=parent,
-            is_hidden=is_hidden,
-            is_deleted=is_deleted,
-            body=body,
-        )
-
-    # --- Category A: backfillable snapshot rows ------------------------------
-
-    def test_dry_run_reports_backfill_candidate_without_mutating(self):
-        unit = self.create_unit("CL-DRY")
-        group = self.create_group("Cleanup Dry Group", unit=unit)
-        comment = self.create_group_reflection(small_group=group, body="dry body")
-
-        stats, _lines = run_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["reflections_checked"], 1)
-        self.assertEqual(stats["snapshot_backfill_candidates"], 1)
-        self.assertEqual(stats["would_backfill_snapshot"], 1)
-        self.assertEqual(stats["backfilled_snapshot"], 0)
-        self.assertEqual(stats["remaining_blockers_after_operation"], 1)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    def test_apply_without_confirmation_refuses_and_does_not_mutate(self):
-        unit = self.create_unit("CL-NOCONFIRM")
-        group = self.create_group("No Confirm Group", unit=unit)
-        comment = self.create_group_reflection(small_group=group, body="noconfirm body")
-
-        with self.assertRaises(CommandError):
-            self.run_cleanup_command("--apply")
-
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_confirmation_without_apply_remains_dry_run(self):
-        unit = self.create_unit("CL-CONFONLY")
-        group = self.create_group("Confirm Only Group", unit=unit)
-        comment = self.create_group_reflection(small_group=group, body="confonly body")
-
-        output = self.run_cleanup_command("--confirm-reflection-snapshot-cleanup")
-
-        self.assertIn("mode: dry-run", output)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_apply_backfills_mapped_group_rows_including_hidden(self):
-        unit = self.create_unit("CL-APPLY")
-        group = self.create_group("Cleanup Apply Group", unit=unit)
-        visible = self.create_group_reflection(small_group=group, body="visible body")
-        hidden = self.create_group_reflection(
-            small_group=group, body="hidden body", is_hidden=True
-        )
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["backfilled_snapshot"], 2)
-        self.assertEqual(stats["would_backfill_snapshot"], 0)
-        self.assertEqual(stats["remaining_blockers_after_operation"], 0)
-        visible.refresh_from_db()
-        hidden.refresh_from_db()
-        self.assertEqual(visible.structure_unit_at_post_id, unit.id)
-        self.assertEqual(hidden.structure_unit_at_post_id, unit.id)
-        # Legacy mirror and hidden flag untouched.
-        self.assertEqual(hidden.small_group_at_post_id, group.id)
-        self.assertTrue(hidden.is_hidden)
-        self.assertEqual(visible.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    # --- Category B: orphan group reflections --------------------------------
-
-    def test_apply_demotes_top_level_orphan_group_to_private(self):
-        orphan = self.create_group_reflection(small_group=None, body="orphan body")
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["orphan_group_candidates"], 1)
-        self.assertEqual(stats["demoted_orphan_to_private"], 1)
-        self.assertEqual(stats["remaining_blockers_after_operation"], 0)
-        orphan.refresh_from_db()
-        self.assertEqual(orphan.visibility, ReflectionComment.VISIBILITY_PRIVATE)
-        self.assertIsNone(orphan.small_group_at_post_id)
-        self.assertIsNone(orphan.structure_unit_at_post_id)
-
-    def test_orphan_reply_is_skipped(self):
-        parent = self.create_group_reflection(
-            small_group=None,
-            body="parent body",
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-        )
-        # Make the parent non-orphan so only the reply is the orphan under test.
-        unit = self.create_unit("CL-REPLY")
-        parent.structure_unit_at_post = unit
-        parent.save(update_fields=["structure_unit_at_post"])
-        reply = self.create_group_reflection(
-            small_group=None, body="reply body", parent=parent
-        )
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["skipped_reply_orphan"], 1)
-        self.assertEqual(stats["demoted_orphan_to_private"], 0)
-        reply.refresh_from_db()
-        self.assertEqual(reply.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    def test_top_level_orphan_with_replies_is_skipped(self):
-        parent = self.create_group_reflection(small_group=None, body="parent orphan")
-        self.create_group_reflection(
-            small_group=None, body="child reply", parent=parent
-        )
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["skipped_orphan_with_replies"], 1)
-        self.assertEqual(stats["demoted_orphan_to_private"], 0)
-        parent.refresh_from_db()
-        self.assertEqual(parent.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    # --- Category A skip reasons ---------------------------------------------
-
-    def test_missing_mapping_is_skipped(self):
-        group = self.create_group("Unmapped Cleanup Group", unit=None)
-        comment = self.create_group_reflection(small_group=group, body="unmapped body")
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["skipped_missing_mapping"], 1)
-        self.assertEqual(stats["backfilled_snapshot"], 0)
-        self.assertEqual(stats["remaining_blockers_after_operation"], 1)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_inactive_unit_is_skipped(self):
-        inactive_unit = self.create_unit("CL-INACT", is_active=False)
-        group = self.create_group("Inactive Cleanup Group", unit=inactive_unit)
-        comment = self.create_group_reflection(small_group=group, body="inactive body")
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["skipped_inactive_unit"], 1)
-        self.assertEqual(stats["backfilled_snapshot"], 0)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    def test_wrong_unit_type_is_skipped(self):
-        district_unit = self.create_unit(
-            "CL-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
-        )
-        group = self.create_group("Wrong Type Cleanup Group", unit=district_unit)
-        comment = self.create_group_reflection(small_group=group, body="wrong type body")
-
-        stats, _lines = apply_reflection_snapshot_cleanup()
-
-        self.assertEqual(stats["skipped_wrong_unit_type"], 1)
-        self.assertEqual(stats["backfilled_snapshot"], 0)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- Output / idempotency ------------------------------------------------
-
-    def test_body_text_is_not_printed_in_verbose(self):
-        unit = self.create_unit("CL-RO")
-        group = self.create_group("Read Only Cleanup Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="SECRET_CLEANUP_BODY")
-        self.create_group_reflection(small_group=None, body="SECRET_ORPHAN_BODY")
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_cleanup_command("--verbose", "--limit", "20")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("mode: dry-run", output)
-        self.assertNotIn("SECRET_CLEANUP_BODY", output)
-        self.assertNotIn("SECRET_ORPHAN_BODY", output)
-
-    def test_second_dry_run_after_apply_is_a_no_op(self):
-        unit = self.create_unit("CL-IDEM")
-        group = self.create_group("Idempotent Cleanup Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="idem backfill body")
-        self.create_group_reflection(small_group=None, body="idem orphan body")
-
-        apply_stats, _lines = apply_reflection_snapshot_cleanup()
-        self.assertEqual(apply_stats["backfilled_snapshot"], 1)
-        self.assertEqual(apply_stats["demoted_orphan_to_private"], 1)
-        self.assertEqual(apply_stats["remaining_blockers_after_operation"], 0)
-
-        second_stats, _lines = run_reflection_snapshot_cleanup()
-        self.assertEqual(second_stats["would_backfill_snapshot"], 0)
-        self.assertEqual(second_stats["would_demote_orphan_to_private"], 0)
-        self.assertEqual(second_stats["remaining_blockers_after_operation"], 0)
-
-    def test_audit_blocker_clears_after_apply(self):
-        unit = self.create_unit("CL-AUDIT")
-        group = self.create_group("Audit Cleanup Group", unit=unit)
-        self.create_group_reflection(small_group=group, body="audit backfill body")
-        self.create_group_reflection(small_group=None, body="audit orphan body")
-
-        before = run_legacy_structure_retirement_audit()
-        self.assertEqual(
-            before["stats"]["reflection_small_group_at_post_removal_blockers"], 2
-        )
-
-        apply_reflection_snapshot_cleanup()
-
-        after = run_legacy_structure_retirement_audit()
-        self.assertEqual(
-            after["stats"]["reflection_small_group_at_post_removal_blockers"], 0
-        )
-
-
-class ReflectionSmallGroupMirrorCleanupCommandTests(TestCase):
-    """REFLECTION-MIRROR.1E guarded legacy-mirror cleanup command tests.
-
-    Dry-run is the default. Apply requires both ``--apply`` and
-    ``--confirm-reflection-small-group-mirror-cleanup``. The command clears the
-    legacy ``small_group_at_post`` mirror only for rows where doing so cannot
-    change visibility or display: group rows whose matching active small-group
-    structure snapshot already drives visibility (including hidden/deleted rows),
-    and non-group rows that carry a structure snapshot. It performs no schema
-    migration, no runtime source switch, never touches ``structure_unit_at_post``
-    / ``visibility`` / ``parent`` / ``body``, and never prints body text.
-    """
-
-    plan_counter = 0
-
-    def run_cleanup_command(self, *args):
-        output = StringIO()
-        call_command(
-            "cleanup_reflection_small_group_mirrors",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, is_active=True):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            is_active=is_active,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_reflection(
-        self,
-        *,
-        small_group=None,
-        structure_unit=None,
-        body,
-        parent=None,
-        is_hidden=False,
-        is_deleted=False,
-        visibility=ReflectionComment.VISIBILITY_GROUP,
-    ):
-        type(self).plan_counter += 1
-        plan = ReadingPlan.objects.create(
-            name=f"Mirror Cleanup Plan {self.plan_counter}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        author = User.objects.create_user(
-            username=f"mirror_author_{self.plan_counter}"
-        )
-        return ReflectionComment.objects.create(
-            user=author,
-            plan_day=day,
-            scripture_ref_key="John 1",
-            scripture_display_zh="约翰福音 第 1 章",
-            scripture_display_en="John 1",
-            visibility=visibility,
-            small_group_at_post=small_group,
-            structure_unit_at_post=structure_unit,
-            parent=parent,
-            is_hidden=is_hidden,
-            is_deleted=is_deleted,
-            body=body,
-        )
-
-    # --- Category A: group mirror rows ---------------------------------------
-
-    def test_dry_run_reports_eligible_group_mirror_without_mutating(self):
-        unit = self.create_unit("MR-DRY")
-        group = self.create_group("Mirror Dry Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="dry body"
-        )
-
-        with CaptureQueriesContext(connection) as queries:
-            stats, _lines = run_reflection_small_group_mirror_cleanup()
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertEqual(stats["mirrors_present"], 1)
-        self.assertEqual(stats["group_candidates"], 1)
-        self.assertEqual(stats["group_eligible_to_clear"], 1)
-        self.assertEqual(stats["would_clear_count"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        self.assertEqual(stats["remaining_mirror_references_after_operation"], 1)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    def test_apply_without_confirmation_refuses_and_does_not_mutate(self):
-        unit = self.create_unit("MR-NOCONFIRM")
-        group = self.create_group("Mirror No Confirm Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="noconfirm body"
-        )
-
-        with self.assertRaises(CommandError):
-            self.run_cleanup_command("--apply")
-
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    def test_confirmation_without_apply_remains_dry_run(self):
-        unit = self.create_unit("MR-CONFONLY")
-        group = self.create_group("Mirror Confirm Only Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="confonly body"
-        )
-
-        output = self.run_cleanup_command(
-            "--confirm-reflection-small-group-mirror-cleanup"
-        )
-
-        self.assertIn("mode: dry-run", output)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    def test_apply_clears_matching_group_mirror(self):
-        unit = self.create_unit("MR-APPLY")
-        group = self.create_group("Mirror Apply Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="apply body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["group_eligible_to_clear"], 1)
-        self.assertEqual(stats["cleared_count"], 1)
-        self.assertEqual(stats["remaining_mirror_references_after_operation"], 0)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.small_group_at_post_id)
-
-    def test_clearing_group_row_preserves_visibility_and_structure_snapshot(self):
-        unit = self.create_unit("MR-PRESERVE")
-        group = self.create_group("Mirror Preserve Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="preserve body"
-        )
-
-        apply_reflection_small_group_mirror_cleanup()
-
-        comment.refresh_from_db()
-        self.assertIsNone(comment.small_group_at_post_id)
-        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_GROUP)
-
-    def test_hidden_and_deleted_group_rows_are_eligible(self):
-        unit = self.create_unit("MR-HIDDEN")
-        group = self.create_group("Mirror Hidden Group", unit=unit)
-        hidden = self.create_reflection(
-            small_group=group, structure_unit=unit, body="hidden body", is_hidden=True
-        )
-        deleted = self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            body="deleted body",
-            is_deleted=True,
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["group_eligible_to_clear"], 2)
-        self.assertEqual(stats["cleared_count"], 2)
-        hidden.refresh_from_db()
-        deleted.refresh_from_db()
-        self.assertIsNone(hidden.small_group_at_post_id)
-        self.assertIsNone(deleted.small_group_at_post_id)
-        # Hidden/deleted state untouched.
-        self.assertTrue(hidden.is_hidden)
-        self.assertTrue(deleted.is_deleted)
-
-    # --- Category A skip reasons ---------------------------------------------
-
-    def test_missing_structure_snapshot_is_skipped(self):
-        group = self.create_group("Mirror Missing Snapshot Group", unit=None)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=None, body="missing body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_missing_structure_snapshot"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        self.assertEqual(stats["remaining_mirror_references_after_operation"], 1)
-        comment.refresh_from_db()
-        self.assertIsNotNone(comment.small_group_at_post_id)
-
-    def test_inactive_structure_unit_is_skipped(self):
-        inactive_unit = self.create_unit("MR-INACT", is_active=False)
-        group = self.create_group("Mirror Inactive Group", unit=inactive_unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=inactive_unit, body="inactive body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_inactive_structure_unit"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertIsNotNone(comment.small_group_at_post_id)
-
-    def test_wrong_structure_unit_type_is_skipped(self):
-        district_unit = self.create_unit(
-            "MR-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
-        )
-        group = self.create_group("Mirror Wrong Type Group", unit=district_unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=district_unit, body="wrong type body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_wrong_structure_unit_type"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertIsNotNone(comment.small_group_at_post_id)
-
-    def test_legacy_group_unmapped_is_skipped(self):
-        unit = self.create_unit("MR-UNMAPPED")
-        # Legacy group has no church_structure_unit mapping, but the snapshot is
-        # a valid small-group unit -- so the mapping check is what blocks it.
-        group = self.create_group("Mirror Unmapped Group", unit=None)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=unit, body="unmapped body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_legacy_group_unmapped"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertIsNotNone(comment.small_group_at_post_id)
-
-    def test_legacy_structure_mismatch_is_skipped(self):
-        snapshot_unit = self.create_unit("MR-SNAP")
-        other_unit = self.create_unit("MR-OTHER")
-        group = self.create_group("Mirror Mismatch Group", unit=other_unit)
-        comment = self.create_reflection(
-            small_group=group, structure_unit=snapshot_unit, body="mismatch body"
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_legacy_structure_mismatch"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    def test_group_reply_without_own_snapshot_is_skipped(self):
-        unit = self.create_unit("MR-REPLY")
-        group = self.create_group("Mirror Reply Group", unit=unit)
-        parent = self.create_reflection(
-            small_group=group, structure_unit=unit, body="reply parent body"
-        )
-        reply = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="reply body",
-            parent=parent,
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_reply_without_own_structure_snapshot"], 1)
-        # The parent was eligible and cleared; only the reply is skipped.
-        self.assertEqual(stats["group_eligible_to_clear"], 1)
-        self.assertEqual(stats["cleared_count"], 1)
-        reply.refresh_from_db()
-        self.assertEqual(reply.small_group_at_post_id, group.id)
-
-    def test_group_reply_with_own_snapshot_is_eligible(self):
-        unit = self.create_unit("MR-REPLY-OK")
-        group = self.create_group("Mirror Reply Ok Group", unit=unit)
-        parent = self.create_reflection(
-            small_group=group, structure_unit=unit, body="ok parent body"
-        )
-        reply = self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            body="ok reply body",
-            parent=parent,
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["group_eligible_to_clear"], 2)
-        self.assertEqual(stats["cleared_count"], 2)
-        reply.refresh_from_db()
-        self.assertIsNone(reply.small_group_at_post_id)
-
-    # --- Category B: non-group mirror rows -----------------------------------
-
-    def test_nongroup_row_with_structure_snapshot_is_cleared(self):
-        unit = self.create_unit("MR-CHURCH")
-        group = self.create_group("Mirror Church Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            body="church body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["nongroup_candidates"], 1)
-        self.assertEqual(stats["nongroup_eligible_to_clear"], 1)
-        self.assertEqual(stats["cleared_count"], 1)
-        comment.refresh_from_db()
-        self.assertIsNone(comment.small_group_at_post_id)
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_CHURCH)
-        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
-
-    def test_nongroup_row_without_structure_snapshot_is_skipped(self):
-        group = self.create_group("Mirror Church No Snapshot Group", unit=None)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="church no snapshot body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_small_group_mirror_cleanup()
-
-        self.assertEqual(stats["nongroup_candidates"], 1)
-        self.assertEqual(stats["skipped_nongroup_uncertain_display_context"], 1)
-        self.assertEqual(stats["cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-
-    # --- Output / idempotency / audit ----------------------------------------
-
-    def test_body_text_is_not_printed_in_verbose(self):
-        unit = self.create_unit("MR-RO")
-        group = self.create_group("Mirror Read Only Group", unit=unit)
-        self.create_reflection(
-            small_group=group, structure_unit=unit, body="SECRET_MIRROR_BODY"
-        )
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="SECRET_SKIP_BODY",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_cleanup_command("--verbose", "--limit", "20")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("mode: dry-run", output)
-        self.assertNotIn("SECRET_MIRROR_BODY", output)
-        self.assertNotIn("SECRET_SKIP_BODY", output)
-
-    def test_second_dry_run_after_apply_is_a_no_op(self):
-        unit = self.create_unit("MR-IDEM")
-        group = self.create_group("Mirror Idempotent Group", unit=unit)
-        self.create_reflection(
-            small_group=group, structure_unit=unit, body="idem group body"
-        )
-        self.create_reflection(
-            small_group=group,
-            structure_unit=unit,
-            body="idem church body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        apply_stats, _lines = apply_reflection_small_group_mirror_cleanup()
-        self.assertEqual(apply_stats["cleared_count"], 2)
-        self.assertEqual(
-            apply_stats["remaining_mirror_references_after_operation"], 0
-        )
-
-        second_stats, _lines = run_reflection_small_group_mirror_cleanup()
-        self.assertEqual(second_stats["mirrors_present"], 0)
-        self.assertEqual(second_stats["would_clear_count"], 0)
-        self.assertEqual(
-            second_stats["remaining_mirror_references_after_operation"], 0
-        )
-
-    def test_audit_reference_blockers_reduced_after_apply(self):
-        unit = self.create_unit("MR-AUDIT")
-        group = self.create_group("Mirror Audit Group", unit=unit)
-        # One eligible group mirror, one skipped non-group row (no snapshot).
-        self.create_reflection(
-            small_group=group, structure_unit=unit, body="audit group body"
-        )
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="audit church body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        before = run_legacy_structure_retirement_audit()
-        before_refs = before["stats"]["reflection_small_group_at_post_references"]
-        before_blockers = before["stats"]["small_group_retirement_blocker_references"]
-        self.assertEqual(before_refs, 2)
-
-        apply_reflection_small_group_mirror_cleanup()
-
-        after = run_legacy_structure_retirement_audit()
-        # Only the eligible group mirror was cleared; the no-snapshot church row
-        # is conservatively retained.
-        self.assertEqual(
-            after["stats"]["reflection_small_group_at_post_references"], 1
-        )
-        self.assertEqual(
-            after["stats"]["small_group_retirement_blocker_references"],
-            before_blockers - 1,
-        )
-
-
-class ReflectionNonGroupDisplayMirrorCleanupCommandTests(TestCase):
-    """REFLECTION-MIRROR.1F guarded non-group display-mirror migration tests.
-
-    Dry-run is the default. Apply requires both ``--apply`` and
-    ``--confirm-reflection-nongroup-display-mirror-cleanup``. For non-group rows
-    whose only display context is the legacy ``small_group_at_post`` mirror (no
-    ``structure_unit_at_post`` yet) and whose legacy group maps to a valid active
-    small-group unit, the command sets ``structure_unit_at_post`` to that unit and
-    clears ``small_group_at_post``. Group-visibility rows and non-group rows that
-    already carry a structure snapshot are skipped (owned by
-    ``cleanup_reflection_small_group_mirrors``). It performs no schema migration,
-    no runtime source switch, never touches ``visibility`` / ``parent`` / ``body``,
-    and never prints body text.
-    """
-
-    plan_counter = 0
-
-    def run_cleanup_command(self, *args):
-        output = StringIO()
-        call_command(
-            "cleanup_reflection_nongroup_display_mirrors",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, is_active=True):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            is_active=is_active,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_reflection(
-        self,
-        *,
-        small_group=None,
-        structure_unit=None,
-        body,
-        parent=None,
-        is_hidden=False,
-        is_deleted=False,
-        visibility=ReflectionComment.VISIBILITY_CHURCH,
-    ):
-        type(self).plan_counter += 1
-        plan = ReadingPlan.objects.create(
-            name=f"NonGroup Mirror Plan {self.plan_counter}",
-            is_active=True,
-        )
-        day = ReadingPlanDay.objects.create(
-            plan=plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        author = User.objects.create_user(
-            username=f"nongroup_author_{self.plan_counter}"
-        )
-        return ReflectionComment.objects.create(
-            user=author,
-            plan_day=day,
-            scripture_ref_key="John 1",
-            scripture_display_zh="约翰福音 第 1 章",
-            scripture_display_en="John 1",
-            visibility=visibility,
-            small_group_at_post=small_group,
-            structure_unit_at_post=structure_unit,
-            parent=parent,
-            is_hidden=is_hidden,
-            is_deleted=is_deleted,
-            body=body,
-        )
-
-    # --- 1. Dry-run reports eligible row without mutating ----------------------
-
-    def test_dry_run_reports_eligible_row_without_mutating(self):
-        unit = self.create_unit("ND-DRY")
-        group = self.create_group("NonGroup Dry Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="dry body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        with CaptureQueriesContext(connection) as queries:
-            stats, _lines = run_reflection_nongroup_display_mirror_cleanup()
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertEqual(stats["legacy_mirror_references_before"], 1)
-        self.assertEqual(stats["candidates"], 1)
-        self.assertEqual(stats["eligible_to_migrate_and_clear"], 1)
-        self.assertEqual(stats["would_migrate_and_clear_count"], 1)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        self.assertEqual(
-            stats["remaining_legacy_mirror_references_after_operation"], 1
-        )
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 2. Apply without confirmation refuses --------------------------------
-
-    def test_apply_without_confirmation_refuses_and_does_not_mutate(self):
-        unit = self.create_unit("ND-NOCONFIRM")
-        group = self.create_group("NonGroup No Confirm Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="noconfirm body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        with self.assertRaises(CommandError):
-            self.run_cleanup_command("--apply")
-
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 3. Confirmation without apply remains dry-run ------------------------
-
-    def test_confirmation_without_apply_remains_dry_run(self):
-        unit = self.create_unit("ND-CONFONLY")
-        group = self.create_group("NonGroup Confirm Only Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="confonly body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        output = self.run_cleanup_command(
-            "--confirm-reflection-nongroup-display-mirror-cleanup"
-        )
-
-        self.assertIn("mode: dry-run", output)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 4./5. Apply migrates snapshot and clears mirror; visibility intact ---
-
-    def test_apply_migrates_structure_unit_and_clears_mirror(self):
-        unit = self.create_unit("ND-APPLY")
-        group = self.create_group("NonGroup Apply Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="apply body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["eligible_to_migrate_and_clear"], 1)
-        self.assertEqual(stats["migrated_and_cleared_count"], 1)
-        self.assertEqual(
-            stats["remaining_legacy_mirror_references_after_operation"], 0
-        )
-        comment.refresh_from_db()
-        self.assertIsNone(comment.small_group_at_post_id)
-        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
-        # Visibility unchanged.
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_CHURCH)
-
-    def test_private_visibility_row_is_migrated(self):
-        unit = self.create_unit("ND-PRIV")
-        group = self.create_group("NonGroup Private Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="private body",
-            visibility=ReflectionComment.VISIBILITY_PRIVATE,
-        )
-
-        apply_reflection_nongroup_display_mirror_cleanup()
-
-        comment.refresh_from_db()
-        self.assertIsNone(comment.small_group_at_post_id)
-        self.assertEqual(comment.structure_unit_at_post_id, unit.id)
-        self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_PRIVATE)
-
-    # --- 6. Body text unchanged and never printed -----------------------------
-
-    def test_body_text_unchanged_and_not_printed(self):
-        unit = self.create_unit("ND-BODY")
-        group = self.create_group("NonGroup Body Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="SECRET_NONGROUP_BODY",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        output = self.run_cleanup_command("--verbose", "--limit", "20")
-        self.assertIn("mode: dry-run", output)
-        self.assertNotIn("SECRET_NONGROUP_BODY", output)
-
-        apply_reflection_nongroup_display_mirror_cleanup()
-        comment.refresh_from_db()
-        self.assertEqual(comment.body, "SECRET_NONGROUP_BODY")
-
-    # --- 7. Parent unchanged --------------------------------------------------
-
-    def test_parent_unchanged_for_reply(self):
-        unit = self.create_unit("ND-PARENT")
-        group = self.create_group("NonGroup Parent Group", unit=unit)
-        parent = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="parent body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-        reply = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="reply body",
-            parent=parent,
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        apply_reflection_nongroup_display_mirror_cleanup()
-
-        reply.refresh_from_db()
-        self.assertEqual(reply.parent_id, parent.id)
-        self.assertIsNone(reply.small_group_at_post_id)
-        self.assertEqual(reply.structure_unit_at_post_id, unit.id)
-
-    # --- 8. Group-visibility rows are skipped ---------------------------------
-
-    def test_group_visibility_row_is_skipped(self):
-        unit = self.create_unit("ND-GROUP")
-        group = self.create_group("NonGroup Group Visibility Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="group body",
-            visibility=ReflectionComment.VISIBILITY_GROUP,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_group_visibility"], 1)
-        self.assertEqual(stats["candidates"], 0)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 9. Non-group rows with existing structure snapshot are skipped -------
-
-    def test_nongroup_row_with_existing_structure_snapshot_is_skipped(self):
-        unit = self.create_unit("ND-EXISTING")
-        other_unit = self.create_unit("ND-EXISTING-OTHER")
-        group = self.create_group("NonGroup Existing Group", unit=unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=other_unit,
-            body="existing body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["skipped_existing_structure_snapshot"], 1)
-        self.assertEqual(stats["candidates"], 0)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        comment.refresh_from_db()
-        # Untouched: this row is owned by cleanup_reflection_small_group_mirrors.
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertEqual(comment.structure_unit_at_post_id, other_unit.id)
-
-    # --- 10. Missing legacy mapping is skipped --------------------------------
-
-    def test_legacy_group_unmapped_is_skipped(self):
-        group = self.create_group("NonGroup Unmapped Group", unit=None)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="unmapped body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["candidates"], 1)
-        self.assertEqual(stats["skipped_legacy_group_unmapped"], 1)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 11. Inactive mapped unit is skipped ----------------------------------
-
-    def test_inactive_mapped_unit_is_skipped(self):
-        inactive_unit = self.create_unit("ND-INACT", is_active=False)
-        group = self.create_group("NonGroup Inactive Group", unit=inactive_unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="inactive body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["candidates"], 1)
-        self.assertEqual(stats["skipped_inactive_mapped_unit"], 1)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 12. Wrong-type mapped unit is skipped --------------------------------
-
-    def test_wrong_mapped_unit_type_is_skipped(self):
-        district_unit = self.create_unit(
-            "ND-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
-        )
-        group = self.create_group("NonGroup Wrong Type Group", unit=district_unit)
-        comment = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="wrong type body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["candidates"], 1)
-        self.assertEqual(stats["skipped_wrong_mapped_unit_type"], 1)
-        self.assertEqual(stats["migrated_and_cleared_count"], 0)
-        comment.refresh_from_db()
-        self.assertEqual(comment.small_group_at_post_id, group.id)
-        self.assertIsNone(comment.structure_unit_at_post_id)
-
-    # --- 13. Hidden / deleted eligible rows are handled safely ----------------
-
-    def test_hidden_and_deleted_rows_are_eligible(self):
-        unit = self.create_unit("ND-HIDDEN")
-        group = self.create_group("NonGroup Hidden Group", unit=unit)
-        hidden = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="hidden body",
-            is_hidden=True,
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-        deleted = self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="deleted body",
-            is_deleted=True,
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-
-        self.assertEqual(stats["eligible_to_migrate_and_clear"], 2)
-        self.assertEqual(stats["migrated_and_cleared_count"], 2)
-        hidden.refresh_from_db()
-        deleted.refresh_from_db()
-        self.assertIsNone(hidden.small_group_at_post_id)
-        self.assertIsNone(deleted.small_group_at_post_id)
-        self.assertEqual(hidden.structure_unit_at_post_id, unit.id)
-        self.assertEqual(deleted.structure_unit_at_post_id, unit.id)
-        # Hidden/deleted state untouched.
-        self.assertTrue(hidden.is_hidden)
-        self.assertTrue(deleted.is_deleted)
-
-    # --- 14. Replies handled only from their own mapping (no parent inference) -
-
-    def test_reply_uses_only_its_own_mapping(self):
-        unit = self.create_unit("ND-REPLY")
-        other_unit = self.create_unit("ND-REPLY-OTHER")
-        parent_group = self.create_group("NonGroup Reply Parent Group", unit=unit)
-        reply_group = self.create_group(
-            "NonGroup Reply Own Group", unit=other_unit
-        )
-        parent = self.create_reflection(
-            small_group=parent_group,
-            structure_unit=None,
-            body="reply parent body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-        reply = self.create_reflection(
-            small_group=reply_group,
-            structure_unit=None,
-            body="reply own body",
-            parent=parent,
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        apply_reflection_nongroup_display_mirror_cleanup()
-
-        reply.refresh_from_db()
-        # Reply migrated to its own group's unit, not the parent's.
-        self.assertIsNone(reply.small_group_at_post_id)
-        self.assertEqual(reply.structure_unit_at_post_id, other_unit.id)
-
-    # --- 15. Idempotency ------------------------------------------------------
-
-    def test_second_dry_run_after_apply_is_a_no_op(self):
-        unit = self.create_unit("ND-IDEM")
-        group = self.create_group("NonGroup Idempotent Group", unit=unit)
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="idem body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        apply_stats, _lines = apply_reflection_nongroup_display_mirror_cleanup()
-        self.assertEqual(apply_stats["migrated_and_cleared_count"], 1)
-        self.assertEqual(
-            apply_stats["remaining_legacy_mirror_references_after_operation"], 0
-        )
-
-        second_stats, _lines = run_reflection_nongroup_display_mirror_cleanup()
-        self.assertEqual(second_stats["legacy_mirror_references_before"], 0)
-        self.assertEqual(second_stats["candidates"], 0)
-        self.assertEqual(second_stats["would_migrate_and_clear_count"], 0)
-        self.assertEqual(
-            second_stats["remaining_legacy_mirror_references_after_operation"], 0
-        )
-
-    # --- 16. Audit blockers reduced after apply -------------------------------
-
-    def test_audit_reference_blockers_cleared_after_apply(self):
-        unit = self.create_unit("ND-AUDIT")
-        group = self.create_group("NonGroup Audit Group", unit=unit)
-        # The lone non-group display-context row (no structure snapshot yet).
-        self.create_reflection(
-            small_group=group,
-            structure_unit=None,
-            body="audit body",
-            visibility=ReflectionComment.VISIBILITY_CHURCH,
-        )
-
-        before = run_legacy_structure_retirement_audit()
-        before_refs = before["stats"]["reflection_small_group_at_post_references"]
-        before_blockers = before["stats"]["small_group_retirement_blocker_references"]
-        self.assertEqual(before_refs, 1)
-
-        apply_reflection_nongroup_display_mirror_cleanup()
-
-        after = run_legacy_structure_retirement_audit()
-        self.assertEqual(
-            after["stats"]["reflection_small_group_at_post_references"], 0
-        )
-        self.assertEqual(
-            after["stats"]["small_group_retirement_blocker_references"],
-            before_blockers - 1,
-        )

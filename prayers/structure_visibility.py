@@ -54,7 +54,13 @@ class GroupPrayerWriteContext:
 
 
 def resolve_legacy_small_group_mirror(unit):
-    """Return the lone active legacy SmallGroup mapped to ``unit`` or ``None``."""
+    """Return the lone active legacy SmallGroup mapped to ``unit`` or ``None``.
+
+    PRAYER-MIRROR.1A: this helper is no longer called by the normal app write
+    path. ``PrayerRequest.small_group_at_post`` is no longer stamped on
+    create/edit. The helper is retained as diagnostic / admin / future guarded
+    cleanup support only and carries no live runtime authority.
+    """
     if unit is None or unit.id is None:
         return None
 
@@ -85,9 +91,11 @@ def get_user_group_prayer_write_context(user, target_date=None):
             reason_code="membership_unit_not_active_small_group"
         )
 
+    # PRAYER-MIRROR.1A: the legacy SmallGroup mirror is no longer resolved or
+    # stamped on the normal write path. ``legacy_small_group`` stays ``None``;
+    # ``structure_unit`` is the canonical group-prayer snapshot.
     return GroupPrayerWriteContext(
         structure_unit=membership_unit,
-        legacy_small_group=resolve_legacy_small_group_mirror(membership_unit),
         reason_code="ok",
     )
 

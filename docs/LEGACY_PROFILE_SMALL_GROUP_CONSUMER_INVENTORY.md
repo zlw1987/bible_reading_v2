@@ -33,19 +33,25 @@ table removal. Cleanup tooling should remain until target DBs are audited after
 any separately approved cleanup apply, and legacy object tables remain last.
 
 The schema-prep candidate list includes `PrayerRequest.small_group_at_post`
-(`blocked_by_app_write`, data counter `prayer_request_small_group_at_post`).
-Unlike the reflection mirror, the normal prayer group create/edit path still
-writes this legacy `SmallGroup` FK mirror (`prayers.views` via
-`prayers.structure_visibility.resolve_legacy_small_group_mirror`), so it is a
-remaining `SmallGroup` mirror/write surface that **blocks final `SmallGroup`
-table retirement**. Ordinary group-prayer visibility is already structure-native
-(`PrayerRequest.structure_unit_at_post` plus active primary
-`ChurchStructureMembership`), so the mirror carries no live runtime authority of
-its own. LEGACY-SCHEMA-PREP.1A does not remove it, stop the write, or add
-cleanup; a later **PRAYER-MIRROR** slice should first stop the normal app-level
-mirror write (mirroring REFLECTION-MIRROR.1D), then add guarded cleanup if
-appropriate, then remove admin/display/diagnostic surfaces before any field or
-table removal. No field/table removal is approved by schema-prep.
+(data counter `prayer_request_small_group_at_post`). **PRAYER-MIRROR.1A stops the
+normal app-level writes to `PrayerRequest.small_group_at_post`.** The prayer
+group create/edit path no longer stamps or re-stamps this legacy `SmallGroup` FK
+mirror; `prayers.structure_visibility.resolve_legacy_small_group_mirror` is no
+longer called on the runtime write path and is retained as
+diagnostic/admin/future-cleanup support only.
+`PrayerRequest.structure_unit_at_post` plus active primary
+`ChurchStructureMembership` remains the canonical group-prayer visibility
+snapshot; the mirror is now legacy display/history/admin/cleanup context only,
+not an access source. New group prayers leave `small_group_at_post` null, and
+existing stored mirror values are preserved on ordinary edit and are **not**
+cleared in this slice. Because the app-level write is gone, the schema-prep audit
+reclassifies the candidate away from `blocked_by_app_write` (to `blocked_by_data`
+while rows remain populated, otherwise `blocked_by_display_or_admin`). A later
+**PRAYER-MIRROR.1B** should add guarded dry-run-first cleanup of stored values if
+appropriate (mirroring REFLECTION-MIRROR.1D), then remove admin/display/
+diagnostic surfaces before any field or table removal. Field/schema retirement
+remains a later, separately approved slice; no field/table removal is approved by
+schema-prep.
 
 Use the new execution plan as the current checklist for legacy-field/table retirement sequencing. Keep this consumer inventory as the detailed historical/current-state map of which consumers are switched, stored-only, diagnostic-only, retired app runtime, or still legacy bridge/runtime.
 
@@ -73,7 +79,7 @@ These consumers have already moved to active primary `ChurchStructureMembership`
 | Consumer | Current source | Notes |
 | --- | --- | --- |
 | ServiceEvent audience rows | Active primary `ChurchStructureMembership` | `events.models.ServiceEvent.can_be_seen_by()` delegates to `ServiceEvent._audience_scope_allows()` when `ServiceEventAudienceScope` rows exist, and the selector layer uses membership-core matching after CS-CORE.2B-A. |
-| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. `PrayerRequest.small_group_at_post` carries no ordinary runtime authority, but unlike the reflection mirror the normal prayer group create/edit path **still writes** this legacy `SmallGroup` FK mirror (`prayers.views` via `prayers.structure_visibility.resolve_legacy_small_group_mirror`), so it remains a `SmallGroup` table-retirement blocker (`blocked_by_app_write` in LEGACY-SCHEMA-PREP.1A) pending a later PRAYER-MIRROR slice that stops the write before adding cleanup. `Profile.small_group` no longer grants ordinary group-prayer access. |
+| Prayer group request visibility | `PrayerRequest.structure_unit_at_post` + active primary `ChurchStructureMembership` | After PRAYER-STRUCT.1A, ordinary group-prayer visibility matches the request's structure-unit snapshot against active primary membership. After **PRAYER-MIRROR.1A** the normal prayer group create/edit path no longer writes `PrayerRequest.small_group_at_post` (new group prayers leave it null; existing values preserved on edit, not cleared); `prayers.structure_visibility.resolve_legacy_small_group_mirror` is no longer on the runtime write path and is diagnostic/admin/future-cleanup support only. The mirror is now legacy display/history/admin/cleanup context with no ordinary runtime authority; the schema-prep audit reclassifies it from `blocked_by_app_write` to `blocked_by_data` (while rows remain) / `blocked_by_display_or_admin`. A later PRAYER-MIRROR.1B adds guarded cleanup before field/table retirement. `Profile.small_group` no longer grants ordinary group-prayer access. |
 | Bible Study v2 `BibleStudyMeeting` ordinary-member visibility | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | After BS-STRUCT.2A, `studies.models.BibleStudyMeeting.can_be_seen_by()` treats audience rows as the V2 runtime source of truth. Zero-row V2 meetings fail closed for ordinary users; `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only; `Profile.small_group` alone grants no v2 meeting visibility. |
 | `/studies/` and Today v2 meeting pre-filter | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `studies.views.get_v2_landing_context()` filters through audience rows before the final `BibleStudyMeeting.can_be_seen_by()` gate. Today reuses this context through `reading.views`; zero-row V2 meetings are not surfaced to ordinary users. |
 | Bible Study v2 role and worship user pickers | `BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership` | `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` use membership-core matching against the meeting audience rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates. |
@@ -178,7 +184,7 @@ Do not migrate these casually as part of small-group cleanup:
 
 ## Recommended Next Slices
 
-Completed after this inventory baseline: CS-CORE.3B moved Bible Study v2 role/worship user filtering to membership-core matching while preserving the saved-user edit exception; PRAYER-STRUCT.1A moved Prayer group visibility to structure snapshots plus membership; BS-STRUCT.2A retired Bible Study V2 zero-row ordinary-user fallback and made meeting audience rows the runtime source of truth for visibility, Today, and role/worship pickers.
+Completed after this inventory baseline: CS-CORE.3B moved Bible Study v2 role/worship user filtering to membership-core matching while preserving the saved-user edit exception; PRAYER-STRUCT.1A moved Prayer group visibility to structure snapshots plus membership; PRAYER-MIRROR.1A stopped the normal app-level write to `PrayerRequest.small_group_at_post` while preserving structure-native visibility and existing stored mirror values; BS-STRUCT.2A retired Bible Study V2 zero-row ordinary-user fallback and made meeting audience rows the runtime source of truth for visibility, Today, and role/worship pickers.
 
 1. **Legacy `BibleStudySession` retirement/purge slices.** CS-CORE.3C completed the decision record (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`): legacy sessions are no longer promoted in normal or staff UI, and legacy V1 `BibleStudySession` is a retirement candidate. CS-CORE.3D froze app-level creation through `/studies/new/`; CS-CORE.3F froze app-level edit/delete/worship mutations; BS-V1-RETIRE.1A retired direct V1 app detail/list runtime for ordinary users and managers. BS-V1-PURGE.1A adds `purge_legacy_bible_study_v1_sessions`, which is dry-run by default and deletes V1 rows only when staff explicitly run `.venv\Scripts\python.exe manage.py purge_legacy_bible_study_v1_sessions --apply --confirm-v1-bible-study-retirement`. The implementation task should not run `--apply` against local/dev data. The command does not delete V2 `BibleStudyMeeting` data, does not change V2 behavior, and does not remove V1 models/tables; schema cleanup remains a later migration slice.
 2. **Reading progress and reflection privacy migration sequence.** CS-CORE.4A completed the docs-only privacy migration plan, CS-CORE.4B completed the read-only diagnostic command `audit_reading_privacy_membership_readiness`, CS-CORE.4C locked the current privacy invariants in tests, CS-CORE.4D added a nullable write-only `structure_unit_at_post` snapshot for future reflection records, and CS-CORE.4E added a comparison-only group-progress membership-core shadow (`reading/group_progress_shadow.py`, internal `group_progress_shadow` view context, not rendered) that reuses the existing read-only audit command's roster divergence categories, CS-CORE.4E.1 added the read-only `audit_group_progress_shadow` gate command, CS-CORE.4F.1 switched only the group-progress visible roster (`member_rows`) to the membership-core candidate, and CS-CORE.4F.2 switched only the no-`?group=` default selected group to a permission-fenced membership-core candidate (used only when already inside the legacy-accessible list), both after zero-drift gate evidence. CS-CORE.4G.2 then switched the ordinary-member group reflection **read path** (`can_be_seen_by`, `get_visible_reflection_filter`, `passage_wall` group tab), and CS-CORE.4G.3 switched the reflection **write path / form option-gating** (`ReflectionCommentForm`, `ReflectionCommentEditForm`, `add_comment`, `edit_comment` via `get_user_group_reflection_write_context`), both to `structure_unit_at_post` + active primary `ChurchStructureMembership`. CS-CORE.2D-A added the structure-aware role-scope foundation and CS-CORE.2D-B switched the group-progress permission and accessible group list to structure-aware role scopes + membership-core own group, so `Profile.small_group` no longer grants group-progress access (explicit `?group=` is now gated by the new structure-aware accessible list). (The earlier uncommitted CS-CORE.CLOSE.1 "pause / no further switches" draft was superseded before commit; see the Migration Status section above.)

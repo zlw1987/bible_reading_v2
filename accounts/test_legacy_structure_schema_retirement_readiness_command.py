@@ -8,7 +8,9 @@ from django.utils import timezone
 
 from accounts.management.commands.audit_legacy_structure_schema_retirement_readiness import (
     Command,
+    STATUS_DATA,
     STATUS_DIAGNOSTIC,
+    STATUS_DISPLAY,
     STATUS_HISTORICAL,
     STATUS_RUNTIME,
     STATUS_WRITE,
@@ -274,12 +276,17 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             0,
         )
 
-    def test_prayer_request_mirror_is_app_write_blocker(self):
+    def test_prayer_request_mirror_is_no_longer_app_write_blocker(self):
+        # PRAYER-MIRROR.1A stopped the normal app-level mirror write, so the
+        # candidate must no longer be classified as blocked_by_app_write. With
+        # no stored mirror rows in this fixture, it falls back to the
+        # display/admin classification and remains a removal candidate.
         audit = run_audit()
         candidate = _candidate(audit, "PrayerRequest.small_group_at_post")
 
-        self.assertEqual(candidate["schema_removal_status"], STATUS_WRITE)
-        self.assertGreater(len(candidate["app_write_references"]), 0)
+        self.assertEqual(candidate["app_write_references"], ())
+        self.assertEqual(candidate["schema_removal_status"], STATUS_DISPLAY)
+        self.assertNotEqual(candidate["schema_removal_status"], STATUS_WRITE)
         # Ordinary group-prayer visibility is structure-native, so the legacy
         # mirror carries no live runtime authority of its own.
         self.assertEqual(candidate["live_runtime_references"], ())
@@ -295,8 +302,9 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
 
         self.assertEqual(after, before + 1)
         self.assertEqual(candidate["data_blocker_count"], after)
-        # A populated mirror still reports as app-write blocked, not data blocked.
-        self.assertEqual(candidate["schema_removal_status"], STATUS_WRITE)
+        # With the app-level write stopped, a still-populated mirror now reports
+        # as data-blocked rather than app-write blocked.
+        self.assertEqual(candidate["schema_removal_status"], STATUS_DATA)
 
     def test_command_does_not_mutate_prayer_request(self):
         prayer = self.make_group_prayer(title="READONLY_PRAYER", small_group=self.group)

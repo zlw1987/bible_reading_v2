@@ -160,11 +160,13 @@ def prayer_list(request):
             if prayer.visibility == PrayerRequest.VISIBILITY_GROUP:
                 write_context = get_user_group_prayer_write_context(request.user)
                 prayer.structure_unit_at_post = write_context.structure_unit
-                prayer.small_group_at_post = write_context.legacy_small_group
             else:
                 prayer.structure_unit_at_post = None
-                prayer.small_group_at_post = None
 
+            # PRAYER-MIRROR.1A: the legacy ``small_group_at_post`` mirror is no
+            # longer written here. ``structure_unit_at_post`` is the canonical
+            # group-prayer snapshot; new group prayers leave the legacy mirror
+            # null.
             prayer.save()
 
             messages.success(request, message_text(request, "prayer_posted"))
@@ -288,11 +290,14 @@ def edit_prayer_request(request, prayer_id):
             if edited_prayer.visibility == PrayerRequest.VISIBILITY_GROUP:
                 write_context = get_user_group_prayer_write_context(request.user)
                 edited_prayer.structure_unit_at_post = write_context.structure_unit
-                edited_prayer.small_group_at_post = write_context.legacy_small_group
             else:
                 edited_prayer.structure_unit_at_post = None
-                edited_prayer.small_group_at_post = None
 
+            # PRAYER-MIRROR.1A: do not re-stamp or clear the legacy
+            # ``small_group_at_post`` mirror on edit. Existing stored mirror
+            # values are preserved as legacy display/history context only;
+            # ``structure_unit_at_post`` remains the canonical visibility
+            # snapshot.
             edited_prayer.save()
 
             messages.success(request, message_text(request, "prayer_updated"))

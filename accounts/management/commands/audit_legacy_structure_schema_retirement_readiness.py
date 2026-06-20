@@ -659,11 +659,6 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "prayers.PrayerRequest",
         "field_name": "small_group_at_post",
         "candidate_type": "bridge-field",
-        "app_write_references": _refs(
-            "prayers.views group-prayer create/edit writes the legacy "
-            "small_group_at_post mirror via "
-            "prayers.structure_visibility.resolve_legacy_small_group_mirror",
-        ),
         "app_read_references": _refs(
             "prayers.views list/detail select_related legacy mirror display",
         ),
@@ -673,19 +668,24 @@ CANDIDATE_DEFINITIONS = (
         "template_display_references": _refs(
             "prayer list/detail legacy small_group label (display only)",
         ),
+        "diagnostic_cleanup_references": _refs(
+            "prayers.structure_visibility.resolve_legacy_small_group_mirror "
+            "(diagnostic/admin/future-cleanup helper, no longer a write path)",
+        ),
         "test_fixture_references": _refs(
             "prayer group-visibility / legacy mirror fixtures",
         ),
         "migration_history_references": _refs("prayers migrations"),
         "data_counter": "prayer_request_small_group_at_post",
         "recommended_next_action": (
-            "Remaining legacy SmallGroup mirror/write surface that blocks final "
-            "SmallGroup table retirement. Ordinary group-prayer visibility "
-            "already uses PrayerRequest.structure_unit_at_post, so a later "
-            "PRAYER-MIRROR slice should first stop the normal app-level mirror "
-            "write, then add guarded cleanup/backfill if needed, then remove "
-            "admin/display/diagnostic surfaces before any field/table removal. "
-            "Do not remove in LEGACY-SCHEMA-PREP.1A."
+            "PRAYER-MIRROR.1A stopped the normal app-level write to this legacy "
+            "SmallGroup mirror; ordinary group-prayer visibility uses "
+            "PrayerRequest.structure_unit_at_post plus active primary membership. "
+            "The mirror is now legacy display/history/admin/cleanup context only. "
+            "A later PRAYER-MIRROR.1B should add guarded dry-run-first cleanup of "
+            "stored values if appropriate, then remove admin/display/diagnostic "
+            "surfaces before any field/table removal. Do not clear existing rows "
+            "or remove the field in this slice."
         ),
         "suggested_removal_phase": "phase 1 then phase 2 then phase 4",
     },

@@ -38,8 +38,9 @@ Legacy fields still exist:
 * `MinistryContext`
 * ServiceEvent legacy scope fields
 * Bible Study legacy/mirror fields
-* role legacy fields
 * reflection/prayer legacy mirror fields
+
+Removed role legacy fields (do not reintroduce): `ChurchRoleAssignment.district` and `ChurchRoleAssignment.small_group` were removed in `ROLE-FIELD-RETIRE.1A` (migration `accounts/0011`); scoped-role runtime uses `ChurchRoleAssignment.structure_unit` only.
 
 Do not delete legacy fields/models/tables without a separately approved field/table retirement slice.
 

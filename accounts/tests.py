@@ -3245,21 +3245,19 @@ class ChurchRolePermissionTests(TestCase):
         self.assertEqual(self.group.district, self.district)
         self.assertIn(self.group, self.district.small_groups.all())
 
-    def test_global_scope_rejects_scoped_fields(self):
+    def test_global_scope_rejects_structure_unit(self):
+        # ROLE-FIELD-RETIRE.1A: only structure_unit remains scoped; global roles
+        # must leave it blank.
         assignment = ChurchRoleAssignment(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_PASTOR,
             scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
-            district=self.district,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
 
         with self.assertRaises(ValidationError) as context:
             assignment.full_clean()
 
-        self.assertIn("district", context.exception.message_dict)
-        self.assertIn("small_group", context.exception.message_dict)
         self.assertIn("structure_unit", context.exception.message_dict)
 
     def test_district_scope_requires_structure_unit(self):
@@ -3267,7 +3265,6 @@ class ChurchRolePermissionTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=self.district,
         )
 
         with self.assertRaises(ValidationError) as context:
@@ -3280,7 +3277,6 @@ class ChurchRolePermissionTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
 
         with self.assertRaises(ValidationError) as context:
@@ -3340,7 +3336,6 @@ class ChurchRolePermissionTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=self.district,
             structure_unit=self.district_unit,
         )
 
@@ -3354,7 +3349,6 @@ class ChurchRolePermissionTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
 
@@ -7456,7 +7450,7 @@ class StructureRoleScopeFoundationTests(TestCase):
             name="Small Group Z",
         )
 
-    def test_scoped_assignment_with_structure_unit_does_not_require_legacy_fields(self):
+    def test_scoped_assignment_with_structure_unit(self):
         assignment = ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
@@ -7465,40 +7459,19 @@ class StructureRoleScopeFoundationTests(TestCase):
         )
 
         assignment.refresh_from_db()
-        self.assertIsNone(assignment.small_group_id)
         self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
 
-    def test_scoped_assignment_with_only_legacy_small_group_fails_validation(self):
-        group = SmallGroup.objects.create(
-            name="Legacy Only SG", church_structure_unit=self.group_unit
-        )
-        assignment = ChurchRoleAssignment(
-            user=self.user,
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
-        )
-
-        with self.assertRaises(ValidationError) as context:
-            assignment.full_clean()
-
-        self.assertIn("structure_unit", context.exception.message_dict)
-
     def test_scoped_duplicate_identity_uses_structure_unit(self):
-        first_group = SmallGroup.objects.create(name="Duplicate Legacy SG A")
-        second_group = SmallGroup.objects.create(name="Duplicate Legacy SG B")
         ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=first_group,
             structure_unit=self.group_unit,
         )
         duplicate = ChurchRoleAssignment(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=second_group,
             structure_unit=self.group_unit,
         )
 
@@ -7525,27 +7498,21 @@ class StructureRoleScopeFoundationTests(TestCase):
         self.assertIn("role", context.exception.message_dict)
 
     def test_assignment_can_be_created_with_structure_unit(self):
-        group = SmallGroup.objects.create(name="Mapped SG")
         assignment = ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
             structure_unit=self.group_unit,
         )
 
         assignment.refresh_from_db()
         self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
 
-    def test_resolver_returns_explicit_structure_unit_first(self):
-        group = SmallGroup.objects.create(
-            name="Mapped SG2", church_structure_unit=self.sibling_group_unit
-        )
+    def test_resolver_returns_explicit_structure_unit(self):
         assignment = ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
             structure_unit=self.group_unit,
         )
 
@@ -7553,43 +7520,14 @@ class StructureRoleScopeFoundationTests(TestCase):
             get_role_assignment_structure_unit(assignment), self.group_unit
         )
 
-    def test_resolver_ignores_legacy_small_group_unit_after_retirement(self):
-        # ROLE-RETIRE.1B: the legacy small_group runtime fallback is retired, so a
-        # scoped row with only a mapped legacy small_group resolves to None.
-        group = SmallGroup.objects.create(
-            name="Mapped SG3", church_structure_unit=self.group_unit
-        )
+    def test_resolver_returns_none_for_scoped_row_missing_structure_unit(self):
+        # ROLE-FIELD-RETIRE.1A: scoped runtime access is explicit-structure_unit
+        # only. A scoped row with no structure_unit (which normal validation would
+        # reject) fails closed at resolution time.
         assignment = create_role_assignment_without_validation(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
-        )
-
-        self.assertIsNone(get_role_assignment_structure_unit(assignment))
-
-    def test_resolver_ignores_legacy_district_unit_after_retirement(self):
-        # ROLE-RETIRE.1B: the legacy district runtime fallback is retired, so a
-        # scoped row with only a mapped legacy district resolves to None.
-        district = District.objects.create(
-            name="Mapped District", church_structure_unit=self.district_unit
-        )
-        assignment = create_role_assignment_without_validation(
-            user=self.user,
-            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
-        )
-
-        self.assertIsNone(get_role_assignment_structure_unit(assignment))
-
-    def test_resolver_returns_none_for_unmapped_legacy_scope(self):
-        group = SmallGroup.objects.create(name="Unmapped SG")
-        assignment = create_role_assignment_without_validation(
-            user=self.user,
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
         )
 
         self.assertIsNone(get_role_assignment_structure_unit(assignment))
@@ -7608,7 +7546,6 @@ class StructureRoleScopeFoundationTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=SmallGroup.objects.create(name="Same SG"),
             structure_unit=self.group_unit,
         )
 
@@ -7617,14 +7554,10 @@ class StructureRoleScopeFoundationTests(TestCase):
         )
 
     def test_scope_includes_descendant_small_group_under_district_unit(self):
-        district = District.objects.create(
-            name="Cover District", church_structure_unit=self.district_unit
-        )
         assignment = ChurchRoleAssignment.objects.create(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
             structure_unit=self.district_unit,
         )
 
@@ -7633,17 +7566,13 @@ class StructureRoleScopeFoundationTests(TestCase):
             assignment_scope_includes_unit(assignment, self.group_unit)
         )
 
-    def test_scope_fails_closed_for_legacy_only_district_after_retirement(self):
-        # ROLE-RETIRE.1B: a legacy-only district scope (no structure_unit) no
+    def test_scope_fails_closed_for_scoped_district_missing_structure_unit(self):
+        # ROLE-FIELD-RETIRE.1A: a scoped district row with no structure_unit no
         # longer covers its descendant units at runtime.
-        district = District.objects.create(
-            name="Legacy Cover District", church_structure_unit=self.district_unit
-        )
         assignment = create_role_assignment_without_validation(
             user=self.user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
         )
 
         self.assertIsNone(get_role_assignment_structure_unit(assignment))
@@ -7659,7 +7588,6 @@ class StructureRoleScopeFoundationTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=SmallGroup.objects.create(name="Excl SG"),
             structure_unit=self.group_unit,
         )
 
@@ -7680,14 +7608,13 @@ class StructureRoleScopeFoundationTests(TestCase):
             user=self.user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=SmallGroup.objects.create(name="NoUnit SG"),
         )
 
         # Missing target unit fails closed.
         self.assertFalse(
             assignment_scope_includes_unit(unresolved, None)
         )
-        # Unresolved assignment scope (no explicit unit, unmapped legacy) fails closed.
+        # Unresolved assignment scope (no explicit structure_unit) fails closed.
         self.assertFalse(
             assignment_scope_includes_unit(unresolved, self.group_unit)
         )
@@ -7714,42 +7641,33 @@ class StructureRoleScopeFoundationTests(TestCase):
         )
 
     def test_progress_permission_uses_structure_aware_role_scope(self):
-        # ROLE-RETIRE.1B: progress access now requires an explicit structure_unit.
-        # A scoped role with only a mapped legacy SmallGroup no longer grants
-        # access; the same role with structure_unit set does.
+        # ROLE-FIELD-RETIRE.1A: progress access requires an explicit
+        # structure_unit. A scoped role with structure_unit set grants access to
+        # the mapped group; a scoped role with no structure_unit fails closed.
         mapped_group = SmallGroup.objects.create(
             name="Mapped Perm SG", church_structure_unit=self.group_unit
         )
-        create_role_assignment_without_validation(
-            user=self.user,
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=mapped_group,
-        )
-        # Legacy-only mapped scope no longer grants access after retirement.
-        self.assertEqual(list(get_accessible_progress_groups(self.user)), [])
 
         explicit_user = User.objects.create_user(username="explicit_perm_user")
         ChurchRoleAssignment.objects.create(
             user=explicit_user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=mapped_group,
             structure_unit=self.group_unit,
         )
         self.assertEqual(
             list(get_accessible_progress_groups(explicit_user)), [mapped_group]
         )
 
-        unmapped_user = User.objects.create_user(username="unmapped_perm_user")
-        unmapped_group = SmallGroup.objects.create(name="Unmapped Perm SG")
+        missing_unit_user = User.objects.create_user(username="missing_unit_perm_user")
         create_role_assignment_without_validation(
-            user=unmapped_user,
+            user=missing_unit_user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=unmapped_group,
         )
-        self.assertEqual(list(get_accessible_progress_groups(unmapped_user)), [])
+        self.assertEqual(
+            list(get_accessible_progress_groups(missing_unit_user)), []
+        )
 
 
 class StructureRoleScopeAuditCommandTests(TestCase):
@@ -7781,13 +7699,10 @@ class StructureRoleScopeAuditCommandTests(TestCase):
 
     def test_command_is_read_only(self):
         unit = self.create_unit("AUDIT-RO")
-        group = SmallGroup.objects.create(
-            name="Audit RO SG", church_structure_unit=unit
-        )
         self.create_assignment(
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
+            structure_unit=unit,
         )
         before = {
             "assignments": ChurchRoleAssignment.objects.count(),
@@ -7818,66 +7733,41 @@ class StructureRoleScopeAuditCommandTests(TestCase):
             },
         )
 
-    def test_mapped_small_group_scope_is_ready(self):
+    def test_explicit_structure_unit_scope_is_ready(self):
         unit = self.create_unit("AUDIT-MAP-SG")
-        group = SmallGroup.objects.create(
-            name="Audit Mapped SG", church_structure_unit=unit
-        )
         self.create_assignment(
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
+            structure_unit=unit,
         )
 
         output = self.run_command()
 
         self.assert_summary_count(output, "assignments_checked", 1)
-        self.assert_summary_count(output, "legacy_small_group_scope_mapped", 1)
-        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 0)
+        self.assert_summary_count(output, "assignments_with_structure_unit", 1)
+        self.assert_summary_count(output, "assignments_missing_structure_unit", 0)
         self.assert_summary_count(output, "assignments_ready_for_structure_scope", 1)
         self.assert_summary_count(
             output, "assignments_not_ready_for_structure_scope", 0
         )
 
-    def test_unmapped_small_group_scope_is_not_ready(self):
-        group = SmallGroup.objects.create(name="Audit Unmapped SG")
+    def test_scoped_assignment_missing_structure_unit_is_not_ready(self):
+        # A scoped row with no structure_unit (which normal validation rejects)
+        # fails closed in the audit.
         self.create_assignment(
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
         )
 
         output = self.run_command("--verbose")
 
-        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 1)
+        self.assert_summary_count(output, "assignments_missing_structure_unit", 1)
         self.assert_summary_count(
             output, "assignments_not_ready_for_structure_scope", 1
         )
-        self.assertIn("reason=legacy_small_group_scope_unmapped", output)
-
-    def test_mapped_and_unmapped_district_scopes_counted(self):
-        unit = self.create_unit("AUDIT-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT)
-        mapped_district = District.objects.create(
-            name="Audit Mapped District", church_structure_unit=unit
+        self.assertIn(
+            "reason=assignments_not_ready_for_structure_scope", output
         )
-        unmapped_district = District.objects.create(name="Audit Unmapped District")
-        self.create_assignment(
-            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=mapped_district,
-        )
-        other = User.objects.create_user(username="audit_role_user2")
-        self.create_assignment(
-            user=other,
-            role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=unmapped_district,
-        )
-
-        output = self.run_command()
-
-        self.assert_summary_count(output, "legacy_district_scope_mapped", 1)
-        self.assert_summary_count(output, "legacy_district_scope_unmapped", 1)
 
     def test_global_assignment_counted_and_ready(self):
         ChurchRoleAssignment.objects.create(
@@ -7892,36 +7782,12 @@ class StructureRoleScopeAuditCommandTests(TestCase):
         self.assert_summary_count(output, "assignments_missing_structure_unit", 1)
         self.assert_summary_count(output, "assignments_ready_for_structure_scope", 1)
 
-    def test_mismatch_between_structure_unit_and_legacy_mapping(self):
-        unit_a = self.create_unit("AUDIT-MIS-A")
-        unit_b = self.create_unit("AUDIT-MIS-B")
-        group = SmallGroup.objects.create(
-            name="Audit Mismatch SG", church_structure_unit=unit_a
-        )
-        self.create_assignment(
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
-            structure_unit=unit_b,
-        )
-
-        output = self.run_command("--verbose")
-
-        self.assert_summary_count(output, "legacy_scope_mismatch_structure_unit", 1)
-        self.assert_summary_count(
-            output, "assignments_not_ready_for_structure_scope", 1
-        )
-        self.assertIn("reason=legacy_scope_mismatch_structure_unit", output)
-
     def test_inactive_structure_unit_counted_and_not_ready(self):
         inactive_unit = self.create_unit("AUDIT-INACT", is_active=False)
-        group = SmallGroup.objects.create(
-            name="Audit Inactive SG", church_structure_unit=inactive_unit
-        )
         self.create_assignment(
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
+            structure_unit=inactive_unit,
         )
 
         output = self.run_command("--verbose")
@@ -7936,11 +7802,9 @@ class StructureRoleScopeAuditCommandTests(TestCase):
         fellowship_unit = self.create_unit(
             "AUDIT-WT-FEL", unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP
         )
-        group = SmallGroup.objects.create(name="Audit WrongType SG")
         self.create_assignment(
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=group,
             structure_unit=fellowship_unit,
         )
 
@@ -7954,18 +7818,18 @@ class StructureRoleScopeAuditCommandTests(TestCase):
 
     def test_limit_caps_verbose_rows(self):
         for index in range(3):
-            group = SmallGroup.objects.create(name=f"Audit Limit SG {index}")
             user = User.objects.create_user(username=f"audit_limit_user_{index}")
             self.create_assignment(
                 user=user,
                 role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
                 scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-                small_group=group,
             )
 
         output = self.run_command("--verbose", "--limit", "1")
 
-        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 3)
+        self.assert_summary_count(
+            output, "assignments_not_ready_for_structure_scope", 3
+        )
         self.assertIn("(stopped at --limit 1)", output)
 
 
@@ -8146,7 +8010,6 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
 
@@ -8159,7 +8022,6 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=self.district,
             structure_unit=self.district_unit,
         )
 
@@ -8173,61 +8035,41 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.assertTrue(can_view_group_progress_for(leader, self.sibling_group))
         self.assertFalse(can_view_group_progress_for(leader, self.other_group))
 
-    def test_legacy_small_group_scope_fails_closed_after_retirement(self):
-        # ROLE-RETIRE.1B: a scoped role with only a mapped legacy small_group and no
-        # structure_unit no longer grants progress access.
-        leader = self.create_user("perm2db_legacy_group_leader")
+    def test_scoped_group_role_missing_structure_unit_fails_closed(self):
+        # ROLE-FIELD-RETIRE.1A: a scoped group-leader role with no structure_unit
+        # (which normal validation rejects) no longer grants progress access.
+        leader = self.create_user("perm2db_missing_unit_group_leader")
         create_role_assignment_without_validation(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
 
         self.assertEqual(self.accessible_ids(leader), set())
         self.assertFalse(can_view_group_progress_for(leader, self.group))
 
-    def test_legacy_district_scope_fails_closed_after_retirement(self):
-        # ROLE-RETIRE.1B: a scoped role with only a mapped legacy district and no
+    def test_scoped_district_role_missing_structure_unit_fails_closed(self):
+        # ROLE-FIELD-RETIRE.1A: a scoped district-leader role with no
         # structure_unit no longer grants progress access to descendant groups.
-        leader = self.create_user("perm2db_legacy_district_leader")
+        leader = self.create_user("perm2db_missing_unit_district_leader")
         create_role_assignment_without_validation(
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=self.district,
         )
 
         self.assertEqual(self.accessible_ids(leader), set())
         self.assertFalse(can_view_group_progress_for(leader, self.group))
         self.assertFalse(can_view_group_progress_for(leader, self.sibling_group))
 
-    def test_structure_unit_followed_when_legacy_fields_disagree(self):
-        # ROLE-RETIRE.1B: when structure_unit is set, runtime follows it and ignores
-        # legacy fields even if they point elsewhere.
-        leader = self.create_user("perm2db_disagree_leader")
-        ChurchRoleAssignment.objects.create(
-            user=leader,
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            # Legacy small_group maps to other_group_unit, structure_unit to group_unit.
-            small_group=self.other_group,
-            structure_unit=self.group_unit,
-        )
-
-        self.assertEqual(self.accessible_ids(leader), {self.group.id})
-        self.assertTrue(can_view_group_progress_for(leader, self.group))
-        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
-
-    def test_legacy_fields_not_mutated_by_permission_checks(self):
-        # ROLE-RETIRE.1B read-only invariant: evaluating progress permissions never
-        # writes structure_unit or touches the legacy scope fields.
+    def test_permission_checks_do_not_mutate_role_assignments(self):
+        # Read-only invariant: evaluating progress permissions never writes
+        # structure_unit or any other role-assignment field.
         leader = self.create_user("perm2db_readonly_leader")
         assignment = create_role_assignment_without_validation(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
 
         with CaptureQueriesContext(connection) as queries:
@@ -8242,20 +8084,6 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.assertEqual(write_sql, [])
         assignment.refresh_from_db()
         self.assertIsNone(assignment.structure_unit_id)
-        self.assertEqual(assignment.small_group_id, self.group.id)
-
-    def test_unmapped_legacy_role_scope_fails_closed(self):
-        leader = self.create_user("perm2db_unmapped_leader")
-        unmapped_group = SmallGroup.objects.create(name="Perm2DB Unmapped Group")
-        create_role_assignment_without_validation(
-            user=leader,
-            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=unmapped_group,
-        )
-
-        self.assertEqual(self.accessible_ids(leader), set())
-        self.assertFalse(can_view_group_progress_for(leader, unmapped_group))
 
     # --- staff / global + agreement ---------------------------------------------
 
@@ -8284,7 +8112,6 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
 
@@ -8295,337 +8122,3 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
                 candidate.id in accessible,
             )
 
-
-class StructureRoleScopeBackfillCommandTests(TestCase):
-    """CS-CORE.2D-C: backfill ChurchRoleAssignment.structure_unit from legacy scopes.
-
-    Data-migration tooling. Dry-run by default; ``--apply`` writes only
-    ``structure_unit`` on ready rows. Legacy district / small_group fields are
-    never cleared, runtime permission behavior is unchanged, and ordinary
-    ChurchStructureMembership is never read.
-    """
-
-    def setUp(self):
-        self.user = User.objects.create_user(username="backfill_role_user")
-        self.district_unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
-            code="BF-DIST",
-            name="Backfill District",
-        )
-        self.group_unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="BF-SG",
-            name="Backfill Small Group",
-            parent=self.district_unit,
-        )
-        self.other_unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="BF-SG-OTHER",
-            name="Backfill Other Small Group",
-        )
-
-    def run_command(self, *args):
-        output = StringIO()
-        call_command("backfill_structure_role_scopes", *args, stdout=output)
-        return output.getvalue()
-
-    def assert_summary_count(self, output, key, count):
-        self.assertIn(f"{key}: {count}", output)
-
-    def make_group_assignment(self, group, *, structure_unit=None, user=None):
-        kwargs = {
-            "user": user or self.user,
-            "role": ChurchRoleAssignment.ROLE_GROUP_LEADER,
-            "scope_type": ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            "small_group": group,
-            "structure_unit": structure_unit,
-        }
-        if structure_unit is None:
-            return create_role_assignment_without_validation(**kwargs)
-        return ChurchRoleAssignment.objects.create(**kwargs)
-
-    def make_district_assignment(self, district, *, structure_unit=None, user=None):
-        kwargs = {
-            "user": user or self.user,
-            "role": ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
-            "scope_type": ChurchRoleAssignment.SCOPE_DISTRICT,
-            "district": district,
-            "structure_unit": structure_unit,
-        }
-        if structure_unit is None:
-            return create_role_assignment_without_validation(**kwargs)
-        return ChurchRoleAssignment.objects.create(**kwargs)
-
-    # --- dry-run writes nothing -------------------------------------------------
-
-    def test_dry_run_writes_nothing_for_ready_small_group_scope(self):
-        group = SmallGroup.objects.create(
-            name="BF Ready SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "missing_structure_unit_ready", 1)
-        self.assert_summary_count(output, "would_update", 1)
-        self.assert_summary_count(output, "updated", 0)
-        self.assert_summary_count(output, "dry_run", 1)
-        self.assertIn("MODE: dry-run", output)
-
-    def test_dry_run_writes_nothing_for_ready_district_scope(self):
-        district = District.objects.create(
-            name="BF Ready District", church_structure_unit=self.district_unit
-        )
-        assignment = self.make_district_assignment(district)
-
-        before = assignment.structure_unit_id
-        output = self.run_command()
-
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, before)
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "missing_structure_unit_ready", 1)
-        self.assert_summary_count(output, "would_update", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    # --- apply writes ready rows -----------------------------------------------
-
-    def test_apply_sets_structure_unit_for_ready_small_group_scope(self):
-        group = SmallGroup.objects.create(
-            name="BF Apply SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
-        # Legacy field is untouched.
-        self.assertEqual(assignment.small_group_id, group.id)
-        self.assert_summary_count(output, "updated", 1)
-        self.assert_summary_count(output, "would_update", 0)
-        self.assert_summary_count(output, "dry_run", 0)
-        self.assertIn("MODE: apply", output)
-
-    def test_apply_sets_structure_unit_for_ready_district_scope(self):
-        district = District.objects.create(
-            name="BF Apply District", church_structure_unit=self.district_unit
-        )
-        assignment = self.make_district_assignment(district)
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.district_unit.id)
-        self.assertEqual(assignment.district_id, district.id)
-        self.assert_summary_count(output, "updated", 1)
-
-    # --- existing structure_unit is never overwritten ---------------------------
-
-    def test_existing_matching_structure_unit_not_updated(self):
-        group = SmallGroup.objects.create(
-            name="BF Match SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group, structure_unit=self.group_unit)
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_command("--apply")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
-        self.assert_summary_count(output, "already_set_matching", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    def test_existing_mismatched_structure_unit_not_overwritten(self):
-        group = SmallGroup.objects.create(
-            name="BF Mismatch SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group, structure_unit=self.other_unit)
-
-        output = self.run_command("--apply", "--verbose")
-
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.other_unit.id)
-        self.assert_summary_count(output, "mismatch_existing_structure_unit", 1)
-        self.assert_summary_count(output, "updated", 0)
-        self.assertIn("reason=mismatch_existing_structure_unit", output)
-
-    def test_already_set_structure_unit_without_legacy_mapping(self):
-        group = SmallGroup.objects.create(name="BF NoMap SG")  # unmapped legacy group
-        assignment = self.make_group_assignment(group, structure_unit=self.group_unit)
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
-        self.assert_summary_count(output, "already_set_no_legacy_mapping", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    # --- global roles stay None -------------------------------------------------
-
-    def test_global_assignment_remains_none(self):
-        assignment = ChurchRoleAssignment.objects.create(
-            user=self.user,
-            role=ChurchRoleAssignment.ROLE_PASTOR,
-            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
-        )
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "global_assignments", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    # --- not-ready rows are skipped --------------------------------------------
-
-    def test_unmapped_small_group_scope_skipped(self):
-        group = SmallGroup.objects.create(name="BF Unmapped SG")
-        assignment = self.make_group_assignment(group)
-
-        output = self.run_command("--apply", "--verbose")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "legacy_small_group_scope_unmapped", 1)
-        self.assert_summary_count(output, "skipped_not_ready", 1)
-        self.assert_summary_count(output, "updated", 0)
-        self.assertIn("reason=legacy_scope_unmapped", output)
-
-    def test_unmapped_district_scope_skipped(self):
-        district = District.objects.create(name="BF Unmapped District")
-        assignment = self.make_district_assignment(district)
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "legacy_district_scope_unmapped", 1)
-        self.assert_summary_count(output, "skipped_not_ready", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    def test_inactive_mapped_unit_skipped(self):
-        inactive_unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="BF-INACT",
-            name="Backfill Inactive",
-            is_active=False,
-        )
-        group = SmallGroup.objects.create(
-            name="BF Inactive SG", church_structure_unit=inactive_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        output = self.run_command("--apply", "--verbose")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "legacy_scope_structure_unit_inactive", 1)
-        self.assert_summary_count(output, "skipped_not_ready", 1)
-        self.assert_summary_count(output, "updated", 0)
-        self.assertIn("reason=legacy_scope_structure_unit_inactive", output)
-
-    def test_wrong_type_mapped_unit_skipped_for_small_group_scope(self):
-        # A district-type unit is too broad to back a small-group scope.
-        group = SmallGroup.objects.create(
-            name="BF WrongType SG", church_structure_unit=self.district_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        output = self.run_command("--apply", "--verbose")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "legacy_scope_structure_unit_wrong_type", 1)
-        self.assert_summary_count(output, "skipped_not_ready", 1)
-        self.assert_summary_count(output, "updated", 0)
-        self.assertIn("reason=legacy_scope_structure_unit_wrong_type", output)
-
-    def test_wrong_type_mapped_unit_skipped_for_district_scope(self):
-        # A small-group-type unit is too narrow to back a district scope.
-        district = District.objects.create(
-            name="BF WrongType District", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_district_assignment(district)
-
-        output = self.run_command("--apply")
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-        self.assert_summary_count(output, "legacy_scope_structure_unit_wrong_type", 1)
-        self.assert_summary_count(output, "skipped_not_ready", 1)
-        self.assert_summary_count(output, "updated", 0)
-
-    # --- idempotency ------------------------------------------------------------
-
-    def test_apply_is_idempotent(self):
-        group = SmallGroup.objects.create(
-            name="BF Idempotent SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        first = self.run_command("--apply")
-        self.assert_summary_count(first, "updated", 1)
-        assignment.refresh_from_db()
-        self.assertEqual(assignment.structure_unit_id, self.group_unit.id)
-
-        with CaptureQueriesContext(connection) as queries:
-            second = self.run_command("--apply")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assert_summary_count(second, "updated", 0)
-        self.assert_summary_count(second, "already_set_matching", 1)
-
-    def test_repeated_dry_run_changes_nothing(self):
-        group = SmallGroup.objects.create(
-            name="BF Repeat SG", church_structure_unit=self.group_unit
-        )
-        assignment = self.make_group_assignment(group)
-
-        self.run_command()
-        self.run_command()
-
-        assignment.refresh_from_db()
-        self.assertIsNone(assignment.structure_unit_id)
-
-    # --- output distinguishes dry-run vs apply ----------------------------------
-
-    def test_output_distinguishes_dry_run_and_apply(self):
-        dry = self.run_command()
-        applied = self.run_command("--apply")
-
-        self.assertIn("MODE: dry-run", dry)
-        self.assertIn("dry-run: nothing was written", dry)
-        self.assertIn("MODE: apply", applied)
-        self.assertIn("apply mode: only structure_unit was written", applied)
-
-    def test_limit_caps_verbose_rows(self):
-        for index in range(3):
-            group = SmallGroup.objects.create(name=f"BF Limit SG {index}")
-            user = User.objects.create_user(username=f"bf_limit_user_{index}")
-            self.make_group_assignment(group, user=user)
-
-        output = self.run_command("--verbose", "--limit", "1")
-
-        self.assert_summary_count(output, "skipped_not_ready", 3)
-        self.assertIn("(stopped at --limit 1)", output)

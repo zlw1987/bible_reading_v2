@@ -117,7 +117,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             user=user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
         before_counts = {
@@ -137,8 +136,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             ),
             "role_scope": (
                 assignment.scope_type,
-                assignment.district_id,
-                assignment.small_group_id,
                 assignment.structure_unit_id,
             ),
         }
@@ -178,8 +175,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(
             (
                 assignment.scope_type,
-                assignment.district_id,
-                assignment.small_group_id,
                 assignment.structure_unit_id,
             ),
             before_values["role_scope"],
@@ -295,6 +290,34 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertNotIn(
             "prayer_request_small_group_at_post", audit["data_counts"]
         )
+
+    def test_role_legacy_fields_are_historical_after_field_removal(self):
+        # ROLE-FIELD-RETIRE.1A removed ChurchRoleAssignment.district /
+        # small_group after ROLE-RETIRE.1B retired the runtime fallback and
+        # local/dev audit confirmed zero populated legacy role values. Only
+        # immutable historical migrations still name them, so the candidates are
+        # now classified as historical-only with no active schema blocker, and
+        # neither field has a queryable data counter.
+        audit = run_audit()
+        for name in (
+            "ChurchRoleAssignment.district (removed)",
+            "ChurchRoleAssignment.small_group (removed)",
+        ):
+            candidate = _candidate(audit, name)
+            self.assertEqual(candidate["live_runtime_references"], ())
+            self.assertEqual(candidate["app_write_references"], ())
+            self.assertEqual(candidate["app_read_references"], ())
+            self.assertEqual(candidate["admin_references"], ())
+            self.assertEqual(candidate["template_display_references"], ())
+            self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+            self.assertEqual(candidate["data_blocker_count"], 0)
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+            self.assertFalse(
+                candidate["schema_removal_status"].startswith("blocked_by_")
+            )
+
+        self.assertNotIn("role_district", audit["data_counts"])
+        self.assertNotIn("role_small_group", audit["data_counts"])
 
     def test_command_does_not_mutate_prayer_request(self):
         prayer = self.make_group_prayer(title="READONLY_PRAYER")

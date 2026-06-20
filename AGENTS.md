@@ -103,8 +103,8 @@ Current migrated/runtime-retired state:
 * V1 `BibleStudySession` is not being migrated to membership-core.
 * V1 purge tooling exists as guarded, dry-run-first cleanup.
 * V2 generation-key backfill tooling exists for structure-native `generation_key` / safe `anchor_unit`; local/dev V2 meetings have already been backfilled, and target DBs should be verified with dry-run/audit before any apply; local/dev V2 meetings have already been backfilled, and target DBs should be verified with dry-run/audit before any apply.
-* Role scoped validation is structure-unit-native through `ChurchRoleAssignment.structure_unit`.
-* Legacy role `district` / `small_group` fields are compatibility/admin/display/audit/backfill/rollback context only.
+* Role scoped validation is structure-unit-native through `ChurchRoleAssignment.structure_unit`, the sole scoped-role runtime source.
+* `ChurchRoleAssignment.district` and `ChurchRoleAssignment.small_group` were removed in `ROLE-FIELD-RETIRE.1A` (migration `accounts/0011`). The `backfill_structure_role_scopes` command and the `resolve_role_assignment_structure_unit_for_diagnostics` helper were retired with them; `audit_structure_role_scopes` now validates explicit `structure_unit` readiness only. Only immutable historical migrations still name these fields.
 * Group progress migrated consumers no longer receive ordinary access from `Profile.small_group`.
 * Reflection group read/write paths use structure snapshots and active primary membership.
 * `Profile.small_group`, `SmallGroup`, `District`, and `MinistryContext` still exist and must not be deleted until audits/backfills/purges and field-level retirement slices prove safe.

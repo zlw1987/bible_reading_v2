@@ -425,20 +425,6 @@ class ChurchRoleAssignment(models.Model):
     )
     role = models.CharField(max_length=32, choices=ROLE_CHOICES)
     scope_type = models.CharField(max_length=32, choices=SCOPE_CHOICES)
-    district = models.ForeignKey(
-        District,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="role_assignments",
-    )
-    small_group = models.ForeignKey(
-        SmallGroup,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="role_assignments",
-    )
     structure_unit = models.ForeignKey(
         "ChurchStructureUnit",
         null=True,
@@ -448,9 +434,8 @@ class ChurchRoleAssignment(models.Model):
         help_text=(
             "Canonical structure scope for non-global role assignments. Leave "
             "blank for global roles. District/small-group scoped roles require "
-            "an explicit active ChurchStructureUnit; legacy district / "
-            "small_group fields are compatibility/admin/display/audit/backfill/"
-            "rollback context only."
+            "an explicit active ChurchStructureUnit and are the sole runtime "
+            "source for scoped-role access."
         ),
     )
     is_active = models.BooleanField(default=True)
@@ -472,10 +457,6 @@ class ChurchRoleAssignment(models.Model):
                 structure_unit = None
 
         if self.scope_type == self.SCOPE_GLOBAL:
-            if self.district_id:
-                errors["district"] = "Global roles cannot be scoped to a district."
-            if self.small_group_id:
-                errors["small_group"] = "Global roles cannot be scoped to a small group."
             if self.structure_unit_id:
                 errors["structure_unit"] = (
                     "Global roles cannot be scoped to a structure unit."
@@ -496,8 +477,6 @@ class ChurchRoleAssignment(models.Model):
                 errors["structure_unit"] = (
                     "District-scoped roles cannot use a small-group structure unit."
                 )
-            if self.small_group_id:
-                errors["small_group"] = "District-scoped roles cannot also use a small group."
         elif self.scope_type == self.SCOPE_SMALL_GROUP:
             if not self.structure_unit_id:
                 errors["structure_unit"] = (
@@ -514,8 +493,6 @@ class ChurchRoleAssignment(models.Model):
                 errors["structure_unit"] = (
                     "Small-group-scoped roles require a small-group structure unit."
                 )
-            if self.district_id:
-                errors["district"] = "Small-group-scoped roles cannot also use a district."
 
         if self.user_id and self.role and self.scope_type and self.is_active:
             duplicate_filter = {

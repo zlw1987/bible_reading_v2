@@ -68,7 +68,6 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_v2_meeting_small_group_references",
                 "bible_study_v1_session_small_group_references",
                 "reflection_small_group_at_post_references",
-                "role_assignment_small_group_references",
                 "service_event_small_group_references",
                 "bible_study_series_small_group_references",
                 "small_group_retirement_blocker_references",
@@ -88,7 +87,6 @@ SECTION_KEYS = OrderedDict(
                 "service_events_with_district",
                 "bible_study_series_with_district",
                 "bible_study_sessions_with_district",
-                "role_assignments_with_district",
                 "district_retirement_blocker_references",
             ),
         ),
@@ -161,17 +159,13 @@ SECTION_KEYS = OrderedDict(
             ),
         ),
         (
-            "Role legacy fields",
+            "Role structure scope",
             (
                 "role_assignments_checked",
                 "role_scoped_assignments",
                 "role_scoped_assignments_with_structure_unit",
                 "role_scoped_assignments_missing_structure_unit",
-                "role_assignments_with_legacy_district_populated",
-                "role_assignments_with_legacy_small_group_populated",
-                "role_assignments_with_any_legacy_field_populated",
-                "role_assignments_legacy_structure_unit_mismatch",
-                "role_legacy_field_retirement_blockers",
+                "role_scoped_assignments_structure_unit_retirement_blockers",
             ),
         ),
         (
@@ -196,7 +190,7 @@ BLOCKER_KEYS = (
     "service_event_zero_row_visible_active_safety_blockers",
     "bible_study_legacy_retirement_blockers",
     "reflection_small_group_at_post_removal_blockers",
-    "role_legacy_field_retirement_blockers",
+    "role_scoped_assignments_structure_unit_retirement_blockers",
 )
 
 DETAIL_KEYS = (
@@ -221,8 +215,7 @@ DETAIL_KEYS = (
     "bible_study_generation_key_missing",
     "reflection_missing_structure_snapshot",
     "reflection_snapshot_mismatch",
-    "role_legacy_field_populated",
-    "role_legacy_structure_unit_mismatch",
+    "role_scoped_assignment_missing_structure_unit",
 )
 
 DIAGNOSTIC_BACKFILL_COMMANDS = (
@@ -252,11 +245,7 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
     ),
     (
         "accounts.management.commands.audit_structure_role_scopes",
-        "diagnostic/audit/backfill support",
-    ),
-    (
-        "accounts.management.commands.backfill_structure_role_scopes",
-        "backfill support; dry-run by default",
+        "read-only diagnostic validating explicit structure_unit role scope",
     ),
     (
         "events.management.commands.audit_service_event_fallback_retirement_readiness",
@@ -449,20 +438,6 @@ def _bible_study_session_has_legacy_scope_fields(session):
     )
 
 
-def _role_legacy_unit(assignment):
-    if (
-        assignment.scope_type == ChurchRoleAssignment.SCOPE_SMALL_GROUP
-        and assignment.small_group is not None
-    ):
-        return assignment.small_group.church_structure_unit
-    if (
-        assignment.scope_type == ChurchRoleAssignment.SCOPE_DISTRICT
-        and assignment.district is not None
-    ):
-        return assignment.district.church_structure_unit
-    return None
-
-
 def _append(details, key, line):
     details[key].append(line)
 
@@ -618,9 +593,6 @@ def _scan_small_groups(stats, details):
     stats["reflection_small_group_at_post_references"] = (
         ReflectionComment.objects.filter(small_group_at_post__isnull=False).count()
     )
-    stats["role_assignment_small_group_references"] = (
-        ChurchRoleAssignment.objects.filter(small_group__isnull=False).count()
-    )
     stats["service_event_small_group_references"] = (
         ServiceEvent.objects.filter(small_group__isnull=False).count()
     )
@@ -633,7 +605,6 @@ def _scan_small_groups(stats, details):
         + stats["bible_study_v2_meeting_small_group_references"]
         + stats["bible_study_v1_session_small_group_references"]
         + stats["reflection_small_group_at_post_references"]
-        + stats["role_assignment_small_group_references"]
         + stats["service_event_small_group_references"]
         + stats["bible_study_series_small_group_references"]
     )
@@ -699,16 +670,12 @@ def _scan_districts(stats, details):
     stats["bible_study_sessions_with_district"] = (
         BibleStudySession.objects.filter(district__isnull=False).count()
     )
-    stats["role_assignments_with_district"] = (
-        ChurchRoleAssignment.objects.filter(district__isnull=False).count()
-    )
     stats["district_retirement_blocker_references"] = (
         stats["districts_total"]
         + stats["small_groups_with_district"]
         + stats["service_events_with_district"]
         + stats["bible_study_series_with_district"]
         + stats["bible_study_sessions_with_district"]
-        + stats["role_assignments_with_district"]
     )
 
 
@@ -1042,15 +1009,12 @@ def _scan_reflections(stats, details):
 
 
 def _scan_roles(stats, details):
+    # ROLE-FIELD-RETIRE.1A removed ChurchRoleAssignment.district / small_group.
+    # Scoped-role runtime now uses the explicit structure_unit only, so the only
+    # remaining role retirement blocker is a non-global scoped assignment that is
+    # missing structure_unit (fail-closed).
     assignments = (
-        ChurchRoleAssignment.objects.select_related(
-            "user",
-            "district",
-            "district__church_structure_unit",
-            "small_group",
-            "small_group__church_structure_unit",
-            "structure_unit",
-        )
+        ChurchRoleAssignment.objects.select_related("user", "structure_unit")
         .all()
         .order_by("user__username", "role", "scope_type", "id")
     )
@@ -1063,57 +1027,22 @@ def _scan_roles(stats, details):
                 stats["role_scoped_assignments_with_structure_unit"] += 1
             else:
                 stats["role_scoped_assignments_missing_structure_unit"] += 1
+                _append(
+                    details,
+                    "role_scoped_assignment_missing_structure_unit",
+                    (
+                        "assignment_id={assignment_id} username={username} "
+                        "role={role} scope_type={scope_type}"
+                    ).format(
+                        assignment_id=assignment.id,
+                        username=assignment.user.get_username(),
+                        role=assignment.role,
+                        scope_type=assignment.scope_type,
+                    ),
+                )
 
-        has_legacy_district = bool(assignment.district_id)
-        has_legacy_small_group = bool(assignment.small_group_id)
-        if has_legacy_district:
-            stats["role_assignments_with_legacy_district_populated"] += 1
-        if has_legacy_small_group:
-            stats["role_assignments_with_legacy_small_group_populated"] += 1
-        if has_legacy_district or has_legacy_small_group:
-            stats["role_assignments_with_any_legacy_field_populated"] += 1
-            _append(
-                details,
-                "role_legacy_field_populated",
-                (
-                    "assignment_id={assignment_id} username={username} "
-                    "scope_type={scope_type} district={district} small_group={small_group} "
-                    "structure_unit={structure_unit}"
-                ).format(
-                    assignment_id=assignment.id,
-                    username=assignment.user.get_username(),
-                    scope_type=assignment.scope_type,
-                    district=_district_label(assignment.district),
-                    small_group=_group_label(assignment.small_group),
-                    structure_unit=_unit_label(assignment.structure_unit),
-                ),
-            )
-
-        legacy_unit = _role_legacy_unit(assignment)
-        if (
-            assignment.structure_unit_id
-            and legacy_unit is not None
-            and assignment.structure_unit_id != legacy_unit.id
-        ):
-            stats["role_assignments_legacy_structure_unit_mismatch"] += 1
-            _append(
-                details,
-                "role_legacy_structure_unit_mismatch",
-                (
-                    "assignment_id={assignment_id} username={username} "
-                    "legacy_unit={legacy_unit} structure_unit={structure_unit}"
-                ).format(
-                    assignment_id=assignment.id,
-                    username=assignment.user.get_username(),
-                    legacy_unit=_unit_label(legacy_unit),
-                    structure_unit=_unit_label(assignment.structure_unit),
-                ),
-            )
-
-    stats["role_legacy_field_retirement_blockers"] = (
-        stats["role_assignments_with_any_legacy_field_populated"]
-        + stats["role_scoped_assignments_missing_structure_unit"]
-        + stats["role_assignments_legacy_structure_unit_mismatch"]
+    stats["role_scoped_assignments_structure_unit_retirement_blockers"] = (
+        stats["role_scoped_assignments_missing_structure_unit"]
     )
 
 

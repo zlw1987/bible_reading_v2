@@ -16,7 +16,6 @@ from copy import deepcopy
 from django.core.management.base import BaseCommand, CommandError
 
 from accounts.models import (
-    ChurchRoleAssignment,
     District,
     MinistryContext,
     Profile,
@@ -184,7 +183,7 @@ CANDIDATE_DEFINITIONS = (
         "candidate_type": "model/table",
         "app_read_references": _refs(
             "legacy hierarchy bridge",
-            "ServiceEvent/BibleStudy/role stored context",
+            "ServiceEvent/BibleStudy stored context",
         ),
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
@@ -233,7 +232,6 @@ CANDIDATE_DEFINITIONS = (
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
             "cleanup_legacy_structure_parent_links",
-            "backfill_structure_role_scopes diagnostics",
         ),
         "test_fixture_references": _refs("district mapping fixtures"),
         "migration_history_references": _refs("accounts migrations"),
@@ -293,44 +291,44 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "phase 4 then phase 5",
     },
     {
-        "candidate_name": "ChurchRoleAssignment.district",
+        "candidate_name": "ChurchRoleAssignment.district (removed)",
         "model_table": "accounts.ChurchRoleAssignment",
         "field_name": "district",
         "candidate_type": "field",
-        "admin_references": _refs("accounts.admin.ChurchRoleAssignmentAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "audit_structure_role_scopes diagnostic candidate unit",
-            "backfill_structure_role_scopes",
-            "audit_legacy_structure_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("role-scope migration fixtures"),
-        "migration_history_references": _refs("accounts migrations"),
-        "data_counter": "role_district",
+        "migration_history_references": _refs("accounts migrations (field added then removed)"),
         "recommended_next_action": (
-            "Confirm target DB has no populated legacy role fields and retire "
-            "admin/display/audit surfaces before field removal."
+            "Completed. ROLE-FIELD-RETIRE.1A removed the "
+            "ChurchRoleAssignment.district model field after ROLE-RETIRE.1B "
+            "retired its runtime fallback and local/dev audit confirmed zero "
+            "populated legacy role fields and zero scoped assignments missing "
+            "structure_unit. Scoped-role runtime now uses ChurchRoleAssignment."
+            "structure_unit only; the backfill_structure_role_scopes command was "
+            "retired with the field because its only source no longer exists. "
+            "Only immutable historical migrations still name it; no active schema "
+            "blocker remains. This did not affect Profile.small_group, the "
+            "SmallGroup / District tables, or any other module."
         ),
-        "suggested_removal_phase": "phase 1 then phase 2",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "ChurchRoleAssignment.small_group",
+        "candidate_name": "ChurchRoleAssignment.small_group (removed)",
         "model_table": "accounts.ChurchRoleAssignment",
         "field_name": "small_group",
         "candidate_type": "field",
-        "admin_references": _refs("accounts.admin.ChurchRoleAssignmentAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "audit_structure_role_scopes diagnostic candidate unit",
-            "backfill_structure_role_scopes",
-            "audit_legacy_structure_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("role-scope migration fixtures"),
-        "migration_history_references": _refs("accounts migrations"),
-        "data_counter": "role_small_group",
+        "migration_history_references": _refs("accounts migrations (field added then removed)"),
         "recommended_next_action": (
-            "Confirm target DB has no populated legacy role fields and retire "
-            "admin/display/audit surfaces before field removal."
+            "Completed. ROLE-FIELD-RETIRE.1A removed the "
+            "ChurchRoleAssignment.small_group model field after ROLE-RETIRE.1B "
+            "retired its runtime fallback and local/dev audit confirmed zero "
+            "populated legacy role fields and zero scoped assignments missing "
+            "structure_unit. Scoped-role runtime now uses ChurchRoleAssignment."
+            "structure_unit only; the backfill_structure_role_scopes command was "
+            "retired with the field because its only source no longer exists. "
+            "Only immutable historical migrations still name it; no active schema "
+            "blocker remains. This did not affect Profile.small_group, the "
+            "SmallGroup / District tables, or any other module."
         ),
-        "suggested_removal_phase": "phase 1 then phase 2",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "ServiceEvent.scope_type",
@@ -733,12 +731,8 @@ def _data_counts():
         "ministry_context_mapping": MinistryContext.objects.filter(
             church_structure_unit__isnull=False
         ).count(),
-        "role_district": ChurchRoleAssignment.objects.filter(
-            district__isnull=False
-        ).count(),
-        "role_small_group": ChurchRoleAssignment.objects.filter(
-            small_group__isnull=False
-        ).count(),
+        # ROLE-FIELD-RETIRE.1A removed ChurchRoleAssignment.district /
+        # small_group, so there is no longer a queryable data counter for them.
         "service_event_scope_type": ServiceEvent.objects.exclude(
             scope_type=ServiceEvent.SCOPE_GLOBAL
         ).count(),

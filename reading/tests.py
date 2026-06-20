@@ -1889,7 +1889,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             user=self.viewer,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
         self.same_group_member = self.create_user("progress_same", group=self.group)
@@ -2058,7 +2057,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.other_group,
             structure_unit=self.other_group_unit,
         )
 
@@ -2081,7 +2079,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=self.district,
             structure_unit=self.district_unit,
         )
 
@@ -2950,7 +2947,6 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
             user=user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
             structure_unit=district.church_structure_unit,
         )
 
@@ -4301,7 +4297,6 @@ class BibleReadingFlowTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=assigned_group,
             structure_unit=assigned_unit,
         )
 
@@ -4351,7 +4346,6 @@ class BibleReadingFlowTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
             structure_unit=district_unit,
         )
 
@@ -4416,7 +4410,6 @@ class BibleReadingFlowTests(TestCase):
             user=leader,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            district=district,
             structure_unit=district_unit,
         )
 

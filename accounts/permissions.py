@@ -87,13 +87,7 @@ def get_user_active_role_assignments(user):
 
     return (
         ChurchRoleAssignment.objects.filter(user=user, is_active=True)
-        .select_related(
-            "district",
-            "district__church_structure_unit",
-            "small_group",
-            "small_group__church_structure_unit",
-            "structure_unit",
-        )
+        .select_related("structure_unit")
         .order_by("role", "scope_type")
     )
 
@@ -106,14 +100,10 @@ def get_role_assignment_structure_unit(assignment):
     ``structure_unit``). Ordinary ``ChurchStructureMembership`` is intentionally
     never consulted here: belonging does not decide role scope.
 
-    ROLE-RETIRE.1B: the legacy ``district`` / ``small_group`` runtime fallback was
-    retired. Runtime scoped role access now uses ``structure_unit`` only, so a
-    non-global scoped assignment with a missing ``structure_unit`` fails closed.
-    The legacy ``district`` / ``small_group`` fields are retained only for
-    stored/admin/display/audit/backfill/rollback context and must not grant
-    runtime access; diagnostics that still need to derive a candidate unit from
-    those legacy fields use
-    :func:`resolve_role_assignment_structure_unit_for_diagnostics` instead.
+    ROLE-RETIRE.1B retired the legacy ``district`` / ``small_group`` runtime
+    fallback, and ROLE-FIELD-RETIRE.1A removed those legacy fields entirely.
+    Runtime scoped role access now uses ``structure_unit`` only, so a non-global
+    scoped assignment with a missing ``structure_unit`` fails closed.
 
     Introduced as the CS-CORE.2D-A foundation; CS-CORE.2D-B used it to drive the
     group-progress permission / accessible group list at runtime
@@ -124,37 +114,6 @@ def get_role_assignment_structure_unit(assignment):
 
     if assignment.structure_unit_id:
         return assignment.structure_unit
-
-    return None
-
-
-def resolve_role_assignment_structure_unit_for_diagnostics(assignment):
-    """Diagnostic-only structure-unit resolution with the legacy fallback.
-
-    NOT a runtime permission path. Read-only. Prefers the canonical
-    ``structure_unit``; otherwise derives a candidate unit from the legacy
-    ``small_group`` / ``district`` mapped ``church_structure_unit``. Returns
-    ``None`` when nothing can be resolved (including global roles).
-
-    This is used exclusively by the audit / backfill / rollback tooling so it can
-    still inspect what a legacy scope *would* map to for migration context.
-    Runtime must never call this helper: the legacy runtime fallback was retired
-    in ROLE-RETIRE.1B (use :func:`get_role_assignment_structure_unit` for any
-    permission decision). Ordinary ``ChurchStructureMembership`` is never read.
-    """
-    if assignment is None:
-        return None
-
-    if assignment.structure_unit_id:
-        return assignment.structure_unit
-
-    small_group = assignment.small_group
-    if small_group is not None and small_group.church_structure_unit_id:
-        return small_group.church_structure_unit
-
-    district = assignment.district
-    if district is not None and district.church_structure_unit_id:
-        return district.church_structure_unit
 
     return None
 

@@ -109,11 +109,13 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.make_user("missing_membership", small_group=unmapped_group)
         self.make_service_event()
         self.make_v1_session()
+        # ROLE-FIELD-RETIRE.1A: scoped roles are structure-native (explicit
+        # structure_unit only) and no longer carry a legacy small_group field, so
+        # a valid scoped assignment is not a role retirement blocker.
         ChurchRoleAssignment.objects.create(
             user=self.make_user("leader"),
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
 
@@ -131,11 +133,13 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(
             stats["service_event_zero_row_visible_active_safety_blockers"], 1
         )
+        self.assertEqual(stats["role_scoped_assignments"], 1)
+        self.assertEqual(stats["role_scoped_assignments_with_structure_unit"], 1)
+        self.assertEqual(stats["role_scoped_assignments_missing_structure_unit"], 0)
         self.assertEqual(
-            stats["role_assignments_with_legacy_small_group_populated"], 1
+            stats["role_scoped_assignments_structure_unit_retirement_blockers"], 0
         )
         self.assertGreater(stats["bible_study_legacy_retirement_blockers"], 0)
-        self.assertGreater(stats["role_legacy_field_retirement_blockers"], 0)
 
     def test_bible_study_series_legacy_scope_fields_remain_retirement_blockers(self):
         series = BibleStudySeries.objects.create(
@@ -256,6 +260,18 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
         self.assertNotIn(
             "prayers.management.commands.cleanup_prayer_small_group_mirrors",
+            out.getvalue(),
+        )
+
+    def test_backfill_structure_role_scopes_command_no_longer_listed(self):
+        # ROLE-FIELD-RETIRE.1A retired the backfill command together with the
+        # ChurchRoleAssignment.district / small_group fields (its only source),
+        # so it must no longer appear in the diagnostic/backfill command list.
+        out = StringIO()
+        call_command("audit_legacy_structure_retirement_readiness", stdout=out)
+
+        self.assertNotIn(
+            "accounts.management.commands.backfill_structure_role_scopes",
             out.getvalue(),
         )
 

@@ -299,7 +299,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
             user=user,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             structure_unit=self.group_unit,
         )
         event = ServiceEvent.objects.create(
@@ -331,7 +330,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
             title="Preserved Prayer",
             body="Please pray",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
         plan = ReadingPlan.objects.create(name="Preserved Plan")
@@ -430,14 +428,12 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
         )
         self.assertEqual(membership.unit_id, self.group_unit.id)
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
-        self.assertEqual(role.small_group_id, self.group.id)
         self.assertEqual(role.structure_unit_id, self.group_unit.id)
         self.assertTrue(user.user_permissions.filter(id=permission.id).exists())
         self.assertEqual(event.small_group_id, self.group.id)
         self.assertEqual(event.ministry_context_id, self.ministry_context.id)
         self.assertEqual(series.small_group_id, self.group.id)
         self.assertEqual(session.small_group_id, self.group.id)
-        self.assertEqual(prayer.small_group_at_post_id, self.group.id)
         self.assertEqual(prayer.structure_unit_at_post_id, self.group_unit.id)
         self.assertEqual(guide.author_id, user.id)
         self.assertEqual(reflection.small_group_at_post_id, self.group.id)

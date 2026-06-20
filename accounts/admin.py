@@ -298,18 +298,16 @@ class ChurchRoleAssignmentAdmin(admin.ModelAdmin):
         "user",
         "role",
         "scope_type",
-        "district",
-        "small_group",
         "structure_unit",
         "is_active",
         "created_at",
     )
-    list_filter = ("role", "scope_type", "district", "small_group", "is_active")
+    list_filter = ("role", "scope_type", "structure_unit", "is_active")
     search_fields = (
         "user__username",
         "user__email",
-        "district__name",
-        "small_group__name",
+        "structure_unit__code",
+        "structure_unit__name",
     )
 
 

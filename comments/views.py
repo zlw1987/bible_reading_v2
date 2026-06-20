@@ -182,7 +182,6 @@ def add_reply(request, comment_id):
             "active_plan",
             "plan_day",
             "user",
-            "small_group_at_post",
             "structure_unit_at_post",
         ),
         id=comment_id,
@@ -228,9 +227,7 @@ def edit_comment(request, comment_id):
         ReflectionComment.objects.select_related(
             "user",
             "parent",
-            "parent__small_group_at_post",
             "parent__structure_unit_at_post",
-            "small_group_at_post",
             "structure_unit_at_post",
         ),
         id=comment_id,
@@ -325,7 +322,6 @@ def report_comment(request, comment_id):
             "user",
             "active_plan",
             "plan_day",
-            "small_group_at_post",
         ),
         id=comment_id,
     )
@@ -401,7 +397,6 @@ def staff_reflection_reports(request):
             "comment__user",
             "comment__active_plan",
             "comment__plan_day",
-            "comment__small_group_at_post",
             "reporter",
             "reviewed_by",
         )

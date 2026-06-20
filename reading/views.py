@@ -305,8 +305,8 @@ def reading_media_reader(request, active_plan_id, plan_day_id, passage_index, me
             scripture_ref_key=scripture_ref_key,
             parent__isnull=True,
         )
-        .select_related("user", "small_group_at_post")
-        .prefetch_related("replies", "replies__user", "replies__small_group_at_post")
+        .select_related("user")
+        .prefetch_related("replies", "replies__user")
         .order_by("created_at")
     )
 
@@ -1353,7 +1353,6 @@ def passage_wall(request):
             "active_plan",
             "plan_day",
             "structure_unit_at_post",
-            "small_group_at_post",
         )
         .order_by("-created_at")
     )

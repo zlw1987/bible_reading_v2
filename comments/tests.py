@@ -1,3 +1,4 @@
+from django.contrib import admin
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -6,6 +7,35 @@ from django.utils import timezone
 from accounts.models import SmallGroup
 from comments.models import ReflectionComment, ReflectionReport
 from reading.models import ActivePlan, PlanEnrollment, ReadingPlan, ReadingPlanDay
+
+
+class ReflectionCommentAdminLegacyMirrorTests(TestCase):
+    """REFLECTION-MIRROR.1G: the admin must not expose or search the legacy
+    ``small_group_at_post`` mirror. The structure-native snapshot stays usable.
+    """
+
+    def setUp(self):
+        self.model_admin = admin.site._registry[ReflectionComment]
+
+    def test_admin_does_not_expose_or_search_legacy_mirror(self):
+        for attr in ("list_display", "list_filter", "search_fields", "readonly_fields"):
+            values = tuple(getattr(self.model_admin, attr) or ())
+            self.assertNotIn(
+                "small_group_at_post",
+                values,
+                msg=f"small_group_at_post must not appear in admin {attr}",
+            )
+        self.assertNotIn(
+            "small_group_at_post",
+            tuple(getattr(self.model_admin, "list_select_related", ()) or ()),
+        )
+
+    def test_admin_fieldsets_do_not_reference_legacy_mirror(self):
+        fieldsets = getattr(self.model_admin, "fieldsets", None)
+        if not fieldsets:
+            return
+        for _name, opts in fieldsets:
+            self.assertNotIn("small_group_at_post", tuple(opts.get("fields", ()) or ()))
 
 
 class ReflectionReportModerationTests(TestCase):

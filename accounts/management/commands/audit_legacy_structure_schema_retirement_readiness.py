@@ -608,9 +608,14 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "comments.ReflectionComment",
         "field_name": "small_group_at_post",
         "candidate_type": "display-field",
-        "app_read_references": _refs("legacy passage-wall label fallback for old rows"),
-        "admin_references": _refs("comments.admin.ReflectionCommentAdmin search/display"),
-        "template_display_references": _refs("reading passage-wall legacy fallback label"),
+        # REFLECTION-MIRROR.1G removed the normal app display/read surfaces:
+        # the passage-wall legacy fallback label (template + view select_related)
+        # and the dead comments-view display select_related. There is no admin
+        # surface to remove (ReflectionCommentAdmin never listed/searched the
+        # field). The only remaining live-code references are guarded
+        # diagnostic/cleanup tooling, so once stored data is clean the candidate
+        # classifies as blocked_by_diagnostic_tooling, ready for a follow-up
+        # REFLECTION-MIRROR.1H field-removal slice.
         "diagnostic_cleanup_references": _refs(
             "cleanup_reflection_small_group_mirrors",
             "cleanup_reflection_nongroup_display_mirrors",
@@ -620,10 +625,14 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("comments migrations"),
         "data_counter": "reflection_small_group_at_post",
         "recommended_next_action": (
-            "Clear existing safe mirrors through guarded cleanup, confirm no old "
-            "rows still need fallback display, then remove display/admin references."
+            "REFLECTION-MIRROR.1G removed the passage-wall legacy fallback "
+            "display and the dead app read/display select_related; there is no "
+            "admin surface. The field is now diagnostic-cleanup-only. After the "
+            "target DB cleanup/audit confirms zero stored mirror values, retire "
+            "the cleanup/diagnostic tooling, then remove the model field and add "
+            "a migration in a separate REFLECTION-MIRROR.1H slice."
         ),
-        "suggested_removal_phase": "phase 1 then phase 2",
+        "suggested_removal_phase": "phase 3",
     },
     {
         "candidate_name": "ReflectionComment.structure_unit_at_post",

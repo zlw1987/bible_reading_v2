@@ -1815,10 +1815,13 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertFalse(post.can_be_seen_by(self.new_group_member))
         self.assertTrue(post.can_be_seen_by(self.author))
 
-    def test_passage_wall_label_prefers_structure_unit_with_legacy_fallback(self):
-        # REFLECTION-MIRROR.1D: the passage wall group label prefers the structure
-        # unit name (structure-native rows) and falls back to the legacy
-        # small_group_at_post name only for old rows that lack a structure snapshot.
+    def test_passage_wall_label_uses_structure_unit_without_legacy_fallback(self):
+        # REFLECTION-MIRROR.1G: the passage wall group label relies solely on the
+        # structure snapshot. The legacy small_group_at_post fallback branch was
+        # removed, so a structure-native row (no legacy mirror) renders its unit
+        # name, a row that lacks the structure snapshot renders no group label,
+        # and a row whose legacy mirror is still populated never renders the
+        # legacy SmallGroup name when a structure label is available.
         self.make_reflection(
             user=self.author,
             body="Structure-native labelled post",
@@ -1828,10 +1831,17 @@ class ReflectionPrivacyInvariantTests(TestCase):
         )
         self.make_reflection(
             user=self.author,
-            body="Legacy-only labelled post",
+            body="Legacy-only post with no structure snapshot",
             visibility=ReflectionComment.VISIBILITY_GROUP,
             small_group=self.old_group,
             structure_unit=None,
+        )
+        self.make_reflection(
+            user=self.author,
+            body="Structure snapshot wins over a populated legacy mirror",
+            visibility=ReflectionComment.VISIBILITY_GROUP,
+            small_group=self.other_group,
+            structure_unit=self.new_unit,
         )
 
         self.client.login(username=self.author.username, password="TestPass123!")
@@ -1840,10 +1850,14 @@ class ReflectionPrivacyInvariantTests(TestCase):
             {"ref": "John 1", "tab": "my"},
         )
         self.assertEqual(response.status_code, 200)
-        # Structure-native row shows the unit name; legacy-only row falls back to
-        # the SmallGroup name. The two fixtures use distinct names.
+        # Structure-native rows render their unit name (including the row whose
+        # legacy mirror is still populated).
         self.assertContains(response, self.old_unit.name)
-        self.assertContains(response, self.old_group.name)
+        self.assertContains(response, self.new_unit.name)
+        # The removed legacy fallback never renders a SmallGroup name, whether the
+        # row lacks a structure snapshot or still carries a populated legacy mirror.
+        self.assertNotContains(response, self.old_group.name)
+        self.assertNotContains(response, self.other_group.name)
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):

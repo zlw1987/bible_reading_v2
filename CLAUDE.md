@@ -18,6 +18,7 @@ Current state:
 
 * ServiceEvent audience rows use active primary `ChurchStructureMembership`.
 * ServiceEvent zero-row ordinary-user fallback is retired; zero-row events fail closed.
+* ServiceEvent legacy `scope_type`, `district`, and `small_group` fields were removed in `SE-FIELD-RETIRE.1A` (migration `events/0007`); their cleanup/backfill/fallback-audit tooling was retired with them. This did not touch `ServiceEvent.ministry_context`, `host_language_unit`, `ServiceEventAudienceScope`, or the `SmallGroup`/`District` tables.
 * Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary membership.
 * Bible Study V2 uses `BibleStudyMeetingAudienceScope` rows plus active primary membership for ordinary visibility, Today/landing, and role/worship pickers.
 * Bible Study V2 zero-row meetings fail closed.
@@ -36,7 +37,6 @@ Legacy fields still exist:
 * `SmallGroup`
 * `District`
 * `MinistryContext`
-* ServiceEvent legacy scope fields
 * Bible Study legacy/mirror fields
 * reflection/prayer legacy mirror fields
 

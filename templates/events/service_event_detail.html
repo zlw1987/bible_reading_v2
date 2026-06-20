@@ -90,7 +90,7 @@
     </p>
 
     <p>
-        <strong>{{ event|event_visibility_source_label:language }}</strong>
+        <strong>{% if language == "zh" %}可见范围{% else %}Audience{% endif %}:</strong>
     </p>
 
     <div class="scope-chip-list">
@@ -99,13 +99,11 @@
         {% endfor %}
     </div>
 
+    {% if not event|event_uses_structure_audience %}
     <p class="muted">
-        {% if event|event_uses_structure_audience %}
-            {% if language == "zh" %}已选择教会结构适用范围；备用设置不会作为额外筛选条件。{% else %}Structure audience is selected; fallback settings are not an extra filter.{% endif %}
-        {% else %}
-            {% if language == "zh" %}没有选择教会结构适用范围；此聚会使用备用适用范围设置。{% else %}No structure audience is selected; this gathering uses fallback audience settings.{% endif %}
-        {% endif %}
+        {% if language == "zh" %}尚未选择教会结构适用范围；普通用户看不到此聚会。{% else %}No structure audience is selected; ordinary users cannot see this gathering.{% endif %}
     </p>
+    {% endif %}
 
     {% if event|event_structure_audience_has_no_legacy_groups %}
     <p class="muted">

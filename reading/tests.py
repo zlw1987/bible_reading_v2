@@ -5332,7 +5332,6 @@ class BibleReadingFlowTests(TestCase):
             title_en="Sunday Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now() + timezone.timedelta(days=7),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
         assignment = TeamAssignment.objects.create(
@@ -6395,15 +6394,13 @@ class TodayActionCenterTests(TestCase):
         session["language"] = language
         session.save()
 
-    def make_event(self, *, title_en, days_from_now=1, scope=None, small_group=None,
+    def make_event(self, *, title_en, days_from_now=1,
                    status=None, start_datetime=None):
         return ServiceEvent.objects.create(
             title=title_en,
             title_en=title_en,
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=start_datetime or timezone.now() + timedelta(days=days_from_now),
-            scope_type=scope or ServiceEvent.SCOPE_GLOBAL,
-            small_group=small_group,
             status=status or ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -6554,11 +6551,9 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Cancelled Retreat")
 
     def test_ordinary_user_does_not_see_out_of_scope_gathering(self):
-        self.make_event(
-            title_en="Other Group Only Meeting",
-            scope=ServiceEvent.SCOPE_SMALL_GROUP,
-            small_group=self.other_group,
-        )
+        # SE-FIELD-RETIRE.1A: a zero-row gathering (no ServiceEventAudienceScope
+        # rows) fails closed for ordinary users.
+        self.make_event(title_en="Other Group Only Meeting")
 
         response = self.get_home()
 

@@ -398,8 +398,6 @@ class AccountProfileTests(TestCase):
             title="Profile District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.client.login(username="levin", password="OldPass123!")
@@ -1105,8 +1103,6 @@ class MinistryContextBridgeTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -2107,8 +2103,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -2448,8 +2442,6 @@ class ChurchStructureMembershipFoundationTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -2642,8 +2634,6 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -3888,8 +3878,6 @@ class StaffMembershipRequestListTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -3911,8 +3899,6 @@ class StaffMembershipRequestListTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.client.login(username="membership_staff", password="TestPass123!")
@@ -3947,8 +3933,6 @@ class StaffMembershipRequestListTests(TestCase):
             title="Mapped District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -3973,8 +3957,6 @@ class StaffMembershipRequestListTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.client.login(username="membership_staff", password="TestPass123!")
@@ -7104,8 +7086,6 @@ class AccountSignupLanguageTests(TestCase):
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now(),
-            scope_type=ServiceEvent.SCOPE_DISTRICT,
-            district=district,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 

@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, District, SmallGroup
+from accounts.models import ChurchStructureUnit
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 from accounts.structure_selectors import user_matches_structure_audience
 
@@ -27,16 +27,6 @@ class ServiceEvent(models.Model):
         (EVENT_OTHER, "Other"),
     ]
 
-    SCOPE_GLOBAL = "global"
-    SCOPE_DISTRICT = "district"
-    SCOPE_SMALL_GROUP = "small_group"
-
-    SCOPE_CHOICES = [
-        (SCOPE_GLOBAL, "Global"),
-        (SCOPE_DISTRICT, "District"),
-        (SCOPE_SMALL_GROUP, "Small Group"),
-    ]
-
     STATUS_DRAFT = "draft"
     STATUS_PUBLISHED = "published"
     STATUS_COMPLETED = "completed"
@@ -58,25 +48,6 @@ class ServiceEvent(models.Model):
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")
     meeting_link = models.URLField(max_length=500, blank=True, default="")
-    scope_type = models.CharField(
-        max_length=32,
-        choices=SCOPE_CHOICES,
-        default=SCOPE_GLOBAL,
-    )
-    district = models.ForeignKey(
-        District,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="service_events",
-    )
-    small_group = models.ForeignKey(
-        SmallGroup,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="service_events",
-    )
     ministry_context = models.ForeignKey(
         "accounts.MinistryContext",
         null=True,
@@ -130,7 +101,6 @@ class ServiceEvent(models.Model):
             models.Index(fields=["event_type"]),
             models.Index(fields=["status"]),
             models.Index(fields=["start_datetime"]),
-            models.Index(fields=["scope_type"]),
         ]
 
     def __str__(self):
@@ -138,22 +108,6 @@ class ServiceEvent(models.Model):
 
     def clean(self):
         errors = {}
-
-        if self.scope_type == self.SCOPE_GLOBAL:
-            if self.district_id:
-                errors["district"] = "Global events cannot be scoped to a district."
-            if self.small_group_id:
-                errors["small_group"] = "Global events cannot be scoped to a small group."
-        elif self.scope_type == self.SCOPE_DISTRICT:
-            if not self.district_id:
-                errors["district"] = "District-scoped events require a district."
-            if self.small_group_id:
-                errors["small_group"] = "District-scoped events cannot also use a small group."
-        elif self.scope_type == self.SCOPE_SMALL_GROUP:
-            if not self.small_group_id:
-                errors["small_group"] = "Small-group-scoped events require a small group."
-            if self.district_id:
-                errors["district"] = "Small-group-scoped events cannot also use a district."
 
         if self.end_datetime and self.start_datetime and self.end_datetime < self.start_datetime:
             errors["end_datetime"] = "End time cannot be before start time."

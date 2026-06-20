@@ -10,7 +10,6 @@ from accounts.management.commands.audit_legacy_structure_schema_retirement_readi
     Command,
     STATUS_DIAGNOSTIC,
     STATUS_HISTORICAL,
-    STATUS_RUNTIME,
     STATUS_WRITE,
     run_audit,
 )
@@ -78,7 +77,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             title=title,
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=self.now + timezone.timedelta(days=7),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -128,7 +126,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         }
         before_values = {
             "profile_small_group": user.profile.small_group_id,
-            "event_scope": (event.scope_type, event.district_id, event.small_group_id),
+            "event_scope": (event.title, event.status),
             "series_scope": (
                 series.scope_type,
                 series.district_id,
@@ -164,10 +162,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             before_counts["role_assignments"],
         )
         self.assertEqual(user.profile.small_group_id, before_values["profile_small_group"])
-        self.assertEqual(
-            (event.scope_type, event.district_id, event.small_group_id),
-            before_values["event_scope"],
-        )
+        self.assertEqual((event.title, event.status), before_values["event_scope"])
         self.assertEqual(
             (series.scope_type, series.district_id, series.small_group_id),
             before_values["series_scope"],
@@ -189,19 +184,41 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         output = out.getvalue()
 
         self.assertIn("Profile.small_group", output)
-        self.assertIn("ServiceEvent.scope_type", output)
+        self.assertIn("ServiceEvent.scope_type (removed)", output)
         self.assertIn("BibleStudyMeeting.small_group", output)
         self.assertIn("ReflectionComment.small_group_at_post", output)
         self.assertIn("PrayerRequest.small_group_at_post", output)
         self.assertIn("SmallGroup model/table", output)
 
-    def test_clean_no_data_field_is_not_runtime_blocker(self):
+    def test_service_event_legacy_scope_fields_are_historical_after_field_removal(self):
+        # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /
+        # small_group after SE-RETIRE.1B retired the zero-row runtime fallback
+        # and local/dev audit confirmed zero populated legacy scope fields. Only
+        # immutable historical migrations still name them, so the candidates are
+        # now classified as historical-only with no active schema blocker, and
+        # none of them has a queryable data counter.
         audit = run_audit()
-        candidate = _candidate(audit, "ServiceEvent.scope_type")
+        for name in (
+            "ServiceEvent.scope_type (removed)",
+            "ServiceEvent.district (removed)",
+            "ServiceEvent.small_group (removed)",
+        ):
+            candidate = _candidate(audit, name)
+            self.assertEqual(candidate["live_runtime_references"], ())
+            self.assertEqual(candidate["app_write_references"], ())
+            self.assertEqual(candidate["app_read_references"], ())
+            self.assertEqual(candidate["admin_references"], ())
+            self.assertEqual(candidate["template_display_references"], ())
+            self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+            self.assertEqual(candidate["data_blocker_count"], 0)
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+            self.assertFalse(
+                candidate["schema_removal_status"].startswith("blocked_by_")
+            )
 
-        self.assertEqual(candidate["data_blocker_count"], 0)
-        self.assertNotEqual(candidate["schema_removal_status"], STATUS_RUNTIME)
-        self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertNotIn("service_event_scope_type", audit["data_counts"])
+        self.assertNotIn("service_event_district", audit["data_counts"])
+        self.assertNotIn("service_event_small_group", audit["data_counts"])
 
     def test_static_app_write_reference_blocks_schema_removal(self):
         audit = run_audit()

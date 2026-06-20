@@ -67,23 +67,6 @@ def event_status_label(event, language):
     return labels.get(language, labels["en"]).get(event.status, event.status)
 
 
-@register.filter
-def event_scope_label(event, language):
-    labels = {
-        "zh": {
-            "global": "全教会",
-            "district": "区",
-            "small_group": "小组",
-        },
-        "en": {
-            "global": "Global",
-            "district": "District",
-            "small_group": "Small Group",
-        },
-    }
-    return labels.get(language, labels["en"]).get(event.scope_type, event.scope_type)
-
-
 def _whole_church_label(language):
     return "全教会" if language == "zh" else "Whole Church"
 
@@ -100,29 +83,6 @@ def _compact_unit_label(unit, language):
     return " > ".join(node.display_name(language) for node in chain)
 
 
-def _fallback_audience_label(event, language):
-    if language == "zh":
-        if event.scope_type == "global":
-            return "全教会"
-        if event.scope_type == "district":
-            name = event.district.name if event.district_id else "-"
-            return f"区：{name}"
-        if event.scope_type == "small_group":
-            name = event.small_group.name if event.small_group_id else "-"
-            return f"小组：{name}"
-        return event.scope_type
-
-    if event.scope_type == "global":
-        return "Whole Church"
-    if event.scope_type == "district":
-        name = event.district.name if event.district_id else "-"
-        return f"District: {name}"
-    if event.scope_type == "small_group":
-        name = event.small_group.name if event.small_group_id else "-"
-        return f"Small Group: {name}"
-    return event.scope_type
-
-
 def _audience_units(event):
     return [link.unit for link in event.audience_scope_links.all()]
 
@@ -133,31 +93,20 @@ def event_uses_structure_audience(event):
 
 
 @register.filter
-def event_visibility_source_label(event, language):
-    if event_uses_structure_audience(event):
-        return (
-            "可见范围来源：教会结构适用范围"
-            if language == "zh"
-            else "Visibility source: Structure audience"
-        )
-    return (
-        "可见范围来源：备用适用范围"
-        if language == "zh"
-        else "Visibility source: Legacy fallback audience"
-    )
-
-
-@register.filter
 def event_effective_audience_labels(event, language):
+    # SE-FIELD-RETIRE.1A: audience display is sourced solely from
+    # ServiceEventAudienceScope rows. The legacy scope_type/district/small_group
+    # fallback labels were removed with the fields; a zero-row event has no
+    # audience labels and is fail-closed for ordinary users.
     if not event:
         return []
 
     units = _audience_units(event)
-    if units:
-        if any(unit.unit_type == "root" for unit in units):
-            return [_whole_church_label(language)]
-        return [_compact_unit_label(unit, language) for unit in units]
-    return [_fallback_audience_label(event, language)]
+    if not units:
+        return []
+    if any(unit.unit_type == "root" for unit in units):
+        return [_whole_church_label(language)]
+    return [_compact_unit_label(unit, language) for unit in units]
 
 
 @register.filter

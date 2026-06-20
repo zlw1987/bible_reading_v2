@@ -272,9 +272,6 @@ def get_or_create_service_event(
             title_matches,
             event_type=event_type,
             start_datetime=start_datetime,
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            district__isnull=True,
-            small_group__isnull=True,
         )
         .exclude(status=ServiceEvent.STATUS_CANCELLED)
         .order_by("id")
@@ -290,7 +287,6 @@ def get_or_create_service_event(
             end_datetime=end_datetime,
             description=build_event_description(row),
             description_en=build_event_description(row),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
         return event, True

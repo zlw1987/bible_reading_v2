@@ -447,9 +447,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="主日崇拜",
             title_en="Sunday Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timezone.timedelta(days=2),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=2),            status=ServiceEvent.STATUS_PUBLISHED,
         )
 
     def set_language(self, language="en"):
@@ -490,9 +488,7 @@ class TeamAssignmentV1Tests(TestCase):
             title=title_en,
             title_en=title_en,
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timezone.timedelta(days=days_from_now),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=status or ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=days_from_now),            status=status or ServiceEvent.STATUS_PUBLISHED,
             rotation_anchor_team=anchor,
         )
 
@@ -918,9 +914,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="ä¸»æ—¥å´‡æ‹œ",
             title_en="Sunday Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.client.login(username="assignment_pastor", password="testpass123")
 
@@ -1447,9 +1441,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="过去聚会",
             title_en="Past Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() - timezone.timedelta(days=2),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_COMPLETED,
+            start_datetime=timezone.now() - timezone.timedelta(days=2),            status=ServiceEvent.STATUS_COMPLETED,
         )
         self.create_assignment(service_event=past_event)
         self.client.login(username="regular_assign", password="testpass123")
@@ -1556,9 +1548,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="Midweek Service",
             title_en="Midweek Service",
             event_type=ServiceEvent.EVENT_OTHER,
-            start_datetime=timezone.now() + timezone.timedelta(days=9),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=9),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.create_assignment(service_event=later_event)
         self.client.login(username="regular_assign", password="testpass123")
@@ -1605,9 +1595,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="Future Service",
             title_en="Future Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timezone.timedelta(days=45),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=45),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         assignment = self.create_assignment(service_event=far_event)
         assignment_member = assignment.assignment_members.get(membership=self.membership)
@@ -1857,9 +1845,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="ç‰¹åˆ«èšä¼š",
             title_en="Confirmed Service",
             event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
-            start_datetime=timezone.now() + timezone.timedelta(days=5),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=5),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.create_assignment(
             service_event=confirmed_event,
@@ -1931,9 +1917,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="过去聚会",
             title_en="Past Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() - timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_COMPLETED,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),            status=ServiceEvent.STATUS_COMPLETED,
         )
         self.create_assignment(service_event=past_event)
         self.client.login(username="assignment_pastor", password="testpass123")
@@ -2273,27 +2257,21 @@ class TeamAssignmentV1Tests(TestCase):
             title="Unrelated Sunday",
             title_en="Unrelated Sunday",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=7),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         unrelated_event.required_teams.add(self.other_team)
         bible_study_event = ServiceEvent.objects.create(
             title="查经",
             title_en="Bible Study Night",
             event_type=ServiceEvent.EVENT_BIBLE_STUDY,
-            start_datetime=self.event.start_datetime + timezone.timedelta(days=14),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=14),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         bible_study_event.required_teams.add(self.team)
         additional_event = ServiceEvent.objects.create(
             title="特别服事",
             title_en="Special Service Assignment",
             event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
-            start_datetime=self.event.start_datetime + timezone.timedelta(days=21),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=21),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.create_assignment(service_event=additional_event)
         self.client.login(username="assignment_lead", password="testpass123")
@@ -2314,9 +2292,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="查经",
             title_en="Bible Study Night",
             event_type=ServiceEvent.EVENT_BIBLE_STUDY,
-            start_datetime=self.event.start_datetime + timezone.timedelta(days=14),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=self.event.start_datetime + timezone.timedelta(days=14),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         bible_study_event.required_teams.add(self.team)
         self.client.login(username="assignment_lead", password="testpass123")
@@ -2769,9 +2745,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="取消聚会",
             title_en="Cancelled Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_CANCELLED,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),            status=ServiceEvent.STATUS_CANCELLED,
         )
 
         event_ids = self.assignment_form_event_ids()
@@ -2784,9 +2758,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="草稿聚会",
             title_en="Draft Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() + timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_DRAFT,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),            status=ServiceEvent.STATUS_DRAFT,
         )
 
         event_ids = self.assignment_form_event_ids()
@@ -2799,9 +2771,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="过去聚会",
             title_en="Past Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() - timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),            status=ServiceEvent.STATUS_PUBLISHED,
         )
 
         event_ids = self.assignment_form_event_ids()
@@ -2814,9 +2784,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="小组查经",
             title_en="Group Bible Study",
             event_type=ServiceEvent.EVENT_BIBLE_STUDY,
-            start_datetime=timezone.now() + timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         self.make_bible_study_meeting(study_event)
 
@@ -2830,9 +2798,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="特别聚会",
             title_en="Special Meeting",
             event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
-            start_datetime=timezone.now() + timezone.timedelta(days=5),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() + timezone.timedelta(days=5),            status=ServiceEvent.STATUS_PUBLISHED,
         )
 
         event_ids = self.assignment_form_event_ids()
@@ -2845,9 +2811,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="过去聚会",
             title_en="Past Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() - timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         assignment = self.create_assignment(service_event=past)
 
@@ -2863,9 +2827,7 @@ class TeamAssignmentV1Tests(TestCase):
             title="过去聚会",
             title_en="Past Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now() - timezone.timedelta(days=3),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=timezone.now() - timezone.timedelta(days=3),            status=ServiceEvent.STATUS_PUBLISHED,
         )
         assignment = self.create_assignment(service_event=past)
         self.client.login(username="assignment_pastor", password="testpass123")
@@ -3046,7 +3008,6 @@ class LightingPilotImportCommandTests(TestCase):
         event = ServiceEvent.objects.get(title="主日崇拜")
         self.assertEqual(event.title_en, "Sunday Service")
         self.assertEqual(event.event_type, ServiceEvent.EVENT_SUNDAY_SERVICE)
-        self.assertEqual(event.scope_type, ServiceEvent.SCOPE_GLOBAL)
         self.assertEqual(event.status, ServiceEvent.STATUS_PUBLISHED)
         self.assertIn("Main sanctuary service.", event.description)
 
@@ -3104,9 +3065,7 @@ class LightingPilotImportCommandTests(TestCase):
         ServiceEvent.objects.create(
             title="Sunday Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=start_datetime,
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_PUBLISHED,
+            start_datetime=start_datetime,            status=ServiceEvent.STATUS_PUBLISHED,
         )
         csv_path = self.write_csv(self.csv_content())
 
@@ -3130,9 +3089,7 @@ class LightingPilotImportCommandTests(TestCase):
             title="主日崇拜",
             title_en="Sunday Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=start_datetime,
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
-            status=ServiceEvent.STATUS_CANCELLED,
+            start_datetime=start_datetime,            status=ServiceEvent.STATUS_CANCELLED,
         )
         csv_path = self.write_csv(self.csv_content())
 

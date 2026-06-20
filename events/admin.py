@@ -21,14 +21,12 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "ministry_context",
         "host_language_unit",
         "rotation_anchor_team",
-        "scope_type",
         "status",
         "created_by",
     )
     list_filter = (
         "event_type",
         "status",
-        "scope_type",
         "ministry_context",
         "host_language_unit",
         "rotation_anchor_team",

@@ -106,17 +106,15 @@ SECTION_KEYS = OrderedDict(
             ),
         ),
         (
-            "ServiceEvent legacy scope fields",
+            # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /
+            # small_group. This section now only tracks audience-row readiness
+            # and the (historical, always-0) zero-row runtime fallback marker.
+            "ServiceEvent audience rows",
             (
                 "service_events_checked",
                 "service_events_with_audience_rows",
                 "service_events_without_audience_rows",
                 "service_event_zero_row_visible_active_safety_blockers",
-                "service_events_with_legacy_scope_type_non_global",
-                "service_events_with_legacy_district_set",
-                "service_events_with_legacy_small_group_set",
-                "service_events_with_any_legacy_scope_field_set",
-                "service_event_legacy_scope_field_retirement_blockers",
                 "service_event_zero_row_runtime_fallback_active",
             ),
         ),
@@ -182,7 +180,6 @@ BLOCKER_KEYS = (
     "small_group_retirement_blocker_references",
     "district_retirement_blocker_references",
     "ministry_context_retirement_blocker_references",
-    "service_event_legacy_scope_field_retirement_blockers",
     "service_event_zero_row_visible_active_safety_blockers",
     "bible_study_legacy_retirement_blockers",
     "reflection_structure_snapshot_readiness_blockers",
@@ -204,7 +201,6 @@ DETAIL_KEYS = (
     "ministry_context_inactive_unit",
     "ministry_context_wrong_unit_type",
     "service_event_zero_row_safety_state",
-    "service_event_legacy_scope_fields",
     "bible_study_v1_session",
     "bible_study_v2_meeting_zero_rows",
     "bible_study_v2_meeting_mirror_mismatch",
@@ -242,18 +238,13 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "accounts.management.commands.audit_structure_role_scopes",
         "read-only diagnostic validating explicit structure_unit role scope",
     ),
-    (
-        "events.management.commands.audit_service_event_fallback_retirement_readiness",
-        "standing diagnostic/audit guard",
-    ),
-    (
-        "events.management.commands.backfill_service_event_audience_scopes",
-        "backfill support for ServiceEvent audience rows",
-    ),
-    (
-        "events.management.commands.cleanup_service_event_legacy_scope_fields",
-        "guarded cleanup tooling for ServiceEvent legacy scope fields; dry-run by default",
-    ),
+    # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district / small_group
+    # together with their legacy-scope tooling
+    # (audit_service_event_fallback_retirement_readiness,
+    # backfill_service_event_audience_scopes,
+    # cleanup_service_event_legacy_scope_fields), so they are no longer listed
+    # here. ServiceEvent visibility remains ServiceEventAudienceScope rows plus
+    # active primary ChurchStructureMembership; zero-row events fail closed.
     (
         "events.management.commands.backfill_service_event_host_language_units",
         (
@@ -393,14 +384,6 @@ def _is_service_event_visible_active_safety_state(event, now):
     if event.status == ServiceEvent.STATUS_COMPLETED:
         return bool(event.start_datetime and event.start_datetime >= now)
     return False
-
-
-def _service_event_has_legacy_scope_fields(event):
-    return bool(
-        event.scope_type != ServiceEvent.SCOPE_GLOBAL
-        or event.district_id
-        or event.small_group_id
-    )
 
 
 def _bible_study_series_has_legacy_scope_fields(series):
@@ -574,9 +557,9 @@ def _scan_small_groups(stats, details):
     )
     # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post, so the
     # SmallGroup table no longer has any reflection inbound reference to count.
-    stats["service_event_small_group_references"] = (
-        ServiceEvent.objects.filter(small_group__isnull=False).count()
-    )
+    # SE-FIELD-RETIRE.1A removed ServiceEvent.small_group, so ServiceEvent is no
+    # longer an inbound SmallGroup reference either.
+    stats["service_event_small_group_references"] = 0
     stats["bible_study_series_small_group_references"] = (
         BibleStudySeries.objects.filter(small_group__isnull=False).count()
     )
@@ -641,9 +624,9 @@ def _scan_districts(stats, details):
     stats["small_groups_with_district"] = (
         SmallGroup.objects.filter(district__isnull=False).count()
     )
-    stats["service_events_with_district"] = (
-        ServiceEvent.objects.filter(district__isnull=False).count()
-    )
+    # SE-FIELD-RETIRE.1A removed ServiceEvent.district, so ServiceEvent is no
+    # longer an inbound District reference.
+    stats["service_events_with_district"] = 0
     stats["bible_study_series_with_district"] = (
         BibleStudySeries.objects.filter(district__isnull=False).count()
     )
@@ -725,15 +708,16 @@ def _scan_ministry_contexts(stats, details):
 
 
 def _scan_service_events(stats, details, now):
+    # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /
+    # small_group. This scan now only measures audience-row readiness and the
+    # zero-row fail-closed safety state; there are no legacy scope fields left to
+    # count.
     event_ids_with_rows = set(
         ServiceEventAudienceScope.objects.values_list(
             "service_event_id", flat=True
         ).distinct()
     )
-    events = ServiceEvent.objects.select_related(
-        "district",
-        "small_group",
-    ).order_by("id")
+    events = ServiceEvent.objects.order_by("id")
 
     for event in events:
         stats["service_events_checked"] += 1
@@ -747,43 +731,13 @@ def _scan_service_events(stats, details, now):
                 _append(
                     details,
                     "service_event_zero_row_safety_state",
-                    (
-                        "event_id={event_id} title={title} status={status} "
-                        "scope_type={scope_type}"
-                    ).format(
+                    "event_id={event_id} title={title} status={status}".format(
                         event_id=event.id,
                         title=event.title,
                         status=event.status,
-                        scope_type=event.scope_type,
                     ),
                 )
 
-        if event.scope_type != ServiceEvent.SCOPE_GLOBAL:
-            stats["service_events_with_legacy_scope_type_non_global"] += 1
-        if event.district_id:
-            stats["service_events_with_legacy_district_set"] += 1
-        if event.small_group_id:
-            stats["service_events_with_legacy_small_group_set"] += 1
-        if _service_event_has_legacy_scope_fields(event):
-            stats["service_events_with_any_legacy_scope_field_set"] += 1
-            _append(
-                details,
-                "service_event_legacy_scope_fields",
-                (
-                    "event_id={event_id} title={title} scope_type={scope_type} "
-                    "district={district} small_group={small_group}"
-                ).format(
-                    event_id=event.id,
-                    title=event.title,
-                    scope_type=event.scope_type,
-                    district=_district_label(event.district),
-                    small_group=_group_label(event.small_group),
-                ),
-            )
-
-    stats["service_event_legacy_scope_field_retirement_blockers"] = (
-        stats["service_events_with_any_legacy_scope_field_set"]
-    )
     # Current code has already retired the ordinary-user zero-row legacy fallback.
     stats["service_event_zero_row_runtime_fallback_active"] = 0
 

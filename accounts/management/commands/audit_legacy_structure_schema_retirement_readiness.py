@@ -328,67 +328,65 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "ServiceEvent.scope_type",
+        "candidate_name": "ServiceEvent.scope_type (removed)",
         "model_table": "events.ServiceEvent",
         "field_name": "scope_type",
         "candidate_type": "field",
-        "app_read_references": _refs("events.templatetags.event_extras legacy label helpers"),
-        "admin_references": _refs("events.admin.ServiceEventAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "backfill_service_event_audience_scopes",
-            "cleanup_service_event_legacy_scope_fields",
-            "audit_service_event_fallback_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("ServiceEvent fallback/cleanup fixtures"),
-        "migration_history_references": _refs("events migrations"),
-        "data_counter": "service_event_scope_type",
+        "migration_history_references": _refs("events migrations (field added then removed)"),
         "recommended_next_action": (
-            "Closest after target DB cleanup: no runtime fallback remains, but "
-            "stored values, admin/display, and cleanup diagnostics must clear first."
+            "Completed. SE-FIELD-RETIRE.1A removed the ServiceEvent.scope_type "
+            "model field after SE-RETIRE.1B retired the zero-row runtime fallback "
+            "and local/dev audit confirmed zero populated legacy scope fields. "
+            "ServiceEvent visibility uses ServiceEventAudienceScope rows plus "
+            "active primary ChurchStructureMembership; zero-row events fail "
+            "closed for ordinary users. The legacy-scope tooling "
+            "(backfill_service_event_audience_scopes, "
+            "cleanup_service_event_legacy_scope_fields, "
+            "audit_service_event_fallback_retirement_readiness) was retired with "
+            "the field. Only immutable historical migrations still name it; no "
+            "active schema blocker remains. This did not affect "
+            "ServiceEvent.ministry_context, host_language_unit, "
+            "ServiceEventAudienceScope, or the SmallGroup / District tables."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "ServiceEvent.district",
+        "candidate_name": "ServiceEvent.district (removed)",
         "model_table": "events.ServiceEvent",
         "field_name": "district",
         "candidate_type": "field",
-        "admin_references": _refs("events.admin.ServiceEventAdmin"),
-        "template_display_references": _refs("legacy event context labels"),
-        "diagnostic_cleanup_references": _refs(
-            "backfill_service_event_audience_scopes",
-            "cleanup_service_event_legacy_scope_fields",
-            "audit_service_event_fallback_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("ServiceEvent fallback/cleanup fixtures"),
-        "migration_history_references": _refs("events migrations"),
-        "data_counter": "service_event_district",
+        "migration_history_references": _refs("events migrations (field added then removed)"),
         "recommended_next_action": (
-            "Clear stored values only through guarded cleanup after exact target "
-            "DB dry-run review; then remove admin/display references."
+            "Completed. SE-FIELD-RETIRE.1A removed the ServiceEvent.district "
+            "model field after SE-RETIRE.1B retired the zero-row runtime fallback "
+            "and local/dev audit confirmed zero populated legacy scope fields. "
+            "ServiceEvent visibility uses ServiceEventAudienceScope rows plus "
+            "active primary ChurchStructureMembership. The legacy-scope tooling "
+            "was retired with the field. Only immutable historical migrations "
+            "still name it; no active schema blocker remains. This did not remove "
+            "the District table or affect ServiceEvent.ministry_context / "
+            "host_language_unit."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "ServiceEvent.small_group",
+        "candidate_name": "ServiceEvent.small_group (removed)",
         "model_table": "events.ServiceEvent",
         "field_name": "small_group",
         "candidate_type": "field",
-        "admin_references": _refs("events.admin.ServiceEventAdmin"),
-        "template_display_references": _refs("legacy event context labels"),
-        "diagnostic_cleanup_references": _refs(
-            "backfill_service_event_audience_scopes",
-            "cleanup_service_event_legacy_scope_fields",
-            "audit_service_event_fallback_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("ServiceEvent fallback/cleanup fixtures"),
-        "migration_history_references": _refs("events migrations"),
-        "data_counter": "service_event_small_group",
+        "migration_history_references": _refs("events migrations (field added then removed)"),
         "recommended_next_action": (
-            "Clear stored values only through guarded cleanup after exact target "
-            "DB dry-run review; then remove admin/display references."
+            "Completed. SE-FIELD-RETIRE.1A removed the ServiceEvent.small_group "
+            "model field after SE-RETIRE.1B retired the zero-row runtime fallback "
+            "and local/dev audit confirmed zero populated legacy scope fields. "
+            "ServiceEvent visibility uses ServiceEventAudienceScope rows plus "
+            "active primary ChurchStructureMembership. The legacy-scope tooling "
+            "was retired with the field. Only immutable historical migrations "
+            "still name it; no active schema blocker remains. This did not remove "
+            "the SmallGroup table or affect ServiceEvent.ministry_context / "
+            "host_language_unit."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "ServiceEvent.ministry_context",
@@ -731,15 +729,9 @@ def _data_counts():
         ).count(),
         # ROLE-FIELD-RETIRE.1A removed ChurchRoleAssignment.district /
         # small_group, so there is no longer a queryable data counter for them.
-        "service_event_scope_type": ServiceEvent.objects.exclude(
-            scope_type=ServiceEvent.SCOPE_GLOBAL
-        ).count(),
-        "service_event_district": ServiceEvent.objects.filter(
-            district__isnull=False
-        ).count(),
-        "service_event_small_group": ServiceEvent.objects.filter(
-            small_group__isnull=False
-        ).count(),
+        # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /
+        # small_group, so there is no longer a queryable data counter for them
+        # either.
         "service_event_ministry_context": ServiceEvent.objects.filter(
             ministry_context__isnull=False
         ).count(),

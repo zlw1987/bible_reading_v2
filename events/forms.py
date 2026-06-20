@@ -41,7 +41,6 @@ FORM_TEXT = {
         "gospel_music": "Gospel Music Night",
         "baptism": "Baptism",
         "other": "Other",
-        "global": "Global",
         "rotation_anchor_team_help": (
             "Optional scheduling hint for future copy-forward suggestions, such as Worship C1/C2/C3/A. "
             "This does not make the team required and does not control coverage, audience, visibility, or permissions."
@@ -86,7 +85,6 @@ FORM_TEXT = {
         "gospel_music": "福音音乐会",
         "baptism": "洗礼",
         "other": "其他",
-        "global": "全教会",
         "draft": "草稿",
         "published": "已发布",
         "completed": "已完成",

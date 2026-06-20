@@ -84,7 +84,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             title="Zero Row Gathering",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=self.now + timezone.timedelta(days=7),
-            scope_type=ServiceEvent.SCOPE_GLOBAL,
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
@@ -198,7 +197,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         session = self.make_v1_session()
 
         before_profile_group = user.profile.small_group_id
-        before_event = (event.scope_type, event.district_id, event.small_group_id)
+        before_event = (event.title, event.status)
         before_session = (session.scope_type, session.district_id, session.small_group_id)
         before_counts = {
             "small_groups": SmallGroup.objects.count(),
@@ -222,10 +221,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         session.refresh_from_db()
 
         self.assertEqual(user.profile.small_group_id, before_profile_group)
-        self.assertEqual(
-            (event.scope_type, event.district_id, event.small_group_id),
-            before_event,
-        )
+        self.assertEqual((event.title, event.status), before_event)
         self.assertEqual(
             (session.scope_type, session.district_id, session.small_group_id),
             before_session,

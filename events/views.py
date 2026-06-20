@@ -60,11 +60,9 @@ def can_manage_service_events(user):
 
 def get_visible_service_events(user):
     events = ServiceEvent.objects.select_related(
-        "district",
         "host_language_unit",
         "ministry_context",
         "rotation_anchor_team",
-        "small_group",
         "created_by",
     ).prefetch_related(
         # SE-AS.4: can_be_seen_by reads audience scope rows per event; the

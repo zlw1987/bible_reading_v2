@@ -41,13 +41,6 @@ class PrayerRequest(models.Model):
     )
     is_anonymous = models.BooleanField(default=False)
 
-    small_group_at_post = models.ForeignKey(
-        "accounts.SmallGroup",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="prayer_requests",
-    )
     structure_unit_at_post = models.ForeignKey(
         "accounts.ChurchStructureUnit",
         on_delete=models.SET_NULL,
@@ -55,9 +48,7 @@ class PrayerRequest(models.Model):
         blank=True,
         related_name="prayer_requests_at_post",
         help_text=(
-            "Structure-native snapshot driving group prayer visibility. "
-            "small_group_at_post remains a legacy compatibility / display / "
-            "history mirror."
+            "Structure-native snapshot driving group prayer visibility."
         ),
     )
 
@@ -89,7 +80,6 @@ class PrayerRequest(models.Model):
         indexes = [
             models.Index(fields=["visibility", "status"]),
             models.Index(fields=["user", "status"]),
-            models.Index(fields=["small_group_at_post", "status"]),
             models.Index(fields=["structure_unit_at_post", "status"]),
         ]
 

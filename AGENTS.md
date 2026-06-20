@@ -95,7 +95,7 @@ Current migrated/runtime-retired state:
 * ServiceEvent zero-row events fail closed for ordinary users after `SE-RETIRE.1B`.
 * ServiceEvent legacy `scope_type`, `district`, and `small_group` fields remain stored/admin/display/backfill/audit/rollback context only.
 * Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary membership.
-* `PrayerRequest.small_group_at_post` remains legacy mirror/display/history only.
+* `PrayerRequest.small_group_at_post` was removed in `PRAYER-MIRROR.1D` (migration `prayers/0004`); its cleanup command (`cleanup_prayer_small_group_mirrors`) and the `resolve_legacy_small_group_mirror` helper were retired with it. Prayer group visibility is fully structure-native; `Profile.small_group` and legacy `SmallGroup` no longer participate in prayer visibility, writes, display, admin, cleanup, or schema. This was a prayer-only field removal and does not remove the `SmallGroup` table.
 * Bible Study V2 `BibleStudyMeeting` visibility, `/studies/` / Today pre-filtering, and role/worship pickers use audience rows plus active primary membership.
 * Bible Study V2 zero-row meetings fail closed for ordinary users.
 * V1 `BibleStudySession` app-level runtime is retired.

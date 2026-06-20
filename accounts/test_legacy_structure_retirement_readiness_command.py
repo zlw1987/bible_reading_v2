@@ -247,11 +247,14 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             out.getvalue(),
         )
 
-    def test_prayer_small_group_mirror_cleanup_command_listed(self):
+    def test_prayer_small_group_mirror_cleanup_command_no_longer_listed(self):
+        # PRAYER-MIRROR.1D removed the cleanup command together with the
+        # PrayerRequest.small_group_at_post field, so it must no longer appear
+        # in the diagnostic/backfill command list.
         out = StringIO()
         call_command("audit_legacy_structure_retirement_readiness", stdout=out)
 
-        self.assertIn(
+        self.assertNotIn(
             "prayers.management.commands.cleanup_prayer_small_group_mirrors",
             out.getvalue(),
         )

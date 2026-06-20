@@ -2,13 +2,14 @@
 
 Group-shared ``PrayerRequest`` visibility for ordinary members uses the
 structure-native snapshot (``structure_unit_at_post``) plus the viewer's single
-active primary ``ChurchStructureMembership``. Legacy ``Profile.small_group``
-and ``small_group_at_post`` are compatibility mirrors only.
+active primary ``ChurchStructureMembership``. Legacy ``Profile.small_group`` is
+not consulted for prayer visibility; the legacy ``small_group_at_post`` mirror
+field was removed in PRAYER-MIRROR.1D.
 """
 
 from dataclasses import dataclass
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit
 from accounts.structure_selectors import (
     _collect_unit_and_descendant_ids,
     get_user_primary_membership_unit,
@@ -45,34 +46,11 @@ class GroupPrayerWriteContext:
     """Resolved membership-core context for stamping a group prayer request."""
 
     structure_unit: "ChurchStructureUnit | None" = None
-    legacy_small_group: "SmallGroup | None" = None
     reason_code: str = "no_context"
 
     @property
     def can_share_to_group(self):
         return self.structure_unit is not None
-
-
-def resolve_legacy_small_group_mirror(unit):
-    """Return the lone active legacy SmallGroup mapped to ``unit`` or ``None``.
-
-    PRAYER-MIRROR.1A: this helper is no longer called by the normal app write
-    path. ``PrayerRequest.small_group_at_post`` is no longer stamped on
-    create/edit. The helper is retained as diagnostic / admin / future guarded
-    cleanup support only and carries no live runtime authority.
-    """
-    if unit is None or unit.id is None:
-        return None
-
-    groups = list(
-        SmallGroup.objects.filter(
-            church_structure_unit_id=unit.id,
-            is_active=True,
-        )[:2]
-    )
-    if len(groups) != 1:
-        return None
-    return groups[0]
 
 
 def get_user_group_prayer_write_context(user, target_date=None):
@@ -91,8 +69,7 @@ def get_user_group_prayer_write_context(user, target_date=None):
             reason_code="membership_unit_not_active_small_group"
         )
 
-    # PRAYER-MIRROR.1A: the legacy SmallGroup mirror is no longer resolved or
-    # stamped on the normal write path. ``legacy_small_group`` stays ``None``;
+    # The legacy SmallGroup mirror was removed in PRAYER-MIRROR.1D.
     # ``structure_unit`` is the canonical group-prayer snapshot.
     return GroupPrayerWriteContext(
         structure_unit=membership_unit,

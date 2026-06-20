@@ -163,10 +163,9 @@ def prayer_list(request):
             else:
                 prayer.structure_unit_at_post = None
 
-            # PRAYER-MIRROR.1A: the legacy ``small_group_at_post`` mirror is no
-            # longer written here. ``structure_unit_at_post`` is the canonical
-            # group-prayer snapshot; new group prayers leave the legacy mirror
-            # null.
+            # ``structure_unit_at_post`` is the canonical group-prayer snapshot.
+            # The legacy ``small_group_at_post`` mirror was removed in
+            # PRAYER-MIRROR.1D.
             prayer.save()
 
             messages.success(request, message_text(request, "prayer_posted"))
@@ -293,11 +292,9 @@ def edit_prayer_request(request, prayer_id):
             else:
                 edited_prayer.structure_unit_at_post = None
 
-            # PRAYER-MIRROR.1A: do not re-stamp or clear the legacy
-            # ``small_group_at_post`` mirror on edit. Existing stored mirror
-            # values are preserved as legacy display/history context only;
             # ``structure_unit_at_post`` remains the canonical visibility
-            # snapshot.
+            # snapshot. The legacy ``small_group_at_post`` mirror was removed in
+            # PRAYER-MIRROR.1D.
             edited_prayer.save()
 
             messages.success(request, message_text(request, "prayer_updated"))

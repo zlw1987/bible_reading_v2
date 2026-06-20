@@ -138,21 +138,19 @@ class PrayerRequestFlowTests(TestCase):
 
         self.assertEqual(prayer.user, self.user)
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_GROUP)
+        # New group prayers stamp the structure-native snapshot.
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
-        # PRAYER-MIRROR.1A: new group prayers stamp only the structure-native
-        # snapshot; the legacy SmallGroup mirror is left null.
-        self.assertIsNone(prayer.small_group_at_post)
 
-    def test_group_prayer_creation_allows_null_legacy_mirror(self):
-        mirrorless_unit = create_structure_unit("MIRRORLESS", "Mirrorless Group")
-        mirrorless_user = User.objects.create_user(
-            username="mirrorless",
+    def test_group_prayer_creation_stamps_structure_snapshot(self):
+        snapshot_unit = create_structure_unit("SNAPSHOTSG", "Snapshot Group")
+        snapshot_user = User.objects.create_user(
+            username="snapshot",
             password="TestPass123!",
         )
-        create_primary_membership(mirrorless_user, mirrorless_unit)
+        create_primary_membership(snapshot_user, snapshot_unit)
 
         self.set_language("en")
-        self.client.login(username="mirrorless", password="TestPass123!")
+        self.client.login(username="snapshot", password="TestPass123!")
 
         response = self.client.post(
             reverse("prayer_list"),
@@ -166,8 +164,7 @@ class PrayerRequestFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         prayer = PrayerRequest.objects.get(title="Structure only group prayer")
-        self.assertEqual(prayer.structure_unit_at_post, mirrorless_unit)
-        self.assertIsNone(prayer.small_group_at_post)
+        self.assertEqual(prayer.structure_unit_at_post, snapshot_unit)
 
     def test_group_prayer_visible_to_same_group_user(self):
         PrayerRequest.objects.create(
@@ -175,7 +172,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Group prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -233,7 +229,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Hidden group prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -263,7 +258,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Membership only visible prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -308,7 +302,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Membership wins prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.other_group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -326,13 +319,12 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Membership wins prayer")
 
-    def test_legacy_only_group_prayer_snapshot_fails_closed_for_non_owner(self):
+    def test_group_prayer_without_structure_snapshot_fails_closed_for_non_owner(self):
         prayer = PrayerRequest.objects.create(
             user=self.user,
-            title="Legacy snapshot only prayer",
+            title="Snapshotless group prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
         )
 
         self.assertFalse(prayer.can_be_seen_by(self.same_group_user))
@@ -347,10 +339,9 @@ class PrayerRequestFlowTests(TestCase):
     def test_owner_and_staff_can_still_see_group_prayer_without_snapshot(self):
         prayer = PrayerRequest.objects.create(
             user=self.user,
-            title="Owner staff legacy prayer",
+            title="Owner staff snapshotless prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
         )
 
         self.assertTrue(prayer.can_be_seen_by(self.user))
@@ -418,7 +409,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Answered prayer",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -446,7 +436,6 @@ class PrayerRequestFlowTests(TestCase):
             title="Old title",
             body="Old body",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -470,11 +459,9 @@ class PrayerRequestFlowTests(TestCase):
         self.assertEqual(prayer.title, "New title")
         self.assertEqual(prayer.body, "New body")
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_CHURCH)
+        # The canonical structure snapshot is cleared when the prayer leaves
+        # group visibility.
         self.assertIsNone(prayer.structure_unit_at_post)
-        # PRAYER-MIRROR.1A: the canonical structure snapshot is cleared when the
-        # prayer leaves group visibility, but the legacy mirror is preserved
-        # (not re-stamped, not cleared) on edit.
-        self.assertEqual(prayer.small_group_at_post, self.group)
         self.assertTrue(prayer.is_anonymous)
 
     def test_edit_to_group_rebinds_current_membership_context(self):
@@ -502,19 +489,16 @@ class PrayerRequestFlowTests(TestCase):
 
         prayer.refresh_from_db()
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_GROUP)
+        # Rebinding to group stamps the structure snapshot from the author's
+        # current active primary membership.
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
-        # PRAYER-MIRROR.1A: rebinding to group stamps the structure snapshot but
-        # no longer re-stamps the legacy mirror. The source prayer was church-wide
-        # (mirror null), so it stays null after the edit.
-        self.assertIsNone(prayer.small_group_at_post)
 
-    def test_edit_to_private_clears_structure_snapshot_and_preserves_legacy_mirror(self):
+    def test_edit_to_private_clears_structure_snapshot(self):
         prayer = PrayerRequest.objects.create(
             user=self.user,
             title="Group to private",
             body="Old body",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -535,10 +519,8 @@ class PrayerRequestFlowTests(TestCase):
 
         prayer.refresh_from_db()
         self.assertEqual(prayer.visibility, PrayerRequest.VISIBILITY_PRIVATE)
+        # Structure snapshot cleared on leaving group visibility.
         self.assertIsNone(prayer.structure_unit_at_post)
-        # PRAYER-MIRROR.1A: structure snapshot cleared on leaving group
-        # visibility, but the existing legacy mirror is preserved, not cleared.
-        self.assertEqual(prayer.small_group_at_post, self.group)
 
     def test_other_user_cannot_edit_prayer_request(self):
         prayer = PrayerRequest.objects.create(
@@ -1208,9 +1190,12 @@ class PrayerRequestFlowTests(TestCase):
 
 
 class PrayerLegacyMirrorWriteRetirementTests(TestCase):
-    """PRAYER-MIRROR.1A: normal app writes no longer touch the legacy
-    ``small_group_at_post`` mirror, while structure-native visibility and
-    existing stored mirrors are preserved.
+    """Group-prayer writes and visibility are fully structure-native.
+
+    The legacy ``PrayerRequest.small_group_at_post`` mirror field was removed in
+    PRAYER-MIRROR.1D; these tests confirm create/edit/visibility rely only on
+    ``structure_unit_at_post`` plus active primary membership, and that
+    ``Profile.small_group`` alone grants no group-prayer visibility.
     """
 
     def setUp(self):
@@ -1237,7 +1222,7 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         )
         create_primary_membership(self.viewer, self.group_unit)
 
-    def test_new_group_prayer_stamps_structure_unit_but_leaves_mirror_null(self):
+    def test_new_group_prayer_stamps_structure_unit(self):
         self.client.login(username="mirror_user", password="TestPass123!")
 
         response = self.client.post(
@@ -1253,9 +1238,8 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         self.assertEqual(response.status_code, 302)
         prayer = PrayerRequest.objects.get(title="Mirror create")
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
-        self.assertIsNone(prayer.small_group_at_post)
 
-    def test_editing_group_prayer_does_not_reintroduce_mirror(self):
+    def test_editing_group_prayer_keeps_structure_snapshot(self):
         prayer = PrayerRequest.objects.create(
             user=self.user,
             title="No mirror on create",
@@ -1263,7 +1247,6 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
             visibility=PrayerRequest.VISIBILITY_GROUP,
             structure_unit_at_post=self.group_unit,
         )
-        self.assertIsNone(prayer.small_group_at_post)
 
         self.client.login(username="mirror_user", password="TestPass123!")
         response = self.client.post(
@@ -1279,37 +1262,8 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         self.assertEqual(response.status_code, 302)
         prayer.refresh_from_db()
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
-        # The legacy mirror is never re-stamped on edit.
-        self.assertIsNone(prayer.small_group_at_post)
 
-    def test_editing_preserves_existing_legacy_mirror(self):
-        prayer = PrayerRequest.objects.create(
-            user=self.user,
-            title="Existing mirror",
-            body="Old body",
-            visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
-            structure_unit_at_post=self.group_unit,
-        )
-
-        self.client.login(username="mirror_user", password="TestPass123!")
-        response = self.client.post(
-            reverse("edit_prayer_request", args=[prayer.id]),
-            {
-                "title": "Edited mirror",
-                "body": "New body",
-                "visibility": PrayerRequest.VISIBILITY_GROUP,
-                "is_anonymous": "",
-            },
-        )
-
-        self.assertEqual(response.status_code, 302)
-        prayer.refresh_from_db()
-        self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
-        # Existing stored mirror is preserved, not cleared, on ordinary edit.
-        self.assertEqual(prayer.small_group_at_post, self.group)
-
-    def test_forged_post_cannot_set_legacy_mirror_on_create(self):
+    def test_forged_post_cannot_set_structure_snapshot_on_create(self):
         self.client.login(username="mirror_user", password="TestPass123!")
 
         response = self.client.post(
@@ -1319,19 +1273,17 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
                 "body": "Please pray.",
                 "visibility": PrayerRequest.VISIBILITY_GROUP,
                 "is_anonymous": "",
-                # Attacker-supplied fields the form/view must ignore.
-                "small_group_at_post": self.other_group.id,
+                # Attacker-supplied field the form/view must ignore.
                 "structure_unit_at_post": self.other_group_unit.id,
             },
         )
 
         self.assertEqual(response.status_code, 302)
         prayer = PrayerRequest.objects.get(title="Forged create")
-        self.assertIsNone(prayer.small_group_at_post)
         # Structure snapshot still comes from the author's own membership.
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
 
-    def test_forged_post_cannot_set_legacy_mirror_on_edit(self):
+    def test_forged_post_cannot_set_structure_snapshot_on_edit(self):
         prayer = PrayerRequest.objects.create(
             user=self.user,
             title="Forged edit",
@@ -1348,19 +1300,17 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
                 "body": "New body",
                 "visibility": PrayerRequest.VISIBILITY_GROUP,
                 "is_anonymous": "",
-                "small_group_at_post": self.other_group.id,
                 "structure_unit_at_post": self.other_group_unit.id,
             },
         )
 
         self.assertEqual(response.status_code, 302)
         prayer.refresh_from_db()
-        self.assertIsNone(prayer.small_group_at_post)
         self.assertEqual(prayer.structure_unit_at_post, self.group_unit)
 
-    def test_group_prayer_visibility_uses_structure_snapshot_not_mirror(self):
-        # Snapshot-only prayer (no legacy mirror) is visible to a same-unit
-        # member through active primary membership.
+    def test_group_prayer_visibility_uses_structure_snapshot(self):
+        # Snapshot-only prayer is visible to a same-unit member through active
+        # primary membership.
         PrayerRequest.objects.create(
             user=self.user,
             title="Snapshot only visible",
@@ -1386,7 +1336,6 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
             title="Legacy profile only target",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -1448,9 +1397,9 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
 
         self.assertFalse(prayer.can_be_seen_by(ambiguous))
 
-    def test_admin_no_longer_exposes_legacy_mirror_field(self):
-        # PRAYER-MIRROR.1C: the admin maintenance surface no longer lists,
-        # searches, or select_relateds the legacy small_group_at_post mirror.
+    def test_admin_does_not_reference_removed_mirror_field(self):
+        # PRAYER-MIRROR.1D removed the legacy small_group_at_post field, so no
+        # admin surface may list, search, or select_related it.
         self.assertNotIn("small_group_at_post", PrayerRequestAdmin.list_display)
         self.assertNotIn(
             "small_group_at_post__name", PrayerRequestAdmin.search_fields
@@ -1461,10 +1410,9 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         # The structure-native snapshot remains the admin display/search surface.
         self.assertIn("structure_unit_at_post", PrayerRequestAdmin.list_display)
 
-    def test_prayer_list_and_detail_render_without_mirror(self):
-        # A group prayer whose legacy mirror is null still renders in both the
-        # list and detail views, proving normal display no longer depends on
-        # the small_group_at_post select_related.
+    def test_prayer_list_and_detail_render_with_structure_snapshot(self):
+        # A structure-snapshotted group prayer renders in both the list and
+        # detail views via the structure-native snapshot.
         prayer = PrayerRequest.objects.create(
             user=self.user,
             title="Mirrorless display prayer",
@@ -1472,7 +1420,6 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
             visibility=PrayerRequest.VISIBILITY_GROUP,
             structure_unit_at_post=self.group_unit,
         )
-        self.assertIsNone(prayer.small_group_at_post)
 
         self.client.login(username="mirror_viewer", password="TestPass123!")
 
@@ -1553,7 +1500,6 @@ class PrayerListTabAudienceTests(TestCase):
             title="Own group request",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
         self.own_church = PrayerRequest.objects.create(
@@ -1568,7 +1514,6 @@ class PrayerListTabAudienceTests(TestCase):
             title="Same group request",
             body="Please pray.",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=self.group,
             structure_unit_at_post=self.group_unit,
         )
         self.other_user_church = PrayerRequest.objects.create(

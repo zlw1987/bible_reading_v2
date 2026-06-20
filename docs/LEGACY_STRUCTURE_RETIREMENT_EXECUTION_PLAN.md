@@ -65,28 +65,24 @@ closest legacy field candidates still require admin/display/diagnostic cleanup
 and target-DB dry-run review before any separate schema migration can be
 proposed.
 
-`PrayerRequest.small_group_at_post` is included as an explicit schema-prep
-candidate. **PRAYER-MIRROR.1A stops the normal app-level writes to
-`PrayerRequest.small_group_at_post`.** The prayer group-create/edit path no
-longer stamps or re-stamps this legacy `SmallGroup` FK mirror (the write through
-`prayers.structure_visibility.resolve_legacy_small_group_mirror` is removed from
-the runtime write path; the helper remains diagnostic/admin/future-cleanup
-support only). `PrayerRequest.structure_unit_at_post` plus active primary
-`ChurchStructureMembership` remains the canonical group-prayer visibility
-snapshot, so the mirror carries no live runtime authority of its own and is now
-legacy display/history/admin/cleanup context only, not an access source. New
-group prayers leave `small_group_at_post` null; existing stored mirror values
-are preserved on ordinary edit (not re-stamped, not cleared) and are **not**
-cleared by PRAYER-MIRROR.1A. After PRAYER-MIRROR.1A the schema-prep audit
-reclassifies the candidate away from `blocked_by_app_write` (to `blocked_by_data`
-while rows remain populated, or `blocked_by_display_or_admin` once data is
-cleared). PRAYER-MIRROR.1B adds the guarded dry-run-first
-`cleanup_prayer_small_group_mirrors` command (dry-run by default; apply requires
-`--apply` plus `--confirm-prayer-small-group-mirror-cleanup`) that clears only
-the safe stored mirror values where doing so cannot change visibility or display;
-it does not remove the field/table. Admin/display/diagnostic surface removal and
-any field or table removal remain later, separately approved slices. No
-field/table removal is approved by schema-prep.
+**`PrayerRequest.small_group_at_post` has been removed (PRAYER-MIRROR.1D).**
+PRAYER-MIRROR.1A stopped the normal app-level writes, 1B added the guarded
+dry-run-first `cleanup_prayer_small_group_mirrors` command and the local/dev
+apply cleared the stored mirror data blockers, and 1C removed the prayer
+display/admin surfaces. With no stored data and no write/display/admin
+references left, PRAYER-MIRROR.1D dropped the model field (Django migration
+`prayers/0004_remove_prayerrequest_prayers_pra_small_g_c02632_idx_and_more.py`,
+which removes the `small_group_at_post` field and its index), retired the
+now-orphaned `cleanup_prayer_small_group_mirrors` command and the
+`prayers.structure_visibility.resolve_legacy_small_group_mirror` helper, and
+reclassified the schema-prep candidate as historical-only (no active blocker).
+`PrayerRequest.structure_unit_at_post` plus active primary
+`ChurchStructureMembership` remains the canonical and only group-prayer
+visibility snapshot. `Profile.small_group` and the legacy `SmallGroup` model no
+longer participate in prayer visibility, writes, display, admin, cleanup, or
+schema. This was a prayer-only field removal: it does not remove the
+`SmallGroup` table and does not affect ServiceEvent, Bible Study, reflection,
+role, or profile schema.
 
 Docs-only later-cleanup notes (not changed in this slice): `reading/views.py`
 still imports `accounts.models.SmallGroup` although the only remaining reference
@@ -313,7 +309,7 @@ Current runtime split:
 - Bible Study V2 meeting visibility, Today/landing, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; V2 display labels now prefer `anchor_unit` / meeting audience units after BS-V2-MIRROR.1A, and BS-V2-MIRROR.1B stops new normal meeting writes from setting `BibleStudyMeeting.small_group`. BS-V2-MIRROR.1C adds `cleanup_bible_study_v2_small_group_mirrors`, a dry-run-first command that can clear existing mirrors only when `generation_key`, `anchor_unit`, and exactly one matching active small-group audience row already prove structure-native identity. Normal V2 schedule saves now write `BibleStudySeriesAudienceScope` rows without writing/updating legacy series scope fields; generation/preview read those audience rows and fail closed with zero rows. BS-SERIES-SCOPE.1B adds `cleanup_bible_study_series_legacy_scope_fields`, a dry-run-first command that can clear existing series legacy scope values only when the series already has valid `BibleStudySeriesAudienceScope` rows. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains a separate migration. V1 `BibleStudySession` app runtime is retired after BS-V1-RETIRE.1A and remaining V1 rows are pilot/archive data removable only by the explicit guarded BS-V1-PURGE.1A command.
 - Reflection group read/write paths use `ReflectionComment.structure_unit_at_post` plus active primary `ChurchStructureMembership`; `small_group_at_post` remains a legacy compatibility/staff-display mirror. REFLECTION-MIRROR.1D stops normal app-level writes to `small_group_at_post` (create, reply, and edit-into-group paths leave it null; group→group Policy C edits preserve the existing value without re-stamping it), and the passage-wall group label now prefers `structure_unit_at_post` with legacy `small_group_at_post` fallback only for old rows. It does not clear existing stored values and does not remove the field. REFLECTION-MIRROR.1E adds `cleanup_reflection_small_group_mirrors`, a dry-run-first command that clears existing stored `small_group_at_post` values only when doing so cannot change visibility or display: group rows whose matching active small-group `structure_unit_at_post` already drives visibility (including hidden/deleted rows), and non-group rows that carry a `structure_unit_at_post`. Non-group rows with no structure snapshot (the legacy mirror is still the passage-wall display label) and group rows with a missing/inactive/wrong-type/unmapped/mismatched snapshot are skipped. It requires `--apply` plus `--confirm-reflection-small-group-mirror-cleanup`, performs no schema migration or runtime source switch, and does not remove the field; field/schema retirement remains a separate later slice. REFLECTION-MIRROR.1F adds `cleanup_reflection_nongroup_display_mirrors`, a dry-run-first command that finishes the non-group case the 1E command conservatively skipped: for non-group rows whose only remaining display context is the legacy mirror (`small_group_at_post` set, `visibility != group`, `structure_unit_at_post` null) and whose legacy group maps to a valid active small-group unit, it sets `structure_unit_at_post` to that unit and clears `small_group_at_post`, preserving the passage-wall label while removing the legacy `SmallGroup` FK. It requires `--apply` plus `--confirm-reflection-nongroup-display-mirror-cleanup`, never changes `visibility`/`parent`/`body`, does not infer anything from parent (replies use only their own mapping), performs no schema migration or runtime source switch, and does not remove the field; field/schema retirement remains a separate later slice.
 - Role runtime scope uses explicit `ChurchRoleAssignment.structure_unit`; legacy `district` / `small_group` role fields remain stored/admin/display/audit/backfill/rollback context only.
-- Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary `ChurchStructureMembership`. PRAYER-MIRROR.1A stops normal app-level writes to `PrayerRequest.small_group_at_post`: the prayer group create/edit path no longer stamps or re-stamps it (`prayers.structure_visibility.resolve_legacy_small_group_mirror` is no longer on the runtime write path and is diagnostic/admin/cleanup support only). New group prayers leave `small_group_at_post` null, and existing mirror values are preserved on edit and not cleared. The mirror is now legacy display/history/admin/cleanup context only with no live runtime authority. PRAYER-MIRROR.1B added the guarded dry-run-first `cleanup_prayer_small_group_mirrors` command and local/dev apply cleared the stored data blockers. PRAYER-MIRROR.1C removed the `prayers.views` display `select_related` and the `PrayerRequestAdmin` list/search/select_related surfaces, so only guarded cleanup/diagnostic tooling now references the field and the schema-prep audit reclassifies it from `blocked_by_display_or_admin` to `blocked_by_diagnostic_tooling`. The field is still physically present; field/table retirement remains a separate later slice.
+- Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary `ChurchStructureMembership`. PRAYER-MIRROR.1A–1C stopped the legacy `small_group_at_post` writes, cleared the stored data (local/dev apply of the guarded `cleanup_prayer_small_group_mirrors` command), and removed the display/admin surfaces. **PRAYER-MIRROR.1D removed the `PrayerRequest.small_group_at_post` model field** (migration `prayers/0004`), retired the now-orphaned `cleanup_prayer_small_group_mirrors` command and the `prayers.structure_visibility.resolve_legacy_small_group_mirror` helper, and reclassified the schema-prep candidate as historical-only. `Profile.small_group` and the legacy `SmallGroup` model no longer participate in prayer visibility, writes, display, admin, cleanup, or schema. This was a prayer-only field removal; it does not remove the `SmallGroup` table or affect other modules.
 
 ## Code-Level Inventory
 
@@ -330,7 +326,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | Bible Study V2 generation key / anchor bridge | `studies.services.normal_generation_key_for_unit()`, `anchor_unit`, `generation_key`, `backfill_bible_study_v2_generation_keys` | generation/idempotency bridge | Structure-native idempotency is present; BS-V2-KEY.1A adds dry-run-first support to backfill missing safe keys/anchors without changing runtime behavior, audience rows, or the `small_group` mirror. |
 | Reflection legacy small-group snapshot | `comments.models.ReflectionComment.small_group_at_post` | stored mirror/display/history snapshot | No longer grants ordinary group visibility. REFLECTION-MIRROR.1D stops normal app-level writes (create/reply/edit-into-group leave it null; Policy C group→group edits preserve existing values without re-stamping). REFLECTION-MIRROR.1E adds guarded dry-run-first cleanup (`cleanup_reflection_small_group_mirrors`) that clears existing stored values only when clearing cannot change visibility/display (group rows matching a valid active small-group `structure_unit_at_post`; non-group rows that carry a structure snapshot). REFLECTION-MIRROR.1F adds guarded dry-run-first migration (`cleanup_reflection_nongroup_display_mirrors`) that, for non-group rows whose only display context is the legacy mirror and which map to a valid active small-group unit, sets `structure_unit_at_post` to that unit and clears `small_group_at_post`. Unsafe rows stay blocked; field/table removal still requires a later schema slice. |
 | Reflection structure snapshot | `ReflectionComment.structure_unit_at_post` | already runtime-retired / historical only | Canonical group reflection read/write snapshot after CS-CORE.4G.2/4G.3. |
-| Prayer legacy small-group mirror | `prayers.models.PrayerRequest.small_group_at_post`, `prayers.structure_visibility.resolve_legacy_small_group_mirror` (diagnostic/cleanup only), `cleanup_prayer_small_group_mirrors` | stored mirror/history + guarded cleanup/diagnostic context | No longer ordinary visibility authority (`structure_unit_at_post` plus active primary membership drive group prayer visibility). PRAYER-MIRROR.1A stopped the normal app-level write: the prayer group create/edit path no longer stamps or re-stamps the mirror, new group prayers leave it null, and existing stored values are preserved on edit and not cleared. PRAYER-MIRROR.1B added guarded dry-run-first cleanup (`cleanup_prayer_small_group_mirrors`, requires `--apply` plus `--confirm-prayer-small-group-mirror-cleanup`) that clears stored values only where clearing cannot change visibility/display, and local/dev apply cleared the remaining data blockers. PRAYER-MIRROR.1C removed the `prayers.views` display `select_related` and the `PrayerRequestAdmin` list/search/select_related surfaces, so the schema-prep audit reclassifies it from `blocked_by_display_or_admin` to `blocked_by_diagnostic_tooling`: only guarded cleanup/diagnostic tooling still references it. It performs no schema migration or runtime source switch and does not remove the field; field/table retirement remains a later slice. |
+| Prayer legacy small-group mirror | `prayers.models.PrayerRequest` (field removed) | removed / historical only | **Removed in PRAYER-MIRROR.1D.** Ordinary group-prayer visibility uses `PrayerRequest.structure_unit_at_post` plus active primary membership. 1A stopped the write, 1B cleared the stored data via the guarded `cleanup_prayer_small_group_mirrors` command, 1C removed the display/admin surfaces, and 1D dropped the model field (migration `prayers/0004`), retired the `cleanup_prayer_small_group_mirrors` command and the `resolve_legacy_small_group_mirror` helper, and reclassified the schema-prep candidate as historical-only. Prayer-only field removal; the `SmallGroup` table is unaffected. |
 | Role legacy scope fields | `ChurchRoleAssignment.district`, `ChurchRoleAssignment.small_group` | stored mirror/display/history snapshot | Runtime fallback is retired; fields remain display/audit/backfill/rollback context until field-level retirement. |
 | Role explicit structure scope | `ChurchRoleAssignment.structure_unit` | already runtime-retired / historical only | Current non-global role runtime scope source; membership is not used to infer role scope. |
 | Legacy bridge mappings | `MinistryContext.church_structure_unit`, `District.church_structure_unit`, `SmallGroup.church_structure_unit` | generation/idempotency bridge | Still needed for setup diagnostics, Bible Study resolution/generation, and backfill/audit comparison. |
@@ -376,7 +372,7 @@ Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wron
 - `BibleStudyMeeting.small_group`
 - V1 `BibleStudySession.small_group`
 - `ReflectionComment.small_group_at_post`
-- `PrayerRequest.small_group_at_post`
+- `PrayerRequest.small_group_at_post` (removed in PRAYER-MIRROR.1D; no longer an inbound `SmallGroup` reference)
 - `ChurchRoleAssignment.small_group`
 - `ServiceEvent.small_group`
 - `BibleStudySeries.small_group`
@@ -384,7 +380,7 @@ Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wron
 Blockers:
 
 - Existing `SmallGroup` rows and FK references block table retirement.
-- `PrayerRequest.small_group_at_post`: PRAYER-MIRROR.1A stopped the normal prayer group create/edit write to this FK mirror, so it is no longer an app-level write blocker. PRAYER-MIRROR.1B added guarded cleanup and local/dev apply cleared the stored data; PRAYER-MIRROR.1C removed the admin/display read surfaces. It now blocks only on guarded cleanup/diagnostic tooling (`blocked_by_diagnostic_tooling`). See the dedicated subsection below; this inbound reference can be retired only after that tooling is retired in a later field/table-removal slice.
+- `PrayerRequest.small_group_at_post`: **removed in PRAYER-MIRROR.1D.** After 1A stopped the write, 1B cleared the stored data, and 1C removed the admin/display read surfaces, 1D dropped the model field (migration `prayers/0004`), retired the `cleanup_prayer_small_group_mirrors` command and `resolve_legacy_small_group_mirror` helper, and reclassified the schema-prep candidate as historical-only. This inbound `SmallGroup` reference no longer exists. The `SmallGroup` table itself is unaffected by this prayer-only field removal.
 - Unmapped/inactive/wrong-type bridge mappings are readiness blockers for any non-lossy migration or final archive step.
 - `SmallGroup.district` parent links are redundant with `ChurchStructureUnit.parent`. LEGACY-OBJECT-LINKS.1A adds dry-run-first `cleanup_legacy_structure_parent_links` to clear eligible links (child unit `parent` equals the district's mapped active district unit); unsafe/mismatched links stay set. This does not delete `SmallGroup` rows or remove the field.
 - ROW-RETIRE.1A separately counts the remaining `SmallGroup` rows as future
@@ -494,83 +490,38 @@ Blockers:
 
 ### Prayer Legacy Small-Group Mirror
 
-Schema-prep candidate: `PrayerRequest.small_group_at_post` (data counter
-`prayer_request_small_group_at_post`).
+Status: **`PrayerRequest.small_group_at_post` was removed in PRAYER-MIRROR.1D.**
 
-Status: **PRAYER-MIRROR.1A stops normal app-level writes to
-`PrayerRequest.small_group_at_post`.**
+Summary of the completed slice sequence:
 
-- `prayers.views` group-prayer create/edit no longer stamps or re-stamps the
-  legacy `SmallGroup` FK mirror. `get_user_group_prayer_write_context` no longer
-  resolves it (the `legacy_small_group` context value stays `None`), so
-  `prayers.structure_visibility.resolve_legacy_small_group_mirror` is no longer
-  on the runtime write path. The helper is retained as diagnostic / admin /
-  future guarded-cleanup support only.
-- Ordinary group-prayer visibility is structure-native
-  (`PrayerRequest.structure_unit_at_post` plus active primary
-  `ChurchStructureMembership`) and is unchanged. The mirror carries no access
-  authority; it is now legacy display/history/admin/cleanup context only.
-- New group prayers leave `small_group_at_post` null. On ordinary edit the
-  existing stored mirror value is preserved (not re-stamped, not cleared).
-  Existing stored mirror values are **not** cleared in this slice.
-- The schema-prep audit no longer classifies this candidate
-  `blocked_by_app_write`. It reports `blocked_by_data` while mirror rows remain
-  populated (data counter `prayer_request_small_group_at_post`), and falls back
-  to `blocked_by_display_or_admin` once those rows are cleared.
-- PRAYER-MIRROR.1B adds the guarded dry-run-first cleanup command
-  `cleanup_prayer_small_group_mirrors` (mirroring the reflection cleanup
-  pattern). It clears existing stored `small_group_at_post` values only where
-  doing so cannot change visibility or display: group rows whose
-  `structure_unit_at_post` is non-null, active, a small-group unit, and equal to
-  the mapped legacy unit (decision `eligible_clear_group_matching_snapshot`), and
-  non-group rows that satisfy the same full matching checks (decision
-  `eligible_clear_nongroup_matching_snapshot`). Non-group rows with no
-  `structure_unit_at_post` are skipped conservatively
-  (`skipped_display_context_uncertain`) for a later separate display-mirror
-  migration, and group rows with missing/inactive/wrong-type/unmapped/mismatched
-  snapshots are skipped. The only field it mutates is `small_group_at_post`
-  (set to null); it never touches `visibility`, `structure_unit_at_post`,
-  `status`, `title`/`body`/`answer_note`, author, or hidden/deleted state, never
-  deletes rows, performs no schema migration or runtime source switch, and never
-  prints prayer free text. It requires `--apply` plus
-  `--confirm-prayer-small-group-mirror-cleanup` and supports `--verbose`,
-  `--limit N`, and optional `--prayer-id ID` (verbose-only filters). It does not
-  remove the field/table; admin/display/diagnostic surface removal and any
-  field/schema retirement remain later, separately approved slices.
+- PRAYER-MIRROR.1A stopped the normal app-level writes; the group-prayer
+  create/edit path stamps only the structure-native
+  `PrayerRequest.structure_unit_at_post`.
+- PRAYER-MIRROR.1B added the guarded dry-run-first
+  `cleanup_prayer_small_group_mirrors` command and the local/dev `--apply`
+  cleared the stored mirror data blockers.
+- PRAYER-MIRROR.1C removed the prayer display `select_related` and the
+  `PrayerRequestAdmin` list/search/`list_select_related` surfaces.
+- PRAYER-MIRROR.1D removed the model field itself (Django migration
+  `prayers/0004_remove_prayerrequest_prayers_pra_small_g_c02632_idx_and_more.py`,
+  which removes the `small_group_at_post` field and its index), retired the
+  now-orphaned `cleanup_prayer_small_group_mirrors` command and the
+  `prayers.structure_visibility.resolve_legacy_small_group_mirror` helper,
+  dropped the `prayer_request_small_group_at_post` schema-prep data counter, and
+  reclassified the schema-prep candidate as historical-only (no active blocker).
 
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_prayer_small_group_mirrors
-```
+Current state:
 
-`cleanup_prayer_small_group_mirrors` is dry-run by default. Apply requires both
-explicit flags:
-
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_prayer_small_group_mirrors --apply --confirm-prayer-small-group-mirror-cleanup
-```
-
-Do not run that `--apply` command against the local/dev database during the
-PRAYER-MIRROR.1B implementation task. Field/schema cleanup remains later.
-
-PRAYER-MIRROR.1C removes/downgrades the remaining admin and display read
-surfaces for the legacy mirror now that local/dev apply has cleared the stored
-`prayer_request_small_group_at_post` data blockers:
-
-- `prayers.views` list/detail/report querysets no longer `select_related`
-  `small_group_at_post`; no prayer template ever displayed the legacy mirror, so
-  normal prayer display/read no longer references the field.
-- `PrayerRequestAdmin` no longer lists, searches, or `list_select_related`s the
-  mirror; the structure-native `structure_unit_at_post` snapshot is the admin
-  display/search surface.
-- The `small_group_at_post` model field is still physically present. Group-prayer
-  visibility and create/edit behavior are unchanged.
-- With admin/display surfaces removed and stored data cleared, the schema-prep
-  audit reclassifies this candidate from `blocked_by_display_or_admin` to
-  `blocked_by_diagnostic_tooling`: only the guarded `cleanup_prayer_small_group_mirrors`
-  command and the `resolve_legacy_small_group_mirror` diagnostic helper still
-  reference it. Cleanup/audit tooling may keep referencing the field until a
-  later, separately approved field/table-removal slice; it is **not** yet ready
-  for schema removal.
+- Ordinary group-prayer visibility is structure-native and unchanged:
+  `PrayerRequest.structure_unit_at_post` plus the viewer's single active primary
+  `ChurchStructureMembership`. Zero-snapshot group prayers fail closed for
+  non-owners.
+- `Profile.small_group` and the legacy `SmallGroup` model no longer participate
+  in prayer visibility, writes, display, admin, cleanup, or schema.
+- This was a prayer-only field removal. It does not remove the `SmallGroup`
+  table and does not affect ServiceEvent, Bible Study, reflection, role, or
+  profile schema. The `cleanup_prayer_small_group_mirrors` command no longer
+  exists; it was retired only after the stored data was cleared.
 
 ### Role Legacy Fields
 

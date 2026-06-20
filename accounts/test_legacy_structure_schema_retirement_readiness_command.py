@@ -8,9 +8,7 @@ from django.utils import timezone
 
 from accounts.management.commands.audit_legacy_structure_schema_retirement_readiness import (
     Command,
-    STATUS_DATA,
     STATUS_DIAGNOSTIC,
-    STATUS_DISPLAY,
     STATUS_HISTORICAL,
     STATUS_RUNTIME,
     STATUS_WRITE,
@@ -84,14 +82,13 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
-    def make_group_prayer(self, *, title="Group Prayer", small_group=None):
+    def make_group_prayer(self, *, title="Group Prayer"):
         owner = self.make_user(f"prayer_owner_{title}")
         return PrayerRequest.objects.create(
             user=owner,
             title=title,
             body="prayer body text",
             visibility=PrayerRequest.VISIBILITY_GROUP,
-            small_group_at_post=small_group,
             structure_unit_at_post=self.group_unit,
         )
 
@@ -276,51 +273,33 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             0,
         )
 
-    def test_prayer_request_mirror_is_diagnostic_only_after_display_admin_removal(self):
-        # PRAYER-MIRROR.1A stopped the normal app-level mirror write and 1B/1C
-        # cleared stored data and removed the prayers.views display
-        # select_related plus the PrayerRequestAdmin list/search/select_related
-        # surfaces. With no stored mirror rows in this fixture and no
-        # app_read/admin/template references remaining, the candidate is now
-        # classified as diagnostic-tooling-only, not display/admin blocked.
+    def test_prayer_request_mirror_is_historical_after_field_removal(self):
+        # PRAYER-MIRROR.1D removed the PrayerRequest.small_group_at_post model
+        # field after 1A-1C retired its write/display/admin surfaces and the
+        # guarded cleanup cleared stored data. Only immutable historical
+        # migrations still name it, so the candidate is now classified as
+        # historical-only with no active schema blocker.
         audit = run_audit()
-        candidate = _candidate(audit, "PrayerRequest.small_group_at_post")
+        candidate = _candidate(audit, "PrayerRequest.small_group_at_post (removed)")
 
+        self.assertEqual(candidate["live_runtime_references"], ())
         self.assertEqual(candidate["app_write_references"], ())
         self.assertEqual(candidate["app_read_references"], ())
         self.assertEqual(candidate["admin_references"], ())
         self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
         self.assertEqual(candidate["data_blocker_count"], 0)
-        self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
-        self.assertNotEqual(candidate["schema_removal_status"], STATUS_DISPLAY)
-        self.assertNotEqual(candidate["schema_removal_status"], STATUS_WRITE)
-        # Guarded cleanup/diagnostic tooling still references the field, so it is
-        # not yet ready for schema removal.
-        self.assertTrue(candidate["diagnostic_cleanup_references"])
-        # Ordinary group-prayer visibility is structure-native, so the legacy
-        # mirror carries no live runtime authority of its own.
-        self.assertEqual(candidate["live_runtime_references"], ())
-
-    def test_prayer_request_mirror_data_counter_increments(self):
-        before = run_audit()["data_counts"]["prayer_request_small_group_at_post"]
-
-        self.make_group_prayer(title="MIRROR_FIXTURE", small_group=self.group)
-
-        after_audit = run_audit()
-        after = after_audit["data_counts"]["prayer_request_small_group_at_post"]
-        candidate = _candidate(after_audit, "PrayerRequest.small_group_at_post")
-
-        self.assertEqual(after, before + 1)
-        self.assertEqual(candidate["data_blocker_count"], after)
-        # With the app-level write stopped, a still-populated mirror now reports
-        # as data-blocked rather than app-write blocked.
-        self.assertEqual(candidate["schema_removal_status"], STATUS_DATA)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+        # The removed field no longer has a queryable data counter.
+        self.assertNotIn(
+            "prayer_request_small_group_at_post", audit["data_counts"]
+        )
 
     def test_command_does_not_mutate_prayer_request(self):
-        prayer = self.make_group_prayer(title="READONLY_PRAYER", small_group=self.group)
+        prayer = self.make_group_prayer(title="READONLY_PRAYER")
         before = (
             PrayerRequest.objects.count(),
-            prayer.small_group_at_post_id,
             prayer.structure_unit_at_post_id,
         )
 
@@ -336,14 +315,13 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(
             (
                 PrayerRequest.objects.count(),
-                prayer.small_group_at_post_id,
                 prayer.structure_unit_at_post_id,
             ),
             before,
         )
 
     def test_verbose_output_does_not_print_prayer_free_text(self):
-        self.make_group_prayer(title="SECRET_PRAYER_TITLE_DO_NOT_PRINT", small_group=self.group)
+        self.make_group_prayer(title="SECRET_PRAYER_TITLE_DO_NOT_PRINT")
 
         out = StringIO()
         call_command(

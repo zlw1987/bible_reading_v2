@@ -24,7 +24,6 @@ from accounts.models import (
 )
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
-from prayers.models import PrayerRequest
 from studies.models import BibleStudyMeeting, BibleStudySeries, BibleStudySession
 
 
@@ -655,35 +654,28 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "not in legacy removal sequence",
     },
     {
-        "candidate_name": "PrayerRequest.small_group_at_post",
+        "candidate_name": "PrayerRequest.small_group_at_post (removed)",
         "model_table": "prayers.PrayerRequest",
         "field_name": "small_group_at_post",
-        "candidate_type": "bridge-field",
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_prayer_small_group_mirrors "
-            "(guarded dry-run-first cleanup of stored mirror values)",
-            "prayers.structure_visibility.resolve_legacy_small_group_mirror "
-            "(diagnostic/admin/future-cleanup helper, no longer a write path)",
+        "candidate_type": "field",
+        "migration_history_references": _refs(
+            "prayers migrations (field added then removed)",
         ),
-        "test_fixture_references": _refs(
-            "prayer group-visibility / legacy mirror fixtures",
-        ),
-        "migration_history_references": _refs("prayers migrations"),
-        "data_counter": "prayer_request_small_group_at_post",
         "recommended_next_action": (
-            "PRAYER-MIRROR.1A stopped the normal app-level write to this legacy "
-            "SmallGroup mirror; ordinary group-prayer visibility uses "
-            "PrayerRequest.structure_unit_at_post plus active primary membership. "
-            "PRAYER-MIRROR.1B added the guarded dry-run-first "
-            "cleanup_prayer_small_group_mirrors command and local/dev apply "
-            "cleared the remaining stored mirror data blockers. PRAYER-MIRROR.1C "
-            "removed the prayers.views display select_related and the "
-            "PrayerRequestAdmin list/search/select_related surfaces, so only "
-            "guarded cleanup/diagnostic tooling now references the field. Keep "
-            "the field physically present until that cleanup/audit tooling is "
-            "retired; then remove it in a separate field/table-removal slice."
+            "Completed. PRAYER-MIRROR.1D removed the "
+            "PrayerRequest.small_group_at_post model field after "
+            "PRAYER-MIRROR.1A-1C retired its write/display/admin surfaces and "
+            "the guarded cleanup cleared stored mirror data. Ordinary "
+            "group-prayer visibility uses PrayerRequest.structure_unit_at_post "
+            "plus active primary ChurchStructureMembership. The "
+            "cleanup_prayer_small_group_mirrors command and the "
+            "resolve_legacy_small_group_mirror helper were retired with the "
+            "field. Only immutable historical migrations still name it; no "
+            "active schema blocker remains. This was a prayer-only field "
+            "removal and did not remove the SmallGroup table or affect other "
+            "modules."
         ),
-        "suggested_removal_phase": "phase 3 then phase 4",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "Legacy diagnostic and cleanup command surfaces",
@@ -792,9 +784,8 @@ def _data_counts():
         "reflection_structure_unit_at_post": ReflectionComment.objects.filter(
             structure_unit_at_post__isnull=False
         ).count(),
-        "prayer_request_small_group_at_post": PrayerRequest.objects.filter(
-            small_group_at_post__isnull=False
-        ).count(),
+        # PRAYER-MIRROR.1D removed PrayerRequest.small_group_at_post, so there is
+        # no longer a queryable data counter for it.
     }
 
 

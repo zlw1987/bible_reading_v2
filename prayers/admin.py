@@ -5,11 +5,9 @@ from .models import PrayerComment, PrayerMark, PrayerReport, PrayerRequest
 
 @admin.register(PrayerRequest)
 class PrayerRequestAdmin(admin.ModelAdmin):
-    # PRAYER-MIRROR.1C: the legacy ``small_group_at_post`` mirror is no longer
-    # surfaced in admin list/search/select_related. Group-prayer context is
-    # shown via the structure-native ``structure_unit_at_post`` snapshot. The
-    # model field still physically exists and is kept only for guarded
-    # cleanup/diagnostic tooling until a later field-removal slice.
+    # Group-prayer context is shown via the structure-native
+    # ``structure_unit_at_post`` snapshot. The legacy ``small_group_at_post``
+    # mirror field was removed in PRAYER-MIRROR.1D.
     list_display = (
         "title",
         "user",

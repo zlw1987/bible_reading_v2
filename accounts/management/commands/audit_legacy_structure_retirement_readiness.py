@@ -343,10 +343,9 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.cleanup_reflection_nongroup_display_mirrors",
         "guarded migration of non-group reflection display context off small_group_at_post; dry-run by default",
     ),
-    (
-        "prayers.management.commands.cleanup_prayer_small_group_mirrors",
-        "guarded cleanup tooling for PrayerRequest.small_group_at_post mirrors; dry-run by default",
-    ),
+    # PRAYER-MIRROR.1D removed prayers.management.commands.
+    # cleanup_prayer_small_group_mirrors together with the
+    # PrayerRequest.small_group_at_post field, so it is no longer listed here.
 )
 
 

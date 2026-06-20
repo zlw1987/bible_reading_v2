@@ -247,6 +247,15 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             out.getvalue(),
         )
 
+    def test_prayer_small_group_mirror_cleanup_command_listed(self):
+        out = StringIO()
+        call_command("audit_legacy_structure_retirement_readiness", stdout=out)
+
+        self.assertIn(
+            "prayers.management.commands.cleanup_prayer_small_group_mirrors",
+            out.getvalue(),
+        )
+
 
 class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
     def setUp(self):

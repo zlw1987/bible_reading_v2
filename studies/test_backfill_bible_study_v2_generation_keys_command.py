@@ -5,7 +5,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -13,9 +13,6 @@ from studies.models import (
     BibleStudySeries,
 )
 from studies.services import normal_generation_key_for_unit
-
-
-_DEFAULT_GROUP = object()
 
 
 class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
@@ -42,10 +39,6 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
             "NORTH",
             ChurchStructureUnit.UNIT_DISTRICT,
         )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
 
     def make_unit(self, code, unit_type, *, is_active=True):
         return ChurchStructureUnit.objects.create(
@@ -66,12 +59,9 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
         data.update(overrides)
         return BibleStudyLesson.objects.create(**data)
 
-    def make_meeting(self, *, lesson=None, small_group=_DEFAULT_GROUP, **overrides):
-        if small_group is _DEFAULT_GROUP:
-            small_group = self.group
+    def make_meeting(self, *, lesson=None, **overrides):
         data = {
             "lesson": lesson or self.make_lesson(),
-            "small_group": small_group,
             "meeting_datetime": self.future_time,
             "status": BibleStudyMeeting.STATUS_PUBLISHED,
         }
@@ -103,14 +93,13 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
         audience.refresh_from_db()
         self.assertIsNone(meeting.generation_key)
         self.assertIsNone(meeting.anchor_unit_id)
-        self.assertEqual(meeting.small_group_id, self.group.id)
         self.assertEqual(audience.unit_id, self.group_unit.id)
         self.assertIn("would_update_generation_key: 1", output)
         self.assertIn("would_update_anchor_unit: 1", output)
         self.assertIn("data_mutated: false", output)
         self.assertIn("runtime_mutated: false", output)
 
-    def test_apply_updates_safe_row_without_mutating_mirrors_or_audience(self):
+    def test_apply_updates_safe_row_without_mutating_audience(self):
         meeting = self.make_meeting()
         audience = self.add_audience(meeting)
         expected_key = normal_generation_key_for_unit(self.group_unit)
@@ -121,11 +110,9 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
         audience.refresh_from_db()
         self.assertEqual(meeting.generation_key, expected_key)
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
-        self.assertEqual(meeting.small_group_id, self.group.id)
         self.assertEqual(audience.unit_id, self.group_unit.id)
         self.assertIn("updated_generation_key: 1", output)
         self.assertIn("updated_anchor_unit: 1", output)
-        self.assertIn("legacy_small_group_mutated: 0", output)
         self.assertIn("data_mutated: true", output)
 
     def test_already_correct_row_is_skipped(self):
@@ -175,7 +162,6 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
         expected_key = normal_generation_key_for_unit(self.group_unit)
         self.make_meeting(
             lesson=lesson,
-            small_group=None,
             generation_key=expected_key,
         )
         target = self.make_meeting(lesson=lesson)
@@ -224,7 +210,7 @@ class BackfillBibleStudyV2GenerationKeysCommandTests(TestCase):
         self.assertIn(f"meeting #{meeting.id}", output)
         self.assertIn("generation_key: (blank)", output)
         self.assertIn(f"expected: normal-unit:{self.group_unit.id}", output)
-        self.assertIn("small_group:", output)
+        self.assertIn(f"audience_unit: #{self.group_unit.id}", output)
 
     def test_verbose_limit_caps_output_but_not_scan_scope(self):
         for _index in range(3):

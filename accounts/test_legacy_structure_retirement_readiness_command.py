@@ -372,9 +372,7 @@ class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
         self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
-        self.assertEqual(stats["bible_study_v2_meetings_with_small_group_mirror"], 0)
         self.assertEqual(stats["bible_study_v2_meetings_without_audience_rows"], 0)
-        self.assertEqual(stats["bible_study_v2_meeting_small_group_mirror_mismatches"], 0)
         self.assertEqual(stats["bible_study_normal_meetings_missing_generation_key"], 0)
         self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
 

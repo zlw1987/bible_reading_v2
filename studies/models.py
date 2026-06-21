@@ -467,21 +467,11 @@ class BibleStudyMeeting(models.Model):
         on_delete=models.CASCADE,
         related_name="meetings",
     )
-    # BS-STRUCT.1B: legacy SmallGroup becomes a temporary compatibility mirror,
-    # not the audience source of truth. It is now nullable so higher-level and
-    # multi-unit joint meetings (which map to no single leaf group) are
-    # representable, and SET_NULL so retiring a legacy group never deletes a
-    # meeting. Historically normal V2 meetings set it as a compatibility
-    # mirror; after BS-V2-MIRROR.1B, new generated/manual normal V2 meetings
-    # leave it null. Existing old values remain stored for old-row
-    # compatibility, fallback display, diagnostics, and future cleanup.
-    small_group = models.ForeignKey(
-        SmallGroup,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="bible_study_meetings",
-    )
+    # BS-MEETING-MIRROR.1A removed the legacy ``small_group`` compatibility
+    # mirror FK. V2 meeting audience/visibility is ``BibleStudyMeetingAudienceScope``
+    # rows plus active primary ``ChurchStructureMembership``; display/grouping
+    # uses ``anchor_unit`` and audience rows. The SmallGroup table itself is
+    # untouched (separate table-retirement slice).
     # BS-STRUCT.1B: optional primary organizational unit for
     # display/grouping/ownership. Not a visibility source; no runtime reads it
     # for visibility in this slice.
@@ -542,19 +532,12 @@ class BibleStudyMeeting(models.Model):
     class Meta:
         ordering = ["-meeting_datetime"]
         constraints = [
-            # Existing duplicate protection for normal group-level meetings.
-            # Now conditional on a non-null small_group so multiple
-            # higher-level / joint meetings (small_group is null) for one lesson
-            # are not blocked, while two meetings for the same (lesson, group)
-            # are still rejected.
-            models.UniqueConstraint(
-                fields=["lesson", "small_group"],
-                condition=models.Q(small_group__isnull=False),
-                name="unique_bible_study_meeting_lesson_group",
-            ),
-            # BS-STRUCT.1B future identity key for joint/higher-level meetings
-            # that have no single small_group. Only enforced when set; multiple
-            # null generation_key rows for one lesson are allowed.
+            # BS-MEETING-MIRROR.1A retired the legacy
+            # (lesson, small_group) duplicate constraint with the small_group
+            # field. Structure-native generation idempotency now relies solely
+            # on the (lesson, generation_key) constraint below. Only enforced
+            # when set; multiple null generation_key rows (higher-level / joint
+            # meetings) for one lesson are allowed.
             models.UniqueConstraint(
                 fields=["lesson", "generation_key"],
                 condition=models.Q(generation_key__isnull=False),
@@ -568,9 +551,10 @@ class BibleStudyMeeting(models.Model):
     def get_structure_display_label(self, language="zh", limit=3):
         """Display-only structure label for V2 meeting surfaces.
 
-        This does not grant visibility and does not consult membership. It
-        prefers structure-native meeting data, retaining the legacy
-        ``small_group`` mirror only as a fallback for old or invalid rows.
+        This does not grant visibility and does not consult membership. It uses
+        structure-native meeting data only: ``anchor_unit`` first, then the
+        meeting's ``BibleStudyMeetingAudienceScope`` units. BS-MEETING-MIRROR.1A
+        removed the legacy ``small_group`` mirror fallback.
         """
         if self.anchor_unit_id and self.anchor_unit and self.anchor_unit.is_active:
             return self.anchor_unit.path_label(language)
@@ -590,9 +574,6 @@ class BibleStudyMeeting(models.Model):
             remaining = len(labels) - limit
             more = f"另 {remaining} 个" if language == "zh" else f"+ {remaining} more"
             return f"{shown}, {more}"
-
-        if self.small_group_id and self.small_group:
-            return self.small_group.name
 
         return "未指定 / Unassigned" if language == "zh" else "Unassigned / 未指定"
 
@@ -617,8 +598,7 @@ class BibleStudyMeeting(models.Model):
         BibleStudyMeetingAudienceScope rows are the V2 runtime source of truth
         for ordinary-member visibility. V2 landing/Today and role/worship
         candidate pickers also read these rows. Zero-row V2 meetings fail closed
-        for ordinary users; legacy ``small_group`` remains mirror/display/
-        backfill/history/idempotency compatibility only.
+        for ordinary users.
         """
         if not self.pk:
             return ChurchStructureUnit.objects.none()
@@ -663,8 +643,7 @@ class BibleStudyMeeting(models.Model):
             return False
 
         # BS-STRUCT.2A: audience-scope rows are the V2 runtime source of truth.
-        # Zero-row meetings fail closed for ordinary users; legacy small_group
-        # remains mirror/display/backfill context only.
+        # Zero-row meetings fail closed for ordinary users.
         if meeting_has_audience_scope_rows(self):
             return user_matches_meeting_audience_scopes(user, self)
 
@@ -675,15 +654,13 @@ class BibleStudyMeetingAudienceScope(models.Model):
     """App-specific audience-scope join from a meeting to ChurchStructureUnit.
 
     Selected units are the structure-native meeting audience (single group,
-    district, CM/EM, or multi-unit joint such as Singles + Campus), replacing
-    the single legacy ``BibleStudyMeeting.small_group`` FK as the audience
-    source. Since BS-STRUCT.1D generation writes a row for each newly generated
-    normal group-level meeting, and since BS-STRUCT.1E ordinary-member
-    visibility, the V2 landing/Today read path, and role / worship pickers read
-    these rows. Zero-row V2 meetings fail closed for ordinary users; legacy
-    ``small_group`` remains stored old-row compatibility, fallback display,
-    diagnostics, and backfill context only. Validation mirrors
-    ``BibleStudySeriesAudienceScope``.
+    district, CM/EM, or multi-unit joint such as Singles + Campus). They are the
+    audience source of truth after BS-MEETING-MIRROR.1A removed the legacy
+    ``BibleStudyMeeting.small_group`` FK. Since BS-STRUCT.1D generation writes a
+    row for each newly generated normal group-level meeting, and since
+    BS-STRUCT.1E ordinary-member visibility, the V2 landing/Today read path, and
+    role / worship pickers read these rows. Zero-row V2 meetings fail closed for
+    ordinary users. Validation mirrors ``BibleStudySeriesAudienceScope``.
     """
 
     meeting = models.ForeignKey(

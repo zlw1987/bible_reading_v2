@@ -2,8 +2,9 @@
 
 Dry-run is the default. Apply mode only updates ``BibleStudyMeeting`` identity
 fields that are safe to derive from an existing single small-group audience row:
-``generation_key`` and a null ``anchor_unit``. It never mutates the legacy
-``small_group`` mirror or ``BibleStudyMeetingAudienceScope`` rows.
+``generation_key`` and a null ``anchor_unit``. It never mutates
+``BibleStudyMeetingAudienceScope`` rows. BS-MEETING-MIRROR.1A removed the legacy
+``small_group`` mirror, so there is no mirror to inspect or preserve.
 """
 
 from dataclasses import dataclass
@@ -36,7 +37,6 @@ _STAT_KEYS = (
     "would_update_anchor_unit",
     "updated_generation_key",
     "updated_anchor_unit",
-    "legacy_small_group_mutated",
 )
 
 _BLOCKER_KEYS = (
@@ -68,7 +68,6 @@ class DecisionLine:
     expected_generation_key: str
     anchor_unit: str
     audience_unit: str
-    small_group: str
     category: str
     reason: str
 
@@ -85,12 +84,6 @@ def _unit_label(unit):
     if name:
         label = f"{label} {name}"
     return label
-
-
-def _group_label(group):
-    if group is None:
-        return "(none)"
-    return f"#{group.id} {group.name}"
 
 
 def _clean_key(value):
@@ -113,7 +106,6 @@ def _decision_line(
         expected_generation_key=expected_generation_key or "(n/a)",
         anchor_unit=_unit_label(meeting.anchor_unit),
         audience_unit=_unit_label(audience_unit),
-        small_group=_group_label(meeting.small_group),
         category=category,
         reason=reason,
     )
@@ -124,7 +116,7 @@ def _format_decision_line(line):
         f"  meeting #{line.meeting_id} | lesson #{line.lesson_id or '(none)'} "
         f"{line.lesson_title!r} | generation_key: {line.current_generation_key} "
         f"| expected: {line.expected_generation_key} | anchor_unit: {line.anchor_unit} "
-        f"| audience_unit: {line.audience_unit} | small_group: {line.small_group} "
+        f"| audience_unit: {line.audience_unit} "
         f"| category: {line.category} | reason: {line.reason}"
     )
 
@@ -294,7 +286,6 @@ def _meeting_queryset(*, meeting_id=None, lesson_id=None, lock=False):
     meetings = (
         BibleStudyMeeting.objects.select_related(
             "lesson",
-            "small_group",
             "anchor_unit",
         )
         .prefetch_related(
@@ -371,7 +362,7 @@ class Command(BaseCommand):
         "Dry-run-first backfill for existing normal V2 BibleStudyMeeting rows "
         "missing structure-native generation_key / safe anchor_unit identity. "
         "Apply mode only touches generation_key and anchor_unit; it never "
-        "mutates small_group, audience rows, or runtime behavior."
+        "mutates audience rows or runtime behavior."
     )
 
     def add_arguments(self, parser):
@@ -471,12 +462,12 @@ class Command(BaseCommand):
         if apply_mode:
             write(
                 "Apply mode: updated safe generation_key/anchor_unit values only; "
-                "small_group and audience rows were not mutated."
+                "audience rows were not mutated."
             )
         else:
             write(
-                "Dry-run only: no generation_key, anchor_unit, small_group, "
-                "audience row, or runtime behavior changed."
+                "Dry-run only: no generation_key, anchor_unit, audience row, or "
+                "runtime behavior changed."
             )
 
         if not verbose:

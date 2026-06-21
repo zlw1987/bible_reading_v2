@@ -1,9 +1,14 @@
 """Read-only Bible Study generation bridge retirement inventory.
 
-This command reports what still ties Bible Study V2 generation/idempotency,
-display, admin, and diagnostics to legacy ``SmallGroup`` rows. It is strictly
-read-only: no ``--apply``, no row writes, no runtime changes, and no schema
-changes.
+This command reports what still ties Bible Study V2 generation/idempotency and
+diagnostics to legacy ``SmallGroup`` *table* rows. BS-MEETING-MIRROR.1A removed
+the legacy ``BibleStudyMeeting.small_group`` mirror field, so this audit no
+longer inspects a per-meeting mirror; remaining Bible Study blockers are series
+audience-row coverage and structure-native generation-key / anchor readiness,
+plus the diagnostic resolvers that still read the ``SmallGroup`` table.
+
+It is strictly read-only: no ``--apply``, no row writes, no runtime changes, and
+no schema changes.
 """
 
 from dataclasses import dataclass
@@ -11,7 +16,6 @@ from dataclasses import dataclass
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Prefetch
 
-from accounts.models import ChurchStructureUnit
 from studies.models import (
     BibleStudyMeeting,
     BibleStudyMeetingAudienceScope,
@@ -36,17 +40,8 @@ _STAT_KEYS = (
     "meetings_missing_anchor_unit",
     "meetings_with_audience_rows",
     "meetings_without_audience_rows",
-    "meetings_with_small_group",
-    "meetings_with_small_group_and_anchor_unit",
-    "meetings_with_small_group_without_anchor_unit",
-    "meetings_where_anchor_unit_matches_small_group_mapping",
-    "meetings_where_anchor_unit_mismatches_small_group_mapping",
-    "generation_paths_using_resolve_units_to_small_groups",
-    "display_paths_using_small_group_fallback",
-    "admin_paths_using_small_group",
-    "cleanup_or_diagnostic_paths_using_small_group",
+    "diagnostic_paths_using_small_group_table",
     "ordinary_visibility_paths_using_small_group",
-    "candidate_paths_for_structure_unit_generation_switch",
     "blockers_for_small_group_table_retirement",
 )
 
@@ -59,9 +54,7 @@ _BOOLEAN_FLAGS = (
 
 _CLASSIFICATION_CATEGORIES = (
     "ordinary runtime visibility",
-    "generation target / idempotency bridge",
-    "display fallback",
-    "admin/emergency maintenance",
+    "structure-native generation / idempotency",
     "diagnostic/audit/backfill/cleanup support",
     "test fixture / migration history",
     "dead/stale",
@@ -73,43 +66,11 @@ class ConsumerPath:
     category: str
     path: str
     reason: str
-    uses_resolve_units_to_small_groups: bool = False
-    candidate_for_generation_switch: bool = False
 
 
+# Remaining Bible Study dependencies on the legacy ``SmallGroup`` *table* after
+# BS-MEETING-MIRROR.1A removed the ``BibleStudyMeeting.small_group`` mirror.
 _CONSUMER_PATHS = (
-    ConsumerPath(
-        category="generation target / idempotency bridge",
-        path="studies.services.GenerationTarget.small_group",
-        reason=(
-            "optional legacy mirror for warnings and old-row duplicate matching; "
-            "new normal generation targets ChurchStructureUnit"
-        ),
-    ),
-    ConsumerPath(
-        category="generation target / idempotency bridge",
-        path=(
-            "studies.services.build_existing_normal_meeting_index / "
-            "find_existing_meeting_for_target"
-        ),
-        reason=(
-            "keeps pre-structure-native rows idempotent by matching existing "
-            "meetings by legacy small_group when present"
-        ),
-    ),
-    ConsumerPath(
-        category="display fallback",
-        path="studies.models.BibleStudyMeeting.get_structure_display_label",
-        reason=(
-            "falls back to BibleStudyMeeting.small_group only when anchor_unit "
-            "and audience rows cannot produce a label"
-        ),
-    ),
-    ConsumerPath(
-        category="admin/emergency maintenance",
-        path="studies.admin BibleStudyMeetingAdmin / inline search and filters",
-        reason="Django Admin exposes stored legacy context for emergency maintenance.",
-    ),
     ConsumerPath(
         category="diagnostic/audit/backfill/cleanup support",
         path=(
@@ -118,34 +79,29 @@ _CONSUMER_PATHS = (
         ),
         reason=(
             "structure-audience resolver (audience rows -> active SmallGroups) "
-            "retained for coexistence diagnostics; BS-SERIES-FIELD-RETIRE.1A "
-            "removed the legacy series scope fields, so there is no legacy "
-            "fallback and current normal generation does not call this as its "
-            "target source"
+            "retained for coexistence diagnostics; normal generation is "
+            "structure-unit-native and does not call this as its target source"
         ),
-        uses_resolve_units_to_small_groups=True,
     ),
     ConsumerPath(
         category="diagnostic/audit/backfill/cleanup support",
         path="studies.management.commands.backfill_bible_study_v2_generation_keys",
-        reason="dry-run-first identity backfill inspects existing small_group mirrors.",
-    ),
-    ConsumerPath(
-        category="diagnostic/audit/backfill/cleanup support",
-        path="studies.management.commands.cleanup_bible_study_v2_small_group_mirrors",
-        reason="guarded cleanup reads mirrors to prove they can be safely cleared.",
+        reason=(
+            "dry-run-first identity backfill derives generation_key / anchor_unit "
+            "from a single small-group audience row; it does not read a meeting mirror"
+        ),
     ),
     ConsumerPath(
         category="diagnostic/audit/backfill/cleanup support",
         path="studies.management.commands.audit_bible_study_structure_retirement_readiness",
-        reason="read-only readiness audit reports mirror/audience/anchor drift.",
+        reason="read-only readiness audit reports audience/anchor/generation-key drift.",
     ),
     ConsumerPath(
         category="test fixture / migration history",
         path="studies tests and historical migrations",
         reason=(
-            "fixtures intentionally create legacy rows to protect old-row "
-            "compatibility and migration history"
+            "fixtures and immutable migrations still name the removed "
+            "BibleStudyMeeting.small_group field"
         ),
     ),
 )
@@ -160,8 +116,6 @@ class DecisionLine:
     meeting_date: str
     generation_key: str
     anchor_unit: str
-    small_group: str
-    mapped_unit: str
     category: str
     decision: str
     reason: str
@@ -186,12 +140,6 @@ def _unit_label(unit):
     return label
 
 
-def _group_label(group):
-    if group is None:
-        return "(none)"
-    return f"#{group.id} {group.name}"
-
-
 def _clean_generation_key(value):
     return (value or "").strip()
 
@@ -207,19 +155,6 @@ def _series_is_active_for_generation(series):
     )
 
 
-def _small_group_mapping_state(group):
-    if group is None:
-        return None, "none"
-    unit = group.church_structure_unit
-    if unit is None:
-        return None, "unmapped"
-    if not unit.is_active:
-        return unit, "inactive"
-    if unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
-        return unit, "wrong_type"
-    return unit, "ok"
-
-
 def _series_line(series, *, category, decision, reason):
     units = [link.unit for link in series._prefetched_audience_links]
     return DecisionLine(
@@ -230,15 +165,13 @@ def _series_line(series, *, category, decision, reason):
         meeting_date="(n/a)",
         generation_key="(n/a)",
         anchor_unit=", ".join(_unit_label(unit) for unit in units) or "(none)",
-        small_group="(n/a)",
-        mapped_unit="(n/a)",
         category=category,
         decision=decision,
         reason=reason,
     )
 
 
-def _meeting_line(meeting, *, category, decision, reason, mapped_unit=None):
+def _meeting_line(meeting, *, category, decision, reason):
     return DecisionLine(
         object_type="meeting",
         object_id=meeting.id,
@@ -251,8 +184,6 @@ def _meeting_line(meeting, *, category, decision, reason, mapped_unit=None):
         ),
         generation_key=_clean_generation_key(meeting.generation_key) or "(blank)",
         anchor_unit=_unit_label(meeting.anchor_unit),
-        small_group=_group_label(meeting.small_group),
-        mapped_unit=_unit_label(mapped_unit),
         category=category,
         decision=decision,
         reason=reason,
@@ -264,7 +195,6 @@ def _format_decision_line(line):
         f"  {line.object_type} #{line.object_id} | title: {line.title!r} "
         f"| date: {line.meeting_date} | status: {line.status} "
         f"| generation_key: {line.generation_key} | anchor_unit: {line.anchor_unit} "
-        f"| small_group: {line.small_group} | mapped_unit: {line.mapped_unit} "
         f"| category: {line.category} | decision: {line.decision} "
         f"| reason: {line.reason}"
     )
@@ -278,28 +208,13 @@ def _consumer_category_counts():
 
 
 def _apply_static_path_counts(stats):
-    stats["generation_paths_using_resolve_units_to_small_groups"] = sum(
-        1
-        for path in _CONSUMER_PATHS
-        if path.category == "generation target / idempotency bridge"
-        and path.uses_resolve_units_to_small_groups
-    )
-    stats["display_paths_using_small_group_fallback"] = sum(
-        1 for path in _CONSUMER_PATHS if path.category == "display fallback"
-    )
-    stats["admin_paths_using_small_group"] = sum(
-        1 for path in _CONSUMER_PATHS if path.category == "admin/emergency maintenance"
-    )
-    stats["cleanup_or_diagnostic_paths_using_small_group"] = sum(
+    stats["diagnostic_paths_using_small_group_table"] = sum(
         1
         for path in _CONSUMER_PATHS
         if path.category == "diagnostic/audit/backfill/cleanup support"
     )
     stats["ordinary_visibility_paths_using_small_group"] = sum(
         1 for path in _CONSUMER_PATHS if path.category == "ordinary runtime visibility"
-    )
-    stats["candidate_paths_for_structure_unit_generation_switch"] = sum(
-        1 for path in _CONSUMER_PATHS if path.candidate_for_generation_switch
     )
 
 
@@ -323,8 +238,6 @@ def _meeting_queryset():
     return (
         BibleStudyMeeting.objects.select_related(
             "lesson",
-            "small_group",
-            "small_group__church_structure_unit",
             "anchor_unit",
         )
         .prefetch_related(
@@ -346,7 +259,7 @@ def _classify_series(series, stats):
         stats["normal_series_with_structure_audience"] += 1
         return _series_line(
             series,
-            category="generation target / idempotency bridge",
+            category="structure-native generation / idempotency",
             decision="structure_audience_ready",
             reason=(
                 "series has structure audience rows; normal generation "
@@ -359,7 +272,7 @@ def _classify_series(series, stats):
         stats["active_series_without_audience_rows"] += 1
         return _series_line(
             series,
-            category="generation target / idempotency bridge",
+            category="structure-native generation / idempotency",
             decision="blocker",
             reason=(
                 "active draft/published series has no "
@@ -377,7 +290,8 @@ def _classify_series(series, stats):
 
 def _classify_meeting(meeting, stats):
     stats["meetings_checked"] += 1
-    if meeting.meeting_kind == BibleStudyMeeting.KIND_NORMAL:
+    is_normal = meeting.meeting_kind == BibleStudyMeeting.KIND_NORMAL
+    if is_normal:
         stats["normal_meetings_checked"] += 1
 
     current_key = _clean_generation_key(meeting.generation_key)
@@ -390,7 +304,7 @@ def _classify_meeting(meeting, stats):
         stats["meetings_with_anchor_unit"] += 1
     else:
         stats["meetings_missing_anchor_unit"] += 1
-        if meeting.meeting_kind == BibleStudyMeeting.KIND_NORMAL:
+        if is_normal:
             stats["normal_meetings_missing_anchor_unit"] += 1
 
     audience_links = list(meeting._prefetched_audience_links)
@@ -399,86 +313,47 @@ def _classify_meeting(meeting, stats):
     else:
         stats["meetings_without_audience_rows"] += 1
 
-    mapped_unit, mapping_state = _small_group_mapping_state(meeting.small_group)
-    if meeting.small_group_id:
-        stats["meetings_with_small_group"] += 1
-        if meeting.anchor_unit_id:
-            stats["meetings_with_small_group_and_anchor_unit"] += 1
-        else:
-            stats["meetings_with_small_group_without_anchor_unit"] += 1
-            return _meeting_line(
-                meeting,
-                category="generation target / idempotency bridge",
-                decision="blocker",
-                reason=(
-                    "legacy small_group mirror exists but anchor_unit is missing"
-                ),
-                mapped_unit=mapped_unit,
-            )
-
-        if mapping_state == "ok" and meeting.anchor_unit_id == mapped_unit.id:
-            stats["meetings_where_anchor_unit_matches_small_group_mapping"] += 1
-            return _meeting_line(
-                meeting,
-                category="generation target / idempotency bridge",
-                decision="display_idempotency_compatibility",
-                reason=(
-                    "legacy mirror maps to anchor_unit; mirror is compatibility "
-                    "data, not ordinary visibility"
-                ),
-                mapped_unit=mapped_unit,
-            )
-
-        if mapping_state != "none":
-            stats["meetings_where_anchor_unit_mismatches_small_group_mapping"] += 1
-            return _meeting_line(
-                meeting,
-                category="generation target / idempotency bridge",
-                decision="blocker",
-                reason=(
-                    "legacy mirror mapping is missing, inactive, wrong-type, or "
-                    "does not match anchor_unit"
-                ),
-                mapped_unit=mapped_unit,
-            )
+    if is_normal and (not current_key or not meeting.anchor_unit_id or not audience_links):
+        return _meeting_line(
+            meeting,
+            category="structure-native generation / idempotency",
+            decision="blocker",
+            reason=(
+                "normal meeting is missing generation_key, anchor_unit, or "
+                "audience rows"
+            ),
+        )
 
     if (
-        meeting.meeting_kind == BibleStudyMeeting.KIND_NORMAL
+        is_normal
         and current_key
         and meeting.anchor_unit_id
         and audience_links
-        and not meeting.small_group_id
         and current_key.startswith(NORMAL_GENERATION_KEY_PREFIX)
+        and current_key == normal_generation_key_for_unit(meeting.anchor_unit)
     ):
-        expected_key = normal_generation_key_for_unit(meeting.anchor_unit)
-        if current_key == expected_key:
-            return _meeting_line(
-                meeting,
-                category="generation target / idempotency bridge",
-                decision="structure_native",
-                reason=(
-                    "normal meeting has generation_key, anchor_unit, audience "
-                    "rows, and no legacy small_group mirror"
-                ),
-                mapped_unit=mapped_unit,
-            )
+        return _meeting_line(
+            meeting,
+            category="structure-native generation / idempotency",
+            decision="structure_native",
+            reason=(
+                "normal meeting has generation_key, anchor_unit, and audience rows"
+            ),
+        )
 
     return _meeting_line(
         meeting,
         category="diagnostic/audit/backfill/cleanup support",
         decision="review",
-        reason="meeting is retained for audit/backfill/display review",
-        mapped_unit=mapped_unit,
+        reason="meeting is retained for audit/display review",
     )
 
 
 def _finalize_blockers(stats):
     stats["blockers_for_small_group_table_retirement"] = (
         stats["active_series_without_audience_rows"]
-        + stats["meetings_with_small_group"]
         + stats["meetings_missing_generation_key"]
         + stats["normal_meetings_missing_anchor_unit"]
-        + stats["meetings_where_anchor_unit_mismatches_small_group_mapping"]
     )
 
 
@@ -504,8 +379,8 @@ def _blockers_present(stats):
 class Command(BaseCommand):
     help = (
         "Read-only Bible Study generation/idempotency bridge retirement audit. "
-        "Inventories remaining SmallGroup bridge dependencies without changing "
-        "data, schema, or runtime behavior."
+        "Inventories remaining SmallGroup table dependencies and structure-native "
+        "generation readiness without changing data, schema, or runtime behavior."
     )
 
     def add_arguments(self, parser):
@@ -527,8 +402,8 @@ class Command(BaseCommand):
             "--fail-on-blockers",
             action="store_true",
             help=(
-                "Exit nonzero when data blockers for legacy SmallGroup table "
-                "retirement are present. Still read-only."
+                "Exit nonzero when Bible Study generation-readiness blockers for "
+                "legacy SmallGroup table retirement are present. Still read-only."
             ),
         )
 
@@ -576,10 +451,12 @@ class Command(BaseCommand):
         write("")
         write(
             "Recommendation: ordinary Bible Study V2 visibility is already "
-            "audience-row + membership-core. Normal generation is already "
-            "structure-unit-native; remaining legacy SmallGroup dependencies are "
-            "old-row idempotency, stored mirrors, fallback display, admin, and "
-            "diagnostic/cleanup support. No deletion/removal is approved here."
+            "audience-row + membership-core, and BS-MEETING-MIRROR.1A removed the "
+            "legacy BibleStudyMeeting.small_group mirror. Remaining Bible Study "
+            "blockers are series audience-row coverage and structure-native "
+            "generation-key / anchor readiness; remaining SmallGroup dependencies "
+            "are diagnostic resolvers on the SmallGroup table. No deletion/removal "
+            "is approved here."
         )
         write(
             "Audit only: no series, meeting, audience row, SmallGroup, unit, "

@@ -28,6 +28,9 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         )
         self.group_unit = self.make_unit("RAINBOW4")
         self.other_group_unit = self.make_unit("RAINBOW5")
+        # SmallGroup mapping remains a diagnostic-resolver dependency on the
+        # SmallGroup table; BS-MEETING-MIRROR.1A removed the meeting mirror, so
+        # it is no longer attached to meetings.
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
             church_structure_unit=self.group_unit,
@@ -64,10 +67,9 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         data.update(overrides)
         return BibleStudyLesson.objects.create(**data)
 
-    def make_meeting(self, *, lesson=None, small_group=None, **overrides):
+    def make_meeting(self, *, lesson=None, **overrides):
         data = {
             "lesson": lesson or self.make_lesson(),
-            "small_group": small_group,
             "meeting_datetime": self.future_time,
             "status": BibleStudyMeeting.STATUS_PUBLISHED,
         }
@@ -92,7 +94,6 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
     def make_structure_native_meeting(self):
         self.add_series_audience()
         meeting = self.make_meeting(
-            small_group=None,
             anchor_unit=self.group_unit,
             generation_key=normal_generation_key_for_unit(self.group_unit),
         )
@@ -115,7 +116,6 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         meeting.refresh_from_db()
         self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), before_series_rows)
         self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), before_meeting_rows)
-        self.assertIsNone(meeting.small_group_id)
         self.assertEqual(meeting.anchor_unit_id, self.group_unit.id)
         self.assertIn("runtime_mutated: false", output)
         self.assertIn("data_mutated: false", output)
@@ -136,61 +136,30 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         self.assertIn("meetings_missing_generation_key: 0", output)
         self.assertIn("meetings_with_anchor_unit: 1", output)
         self.assertIn("meetings_with_audience_rows: 1", output)
-        self.assertIn("meetings_with_small_group: 0", output)
         self.assertIn("ordinary_visibility_paths_using_small_group: 0", output)
-        self.assertIn("candidate_paths_for_structure_unit_generation_switch: 0", output)
         self.assertIn("blockers_for_small_group_table_retirement: 0", output)
 
-    def test_generation_key_anchor_audience_no_small_group_is_structure_native(self):
+    def test_generation_key_anchor_audience_is_structure_native(self):
         meeting = self.make_structure_native_meeting()
 
         output = self.run_command("--verbose", "--limit", "10")
 
         self.assertIn(f"meeting #{meeting.id}", output)
         self.assertIn("decision: structure_native", output)
-        self.assertIn("small_group: (none)", output)
 
-    def test_matching_small_group_mirror_is_compatibility_not_visibility(self):
+    def test_normal_meeting_missing_generation_key_is_blocker(self):
         self.add_series_audience()
-        meeting = self.make_meeting(
-            small_group=self.group,
-            anchor_unit=self.group_unit,
-            generation_key=normal_generation_key_for_unit(self.group_unit),
-        )
+        meeting = self.make_meeting(anchor_unit=self.group_unit)
         self.add_meeting_audience(meeting, self.group_unit)
 
         output = self.run_command("--verbose", "--limit", "10")
 
-        self.assertIn("meetings_with_small_group: 1", output)
-        self.assertIn("meetings_where_anchor_unit_matches_small_group_mapping: 1", output)
-        self.assertIn("ordinary_visibility_paths_using_small_group: 0", output)
-        self.assertIn("decision: display_idempotency_compatibility", output)
-        self.assertIn("not ordinary visibility", output)
-
-    def test_small_group_missing_or_mismatched_anchor_is_blocker(self):
-        self.add_series_audience()
-        missing_anchor = self.make_meeting(small_group=self.group)
-        self.add_meeting_audience(missing_anchor, self.group_unit)
-        mismatched = self.make_meeting(
-            small_group=self.group,
-            anchor_unit=self.other_group_unit,
-            generation_key=normal_generation_key_for_unit(self.other_group_unit),
-        )
-        self.add_meeting_audience(mismatched, self.other_group_unit)
-
-        output = self.run_command("--verbose", "--limit", "10")
-
-        self.assertIn("meetings_with_small_group_without_anchor_unit: 1", output)
-        self.assertIn(
-            "meetings_where_anchor_unit_mismatches_small_group_mapping: 1",
-            output,
-        )
+        self.assertIn("meetings_missing_generation_key: 1", output)
         self.assertIn("decision: blocker", output)
-        self.assertIn("blockers_for_small_group_table_retirement:", output)
+        self.assertNotIn("blockers_for_small_group_table_retirement: 0", output)
 
     def test_series_without_audience_rows_is_blocker(self):
         self.make_meeting(
-            small_group=None,
             anchor_unit=self.group_unit,
             generation_key=normal_generation_key_for_unit(self.group_unit),
         )
@@ -211,7 +180,8 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         self.assertNotIn("DO-NOT-PRINT-PRESTUDY-NOTES", output)
 
     def test_fail_on_blockers_exits_nonzero_when_blockers_exist(self):
-        self.make_meeting(small_group=self.group)
+        # Active series without audience rows is a generation-readiness blocker.
+        self.make_meeting(anchor_unit=self.group_unit)
 
         with self.assertRaises(CommandError) as context:
             self.run_command("--fail-on-blockers")
@@ -227,3 +197,10 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         output = self.run_command()
 
         self.assertIn("ordinary_visibility_paths_using_small_group: 0", output)
+
+    def test_diagnostic_paths_counter_reports_small_group_table_dependencies(self):
+        self.make_structure_native_meeting()
+
+        output = self.run_command()
+
+        self.assertIn("diagnostic_paths_using_small_group_table: 3", output)

@@ -179,7 +179,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
 
         self.assertIn("Profile.small_group", output)
         self.assertIn("ServiceEvent.scope_type (removed)", output)
-        self.assertIn("BibleStudyMeeting.small_group", output)
+        self.assertIn("BibleStudyMeeting.small_group (removed)", output)
         self.assertIn("ReflectionComment.small_group_at_post", output)
         self.assertIn("PrayerRequest.small_group_at_post", output)
         self.assertIn("SmallGroup model/table", output)
@@ -389,6 +389,42 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("series_ministry_context", audit["data_counts"])
         self.assertNotIn("series_district", audit["data_counts"])
         self.assertNotIn("series_small_group", audit["data_counts"])
+
+    def test_bible_study_meeting_mirror_is_historical_after_field_removal(self):
+        # BS-MEETING-MIRROR.1A removed the BibleStudyMeeting.small_group legacy
+        # mirror FK (migration studies/0011) after preflight audits confirmed zero
+        # populated values and no live runtime/display/admin/generation dependency.
+        # The guarded mirror cleanup command and the legacy-vs-membership shadow
+        # audit were retired with it. Only immutable historical migrations still
+        # name it, so the candidate is now historical-only with no active schema
+        # blocker and no queryable data counter. V2 meeting visibility remains
+        # BibleStudyMeetingAudienceScope rows plus active primary membership.
+        audit = run_audit()
+        candidate = _candidate(audit, "BibleStudyMeeting.small_group (removed)")
+
+        self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertEqual(candidate["app_write_references"], ())
+        self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["admin_references"], ())
+        self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+        self.assertEqual(candidate["data_blocker_count"], 0)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+
+        self.assertNotIn("meeting_small_group", audit["data_counts"])
+
+        # anchor_unit / generation_key remain structure-native and are not
+        # legacy-removal targets.
+        for name in (
+            "BibleStudyMeeting.anchor_unit",
+            "BibleStudyMeeting.generation_key",
+        ):
+            kept = _candidate(audit, name)
+            self.assertEqual(
+                kept["suggested_removal_phase"],
+                "not in legacy removal sequence",
+            )
 
     def test_reflection_mirror_is_historical_after_field_removal(self):
         # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post

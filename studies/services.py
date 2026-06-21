@@ -4,14 +4,13 @@ from typing import Optional
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit
 
 from .models import (
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudyMeetingAudienceScope,
 )
-from .visibility import get_small_group_structure_unit
 
 
 def cancel_non_final_meetings_for_lesson(lesson):
@@ -33,38 +32,15 @@ def cancel_bible_study_lesson_with_meetings(lesson):
         return cancel_non_final_meetings_for_lesson(lesson)
 
 
-def resolve_normal_small_group_unit(small_group):
-    """Return the active ``UNIT_SMALL_GROUP`` unit a legacy small group maps to.
-
-    Returns ``None`` when the mapping is missing, the mapped unit is inactive, or
-    the mapped unit is not a ``UNIT_SMALL_GROUP`` (e.g. a district / CM / EM
-    mapping is drift for a normal small-group meeting). Since BS-STRUCT.1P the
-    only caller is the manual ``BibleStudyMeetingForm`` edit path, which uses it
-    to pre-fill the ``audience_unit`` from an existing legacy ``small_group`` when
-    a meeting has no audience row / anchor yet (priority 3 of the edit initial
-    resolution). It is never a write path; It is never a write path; ``small_group`` remains only old-row
-compatibility, fallback display, diagnostics, and future cleanup context.
-Zero-row ordinary-user runtime fallback has been retired.
-    """
-    unit = get_small_group_structure_unit(small_group)
-    if (
-        unit is None
-        or not unit.is_active
-        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
-    ):
-        return None
-    return unit
-
-
 def sync_normal_meeting_audience_scope_for_unit(meeting, unit):
     """BS-STRUCT.1O manual-form writer keyed on a structure unit, not a group.
 
-    The manual normal small-group meeting form now chooses a
-    ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` as the source of truth. This
-    helper aligns the meeting to that unit. The caller (the form's ``clean()``)
-    must have already validated that the meeting is a normal single-unit
-    small-group meeting — never a higher-level / joint / multi-unit meeting — so
-    the stale-row deletion below can never clobber a district / joint audience.
+    The manual normal small-group meeting form chooses a ``UNIT_SMALL_GROUP``
+    ``ChurchStructureUnit`` as the source of truth. This helper aligns the
+    meeting to that unit. The caller (the form's ``clean()``) must have already
+    validated that the meeting is a normal single-unit small-group meeting —
+    never a higher-level / joint / multi-unit meeting — so the stale-row
+    deletion below can never clobber a district / joint audience.
 
     Behavior:
 
@@ -75,48 +51,34 @@ def sync_normal_meeting_audience_scope_for_unit(meeting, unit):
     * set ``meeting_kind`` to ``normal``;
     * set the structure-native ``generation_key`` (``normal-unit:{unit_id}``) so
       a manual normal meeting shares the per-unit idempotency key with
-      generation, giving one normal meeting per (lesson, unit);
-    * preserve an existing legacy ``small_group`` mirror only when it already
-      maps to the selected unit; otherwise clear it so manual edits do not leave
-      a stale mirror.
+      generation, giving one normal meeting per (lesson, unit).
 
-    This helper never writes a new legacy ``small_group`` mirror. Returns the
-    preserved ``SmallGroup`` (or ``None``) so callers/tests can assert the
-    compatibility result.
+    BS-MEETING-MIRROR.1A removed the legacy ``small_group`` mirror, so this
+    helper is fully structure-native.
     """
-    mirror = None
-    if meeting.small_group_id:
-        current_unit = resolve_normal_small_group_unit(meeting.small_group)
-        if current_unit is not None and current_unit.id == unit.id:
-            mirror = meeting.small_group
-
     BibleStudyMeetingAudienceScope.objects.get_or_create(meeting=meeting, unit=unit)
     meeting.audience_scope_links.exclude(unit=unit).delete()
 
     meeting.anchor_unit = unit
     meeting.meeting_kind = BibleStudyMeeting.KIND_NORMAL
     meeting.generation_key = normal_generation_key_for_unit(unit)
-    meeting.small_group = mirror
     meeting.save(
         update_fields=[
             "anchor_unit",
             "meeting_kind",
             "generation_key",
-            "small_group",
             "updated_at",
         ]
     )
-    return mirror
 
 
 # ---------------------------------------------------------------------------
 # BS-STRUCT.1L: structure-unit-native normal meeting generation.
 #
-# Normal Bible Study generation now targets ``ChurchStructureUnit`` leaf
-# small-group units instead of fundamentally targeting legacy ``SmallGroup``
-# rows. ``GenerationTarget.small_group`` is retained only for preview/warnings
-# and old-row duplicate detection; new generated meetings leave the legacy
-# ``small_group`` FK unset.
+# Normal Bible Study generation targets ``ChurchStructureUnit`` leaf
+# small-group units. BS-MEETING-MIRROR.1A removed the legacy
+# ``BibleStudyMeeting.small_group`` mirror, so generation and idempotency are
+# fully structure-native (``generation_key`` + audience rows).
 # ---------------------------------------------------------------------------
 
 # Stable per-unit idempotency key prefix for a normal group-level meeting.
@@ -124,11 +86,10 @@ NORMAL_GENERATION_KEY_PREFIX = "normal-unit:"
 
 # Warning kinds surfaced by ``resolve_normal_generation_targets`` so the view
 # layer can format manager-visible, language-specific messages without the
-# service layer knowing about request language. (BS-STRUCT.1P removed the
-# obsolete ``unmapped_group`` warning: since BS-STRUCT.1L/1M generation no longer
-# resolves legacy ``SmallGroup`` rows, so an unmapped-legacy-group warning can no
-# longer be produced.)
-GENERATION_WARNING_AMBIGUOUS_MIRROR = "ambiguous_mirror"
+# service layer knowing about request language. BS-STRUCT.1L/1M made generation
+# structure-unit-native (it no longer resolves legacy ``SmallGroup`` rows), and
+# BS-MEETING-MIRROR.1A removed the legacy ``small_group`` mirror, so the old
+# ambiguous-mirror warning is gone.
 # BS-STRUCT.1M: a series with zero BibleStudySeriesAudienceScope rows no longer
 # falls back to legacy scope; generation fails closed and surfaces this warning.
 GENERATION_WARNING_MISSING_SERIES_AUDIENCE = "missing_series_audience"
@@ -138,11 +99,9 @@ def normal_generation_key_for_unit(unit):
     """Return the stable generation key for a normal meeting on ``unit``.
 
     Format: ``normal-unit:{unit_id}``. Keyed on the ``ChurchStructureUnit``
-    leaf id (not the legacy ``small_group``) because the generation target is
-    now a structure unit; the legacy group is only a mirror. Combined with the
+    leaf id because the generation target is a structure unit. Combined with the
     ``(lesson, generation_key)`` conditional unique constraint this gives one
-    normal meeting per (lesson, unit) and makes generation idempotent even for
-    a structure-native unit that has no legacy ``SmallGroup`` mirror.
+    normal meeting per (lesson, unit) and makes generation idempotent.
     """
     return f"{NORMAL_GENERATION_KEY_PREFIX}{unit.id}"
 
@@ -153,22 +112,16 @@ class GenerationTarget:
 
     ``unit`` is an active ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` that
     should receive exactly one normal ``BibleStudyMeeting`` per lesson.
-    ``small_group`` is the optional legacy compatibility mirror, set only when
-    exactly one active legacy ``SmallGroup`` maps to ``unit`` (``None`` for a
-    structure-native unit with no legacy group, or an ambiguous many-to-one
-    mapping).
     """
 
     unit: ChurchStructureUnit
-    small_group: Optional[SmallGroup]
 
 
 @dataclass(frozen=True)
 class GenerationWarning:
-    """A manager-visible reason a legacy group / unit did not yield a clean target."""
+    """A manager-visible reason a unit did not yield a clean target."""
 
     kind: str
-    small_group: Optional[SmallGroup] = None
     unit: Optional[ChurchStructureUnit] = None
 
 
@@ -184,38 +137,6 @@ def _collect_descendant_or_self_unit_ids(units):
             .values_list("id", flat=True)
         )
     return collected
-
-
-def _resolve_unit_small_group_mirror(unit):
-    """Return (mirror, ambiguous) for a target unit's legacy ``SmallGroup``.
-
-    The legacy ``small_group`` value is resolved only when exactly one active
-    legacy ``SmallGroup`` maps to the unit, for compatibility metadata such as
-    warnings and old-row duplicate detection. Zero mappings yield ``(None,
-    False)`` (a structure-native unit with no legacy group). Two or more active
-    mappings are ambiguous and yield ``(None, True)`` so generation never
-    silently chooses an arbitrary legacy group; the unit still becomes a single
-    structure-native target and the caller surfaces a warning.
-    """
-    active_groups = list(unit.legacy_small_groups.filter(is_active=True)[:2])
-    if len(active_groups) == 1:
-        return active_groups[0], False
-    if len(active_groups) > 1:
-        return None, True
-    return None, False
-
-
-def resolve_unit_small_group_mirror(unit):
-    """Public ``(mirror, ambiguous)`` for a unit's exact-one legacy ``SmallGroup``.
-
-    Thin public wrapper over :func:`_resolve_unit_small_group_mirror` so callers
-    outside generation (e.g. the manual ``BibleStudyMeetingForm`` duplicate
-    check) share the exact-one-active-legacy-group semantics rather than
-    re-deriving them. Returns ``(group, False)`` only when exactly one active
-    legacy group maps to ``unit``; ``(None, True)`` when ambiguous (two or more);
-    ``(None, False)`` when none.
-    """
-    return _resolve_unit_small_group_mirror(unit)
 
 
 def _ordered_targets(targets):
@@ -238,20 +159,17 @@ def resolve_normal_generation_targets(series):
 
     * ``targets`` — a deduplicated (by unit id), deterministically ordered list
       of :class:`GenerationTarget`.
-    * ``warnings`` — a list of :class:`GenerationWarning` describing units whose
-      legacy mirror was dropped as ambiguous, or (when the series has no
-      structure audience rows) a single
-      ``GENERATION_WARNING_MISSING_SERIES_AUDIENCE`` warning.
+    * ``warnings`` — a list of :class:`GenerationWarning`; currently only a
+      single ``GENERATION_WARNING_MISSING_SERIES_AUDIENCE`` warning when the
+      series has no structure audience rows.
 
     Resolution (BS-STRUCT.1M — structure-audience-required):
 
     * **Structure audience rows present** — each selected
       ``BibleStudySeriesAudienceScope`` unit expands to its active
       descendant-or-self ``UNIT_SMALL_GROUP`` units; each such unit becomes one
-      target. This is the structure-native path and can produce targets for
-      units that have no legacy ``SmallGroup`` mirror. ``GenerationTarget`` keeps
-      the legacy ``small_group`` value only for warnings and old-row duplicate
-      detection when exactly one active legacy group maps to the target unit.
+      structure-native target. BS-MEETING-MIRROR.1A removed the legacy
+      ``small_group`` mirror, so targets carry only their structure unit.
     * **Zero audience rows** — generation **fails closed**. The legacy
       ``BibleStudySeries.scope_type`` / ``ministry_context`` / ``district`` /
       ``small_group`` fields were removed in BS-SERIES-FIELD-RETIRE.1A and are
@@ -282,15 +200,7 @@ def resolve_normal_generation_targets(series):
         if unit.id in seen_unit_ids:
             continue
         seen_unit_ids.add(unit.id)
-        mirror, ambiguous = _resolve_unit_small_group_mirror(unit)
-        if ambiguous:
-            warnings.append(
-                GenerationWarning(
-                    kind=GENERATION_WARNING_AMBIGUOUS_MIRROR,
-                    unit=unit,
-                )
-            )
-        targets.append(GenerationTarget(unit=unit, small_group=mirror))
+        targets.append(GenerationTarget(unit=unit))
 
     return _ordered_targets(targets), warnings
 
@@ -298,40 +208,35 @@ def resolve_normal_generation_targets(series):
 def build_existing_normal_meeting_index(lesson):
     """Index a lesson's existing meetings for generation-target matching.
 
-    Existing meetings are matched against a target by any of three keys so that
-    both newly generated meetings and pre-BS-STRUCT.1L meetings are recognized
-    and never duplicated:
+    Existing meetings are matched against a target by either of two
+    structure-native keys so that both newly generated meetings and pre-key
+    meetings are recognized and never duplicated:
 
-    * ``by_generation_key`` — the ``normal-unit:{unit_id}`` key written by this
-      slice's generation;
-    * ``by_small_group_id`` — the legacy ``small_group`` mirror, recognizing
-      meetings generated before generation keys existed;
+    * ``by_generation_key`` — the ``normal-unit:{unit_id}`` key written by
+      generation;
     * ``by_single_audience_unit_id`` — a meeting whose audience rows are exactly
-      one unit, recognizing a pre-1L meeting that has a single small-group
-      audience row but no generation key. A multi-unit (joint / higher-level)
-      meeting is intentionally not indexed here so it never absorbs a normal
-      target.
+      one unit, recognizing a meeting that has a single small-group audience row
+      but no generation key. A multi-unit (joint / higher-level) meeting is
+      intentionally not indexed here so it never absorbs a normal target.
+
+    BS-MEETING-MIRROR.1A removed the legacy ``small_group`` idempotency key.
 
     All non-cancelled and cancelled meetings are indexed; cancelled meetings
     still count as existing so generation never regenerates over them.
     """
     by_generation_key = {}
-    by_small_group_id = {}
     by_single_audience_unit_id = {}
 
     meetings = lesson.meetings.all().prefetch_related("audience_scope_links")
     for meeting in meetings:
         if meeting.generation_key:
             by_generation_key.setdefault(meeting.generation_key, meeting)
-        if meeting.small_group_id:
-            by_small_group_id.setdefault(meeting.small_group_id, meeting)
         audience_unit_ids = [link.unit_id for link in meeting.audience_scope_links.all()]
         if len(audience_unit_ids) == 1:
             by_single_audience_unit_id.setdefault(audience_unit_ids[0], meeting)
 
     return {
         "by_generation_key": by_generation_key,
-        "by_small_group_id": by_small_group_id,
         "by_single_audience_unit_id": by_single_audience_unit_id,
     }
 
@@ -339,33 +244,28 @@ def build_existing_normal_meeting_index(lesson):
 def find_existing_meeting_for_target(index, target):
     """Return an existing meeting matching ``target``, or ``None``.
 
-    Checks, in order: generation key, legacy ``small_group`` mirror (when the
-    target has one), and a single-unit audience row matching the target unit.
+    Checks, in order: generation key, then a single-unit audience row matching
+    the target unit. BS-MEETING-MIRROR.1A removed the legacy ``small_group``
+    fallback match.
     """
     meeting = index["by_generation_key"].get(normal_generation_key_for_unit(target.unit))
     if meeting is not None:
         return meeting
-    if target.small_group is not None:
-        meeting = index["by_small_group_id"].get(target.small_group.id)
-        if meeting is not None:
-            return meeting
     return index["by_single_audience_unit_id"].get(target.unit.id)
 
 
 def create_normal_meeting_for_target(lesson, target, *, meeting_datetime, created_by):
     """Create one structure-native normal meeting for ``target``.
 
-    Writes a meeting with ``small_group`` unset, ``anchor_unit`` and one
-    audience row set to the target unit, ``meeting_kind`` normal, and the stable
-    per-unit ``generation_key``. Returns the created meeting. Assumes the caller
-    has confirmed no existing meeting matches the target (idempotency is
-    enforced by the caller via
+    Writes a meeting with ``anchor_unit`` and one audience row set to the target
+    unit, ``meeting_kind`` normal, and the stable per-unit ``generation_key``.
+    Returns the created meeting. Assumes the caller has confirmed no existing
+    meeting matches the target (idempotency is enforced by the caller via
     :func:`find_existing_meeting_for_target` plus the database unique
     constraints).
     """
     meeting = BibleStudyMeeting.objects.create(
         lesson=lesson,
-        small_group=None,
         anchor_unit=target.unit,
         meeting_kind=BibleStudyMeeting.KIND_NORMAL,
         generation_key=normal_generation_key_for_unit(target.unit),

@@ -20,8 +20,6 @@ from .models import (
 )
 from .services import (
     normal_generation_key_for_unit,
-    resolve_normal_small_group_unit,
-    resolve_unit_small_group_mirror,
 )
 from .visibility import filter_users_for_meeting_audience
 
@@ -649,7 +647,6 @@ class BibleStudyLessonForm(forms.ModelForm):
 MEETING_FORM_TEXT = {
     "en": {
         "lesson": "Weekly Bible Study Guide",
-        "small_group": "Small Group",
         "audience_unit": "Audience Unit",
         "meeting_datetime": "Meeting Time",
         "location": "Location",
@@ -673,19 +670,11 @@ MEETING_FORM_TEXT = {
         "direction_placeholder": "Direction for this small group meeting.",
         "questions_placeholder": "Questions for this small group.",
         "audience_unit_help": (
-            "Choose the small-group church structure unit this meeting is for. "
-            "New saves use the church structure unit and leave the legacy small "
-            "group mirror unset."
+            "Choose the small-group church structure unit this meeting is for."
         ),
         "audience_unit_required": "Select the audience unit for this meeting.",
         "duplicate_unit": (
             "A meeting for this guide and audience unit already exists."
-        ),
-        "small_group_required": "Select the small group for this meeting.",
-        "small_group_unit_invalid": (
-            "The selected small group is not mapped to an active small-group "
-            "church structure unit, so this meeting cannot be made "
-            "structure-native. Map the small group first."
         ),
         "meeting_audience_not_small_group": (
             "This meeting is a higher-level, joint, or multi-unit meeting and "
@@ -694,7 +683,6 @@ MEETING_FORM_TEXT = {
     },
     "zh": {
         "lesson": "每周查经指引",
-        "small_group": "小组",
         "audience_unit": "适用单位",
         "meeting_datetime": "聚会时间",
         "location": "地点",
@@ -718,15 +706,9 @@ MEETING_FORM_TEXT = {
         "questions_placeholder": "这个小组的讨论问题。",
         "audience_unit_help": (
             "选择这次聚会所属的小组级教会结构单元。"
-            "新的保存会使用教会结构单元，并不再写入旧版小组镜像。"
         ),
         "audience_unit_required": "请选择这次聚会的适用单位。",
         "duplicate_unit": "这个查经指引和适用单位的聚会已经存在。",
-        "small_group_required": "请选择这次聚会的小组。",
-        "small_group_unit_invalid": (
-            "所选小组没有映射到有效的、启用的小组级教会结构单元，"
-            "无法生成结构受众范围。请先为小组配置结构单元。"
-        ),
         "meeting_audience_not_small_group": (
             "这是一个上级、联合或多单元聚会，不能通过小组聚会表单编辑。"
         ),
@@ -823,8 +805,10 @@ class BibleStudyMeetingForm(forms.ModelForm):
 
         1. exactly one existing audience row that is ``UNIT_SMALL_GROUP``;
         2. existing ``anchor_unit`` if it is an active ``UNIT_SMALL_GROUP``;
-        3. mapped unit from the existing legacy ``small_group``;
-        4. blank.
+        3. blank.
+
+        BS-MEETING-MIRROR.1A removed the legacy ``small_group`` mirror, so there
+        is no longer a mirror-derived initial fallback.
         """
         instance = self.instance
         if instance is None or not instance.pk:
@@ -846,11 +830,6 @@ class BibleStudyMeetingForm(forms.ModelForm):
             and anchor.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
         ):
             return anchor.id
-
-        if instance.small_group_id:
-            unit = resolve_normal_small_group_unit(instance.small_group)
-            if unit is not None:
-                return unit.id
 
         return None
 
@@ -881,16 +860,10 @@ class BibleStudyMeetingForm(forms.ModelForm):
 
         * the structure-native ``generation_key`` (so a manual meeting cannot
           duplicate a generated meeting for the same unit);
-        * the legacy ``small_group`` mirror — only when exactly one active legacy
-          group maps to ``unit`` (BS-STRUCT.1O-FU1). This catches an old legacy
-          **zero-row** meeting (``small_group`` set, no audience row, no
-          ``generation_key``) that would otherwise slip past and collide with the
-          ``(lesson, small_group)`` unique constraint at save time, raising an
-          ``IntegrityError`` instead of a friendly form error. No mirror /
-          ambiguous mirror invents nothing;
         * an existing meeting whose audience rows are exactly that single unit (so
           it cannot duplicate another normal single-unit meeting).
 
+        BS-MEETING-MIRROR.1A removed the legacy ``small_group`` mirror match.
         The current instance is excluded when editing.
         """
         others = BibleStudyMeeting.objects.filter(lesson=lesson)
@@ -900,10 +873,6 @@ class BibleStudyMeetingForm(forms.ModelForm):
         if others.filter(
             generation_key=normal_generation_key_for_unit(unit)
         ).exists():
-            return True
-
-        mirror, _ambiguous = resolve_unit_small_group_mirror(unit)
-        if mirror is not None and others.filter(small_group=mirror).exists():
             return True
 
         for meeting in others.prefetch_related("audience_scope_links"):

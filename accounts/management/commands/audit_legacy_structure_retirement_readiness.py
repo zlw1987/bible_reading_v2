@@ -122,10 +122,8 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_series_without_audience_rows",
                 "bible_study_active_series_without_audience_rows",
                 "bible_study_v2_meetings_checked",
-                "bible_study_v2_meetings_with_small_group_mirror",
                 "bible_study_v2_meetings_with_audience_rows",
                 "bible_study_v2_meetings_without_audience_rows",
-                "bible_study_v2_meeting_small_group_mirror_mismatches",
                 "bible_study_normal_meetings_missing_generation_key",
                 "bible_study_v1_sessions_checked",
                 "bible_study_v1_sessions_with_legacy_scope_fields_set",
@@ -198,7 +196,6 @@ DETAIL_KEYS = (
     "service_event_zero_row_safety_state",
     "bible_study_v1_session",
     "bible_study_v2_meeting_zero_rows",
-    "bible_study_v2_meeting_mirror_mismatch",
     "bible_study_generation_key_missing",
     "reflection_missing_structure_snapshot",
     "role_scoped_assignment_missing_structure_unit",
@@ -249,18 +246,17 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "studies.management.commands.audit_bible_study_structure_retirement_readiness",
         "standing diagnostic/audit guard",
     ),
-    (
-        "studies.management.commands.backfill_bible_study_meeting_audience_scopes",
-        "backfill support for Bible Study meeting audience rows",
-    ),
+    # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group; the one-time
+    # mirror->audience-row backfill (backfill_bible_study_meeting_audience_scopes)
+    # derived rows from that FK and was retired with it, so it is no longer listed.
     (
         "studies.management.commands.backfill_bible_study_v2_generation_keys",
         "backfill support for Bible Study V2 generation keys; dry-run by default",
     ),
-    (
-        "studies.management.commands.cleanup_bible_study_v2_small_group_mirrors",
-        "guarded cleanup tooling for V2 meeting small_group mirrors; dry-run by default",
-    ),
+    # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group together with its
+    # guarded cleanup tooling (cleanup_bible_study_v2_small_group_mirrors) and the
+    # legacy-vs-membership shadow audit (audit_bible_study_membership_readiness),
+    # so neither is listed here.
     (
         "studies.management.commands.audit_bible_study_generation_bridge_retirement",
         "standing diagnostic/audit guard for Bible Study generation bridge retirement",
@@ -519,9 +515,9 @@ def _scan_small_groups(stats, details):
                 )
 
     stats["profile_small_group_references"] = stats["profiles_with_small_group"]
-    stats["bible_study_v2_meeting_small_group_references"] = (
-        BibleStudyMeeting.objects.filter(small_group__isnull=False).count()
-    )
+    # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group, so the V2
+    # meeting is no longer an inbound SmallGroup reference.
+    stats["bible_study_v2_meeting_small_group_references"] = 0
     stats["bible_study_v1_session_small_group_references"] = (
         BibleStudySession.objects.filter(small_group__isnull=False).count()
     )
@@ -726,19 +722,15 @@ def _scan_bible_study(stats, details):
             "meeting_id", flat=True
         ).distinct()
     )
+    # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group, so V2 meeting
+    # readiness is now audience-row + generation-key only; there is no meeting
+    # mirror to count or reconcile.
     meetings = (
-        BibleStudyMeeting.objects.select_related(
-            "lesson",
-            "small_group",
-            "small_group__church_structure_unit",
-        )
-        .prefetch_related("audience_scope_links__unit")
+        BibleStudyMeeting.objects.select_related("lesson")
         .order_by("id")
     )
     for meeting in meetings:
         stats["bible_study_v2_meetings_checked"] += 1
-        if meeting.small_group_id:
-            stats["bible_study_v2_meetings_with_small_group_mirror"] += 1
         has_rows = meeting.id in meeting_ids_with_rows
         if has_rows:
             stats["bible_study_v2_meetings_with_audience_rows"] += 1
@@ -747,10 +739,9 @@ def _scan_bible_study(stats, details):
             _append(
                 details,
                 "bible_study_v2_meeting_zero_rows",
-                "meeting_id={meeting_id} lesson={lesson} small_group={small_group}".format(
+                "meeting_id={meeting_id} lesson={lesson}".format(
                     meeting_id=meeting.id,
                     lesson=meeting.lesson.title if meeting.lesson_id else "",
-                    small_group=_group_label(meeting.small_group),
                 ),
             )
 
@@ -762,33 +753,11 @@ def _scan_bible_study(stats, details):
             _append(
                 details,
                 "bible_study_generation_key_missing",
-                "meeting_id={meeting_id} lesson={lesson} small_group={small_group}".format(
+                "meeting_id={meeting_id} lesson={lesson}".format(
                     meeting_id=meeting.id,
                     lesson=meeting.lesson.title if meeting.lesson_id else "",
-                    small_group=_group_label(meeting.small_group),
                 ),
             )
-
-        audience_units = [link.unit for link in meeting.audience_scope_links.all()]
-        if len(audience_units) == 1 and meeting.small_group is not None:
-            mirror_unit = meeting.small_group.church_structure_unit
-            if mirror_unit is not None and mirror_unit.id != audience_units[0].id:
-                stats["bible_study_v2_meeting_small_group_mirror_mismatches"] += 1
-                _append(
-                    details,
-                    "bible_study_v2_meeting_mirror_mismatch",
-                    (
-                        "meeting_id={meeting_id} lesson={lesson} "
-                        "small_group={small_group} mirror_unit={mirror_unit} "
-                        "audience_unit={audience_unit}"
-                    ).format(
-                        meeting_id=meeting.id,
-                        lesson=meeting.lesson.title if meeting.lesson_id else "",
-                        small_group=_group_label(meeting.small_group),
-                        mirror_unit=_unit_label(mirror_unit),
-                        audience_unit=_unit_label(audience_units[0]),
-                    ),
-                )
 
     sessions = BibleStudySession.objects.select_related(
         "series",
@@ -822,9 +791,7 @@ def _scan_bible_study(stats, details):
     stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
     stats["bible_study_legacy_retirement_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
-        + stats["bible_study_v2_meetings_with_small_group_mirror"]
         + stats["bible_study_v2_meetings_without_audience_rows"]
-        + stats["bible_study_v2_meeting_small_group_mirror_mismatches"]
         + stats["bible_study_normal_meetings_missing_generation_key"]
         + stats["bible_study_v1_purge_pending"]
         + stats["bible_study_v1_app_runtime_legacy_blockers"]

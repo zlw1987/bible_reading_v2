@@ -101,17 +101,15 @@ CANDIDATE_DEFINITIONS = (
         "candidate_type": "model/table",
         "app_read_references": _refs(
             "accounts.structure_selectors.resolve_units_to_small_groups",
-            "studies.services old-row idempotency and mirror lookup",
+            "studies.BibleStudySeries.get_eligible_small_groups audience-row resolver",
             "reading group-progress compatibility group lists",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
         "template_display_references": _refs(
             "reading/group_progress selected group display",
-            "Bible Study fallback meeting labels for old rows",
         ),
         "diagnostic_cleanup_references": _refs(
             "cleanup_profile_small_group",
-            "cleanup_bible_study_v2_small_group_mirrors",
             "cleanup_legacy_structure_parent_links",
             "audit_legacy_structure_object_row_retirement",
         ),
@@ -440,9 +438,10 @@ CANDIDATE_DEFINITIONS = (
             "zero audience rows. The cleanup_bible_study_series_legacy_scope_fields "
             "command was retired with the fields. Only immutable historical "
             "migrations still name it; no active schema blocker remains. This did "
-            "not remove BibleStudyMeeting.small_group, anchor_unit, generation_key, "
+            "not remove BibleStudyMeeting.anchor_unit, generation_key, "
             "BibleStudySeriesAudienceScope, BibleStudyMeetingAudienceScope, V1 "
-            "BibleStudySession, or the SmallGroup / District / MinistryContext tables."
+            "BibleStudySession, or the SmallGroup / District / MinistryContext tables "
+            "(BibleStudyMeeting.small_group was later removed in BS-MEETING-MIRROR.1A)."
         ),
         "suggested_removal_phase": "historical only",
     },
@@ -487,34 +486,32 @@ CANDIDATE_DEFINITIONS = (
             "scope FK (migration studies/0010). Normal generation uses "
             "BibleStudySeriesAudienceScope rows. Only immutable historical "
             "migrations still name it; no active schema blocker remains. This did "
-            "not remove the SmallGroup table or BibleStudyMeeting.small_group."
+            "not remove the SmallGroup table (BibleStudyMeeting.small_group was "
+            "later removed in BS-MEETING-MIRROR.1A)."
         ),
         "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudyMeeting.small_group",
+        "candidate_name": "BibleStudyMeeting.small_group (removed)",
         "model_table": "studies.BibleStudyMeeting",
         "field_name": "small_group",
-        "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "old-row idempotency lookup",
-            "fallback display when anchor/audience data is missing",
-            "forms tolerate legacy small_group URL compatibility",
-        ),
-        "admin_references": _refs("studies.admin.BibleStudyMeetingAdmin"),
-        "template_display_references": _refs("meeting structure label fallback for old rows"),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_bible_study_v2_small_group_mirrors",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
-        "test_fixture_references": _refs("V2 old-row compatibility fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "meeting_small_group",
+        "candidate_type": "field",
+        "migration_history_references": _refs("studies migrations (field added then removed)"),
         "recommended_next_action": (
-            "Close after safe mirror cleanup and idempotency bridge replacement; "
-            "do not remove while fallback display or old-row matching depends on it."
+            "Completed. BS-MEETING-MIRROR.1A removed the BibleStudyMeeting.small_group "
+            "legacy mirror FK (migration studies/0011) after preflight audits "
+            "confirmed zero populated values and no live runtime/visibility/"
+            "display/admin/generation dependency. V2 meeting visibility remains "
+            "BibleStudyMeetingAudienceScope rows plus active primary "
+            "ChurchStructureMembership; normal generation stays structure-unit-native "
+            "via generation_key and anchor_unit. The guarded mirror cleanup command "
+            "(cleanup_bible_study_v2_small_group_mirrors) and the legacy-vs-membership "
+            "shadow audit (audit_bible_study_membership_readiness) were retired with "
+            "the field. Only immutable historical migrations still name it; no active "
+            "schema blocker remains. This did not remove the SmallGroup table, "
+            "BibleStudyMeeting.anchor_unit, generation_key, or BibleStudyMeetingAudienceScope."
         ),
-        "suggested_removal_phase": "phase 4",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "BibleStudyMeeting.anchor_unit",
@@ -530,7 +527,6 @@ CANDIDATE_DEFINITIONS = (
         "template_display_references": _refs("V2 meeting member/staff labels"),
         "diagnostic_cleanup_references": _refs(
             "backfill_bible_study_v2_generation_keys",
-            "cleanup_bible_study_v2_small_group_mirrors",
         ),
         "test_fixture_references": _refs("V2 generation/display fixtures"),
         "migration_history_references": _refs("studies migrations"),
@@ -721,11 +717,9 @@ def _data_counts():
             host_language_unit__isnull=False
         ).count(),
         # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.scope_type /
-        # ministry_context / district / small_group, so there is no longer a
-        # queryable data counter for those.
-        "meeting_small_group": BibleStudyMeeting.objects.filter(
-            small_group__isnull=False
-        ).count(),
+        # ministry_context / district / small_group, and BS-MEETING-MIRROR.1A
+        # removed BibleStudyMeeting.small_group, so there is no longer a queryable
+        # data counter for those.
         "meeting_anchor_unit": BibleStudyMeeting.objects.filter(
             anchor_unit__isnull=False
         ).count(),

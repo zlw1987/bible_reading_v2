@@ -9,8 +9,18 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.2A.** The design slices that
-followed BS-STRUCT.1A are now implemented:
+Status: **partially migrated through BS-STRUCT.2A; the `BibleStudyMeeting.small_group`
+mirror FK was removed in BS-MEETING-MIRROR.1A** (migration `studies/0011`) after
+preflight audits confirmed zero populated values and no live runtime/visibility/
+display/admin/generation dependency. V2 meeting visibility remains
+`BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership`;
+normal generation stays structure-unit-native via `generation_key` and `anchor_unit`;
+display/grouping uses `anchor_unit` and audience rows. The mirror cleanup command
+(`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror→audience backfill
+(`backfill_bible_study_meeting_audience_scopes`), and the legacy-vs-membership shadow
+audit (`audit_bible_study_membership_readiness`) were retired with the field; the
+references to `BibleStudyMeeting.small_group` below are historical. The design slices
+that followed BS-STRUCT.1A are now implemented:
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
   `anchor_unit`, nullable `small_group` mirror, `generation_key`, `meeting_kind`

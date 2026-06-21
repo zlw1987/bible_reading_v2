@@ -78,11 +78,10 @@ class BibleStudyMeetingAdmin(admin.ModelAdmin):
         "discussion_leader_user",
         "created_by",
     )
-    list_filter = ("status", "small_group", "meeting_datetime")
+    list_filter = ("status", "anchor_unit", "meeting_datetime")
     search_fields = (
         "lesson__title",
         "lesson__title_en",
-        "small_group__name",
         "location",
         "location_en",
         "discussion_leader_name",
@@ -100,7 +99,7 @@ class BibleStudyMeetingAdmin(admin.ModelAdmin):
         return (
             super()
             .get_queryset(request)
-            .select_related("anchor_unit", "small_group")
+            .select_related("anchor_unit")
             .prefetch_related("audience_scope_links__unit")
         )
 
@@ -116,7 +115,6 @@ class BibleStudyMeetingWorshipSongAdmin(admin.ModelAdmin):
         "arrangement_notes",
         "support_notes",
         "meeting__lesson__title",
-        "meeting__small_group__name",
     )
     readonly_fields = ("created_at", "updated_at")
     ordering = ("meeting", "sort_order", "id")
@@ -128,7 +126,6 @@ class BibleStudyMeetingWorshipSongAdmin(admin.ModelAdmin):
             .select_related(
                 "meeting",
                 "meeting__anchor_unit",
-                "meeting__small_group",
             )
             .prefetch_related("meeting__audience_scope_links__unit")
         )
@@ -146,7 +143,6 @@ class BibleStudyMeetingRoleAdmin(admin.ModelAdmin):
         "user__first_name",
         "user__last_name",
         "meeting__lesson__title",
-        "meeting__small_group__name",
     )
     readonly_fields = ("created_at", "updated_at")
     ordering = ("meeting", "role", "id")
@@ -158,7 +154,6 @@ class BibleStudyMeetingRoleAdmin(admin.ModelAdmin):
             .select_related(
                 "meeting",
                 "meeting__anchor_unit",
-                "meeting__small_group",
                 "user",
             )
             .prefetch_related("meeting__audience_scope_links__unit")

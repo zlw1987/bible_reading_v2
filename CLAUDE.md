@@ -23,7 +23,8 @@ Current state:
 * Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary membership.
 * Bible Study V2 uses `BibleStudyMeetingAudienceScope` rows plus active primary membership for ordinary visibility, Today/landing, and role/worship pickers.
 * Bible Study V2 zero-row meetings fail closed.
-* Bible Study schedule audience/eligibility uses `BibleStudySeriesAudienceScope` rows; normal generation is structure-unit-native and fails closed on zero rows. The legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, and `small_group` fields were removed in `BS-SERIES-FIELD-RETIRE.1A` (migration `studies/0010`); `get_eligible_small_groups()` resolves audience rows only, and the `cleanup_bible_study_series_legacy_scope_fields` command was retired with the fields. This did not remove `BibleStudyMeeting.small_group`, V1 `BibleStudySession`, or the `SmallGroup`/`District`/`MinistryContext` tables.
+* Bible Study schedule audience/eligibility uses `BibleStudySeriesAudienceScope` rows; normal generation is structure-unit-native and fails closed on zero rows. The legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, and `small_group` fields were removed in `BS-SERIES-FIELD-RETIRE.1A` (migration `studies/0010`); `get_eligible_small_groups()` resolves audience rows only, and the `cleanup_bible_study_series_legacy_scope_fields` command was retired with the fields. This did not remove V1 `BibleStudySession`, or the `SmallGroup`/`District`/`MinistryContext` tables.
+* The legacy `BibleStudyMeeting.small_group` mirror FK was removed in `BS-MEETING-MIRROR.1A` (migration `studies/0011`) after preflight audits confirmed zero populated values and no live runtime/visibility/display/admin/generation dependency. V2 meeting visibility remains `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; normal generation stays structure-unit-native via `generation_key` and `anchor_unit`. The mirror cleanup command (`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror→audience backfill (`backfill_bible_study_meeting_audience_scopes`), and the legacy-vs-membership shadow audit (`audit_bible_study_membership_readiness`) were retired with it. This did not remove `BibleStudyMeetingAudienceScope`, `anchor_unit`, `generation_key`, V1 `BibleStudySession`, or the `SmallGroup`/`District`/`MinistryContext` tables.
 * V1 `BibleStudySession` app runtime is retired.
 * Guarded V1 purge tooling exists; do not run destructive purge/apply unless explicitly approved.
 * V2 `BibleStudyMeeting` is the active Bible Study path.
@@ -39,8 +40,7 @@ Legacy fields still exist:
 * `SmallGroup`
 * `District`
 * `MinistryContext`
-* Bible Study legacy/mirror fields
-* reflection/prayer legacy mirror fields
+* V1 `BibleStudySession` legacy scope fields (`scope_type`/`district`/`small_group`); the V2 `BibleStudyMeeting.small_group` mirror was removed in `BS-MEETING-MIRROR.1A`
 
 Removed role legacy fields (do not reintroduce): `ChurchRoleAssignment.district` and `ChurchRoleAssignment.small_group` were removed in `ROLE-FIELD-RETIRE.1A` (migration `accounts/0011`); scoped-role runtime uses `ChurchRoleAssignment.structure_unit` only.
 

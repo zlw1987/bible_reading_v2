@@ -34,7 +34,6 @@ from .models import (
     BibleStudyWorshipSong,
 )
 from .services import (
-    GENERATION_WARNING_AMBIGUOUS_MIRROR,
     GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
     _collect_descendant_or_self_unit_ids,
     build_existing_normal_meeting_index,
@@ -46,7 +45,6 @@ from .services import (
 )
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
-    get_small_group_structure_unit,
 )
 
 
@@ -150,7 +148,6 @@ def get_v2_landing_context(user):
         "lesson",
         "lesson__series",
         "anchor_unit",
-        "small_group",
     ).prefetch_related(
         "audience_scope_links__unit",
     ).filter(
@@ -207,13 +204,12 @@ def get_default_meeting_datetime(lesson):
 def get_bible_study_meeting_generation_preview(lesson):
     """Build the structure-unit-native normal generation preview (BS-STRUCT.1L).
 
-    The preview is now based on :class:`GenerationTarget` rows resolved from the
-    series (each an active ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` leaf),
-    not on the set of missing legacy ``SmallGroup`` rows. A target counts as
-    existing when any existing meeting matches it by generation key, legacy
-    ``small_group`` mirror, or a single-unit audience row (so pre-1L meetings
-    are recognized and never duplicated). Cancelled meetings still count as
-    existing and are deliberately not regenerated.
+    The preview is based on :class:`GenerationTarget` rows resolved from the
+    series (each an active ``UNIT_SMALL_GROUP`` ``ChurchStructureUnit`` leaf). A
+    target counts as existing when any existing meeting matches it by generation
+    key or a single-unit audience row (so pre-key meetings are recognized and
+    never duplicated). Cancelled meetings still count as existing and are
+    deliberately not regenerated.
     """
     targets, warnings = resolve_normal_generation_targets(lesson.series)
     index = build_existing_normal_meeting_index(lesson)
@@ -426,7 +422,6 @@ def bible_study_lesson_detail(request, lesson_id):
                 status=BibleStudyMeeting.STATUS_CANCELLED,
             ).select_related(
                 "anchor_unit",
-                "small_group",
                 "discussion_leader_user",
             ).prefetch_related(
                 "audience_scope_links__unit",
@@ -458,8 +453,7 @@ def generate_bible_study_meetings(request, lesson_id):
         created_count = 0
         # BS-STRUCT.1L: each missing target is one active UNIT_SMALL_GROUP
         # ChurchStructureUnit leaf. Create one structure-native normal meeting
-        # per target (audience row + anchor_unit + per-unit generation_key),
-        # leaving the legacy small_group mirror unset for new rows.
+        # per target (audience row + anchor_unit + per-unit generation_key).
         default_meeting_datetime = get_default_meeting_datetime(lesson)
 
         for target in preview["missing_targets"]:
@@ -504,32 +498,6 @@ def generate_bible_study_meetings(request, lesson_id):
             )
             messages.warning(request, missing_audience_message)
 
-        # BS-STRUCT.1L: a target unit with several active legacy small groups is
-        # ambiguous, so its generated meeting carries no legacy small_group
-        # mirror (the structure-native audience row still drives runtime).
-        ambiguous_units = [
-            warning.unit
-            for warning in preview["warnings"]
-            if warning.kind == GENERATION_WARNING_AMBIGUOUS_MIRROR
-        ]
-        if ambiguous_units:
-            unit_names = "、".join(
-                unit.display_name("zh") for unit in ambiguous_units
-            )
-            unit_names_en = ", ".join(
-                unit.display_name("en") for unit in ambiguous_units
-            )
-            ambiguous_message = (
-                f"有 {len(ambiguous_units)} 个结构单元对应多个有效的传统小组，"
-                f"生成的聚会未设置传统小组镜像：{unit_names}。"
-                if language == "zh"
-                else (
-                    f"{len(ambiguous_units)} unit(s) map to multiple active "
-                    "legacy small groups; their generated meetings have no "
-                    f"legacy small-group mirror: {unit_names_en}."
-                )
-            )
-            messages.warning(request, ambiguous_message)
         return redirect("bible_study_lesson_detail", lesson_id=lesson.id)
 
     return render(
@@ -647,24 +615,12 @@ def bible_study_meeting_manage_list(request):
     status = (request.GET.get("status") or "").strip()
     lesson_id = (request.GET.get("lesson") or "").strip()
 
-    # BS-STRUCT.1N: the manage-list filter is now structure-audience aware. The
-    # preferred GET param is ``unit`` (a ChurchStructureUnit id). A legacy
-    # ``small_group=<id>`` URL (with no ``unit``) is tolerated and mapped
-    # internally to that group's structure unit within this same request (not an
-    # HTTP redirect) so old bookmarks keep working, but the UI no longer exposes
-    # a legacy small-group field.
+    # BS-STRUCT.1N: the manage-list filter is structure-audience aware. The
+    # filter GET param is ``unit`` (a ChurchStructureUnit id). BS-MEETING-MIRROR.1A
+    # removed the legacy ``small_group`` mirror, so the obsolete
+    # ``?small_group=<id>`` URL tolerance was retired with it; an old bookmark
+    # using it now simply falls back to the unfiltered "All" view.
     unit_id = (request.GET.get("unit") or "").strip()
-    legacy_small_group_id = (request.GET.get("small_group") or "").strip()
-    if not unit_id and legacy_small_group_id.isdigit():
-        small_group_model = BibleStudyMeeting._meta.get_field(
-            "small_group"
-        ).remote_field.model
-        legacy_group = small_group_model.objects.filter(
-            id=legacy_small_group_id
-        ).first()
-        mapped_unit = get_small_group_structure_unit(legacy_group)
-        if mapped_unit is not None:
-            unit_id = str(mapped_unit.id)
 
     selected_unit = None
     if unit_id.isdigit():
@@ -678,7 +634,6 @@ def bible_study_meeting_manage_list(request):
     ).select_related(
         "lesson",
         "anchor_unit",
-        "small_group",
         "created_by",
     ).prefetch_related(
         "audience_scope_links__unit",
@@ -690,8 +645,7 @@ def bible_study_meeting_manage_list(request):
         meetings = meetings.filter(lesson_id=lesson_id)
     if selected_unit is not None:
         # Match the selected unit or any descendant using audience rows only.
-        # Zero-row meetings fail closed for ordinary users; legacy small_group
-        # remains mirror/display/backfill context only.
+        # Zero-row meetings fail closed for ordinary users.
         unit_ids = _collect_descendant_or_self_unit_ids([selected_unit])
         meetings = meetings.filter(
             audience_scope_links__unit_id__in=unit_ids,
@@ -734,7 +688,6 @@ def bible_study_meeting_detail(request, meeting_id):
             "lesson",
             "lesson__series",
             "anchor_unit",
-            "small_group",
             "discussion_leader_user",
             "service_event",
             "created_by",
@@ -789,10 +742,9 @@ def create_bible_study_meeting(request):
                 meeting.created_by = request.user
                 meeting.save()
                 # BS-STRUCT.1O: the form's selected structure unit is the source
-                # of truth; this writes the audience row + anchor + generation key
-                # while leaving the legacy small_group mirror unset. clean()
-                # already rejected duplicates and higher-level / joint /
-                # multi-unit edits.
+                # of truth; this writes the audience row + anchor + generation
+                # key. clean() already rejected duplicates and higher-level /
+                # joint / multi-unit edits.
                 sync_normal_meeting_audience_scope_for_unit(
                     meeting,
                     form.cleaned_data["audience_unit"],
@@ -833,10 +785,8 @@ def edit_bible_study_meeting(request, meeting_id):
             with transaction.atomic():
                 meeting = form.save()
                 # BS-STRUCT.1O: realign the single normal audience row + anchor +
-                # generation key to the selected structure unit. The helper
-                # preserves only an already-valid old small_group mirror and
-                # clears stale mismatches. clean() already blocked duplicates
-                # and higher-level / joint / multi-unit edits.
+                # generation key to the selected structure unit. clean() already
+                # blocked duplicates and higher-level / joint / multi-unit edits.
                 sync_normal_meeting_audience_scope_for_unit(
                     meeting,
                     form.cleaned_data["audience_unit"],
@@ -889,7 +839,6 @@ def edit_bible_study_meeting_preparation(request, meeting_id):
             "lesson",
             "lesson__series",
             "anchor_unit",
-            "small_group",
             "discussion_leader_user",
             "service_event",
             "created_by",
@@ -941,7 +890,6 @@ def manage_bible_study_meeting_roles(request, meeting_id):
             "lesson",
             "lesson__series",
             "anchor_unit",
-            "small_group",
         ).prefetch_related(
             "audience_scope_links__unit",
         ),
@@ -992,7 +940,6 @@ def edit_bible_study_meeting_role(request, role_id):
             "meeting__lesson",
             "meeting__lesson__series",
             "meeting__anchor_unit",
-            "meeting__small_group",
             "user",
         ).prefetch_related(
             "meeting__audience_scope_links__unit",
@@ -1075,7 +1022,6 @@ def manage_bible_study_meeting_worship_songs(request, meeting_id):
             "lesson",
             "lesson__series",
             "anchor_unit",
-            "small_group",
         ).prefetch_related(
             "audience_scope_links__unit",
         ),
@@ -1137,7 +1083,6 @@ def edit_bible_study_meeting_worship_song(request, song_id):
             "meeting__lesson",
             "meeting__lesson__series",
             "meeting__anchor_unit",
-            "meeting__small_group",
             "worship_lead_user",
         ).prefetch_related(
             "meeting__audience_scope_links__unit",

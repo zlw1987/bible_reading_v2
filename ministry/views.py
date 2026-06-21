@@ -119,7 +119,7 @@ def visible_assignments_for_user(user):
     assignments = (
         TeamAssignment.objects.select_related(
             "service_event",
-            "service_event__ministry_context",
+            "service_event__host_language_unit",
             "ministry_team",
             "created_by",
         )
@@ -150,7 +150,7 @@ def my_serving_assignments(user, tab="upcoming"):
         TeamAssignmentMember.objects.select_related(
             "assignment",
             "assignment__service_event",
-            "assignment__service_event__ministry_context",
+            "assignment__service_event__host_language_unit",
             "assignment__ministry_team",
             "membership",
             "membership__team",
@@ -382,7 +382,7 @@ def team_schedule(request, team_id):
     assignments = list(
         TeamAssignment.objects.select_related(
             "service_event",
-            "service_event__ministry_context",
+            "service_event__host_language_unit",
             "service_event__rotation_anchor_team",
             "ministry_team",
         )
@@ -968,10 +968,16 @@ def team_assignment_detail(request, assignment_id):
     assignment = get_object_or_404(
         TeamAssignment.objects.select_related(
             "service_event",
-            "service_event__ministry_context",
+            "service_event__host_language_unit",
             "ministry_team",
             "created_by",
-        ).prefetch_related(assignment_member_prefetch()),
+        ).prefetch_related(
+            assignment_member_prefetch(),
+            # SERVICE-EVENT-CONTEXT.1C: host/language label falls back to
+            # audience-row-derived ministry context when host_language_unit is
+            # blank; batch the audience rows.
+            "service_event__audience_scope_links__unit",
+        ),
         id=assignment_id,
     )
 

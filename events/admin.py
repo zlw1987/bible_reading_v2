@@ -18,7 +18,6 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "title",
         "event_type",
         "start_datetime",
-        "ministry_context",
         "host_language_unit",
         "rotation_anchor_team",
         "status",
@@ -27,7 +26,6 @@ class ServiceEventAdmin(admin.ModelAdmin):
     list_filter = (
         "event_type",
         "status",
-        "ministry_context",
         "host_language_unit",
         "rotation_anchor_team",
         "start_datetime",
@@ -38,9 +36,6 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "description",
         "description_en",
         "location",
-        "ministry_context__code",
-        "ministry_context__name",
-        "ministry_context__name_en",
         "host_language_unit__code",
         "host_language_unit__name",
         "host_language_unit__name_en",
@@ -51,12 +46,6 @@ class ServiceEventAdmin(admin.ModelAdmin):
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
-        if db_field.name == "ministry_context":
-            formfield.label = "Host / Language Label"
-            formfield.help_text = (
-                "Optional label for the host, language, or similar ministry context. "
-                "This is label-only and does not control visibility, serving assignment, or permissions."
-            )
         if db_field.name == "host_language_unit":
             formfield.label = "Host / Language Unit"
             formfield.queryset = ChurchStructureUnit.objects.filter(

@@ -126,37 +126,16 @@ def event_structure_audience_has_no_legacy_groups(event):
 
 
 @register.filter
-def event_ministry_context_label(event, language):
-    if not event or not event.ministry_context_id:
-        return ""
-
-    context = event.ministry_context
-    if language == "en" and context.name_en:
-        name = context.name_en
-    else:
-        name = context.name
-
-    if context.code:
-        return f"{context.code} - {name}"
-    return name
-
-
-@register.filter
 def event_host_language_label(event, language):
     """Host/language ("ministry context") label with structure-native fallback.
 
-    When the legacy ``ServiceEvent.ministry_context`` FK is still set, the
-    existing label is kept verbatim during transition. Otherwise the
-    structure-native ``host_language_unit`` display context is used when set.
-    When both are blank, the label is derived from the event's
+    The structure-native ``host_language_unit`` display context is used when
+    set. When it is blank, the label is derived from the event's
     ``ServiceEventAudienceScope`` rows via ``ChurchStructureUnit.parent``.
     This is display only; it never affects audience visibility.
     """
     if not event:
         return ""
-
-    if event.ministry_context_id:
-        return event_ministry_context_label(event, language)
 
     if event.host_language_unit_id:
         return ministry_context_unit_label(event.host_language_unit, language)

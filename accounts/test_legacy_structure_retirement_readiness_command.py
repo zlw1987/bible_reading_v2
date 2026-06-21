@@ -140,6 +140,30 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
         self.assertGreater(stats["bible_study_legacy_retirement_blockers"], 0)
 
+    def test_service_event_ministry_context_no_longer_counted_after_field_removal(self):
+        # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context, so the
+        # ServiceEvent FK is no longer a MinistryContext retirement blocker and
+        # the umbrella audit neither counts it nor lists its retired display
+        # cleanup/backfill commands.
+        self.make_service_event()
+
+        audit = run_audit(target_date=self.today, now=self.now)
+        stats = audit["stats"]
+
+        self.assertNotIn("service_events_with_ministry_context", stats)
+        self.assertEqual(
+            stats["ministry_context_retirement_blocker_references"],
+            stats["ministry_contexts_total"]
+            + stats["districts_with_ministry_context"]
+            + stats["bible_study_series_with_ministry_context"],
+        )
+
+        out = StringIO()
+        call_command("audit_legacy_structure_retirement_readiness", stdout=out)
+        output = out.getvalue()
+        self.assertNotIn("backfill_service_event_host_language_units", output)
+        self.assertNotIn("cleanup_service_event_ministry_context_labels", output)
+
     def test_bible_study_series_legacy_scope_fields_remain_retirement_blockers(self):
         series = BibleStudySeries.objects.create(
             title="Legacy-scoped Schedule",

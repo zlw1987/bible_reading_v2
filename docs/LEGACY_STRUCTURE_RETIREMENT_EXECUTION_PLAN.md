@@ -232,15 +232,14 @@ match are skipped and reported. Both target FKs were verified nullable before
 implementation; a non-nullable target would be detected, reported via
 `skipped_not_nullable`, and left untouched.
 
-`ServiceEvent.ministry_context` is **not** cleared by this command. It is a
-staff/member "Host / Language Label" surfaced in the event detail/list and
-ministry assignment detail/list displays, not pure hierarchy redundancy, so
-those rows are reported and conservatively skipped
-(`skipped_service_event_uncertain_display_context`). SERVICE-EVENT-CONTEXT.1B
-now handles that FK separately with structure-native `host_language_unit`
-display context, stopped normal app-level writes, and the guarded
-`backfill_service_event_host_language_units` /
-`cleanup_service_event_ministry_context_labels` command sequence.
+This command does not scan `ServiceEvent` at all. The legacy
+`ServiceEvent.ministry_context` display FK was removed in
+SERVICE-EVENT-CONTEXT.1C (migration `events/0008`); its display-only tooling
+(`backfill_service_event_host_language_units`,
+`cleanup_service_event_ministry_context_labels`) was retired with it, and the
+`service_event_*` counters were dropped from this command. Host / Language
+display now uses structure-native `ServiceEvent.host_language_unit` plus the
+audience-derived structure fallback.
 
 Apply requires both explicit flags:
 
@@ -280,70 +279,43 @@ only prepares link cleanup where the relationship is already represented by
 `ChurchStructureUnit`. Final row/table/field deletion remains a later approved
 schema slice.
 
-ServiceEvent ministry-context label cleanup command:
-
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_service_event_ministry_context_labels
-```
+ServiceEvent Host / Language display FK retirement (SERVICE-EVENT-CONTEXT.1C, complete):
 
 SERVICE-EVENT-CONTEXT.1A kept `ServiceEvent.ministry_context` as stored legacy
 display context only and added an audience-derived fallback. SERVICE-EVENT-CONTEXT.1B
-adds `ServiceEvent.host_language_unit`, a structure-native
-display-only Host / Language context. Neither field is audience authority, and
-neither controls visibility, serving assignments, permissions, required teams,
-or TeamAssignment/My Serving behavior. Member/staff Host / Language displays
-now prefer the stored legacy FK while it exists, then `host_language_unit`, then
-derive a safe fallback from `ServiceEventAudienceScope` units by walking
+added `ServiceEvent.host_language_unit` (structure-native display-only Host /
+Language context), stopped normal app-level writes to `ministry_context`, and
+added guarded `backfill_service_event_host_language_units` /
+`cleanup_service_event_ministry_context_labels` tooling.
+
+SERVICE-EVENT-CONTEXT.1C then **removed** `ServiceEvent.ministry_context`
+(migration `events/0008`) after local/dev audit confirmed zero populated
+`ministry_context` rows. Host / Language display now uses
+`ServiceEvent.host_language_unit` and, when that is blank, derives a safe
+fallback from `ServiceEventAudienceScope` units by walking
 `ChurchStructureUnit.parent` to the nearest ministry-context unit. Root-audience
-events can therefore keep a whole-church audience while displaying an explicit
-Host / Language unit. Rows with no stored display unit and no derivable context
-render no derived label, and rows spanning multiple derived ministry contexts
-render a generic mixed-context label.
+events can keep a whole-church audience while displaying an explicit Host /
+Language unit. Rows with no stored display unit and no derivable context render
+no derived label, and rows spanning multiple derived ministry contexts render a
+generic mixed-context label. Neither display field is audience authority, and
+neither controls visibility, serving assignments, permissions, required teams,
+or TeamAssignment/My Serving behavior.
 
-The normal app-level ServiceEvent create/edit form and recurring-create form no
-longer expose or save `ServiceEvent.ministry_context`, and they do not expose or
-save `host_language_unit` in this slice; forged POST values for either field are
-ignored. Django Admin may still expose both fields as maintenance surfaces while
-the model fields exist. This slice does not remove `ServiceEvent.ministry_context`,
-does not delete `MinistryContext` rows, and does not change ServiceEvent
-audience/runtime semantics.
-
-Backfill the structure-native display context before clearing the legacy FK:
-
-```powershell
-.venv\Scripts\python.exe manage.py backfill_service_event_host_language_units
-```
-
-`backfill_service_event_host_language_units` is dry-run by default. It sets only
-`ServiceEvent.host_language_unit`, and only for rows where
-`ServiceEvent.ministry_context.church_structure_unit` is an active
-ministry-context `ChurchStructureUnit`. Apply requires both explicit flags:
-
-```powershell
-.venv\Scripts\python.exe manage.py backfill_service_event_host_language_units --apply --confirm-service-event-host-language-unit-backfill
-```
-
-`cleanup_service_event_ministry_context_labels` is dry-run by default. It clears
-only `ServiceEvent.ministry_context = None`, and only when `host_language_unit`,
-or the audience-derived fallback when that field is blank, maps to the same
-active ministry-context unit as the current legacy FK mapping. It never mutates
-`ServiceEventAudienceScope`, `ChurchStructureUnit`, `ChurchStructureMembership`,
-`SmallGroup`, `District`, `MinistryContext`, Bible Study, ReflectionComment,
-Profile, Role, ministry team/serving assignments, permissions, reading progress,
-runtime behavior, or schema. Apply requires both explicit flags:
-
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_service_event_ministry_context_labels --apply --confirm-service-event-ministry-context-label-cleanup
-```
-
-Do not run that `--apply` command without first reviewing the dry-run output for
-the exact target database. Field/schema/table retirement remains a later
-approved slice after cleanup and audit blockers are reviewed.
+The display-only cleanup/backfill tooling
+(`backfill_service_event_host_language_units`,
+`cleanup_service_event_ministry_context_labels`) was retired with the field,
+and its references were removed from the umbrella/schema retirement audits.
+The normal app-level ServiceEvent create/edit and recurring-create forms do not
+expose or save `host_language_unit`; forged POST values are ignored. This slice
+did not remove the `MinistryContext` table, `MinistryContext.church_structure_unit`,
+`ServiceEvent.host_language_unit`, or `ServiceEventAudienceScope`, and did not
+change ServiceEvent audience/runtime semantics; zero-row events remain
+fail-closed for ordinary users.
 
 Current runtime split:
 
 - `Profile.small_group` has no normal app-level write path after CS-RETIRE.1A, but remains stored legacy/admin/archive/audit data. PROFILE-SG.1B adds guarded cleanup tooling only; it can clear the field only for rows whose single active primary membership already safely represents the same mapped active small-group unit, and it does not run automatically.
-- ServiceEvent ordinary-user visibility no longer uses zero-row legacy fallback; zero-row events are fail-closed safety states, and SE-SCOPE.1A stops normal app-level writes to legacy `scope_type` / `district` / `small_group`. SE-SCOPE.1B adds guarded cleanup tooling for existing stored values, but cleanup is explicit and not automatic. SERVICE-EVENT-CONTEXT.1B separately keeps normal app writes to `ServiceEvent.ministry_context` stopped, adds display-only `host_language_unit`, and adds guarded backfill/cleanup for matching stored FK values.
+- ServiceEvent ordinary-user visibility no longer uses zero-row legacy fallback; zero-row events are fail-closed safety states, and SE-SCOPE.1A stops normal app-level writes to legacy `scope_type` / `district` / `small_group`. SE-SCOPE.1B adds guarded cleanup tooling for existing stored values, but cleanup is explicit and not automatic. SERVICE-EVENT-CONTEXT.1C removed the legacy `ServiceEvent.ministry_context` display FK (migration `events/0008`); Host / Language display now uses structure-native `ServiceEvent.host_language_unit` plus the audience-derived structure fallback, and the display-only backfill/cleanup tooling was retired with the field.
 - Bible Study V2 meeting visibility, Today/landing, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; V2 display labels now prefer `anchor_unit` / meeting audience units after BS-V2-MIRROR.1A, and BS-V2-MIRROR.1B stops new normal meeting writes from setting `BibleStudyMeeting.small_group`. BS-V2-MIRROR.1C adds `cleanup_bible_study_v2_small_group_mirrors`, a dry-run-first command that can clear existing mirrors only when `generation_key`, `anchor_unit`, and exactly one matching active small-group audience row already prove structure-native identity. Normal V2 schedule saves now write `BibleStudySeriesAudienceScope` rows without writing/updating legacy series scope fields; generation/preview read those audience rows and fail closed with zero rows. BS-SERIES-SCOPE.1B adds `cleanup_bible_study_series_legacy_scope_fields`, a dry-run-first command that can clear existing series legacy scope values only when the series already has valid `BibleStudySeriesAudienceScope` rows. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains a separate migration. V1 `BibleStudySession` app runtime is retired after BS-V1-RETIRE.1A and remaining V1 rows are pilot/archive data removable only by the explicit guarded BS-V1-PURGE.1A command.
 - Reflection group read/write paths use `ReflectionComment.structure_unit_at_post` plus active primary `ChurchStructureMembership`. **`small_group_at_post` was removed in REFLECTION-MIRROR.1H** (migration `comments/0007`), after 1D stopped the writes, 1E/1F cleared the stored mirror data, and 1G removed the display/read/admin surfaces. The reflection mirror cleanup commands (`cleanup_reflection_small_group_mirrors`, `cleanup_reflection_nongroup_display_mirrors`) and the legacy-mirror backfill/recovery/shadow tooling (`backfill_reflection_structure_snapshots`, `cleanup_reflection_snapshot_blockers`, `audit_reading_privacy_membership_readiness`, `reading.reflection_privacy_shadow`) were retired with the field, along with the `resolve_legacy_small_group_mirror` helper and the `GroupReflectionWriteContext.legacy_small_group` attribute. `Profile.small_group` and the legacy `SmallGroup` model no longer participate in reflection visibility, writes, display, admin, cleanup, or schema. This was a reflection-only field removal; it does not remove the `SmallGroup` table or affect other modules.
 - Role runtime scope uses explicit `ChurchRoleAssignment.structure_unit` as the sole scoped-role source. **ROLE-FIELD-RETIRE.1A removed the `ChurchRoleAssignment.district` and `ChurchRoleAssignment.small_group` model fields** (migration `accounts/0011`) after ROLE-RETIRE.1B retired their runtime fallback and local/dev audit confirmed zero populated legacy role fields and zero scoped assignments missing `structure_unit`. The now-orphaned `backfill_structure_role_scopes` command was retired with the fields because its only source no longer exists; `audit_structure_role_scopes` now validates explicit `structure_unit` readiness only. This did not change permissions or group-progress access and did not affect `Profile.small_group`, `SmallGroup`, `District`, `MinistryContext`, ServiceEvent, Bible Study, Reflection, or Prayer schema.
@@ -454,14 +426,13 @@ Blockers:
 Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wrong-type mapped units, and references from:
 
 - `District.ministry_context`
-- `ServiceEvent.ministry_context`
 - `BibleStudySeries.ministry_context`
+- (`ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C and is no longer a `MinistryContext` inbound reference.)
 
 Blockers:
 
 - Existing rows and references block table retirement.
-- ServiceEvent `ministry_context` is label/context data, not audience authority, but it is still a FK reference that must be cleaned or otherwise approved before table retirement.
-- `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` is handled separately by SERVICE-EVENT-CONTEXT.1B: normal app writes are stopped, display uses structure-native `host_language_unit` (then the existing audience-derived fallback when no explicit display unit exists), `backfill_service_event_host_language_units` can populate the display-only unit from valid legacy mappings, and `cleanup_service_event_ministry_context_labels` can clear matching stored FK values after dry-run review and explicit apply approval. The legacy field and `MinistryContext` rows remain.
+- `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C (migration `events/0008`); Host / Language display now uses structure-native `ServiceEvent.host_language_unit` plus the audience-derived structure fallback, and the display-only backfill/cleanup tooling (`backfill_service_event_host_language_units`, `cleanup_service_event_ministry_context_labels`) was retired with it. The `MinistryContext` rows and table remain.
 - ROW-RETIRE.1A counts all remaining `MinistryContext` rows as bridge/admin/
   diagnostic row-retirement blockers until the Host / Language display cleanup,
   mapping bridge, and final table-retirement path are explicitly approved.

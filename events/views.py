@@ -61,7 +61,6 @@ def can_manage_service_events(user):
 def get_visible_service_events(user):
     events = ServiceEvent.objects.select_related(
         "host_language_unit",
-        "ministry_context",
         "rotation_anchor_team",
         "created_by",
     ).prefetch_related(

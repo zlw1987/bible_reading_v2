@@ -48,13 +48,6 @@ class ServiceEvent(models.Model):
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")
     meeting_link = models.URLField(max_length=500, blank=True, default="")
-    ministry_context = models.ForeignKey(
-        "accounts.MinistryContext",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="service_events",
-    )
     host_language_unit = models.ForeignKey(
         "accounts.ChurchStructureUnit",
         null=True,

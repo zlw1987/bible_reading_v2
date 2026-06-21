@@ -305,7 +305,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
             title="Preserved Event",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=self.now + timezone.timedelta(days=7),
-            ministry_context=self.ministry_context,
             status=ServiceEvent.STATUS_PUBLISHED,
             created_by=user,
         )
@@ -427,7 +426,7 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
         self.assertEqual(role.structure_unit_id, self.group_unit.id)
         self.assertTrue(user.user_permissions.filter(id=permission.id).exists())
-        self.assertEqual(event.ministry_context_id, self.ministry_context.id)
+        self.assertTrue(ServiceEvent.objects.filter(id=event.id).exists())
         self.assertEqual(series.small_group_id, self.group.id)
         self.assertEqual(session.small_group_id, self.group.id)
         self.assertEqual(prayer.structure_unit_at_post_id, self.group_unit.id)

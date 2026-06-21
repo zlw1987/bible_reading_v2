@@ -1,15 +1,17 @@
-"""SE-CTX.1A tests for the structure-native host/language display fallback."""
+"""Tests for the structure-native host/language display fallback.
+
+SERVICE-EVENT-CONTEXT.1C removed the legacy ``ServiceEvent.ministry_context``
+display FK. Host / Language display now uses ``ServiceEvent.host_language_unit``
+plus an audience-derived ``ChurchStructureUnit`` fallback.
+"""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, MinistryContext
+from accounts.models import ChurchStructureUnit
 from events.models import ServiceEvent, ServiceEventAudienceScope
-from events.templatetags.event_extras import (
-    event_host_language_label,
-    event_ministry_context_label,
-)
+from events.templatetags.event_extras import event_host_language_label
 
 
 User = get_user_model()
@@ -56,12 +58,6 @@ class HostLanguageDisplayFallbackTests(TestCase):
             name="彩虹四组",
             name_en="Rainbow 4",
         )
-        self.cm_context = MinistryContext.objects.create(
-            code="CM",
-            name="中文事工",
-            name_en="Chinese Ministry",
-            church_structure_unit=self.cm_unit,
-        )
 
     def make_event(self, **overrides):
         data = {
@@ -81,53 +77,35 @@ class HostLanguageDisplayFallbackTests(TestCase):
             unit=unit,
         )
 
-    def test_existing_ministry_context_label_unchanged(self):
-        event = self.make_event(
-            ministry_context=self.cm_context,
-            host_language_unit=self.em_unit,
-        )
-        self.add_audience(event, self.em_unit)  # audience differs from FK
-
-        # The legacy FK label is preserved verbatim while the FK is set.
-        self.assertEqual(
-            event_host_language_label(event, "en"),
-            event_ministry_context_label(event, "en"),
-        )
-        self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
-        self.assertEqual(event_host_language_label(event, "zh"), "CM - 中文事工")
-
     def test_host_language_unit_field_accepts_ministry_context_unit(self):
         event = self.make_event(host_language_unit=self.cm_unit)
 
         self.assertEqual(event.host_language_unit, self.cm_unit)
         self.assertIn(event, self.cm_unit.host_language_service_events.all())
 
-    def test_null_legacy_fk_uses_host_language_unit_before_audience_rows(self):
-        event = self.make_event(
-            ministry_context=None,
-            host_language_unit=self.cm_unit,
-        )
+    def test_host_language_unit_label_takes_precedence_over_audience_rows(self):
+        event = self.make_event(host_language_unit=self.cm_unit)
         self.add_audience(event, self.em_unit)  # audience differs from display label
 
         self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
         self.assertEqual(event_host_language_label(event, "zh"), "CM - 中文事工")
 
-    def test_null_fk_derives_from_ministry_context_audience_row(self):
-        event = self.make_event(ministry_context=None)
+    def test_derives_from_ministry_context_audience_row(self):
+        event = self.make_event()
         self.add_audience(event, self.cm_unit)
 
         self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
         self.assertEqual(event_host_language_label(event, "zh"), "CM - 中文事工")
 
-    def test_null_fk_derives_ancestor_from_district_and_small_group_rows(self):
-        district_event = self.make_event(ministry_context=None)
+    def test_derives_ancestor_from_district_and_small_group_rows(self):
+        district_event = self.make_event()
         self.add_audience(district_event, self.district_unit)
         self.assertEqual(
             event_host_language_label(district_event, "en"),
             "CM - Chinese Ministry",
         )
 
-        group_event = self.make_event(ministry_context=None, title="Group")
+        group_event = self.make_event(title="Group")
         self.add_audience(group_event, self.group_unit)
         self.assertEqual(
             event_host_language_label(group_event, "en"),
@@ -135,7 +113,7 @@ class HostLanguageDisplayFallbackTests(TestCase):
         )
 
     def test_multiple_derived_contexts_render_safe_mixed_label(self):
-        event = self.make_event(ministry_context=None)
+        event = self.make_event()
         self.add_audience(event, self.cm_unit)
         self.add_audience(event, self.em_unit)
 
@@ -146,19 +124,16 @@ class HostLanguageDisplayFallbackTests(TestCase):
         self.assertEqual(event_host_language_label(event, "zh"), "多个事工/语言范围")
 
     def test_root_audience_with_host_language_unit_displays_context_label(self):
-        event = self.make_event(
-            ministry_context=None,
-            host_language_unit=self.cm_unit,
-        )
+        event = self.make_event(host_language_unit=self.cm_unit)
         self.add_audience(event, self.root)
 
         self.assertEqual(event_host_language_label(event, "en"), "CM - Chinese Ministry")
 
     def test_no_audience_or_no_context_ancestor_falls_back_to_empty(self):
-        no_audience = self.make_event(ministry_context=None)
+        no_audience = self.make_event()
         self.assertEqual(event_host_language_label(no_audience, "en"), "")
 
-        root_event = self.make_event(ministry_context=None, title="Root")
+        root_event = self.make_event(title="Root")
         self.add_audience(root_event, self.root)
         self.assertEqual(event_host_language_label(root_event, "en"), "")
 
@@ -168,13 +143,13 @@ class HostLanguageDisplayFallbackTests(TestCase):
             code="CUSTOM",
             name="Custom",
         )
-        custom_event = self.make_event(ministry_context=None, title="Custom")
+        custom_event = self.make_event(title="Custom")
         self.add_audience(custom_event, custom_unit)
         self.assertEqual(event_host_language_label(custom_event, "en"), "")
 
 
 class HostLanguageDisplayViewRenderTests(TestCase):
-    """Templates/views still render after ministry_context is null (SE-CTX.1A)."""
+    """Templates/views still render Host / Language via the derived fallback."""
 
     def setUp(self):
         self.password = "pw123456"
@@ -217,7 +192,6 @@ class HostLanguageDisplayViewRenderTests(TestCase):
             start_datetime=self.future_time,
             status=ServiceEvent.STATUS_PUBLISHED,
             created_by=self.manager,
-            ministry_context=None,
         )
         ServiceEventAudienceScope.objects.create(
             service_event=event,

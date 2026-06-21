@@ -14,10 +14,11 @@ that case the legacy FK is redundant with ``ChurchStructureUnit.parent`` and
 clearing it does not change the migrated runtime (audience-row + hierarchy)
 behaviour or any staff/member display label.
 
-``ServiceEvent.ministry_context`` is intentionally **not** cleared here. It is
-an editable staff/member "Host / Language Label" surfaced in event and ministry
-assignment displays, not pure hierarchy redundancy, so this slice reports those
-rows and conservatively skips them.
+The legacy ``ServiceEvent.ministry_context`` display FK was removed in
+SERVICE-EVENT-CONTEXT.1C, so this command no longer scans or reports
+ServiceEvent rows. Host / Language display now uses
+``ServiceEvent.host_language_unit`` plus the audience-derived structure
+fallback.
 
 This command never deletes ``SmallGroup`` / ``District`` / ``MinistryContext``
 rows, never removes fields, runs no schema migration, and switches no runtime
@@ -30,7 +31,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from accounts.models import ChurchStructureUnit, District, SmallGroup
-from events.models import ServiceEvent
 
 
 CONFIRM_FLAG = "confirm_legacy_structure_parent_link_cleanup"
@@ -48,20 +48,13 @@ _STAT_KEYS = (
     "district_ministry_context_links_eligible",
     "district_ministry_context_links_would_clear",
     "district_ministry_context_links_cleared",
-    "service_events_checked",
-    "service_event_ministry_context_links_present",
-    "service_event_ministry_context_links_eligible",
-    "service_event_ministry_context_links_would_clear",
-    "service_event_ministry_context_links_cleared",
     "skipped_not_nullable",
     "skipped_missing_mapping",
     "skipped_inactive_unit",
     "skipped_wrong_unit_type",
     "skipped_parent_mismatch",
-    "skipped_service_event_uncertain_display_context",
     "remaining_small_group_district_links_after_operation",
     "remaining_district_ministry_context_links_after_operation",
-    "remaining_service_event_ministry_context_links_after_operation",
 )
 
 
@@ -330,36 +323,6 @@ def _scan(*, apply_mode=False, lock=False):
             apply_mode=apply_mode,
         )
 
-    # --- C. ServiceEvent.ministry_context (conservatively skipped) --------
-    events = (
-        ServiceEvent.objects.select_related("ministry_context")
-        .order_by("id")
-    )
-    for event in events:
-        stats["service_events_checked"] += 1
-        if event.ministry_context_id is None:
-            continue
-        stats["service_event_ministry_context_links_present"] += 1
-        stats["skipped_service_event_uncertain_display_context"] += 1
-        lines.append(
-            DecisionLine(
-                object_type="ServiceEvent.ministry_context",
-                object_id=event.id,
-                object_label=f"#{event.id} {event.title}",
-                legacy_fk=_legacy_label(event.ministry_context),
-                mapped_child_unit="(n/a)",
-                mapped_parent_unit=_unit_label(
-                    event.ministry_context.church_structure_unit
-                ),
-                category="skipped",
-                reason=(
-                    "uncertain_display_context: ministry_context is an editable "
-                    "staff/member display label, not pure hierarchy; not cleared "
-                    "in this slice"
-                ),
-            )
-        )
-
     return stats, lines, plans
 
 
@@ -369,9 +332,6 @@ def _finalize_remaining(stats):
     )
     stats["remaining_district_ministry_context_links_after_operation"] = (
         District.objects.filter(ministry_context__isnull=False).count()
-    )
-    stats["remaining_service_event_ministry_context_links_after_operation"] = (
-        ServiceEvent.objects.filter(ministry_context__isnull=False).count()
     )
 
 
@@ -415,8 +375,7 @@ class Command(BaseCommand):
         "Dry-run-first cleanup for legacy structure parent/context FK links "
         "(LEGACY-OBJECT-LINKS.1A). Apply mode clears only SmallGroup.district "
         "and District.ministry_context links that are already represented by "
-        "ChurchStructureUnit.parent. ServiceEvent.ministry_context is reported "
-        "but conservatively skipped. It deletes no rows, removes no fields, runs "
+        "ChurchStructureUnit.parent. It deletes no rows, removes no fields, runs "
         "no schema migration, and switches no runtime source of truth."
     )
 
@@ -512,14 +471,14 @@ class Command(BaseCommand):
                 "Apply mode: cleared only eligible SmallGroup.district and "
                 "District.ministry_context links already represented by "
                 "ChurchStructureUnit.parent. No rows were deleted, no fields were "
-                "removed, no schema migration ran, ServiceEvent.ministry_context "
-                "was not changed, and no runtime source of truth was switched."
+                "removed, no schema migration ran, and no runtime source of truth "
+                "was switched."
             )
         else:
             write(
-                "Dry-run only: no SmallGroup.district, District.ministry_context, "
-                "or ServiceEvent.ministry_context link was changed; no rows were "
-                "deleted and no schema or runtime behaviour changed."
+                "Dry-run only: no SmallGroup.district or District.ministry_context "
+                "link was changed; no rows were deleted and no schema or runtime "
+                "behaviour changed."
             )
 
         if not verbose:
@@ -534,7 +493,6 @@ class Command(BaseCommand):
         for object_type in (
             "SmallGroup.district",
             "District.ministry_context",
-            "ServiceEvent.ministry_context",
         ):
             group_lines = [line for line in lines if line.object_type == object_type]
             write(f"{object_type} ({len(group_lines)}):")

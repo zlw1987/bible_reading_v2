@@ -100,7 +100,6 @@ SECTION_KEYS = OrderedDict(
                 "ministry_contexts_with_inactive_unit",
                 "ministry_contexts_with_wrong_unit_type",
                 "districts_with_ministry_context",
-                "service_events_with_ministry_context",
                 "bible_study_series_with_ministry_context",
                 "ministry_context_retirement_blocker_references",
             ),
@@ -242,26 +241,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
     # together with their legacy-scope tooling
     # (audit_service_event_fallback_retirement_readiness,
     # backfill_service_event_audience_scopes,
-    # cleanup_service_event_legacy_scope_fields), so they are no longer listed
-    # here. ServiceEvent visibility remains ServiceEventAudienceScope rows plus
-    # active primary ChurchStructureMembership; zero-row events fail closed.
-    (
-        "events.management.commands.backfill_service_event_host_language_units",
-        (
-            "backfill support for ServiceEvent.host_language_unit display "
-            "context from legacy ServiceEvent.ministry_context mappings; "
-            "dry-run by default"
-        ),
-    ),
-    (
-        "events.management.commands.cleanup_service_event_ministry_context_labels",
-        (
-            "guarded cleanup tooling for ServiceEvent.ministry_context display "
-            "links where host_language_unit, or the audience-derived fallback "
-            "when that field is blank, maps to the same ministry-context unit; "
-            "dry-run by default"
-        ),
-    ),
+    # cleanup_service_event_legacy_scope_fields). SERVICE-EVENT-CONTEXT.1C then
+    # removed ServiceEvent.ministry_context together with its display tooling
+    # (backfill_service_event_host_language_units,
+    # cleanup_service_event_ministry_context_labels). None are listed here.
+    # ServiceEvent visibility remains ServiceEventAudienceScope rows plus active
+    # primary ChurchStructureMembership; zero-row events fail closed. Host /
+    # Language display uses ServiceEvent.host_language_unit plus the
+    # audience-derived structure fallback.
     (
         "studies.management.commands.audit_bible_study_structure_retirement_readiness",
         "standing diagnostic/audit guard",
@@ -693,16 +680,15 @@ def _scan_ministry_contexts(stats, details):
     stats["districts_with_ministry_context"] = (
         District.objects.filter(ministry_context__isnull=False).count()
     )
-    stats["service_events_with_ministry_context"] = (
-        ServiceEvent.objects.filter(ministry_context__isnull=False).count()
-    )
+    # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context, so the
+    # ServiceEvent FK is no longer a MinistryContext retirement blocker and is
+    # not counted here.
     stats["bible_study_series_with_ministry_context"] = (
         BibleStudySeries.objects.filter(ministry_context__isnull=False).count()
     )
     stats["ministry_context_retirement_blocker_references"] = (
         stats["ministry_contexts_total"]
         + stats["districts_with_ministry_context"]
-        + stats["service_events_with_ministry_context"]
         + stats["bible_study_series_with_ministry_context"]
     )
 

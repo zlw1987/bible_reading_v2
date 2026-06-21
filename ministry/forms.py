@@ -288,9 +288,7 @@ class TeamAssignmentForm(forms.ModelForm):
         self.manageable_teams = manageable_teams
         self.fields["service_event"].language = language
         base_events = ServiceEvent.objects.select_related(
-            "district",
-            "ministry_context",
-            "small_group",
+            "host_language_unit",
         )
         # Assignable operational events only: drop cancelled/draft/past events and
         # ServiceEvents linked from a small-group BibleStudyMeeting. This is a

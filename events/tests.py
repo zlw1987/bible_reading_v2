@@ -34,16 +34,6 @@ class ServiceEventFoundationTests(TestCase):
     def setUp(self):
         self.north = District.objects.create(name="North")
         self.south = District.objects.create(name="South")
-        self.cm = MinistryContext.objects.create(
-            code="CM",
-            name="Chinese Ministry",
-            name_en="Chinese Ministry",
-        )
-        self.em = MinistryContext.objects.create(
-            code="EM",
-            name="English Ministry",
-            name_en="English Ministry",
-        )
         # Structure units used by the normal ServiceEvent audience picker.
         self.root_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
@@ -217,7 +207,6 @@ class ServiceEventFoundationTests(TestCase):
             "end_datetime": self.end_time.strftime("%Y-%m-%dT%H:%M"),
             "location": "Fellowship Hall",
             "meeting_link": "https://example.com/event",
-            "ministry_context": "",
             "rotation_anchor_team": "",
             "required_teams": [],
             "audience_units": [self.root_unit.id],
@@ -1314,11 +1303,6 @@ class ServiceEventFoundationTests(TestCase):
         with self.assertRaises(ValidationError):
             event.full_clean()
 
-    def test_ministry_context_label_is_optional(self):
-        event = self.create_event()
-
-        self.assertIsNone(event.ministry_context)
-
     def test_service_event_form_derives_host_language_from_audience_scope(self):
         english_form = ServiceEventForm(language="en")
         chinese_form = ServiceEventForm(language="zh")
@@ -1376,11 +1360,18 @@ class ServiceEventFoundationTests(TestCase):
             self.assertNotIn("ministry_context", form.fields)
             self.assertNotIn("host_language_unit", form.fields)
 
-    def test_existing_ministry_context_label_still_displays_without_changing_visibility(self):
+    def test_host_language_unit_label_displays_without_changing_visibility(self):
         self.set_language("en")
+        cm_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+            name_en="Chinese Ministry",
+        )
         event = self.create_visible_event(
             title_en="CM Sunday Service",
-            ministry_context=self.cm,
+            host_language_unit=cm_unit,
         )
 
         self.client.login(username="other_group", password="testpass123")
@@ -1389,26 +1380,24 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "CM - Chinese Ministry")
 
-    def test_manager_create_does_not_accept_ministry_context_label(self):
+    def test_manager_create_does_not_accept_host_language_unit(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
         response = self.client.post(
             reverse("create_service_event"),
             self.event_post_data(
-                ministry_context=self.em.id,
                 host_language_unit=self.north_unit.id,
             ),
         )
 
         self.assertEqual(response.status_code, 302)
         event = ServiceEvent.objects.get(title_en="Special Meeting")
-        self.assertIsNone(event.ministry_context)
         self.assertIsNone(event.host_language_unit)
 
-    def test_manager_edit_does_not_reintroduce_cleared_ministry_context_label(self):
+    def test_manager_edit_does_not_reintroduce_host_language_unit(self):
         self.set_language("en")
-        event = self.create_event(ministry_context=None)
+        event = self.create_event()
         self.add_audience(event, self.root_unit)
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -1417,7 +1406,6 @@ class ServiceEventFoundationTests(TestCase):
             self.event_post_data(
                 title="更新聚会",
                 title_en="Updated Meeting",
-                ministry_context=self.em.id,
                 host_language_unit=self.north_unit.id,
             ),
         )
@@ -1425,7 +1413,6 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(event.title_en, "Updated Meeting")
-        self.assertIsNone(event.ministry_context)
         self.assertIsNone(event.host_language_unit)
 
     def test_chinese_list_and_detail_pages_show_chinese_labels(self):
@@ -2011,7 +1998,7 @@ class ServiceEventFoundationTests(TestCase):
         self.assertNotIn("ministry_context", english_form.fields)
         self.assertNotIn("ministry_context", chinese_form.fields)
 
-    def test_recurring_create_does_not_accept_ministry_context_label(self):
+    def test_recurring_create_does_not_accept_host_language_unit(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2019,7 +2006,6 @@ class ServiceEventFoundationTests(TestCase):
             reverse("create_recurring_service_events"),
             self.recurring_post_data(
                 create="1",
-                ministry_context=self.em.id,
                 host_language_unit=self.north_unit.id,
             ),
         )
@@ -2028,25 +2014,9 @@ class ServiceEventFoundationTests(TestCase):
         events = ServiceEvent.objects.filter(title_en="Sunday Service")
         self.assertEqual(events.count(), 3)
         for event in events:
-            self.assertIsNone(event.ministry_context)
             self.assertIsNone(event.host_language_unit)
 
-    def test_recurring_create_with_blank_ministry_context_keeps_events_blank(self):
-        self.set_language("en")
-        self.client.login(username="pastor_event", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_recurring_service_events"),
-            self.recurring_post_data(create="1", ministry_context=""),
-        )
-
-        self.assertEqual(response.status_code, 200)
-        events = ServiceEvent.objects.filter(title_en="Sunday Service")
-        self.assertEqual(events.count(), 3)
-        for event in events:
-            self.assertIsNone(event.ministry_context)
-
-    def test_recurring_create_required_teams_unchanged_with_forged_ministry_context(self):
+    def test_recurring_create_required_teams_unchanged_with_forged_host_language_unit(self):
         self.set_language("en")
         self.client.login(username="pastor_event", password="testpass123")
 
@@ -2054,7 +2024,6 @@ class ServiceEventFoundationTests(TestCase):
             reverse("create_recurring_service_events"),
             self.recurring_post_data(
                 create="1",
-                ministry_context=self.em.id,
                 host_language_unit=self.north_unit.id,
                 required_teams=[
                     self.required_team.id,
@@ -2067,7 +2036,6 @@ class ServiceEventFoundationTests(TestCase):
         events = ServiceEvent.objects.filter(title_en="Sunday Service")
         self.assertEqual(events.count(), 3)
         for event in events:
-            self.assertIsNone(event.ministry_context)
             self.assertIsNone(event.host_language_unit)
             self.assertEqual(
                 set(event.required_teams.values_list("id", flat=True)),

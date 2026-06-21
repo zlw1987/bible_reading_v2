@@ -1,11 +1,12 @@
 """Structure-native host/language ("ministry context") display derivation.
 
-``ServiceEvent.ministry_context`` and ``ServiceEvent.host_language_unit`` are
-display-only host/language labels, not audience authority. As the legacy
-``MinistryContext`` FK is retired, member/staff UI still needs a safe fallback
-when no explicit structure-native display unit is stored. This module derives
-that fallback from the event's ``ServiceEventAudienceScope`` rows using
-``ChurchStructureUnit.parent`` ancestry.
+``ServiceEvent.host_language_unit`` is the structure-native, display-only
+host/language label, not audience authority. The legacy
+``ServiceEvent.ministry_context`` FK was removed in SERVICE-EVENT-CONTEXT.1C.
+Member/staff UI still needs a safe fallback when no explicit
+``host_language_unit`` is stored. This module derives that fallback from the
+event's ``ServiceEventAudienceScope`` rows using ``ChurchStructureUnit.parent``
+ancestry.
 
 Source of hierarchy is ``ChurchStructureUnit.parent`` only. It never consults
 ``District.ministry_context`` or ``SmallGroup.district`` (those legacy parent

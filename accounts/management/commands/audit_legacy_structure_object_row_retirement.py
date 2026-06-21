@@ -95,7 +95,10 @@ CONSUMER_INVENTORY = (
         "ServiceEvent Host / Language display fallback",
         "events.ministry_context_display",
         CATEGORY_DISPLAY_ONLY,
-        "display-only fallback while ServiceEvent.ministry_context exists",
+        "structure-native display via ServiceEvent.host_language_unit plus an "
+        "audience-derived ChurchStructureUnit fallback; the legacy "
+        "ServiceEvent.ministry_context FK was removed in "
+        "SERVICE-EVENT-CONTEXT.1C",
     ),
     (
         "Group progress compatibility group list",

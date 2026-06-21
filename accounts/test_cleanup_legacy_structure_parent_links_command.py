@@ -1,6 +1,5 @@
 from io import StringIO
 
-from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
@@ -20,19 +19,11 @@ from accounts.models import (
     MinistryContext,
     SmallGroup,
 )
-from events.models import ServiceEvent
-
-
-User = get_user_model()
 
 
 class CleanupLegacyStructureParentLinksCommandTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
-        self.future_time = self.now + timezone.timedelta(days=7)
-        self.creator = User.objects.create_user(
-            username="creator", password="pw-creator"
-        )
 
         # --- structure hierarchy: root > ministry context > district > group
         self.root = ChurchStructureUnit.objects.create(
@@ -77,17 +68,6 @@ class CleanupLegacyStructureParentLinksCommandTests(TestCase):
         )
 
     # ----------------------------------------------------------------- helpers
-    def make_event(self, **overrides):
-        data = {
-            "title": "Ministry Context Labeled Event",
-            "event_type": ServiceEvent.EVENT_SUNDAY_SERVICE,
-            "start_datetime": self.future_time,
-            "status": ServiceEvent.STATUS_PUBLISHED,
-            "created_by": self.creator,
-        }
-        data.update(overrides)
-        return ServiceEvent.objects.create(**data)
-
     def run_dry_run(self, **kwargs):
         out = StringIO()
         call_command(
@@ -217,7 +197,6 @@ class CleanupLegacyStructureParentLinksCommandTests(TestCase):
     def test_target_fields_are_nullable(self):
         self.assertTrue(field_is_nullable(SmallGroup, "district"))
         self.assertTrue(field_is_nullable(District, "ministry_context"))
-        self.assertTrue(field_is_nullable(ServiceEvent, "ministry_context"))
 
         stats, _lines = run_audit()
         self.assertEqual(stats["skipped_not_nullable"], 0)
@@ -246,49 +225,6 @@ class CleanupLegacyStructureParentLinksCommandTests(TestCase):
         self.assertTrue(
             MinistryContext.objects.filter(id=self.context.id).exists()
         )
-
-    # ------------------------- 12. ServiceEvent ministry_context conservatively
-    def test_service_event_ministry_context_is_skipped_not_cleared(self):
-        event = self.make_event(ministry_context=self.context)
-
-        stats, _lines = run_audit()
-        self.assertEqual(
-            stats["service_event_ministry_context_links_present"], 1
-        )
-        self.assertEqual(
-            stats["service_event_ministry_context_links_eligible"], 0
-        )
-        self.assertEqual(
-            stats["service_event_ministry_context_links_would_clear"], 0
-        )
-        self.assertEqual(
-            stats["skipped_service_event_uncertain_display_context"], 1
-        )
-
-        stats, _lines = apply_cleanup()
-        self.assertEqual(
-            stats["service_event_ministry_context_links_cleared"], 0
-        )
-        self.assertEqual(
-            stats["remaining_service_event_ministry_context_links_after_operation"],
-            1,
-        )
-        event.refresh_from_db()
-        self.assertEqual(event.ministry_context_id, self.context.id)
-
-    # ----------------------------------------- 13. no sensitive free-text print
-    def test_verbose_does_not_print_sensitive_free_text(self):
-        self.make_event(
-            ministry_context=self.context,
-            title="Secret Event Title",
-            description="PRIVATE_BODY_SHOULD_NOT_APPEAR",
-            description_en="PRIVATE_BODY_EN_SHOULD_NOT_APPEAR",
-        )
-        output = self.run_dry_run(verbose=True)
-        self.assertNotIn("PRIVATE_BODY_SHOULD_NOT_APPEAR", output)
-        self.assertNotIn("PRIVATE_BODY_EN_SHOULD_NOT_APPEAR", output)
-        # operational title metadata is allowed
-        self.assertIn("Secret Event Title", output)
 
     # --------------------------------------------------------- 14. idempotency
     def test_second_dry_run_after_apply_reports_zero_would_clear(self):

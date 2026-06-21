@@ -220,6 +220,36 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("service_event_district", audit["data_counts"])
         self.assertNotIn("service_event_small_group", audit["data_counts"])
 
+    def test_service_event_ministry_context_is_historical_after_field_removal(self):
+        # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context (the
+        # legacy Host / Language display FK). Only immutable historical
+        # migrations still name it, so the candidate is classified as
+        # historical-only with no active schema blocker, no live references, and
+        # no queryable data counter. Host / Language display now uses
+        # ServiceEvent.host_language_unit plus the audience-derived fallback.
+        audit = run_audit()
+        candidate = _candidate(audit, "ServiceEvent.ministry_context (removed)")
+
+        self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertEqual(candidate["app_write_references"], ())
+        self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["admin_references"], ())
+        self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+        self.assertEqual(candidate["data_blocker_count"], 0)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+
+        self.assertNotIn("service_event_ministry_context", audit["data_counts"])
+
+        # host_language_unit remains the structure-native display field and is
+        # not a legacy-removal target.
+        host_language = _candidate(audit, "ServiceEvent.host_language_unit")
+        self.assertEqual(
+            host_language["suggested_removal_phase"],
+            "not in legacy removal sequence",
+        )
+
     def test_static_app_write_reference_blocks_schema_removal(self):
         audit = run_audit()
         candidate = _candidate(audit, "BibleStudyMeeting.anchor_unit")

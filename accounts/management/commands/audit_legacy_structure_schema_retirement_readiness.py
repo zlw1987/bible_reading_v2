@@ -245,21 +245,19 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "",
         "candidate_type": "model/table",
         "app_read_references": _refs(
-            "ServiceEvent Host / Language legacy display context",
             "legacy Bible Study schedule fallback context",
         ),
         "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
         "diagnostic_cleanup_references": _refs(
-            "backfill_service_event_host_language_units",
-            "cleanup_service_event_ministry_context_labels",
             "audit_legacy_structure_object_row_retirement",
         ),
         "test_fixture_references": _refs("ministry-context display/cleanup fixtures"),
         "migration_history_references": _refs("accounts/events/studies migrations"),
         "data_counter": "ministry_context_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Finish Host / Language display cleanup and "
-            "bridge decision first."
+            "Do not remove table yet. Finish remaining MinistryContext bridge "
+            "decisions first. ServiceEvent.ministry_context display cleanup is "
+            "complete (SERVICE-EVENT-CONTEXT.1C removed the FK)."
         ),
         "suggested_removal_phase": "phase 5",
     },
@@ -269,21 +267,17 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "church_structure_unit",
         "candidate_type": "bridge-field",
         "app_read_references": _refs(
-            "ServiceEvent Host / Language backfill bridge",
             "legacy ministry context to structure mapping bridge",
         ),
         "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
-            "backfill_service_event_host_language_units",
-            "cleanup_service_event_ministry_context_labels",
         ),
         "test_fixture_references": _refs("ministry-context mapping fixtures"),
         "migration_history_references": _refs("accounts/events migrations"),
         "data_counter": "ministry_context_mapping",
         "recommended_next_action": (
-            "Keep until ServiceEvent display cleanup and final MinistryContext "
-            "row/table retirement are approved."
+            "Keep until final MinistryContext row/table retirement is approved."
         ),
         "suggested_removal_phase": "phase 4 then phase 5",
     },
@@ -389,25 +383,27 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "ServiceEvent.ministry_context",
+        "candidate_name": "ServiceEvent.ministry_context (removed)",
         "model_table": "events.ServiceEvent",
         "field_name": "ministry_context",
-        "candidate_type": "display-field",
-        "app_read_references": _refs("events.ministry_context_display display fallback"),
-        "admin_references": _refs("events.admin.ServiceEventAdmin"),
-        "template_display_references": _refs("event/ministry assignment Host / Language display"),
-        "diagnostic_cleanup_references": _refs(
-            "backfill_service_event_host_language_units",
-            "cleanup_service_event_ministry_context_labels",
-        ),
-        "test_fixture_references": _refs("Host / Language display cleanup fixtures"),
-        "migration_history_references": _refs("events migrations"),
-        "data_counter": "service_event_ministry_context",
+        "candidate_type": "field",
+        "migration_history_references": _refs("events migrations (field added then removed)"),
         "recommended_next_action": (
-            "Backfill display-only host_language_unit, run guarded cleanup only "
-            "with approval, then remove display/admin references before field removal."
+            "Completed. SERVICE-EVENT-CONTEXT.1C removed the legacy "
+            "ServiceEvent.ministry_context display FK (migration events/0008) "
+            "after prior slices stopped normal app writes, added "
+            "host_language_unit, and local/dev audit confirmed zero populated "
+            "ministry_context rows. Host / Language display now uses "
+            "ServiceEvent.host_language_unit plus the audience-derived structure "
+            "fallback. The display tooling "
+            "(backfill_service_event_host_language_units, "
+            "cleanup_service_event_ministry_context_labels) was retired with the "
+            "field. Only immutable historical migrations still name it; no active "
+            "schema blocker remains. This did not remove the MinistryContext "
+            "model/table, MinistryContext.church_structure_unit, "
+            "ServiceEvent.host_language_unit, or ServiceEventAudienceScope."
         ),
-        "suggested_removal_phase": "phase 2 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "ServiceEvent.host_language_unit",
@@ -417,13 +413,13 @@ CANDIDATE_DEFINITIONS = (
         "app_read_references": _refs("events.ministry_context_display structure-native display"),
         "admin_references": _refs("events.admin.ServiceEventAdmin"),
         "template_display_references": _refs("event/ministry assignment Host / Language display"),
-        "diagnostic_cleanup_references": _refs("backfill_service_event_host_language_units"),
         "test_fixture_references": _refs("Host / Language display fixtures"),
         "migration_history_references": _refs("events migrations"),
         "data_counter": "service_event_host_language_unit",
         "recommended_next_action": (
-            "Keep. This is the structure-native display replacement for legacy "
-            "ServiceEvent.ministry_context, not a legacy-removal target now."
+            "Keep. This is the structure-native display replacement for the "
+            "removed legacy ServiceEvent.ministry_context FK, not a "
+            "legacy-removal target now."
         ),
         "suggested_removal_phase": "not in legacy removal sequence",
     },
@@ -730,11 +726,9 @@ def _data_counts():
         # ROLE-FIELD-RETIRE.1A removed ChurchRoleAssignment.district /
         # small_group, so there is no longer a queryable data counter for them.
         # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /
-        # small_group, so there is no longer a queryable data counter for them
-        # either.
-        "service_event_ministry_context": ServiceEvent.objects.filter(
-            ministry_context__isnull=False
-        ).count(),
+        # small_group, and SERVICE-EVENT-CONTEXT.1C removed
+        # ServiceEvent.ministry_context, so there is no longer a queryable data
+        # counter for those either.
         "service_event_host_language_unit": ServiceEvent.objects.filter(
             host_language_unit__isnull=False
         ).count(),

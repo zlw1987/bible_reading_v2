@@ -12,7 +12,12 @@ from django.test import TestCase
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment, District, MinistryContext, SmallGroup
+from accounts.models import (
+    ChurchRoleAssignment,
+    ChurchStructureUnit,
+    District,
+    SmallGroup,
+)
 from events.models import ServiceEvent
 from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 
@@ -438,9 +443,10 @@ class TeamAssignmentV1Tests(TestCase):
             display_name="Other Helper",
             role=TeamMembership.ROLE_MEMBER,
         )
-        self.cm = MinistryContext.objects.create(
+        self.cm_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
             code="CM",
-            name="Chinese Ministry",
+            name="中文事工",
             name_en="Chinese Ministry",
         )
         self.event = ServiceEvent.objects.create(
@@ -699,9 +705,9 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Team Assignments")
         self.assertContains(response, assignment.service_event.title_en)
 
-    def test_assignment_list_shows_service_event_ministry_context_label_without_filtering(self):
+    def test_assignment_list_shows_service_event_host_language_label_without_filtering(self):
         self.set_language("en")
-        self.event.ministry_context = self.cm
+        self.event.host_language_unit = self.cm_unit
         self.event.save()
         self.create_assignment(members=[self.second_membership])
         self.client.login(username="assignment_lead", password="testpass123")

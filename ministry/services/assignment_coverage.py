@@ -65,13 +65,14 @@ def assignment_member_prefetch():
 def assignment_coverage_queryset():
     return TeamAssignment.objects.select_related(
         "service_event",
-        "service_event__ministry_context",
+        "service_event__host_language_unit",
         "service_event__rotation_anchor_team",
         "ministry_team",
     ).prefetch_related(
         assignment_member_prefetch(),
-        # SE-CTX.1A: host/language label falls back to audience-row-derived
-        # ministry context when the legacy FK is null; batch the audience rows.
+        # SERVICE-EVENT-CONTEXT.1C: host/language label uses host_language_unit
+        # and falls back to audience-row-derived ministry context when it is
+        # blank; batch the audience rows.
         "service_event__audience_scope_links__unit",
     ).order_by(
         "service_event__start_datetime",
@@ -82,13 +83,13 @@ def assignment_coverage_queryset():
 def events_with_coverage_queryset():
     return ServiceEvent.objects.select_related(
         "host_language_unit",
-        "ministry_context",
         "rotation_anchor_team",
         "created_by",
     ).prefetch_related(
         required_team_prefetch(),
-        # SE-CTX.1A: host/language label falls back to audience-row-derived
-        # ministry context when the legacy FK is null; batch the audience rows.
+        # SERVICE-EVENT-CONTEXT.1C: host/language label uses host_language_unit
+        # and falls back to audience-row-derived ministry context when it is
+        # blank; batch the audience rows.
         "audience_scope_links__unit",
     )
 

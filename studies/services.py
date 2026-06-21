@@ -253,9 +253,9 @@ def resolve_normal_generation_targets(series):
       the legacy ``small_group`` value only for warnings and old-row duplicate
       detection when exactly one active legacy group maps to the target unit.
     * **Zero audience rows** — generation **fails closed**. The legacy
-      ``series.get_eligible_small_groups()`` / ``scope_type`` / ``district`` /
-      ``small_group`` fields are **no longer** consulted as a generation source.
-      No targets are produced; instead a single
+      ``BibleStudySeries.scope_type`` / ``ministry_context`` / ``district`` /
+      ``small_group`` fields were removed in BS-SERIES-FIELD-RETIRE.1A and are
+      not a generation source. No targets are produced; instead a single
       ``GENERATION_WARNING_MISSING_SERIES_AUDIENCE`` warning is returned so the
       view can tell the manager to configure the schedule audience scope first.
     """

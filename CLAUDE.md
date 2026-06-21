@@ -23,6 +23,7 @@ Current state:
 * Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary membership.
 * Bible Study V2 uses `BibleStudyMeetingAudienceScope` rows plus active primary membership for ordinary visibility, Today/landing, and role/worship pickers.
 * Bible Study V2 zero-row meetings fail closed.
+* Bible Study schedule audience/eligibility uses `BibleStudySeriesAudienceScope` rows; normal generation is structure-unit-native and fails closed on zero rows. The legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, and `small_group` fields were removed in `BS-SERIES-FIELD-RETIRE.1A` (migration `studies/0010`); `get_eligible_small_groups()` resolves audience rows only, and the `cleanup_bible_study_series_legacy_scope_fields` command was retired with the fields. This did not remove `BibleStudyMeeting.small_group`, V1 `BibleStudySession`, or the `SmallGroup`/`District`/`MinistryContext` tables.
 * V1 `BibleStudySession` app runtime is retired.
 * Guarded V1 purge tooling exists; do not run destructive purge/apply unless explicitly approved.
 * V2 `BibleStudyMeeting` is the active Bible Study path.

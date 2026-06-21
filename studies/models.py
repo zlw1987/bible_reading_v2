@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, District, MinistryContext, SmallGroup
+from accounts.models import ChurchStructureUnit, District, SmallGroup
 from accounts.structure_selectors import (
     resolve_units_to_small_groups as resolve_structure_units_to_small_groups,
 )
@@ -15,18 +15,6 @@ def resolve_units_to_small_groups(units):
 
 
 class BibleStudySeries(models.Model):
-    SCOPE_GLOBAL = "global"
-    SCOPE_MINISTRY_CONTEXT = "ministry_context"
-    SCOPE_DISTRICT = "district"
-    SCOPE_SMALL_GROUP = "small_group"
-
-    SCOPE_CHOICES = [
-        (SCOPE_GLOBAL, "Global"),
-        (SCOPE_MINISTRY_CONTEXT, "Ministry Context"),
-        (SCOPE_DISTRICT, "District"),
-        (SCOPE_SMALL_GROUP, "Small Group"),
-    ]
-
     STATUS_DRAFT = "draft"
     STATUS_PUBLISHED = "published"
     STATUS_COMPLETED = "completed"
@@ -57,32 +45,6 @@ class BibleStudySeries(models.Model):
         null=True,
         blank=True,
         related_name="created_bible_study_schedules",
-    )
-    scope_type = models.CharField(
-        max_length=32,
-        choices=SCOPE_CHOICES,
-        default=SCOPE_GLOBAL,
-    )
-    ministry_context = models.ForeignKey(
-        MinistryContext,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="bible_study_series",
-    )
-    district = models.ForeignKey(
-        District,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="bible_study_schedules",
-    )
-    small_group = models.ForeignKey(
-        SmallGroup,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="bible_study_schedules",
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -122,49 +84,6 @@ class BibleStudySeries(models.Model):
         }:
             errors["status"] = "Invalid Bible study schedule status."
 
-        if self.scope_type == self.SCOPE_GLOBAL:
-            if self.ministry_context_id:
-                errors["ministry_context"] = (
-                    "Whole-church schedules cannot be scoped to a ministry context."
-                )
-            if self.district_id:
-                errors["district"] = "Whole-church schedules cannot be scoped to a district."
-            if self.small_group_id:
-                errors["small_group"] = "Whole-church schedules cannot be scoped to a small group."
-        elif self.scope_type == self.SCOPE_MINISTRY_CONTEXT:
-            if not self.ministry_context_id:
-                errors["ministry_context"] = (
-                    "Ministry-context-scoped schedules require a ministry context."
-                )
-            if self.district_id:
-                errors["district"] = (
-                    "Ministry-context-scoped schedules cannot also use a district."
-                )
-            if self.small_group_id:
-                errors["small_group"] = (
-                    "Ministry-context-scoped schedules cannot also use a small group."
-                )
-        elif self.scope_type == self.SCOPE_DISTRICT:
-            if not self.district_id:
-                errors["district"] = "District-scoped schedules require a district."
-            if self.ministry_context_id:
-                errors["ministry_context"] = (
-                    "District-scoped schedules cannot also use a ministry context."
-                )
-            if self.small_group_id:
-                errors["small_group"] = "District-scoped schedules cannot also use a small group."
-        elif self.scope_type == self.SCOPE_SMALL_GROUP:
-            if not self.small_group_id:
-                errors["small_group"] = "Small-group-scoped schedules require a small group."
-            if self.ministry_context_id:
-                errors["ministry_context"] = (
-                    "Small-group-scoped schedules cannot also use a ministry context."
-                )
-            if self.district_id:
-                errors["district"] = "Small-group-scoped schedules cannot also use a district."
-        else:
-            errors["scope_type"] = "Invalid Bible study schedule scope."
-
         if errors:
             raise ValidationError(errors)
 
@@ -182,89 +101,15 @@ class BibleStudySeries(models.Model):
             bible_study_series_audience_scopes__series_id=self.pk,
         ).distinct()
 
-    def apply_audience_legacy_fallback(self, units):
-        """Best-effort mirror of selected units into legacy scope fields.
-
-        Audience scope rows (``BibleStudySeriesAudienceScope``) drive runtime
-        eligibility. The legacy ``scope_type`` / ``ministry_context`` /
-        ``district`` / ``small_group`` fields are kept only as a coexistence
-        fallback. A single cleanly mappable unit is represented precisely;
-        multi-unit or unmappable selections fall back to the narrowest available
-        legacy value so that, if audience rows were ever removed, the legacy
-        fallback never silently over-exposes meetings to the whole church.
-        """
-        units = list(units)
-        self.ministry_context = None
-        self.district = None
-        self.small_group = None
-
-        if not units:
-            self.scope_type = self.SCOPE_GLOBAL
-            return
-
-        if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
-            self.scope_type = self.SCOPE_GLOBAL
-            return
-
-        if len(units) == 1:
-            unit = units[0]
-            group = (
-                unit.legacy_small_groups.filter(is_active=True).first()
-                or unit.legacy_small_groups.first()
-            )
-            district = unit.legacy_districts.first()
-            context = unit.legacy_ministry_contexts.first()
-            if group is not None:
-                self.scope_type = self.SCOPE_SMALL_GROUP
-                self.small_group = group
-                return
-            if district is not None:
-                self.scope_type = self.SCOPE_DISTRICT
-                self.district = district
-                return
-            if context is not None:
-                self.scope_type = self.SCOPE_MINISTRY_CONTEXT
-                self.ministry_context = context
-                return
-
-        # Multi-unit or unmappable single unit: prefer a narrow small-group
-        # fallback rather than a broad whole-church one.
-        fallback_group = resolve_units_to_small_groups(units).order_by("name").first()
-        if fallback_group is not None:
-            self.scope_type = self.SCOPE_SMALL_GROUP
-            self.small_group = fallback_group
-            return
-
-        # Nothing resolves to an active legacy group; audience rows still drive
-        # eligibility, so the legacy fallback resolves to no meetings.
-        self.scope_type = self.SCOPE_GLOBAL
-
     def get_eligible_small_groups(self):
-        units = list(self.get_audience_scope_units())
-        if units:
-            return resolve_units_to_small_groups(units)
+        """Resolve the schedule's audience-scope units to active SmallGroups.
 
-        groups = SmallGroup.objects.filter(is_active=True)
-
-        if self.scope_type == self.SCOPE_GLOBAL:
-            return groups
-
-        if self.scope_type == self.SCOPE_MINISTRY_CONTEXT:
-            if not self.ministry_context_id:
-                return groups.none()
-            return groups.filter(district__ministry_context_id=self.ministry_context_id)
-
-        if self.scope_type == self.SCOPE_DISTRICT:
-            if not self.district_id:
-                return groups.none()
-            return groups.filter(district_id=self.district_id)
-
-        if self.scope_type == self.SCOPE_SMALL_GROUP:
-            if not self.small_group_id:
-                return groups.none()
-            return groups.filter(id=self.small_group_id)
-
-        return groups.none()
+        BS-SERIES-FIELD-RETIRE.1A removed the legacy ``scope_type`` /
+        ``ministry_context`` / ``district`` / ``small_group`` fields. Eligibility
+        is now derived solely from ``BibleStudySeriesAudienceScope`` rows; a
+        schedule with no audience rows resolves to no groups (fail closed).
+        """
+        return resolve_units_to_small_groups(list(self.get_audience_scope_units()))
 
 
 class BibleStudySeriesAudienceScope(models.Model):

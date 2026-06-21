@@ -68,7 +68,6 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_v2_meeting_small_group_references",
                 "bible_study_v1_session_small_group_references",
                 "service_event_small_group_references",
-                "bible_study_series_small_group_references",
                 "small_group_retirement_blocker_references",
             ),
         ),
@@ -84,7 +83,6 @@ SECTION_KEYS = OrderedDict(
                 "districts_with_wrong_unit_type",
                 "small_groups_with_district",
                 "service_events_with_district",
-                "bible_study_series_with_district",
                 "bible_study_sessions_with_district",
                 "district_retirement_blocker_references",
             ),
@@ -100,7 +98,6 @@ SECTION_KEYS = OrderedDict(
                 "ministry_contexts_with_inactive_unit",
                 "ministry_contexts_with_wrong_unit_type",
                 "districts_with_ministry_context",
-                "bible_study_series_with_ministry_context",
                 "ministry_context_retirement_blocker_references",
             ),
         ),
@@ -124,7 +121,6 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_series_with_audience_rows",
                 "bible_study_series_without_audience_rows",
                 "bible_study_active_series_without_audience_rows",
-                "bible_study_series_with_legacy_scope_fields_set",
                 "bible_study_v2_meetings_checked",
                 "bible_study_v2_meetings_with_small_group_mirror",
                 "bible_study_v2_meetings_with_audience_rows",
@@ -266,10 +262,6 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "guarded cleanup tooling for V2 meeting small_group mirrors; dry-run by default",
     ),
     (
-        "studies.management.commands.cleanup_bible_study_series_legacy_scope_fields",
-        "guarded cleanup tooling for BibleStudySeries legacy scope fields; dry-run by default",
-    ),
-    (
         "studies.management.commands.audit_bible_study_generation_bridge_retirement",
         "standing diagnostic/audit guard for Bible Study generation bridge retirement",
     ),
@@ -371,15 +363,6 @@ def _is_service_event_visible_active_safety_state(event, now):
     if event.status == ServiceEvent.STATUS_COMPLETED:
         return bool(event.start_datetime and event.start_datetime >= now)
     return False
-
-
-def _bible_study_series_has_legacy_scope_fields(series):
-    return bool(
-        series.scope_type != BibleStudySeries.SCOPE_GLOBAL
-        or series.ministry_context_id
-        or series.district_id
-        or series.small_group_id
-    )
 
 
 def _bible_study_session_has_legacy_scope_fields(session):
@@ -547,16 +530,14 @@ def _scan_small_groups(stats, details):
     # SE-FIELD-RETIRE.1A removed ServiceEvent.small_group, so ServiceEvent is no
     # longer an inbound SmallGroup reference either.
     stats["service_event_small_group_references"] = 0
-    stats["bible_study_series_small_group_references"] = (
-        BibleStudySeries.objects.filter(small_group__isnull=False).count()
-    )
+    # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.small_group, so the
+    # series is no longer an inbound SmallGroup reference.
     stats["small_group_retirement_blocker_references"] = (
         stats["small_groups_total"]
         + stats["profile_small_group_references"]
         + stats["bible_study_v2_meeting_small_group_references"]
         + stats["bible_study_v1_session_small_group_references"]
         + stats["service_event_small_group_references"]
-        + stats["bible_study_series_small_group_references"]
     )
 
 
@@ -614,9 +595,8 @@ def _scan_districts(stats, details):
     # SE-FIELD-RETIRE.1A removed ServiceEvent.district, so ServiceEvent is no
     # longer an inbound District reference.
     stats["service_events_with_district"] = 0
-    stats["bible_study_series_with_district"] = (
-        BibleStudySeries.objects.filter(district__isnull=False).count()
-    )
+    # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.district, so the series
+    # is no longer an inbound District reference.
     stats["bible_study_sessions_with_district"] = (
         BibleStudySession.objects.filter(district__isnull=False).count()
     )
@@ -624,7 +604,6 @@ def _scan_districts(stats, details):
         stats["districts_total"]
         + stats["small_groups_with_district"]
         + stats["service_events_with_district"]
-        + stats["bible_study_series_with_district"]
         + stats["bible_study_sessions_with_district"]
     )
 
@@ -680,16 +659,13 @@ def _scan_ministry_contexts(stats, details):
     stats["districts_with_ministry_context"] = (
         District.objects.filter(ministry_context__isnull=False).count()
     )
-    # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context, so the
-    # ServiceEvent FK is no longer a MinistryContext retirement blocker and is
-    # not counted here.
-    stats["bible_study_series_with_ministry_context"] = (
-        BibleStudySeries.objects.filter(ministry_context__isnull=False).count()
-    )
+    # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context and
+    # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.ministry_context, so
+    # neither FK is a MinistryContext retirement blocker and neither is counted
+    # here.
     stats["ministry_context_retirement_blocker_references"] = (
         stats["ministry_contexts_total"]
         + stats["districts_with_ministry_context"]
-        + stats["bible_study_series_with_ministry_context"]
     )
 
 
@@ -744,8 +720,6 @@ def _scan_bible_study(stats, details):
             stats["bible_study_series_without_audience_rows"] += 1
             if series.is_active:
                 stats["bible_study_active_series_without_audience_rows"] += 1
-        if _bible_study_series_has_legacy_scope_fields(series):
-            stats["bible_study_series_with_legacy_scope_fields_set"] += 1
 
     meeting_ids_with_rows = set(
         BibleStudyMeetingAudienceScope.objects.values_list(
@@ -848,7 +822,6 @@ def _scan_bible_study(stats, details):
     stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
     stats["bible_study_legacy_retirement_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
-        + stats["bible_study_series_with_legacy_scope_fields_set"]
         + stats["bible_study_v2_meetings_with_small_group_mirror"]
         + stats["bible_study_v2_meetings_without_audience_rows"]
         + stats["bible_study_v2_meeting_small_group_mirror_mismatches"]

@@ -154,8 +154,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(
             stats["ministry_context_retirement_blocker_references"],
             stats["ministry_contexts_total"]
-            + stats["districts_with_ministry_context"]
-            + stats["bible_study_series_with_ministry_context"],
+            + stats["districts_with_ministry_context"],
         )
 
         out = StringIO()
@@ -164,12 +163,13 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("backfill_service_event_host_language_units", output)
         self.assertNotIn("cleanup_service_event_ministry_context_labels", output)
 
-    def test_bible_study_series_legacy_scope_fields_remain_retirement_blockers(self):
+    def test_bible_study_series_with_audience_rows_is_not_a_blocker(self):
+        # BS-SERIES-FIELD-RETIRE.1A removed the legacy series scope fields, so
+        # the umbrella audit no longer counts them. A series with valid audience
+        # rows is fully structure-native and is not a retirement blocker.
         series = BibleStudySeries.objects.create(
-            title="Legacy-scoped Schedule",
+            title="Structure-native Schedule",
             status=BibleStudySeries.STATUS_PUBLISHED,
-            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
         BibleStudySeriesAudienceScope.objects.create(
             series=series,
@@ -182,8 +182,22 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(stats["bible_study_series_with_audience_rows"], 1)
         self.assertEqual(stats["bible_study_series_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
-        self.assertEqual(stats["bible_study_series_with_legacy_scope_fields_set"], 1)
-        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+        self.assertNotIn("bible_study_series_with_legacy_scope_fields_set", stats)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
+
+    def test_active_bible_study_series_without_audience_rows_is_a_blocker(self):
+        BibleStudySeries.objects.create(
+            title="Zero-audience Schedule",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=True,
+        )
+
+        audit = run_audit(target_date=self.today, now=self.now)
+        stats = audit["stats"]
+
+        self.assertEqual(stats["bible_study_series_without_audience_rows"], 1)
+        self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 1)
+        self.assertGreaterEqual(stats["bible_study_legacy_retirement_blockers"], 1)
 
     def test_fail_on_blockers_exits_nonzero(self):
         self.make_user("blocked", small_group=self.group)
@@ -358,7 +372,6 @@ class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
         self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
-        self.assertEqual(stats["bible_study_series_with_legacy_scope_fields_set"], 0)
         self.assertEqual(stats["bible_study_v2_meetings_with_small_group_mirror"], 0)
         self.assertEqual(stats["bible_study_v2_meetings_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_v2_meeting_small_group_mirror_mismatches"], 0)

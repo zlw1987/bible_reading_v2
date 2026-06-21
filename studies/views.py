@@ -253,10 +253,6 @@ def bible_study_schedule_manage_list(request):
 
     schedules = BibleStudySeries.objects.exclude(
         status=BibleStudySeries.STATUS_CANCELLED,
-    ).select_related(
-        "ministry_context",
-        "district",
-        "small_group",
     ).prefetch_related(
         "audience_scope_links__unit",
     ).annotate(
@@ -281,11 +277,7 @@ def bible_study_schedule_detail(request, series_id):
         return redirect("study_session_list")
 
     schedule = get_object_or_404(
-        BibleStudySeries.objects.select_related(
-            "ministry_context",
-            "district",
-            "small_group",
-        ).prefetch_related(
+        BibleStudySeries.objects.prefetch_related(
             "audience_scope_links__unit",
         ).annotate(
             guide_count=Count(
@@ -379,9 +371,6 @@ def bible_study_lesson_manage_list(request):
         status=BibleStudyLesson.STATUS_CANCELLED,
     ).select_related(
         "series",
-        "series__ministry_context",
-        "series__district",
-        "series__small_group",
         "created_by",
     ).prefetch_related("series__audience_scope_links__unit")
 
@@ -423,9 +412,6 @@ def bible_study_lesson_detail(request, lesson_id):
     lesson = get_object_or_404(
         BibleStudyLesson.objects.select_related(
             "series",
-            "series__ministry_context",
-            "series__district",
-            "series__small_group",
             "created_by",
         ).prefetch_related("series__audience_scope_links__unit"),
         id=lesson_id,
@@ -462,7 +448,6 @@ def generate_bible_study_meetings(request, lesson_id):
     lesson = get_object_or_404(
         BibleStudyLesson.objects.select_related(
             "series",
-            "series__ministry_context",
             "created_by",
         ),
         id=lesson_id,

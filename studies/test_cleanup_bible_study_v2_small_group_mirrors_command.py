@@ -48,9 +48,6 @@ class CleanupBibleStudyV2SmallGroupMirrorsCommandTests(TestCase):
             name="Rainbow 5",
             church_structure_unit=self.other_group_unit,
         )
-        self.series.small_group = self.group
-        self.series.scope_type = BibleStudySeries.SCOPE_SMALL_GROUP
-        self.series.save(update_fields=["scope_type", "small_group", "updated_at"])
 
     def make_unit(self, code, unit_type, *, is_active=True):
         return ChurchStructureUnit.objects.create(
@@ -288,7 +285,7 @@ class CleanupBibleStudyV2SmallGroupMirrorsCommandTests(TestCase):
         self.assertIn("blocked_no_audience_rows: 1", out.getvalue())
         self.assertIn("blocked_no_audience_rows=1", str(context.exception))
 
-    def test_command_does_not_touch_v1_session_or_series_small_group(self):
+    def test_command_does_not_touch_v1_session_small_group(self):
         session = BibleStudySession.objects.create(
             series=self.series,
             title="Legacy Session",
@@ -303,7 +300,5 @@ class CleanupBibleStudyV2SmallGroupMirrorsCommandTests(TestCase):
 
         meeting.refresh_from_db()
         session.refresh_from_db()
-        self.series.refresh_from_db()
         self.assertIsNone(meeting.small_group_id)
         self.assertEqual(session.small_group_id, self.group.id)
-        self.assertEqual(self.series.small_group_id, self.group.id)

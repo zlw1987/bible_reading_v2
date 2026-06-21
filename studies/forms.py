@@ -291,38 +291,12 @@ class BibleStudySeriesForm(forms.ModelForm):
         if not self.instance.pk:
             return []
 
-        existing = list(
+        # BS-SERIES-FIELD-RETIRE.1A: the legacy single-scope fields were removed,
+        # so the audience selector is pre-filled solely from the schedule's
+        # BibleStudySeriesAudienceScope rows.
+        return list(
             self.instance.get_audience_scope_units().values_list("id", flat=True)
         )
-        if existing:
-            return existing
-
-        # Fall back to the legacy single scope so editing a pre-BS-AS.1 schedule
-        # pre-fills the equivalent unit when a mapping exists.
-        scope_type = self.instance.scope_type
-        unit = None
-        if scope_type == BibleStudySeries.SCOPE_GLOBAL:
-            unit = ChurchStructureUnit.objects.filter(
-                unit_type=ChurchStructureUnit.UNIT_ROOT,
-                is_active=True,
-            ).first()
-        elif scope_type == BibleStudySeries.SCOPE_MINISTRY_CONTEXT and (
-            self.instance.ministry_context_id
-        ):
-            unit_id = self.instance.ministry_context.church_structure_unit_id
-            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
-        elif scope_type == BibleStudySeries.SCOPE_DISTRICT and self.instance.district_id:
-            unit_id = self.instance.district.church_structure_unit_id
-            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
-        elif scope_type == BibleStudySeries.SCOPE_SMALL_GROUP and (
-            self.instance.small_group_id
-        ):
-            unit_id = self.instance.small_group.church_structure_unit_id
-            unit = ChurchStructureUnit.objects.filter(id=unit_id).first() if unit_id else None
-
-        if unit is not None and unit.is_active:
-            return [unit.id]
-        return []
 
     def clean(self):
         cleaned = super().clean()

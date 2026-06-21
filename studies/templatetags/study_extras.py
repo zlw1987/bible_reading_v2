@@ -57,53 +57,20 @@ def compact_unit_label(unit, language):
     return " > ".join(node.display_name(language) for node in chain)
 
 
-def _legacy_scope_label(series, language):
-    def ministry_context_label():
-        if not series.ministry_context_id:
-            return "-"
-        context = series.ministry_context
-        name = context.name_en or context.name
-        return f"{context.code} / {name}"
-
-    if language == "zh":
-        if series.scope_type == "global":
-            return "全教会"
-        if series.scope_type == "ministry_context":
-            return f"事工范围：{ministry_context_label()}"
-        if series.scope_type == "district":
-            name = series.district.name if series.district_id else "-"
-            return f"区：{name}"
-        if series.scope_type == "small_group":
-            name = series.small_group.name if series.small_group_id else "-"
-            return f"小组：{name}"
-        return series.scope_type
-
-    if series.scope_type == "global":
-        return "Whole Church"
-    if series.scope_type == "ministry_context":
-        return f"Ministry Context: {ministry_context_label()}"
-    if series.scope_type == "district":
-        name = series.district.name if series.district_id else "-"
-        return f"District: {name}"
-    if series.scope_type == "small_group":
-        name = series.small_group.name if series.small_group_id else "-"
-        return f"Small Group: {name}"
-    return series.scope_type
-
-
 def _scope_unit_labels(series, language):
     """Compact, root-stripped labels for a schedule's audience scope.
 
-    Prefers BS-AS.1 ChurchStructureUnit audience rows (via the prefetched
-    ``audience_scope_links``) and falls back to the legacy single scope when no
-    audience rows exist.
+    BS-SERIES-FIELD-RETIRE.1A removed the legacy single-scope fields, so labels
+    come solely from BS-AS.1 ``ChurchStructureUnit`` audience rows (via the
+    prefetched ``audience_scope_links``). A schedule with no audience rows has
+    no scope label.
     """
     audience_units = [link.unit for link in series.audience_scope_links.all()]
-    if audience_units:
-        if any(unit.unit_type == "root" for unit in audience_units):
-            return [_whole_church_label(language)]
-        return [compact_unit_label(unit, language) for unit in audience_units]
-    return [_legacy_scope_label(series, language)]
+    if not audience_units:
+        return []
+    if any(unit.unit_type == "root" for unit in audience_units):
+        return [_whole_church_label(language)]
+    return [compact_unit_label(unit, language) for unit in audience_units]
 
 
 @register.filter

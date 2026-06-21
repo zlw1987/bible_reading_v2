@@ -27,7 +27,6 @@ _STAT_KEYS = (
     "series_without_audience_rows",
     "active_series_without_audience_rows",
     "normal_series_with_structure_audience",
-    "normal_series_still_using_legacy_scope_fields",
     "meetings_checked",
     "normal_meetings_checked",
     "normal_meetings_missing_anchor_unit",
@@ -118,9 +117,11 @@ _CONSUMER_PATHS = (
             "BibleStudySeries.get_eligible_small_groups"
         ),
         reason=(
-            "legacy compatibility resolver retained for coexistence diagnostics "
-            "and old fallback inspection; current normal generation no longer "
-            "calls this as its target source"
+            "structure-audience resolver (audience rows -> active SmallGroups) "
+            "retained for coexistence diagnostics; BS-SERIES-FIELD-RETIRE.1A "
+            "removed the legacy series scope fields, so there is no legacy "
+            "fallback and current normal generation does not call this as its "
+            "target source"
         ),
         uses_resolve_units_to_small_groups=True,
     ),
@@ -195,15 +196,6 @@ def _clean_generation_key(value):
     return (value or "").strip()
 
 
-def _series_has_legacy_scope_fields(series):
-    return bool(
-        series.scope_type != BibleStudySeries.SCOPE_GLOBAL
-        or series.ministry_context_id
-        or series.district_id
-        or series.small_group_id
-    )
-
-
 def _series_is_active_for_generation(series):
     return bool(
         series.is_active
@@ -238,7 +230,7 @@ def _series_line(series, *, category, decision, reason):
         meeting_date="(n/a)",
         generation_key="(n/a)",
         anchor_unit=", ".join(_unit_label(unit) for unit in units) or "(none)",
-        small_group=_group_label(series.small_group),
+        small_group="(n/a)",
         mapped_unit="(n/a)",
         category=category,
         decision=decision,
@@ -314,11 +306,7 @@ def _apply_static_path_counts(stats):
 def _series_queryset():
     links = BibleStudySeriesAudienceScope.objects.select_related("unit").order_by("id")
     return (
-        BibleStudySeries.objects.select_related(
-            "ministry_context",
-            "district",
-            "small_group",
-        )
+        BibleStudySeries.objects
         .prefetch_related(
             Prefetch(
                 "audience_scope_links",
@@ -356,47 +344,34 @@ def _classify_series(series, stats):
     if audience_links:
         stats["series_with_audience_rows"] += 1
         stats["normal_series_with_structure_audience"] += 1
-        if not _series_has_legacy_scope_fields(series):
-            return _series_line(
-                series,
-                category="generation target / idempotency bridge",
-                decision="structure_audience_ready",
-                reason=(
-                    "series has structure audience rows; normal generation "
-                    "resolves ChurchStructureUnit leaf targets"
-                ),
-            )
-    else:
-        stats["series_without_audience_rows"] += 1
-        if _series_is_active_for_generation(series):
-            stats["active_series_without_audience_rows"] += 1
-            return _series_line(
-                series,
-                category="generation target / idempotency bridge",
-                decision="blocker",
-                reason=(
-                    "active draft/published series has no "
-                    "BibleStudySeriesAudienceScope rows"
-                ),
-            )
-
-    if _series_has_legacy_scope_fields(series):
-        stats["normal_series_still_using_legacy_scope_fields"] += 1
         return _series_line(
             series,
-            category="diagnostic/audit/backfill/cleanup support",
-            decision="legacy_scope_field_retained",
+            category="generation target / idempotency bridge",
+            decision="structure_audience_ready",
             reason=(
-                "series still stores legacy scope fields; cleanup is a separate "
-                "dry-run-first slice"
+                "series has structure audience rows; normal generation "
+                "resolves ChurchStructureUnit leaf targets"
+            ),
+        )
+
+    stats["series_without_audience_rows"] += 1
+    if _series_is_active_for_generation(series):
+        stats["active_series_without_audience_rows"] += 1
+        return _series_line(
+            series,
+            category="generation target / idempotency bridge",
+            decision="blocker",
+            reason=(
+                "active draft/published series has no "
+                "BibleStudySeriesAudienceScope rows"
             ),
         )
 
     return _series_line(
         series,
         category="diagnostic/audit/backfill/cleanup support",
-        decision="no_series_bridge_blocker",
-        reason="series has no stored legacy scope fields requiring this bridge",
+        decision="inactive_series_without_audience_rows",
+        reason="inactive/cancelled series has no audience rows and is not a generation target",
     )
 
 
@@ -500,7 +475,6 @@ def _classify_meeting(meeting, stats):
 def _finalize_blockers(stats):
     stats["blockers_for_small_group_table_retirement"] = (
         stats["active_series_without_audience_rows"]
-        + stats["normal_series_still_using_legacy_scope_fields"]
         + stats["meetings_with_small_group"]
         + stats["meetings_missing_generation_key"]
         + stats["normal_meetings_missing_anchor_unit"]

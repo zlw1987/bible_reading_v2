@@ -1061,21 +1061,6 @@ class MinistryContextBridgeTests(TestCase):
         self.assertEqual(user.profile.small_group, group)
         self.assertIn(user.profile, group.members.all())
 
-    def test_profile_small_group_still_drives_bible_study_scope(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="District 1",
-            ministry_context=context,
-        )
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
-
-        series = BibleStudySeries.objects.create(
-            title="CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
-
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
 
     def test_zero_row_service_event_no_longer_driven_by_profile_small_group(self):
         # SE-RETIRE.1B: this previously asserted that Profile.small_group drove
@@ -2094,11 +2079,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         other_user.profile.small_group = other_group
         other_user.profile.save()
 
-        series = BibleStudySeries.objects.create(
-            title="CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
         event = ServiceEvent.objects.create(
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
@@ -2108,7 +2088,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
 
         self.run_seed_command("--apply")
 
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
         self.assertEqual(user.profile.small_group, group)
         # SE-RETIRE.1B: the seed command still does not create ServiceEvent
         # audience rows, so this zero-row event fails closed for ordinary users
@@ -2402,30 +2381,6 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         user.profile.refresh_from_db()
         self.assertEqual(user.profile.small_group, group)
 
-    def test_membership_does_not_change_bible_study_scope_behavior(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="District 1",
-            ministry_context=context,
-        )
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
-        unit = self.create_unit()
-        user = User.objects.create_user(username="study_membership")
-        ChurchStructureMembership.objects.create(
-            user=user,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
-        series = BibleStudySeries.objects.create(
-            title="CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
-
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
-
     def test_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(name="Rainbow 4", district=district)
@@ -2606,7 +2561,7 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
             ).exists()
         )
 
-    def test_backfill_command_preserves_bible_study_and_service_event_behavior(self):
+    def test_backfill_command_preserves_service_event_behavior(self):
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         district = District.objects.create(
             name="District 1",
@@ -2625,11 +2580,6 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
             is_primary=True,
             start_date=timezone.localdate(),
         )
-        series = BibleStudySeries.objects.create(
-            title="CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
         event = ServiceEvent.objects.create(
             title="District Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
@@ -2639,7 +2589,6 @@ class ChurchStructureMembershipBackfillCommandTests(TestCase):
 
         self.run_backfill_command("--apply")
 
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
         # SE-RETIRE.1B: the membership backfill creates no ServiceEvent audience
         # rows, so this zero-row event fails closed for ordinary users; the
         # retired legacy fallback no longer reads Profile.small_group.
@@ -3975,33 +3924,10 @@ class StaffMembershipRequestListTests(TestCase):
         # zero-row event visible either.
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
-    def test_approved_membership_does_not_change_bible_study_scope_behavior(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="District 1",
-            ministry_context=context,
-        )
-        group = SmallGroup.objects.create(name="District Group", district=district)
-        membership = self.create_membership(user=self.normal_user)
-        series = BibleStudySeries.objects.create(
-            title="CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
-        self.client.login(username="membership_staff", password="TestPass123!")
-
-        self.client.post(
-            reverse("staff_membership_request_approve", args=[membership.id]),
-        )
-
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
-
     def test_mapped_approval_does_not_write_profile_or_change_v1_session_visibility(self):
         # CS-RETIRE.1A: approval no longer writes Profile.small_group, so it no
         # longer flips a legacy V1 BibleStudySession's profile-based visibility.
-        # Series scope resolution (get_eligible_small_groups) is structure/legacy
-        # based and unaffected; the V1 session stays invisible because the profile
-        # group is never written.
+        # The V1 session stays invisible because the profile group is never written.
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         district = District.objects.create(
             name="Mapped District 2",
@@ -4013,11 +3939,7 @@ class StaffMembershipRequestListTests(TestCase):
             church_structure_unit=self.unit,
         )
         membership = self.create_membership(user=self.normal_user)
-        series = BibleStudySeries.objects.create(
-            title="Mapped CM Bible Study",
-            scope_type=BibleStudySeries.SCOPE_MINISTRY_CONTEXT,
-            ministry_context=context,
-        )
+        series = BibleStudySeries.objects.create(title="Mapped CM Bible Study")
         session = BibleStudySession.objects.create(
             series=series,
             title="Mapped Group Study",
@@ -4027,7 +3949,6 @@ class StaffMembershipRequestListTests(TestCase):
             status=BibleStudySession.STATUS_PUBLISHED,
         )
 
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
         self.assertIsNone(self.normal_user.profile.small_group)
         self.assertFalse(session.can_be_seen_by(self.normal_user))
 
@@ -4037,10 +3958,9 @@ class StaffMembershipRequestListTests(TestCase):
         )
         self.normal_user.profile.refresh_from_db()
 
-        # Profile.small_group not written; series scope unchanged; V1 session
-        # still not visible (V1 reads the unchanged legacy profile group).
+        # Profile.small_group not written; V1 session still not visible (V1 reads
+        # the unchanged legacy profile group).
         self.assertIsNone(self.normal_user.profile.small_group)
-        self.assertEqual(list(series.get_eligible_small_groups()), [group])
         self.assertFalse(session.can_be_seen_by(self.normal_user))
 
 

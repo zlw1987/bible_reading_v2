@@ -388,18 +388,16 @@ only when it still maps to the selected unit and clear stale mismatches. Duplica
    display / history / backfill / idempotency field, not a manage-list fallback
    source.
 5. **Series legacy scope fields** (`scope_type` / `ministry_context` /
-   `district` / `small_group`) + `apply_audience_legacy_fallback()` — still
-   exist for compatibility / display / coexistence, but **since BS-STRUCT.1M they
-   are no longer a generation source** (generation requires audience rows and
-   fails closed with zero rows). **Since BS-SERIES-SCOPE.1A, normal app-level
-   schedule create/edit saves no longer call the legacy mirror helper and no
-   longer write/update those legacy series scope fields.** BS-SERIES-SCOPE.1B
-   adds `cleanup_bible_study_series_legacy_scope_fields`, a dry-run-first
-   guarded cleanup command for existing populated values. It only clears rows
-   that already have valid `BibleStudySeriesAudienceScope` rows, does not run
-   automatically, leaves unsafe/mismatched rows blocked for review, and does not
-   remove the model fields or DB constraints. Field/schema removal remains a
-   separate future migration slice.
+   `district` / `small_group`) — **REMOVED in BS-SERIES-FIELD-RETIRE.1A**
+   (migration `studies/0010`). Since BS-STRUCT.1M they were no longer a
+   generation source (generation requires audience rows and fails closed with
+   zero rows); BS-SERIES-SCOPE.1A/1B then stopped normal app-level writes and
+   cleared stored values. BS-SERIES-FIELD-RETIRE.1A removed the four fields and
+   the `apply_audience_legacy_fallback()` helper, and retired the
+   `cleanup_bible_study_series_legacy_scope_fields` command.
+   `BibleStudySeries.get_eligible_small_groups()` now resolves
+   `BibleStudySeriesAudienceScope` rows only. Only immutable historical
+   migrations still name these fields.
 6. **V1 `BibleStudySession`** — legacy-only, retirement target (excluded).
 
 Note: the runtime reads are **already** membership-core in their *user*

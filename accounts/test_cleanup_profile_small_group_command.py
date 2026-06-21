@@ -310,8 +310,6 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
         )
         series = BibleStudySeries.objects.create(
             title="Preserved Series",
-            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-            small_group=self.group,
             status=BibleStudySeries.STATUS_PUBLISHED,
         )
         session = BibleStudySession.objects.create(
@@ -427,7 +425,7 @@ class CleanupProfileSmallGroupCommandTests(TestCase):
         self.assertEqual(role.structure_unit_id, self.group_unit.id)
         self.assertTrue(user.user_permissions.filter(id=permission.id).exists())
         self.assertTrue(ServiceEvent.objects.filter(id=event.id).exists())
-        self.assertEqual(series.small_group_id, self.group.id)
+        self.assertTrue(BibleStudySeries.objects.filter(id=series.id).exists())
         self.assertEqual(session.small_group_id, self.group.id)
         self.assertEqual(prayer.structure_unit_at_post_id, self.group_unit.id)
         self.assertEqual(guide.author_id, user.id)

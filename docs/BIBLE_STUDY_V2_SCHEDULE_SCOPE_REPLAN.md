@@ -241,7 +241,7 @@ The current shipped Bible Study V2 schedule scope uses existing structure:
 - district
 - small group
 
-This currently uses the legacy `BibleStudySeries` scope fields (`scope_type`, `ministry_context`, `district`, `small_group`) and the `MinistryContext` / `District` / `SmallGroup` meeting generation helpers. It remains valid as the current runtime behavior.
+Historical: this originally used the legacy `BibleStudySeries` scope fields (`scope_type`, `ministry_context`, `district`, `small_group`). Those four fields were **removed in BS-SERIES-FIELD-RETIRE.1A** (migration `studies/0010`); schedule audience/eligibility and normal generation now use `BibleStudySeriesAudienceScope` rows and structure-unit-native targets, failing closed on zero rows.
 
 ### BS-AS direction (supersedes the earlier legacy-only future plan)
 
@@ -259,7 +259,7 @@ The new direction is:
 
 Status: implemented. BS-AS.1, BS-AS.2, and BS-AS.2A are complete (see the milestone entries in section 15). Bible Study Schedule is now the first narrow `ChurchStructureUnit` audience-scope runtime consumer. Later consumers (ServiceEvent / Church Gatherings runtime migration, Community Activities) remain deferred and separately approved.
 
-See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md` for the shared `ChurchStructureUnit` audience-scope direction and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the flexible hierarchy background. The legacy `BibleStudySeries.scope_type` / `ministry_context` / `district` / `small_group` fields remain as compatibility/fallback when a schedule has no audience-scope rows, with the current `MinistryContext` / `District` / `SmallGroup` meeting generation helpers.
+See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md` for the shared `ChurchStructureUnit` audience-scope direction and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for the flexible hierarchy background. The legacy `BibleStudySeries.scope_type` / `ministry_context` / `district` / `small_group` fields were **removed in BS-SERIES-FIELD-RETIRE.1A** (migration `studies/0010`); schedule audience/eligibility now uses `BibleStudySeriesAudienceScope` rows only.
 
 ## 6. Meeting Generation From Schedule / Guide Scope
 
@@ -531,7 +531,7 @@ Do not build:
 - Generated `BibleStudyMeeting` rows still point to legacy `SmallGroup`.
 - Ordinary member visibility continues to use `Profile.small_group`.
 - This is the first narrow runtime consumer implemented for `ChurchStructureUnit` audience scope. It does not migrate ordinary user visibility to `ChurchStructureMembership`.
-- Legacy `scope_type` / `ministry_context` / `district` / `small_group` remain compatibility/fallback fields.
+- Legacy `scope_type` / `ministry_context` / `district` / `small_group` were removed in BS-SERIES-FIELD-RETIRE.1A (migration `studies/0010`); audience rows are the sole schedule audience source.
 - A future lesson-level override may be considered later, but it is out of scope now.
 - The already-used `BS-V2.6.5` milestone name was not reused for this work.
 

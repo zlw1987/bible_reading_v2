@@ -23,7 +23,7 @@ from accounts.models import (
 )
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
-from studies.models import BibleStudyMeeting, BibleStudySeries, BibleStudySession
+from studies.models import BibleStudyMeeting, BibleStudySession
 
 
 STATUS_READY = "ready_for_schema_removal"
@@ -131,7 +131,7 @@ CANDIDATE_DEFINITIONS = (
         "candidate_type": "bridge-field",
         "app_read_references": _refs(
             "accounts.structure_selectors.resolve_units_to_small_groups fallback branches",
-            "BibleStudySeries.get_eligible_small_groups legacy fallback",
+            "BibleStudySeries.get_eligible_small_groups (audience-row resolver)",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
         "diagnostic_cleanup_references": _refs(
@@ -424,84 +424,72 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "not in legacy removal sequence",
     },
     {
-        "candidate_name": "BibleStudySeries.scope_type",
+        "candidate_name": "BibleStudySeries.scope_type (removed)",
         "model_table": "studies.BibleStudySeries",
         "field_name": "scope_type",
         "candidate_type": "field",
-        "app_read_references": _refs("BibleStudySeries.get_eligible_small_groups zero-row legacy fallback"),
-        "admin_references": _refs("studies.admin.BibleStudySeriesAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_bible_study_series_legacy_scope_fields",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
-        "test_fixture_references": _refs("Bible Study series legacy-scope fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "series_scope_type",
+        "migration_history_references": _refs("studies migrations (field added then removed)"),
         "recommended_next_action": (
-            "Remove only after all target DBs have audience rows, cleanup clears "
-            "stored legacy scope values, and fallback/admin diagnostics are retired."
+            "Completed. BS-SERIES-FIELD-RETIRE.1A removed the "
+            "BibleStudySeries.scope_type / ministry_context / district / "
+            "small_group legacy scope fields (migration studies/0010) after "
+            "BS-SERIES-SCOPE.1A/1B stopped normal app writes and cleared stored "
+            "values, and local/dev audit confirmed zero populated legacy scope "
+            "fields with all series carrying BibleStudySeriesAudienceScope rows. "
+            "Normal generation is structure-unit-native and fails closed on "
+            "zero audience rows. The cleanup_bible_study_series_legacy_scope_fields "
+            "command was retired with the fields. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove BibleStudyMeeting.small_group, anchor_unit, generation_key, "
+            "BibleStudySeriesAudienceScope, BibleStudyMeetingAudienceScope, V1 "
+            "BibleStudySession, or the SmallGroup / District / MinistryContext tables."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudySeries.ministry_context",
+        "candidate_name": "BibleStudySeries.ministry_context (removed)",
         "model_table": "studies.BibleStudySeries",
         "field_name": "ministry_context",
         "candidate_type": "field",
-        "app_read_references": _refs("BibleStudySeries.get_eligible_small_groups legacy fallback"),
-        "admin_references": _refs("studies.admin.BibleStudySeriesAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_bible_study_series_legacy_scope_fields",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
-        "test_fixture_references": _refs("Bible Study series legacy-scope fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "series_ministry_context",
+        "migration_history_references": _refs("studies migrations (field added then removed)"),
         "recommended_next_action": (
-            "Clear through guarded cleanup after target DB dry-run review; remove "
-            "fallback/admin/diagnostic references before field removal."
+            "Completed. BS-SERIES-FIELD-RETIRE.1A removed this legacy series "
+            "scope FK (migration studies/0010). Normal generation uses "
+            "BibleStudySeriesAudienceScope rows. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove the MinistryContext table."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudySeries.district",
+        "candidate_name": "BibleStudySeries.district (removed)",
         "model_table": "studies.BibleStudySeries",
         "field_name": "district",
         "candidate_type": "field",
-        "app_read_references": _refs("BibleStudySeries.get_eligible_small_groups legacy fallback"),
-        "admin_references": _refs("studies.admin.BibleStudySeriesAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_bible_study_series_legacy_scope_fields",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
-        "test_fixture_references": _refs("Bible Study series legacy-scope fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "series_district",
+        "migration_history_references": _refs("studies migrations (field added then removed)"),
         "recommended_next_action": (
-            "Clear through guarded cleanup after target DB dry-run review; remove "
-            "fallback/admin/diagnostic references before field removal."
+            "Completed. BS-SERIES-FIELD-RETIRE.1A removed this legacy series "
+            "scope FK (migration studies/0010). Normal generation uses "
+            "BibleStudySeriesAudienceScope rows. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove the District table."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudySeries.small_group",
+        "candidate_name": "BibleStudySeries.small_group (removed)",
         "model_table": "studies.BibleStudySeries",
         "field_name": "small_group",
         "candidate_type": "field",
-        "app_read_references": _refs("BibleStudySeries.get_eligible_small_groups legacy fallback"),
-        "admin_references": _refs("studies.admin.BibleStudySeriesAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_bible_study_series_legacy_scope_fields",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
-        "test_fixture_references": _refs("Bible Study series legacy-scope fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "series_small_group",
+        "migration_history_references": _refs("studies migrations (field added then removed)"),
         "recommended_next_action": (
-            "Clear through guarded cleanup after target DB dry-run review; remove "
-            "fallback/admin/diagnostic references before field removal."
+            "Completed. BS-SERIES-FIELD-RETIRE.1A removed this legacy series "
+            "scope FK (migration studies/0010). Normal generation uses "
+            "BibleStudySeriesAudienceScope rows. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove the SmallGroup table or BibleStudyMeeting.small_group."
         ),
-        "suggested_removal_phase": "phase 1 then phase 3",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "BibleStudyMeeting.small_group",
@@ -732,18 +720,9 @@ def _data_counts():
         "service_event_host_language_unit": ServiceEvent.objects.filter(
             host_language_unit__isnull=False
         ).count(),
-        "series_scope_type": BibleStudySeries.objects.exclude(
-            scope_type=BibleStudySeries.SCOPE_GLOBAL
-        ).count(),
-        "series_ministry_context": BibleStudySeries.objects.filter(
-            ministry_context__isnull=False
-        ).count(),
-        "series_district": BibleStudySeries.objects.filter(
-            district__isnull=False
-        ).count(),
-        "series_small_group": BibleStudySeries.objects.filter(
-            small_group__isnull=False
-        ).count(),
+        # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.scope_type /
+        # ministry_context / district / small_group, so there is no longer a
+        # queryable data counter for those.
         "meeting_small_group": BibleStudyMeeting.objects.filter(
             small_group__isnull=False
         ).count(),

@@ -6448,7 +6448,6 @@ class TodayActionCenterTests(TestCase):
         series = BibleStudySeries.objects.create(
             title="查经系列",
             title_en="Study Series",
-            scope_type=BibleStudySeries.SCOPE_GLOBAL,
             status=BibleStudySeries.STATUS_PUBLISHED,
             is_active=True,
         )
@@ -6658,7 +6657,6 @@ class TodayActionCenterTests(TestCase):
         series = BibleStudySeries.objects.create(
             title="旧查经系列",
             title_en="Legacy Series",
-            scope_type=BibleStudySeries.SCOPE_GLOBAL,
             status=BibleStudySeries.STATUS_PUBLISHED,
             is_active=True,
         )

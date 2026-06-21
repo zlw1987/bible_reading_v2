@@ -108,8 +108,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         event = self.make_event(title="READONLY_SECRET_EVENT")
         series = BibleStudySeries.objects.create(
             title="READONLY_SECRET_SERIES",
-            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
         assignment = ChurchRoleAssignment.objects.create(
             user=user,
@@ -127,11 +125,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         before_values = {
             "profile_small_group": user.profile.small_group_id,
             "event_scope": (event.title, event.status),
-            "series_scope": (
-                series.scope_type,
-                series.district_id,
-                series.small_group_id,
-            ),
+            "series_scope": (series.title, series.status),
             "role_scope": (
                 assignment.scope_type,
                 assignment.structure_unit_id,
@@ -164,7 +158,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(user.profile.small_group_id, before_values["profile_small_group"])
         self.assertEqual((event.title, event.status), before_values["event_scope"])
         self.assertEqual(
-            (series.scope_type, series.district_id, series.small_group_id),
+            (series.title, series.status),
             before_values["series_scope"],
         )
         self.assertEqual(
@@ -289,8 +283,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.make_event(title="SECRET_EVENT_TITLE_DO_NOT_PRINT")
         BibleStudySeries.objects.create(
             title="SECRET_SERIES_TITLE_DO_NOT_PRINT",
-            scope_type=BibleStudySeries.SCOPE_SMALL_GROUP,
-            small_group=self.group,
         )
 
         out = StringIO()
@@ -365,6 +357,38 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
 
         self.assertNotIn("role_district", audit["data_counts"])
         self.assertNotIn("role_small_group", audit["data_counts"])
+
+    def test_bible_study_series_scope_fields_are_historical_after_field_removal(self):
+        # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.scope_type /
+        # ministry_context / district / small_group after BS-SERIES-SCOPE.1A/1B
+        # stopped normal app writes and cleared stored values. Only immutable
+        # historical migrations still name them, so the candidates are now
+        # historical-only with no active schema blocker, and none has a queryable
+        # data counter. Normal generation is structure-unit-native.
+        audit = run_audit()
+        for name in (
+            "BibleStudySeries.scope_type (removed)",
+            "BibleStudySeries.ministry_context (removed)",
+            "BibleStudySeries.district (removed)",
+            "BibleStudySeries.small_group (removed)",
+        ):
+            candidate = _candidate(audit, name)
+            self.assertEqual(candidate["live_runtime_references"], ())
+            self.assertEqual(candidate["app_write_references"], ())
+            self.assertEqual(candidate["app_read_references"], ())
+            self.assertEqual(candidate["admin_references"], ())
+            self.assertEqual(candidate["template_display_references"], ())
+            self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+            self.assertEqual(candidate["data_blocker_count"], 0)
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+            self.assertFalse(
+                candidate["schema_removal_status"].startswith("blocked_by_")
+            )
+
+        self.assertNotIn("series_scope_type", audit["data_counts"])
+        self.assertNotIn("series_ministry_context", audit["data_counts"])
+        self.assertNotIn("series_district", audit["data_counts"])
+        self.assertNotIn("series_small_group", audit["data_counts"])
 
     def test_reflection_mirror_is_historical_after_field_removal(self):
         # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post

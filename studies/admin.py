@@ -20,17 +20,10 @@ class BibleStudySeriesAdmin(admin.ModelAdmin):
         "start_date",
         "end_date",
         "status",
-        "scope_type",
-        "ministry_context",
-        "district",
-        "small_group",
         "is_active",
     )
     list_filter = (
         "status",
-        "scope_type",
-        "ministry_context",
-        "district",
         "is_active",
     )
     search_fields = ("title", "title_en")

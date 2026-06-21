@@ -130,7 +130,6 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         self.assertIn("series_checked: 1", output)
         self.assertIn("series_with_audience_rows: 1", output)
         self.assertIn("normal_series_with_structure_audience: 1", output)
-        self.assertIn("normal_series_still_using_legacy_scope_fields: 0", output)
         self.assertIn("meetings_checked: 1", output)
         self.assertIn("normal_meetings_checked: 1", output)
         self.assertIn("meetings_with_generation_key: 1", output)

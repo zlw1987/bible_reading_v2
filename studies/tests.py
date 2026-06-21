@@ -2820,6 +2820,10 @@ class BibleStudyModuleTests(TestCase):
 
     def test_meeting_role_form_accepts_linked_user_without_display_name(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         form = BibleStudyMeetingRoleForm(
             data=self.meeting_role_post_data(user=self.user.id, display_name=""),
@@ -3366,6 +3370,10 @@ class BibleStudyModuleTests(TestCase):
     def test_staff_can_edit_meeting_worship_song(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         song = self.create_meeting_worship_song(meeting)
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="study_staff", password="testpass123")
@@ -3540,6 +3548,10 @@ class BibleStudyModuleTests(TestCase):
             meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -3563,6 +3575,10 @@ class BibleStudyModuleTests(TestCase):
         )
         self.create_membership(member, self.group_unit)
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.client.login(username="detail_membership_only", password="testpass123")
 
         response = self.client.get(
@@ -3598,6 +3614,10 @@ class BibleStudyModuleTests(TestCase):
         )
         self.create_membership(member, child_unit)
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.client.login(username="detail_descendant", password="testpass123")
 
         response = self.client.get(
@@ -3889,6 +3909,10 @@ class BibleStudyModuleTests(TestCase):
             meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         v1_session = self.create_session(title_en="Fallback V1 Session")
         # Pin the membership start well before the fixed meeting date so it is
         # still active once "now" is pinned just before that date below.
@@ -3939,6 +3963,10 @@ class BibleStudyModuleTests(TestCase):
             lesson=lesson,
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
         self.user.profile.small_group = None
         self.user.profile.save(update_fields=["small_group"])
         self.create_membership(self.user, self.group_unit)
@@ -3965,9 +3993,13 @@ class BibleStudyModuleTests(TestCase):
             status=BibleStudyLesson.STATUS_PUBLISHED,
             title_en="Descendant Membership Guide",
         )
-        self.create_meeting(
+        meeting = self.create_meeting(
             lesson=lesson,
             status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
         )
         self.user.profile.small_group = None
         self.user.profile.save(update_fields=["small_group"])

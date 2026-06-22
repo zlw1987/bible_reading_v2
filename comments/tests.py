@@ -48,15 +48,11 @@ class ReflectionReportModerationTests(TestCase):
             username="levin",
             password="UserPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         self.other_user = User.objects.create_user(
             username="other",
             password="OtherPass123!",
         )
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
 
         self.staff = User.objects.create_user(
             username="staff",

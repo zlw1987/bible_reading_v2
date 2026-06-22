@@ -2731,17 +2731,16 @@ class TeamAssignmentV1Tests(TestCase):
         )
 
     def make_bible_study_meeting(self, service_event):
-        district = District.objects.create(name="North")
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
         series = BibleStudySeries.objects.create(title="约翰福音查经")
         lesson = BibleStudyLesson.objects.create(
             series=series,
             title="约翰十五章",
             lesson_date=timezone.localdate() + timezone.timedelta(days=3),
         )
+        # BS-MEETING-MIRROR.1A removed the legacy BibleStudyMeeting.small_group FK;
+        # this fixture only needs the meeting's service_event linkage.
         return BibleStudyMeeting.objects.create(
             lesson=lesson,
-            small_group=group,
             meeting_datetime=timezone.now() + timezone.timedelta(days=2),
             service_event=service_event,
         )

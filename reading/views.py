@@ -31,7 +31,6 @@ from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
 from .group_progress_shadow import (
-    compute_group_progress_shadow,
     get_membership_core_default_progress_group,
     get_membership_core_progress_roster_users,
 )
@@ -43,11 +42,10 @@ from .models import ActivePlan, CheckIn, PlanEnrollment, ReadingGuidePost, Readi
 # ``Profile.small_group``) was removed as dead code. Its last runtime callers
 # were dropped when reflection read visibility moved to the structure snapshot
 # (CS-CORE.4G.2) and the group-progress default stopped reading
-# ``Profile.small_group`` (READING-STRUCT.1D). ``Profile.small_group`` is no
-# longer a Reading runtime source; the membership-core helpers
+# ``Profile.small_group`` (READING-STRUCT.1D). The ``Profile.small_group`` field
+# itself was removed in PROFILE-SG-FIELD-RETIRE.1A; the membership-core helpers
 # (``accounts.structure_selectors`` / ``reading.group_progress_shadow``) are the
-# source of truth, and legacy small-group reads survive only in the read-only
-# audit / shadow-comparison code.
+# source of truth for belonging.
 
 
 def can_publish_reading_guides(user):
@@ -1177,10 +1175,6 @@ def my_group_progress(request):
                 "selected_active_plan_id": None,
                 "member_rows": [],
                 "message": "You are not assigned to a small group yet.",
-                # CS-CORE.4E shadow-only divergence: internal, not rendered.
-                "group_progress_shadow": compute_group_progress_shadow(
-                    request.user, None
-                ),
             },
         )
 
@@ -1191,16 +1185,6 @@ def my_group_progress(request):
     # legacy progress permission gate are all unchanged. Ordinary membership grants
     # no progress access — the viewer already passed the legacy permission check.
     group_members = get_membership_core_progress_roster_users(selected_group)
-
-    # CS-CORE.4E membership-core shadow comparison, retained after the 4F.1 roster
-    # switch as a diagnostic / rollback comparison only (not rendered). It still
-    # computes the legacy Profile.small_group roster itself and compares it against
-    # the membership-core candidate, so it surfaces drift between the old and new
-    # roster sources for the now-live switch.
-    group_progress_shadow = compute_group_progress_shadow(
-        request.user,
-        selected_group,
-    )
 
     active_plans = (
         ActivePlan.objects.filter(
@@ -1234,7 +1218,6 @@ def my_group_progress(request):
                 "selected_active_plan_id": None,
                 "member_rows": [],
                 "message": "No active reading plan has been joined by this group yet.",
-                "group_progress_shadow": group_progress_shadow,
             },
         )
 
@@ -1316,7 +1299,6 @@ def my_group_progress(request):
             "selected_active_plan_id": selected_active_plan.id if selected_active_plan else None,
             "member_rows": member_rows,
             "message": "",
-            "group_progress_shadow": group_progress_shadow,
         },
     )
 

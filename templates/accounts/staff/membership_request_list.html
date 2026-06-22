@@ -31,7 +31,6 @@
                     <th>{{ ui.requested_unit }}</th>
                     <th>{{ ui.requested_by }}</th>
                     <th>{{ ui.submitted }}</th>
-                    <th>{{ ui.current_small_group }}</th>
                     <th>{{ ui.request_note }}</th>
                     <th>{{ ui.status }}</th>
                 </tr>
@@ -58,20 +57,13 @@
                         {% endif %}
                     </td>
                     <td>{{ membership.created_at|date:"Y-m-d H:i" }}</td>
-                    <td>
-                        {% if membership.user.profile.small_group %}
-                        {{ membership.user.profile.small_group.name }}
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
                     <td>{{ membership.notes|truncatechars:80|default:"-" }}</td>
                     <td><span class="status status-warning">{{ ui.pending_review }}</span></td>
                 </tr>
                 {% endwith %}
                 {% empty %}
                 <tr>
-                    <td colspan="7">
+                    <td colspan="6">
                         <strong>{{ ui.staff_membership_empty_title }}</strong><br>
                         <span class="form-help">{{ ui.staff_membership_empty_body }}</span>
                     </td>
@@ -100,14 +92,6 @@
                 <a href="{% url 'staff_membership_request_detail' membership.id %}">
                     {{ row.unit_path }}
                 </a>
-            </dd>
-            <dt>{{ ui.current_runtime_small_group }}</dt>
-            <dd>
-                {% if membership.user.profile.small_group %}
-                {{ membership.user.profile.small_group.name }}
-                {% else %}
-                -
-                {% endif %}
             </dd>
             <dt>{{ ui.requested_by }}</dt>
             <dd>

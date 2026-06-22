@@ -49,6 +49,7 @@ from reading.views import get_visible_reflection_filter
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudySeries,
     BibleStudySession,
@@ -60,18 +61,6 @@ from accounts.management.commands.audit_legacy_structure_retirement_readiness im
     run_audit as run_legacy_structure_retirement_audit,
 )
 from reading.group_progress_shadow import (
-    GroupProgressShadow,
-    REASON_DEFAULT_SAME,
-    REASON_DEFAULT_WOULD_CHANGE,
-    REASON_LEGACY_NO_SELECTED_GROUP,
-    REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY,
-    REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY,
-    REASON_PROFILE_MEMBERSHIP_MISMATCH,
-    REASON_ROSTER_SAME,
-    REASON_ROSTER_WOULD_GAIN,
-    REASON_ROSTER_WOULD_LOSE,
-    REASON_SELECTED_GROUP_UNMAPPED,
-    compute_group_progress_shadow,
     get_membership_core_default_progress_group,
     get_membership_core_progress_roster_users,
 )
@@ -408,8 +397,6 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 
     def create_member(self, username, group, unit):
         user = User.objects.create_user(username=username, password="TestPass123!")
-        user.profile.small_group = group
-        user.profile.save()
         ChurchStructureMembership.objects.create(
             user=user,
             unit=unit,
@@ -780,10 +767,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         membership, or an explicit unit to override.
         """
         user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
-
         if membership_unit == "__from_group__":
             membership_unit = group.church_structure_unit if group else None
         if membership_unit is not None:
@@ -1100,7 +1083,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             small_group=self.old_group,
         )
 
-        self.assertEqual(profile_only_user.profile.small_group, self.old_group)
         self.assertFalse(post.can_be_seen_by(profile_only_user))
         self.assertNotIn(
             post.id,
@@ -1338,8 +1320,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             small_group=self.old_group,
         )
 
-        self.author.profile.small_group = self.new_group
-        self.author.profile.save()
 
         post.refresh_from_db()
         self.assertTrue(post.can_be_seen_by(self.old_group_member))
@@ -1354,8 +1334,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             small_group=self.old_group,
             structure_unit=self.old_unit,
         )
-        self.author.profile.small_group = self.new_group
-        self.author.profile.save()
 
         self.client.login(username=self.author.username, password="TestPass123!")
         response = self.client.post(
@@ -1438,7 +1416,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
         ChurchStructureMembership.objects.filter(user=self.author).update(
             unit=self.new_unit,
         )
-        self.assertEqual(self.author.profile.small_group, self.old_group)
         self.client.login(username=self.author.username, password="TestPass123!")
 
         for original_visibility in [
@@ -1556,7 +1533,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             "invariant_form_membership_only",
             membership_unit=self.old_unit,
         )
-        self.assertIsNone(membership_only.profile.small_group)
 
         form = ReflectionCommentForm(
             {
@@ -1576,7 +1552,6 @@ class ReflectionPrivacyInvariantTests(TestCase):
             group=self.old_group,
             membership_unit=None,
         )
-        self.assertEqual(profile_only.profile.small_group, self.old_group)
         profile_form = ReflectionCommentForm(
             {
                 "body": "Profile-only attempted group post",
@@ -1900,9 +1875,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
 
     def create_user(self, username, *, group=None):
         user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
         return user
 
     def create_unit(self, code, *, unit_type=None, parent=None):
@@ -2073,509 +2045,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertEqual(response.context["selected_group"], self.other_group)
 
 
-class GroupProgressShadowModeTests(TestCase):
-    """CS-CORE.4E group-progress membership-core shadow mode (comparison only).
-
-    The shadow layer (``compute_group_progress_shadow`` and friends) computes a
-    membership-core candidate default/roster alongside the legacy ``Profile.small_group``
-    baseline. The shadow functions themselves never grant/deny access and never mutate
-    the selected group, roster, or permissions; they stay a diagnostic/rollback
-    comparison that recomputes the legacy baseline and compares it to the candidate.
-
-    Note the *runtime* page has since moved on from that legacy baseline for the
-    switched pieces: the visible roster follows the membership-core source after
-    CS-CORE.4F.1, and the no-``?group=`` default selected group is a permission-fenced
-    membership-core candidate after CS-CORE.4F.2 (used only when already in the legacy
-    ``get_accessible_progress_groups()`` set). The group-progress permission and
-    accessible group list remain legacy, and ordinary membership never grants progress
-    access.
-    """
-
-    def setUp(self):
-        self.district = District.objects.create(name="Shadow District")
-        self.other_district = District.objects.create(name="Shadow Other District")
-        self.group_unit = self.create_unit("SHADOW-GROUP")
-        self.other_group_unit = self.create_unit("SHADOW-OTHER")
-        self.group = SmallGroup.objects.create(
-            name="Shadow Group",
-            district=self.district,
-            church_structure_unit=self.group_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Shadow Other Group",
-            district=self.other_district,
-            church_structure_unit=self.other_group_unit,
-        )
-
-        # Viewer belongs to self.group under both legacy and membership sources.
-        self.viewer = self.create_user("shadow_viewer", group=self.group)
-        self.create_membership(self.viewer, self.group_unit)
-
-        self.plan = ReadingPlan.objects.create(name="Shadow Plan", is_active=True)
-        self.day = ReadingPlanDay.objects.create(
-            plan=self.plan,
-            day_number=1,
-            reading_text="John 1",
-            memory_verse="John 1:1",
-        )
-        self.active_plan = ActivePlan.objects.create(
-            plan=self.plan,
-            start_date=timezone.localdate(),
-            title="Shadow Active Plan",
-        )
-        PlanEnrollment.objects.create(user=self.viewer, active_plan=self.active_plan)
-
-    def create_user(self, username, *, group=None):
-        user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
-        return user
-
-    def create_unit(self, code, *, unit_type=None, parent=None):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            parent=parent,
-        )
-
-    def create_membership(self, user, unit):
-        return ChurchStructureMembership.objects.create(
-            user=user,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
-
-    def progress_response_for(self, user, *, group=None):
-        self.client.login(username=user.username, password="TestPass123!")
-        params = {}
-        if group is not None:
-            params["group"] = group.id
-        response = self.client.get(reverse("my_group_progress"), params)
-        self.assertEqual(response.status_code, 200)
-        self.client.logout()
-        return response
-
-    def row_usernames(self, response):
-        return {row["member"].username for row in response.context["member_rows"]}
-
-    def shadow_for(self, user, group):
-        return compute_group_progress_shadow(user, group)
-
-    def test_default_stays_legacy_and_roster_now_membership_core(self):
-        membership_only = self.create_user("shadow_membership_only")
-        self.create_membership(membership_only, self.group_unit)
-
-        response = self.progress_response_for(self.viewer, group=self.group)
-
-        # Explicit ?group=self.group is honored through the unchanged legacy
-        # permission gate (self.group is legacy-accessible to the viewer). Here the
-        # CS-CORE.4F.2 membership-core default candidate would also resolve to
-        # self.group — the viewer's active primary membership maps to it — so the
-        # legacy baseline and the permission-fenced membership default coincide.
-        self.assertEqual(response.context["selected_group"], self.group)
-        # CS-CORE.4F.1: the visible roster switched to the membership-core source,
-        # so the membership-only user (no legacy Profile.small_group) now appears
-        # alongside the viewer, who also has an active primary membership.
-        self.assertEqual(
-            self.row_usernames(response),
-            {"shadow_viewer", "shadow_membership_only"},
-        )
-
-    def test_shadow_context_present_but_not_user_visible(self):
-        response = self.progress_response_for(self.viewer, group=self.group)
-
-        shadow = response.context["group_progress_shadow"]
-        self.assertIsInstance(shadow, GroupProgressShadow)
-
-        # Internal shadow labels and reason codes are never rendered to the page.
-        self.assertNotContains(response, "group_progress_shadow")
-        self.assertNotContains(response, "membership_candidate_group_id")
-        self.assertNotContains(response, "would_gain")
-        self.assertNotContains(response, REASON_DEFAULT_SAME)
-        self.assertNotContains(response, REASON_ROSTER_SAME)
-
-    def test_same_default_and_same_roster_when_sources_agree(self):
-        shadow = self.shadow_for(self.viewer, self.group)
-
-        self.assertEqual(shadow.legacy_selected_group_id, self.group.id)
-        self.assertEqual(shadow.membership_candidate_group_id, self.group.id)
-        self.assertTrue(shadow.same_default)
-        self.assertTrue(shadow.same_roster)
-        self.assertEqual(shadow.would_gain_user_ids, frozenset())
-        self.assertEqual(shadow.would_lose_user_ids, frozenset())
-        self.assertIn(REASON_DEFAULT_SAME, shadow.reason_codes)
-        self.assertIn(REASON_ROSTER_SAME, shadow.reason_codes)
-
-    def test_would_gain_membership_only_member(self):
-        gain_user = self.create_user("shadow_gain")
-        self.create_membership(gain_user, self.group_unit)
-
-        shadow = self.shadow_for(self.viewer, self.group)
-
-        self.assertIn(gain_user.id, shadow.would_gain_user_ids)
-        self.assertNotIn(gain_user.id, shadow.legacy_roster_user_ids)
-        self.assertIn(gain_user.id, shadow.membership_roster_user_ids)
-        self.assertFalse(shadow.same_roster)
-        self.assertIn(REASON_ROSTER_WOULD_GAIN, shadow.reason_codes)
-
-    def test_would_lose_profile_only_member(self):
-        lose_user = self.create_user("shadow_lose", group=self.group)
-
-        shadow = self.shadow_for(self.viewer, self.group)
-
-        self.assertIn(lose_user.id, shadow.would_lose_user_ids)
-        self.assertIn(lose_user.id, shadow.legacy_roster_user_ids)
-        self.assertNotIn(lose_user.id, shadow.membership_roster_user_ids)
-        self.assertFalse(shadow.same_roster)
-        self.assertIn(REASON_ROSTER_WOULD_LOSE, shadow.reason_codes)
-
-    def test_profile_membership_mismatch_records_default_divergence(self):
-        mismatch_user = self.create_user("shadow_mismatch", group=self.group)
-        self.create_membership(mismatch_user, self.other_group_unit)
-
-        shadow = self.shadow_for(mismatch_user, self.group)
-
-        self.assertEqual(shadow.legacy_selected_group_id, self.group.id)
-        self.assertEqual(shadow.membership_candidate_group_id, self.other_group.id)
-        self.assertFalse(shadow.same_default)
-        self.assertIn(REASON_PROFILE_MEMBERSHIP_MISMATCH, shadow.reason_codes)
-        self.assertIn(REASON_DEFAULT_WOULD_CHANGE, shadow.reason_codes)
-
-    def test_multiple_active_primary_memberships_fail_closed(self):
-        ambiguous_user = self.create_user("shadow_ambiguous", group=self.group)
-        # bulk_create bypasses the single-active-primary model validation so the
-        # helper's fail-closed handling of an ambiguous state is exercised.
-        today = timezone.localdate()
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=ambiguous_user,
-                    unit=self.group_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-                ChurchStructureMembership(
-                    user=ambiguous_user,
-                    unit=self.other_group_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-            ]
-        )
-
-        shadow = self.shadow_for(ambiguous_user, self.group)
-
-        # Candidate refuses to silently choose a default group.
-        self.assertIsNone(shadow.membership_candidate_group_id)
-        self.assertIn(
-            REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY, shadow.reason_codes
-        )
-        self.assertFalse(shadow.same_default)
-
-    def test_unmapped_selected_group_yields_empty_candidate_roster(self):
-        unmapped_group = SmallGroup.objects.create(
-            name="Shadow Unmapped Group",
-            district=self.district,
-            church_structure_unit=None,
-        )
-        unmapped_member = self.create_user("shadow_unmapped", group=unmapped_group)
-        PlanEnrollment.objects.create(
-            user=unmapped_member, active_plan=self.active_plan
-        )
-
-        shadow = self.shadow_for(unmapped_member, unmapped_group)
-        self.assertEqual(shadow.membership_roster_user_ids, frozenset())
-        self.assertIn(REASON_SELECTED_GROUP_UNMAPPED, shadow.reason_codes)
-
-        # A staff viewer can still select the unmapped group; its membership-core
-        # roster fails closed to empty (no crash). After CS-CORE.2D-B an ordinary user
-        # can no longer reach an unmapped group at all.
-        staff = User.objects.create_user(
-            username="shadow_unmapped_staff",
-            password="TestPass123!",
-            is_staff=True,
-        )
-        response = self.progress_response_for(staff, group=unmapped_group)
-        self.assertEqual(response.context["selected_group"], unmapped_group)
-        self.assertEqual(list(response.context["member_rows"]), [])
-
-    def test_ordinary_membership_grants_own_group_not_legacy_profile_group(self):
-        # CS-CORE.2D-B: progress access follows the active primary membership, not
-        # Profile.small_group. This user's profile points to self.group but their
-        # membership points into other_group's unit, so only other_group is accessible
-        # (its own mapped group) and the legacy profile group is not.
-        ordinary_user = self.create_user("shadow_ordinary", group=self.group)
-        self.create_membership(ordinary_user, self.other_group_unit)
-        PlanEnrollment.objects.create(user=ordinary_user, active_plan=self.active_plan)
-
-        self.assertTrue(can_view_group_progress_for(ordinary_user, self.other_group))
-        self.assertFalse(can_view_group_progress_for(ordinary_user, self.group))
-        self.assertEqual(
-            set(
-                get_accessible_progress_groups(ordinary_user).values_list(
-                    "id", flat=True
-                )
-            ),
-            {self.other_group.id},
-        )
-
-        response = self.progress_response_for(ordinary_user, group=self.group)
-        # self.group is no longer accessible; selection falls back to the own group.
-        self.assertEqual(response.context["selected_group"], self.other_group)
-
-    def test_no_selected_group_reports_only_default_divergence(self):
-        membership_only = self.create_user("shadow_only_member")
-        self.create_membership(membership_only, self.group_unit)
-
-        shadow = self.shadow_for(membership_only, None)
-
-        self.assertIsNone(shadow.legacy_selected_group_id)
-        self.assertEqual(shadow.membership_candidate_group_id, self.group.id)
-        self.assertEqual(shadow.legacy_roster_user_ids, frozenset())
-        self.assertEqual(shadow.membership_roster_user_ids, frozenset())
-        self.assertIn(REASON_LEGACY_NO_SELECTED_GROUP, shadow.reason_codes)
-        self.assertIn(REASON_DEFAULT_WOULD_CHANGE, shadow.reason_codes)
-
-    def test_no_active_primary_membership_fails_closed_on_default(self):
-        no_membership_user = self.create_user("shadow_no_membership", group=self.group)
-
-        shadow = self.shadow_for(no_membership_user, self.group)
-
-        self.assertIsNone(shadow.membership_candidate_group_id)
-        self.assertIn(REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY, shadow.reason_codes)
-
-    def test_shadow_roster_divergence_agrees_with_audit_command(self):
-        gain_user = self.create_user("shadow_agree_gain")
-        self.create_membership(gain_user, self.group_unit)
-        lose_user = self.create_user("shadow_agree_lose", group=self.group)
-
-        shadow = self.shadow_for(self.viewer, self.group)
-        audit = run_audit()
-
-        # self.other_group has no members or memberships, so the only roster
-        # divergence the read-only audit can find is in self.group, matching the
-        # helper's would-gain / would-lose sets exactly.
-        self.assertEqual(
-            audit["stats"]["progress_would_gain"],
-            len(shadow.would_gain_user_ids),
-        )
-        self.assertEqual(
-            audit["stats"]["progress_would_lose"],
-            len(shadow.would_lose_user_ids),
-        )
-        self.assertEqual(shadow.would_gain_user_ids, frozenset({gain_user.id}))
-        self.assertEqual(shadow.would_lose_user_ids, frozenset({lose_user.id}))
-
-
-class GroupProgressShadowAuditCommandTests(TestCase):
-    """CS-CORE.4E.1 operational group-progress shadow audit command tests.
-
-    The command is read-only: it compares the legacy ``Profile.small_group`` roster
-    and default against a membership-core candidate and writes nothing. It never
-    switches the runtime source, changes a roster/default, or grants progress access.
-    """
-
-    def run_command(self, *args):
-        output = StringIO()
-        call_command("audit_group_progress_shadow", *args, stdout=output)
-        return output.getvalue()
-
-    def create_unit(self, code, *, unit_type=None, parent=None):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=code,
-            parent=parent,
-        )
-
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
-    def create_user(self, username, *, group=None):
-        user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
-        return user
-
-    def create_membership(self, user, unit, **overrides):
-        defaults = {
-            "user": user,
-            "unit": unit,
-            "status": ChurchStructureMembership.STATUS_ACTIVE,
-            "is_primary": True,
-            "start_date": timezone.localdate(),
-        }
-        defaults.update(overrides)
-        return ChurchStructureMembership.objects.create(**defaults)
-
-    def assert_summary_count(self, output, key, count):
-        self.assertIn(f"{key}: {count}", output)
-
-    def test_command_runs_read_only_and_prints_summary(self):
-        unit = self.create_unit("AUDIT-GP-RO")
-        group = self.create_group("Audit GP Read Only", unit=unit)
-        user = self.create_user("audit_gp_ro", group=group)
-        self.create_membership(user, unit)
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("READ-ONLY: no data was changed.", output)
-        self.assertIn(
-            "Runtime roster is membership-core after CS-CORE.4F.1 and the no-?group= "
-            "default selected group is permission-fenced membership-core after "
-            "CS-CORE.4F.2; permission and the accessible group list remain legacy-driven.",
-            output,
-        )
-        self.assert_summary_count(output, "groups_checked", 1)
-
-    def test_same_roster_group_reports_same_and_no_drift(self):
-        unit = self.create_unit("AUDIT-GP-SAME")
-        group = self.create_group("Audit GP Same", unit=unit)
-        user = self.create_user("audit_gp_same", group=group)
-        self.create_membership(user, unit)
-
-        output = self.run_command("--fail-on-drift")
-
-        self.assert_summary_count(output, "groups_checked", 1)
-        self.assert_summary_count(output, "groups_same_roster", 1)
-        self.assert_summary_count(output, "groups_with_roster_gain", 0)
-        self.assert_summary_count(output, "groups_with_roster_loss", 0)
-        self.assert_summary_count(output, "progress_would_gain", 0)
-        self.assert_summary_count(output, "progress_would_lose", 0)
-        self.assert_summary_count(output, "default_would_change", 0)
-
-    def test_would_gain_membership_only_user_reported(self):
-        unit = self.create_unit("AUDIT-GP-GAIN")
-        group = self.create_group("Audit GP Gain", unit=unit)
-        # Membership under the group's unit, but no legacy Profile.small_group.
-        gain_user = self.create_user("audit_gp_gain")
-        self.create_membership(gain_user, unit)
-
-        output = self.run_command("--verbose")
-
-        self.assert_summary_count(output, "progress_would_gain", 1)
-        self.assert_summary_count(output, "groups_with_roster_gain", 1)
-        self.assertIn("audit_gp_gain", output)
-
-    def test_would_lose_profile_only_user_reported(self):
-        unit = self.create_unit("AUDIT-GP-LOSE")
-        group = self.create_group("Audit GP Lose", unit=unit)
-        # Legacy default group but no active primary membership.
-        self.create_user("audit_gp_lose", group=group)
-
-        output = self.run_command()
-
-        self.assert_summary_count(output, "progress_would_lose", 1)
-        self.assert_summary_count(output, "groups_with_roster_loss", 1)
-        self.assert_summary_count(output, "membership_no_active_primary", 1)
-
-    def test_unmapped_group_reported_and_candidate_fails_closed(self):
-        group = self.create_group("Audit GP Unmapped", unit=None)
-        self.create_user("audit_gp_unmapped", group=group)
-
-        output = self.run_command()
-
-        self.assert_summary_count(output, "selected_group_unmapped", 1)
-        # Legacy member is present but the candidate roster is empty -> would lose.
-        self.assert_summary_count(output, "progress_would_lose", 1)
-
-    def test_multiple_active_primary_membership_fails_closed(self):
-        unit = self.create_unit("AUDIT-GP-MULTI")
-        other_unit = self.create_unit("AUDIT-GP-MULTI-OTHER")
-        group = self.create_group("Audit GP Multi", unit=unit)
-        user = self.create_user("audit_gp_multi", group=group)
-        # bulk_create bypasses single-active-primary validation to exercise the
-        # fail-closed ambiguity handling, consistent with existing 4E tests.
-        today = timezone.localdate()
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=user,
-                    unit=unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-                ChurchStructureMembership(
-                    user=user,
-                    unit=other_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-            ]
-        )
-
-        output = self.run_command("--verbose")
-
-        self.assert_summary_count(output, "membership_multiple_active_primary", 1)
-
-    def test_group_id_limits_output_to_that_group(self):
-        unit_one = self.create_unit("AUDIT-GP-ONE")
-        unit_two = self.create_unit("AUDIT-GP-TWO")
-        group_one = self.create_group("Audit GP One", unit=unit_one)
-        group_two = self.create_group("Audit GP Two", unit=unit_two)
-        user_one = self.create_user("audit_gp_one", group=group_one)
-        self.create_membership(user_one, unit_one)
-        user_two = self.create_user("audit_gp_two", group=group_two)
-        self.create_membership(user_two, unit_two)
-
-        output = self.run_command("--group-id", str(group_one.id))
-
-        self.assert_summary_count(output, "groups_checked", 1)
-        self.assertIn(f"group_id_filter: {group_one.id}", output)
-
-    def test_fail_on_drift_raises_when_drift_exists(self):
-        unit = self.create_unit("AUDIT-GP-DRIFT")
-        group = self.create_group("Audit GP Drift", unit=unit)
-        self.create_user("audit_gp_drift", group=group)
-
-        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
-            self.run_command("--fail-on-drift")
-
-    def test_command_does_not_write_any_rows(self):
-        unit = self.create_unit("AUDIT-GP-NOWRITE")
-        group = self.create_group("Audit GP No Write", unit=unit)
-        user = self.create_user("audit_gp_nowrite", group=group)
-        self.create_membership(user, unit)
-        plan = ReadingPlan.objects.create(name="Audit GP Plan", is_active=True)
-
-        before = {
-            "users": User.objects.count(),
-            "groups": SmallGroup.objects.count(),
-            "memberships": ChurchStructureMembership.objects.count(),
-            "plans": ReadingPlan.objects.count(),
-        }
-
-        self.run_command("--verbose", "--fail-on-drift")
-
-        self.assertEqual(
-            before,
-            {
-                "users": User.objects.count(),
-                "groups": SmallGroup.objects.count(),
-                "memberships": ChurchStructureMembership.objects.count(),
-                "plans": ReadingPlan.objects.count(),
-            },
-        )
-        # Sanity: the plan we created is still the only one.
-        self.assertEqual(ReadingPlan.objects.filter(id=plan.id).count(), 1)
-
-
 class GroupProgressRosterSourceSwitchTests(TestCase):
     """CS-CORE.4F.1 locks the group-progress roster-only source switch.
 
@@ -2632,9 +2101,6 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
 
     def create_user(self, username, *, group=None):
         user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
         return user
 
     def create_unit(self, code, *, unit_type=None, parent=None):
@@ -2683,7 +2149,6 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
 
         self.assertIn("switch_membership", self.row_usernames(response))
         membership_user.refresh_from_db()
-        self.assertIsNone(membership_user.profile.small_group)
 
     def test_legacy_profile_only_user_excluded_from_roster(self):
         # User has Profile.small_group=group but no active primary membership; the
@@ -2797,21 +2262,6 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
             list(get_membership_core_progress_roster_users(unmapped_group)), []
         )
 
-    def test_audit_command_remains_readonly_gate_after_runtime_switch(self):
-        # The runtime roster switch is implemented, but audit_group_progress_shadow
-        # stays a read-only gate: it still detects legacy-vs-membership drift and
-        # --fail-on-drift would still block. A legacy profile-only member (no active
-        # primary membership) creates would-lose drift against the candidate.
-        self.create_user("switch_drift_profile_only", group=self.group)
-
-        output = StringIO()
-        with self.assertRaisesMessage(CommandError, "progress_would_lose=1"):
-            call_command(
-                "audit_group_progress_shadow", "--fail-on-drift", stdout=output
-            )
-        # Still read-only: nothing about runtime was changed by the command.
-        self.assertIn("READ-ONLY: no data was changed.", output.getvalue())
-
 
 class GroupProgressDefaultSourceSwitchTests(TestCase):
     """CS-CORE.4F.2 + READING-STRUCT.1D lock the default-selected-group source.
@@ -2884,9 +2334,6 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
     def create_user(self, username, *, group=None):
         user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
         return user
 
     def create_unit(self, code, *, unit_type=None, parent=None):
@@ -4127,8 +3574,6 @@ class BibleReadingFlowTests(TestCase):
         self.assertIn("/login/", response.url)
 
     def test_user_without_group_sees_clear_message(self):
-        self.user.profile.small_group = None
-        self.user.profile.save()
 
         self.client.login(username="levin", password="testpass123")
 
@@ -4145,12 +3590,8 @@ class BibleReadingFlowTests(TestCase):
         # Profile.small_group keeps legacy permission/default for the viewer; the
         # visible roster is membership-core after CS-CORE.4F.1, so members also need
         # an active primary membership under the group's mapped unit.
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.add_active_primary_membership(self.user, group_unit)
 
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
         self.add_active_primary_membership(self.other_user, group_unit)
 
         outside_user = User.objects.create_user(
@@ -4158,8 +3599,6 @@ class BibleReadingFlowTests(TestCase):
             email="outside@example.com",
             password="testpass123",
         )
-        outside_user.profile.small_group = other_group
-        outside_user.profile.save()
         # Membership in another mapped group unit: outside the selected roster.
         self.add_active_primary_membership(outside_user, other_unit)
 
@@ -4188,12 +3627,8 @@ class BibleReadingFlowTests(TestCase):
     def test_group_progress_shows_checked_and_missing_status(self):
         group_unit = self.map_group_to_unit(self.group, "FLOW-STATUS-GROUP")
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.add_active_primary_membership(self.user, group_unit)
 
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
         self.add_active_primary_membership(self.other_user, group_unit)
 
         PlanEnrollment.objects.create(
@@ -4222,12 +3657,8 @@ class BibleReadingFlowTests(TestCase):
     def test_group_progress_shows_not_joined_member(self):
         group_unit = self.map_group_to_unit(self.group, "FLOW-NOTJOINED-GROUP")
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.add_active_primary_membership(self.user, group_unit)
 
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
         self.add_active_primary_membership(self.other_user, group_unit)
 
         PlanEnrollment.objects.create(
@@ -4752,8 +4183,6 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -4793,8 +4222,6 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         PlanEnrollment.objects.create(
             user=self.user,
             active_plan=self.active_plan,
@@ -5040,8 +4467,6 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
         self.add_active_primary_membership(self.user, self.group_unit)
 
@@ -5592,8 +5017,6 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
         self.add_active_primary_membership(self.user, self.group_unit)
 
@@ -5664,12 +5087,8 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.add_active_primary_membership(self.user, self.group_unit)
 
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
         self.add_active_primary_membership(self.other_user, self.group_unit)
 
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
@@ -5703,11 +5122,7 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
-        self.other_user.profile.small_group = other_group
-        self.other_user.profile.save()
 
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
         PlanEnrollment.objects.create(user=self.other_user, active_plan=self.active_plan)
@@ -5982,8 +5397,6 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         # CS-CORE.4G.3: group sharing is membership-core, not Profile.small_group.
         self.add_active_primary_membership(self.user, self.group_unit)
 
@@ -6023,8 +5436,6 @@ class BibleReadingFlowTests(TestCase):
         )
 
     def test_user_can_edit_own_reflection_body_visibility_and_anonymous(self):
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         comment = ReflectionComment.objects.create(
             user=self.user,
@@ -6242,12 +5653,8 @@ class BibleReadingFlowTests(TestCase):
         self.day1.reading_text = "John 1"
         self.day1.save()
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.add_active_primary_membership(self.user, self.group_unit)
 
-        self.other_user.profile.small_group = self.group
-        self.other_user.profile.save()
         self.add_active_primary_membership(self.other_user, self.group_unit)
 
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
@@ -6364,8 +5771,6 @@ class TodayActionCenterTests(TestCase):
             username="member",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         self.staff = User.objects.create_user(
             username="staff_member",
@@ -6458,12 +5863,20 @@ class TodayActionCenterTests(TestCase):
             lesson_date=timezone.localdate(),
             status=BibleStudyLesson.STATUS_PUBLISHED,
         )
-        return BibleStudyMeeting.objects.create(
+        # BS-MEETING-MIRROR.1A removed the legacy BibleStudyMeeting.small_group FK.
+        # V2 belonging is structure-native: anchor on the group's mapped unit and
+        # carry an audience-scope row (ordinary-member visibility reads these rows
+        # plus active primary membership; zero-row meetings fail closed).
+        unit = small_group.church_structure_unit if small_group else None
+        meeting = BibleStudyMeeting.objects.create(
             lesson=lesson,
-            small_group=small_group,
+            anchor_unit=unit,
             meeting_datetime=meeting_datetime or timezone.now() + timedelta(days=days_from_now),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
+        if unit is not None:
+            BibleStudyMeetingAudienceScope.objects.create(meeting=meeting, unit=unit)
+        return meeting
 
     def get_home(self, user=None, language="en"):
         self.client.force_login(user or self.user)
@@ -6615,8 +6028,6 @@ class TodayActionCenterTests(TestCase):
 
     def test_no_small_group_empty_state(self):
         self.user.church_structure_memberships.all().delete()
-        self.user.profile.small_group = None
-        self.user.profile.save()
 
         response = self.get_home()
 
@@ -6626,8 +6037,6 @@ class TodayActionCenterTests(TestCase):
         )
 
     def test_membership_only_user_sees_v2_meeting(self):
-        self.user.profile.small_group = None
-        self.user.profile.save()
         self.make_meeting(
             small_group=self.group,
             lesson_title_en="Membership Only Today Lesson",
@@ -6776,8 +6185,6 @@ class TodayActionCenterTests(TestCase):
             username="other_member",
             password="TestPass123!",
         )
-        self.other_user.profile.small_group = self.other_group
-        self.other_user.profile.save()
         other_meeting = self.make_meeting(small_group=self.other_group)
         self.add_role(
             other_meeting,
@@ -6946,8 +6353,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         group = self.create_group("Clean Group", unit=unit)
         self.create_group_reflection(structure_unit=unit, body="clean body")
         member = User.objects.create_user(username="clean_member")
-        member.profile.small_group = group
-        member.profile.save()
         self.add_active_primary_membership(member, unit)
 
         audit = run_reading_structure_runtime_audit()
@@ -6959,7 +6364,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         self.assertEqual(stats["progress_groups_total"], 1)
         self.assertEqual(stats["progress_groups_resolvable"], 1)
         self.assertEqual(stats["users_with_single_active_primary_membership"], 1)
-        self.assertEqual(stats["users_profile_group_without_single_membership"], 0)
         self.assertEqual(audit["blockers"], [])
 
         # --fail-on-blockers must succeed (no error) on clean data.
@@ -7032,24 +6436,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         self.assertEqual(stats["progress_groups_resolvable"], 0)
         self.assertIn("progress_groups_missing_mapping", audit["blockers"])
 
-    def test_profile_only_user_without_membership_is_blocker(self):
-        unit = self.create_unit("PROF-SG")
-        group = self.create_group("Profile Only Group", unit=unit)
-        member = User.objects.create_user(username="profile_only")
-        member.profile.small_group = group
-        member.profile.save()
-        # No ChurchStructureMembership created for this user.
-
-        audit = run_reading_structure_runtime_audit()
-        stats = audit["stats"]
-
-        self.assertEqual(stats["users_with_profile_small_group"], 1)
-        self.assertEqual(stats["users_with_no_active_primary_membership"], 1)
-        self.assertEqual(stats["users_profile_group_without_single_membership"], 1)
-        self.assertIn(
-            "users_profile_group_without_single_membership", audit["blockers"]
-        )
-
     def test_multiple_active_primary_membership_is_blocker(self):
         unit_a = self.create_unit("MULTI-A")
         unit_b = self.create_unit("MULTI-B")
@@ -7084,8 +6470,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         group = self.create_group("Read Only Group", unit=unit)
         self.create_group_reflection(structure_unit=unit, body="read only body")
         member = User.objects.create_user(username="ro_member")
-        member.profile.small_group = group
-        member.profile.save()
         self.add_active_primary_membership(member, unit)
 
         before = {

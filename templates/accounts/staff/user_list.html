@@ -29,7 +29,6 @@
                 <tr>
                     <th>{{ ui.username }}</th>
                     <th>{{ ui.admin_email }}</th>
-                    <th>{{ ui.admin_small_group }}</th>
                     <th>{{ ui.language }}</th>
                     <th>{{ ui.password_status }}</th>
                     <th>{{ ui.action }}</th>
@@ -40,13 +39,6 @@
                 <tr>
                     <td>{{ member.username }}</td>
                     <td>{{ member.email|default:"-" }}</td>
-                    <td>
-                        {% if member.profile.small_group %}
-                        {{ member.profile.small_group.name }}
-                        {% else %}
-                        -
-                        {% endif %}
-                    </td>
                     <td>{{ member.profile.preferred_language }}</td>
                     <td>
                         {% if member.profile.must_change_password %}
@@ -64,7 +56,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6">{{ ui.no_users_found }}</td>
+                    <td colspan="5">{{ ui.no_users_found }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -110,24 +110,18 @@ class ServiceEventFoundationTests(TestCase):
             email="regular@example.com",
             password="testpass123",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         self.same_district_user = User.objects.create_user(
             username="same_district",
             email="same@example.com",
             password="testpass123",
         )
-        self.same_district_user.profile.small_group = self.same_district_group
-        self.same_district_user.profile.save()
 
         self.other_user = User.objects.create_user(
             username="other_group",
             email="other@example.com",
             password="testpass123",
         )
-        self.other_user.profile.small_group = self.other_group
-        self.other_user.profile.save()
 
         self.staff = User.objects.create_user(
             username="event_staff",
@@ -2467,8 +2461,6 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         """Create an in-sync member: legacy group plus matching membership."""
         user = User.objects.create_user(username=username, password="testpass123")
         if small_group is not None:
-            user.profile.small_group = small_group
-            user.profile.save()
             self.create_membership(user, small_group.church_structure_unit)
         return user
 
@@ -2621,8 +2613,6 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
             username="audience_profile_only",
             password="testpass123",
         )
-        profile_only.profile.small_group = self.group
-        profile_only.profile.save()
 
         event = self.create_event()
         self.add_audience(event, self.group_unit)

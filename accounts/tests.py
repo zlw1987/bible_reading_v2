@@ -89,7 +89,6 @@ class AccountProfileTests(TestCase):
             password="OldPass123!",
         )
 
-        self.user.profile.small_group = self.group
         self.user.profile.preferred_language = "zh"
         self.user.profile.save()
 
@@ -148,7 +147,6 @@ class AccountProfileTests(TestCase):
     def test_profile_page_no_membership_shows_no_group_not_legacy_profile(self):
         # CS-RETIRE.1A: with a legacy Profile.small_group but no active primary
         # membership, the page shows the no-group state, not the legacy group.
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertFalse(
             ChurchStructureMembership.objects.filter(user=self.user).exists()
         )
@@ -182,7 +180,6 @@ class AccountProfileTests(TestCase):
         self.user.profile.refresh_from_db()
 
         self.assertEqual(self.user.email, "")
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertEqual(self.user.profile.preferred_language, "en")
         self.assertEqual(self.client.session["language"], "en")
         self.assertFalse(
@@ -227,7 +224,6 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(self.user.email, "levin@example.com")
         self.assertEqual(self.user.profile.preferred_language, "en")
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertEqual(membership.unit, self.other_unit)
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
         self.assertEqual(
@@ -259,7 +255,6 @@ class AccountProfileTests(TestCase):
 
         self.assertEqual(membership.unit, self.fellowship_unit)
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
-        self.assertEqual(self.user.profile.small_group, self.group)
 
     def test_profile_rejects_inactive_requested_unit(self):
         inactive_unit = ChurchStructureUnit.objects.create(
@@ -285,7 +280,6 @@ class AccountProfileTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.email, "")
         self.assertEqual(self.user.profile.preferred_language, "zh")
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertFalse(
             ChurchStructureMembership.objects.filter(user=self.user).exists(),
         )
@@ -313,7 +307,6 @@ class AccountProfileTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.email, "")
         self.assertEqual(self.user.profile.preferred_language, "zh")
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertFalse(
             ChurchStructureMembership.objects.filter(user=self.user).exists(),
         )
@@ -386,7 +379,6 @@ class AccountProfileTests(TestCase):
         self.assertEqual(pending.unit, self.other_unit)
         self.assertFalse(pending.is_primary)
         self.user.profile.refresh_from_db()
-        self.assertEqual(self.user.profile.small_group, self.group)
 
     def test_profile_request_does_not_grant_runtime_access_or_permissions(self):
         district = District.objects.create(name="Profile District")
@@ -414,7 +406,6 @@ class AccountProfileTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
         self.user.profile.refresh_from_db()
-        self.assertEqual(self.user.profile.small_group, self.group)
         self.assertFalse(event.can_be_seen_by(self.user))
         self.assertFalse(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
         self.assertEqual(TeamMembership.objects.count(), 0)
@@ -449,11 +440,11 @@ class AccountProfileTests(TestCase):
         self.assertEqual(list_response.status_code, 200)
         self.assertContains(list_response, "levin")
         self.assertContains(list_response, "Profile Rainbow 5")
-        self.assertContains(list_response, "Rainbow 4")
+        # PROFILE-SG-FIELD-RETIRE.1A removed the legacy current-group column, so the
+        # legacy Profile.small_group name ("Rainbow 4") is no longer displayed.
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "levin")
         self.assertContains(detail_response, "Profile Rainbow 5")
-        self.assertContains(detail_response, "Rainbow 4")
 
     def test_password_change_page_requires_login(self):
         response = self.client.get(reverse("password_change"))
@@ -1046,22 +1037,6 @@ class MinistryContextBridgeTests(TestCase):
         self.assertEqual(group.church_structure_unit, unit)
         self.assertIn(group, unit.legacy_small_groups.all())
 
-    def test_profile_small_group_behavior_is_unchanged(self):
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
-        user = User.objects.create_user(
-            username="member_context",
-            password="TestPass123!",
-        )
-
-        user.profile.small_group = group
-        user.profile.save()
-
-        user.profile.refresh_from_db()
-        self.assertEqual(user.profile.small_group, group)
-        self.assertIn(user.profile, group.members.all())
-
-
     def test_zero_row_service_event_no_longer_driven_by_profile_small_group(self):
         # SE-RETIRE.1B: this previously asserted that Profile.small_group drove
         # zero-row ServiceEvent scope. The zero-row legacy runtime fallback is
@@ -1079,10 +1054,6 @@ class MinistryContextBridgeTests(TestCase):
             password="TestPass123!",
         )
 
-        user.profile.small_group = group
-        user.profile.save()
-        other_user.profile.small_group = other_group
-        other_user.profile.save()
 
         event = ServiceEvent.objects.create(
             title="District Service",
@@ -1379,8 +1350,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
 
     def create_user(self, username, small_group):
         user = User.objects.create_user(username=username, password="testpass123")
-        user.profile.small_group = small_group
-        user.profile.save(update_fields=["small_group"])
         return user
 
     def create_membership(self, user, unit, **overrides):
@@ -1400,78 +1369,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self.assertEqual(
             set(resolve_units_to_small_groups(units)),
             set(expected_groups),
-        )
-
-    def test_get_user_legacy_small_group_uses_profile_small_group_only(self):
-        from accounts.structure_selectors import get_user_legacy_small_group
-
-        missing_profile_user = User.objects.create_user(
-            username="selector_missing_profile",
-            password="testpass123",
-        )
-        missing_profile_user.profile.delete()
-
-        self.assertEqual(get_user_legacy_small_group(self.group_user), self.group)
-        self.assertIsNone(get_user_legacy_small_group(self.no_group_user))
-        self.assertIsNone(get_user_legacy_small_group(missing_profile_user))
-        self.assertIsNone(get_user_legacy_small_group(AnonymousUser()))
-        self.assertIsNone(get_user_legacy_small_group(object()))
-
-    def test_get_user_legacy_structure_unit_uses_mapped_profile_group_only(self):
-        from accounts.structure_selectors import get_user_legacy_structure_unit
-
-        yesterday = timezone.localdate() - timedelta(days=1)
-        ChurchStructureMembership.objects.create(
-            user=self.unmapped_group_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=yesterday,
-        )
-
-        self.assertEqual(
-            get_user_legacy_structure_unit(self.group_user),
-            self.group_unit,
-        )
-        self.assertIsNone(get_user_legacy_structure_unit(self.unmapped_group_user))
-        self.assertIsNone(get_user_legacy_structure_unit(self.no_group_user))
-
-    def test_get_user_legacy_structure_units_can_include_ancestors(self):
-        from accounts.structure_selectors import get_user_legacy_structure_units
-
-        yesterday = timezone.localdate() - timedelta(days=1)
-        ChurchStructureMembership.objects.create(
-            user=self.no_group_user,
-            unit=self.group_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=yesterday,
-        )
-
-        self.assertEqual(
-            get_user_legacy_structure_units(self.group_user),
-            [self.group_unit],
-        )
-        self.assertEqual(
-            get_user_legacy_structure_units(
-                self.group_user,
-                include_ancestors=True,
-            ),
-            [self.root_unit, self.cm_unit, self.north_unit, self.group_unit],
-        )
-        self.assertEqual(
-            get_user_legacy_structure_units(
-                self.unmapped_group_user,
-                include_ancestors=True,
-            ),
-            [],
-        )
-        self.assertEqual(
-            get_user_legacy_structure_units(
-                self.no_group_user,
-                include_ancestors=True,
-            ),
-            [],
         )
 
     def test_resolve_units_to_small_groups_preserves_legacy_semantics(self):
@@ -1714,7 +1611,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
     ):
         from accounts.structure_selectors import (
             resolve_units_to_small_groups,
-            user_matches_legacy_structure_audience,
             user_matches_membership_structure_audience,
             user_matches_structure_audience,
         )
@@ -1726,9 +1622,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
             user_matches_membership_structure_audience(member, [self.unmapped_unit])
         )
         self.assertTrue(user_matches_structure_audience(member, [self.unmapped_unit]))
-        self.assertFalse(
-            user_matches_legacy_structure_audience(member, [self.unmapped_unit])
-        )
         self.assertEqual(list(resolve_units_to_small_groups([self.unmapped_unit])), [])
 
     def test_membership_audience_requested_membership_does_not_match(self):
@@ -1855,42 +1748,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
         )
         self.assertTrue(
             user_matches_membership_structure_audience(user, [self.root_unit])
-        )
-
-    def test_user_matches_legacy_structure_audience_uses_profile_small_group(self):
-        from accounts.structure_selectors import (
-            user_matches_legacy_structure_audience,
-        )
-
-        self.create_membership(self.no_group_user, self.group_unit)
-
-        self.assertFalse(
-            user_matches_legacy_structure_audience(AnonymousUser(), [self.root_unit])
-        )
-        self.assertTrue(
-            user_matches_legacy_structure_audience(self.no_group_user, [self.root_unit])
-        )
-        # Membership grants nothing through the legacy helper.
-        self.assertFalse(
-            user_matches_legacy_structure_audience(
-                self.no_group_user, [self.group_unit]
-            )
-        )
-        self.assertTrue(
-            user_matches_legacy_structure_audience(self.group_user, [self.group_unit])
-        )
-        self.assertTrue(
-            user_matches_legacy_structure_audience(self.group_user, [self.north_unit])
-        )
-        self.assertFalse(
-            user_matches_legacy_structure_audience(
-                self.sibling_user, [self.group_unit]
-            )
-        )
-        self.assertFalse(
-            user_matches_legacy_structure_audience(
-                self.group_user, [self.unmapped_unit]
-            )
         )
 
     def test_user_matches_structure_audience_is_membership_core(self):
@@ -2074,10 +1931,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
             username="seeded_other_member",
             password="TestPass123!",
         )
-        user.profile.small_group = group
-        user.profile.save()
-        other_user.profile.small_group = other_group
-        other_user.profile.save()
 
         event = ServiceEvent.objects.create(
             title="District Service",
@@ -2088,7 +1941,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
 
         self.run_seed_command("--apply")
 
-        self.assertEqual(user.profile.small_group, group)
         # SE-RETIRE.1B: the seed command still does not create ServiceEvent
         # audience rows, so this zero-row event fails closed for ordinary users
         # (the zero-row legacy fallback via Profile.small_group is retired).
@@ -2359,28 +2211,6 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         self.assertIn("medical", help_text)
         self.assertIn("financial", help_text)
 
-    def test_membership_does_not_change_profile_small_group(self):
-        user = User.objects.create_user(username="profile_unchanged")
-        group = SmallGroup.objects.create(name="Rainbow 4")
-        unit = self.create_unit()
-
-        ChurchStructureMembership.objects.create(
-            user=user,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
-
-        user.profile.refresh_from_db()
-        self.assertIsNone(user.profile.small_group)
-
-        user.profile.small_group = group
-        user.profile.save()
-
-        user.profile.refresh_from_db()
-        self.assertEqual(user.profile.small_group, group)
-
     def test_membership_does_not_change_service_event_visibility(self):
         district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(name="Rainbow 4", district=district)
@@ -2402,595 +2232,11 @@ class ChurchStructureMembershipFoundationTests(TestCase):
 
         self.assertFalse(event.can_be_seen_by(user))
 
-        user.profile.small_group = group
-        user.profile.save()
 
         # SE-RETIRE.1B: with the zero-row legacy fallback retired, neither the
         # membership nor Profile.small_group grants visibility for a zero-row
         # event; it fails closed until it carries audience rows.
         self.assertFalse(event.can_be_seen_by(user))
-
-
-class ChurchStructureMembershipBackfillCommandTests(TestCase):
-    def run_backfill_command(self, *args):
-        output = StringIO()
-        call_command(
-            "backfill_church_structure_memberships",
-            *args,
-            stdout=output,
-        )
-        return output.getvalue()
-
-    def create_mapped_group(self, group_name="Rainbow 4", unit_code="RAINBOW4"):
-        unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=unit_code,
-            name=group_name,
-        )
-        group = SmallGroup.objects.create(
-            name=group_name,
-            church_structure_unit=unit,
-        )
-        return group, unit
-
-    def assign_group(self, user, group):
-        user.profile.small_group = group
-        user.profile.save()
-
-    def test_dry_run_creates_no_memberships(self):
-        group, _unit = self.create_mapped_group()
-        user = User.objects.create_user(username="dry_run_member")
-        self.assign_group(user, group)
-
-        output = self.run_backfill_command()
-
-        self.assertIn("Church structure membership backfill mode: DRY RUN", output)
-        self.assertIn("would_created: 1", output)
-        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
-
-        user.profile.refresh_from_db()
-        self.assertEqual(user.profile.small_group, group)
-
-    def test_apply_creates_active_primary_membership_from_profile_small_group(self):
-        group, unit = self.create_mapped_group()
-        user = User.objects.create_user(username="apply_member")
-        self.assign_group(user, group)
-
-        output = self.run_backfill_command("--apply")
-
-        self.assertIn("Church structure membership backfill mode: APPLY", output)
-        self.assertIn("created: 1", output)
-
-        membership = ChurchStructureMembership.objects.get(user=user)
-        self.assertEqual(membership.unit, unit)
-        self.assertEqual(
-            membership.membership_type,
-            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
-        )
-        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
-        self.assertTrue(membership.is_primary)
-        self.assertEqual(membership.start_date, timezone.localdate())
-        self.assertIsNone(membership.approved_by)
-        self.assertIsNone(membership.approved_at)
-        self.assertIsNone(membership.requested_by)
-        self.assertIn("Backfilled from Profile.small_group", membership.notes)
-
-        user.profile.refresh_from_db()
-        self.assertEqual(user.profile.small_group, group)
-
-    def test_apply_skips_user_without_profile_small_group(self):
-        User.objects.create_user(username="no_profile_group")
-
-        output = self.run_backfill_command("--apply")
-
-        self.assertIn("created: 0", output)
-        self.assertIn("skipped_no_profile_group: 1", output)
-        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
-
-    def test_apply_skips_and_warns_for_unmapped_profile_small_group(self):
-        group = SmallGroup.objects.create(name="Unmapped Group")
-        user = User.objects.create_user(username="unmapped_member")
-        self.assign_group(user, group)
-
-        output = self.run_backfill_command("--apply")
-
-        self.assertIn("WARNING:", output)
-        self.assertIn("skipped_unmapped_group: 1", output)
-        self.assertIn("warnings: 1", output)
-        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
-
-    def test_apply_skips_existing_active_primary_membership(self):
-        group, _unit = self.create_mapped_group()
-        existing_unit = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code="EXISTING",
-            name="Existing Group",
-        )
-        user = User.objects.create_user(username="existing_primary")
-        self.assign_group(user, group)
-        existing = ChurchStructureMembership.objects.create(
-            user=user,
-            unit=existing_unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
-
-        output = self.run_backfill_command("--apply")
-
-        self.assertIn("created: 0", output)
-        self.assertIn("skipped_existing_active_primary: 1", output)
-        self.assertEqual(list(ChurchStructureMembership.objects.all()), [existing])
-
-    def test_apply_and_second_dry_run_are_idempotent(self):
-        group, _unit = self.create_mapped_group()
-        user = User.objects.create_user(username="idempotent_member")
-        self.assign_group(user, group)
-
-        self.run_backfill_command("--apply")
-        second_apply_output = self.run_backfill_command("--apply")
-        dry_run_output = self.run_backfill_command("--dry-run")
-
-        self.assertEqual(ChurchStructureMembership.objects.filter(user=user).count(), 1)
-        self.assertIn("created: 0", second_apply_output)
-        self.assertIn("would_created: 0", dry_run_output)
-        self.assertIn("skipped_existing_active_primary: 1", dry_run_output)
-
-    def test_requested_membership_does_not_block_backfill(self):
-        group, unit = self.create_mapped_group()
-        user = User.objects.create_user(username="requested_backfill")
-        self.assign_group(user, group)
-        ChurchStructureMembership.objects.create(
-            user=user,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_REQUESTED,
-            is_primary=True,
-            start_date=timezone.localdate(),
-            requested_by=user,
-        )
-
-        output = self.run_backfill_command("--apply")
-
-        self.assertIn("created: 1", output)
-        self.assertEqual(ChurchStructureMembership.objects.filter(user=user).count(), 2)
-        self.assertTrue(
-            ChurchStructureMembership.objects.filter(
-                user=user,
-                status=ChurchStructureMembership.STATUS_ACTIVE,
-                is_primary=True,
-            ).exists()
-        )
-
-    def test_backfill_command_preserves_service_event_behavior(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="District 1",
-            ministry_context=context,
-        )
-        group, unit = self.create_mapped_group()
-        group.district = district
-        group.save()
-        user = User.objects.create_user(username="runtime_profile_member")
-        other_user = User.objects.create_user(username="runtime_no_profile_group")
-        self.assign_group(user, group)
-        ChurchStructureMembership.objects.create(
-            user=other_user,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=timezone.localdate(),
-        )
-        event = ServiceEvent.objects.create(
-            title="District Service",
-            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
-            start_datetime=timezone.now(),
-            status=ServiceEvent.STATUS_PUBLISHED,
-        )
-
-        self.run_backfill_command("--apply")
-
-        # SE-RETIRE.1B: the membership backfill creates no ServiceEvent audience
-        # rows, so this zero-row event fails closed for ordinary users; the
-        # retired legacy fallback no longer reads Profile.small_group.
-        self.assertFalse(event.can_be_seen_by(user))
-        self.assertFalse(event.can_be_seen_by(other_user))
-
-    def test_dry_run_and_apply_flags_cannot_be_combined(self):
-        with self.assertRaises(CommandError):
-            self.run_backfill_command("--dry-run", "--apply")
-
-
-class ChurchStructureBelongingAuditCommandTests(TestCase):
-    def run_audit_command(self, *args):
-        output = StringIO()
-        call_command("audit_structure_belonging", *args, stdout=output)
-        return output.getvalue()
-
-    def create_unit(self, code, name=None, unit_type=None):
-        return ChurchStructureUnit.objects.create(
-            unit_type=unit_type or ChurchStructureUnit.UNIT_SMALL_GROUP,
-            code=code,
-            name=name or code,
-        )
-
-    def create_mapped_group(self, name, unit=None):
-        unit = unit or self.create_unit(name.upper().replace(" ", ""))
-        group = SmallGroup.objects.create(name=name, church_structure_unit=unit)
-        return group, unit
-
-    def assign_group(self, user, group):
-        user.profile.small_group = group
-        user.profile.save()
-
-    def create_active_primary(self, user, unit, **kwargs):
-        defaults = {
-            "user": user,
-            "unit": unit,
-            "status": ChurchStructureMembership.STATUS_ACTIVE,
-            "is_primary": True,
-            "start_date": timezone.localdate(),
-        }
-        defaults.update(kwargs)
-        return ChurchStructureMembership.objects.create(**defaults)
-
-    def assert_summary_count(self, output, category, count):
-        self.assertIn(f"{category}: {count}", output)
-
-    def test_summary_classifies_each_required_category(self):
-        in_sync_group, in_sync_unit = self.create_mapped_group("Audit In Sync")
-        _membership_without_group, membership_without_group_unit = (
-            self.create_mapped_group("Audit Membership Only")
-        )
-        group_only_group, _group_only_unit = self.create_mapped_group(
-            "Audit Group Only"
-        )
-        mismatch_group, _mismatch_group_unit = self.create_mapped_group(
-            "Audit Mismatch Group"
-        )
-        mismatch_membership_unit = self.create_unit("AUDIT-MISMATCH-MEMBER")
-        unmapped_group = SmallGroup.objects.create(name="Audit Unmapped Group")
-        parent_unit = self.create_unit(
-            "AUDIT-PARENT",
-            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
-        )
-        multi_unit = self.create_unit("AUDIT-MULTI")
-        SmallGroup.objects.create(
-            name="Audit Multi 1",
-            church_structure_unit=multi_unit,
-        )
-        SmallGroup.objects.create(
-            name="Audit Multi 2",
-            church_structure_unit=multi_unit,
-        )
-
-        in_sync = User.objects.create_user(
-            username="audit_in_sync",
-            first_name="In",
-            last_name="Sync",
-        )
-        self.assign_group(in_sync, in_sync_group)
-        self.create_active_primary(in_sync, in_sync_unit)
-
-        membership_without_group = User.objects.create_user(
-            username="audit_membership_without_group"
-        )
-        self.create_active_primary(
-            membership_without_group,
-            membership_without_group_unit,
-        )
-
-        group_without_membership = User.objects.create_user(
-            username="audit_group_without_membership"
-        )
-        self.assign_group(group_without_membership, group_only_group)
-
-        mismatch = User.objects.create_user(username="audit_mismatch")
-        self.assign_group(mismatch, mismatch_group)
-        self.create_active_primary(mismatch, mismatch_membership_unit)
-
-        unmapped = User.objects.create_user(username="audit_unmapped_group")
-        self.assign_group(unmapped, unmapped_group)
-
-        parent_only = User.objects.create_user(username="audit_parent_only")
-        self.create_active_primary(parent_only, parent_unit)
-
-        multi_group = User.objects.create_user(username="audit_multi_group")
-        self.create_active_primary(multi_group, multi_unit)
-
-        User.objects.create_user(username="audit_no_group_no_membership")
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "in_sync", 1)
-        self.assert_summary_count(output, "membership_without_group", 1)
-        self.assert_summary_count(output, "group_without_membership", 1)
-        self.assert_summary_count(output, "mismatch", 1)
-        self.assert_summary_count(output, "unmapped_group", 1)
-        self.assert_summary_count(output, "parent_or_fellowship_only_membership", 2)
-        self.assert_summary_count(output, "no_group_no_membership", 1)
-        self.assert_summary_count(
-            output,
-            "multiple_active_primary_memberships",
-            0,
-        )
-        self.assertIn("Audit only:", output)
-
-    def test_inactive_membership_lifecycle_states_do_not_count(self):
-        group, unit = self.create_mapped_group("Audit Lifecycle Group")
-        today = timezone.localdate()
-        users = [
-            User.objects.create_user(username=f"audit_inactive_{index}")
-            for index in range(6)
-        ]
-        for user in users:
-            self.assign_group(user, group)
-
-        requested, rejected, cancelled, ended, future, expired = users
-        ChurchStructureMembership.objects.create(
-            user=requested,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_REQUESTED,
-            is_primary=True,
-            start_date=today,
-        )
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=rejected,
-                    unit=unit,
-                    status=ChurchStructureMembership.STATUS_REJECTED,
-                    is_primary=True,
-                    start_date=today - timedelta(days=10),
-                ),
-                ChurchStructureMembership(
-                    user=cancelled,
-                    unit=unit,
-                    status=ChurchStructureMembership.STATUS_CANCELLED,
-                    is_primary=True,
-                    start_date=today - timedelta(days=10),
-                ),
-                ChurchStructureMembership(
-                    user=expired,
-                    unit=unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today - timedelta(days=10),
-                    end_date=today - timedelta(days=1),
-                ),
-            ]
-        )
-        ChurchStructureMembership.objects.create(
-            user=ended,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ENDED,
-            is_primary=True,
-            start_date=today - timedelta(days=10),
-            end_date=today - timedelta(days=1),
-        )
-        ChurchStructureMembership.objects.create(
-            user=future,
-            unit=unit,
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date=today + timedelta(days=1),
-        )
-
-        output = self.run_audit_command()
-
-        self.assert_summary_count(output, "group_without_membership", 6)
-        self.assertNotIn("in_sync: 1", output)
-        self.assert_summary_count(
-            output,
-            "multiple_active_primary_memberships",
-            0,
-        )
-
-    def test_verbose_output_has_details_but_excludes_private_notes(self):
-        group, unit = self.create_mapped_group("Audit Private Notes")
-        user = User.objects.create_user(
-            username="audit_verbose",
-            first_name="Verbose",
-            last_name="Member",
-        )
-        self.assign_group(user, group)
-        membership = self.create_active_primary(
-            user,
-            unit,
-            notes="PRIVATE PASTORAL NOTE SHOULD NOT PRINT",
-        )
-
-        output = self.run_audit_command("--verbose")
-
-        self.assertIn(f"user_id={user.id}", output)
-        self.assertIn("username=audit_verbose", output)
-        self.assertIn("display_name=Verbose Member", output)
-        self.assertIn(f"profile_small_group=#{group.id} Audit Private Notes", output)
-        self.assertIn(f"active_primary_membership_id={membership.id}", output)
-        self.assertIn("classification=in_sync", output)
-        self.assertNotIn("PRIVATE PASTORAL NOTE SHOULD NOT PRINT", output)
-
-    def test_command_performs_zero_writes(self):
-        group, unit = self.create_mapped_group("Audit Read Only")
-        user = User.objects.create_user(username="audit_read_only")
-        self.assign_group(user, group)
-        membership = self.create_active_primary(user, unit)
-        before_counts = {
-            "memberships": ChurchStructureMembership.objects.count(),
-            "groups": SmallGroup.objects.count(),
-            "units": ChurchStructureUnit.objects.count(),
-            "profiles": Profile.objects.count(),
-            "contexts": MinistryContext.objects.count(),
-            "districts": District.objects.count(),
-            "roles": ChurchRoleAssignment.objects.count(),
-        }
-
-        with CaptureQueriesContext(connection) as queries:
-            output = self.run_audit_command("--verbose")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(
-                ("INSERT", "UPDATE", "DELETE")
-            )
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertIn("in_sync: 1", output)
-        self.assertEqual(
-            before_counts,
-            {
-                "memberships": ChurchStructureMembership.objects.count(),
-                "groups": SmallGroup.objects.count(),
-                "units": ChurchStructureUnit.objects.count(),
-                "profiles": Profile.objects.count(),
-                "contexts": MinistryContext.objects.count(),
-                "districts": District.objects.count(),
-                "roles": ChurchRoleAssignment.objects.count(),
-            },
-        )
-        membership.refresh_from_db()
-        user.profile.refresh_from_db()
-        self.assertEqual(membership.unit, unit)
-        self.assertEqual(user.profile.small_group, group)
-
-    def test_multiple_active_primary_memberships_warns_without_silent_pick(self):
-        first_unit = self.create_unit("AUDIT-DUP-1")
-        second_unit = self.create_unit("AUDIT-DUP-2")
-        SmallGroup.objects.create(
-            name="Audit Duplicate 1",
-            church_structure_unit=first_unit,
-        )
-        SmallGroup.objects.create(
-            name="Audit Duplicate 2",
-            church_structure_unit=second_unit,
-        )
-        user = User.objects.create_user(username="audit_duplicate_primary")
-        today = timezone.localdate()
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=user,
-                    unit=first_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-                ChurchStructureMembership(
-                    user=user,
-                    unit=second_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-            ]
-        )
-
-        output = self.run_audit_command("--verbose")
-
-        self.assert_summary_count(
-            output,
-            "multiple_active_primary_memberships",
-            1,
-        )
-        self.assertIn("WARNING: User audit_duplicate_primary", output)
-        self.assertIn("multiple_active_primary_membership_ids=", output)
-
-    def test_fail_on_drift_passes_when_only_safe_categories_exist(self):
-        group, unit = self.create_mapped_group("Audit Drift Clean")
-        in_sync = User.objects.create_user(username="audit_drift_in_sync")
-        self.assign_group(in_sync, group)
-        self.create_active_primary(in_sync, unit)
-        # no_group_no_membership users are consistent, not drifted.
-        User.objects.create_user(username="audit_drift_nobody")
-
-        output = self.run_audit_command("--fail-on-drift")
-
-        self.assert_summary_count(output, "in_sync", 1)
-        self.assert_summary_count(output, "no_group_no_membership", 1)
-
-    def test_fail_on_drift_fails_on_mismatch(self):
-        group, _unit = self.create_mapped_group("Audit Drift Mismatch Group")
-        other_unit = self.create_unit("AUDIT-DRIFT-MISMATCH")
-        SmallGroup.objects.create(
-            name="Audit Drift Mismatch Other",
-            church_structure_unit=other_unit,
-        )
-        user = User.objects.create_user(username="audit_drift_mismatch")
-        self.assign_group(user, group)
-        self.create_active_primary(user, other_unit)
-
-        with self.assertRaisesMessage(CommandError, "mismatch=1"):
-            self.run_audit_command("--fail-on-drift")
-
-    def test_fail_on_drift_fails_on_unmapped_group(self):
-        unmapped_group = SmallGroup.objects.create(name="Audit Drift Unmapped")
-        user = User.objects.create_user(username="audit_drift_unmapped")
-        self.assign_group(user, unmapped_group)
-
-        with self.assertRaisesMessage(CommandError, "unmapped_group=1"):
-            self.run_audit_command("--fail-on-drift")
-
-    def test_fail_on_drift_fails_on_multiple_active_primary_memberships(self):
-        first_group, first_unit = self.create_mapped_group("Audit Drift Multi 1")
-        _second_group, second_unit = self.create_mapped_group("Audit Drift Multi 2")
-        user = User.objects.create_user(username="audit_drift_multi")
-        self.assign_group(user, first_group)
-        today = timezone.localdate()
-        ChurchStructureMembership.objects.bulk_create(
-            [
-                ChurchStructureMembership(
-                    user=user,
-                    unit=first_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-                ChurchStructureMembership(
-                    user=user,
-                    unit=second_unit,
-                    status=ChurchStructureMembership.STATUS_ACTIVE,
-                    is_primary=True,
-                    start_date=today,
-                ),
-            ]
-        )
-
-        with self.assertRaisesMessage(
-            CommandError, "multiple_active_primary_memberships=1"
-        ):
-            self.run_audit_command("--fail-on-drift")
-
-    def test_fail_on_drift_stays_read_only_and_default_run_still_passes(self):
-        unmapped_group = SmallGroup.objects.create(name="Audit Drift Read Only")
-        user = User.objects.create_user(username="audit_drift_read_only")
-        self.assign_group(user, unmapped_group)
-        before_memberships = ChurchStructureMembership.objects.count()
-        before_groups = SmallGroup.objects.count()
-
-        with CaptureQueriesContext(connection) as queries:
-            with self.assertRaises(CommandError):
-                self.run_audit_command("--fail-on-drift")
-
-        write_sql = [
-            query["sql"]
-            for query in queries
-            if query["sql"].lstrip().upper().startswith(
-                ("INSERT", "UPDATE", "DELETE")
-            )
-        ]
-        self.assertEqual(write_sql, [])
-        self.assertEqual(
-            ChurchStructureMembership.objects.count(), before_memberships
-        )
-        self.assertEqual(SmallGroup.objects.count(), before_groups)
-        user.profile.refresh_from_db()
-        self.assertEqual(user.profile.small_group, unmapped_group)
-
-        # Without the flag the same drifted data still reports and exits
-        # successfully, unchanged from CS-CORE.0B.1.
-        output = self.run_audit_command()
-        self.assert_summary_count(output, "unmapped_group", 1)
-        self.assertIn("Audit only:", output)
 
 
 class ChurchStructureAdminClarityTests(TestCase):
@@ -3105,7 +2351,7 @@ class ChurchStructureAdminClarityTests(TestCase):
         )
         self.assertContains(
             response,
-            "Profile.small_group remains legacy/admin/archive/audit/backfill/support data",
+            "legacy Profile.small_group field was removed in",
         )
         self.assertContains(response, "V1 legacy BibleStudySession")
         self.assertContains(response, "Zero-row ServiceEvents fail closed")
@@ -3306,8 +2552,6 @@ class ChurchRolePermissionTests(TestCase):
 
     def test_profile_only_user_no_longer_gets_progress_access(self):
         # CS-CORE.2D-B: Profile.small_group alone no longer grants progress access.
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         self.assertEqual(list(get_accessible_progress_groups(self.user)), [])
 
@@ -3319,8 +2563,6 @@ class StaffMembershipRequestListTests(TestCase):
             username="request_user",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         self.requester = User.objects.create_user(
             username="requester",
             password="TestPass123!",
@@ -3410,7 +2652,6 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "小组申请审核")
         self.assertContains(response, "申请加入的小组/团契")
-        self.assertContains(response, "当前小组")
         self.assertContains(response, "等待审核队列")
         self.assertContains(response, "备注必须只包含非敏感")
 
@@ -3490,13 +2731,14 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertContains(response, "requester")
         self.assertContains(response, "I attend Rainbow 4.")
         self.assertContains(response, "Request Source")
-        self.assertContains(response, "Legacy small group data (reference only)")
-        self.assertContains(response, "Legacy small group (reference)")
+        # PROFILE-SG-FIELD-RETIRE.1A: the legacy small-group reference rows are gone.
+        self.assertNotContains(response, "Legacy small group data (reference only)")
+        self.assertNotContains(response, "Legacy small group (reference)")
         self.assertContains(response, "Group membership after approval")
         self.assertContains(response, "Approval state")
         self.assertContains(
             response,
-            "Approval creates the primary church-structure membership record.",
+            "Approval creates the primary church-structure membership record",
         )
         self.assertContains(response, "No existing confirmed membership")
         # CS-RETIRE.1A: the legacy sync-target row and sync-on-approval wording
@@ -3521,13 +2763,14 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "小组申请详情")
         self.assertContains(response, "申请加入的小组/团契")
-        self.assertContains(response, "旧版小组资料（仅供参考）")
-        self.assertContains(response, "旧版小组（仅供参考）")
+        # PROFILE-SG-FIELD-RETIRE.1A: the legacy small-group reference rows are gone.
+        self.assertNotContains(response, "旧版小组资料（仅供参考）")
+        self.assertNotContains(response, "旧版小组（仅供参考）")
         self.assertContains(response, "确认后的归属记录")
         self.assertContains(response, "现有已确认归属")
         self.assertContains(
             response,
-            "确认后会建立主要归属记录（教会架构归属）。审核不再更新旧版小组资料；归属记录才是依据。",
+            "确认后会建立主要归属记录（教会架构归属）；归属记录才是依据。",
         )
         # CS-RETIRE.1A: the legacy sync-target row is gone.
         self.assertNotContains(response, "确认后会更新到的小组")
@@ -3582,7 +2825,6 @@ class StaffMembershipRequestListTests(TestCase):
             name="Post Only Mapped Rainbow 4",
             church_structure_unit=self.unit,
         )
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.get(
@@ -3593,7 +2835,6 @@ class StaffMembershipRequestListTests(TestCase):
         membership.refresh_from_db()
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
-        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_reject_is_post_only(self):
         membership = self.create_membership()
@@ -3622,7 +2863,6 @@ class StaffMembershipRequestListTests(TestCase):
     def test_approve_changes_requested_to_active(self):
         membership = self.create_membership()
         requested_by = membership.requested_by
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3643,7 +2883,6 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(membership.approved_by, self.staff)
         self.assertIsNotNone(membership.approved_at)
         self.assertEqual(membership.requested_by, requested_by)
-        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_approve_mapped_unit_does_not_update_profile_small_group(self):
         # CS-RETIRE.1A: approval no longer mirrors into Profile.small_group, even
@@ -3655,7 +2894,6 @@ class StaffMembershipRequestListTests(TestCase):
             church_structure_unit=self.unit,
         )
         membership = self.create_membership()
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3667,8 +2905,6 @@ class StaffMembershipRequestListTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
         self.assertTrue(membership.is_primary)
-        self.assertEqual(self.user.profile.small_group, original_group)
-        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_approve_inactive_mapped_small_group_does_not_update_profile_small_group(self):
         SmallGroup.objects.create(
@@ -3677,7 +2913,6 @@ class StaffMembershipRequestListTests(TestCase):
             is_active=False,
         )
         membership = self.create_membership()
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3688,7 +2923,6 @@ class StaffMembershipRequestListTests(TestCase):
         membership.refresh_from_db()
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
-        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_approve_multi_mapped_unit_does_not_update_profile_small_group(self):
         SmallGroup.objects.create(
@@ -3700,7 +2934,6 @@ class StaffMembershipRequestListTests(TestCase):
             church_structure_unit=self.unit,
         )
         membership = self.create_membership()
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3711,7 +2944,6 @@ class StaffMembershipRequestListTests(TestCase):
         membership.refresh_from_db()
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
-        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_approve_blocks_existing_active_primary_membership(self):
         membership = self.create_membership()
@@ -3719,7 +2951,6 @@ class StaffMembershipRequestListTests(TestCase):
             name="Blocked Mapped Rainbow 4",
             church_structure_unit=self.unit,
         )
-        original_group = self.user.profile.small_group
         ChurchStructureMembership.objects.create(
             user=self.user,
             unit=self.other_unit,
@@ -3740,13 +2971,10 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertIsNone(membership.approved_by)
         self.assertIsNone(membership.approved_at)
         self.user.profile.refresh_from_db()
-        self.assertEqual(self.user.profile.small_group, original_group)
-        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_reject_changes_requested_to_rejected_and_not_primary(self):
         membership = self.create_membership(is_primary=True)
         requested_by = membership.requested_by
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3762,7 +2990,6 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(membership.requested_by, requested_by)
         self.assertIsNone(membership.approved_by)
         self.assertIsNone(membership.approved_at)
-        self.assertEqual(self.user.profile.small_group, original_group)
 
     def test_reject_mapped_unit_does_not_update_profile_small_group(self):
         mapped_group = SmallGroup.objects.create(
@@ -3770,7 +2997,6 @@ class StaffMembershipRequestListTests(TestCase):
             church_structure_unit=self.unit,
         )
         membership = self.create_membership(is_primary=True)
-        original_group = self.user.profile.small_group
         self.client.login(username="membership_staff", password="TestPass123!")
 
         response = self.client.post(
@@ -3781,8 +3007,6 @@ class StaffMembershipRequestListTests(TestCase):
         membership.refresh_from_db()
         self.user.profile.refresh_from_db()
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REJECTED)
-        self.assertEqual(self.user.profile.small_group, original_group)
-        self.assertNotEqual(self.user.profile.small_group, mapped_group)
 
     def test_approve_and_reject_only_allow_requested_status(self):
         membership = self.create_membership()
@@ -3832,8 +3056,6 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
-        self.normal_user.profile.small_group = group
-        self.normal_user.profile.save()
 
         # SE-RETIRE.1B: the requested membership grants nothing, and the
         # retired zero-row fallback means even Profile.small_group no longer
@@ -3858,8 +3080,6 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
-        self.normal_user.profile.small_group = group
-        self.normal_user.profile.save()
 
         # SE-RETIRE.1B: the approved (unmapped) membership grants nothing, and
         # the retired zero-row fallback means Profile.small_group no longer
@@ -3895,7 +3115,6 @@ class StaffMembershipRequestListTests(TestCase):
 
         # Profile.small_group is not written, and the legacy event visibility is
         # unchanged by approval.
-        self.assertIsNone(self.normal_user.profile.small_group)
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_rejected_membership_does_not_change_service_event_visibility(self):
@@ -3916,8 +3135,6 @@ class StaffMembershipRequestListTests(TestCase):
 
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
-        self.normal_user.profile.small_group = group
-        self.normal_user.profile.save()
 
         # SE-RETIRE.1B: the rejected membership grants nothing, and the retired
         # zero-row fallback means Profile.small_group no longer makes a
@@ -3949,7 +3166,6 @@ class StaffMembershipRequestListTests(TestCase):
             status=BibleStudySession.STATUS_PUBLISHED,
         )
 
-        self.assertIsNone(self.normal_user.profile.small_group)
         self.assertFalse(session.can_be_seen_by(self.normal_user))
 
         self.client.login(username="membership_staff", password="TestPass123!")
@@ -3960,7 +3176,6 @@ class StaffMembershipRequestListTests(TestCase):
 
         # Profile.small_group not written; V1 session still not visible (V1 reads
         # the unchanged legacy profile group).
-        self.assertIsNone(self.normal_user.profile.small_group)
         self.assertFalse(session.can_be_seen_by(self.normal_user))
 
 
@@ -4022,15 +3237,17 @@ class StaffOverviewTests(TestCase):
             lesson_date=today + timedelta(days=8),
             status=BibleStudyLesson.STATUS_PUBLISHED,
         )
+        # BS-MEETING-MIRROR.1A removed the legacy BibleStudyMeeting.small_group FK;
+        # V2 meetings anchor on a structure unit. The overview only counts meetings.
         BibleStudyMeeting.objects.create(
             lesson=upcoming_lesson,
-            small_group=self.group,
+            anchor_unit=self.unit,
             meeting_datetime=now + timedelta(days=2),
             status=BibleStudyMeeting.STATUS_DRAFT,
         )
         BibleStudyMeeting.objects.create(
             lesson=upcoming_lesson,
-            small_group=SmallGroup.objects.create(name="Overview Group 2"),
+            anchor_unit=None,
             meeting_datetime=now + timedelta(days=9),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
@@ -4503,53 +3720,6 @@ class StaffStructureMapTests(TestCase):
         self.assertIn("待安排区域", content)
         self.assertNotIn("未分配暂存", content)
         self.assertNotIn("未分配暂存节点", content)
-
-    def test_users_in_unmapped_group_are_counted(self):
-        self.build_tree()
-        unmapped_group = SmallGroup.objects.create(name="Unmapped Member Group")
-        profile = self.normal_user.profile
-        profile.small_group = unmapped_group
-        profile.save()
-        self.login_staff()
-
-        response = self.client.get(self.url)
-        indicators = response.context["indicators"]
-
-        self.assertEqual(indicators["users_in_unmapped_group"], 1)
-
-    def test_membership_and_group_drift_categories_are_counted_separately(self):
-        self.build_tree()
-        member_only = User.objects.create_user(
-            username="drift_member_only",
-            password="DriftPass123!",
-        )
-        self.create_active_primary_membership(member_only, self.group_unit)
-
-        group_only = User.objects.create_user(
-            username="drift_group_only",
-            password="DriftPass123!",
-        )
-        group_only_profile = group_only.profile
-        group_only_profile.small_group = self.group
-        group_only_profile.save()
-
-        mismatch_user = User.objects.create_user(
-            username="drift_mismatch",
-            password="DriftPass123!",
-        )
-        mismatch_profile = mismatch_user.profile
-        mismatch_profile.small_group = self.group
-        mismatch_profile.save()
-        self.create_active_primary_membership(mismatch_user, self.cm_unit)
-
-        self.login_staff()
-
-        response = self.client.get(self.url)
-        indicators = response.context["indicators"]
-
-        self.assertEqual(indicators["membership_without_group"], 1)
-        self.assertEqual(indicators["group_without_membership"], 1)
-        self.assertEqual(indicators["membership_group_mismatch"], 1)
 
     def test_structure_map_shows_counts_without_member_names(self):
         self.build_tree()
@@ -6247,15 +5417,9 @@ class StaffStructureMappingEditTests(TestCase):
 
     # --- safety: no side effects on other systems --------------------------
 
-    def test_update_does_not_change_audience_membership_or_profile(self):
+    def test_update_does_not_change_audience_or_membership(self):
         from events.models import ServiceEventAudienceScope
         from studies.models import BibleStudySeriesAudienceScope
-
-        # A profile whose legacy small group is the row being remapped: its
-        # Profile.small_group link must be untouched by a mapping edit.
-        profile = self.normal_user.profile
-        profile.small_group = self.group
-        profile.save(update_fields=["small_group"])
 
         before = (
             ServiceEventAudienceScope.objects.count(),
@@ -6278,8 +5442,6 @@ class StaffStructureMappingEditTests(TestCase):
             ChurchStructureMembership.objects.count(),
         )
         self.assertEqual(before, after)
-        profile.refresh_from_db()
-        self.assertEqual(profile.small_group_id, self.group.id)
 
     # --- CS-SETUP.1D.4: required impact acknowledgement --------------------
 
@@ -6374,8 +5536,6 @@ class StaffStructureMappingEditTests(TestCase):
 
         self.group.church_structure_unit = self.sg_unit_1
         self.group.save(update_fields=["church_structure_unit"])
-        self.normal_user.profile.small_group = self.group
-        self.normal_user.profile.save(update_fields=["small_group"])
         ChurchStructureMembership.objects.create(
             user=self.normal_user,
             unit=self.sg_unit_1,
@@ -6625,8 +5785,6 @@ class StaffPasswordResetTests(TestCase):
             password="OldPass123!",
         )
 
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
     def test_staff_user_list_requires_staff(self):
         self.client.login(username="elder", password="OldPass123!")
@@ -6662,7 +5820,6 @@ class StaffPasswordResetTests(TestCase):
         self.assertContains(response, "搜索")
         self.assertContains(response, "用户名")
         self.assertContains(response, "邮箱")
-        self.assertContains(response, "小组")
         self.assertContains(response, "语言")
         self.assertContains(response, "密码状态")
         self.assertContains(response, "操作")
@@ -6674,7 +5831,8 @@ class StaffPasswordResetTests(TestCase):
     def test_staff_can_search_user_list(self):
         self.client.login(username="staff", password="StaffPass123!")
 
-        response = self.client.get(reverse("staff_user_list"), {"q": "Rainbow"})
+        # PROFILE-SG-FIELD-RETIRE.1A removed group-name search; search by username.
+        response = self.client.get(reverse("staff_user_list"), {"q": "eld"})
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "elder")
@@ -6862,7 +6020,6 @@ class AccountSignupLanguageTests(TestCase):
 
         user = User.objects.get(username="elder_user")
         self.assertEqual(user.email, "")
-        self.assertIsNone(user.profile.small_group)
         self.assertFalse(
             ChurchStructureMembership.objects.filter(user=user).exists(),
         )
@@ -6885,7 +6042,6 @@ class AccountSignupLanguageTests(TestCase):
         user.profile.refresh_from_db()
         membership = ChurchStructureMembership.objects.get(user=user)
 
-        self.assertIsNone(user.profile.small_group)
         self.assertEqual(membership.unit, self.unit)
         self.assertEqual(
             membership.membership_type,
@@ -7024,11 +6180,8 @@ class AccountSignupLanguageTests(TestCase):
 
         user = User.objects.get(username="visibility_request_user")
         user.profile.refresh_from_db()
-        self.assertIsNone(user.profile.small_group)
         self.assertFalse(event.can_be_seen_by(user))
 
-        user.profile.small_group = group
-        user.profile.save()
 
         # SE-RETIRE.1B: the signup request grants nothing, and the retired
         # zero-row fallback means Profile.small_group no longer makes a
@@ -7798,9 +6951,6 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
 
     def create_user(self, username, *, group=None):
         user = User.objects.create_user(username=username, password="TestPass123!")
-        if group is not None:
-            user.profile.small_group = group
-            user.profile.save()
         return user
 
     def create_membership(self, user, unit):

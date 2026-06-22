@@ -54,10 +54,6 @@
         <li>{% if language == "zh" %}未关联结构单元的现有小组{% else %}Current small groups without a linked unit{% endif %}: <strong>{{ indicators.unmapped_small_groups }}</strong></li>
         <li>{% if language == "zh" %}本级及下级都未关联当前资料的单元{% else %}Units with no linked current data mapping at or below them{% endif %}: <strong>{{ indicators.units_without_linked_records }}</strong></li>
         <li>{% if language == "zh" %}位于待安排区域下的单元{% else %}Units in awaiting-placement area{% endif %}: <strong>{{ indicators.units_under_holding }}</strong></li>
-        <li>{% if language == "zh" %}所在小组未关联结构单元的用户{% else %}Users whose current group has no linked unit{% endif %}: <strong>{{ indicators.users_in_unmapped_group }}</strong></li>
-        <li>{% if language == "zh" %}有已确认归属但没有现有小组的用户{% else %}Users with an approved membership but no current group{% endif %}: <strong>{{ indicators.membership_without_group }}</strong></li>
-        <li>{% if language == "zh" %}有现有小组但没有已确认归属的用户{% else %}Users with a current group but no approved membership{% endif %}: <strong>{{ indicators.group_without_membership }}</strong></li>
-        <li>{% if language == "zh" %}现有小组与归属单元不一致的用户{% else %}Users whose current group and membership point to different units{% endif %}: <strong>{{ indicators.membership_group_mismatch }}</strong></li>
         <li>{% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: <strong>{{ indicators.direct_parent_memberships }}</strong></li>
         <li>
             {% if language == "zh" %}启用的全教会根单元（应为 1）{% else %}Active whole-church root units (expected: 1){% endif %}: <strong>{{ indicators.active_root_units }}</strong>

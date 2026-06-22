@@ -1,21 +1,20 @@
-"""Group progress membership-core shadow comparison + runtime selectors (CS-CORE.4E/4F).
+"""Group progress membership-core runtime selectors (CS-CORE.4F).
 
-This module computes a **shadow** membership-core candidate answer for the group
-progress default group and roster, alongside the legacy ``Profile.small_group``
-baseline answer, so that divergence can be observed (``compute_group_progress_shadow``
-/ ``compute_group_progress_roster_shadow``). That legacy baseline is now a
-diagnostic / rollback comparison, not the page's live source for the switched pieces.
-This module also hosts the membership-core *runtime* selectors that the page now uses:
-the visible roster source (``get_membership_core_progress_roster_users``, switched in
-CS-CORE.4F.1) and the permission-fenced default selected group
+This module hosts the membership-core *runtime* selectors that the group-progress
+page uses: the visible roster source (``get_membership_core_progress_roster_users``,
+switched in CS-CORE.4F.1) and the permission-fenced default selected group
 (``get_membership_core_default_progress_group``, switched in CS-CORE.4F.2).
+
+The former legacy-vs-membership shadow comparison layer
+(``compute_group_progress_shadow`` / ``compute_group_progress_roster_shadow`` and
+their dataclasses) read the legacy ``Profile.small_group`` baseline and was retired
+in PROFILE-SG-FIELD-RETIRE.1A together with the ``Profile.small_group`` field. Group
+progress is now fully membership-core; ``Profile.small_group`` no longer exists.
 
 Hard rules (binding, see
 ``docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md`` Section 4 and the
 no-go rules):
 
-- The shadow functions are a **comparison-only** layer: they must never grant or deny
-  access and must never change the roster, default selected group, or permissions.
 - The group-progress permission gate and the accessible group list keep using legacy
   ``accounts.permissions.get_accessible_progress_groups()`` and
   ``accounts.permissions.can_view_group_progress_for()``. The 4F.2 default helper is
@@ -32,8 +31,6 @@ membership-core selectors in ``accounts/structure_selectors.py``.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
-from typing import FrozenSet, List, Optional, Tuple
 
 from django.contrib.auth import get_user_model
 from django.db.models import Q, QuerySet
@@ -42,72 +39,12 @@ from django.utils import timezone
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
 
 
-# Reason codes describe which conditions held when the shadow was computed. They are
-# boring, additive labels: presence means the condition applied. They never gate
-# anything; they are observation only.
-REASON_LEGACY_NO_SELECTED_GROUP = "legacy_no_selected_group"
+# Reason codes describe which fail-closed condition held when the membership-core
+# default candidate could not be resolved. They never gate anything; they are
+# observation only.
 REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY = "membership_no_active_primary"
 REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY = "membership_multiple_active_primary"
 REASON_MEMBERSHIP_UNIT_UNMAPPED = "membership_unit_unmapped"
-REASON_SELECTED_GROUP_UNMAPPED = "selected_group_unmapped"
-REASON_PROFILE_MEMBERSHIP_MISMATCH = "profile_membership_mismatch"
-REASON_DEFAULT_SAME = "default_same"
-REASON_DEFAULT_WOULD_CHANGE = "default_would_change"
-REASON_ROSTER_SAME = "roster_same"
-REASON_ROSTER_WOULD_GAIN = "roster_would_gain"
-REASON_ROSTER_WOULD_LOSE = "roster_would_lose"
-
-
-@dataclass(frozen=True)
-class GroupProgressRosterShadow:
-    """Read-only roster comparison for a single selected legacy ``SmallGroup``.
-
-    This is the group-level half of :class:`GroupProgressShadow`: it compares the
-    legacy ``Profile.small_group`` roster with the membership-core candidate roster
-    for one selected group, and never depends on a particular viewer. It changes
-    nothing and never grants or denies access.
-    """
-
-    selected_group_id: Optional[int]
-    legacy_roster_user_ids: FrozenSet[int]
-    membership_roster_user_ids: FrozenSet[int]
-    same_roster: bool
-    would_gain_user_ids: FrozenSet[int]
-    would_lose_user_ids: FrozenSet[int]
-    reason_codes: Tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class GroupProgressShadow:
-    """Read-only comparison between the legacy and membership-core candidates.
-
-    None of these fields drive runtime behavior; this dataclass is a diagnostic /
-    rollback comparison only and never grants, denies, or mutates anything.
-    ``legacy_selected_group_id`` and ``legacy_roster_user_ids`` are the **legacy
-    baseline** (the pre-switch ``Profile.small_group`` answer), kept for comparison
-    and rollback — they are no longer what the page renders for the switched pieces.
-    The live page now builds its visible roster from the membership-core candidate
-    (CS-CORE.4F.1) and prefers a permission-fenced membership-core default selected
-    group when no ``?group=`` is given (CS-CORE.4F.2), so the ``membership_`` fields
-    mirror the live roster/default source for those switched pieces only. The
-    group-progress permission and accessible group list remain legacy-driven and are
-    not represented here.
-    """
-
-    legacy_selected_group_id: Optional[int]
-    membership_candidate_group_id: Optional[int]
-    legacy_roster_user_ids: FrozenSet[int]
-    membership_roster_user_ids: FrozenSet[int]
-    same_default: bool
-    same_roster: bool
-    would_gain_user_ids: FrozenSet[int]
-    would_lose_user_ids: FrozenSet[int]
-    reason_codes: Tuple[str, ...] = field(default_factory=tuple)
-
-
-def _profile_small_group(user):
-    profile = getattr(user, "profile", None)
-    return getattr(profile, "small_group", None)
 
 
 def _active_primary_memberships(user, target_date):
@@ -164,9 +101,8 @@ def _membership_core_candidate_default_group(user, target_date):
     - unit not a mapped single small-group unit -> ``REASON_MEMBERSHIP_UNIT_UNMAPPED``
 
     This computes a *candidate only*: it never consults permissions and never grants
-    access. It is shared by :func:`compute_group_progress_shadow` (which reports the
-    reason code) and :func:`get_membership_core_default_progress_group` (which adds
-    the permission fence).
+    access. :func:`get_membership_core_default_progress_group` adds the permission
+    fence on top.
     """
     memberships = _active_primary_memberships(user, target_date)
     if not memberships:
@@ -250,22 +186,13 @@ def _unit_and_descendant_ids(unit):
     return unit_ids
 
 
-def _legacy_roster_user_ids(selected_group):
-    User = get_user_model()
-    return set(
-        User.objects.filter(profile__small_group=selected_group).values_list(
-            "id", flat=True
-        )
-    )
-
-
 def _membership_roster_user_ids(selected_group, target_date):
     """Membership-core candidate roster for ``selected_group``.
 
     A user is in the candidate roster when they have exactly one active primary
     membership whose unit is the selected group's mapped ``ChurchStructureUnit`` or
     a descendant of it. Users with multiple active primary memberships fail closed
-    (ambiguous) and are excluded.
+    (ambiguous) and are excluded. Returns ``(roster_user_ids, unmapped)``.
     """
     unit = getattr(selected_group, "church_structure_unit", None)
     if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
@@ -293,92 +220,24 @@ def _membership_roster_user_ids(selected_group, target_date):
     return roster, False
 
 
-def compute_group_progress_roster_shadow(
-    selected_group,
-    *,
-    legacy_roster_user_ids=None,
-    target_date=None,
-):
-    """Compare the legacy vs membership-core roster for one selected legacy group.
-
-    ``selected_group`` is the legacy ``SmallGroup`` to compare. The legacy roster is
-    ``User.objects.filter(profile__small_group=selected_group)`` (or the
-    ``legacy_roster_user_ids`` the caller already computed); the membership-core
-    candidate roster is the set of users with exactly one active primary membership
-    whose unit is the group's mapped ``ChurchStructureUnit`` or a descendant.
-
-    The candidate fails closed on an unmapped or wrong-type selected group (it then
-    yields an empty candidate roster and the ``selected_group_unmapped`` reason).
-    This function only reads; it never grants/denies access and never writes.
-    """
-    target_date = target_date or timezone.localdate()
-    reasons: List[str] = []
-
-    if selected_group is None:
-        # Nothing to compare; there is no legacy group to build a roster from.
-        return GroupProgressRosterShadow(
-            selected_group_id=None,
-            legacy_roster_user_ids=frozenset(),
-            membership_roster_user_ids=frozenset(),
-            same_roster=True,
-            would_gain_user_ids=frozenset(),
-            would_lose_user_ids=frozenset(),
-            reason_codes=(REASON_LEGACY_NO_SELECTED_GROUP,),
-        )
-
-    if legacy_roster_user_ids is None:
-        legacy_roster = _legacy_roster_user_ids(selected_group)
-    else:
-        legacy_roster = set(legacy_roster_user_ids)
-
-    membership_roster, unmapped = _membership_roster_user_ids(
-        selected_group, target_date
-    )
-    if unmapped:
-        reasons.append(REASON_SELECTED_GROUP_UNMAPPED)
-
-    would_gain = membership_roster - legacy_roster
-    would_lose = legacy_roster - membership_roster
-    same_roster = legacy_roster == membership_roster
-
-    if same_roster:
-        reasons.append(REASON_ROSTER_SAME)
-    if would_gain:
-        reasons.append(REASON_ROSTER_WOULD_GAIN)
-    if would_lose:
-        reasons.append(REASON_ROSTER_WOULD_LOSE)
-
-    return GroupProgressRosterShadow(
-        selected_group_id=selected_group.id,
-        legacy_roster_user_ids=frozenset(legacy_roster),
-        membership_roster_user_ids=frozenset(membership_roster),
-        same_roster=same_roster,
-        would_gain_user_ids=frozenset(would_gain),
-        would_lose_user_ids=frozenset(would_lose),
-        reason_codes=tuple(reasons),
-    )
-
-
 def get_membership_core_progress_roster_users(selected_group, *, target_date=None):
     """Runtime membership-core roster for the group-progress page (CS-CORE.4F.1).
 
     Returns the ``User`` queryset that should populate the group-progress roster
     (``member_rows``) for ``selected_group`` using the membership-core candidate
-    rule instead of legacy ``Profile.small_group``. A user is included when they
-    have exactly one active primary ``ChurchStructureMembership`` whose unit is the
-    selected group's mapped small-group ``ChurchStructureUnit`` or a descendant of
-    it, evaluated as of ``target_date`` (today by default).
+    rule. A user is included when they have exactly one active primary
+    ``ChurchStructureMembership`` whose unit is the selected group's mapped
+    small-group ``ChurchStructureUnit`` or a descendant of it, evaluated as of
+    ``target_date`` (today by default).
 
     This is **roster only**, never permission. The caller must already have decided,
     via legacy ``accounts.permissions``, that the viewer may see ``selected_group``;
     ordinary ``ChurchStructureMembership`` confers no progress access on its own
-    (privacy invariant 5). It reuses the same fail-closed roster logic as
-    :func:`compute_group_progress_roster_shadow`, so it returns an empty queryset
-    when ``selected_group`` is ``None``, unmapped, or not a small-group-type unit,
-    and excludes users with multiple active primary memberships (ambiguous).
+    (privacy invariant 5). It returns an empty queryset when ``selected_group`` is
+    ``None``, unmapped, or not a small-group-type unit, and excludes users with
+    multiple active primary memberships (ambiguous).
 
-    Ordered by username then id for a deterministic roster compatible with the
-    legacy page ordering (legacy used ``order_by("username")``).
+    Ordered by username then id for a deterministic roster.
     """
     User = get_user_model()
     if selected_group is None:
@@ -390,85 +249,3 @@ def get_membership_core_progress_roster_users(selected_group, *, target_date=Non
         return User.objects.none()
 
     return User.objects.filter(id__in=roster_user_ids).order_by("username", "id")
-
-
-def compute_group_progress_shadow(
-    user,
-    selected_group,
-    *,
-    legacy_roster_user_ids=None,
-    target_date=None,
-):
-    """Compute the legacy-vs-membership-core shadow comparison.
-
-    ``selected_group`` is the ``SmallGroup`` the page actually selected (or ``None``
-    when the page had no selectable group); since CS-CORE.4F.2 that selection may
-    itself be the permission-fenced membership-core default rather than the legacy
-    ``Profile.small_group`` default. ``legacy_roster_user_ids`` is the **legacy
-    baseline** roster (the pre-4F.1 ``Profile.small_group`` answer) used for the
-    comparison; it may be supplied by the caller, and when omitted it is derived from
-    ``Profile.small_group`` here. Note this baseline is no longer the page's live
-    roster source — that switched to the membership-core candidate in CS-CORE.4F.1.
-
-    This function only reads. It returns a :class:`GroupProgressShadow` and changes
-    nothing.
-    """
-    target_date = target_date or timezone.localdate()
-    reasons: List[str] = []
-
-    legacy_selected_group_id = selected_group.id if selected_group is not None else None
-    if selected_group is None:
-        reasons.append(REASON_LEGACY_NO_SELECTED_GROUP)
-
-    # Membership-core candidate default group (fail closed on ambiguity). This shares
-    # the same candidate logic the runtime CS-CORE.4F.2 default-group helper uses; the
-    # reason code (when any) is surfaced here for the shadow/audit comparison only.
-    candidate_group, candidate_reason = _membership_core_candidate_default_group(
-        user, target_date
-    )
-    if candidate_reason is not None:
-        reasons.append(candidate_reason)
-
-    membership_candidate_group_id = (
-        candidate_group.id if candidate_group is not None else None
-    )
-
-    same_default = legacy_selected_group_id == membership_candidate_group_id
-    reasons.append(REASON_DEFAULT_SAME if same_default else REASON_DEFAULT_WOULD_CHANGE)
-
-    # Profile/membership mismatch is observed against the viewer's own legacy group.
-    profile_group = _profile_small_group(user)
-    if (
-        profile_group is not None
-        and candidate_group is not None
-        and profile_group.id != candidate_group.id
-    ):
-        reasons.append(REASON_PROFILE_MEMBERSHIP_MISMATCH)
-
-    # Roster comparison for the selected legacy group only, reusing the group-level
-    # helper. The no-selected-group reason is owned by this function (above), so the
-    # helper's own REASON_LEGACY_NO_SELECTED_GROUP is dropped here to avoid a
-    # duplicate; the public output is otherwise unchanged.
-    roster_shadow = compute_group_progress_roster_shadow(
-        selected_group,
-        legacy_roster_user_ids=legacy_roster_user_ids,
-        target_date=target_date,
-    )
-    if selected_group is not None:
-        reasons.extend(
-            code
-            for code in roster_shadow.reason_codes
-            if code != REASON_LEGACY_NO_SELECTED_GROUP
-        )
-
-    return GroupProgressShadow(
-        legacy_selected_group_id=legacy_selected_group_id,
-        membership_candidate_group_id=membership_candidate_group_id,
-        legacy_roster_user_ids=roster_shadow.legacy_roster_user_ids,
-        membership_roster_user_ids=roster_shadow.membership_roster_user_ids,
-        same_default=same_default,
-        same_roster=roster_shadow.same_roster,
-        would_gain_user_ids=roster_shadow.would_gain_user_ids,
-        would_lose_user_ids=roster_shadow.would_lose_user_ids,
-        reason_codes=tuple(reasons),
-    )

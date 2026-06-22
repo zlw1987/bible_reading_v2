@@ -31,18 +31,21 @@ Current state:
 * V2 generation-key backfill tooling exists; do not run apply commands unless explicitly approved.
 * Role scoped validation uses explicit `ChurchRoleAssignment.structure_unit`.
 * Group progress and reflection migrated paths no longer rely on `Profile.small_group` for ordinary access.
+* `Profile.small_group` was removed in `PROFILE-SG-FIELD-RETIRE.1A` (migration `accounts/0012`) after preflight audits confirmed zero populated values and no live runtime/app-write/display dependency. `ChurchStructureMembership` is the canonical user belonging source for migrated runtime paths; normal app-level membership approval/profile flows do not write any legacy profile group field. The profile cleanup command (`cleanup_profile_small_group`), the belonging drift audit (`audit_structure_belonging`), the membership backfill (`backfill_church_structure_memberships`), and the group-progress shadow diagnostic (`audit_group_progress_shadow`) were retired with the field. This did not remove the `SmallGroup`, `District`, or `MinistryContext` tables, and did not affect ServiceEvent, Prayer, Reflection, Role, Bible Study, TeamAssignment, or V1 schema.
 * Guarded V1 purge tooling exists; do not run destructive purge/apply unless explicitly approved.
 * V2 generation-key backfill tooling exists; do not run apply commands unless explicitly approved.
 
-Legacy fields still exist:
+Legacy objects still exist:
 
-* `Profile.small_group`
 * `SmallGroup`
 * `District`
 * `MinistryContext`
 * V1 `BibleStudySession` legacy scope fields (`scope_type`/`district`/`small_group`); the V2 `BibleStudyMeeting.small_group` mirror was removed in `BS-MEETING-MIRROR.1A`
 
-Removed role legacy fields (do not reintroduce): `ChurchRoleAssignment.district` and `ChurchRoleAssignment.small_group` were removed in `ROLE-FIELD-RETIRE.1A` (migration `accounts/0011`); scoped-role runtime uses `ChurchRoleAssignment.structure_unit` only.
+Removed legacy fields (do not reintroduce):
+
+* `ChurchRoleAssignment.district` / `ChurchRoleAssignment.small_group` removed in `ROLE-FIELD-RETIRE.1A` (migration `accounts/0011`); scoped-role runtime uses `ChurchRoleAssignment.structure_unit` only.
+* `Profile.small_group` removed in `PROFILE-SG-FIELD-RETIRE.1A` (migration `accounts/0012`); belonging is `ChurchStructureMembership`.
 
 Do not delete legacy fields/models/tables without a separately approved field/table retirement slice.
 

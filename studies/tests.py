@@ -134,24 +134,18 @@ class BibleStudyModuleTests(TestCase):
             email="regular@example.com",
             password="testpass123",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
 
         self.same_district_user = User.objects.create_user(
             username="same_district",
             email="same@example.com",
             password="testpass123",
         )
-        self.same_district_user.profile.small_group = self.same_group
-        self.same_district_user.profile.save()
 
         self.other_user = User.objects.create_user(
             username="other_group",
             email="other@example.com",
             password="testpass123",
         )
-        self.other_user.profile.small_group = self.other_group
-        self.other_user.profile.save()
 
         self.staff = User.objects.create_user(
             username="study_staff",
@@ -2607,15 +2601,11 @@ class BibleStudyModuleTests(TestCase):
             username="role_membership_match",
             password="testpass123",
         )
-        membership_user.profile.small_group = self.other_group
-        membership_user.profile.save(update_fields=["small_group"])
         self.create_membership(membership_user, self.group_unit)
         profile_only_user = User.objects.create_user(
             username="role_profile_only_match",
             password="testpass123",
         )
-        profile_only_user.profile.small_group = self.group
-        profile_only_user.profile.save(update_fields=["small_group"])
 
         form = BibleStudyMeetingRoleForm(meeting=meeting)
 
@@ -3214,15 +3204,11 @@ class BibleStudyModuleTests(TestCase):
             username="worship_membership_match",
             password="testpass123",
         )
-        membership_user.profile.small_group = self.other_group
-        membership_user.profile.save(update_fields=["small_group"])
         self.create_membership(membership_user, self.group_unit)
         profile_only_user = User.objects.create_user(
             username="worship_profile_only_match",
             password="testpass123",
         )
-        profile_only_user.profile.small_group = self.group
-        profile_only_user.profile.save(update_fields=["small_group"])
 
         form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
 
@@ -3967,8 +3953,6 @@ class BibleStudyModuleTests(TestCase):
             meeting=meeting,
             unit=self.group_unit,
         )
-        self.user.profile.small_group = None
-        self.user.profile.save(update_fields=["small_group"])
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -4001,8 +3985,6 @@ class BibleStudyModuleTests(TestCase):
             meeting=meeting,
             unit=self.group_unit,
         )
-        self.user.profile.small_group = None
-        self.user.profile.save(update_fields=["small_group"])
         self.create_membership(self.user, child_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -4159,8 +4141,6 @@ class BibleStudyModuleTests(TestCase):
 
     def test_study_list_user_without_small_group_gets_safe_v2_empty_state(self):
         self.set_language("en")
-        self.user.profile.small_group = None
-        self.user.profile.save()
         self.client.login(username="regular", password="testpass123")
 
         response = self.client.get(reverse("study_session_list"))
@@ -5718,8 +5698,6 @@ class BibleStudyModuleTests(TestCase):
             username="study_profile_only",
             password="testpass123",
         )
-        profile_only_member.profile.small_group = self.group
-        profile_only_member.profile.save(update_fields=["small_group"])
         requested_member = User.objects.create_user(
             username="study_requested_membership",
             password="testpass123",
@@ -6005,8 +5983,6 @@ class BibleStudyModuleTests(TestCase):
             meeting=meeting,
             unit=self.group_unit,
         )
-        self.user.profile.small_group = None
-        self.user.profile.save(update_fields=["small_group"])
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")
 
@@ -6037,8 +6013,6 @@ class BibleStudyModuleTests(TestCase):
             meeting=meeting,
             unit=self.north_unit,
         )
-        self.user.profile.small_group = None
-        self.user.profile.save(update_fields=["small_group"])
         # group_unit is a descendant of the district north_unit.
         self.create_membership(self.user, self.group_unit)
         self.client.login(username="regular", password="testpass123")

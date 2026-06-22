@@ -65,12 +65,8 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             church_structure_unit=self.group_unit,
         )
 
-    def make_user(self, username, *, small_group=None):
-        user = User.objects.create_user(username=username, password="pw123456")
-        if small_group is not None:
-            user.profile.small_group = small_group
-            user.profile.save(update_fields=["small_group"])
-        return user
+    def make_user(self, username):
+        return User.objects.create_user(username=username, password="pw123456")
 
     def make_event(self, *, title="Schema Prep Event"):
         return ServiceEvent.objects.create(
@@ -104,7 +100,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("--apply", option_strings)
 
     def test_command_is_read_only(self):
-        user = self.make_user("legacy_member", small_group=self.group)
+        user = self.make_user("legacy_member")
         event = self.make_event(title="READONLY_SECRET_EVENT")
         series = BibleStudySeries.objects.create(
             title="READONLY_SECRET_SERIES",
@@ -123,7 +119,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             "role_assignments": ChurchRoleAssignment.objects.count(),
         }
         before_values = {
-            "profile_small_group": user.profile.small_group_id,
             "event_scope": (event.title, event.status),
             "series_scope": (series.title, series.status),
             "role_scope": (
@@ -142,7 +137,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             stdout=StringIO(),
         )
 
-        user.profile.refresh_from_db()
         event.refresh_from_db()
         series.refresh_from_db()
         assignment.refresh_from_db()
@@ -155,7 +149,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             ChurchRoleAssignment.objects.count(),
             before_counts["role_assignments"],
         )
-        self.assertEqual(user.profile.small_group_id, before_values["profile_small_group"])
         self.assertEqual((event.title, event.status), before_values["event_scope"])
         self.assertEqual(
             (series.title, series.status),
@@ -177,12 +170,36 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         call_command("audit_legacy_structure_schema_retirement_readiness", stdout=out)
         output = out.getvalue()
 
-        self.assertIn("Profile.small_group", output)
+        self.assertIn("Profile.small_group (removed)", output)
         self.assertIn("ServiceEvent.scope_type (removed)", output)
         self.assertIn("BibleStudyMeeting.small_group (removed)", output)
         self.assertIn("ReflectionComment.small_group_at_post", output)
         self.assertIn("PrayerRequest.small_group_at_post", output)
         self.assertIn("SmallGroup model/table", output)
+
+    def test_profile_small_group_is_historical_after_field_removal(self):
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group after preflight
+        # audits confirmed zero populated values and no live
+        # runtime/visibility/permission/app-write dependency. Belonging is
+        # membership-core. The guarded cleanup command, the profile-vs-membership
+        # belonging drift audit, the membership backfill, and the group-progress
+        # legacy shadow diagnostic were retired with it. Only immutable historical
+        # migrations still name it, so the candidate is now historical-only with
+        # no active schema blocker and no queryable data counter.
+        audit = run_audit()
+        candidate = _candidate(audit, "Profile.small_group (removed)")
+
+        self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertEqual(candidate["app_write_references"], ())
+        self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["admin_references"], ())
+        self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+        self.assertEqual(candidate["data_blocker_count"], 0)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+        # The removed field no longer has a queryable data counter.
+        self.assertNotIn("profile_small_group", audit["data_counts"])
 
     def test_service_event_legacy_scope_fields_are_historical_after_field_removal(self):
         # SE-FIELD-RETIRE.1A removed ServiceEvent.scope_type / district /

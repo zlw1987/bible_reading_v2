@@ -64,11 +64,8 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             church_structure_unit=self.group_unit,
         )
 
-    def make_user(self, username, *, small_group=None, membership_unit=None):
+    def make_user(self, username, *, membership_unit=None):
         user = User.objects.create_user(username=username, password="pw123456")
-        if small_group is not None:
-            user.profile.small_group = small_group
-            user.profile.save()
         if membership_unit is not None:
             ChurchStructureMembership.objects.create(
                 user=user,
@@ -99,13 +96,10 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
 
     def test_reports_representative_retirement_blockers(self):
-        self.make_user(
-            "mismatch",
-            small_group=self.group,
-            membership_unit=self.other_group_unit,
-        )
-        unmapped_group = SmallGroup.objects.create(name="Unmapped Group")
-        self.make_user("missing_membership", small_group=unmapped_group)
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so the audit no
+        # longer carries profile-vs-membership drift counters; belonging is
+        # membership-core.
+        SmallGroup.objects.create(name="Unmapped Group")
         self.make_service_event()
         self.make_v1_session()
         # ROLE-FIELD-RETIRE.1A: scoped roles are structure-native (explicit
@@ -121,8 +115,8 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         audit = run_audit(target_date=self.today, now=self.now)
         stats = audit["stats"]
 
-        self.assertEqual(stats["profile_membership_unit_mismatch_group_mapping"], 1)
-        self.assertEqual(stats["profiles_with_small_group_no_active_primary_membership"], 1)
+        self.assertNotIn("profile_membership_unit_mismatch_group_mapping", stats)
+        self.assertNotIn("profiles_with_small_group_no_active_primary_membership", stats)
         self.assertEqual(stats["small_groups_without_church_structure_unit"], 1)
         self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
         self.assertEqual(stats["bible_study_v1_pilot_records_present"], 1)
@@ -200,8 +194,9 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertGreaterEqual(stats["bible_study_legacy_retirement_blockers"], 1)
 
     def test_fail_on_blockers_exits_nonzero(self):
-        self.make_user("blocked", small_group=self.group)
-
+        # setUp already created a SmallGroup row, so the SmallGroup table
+        # retirement-blocker reference count is nonzero and --fail-on-blockers
+        # exits nonzero.
         out = StringIO()
         with self.assertRaises(CommandError):
             call_command(
@@ -212,8 +207,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
     def test_verbose_limit_caps_example_rows(self):
         for index in range(3):
-            user = self.make_user(f"blocked_{index}", small_group=self.group)
-            user.church_structure_memberships.all().delete()
+            SmallGroup.objects.create(name=f"Unmapped Verbose Group {index}")
 
         out = StringIO()
         call_command(
@@ -225,16 +219,15 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
 
         output = out.getvalue()
-        self.assertIn("profile_no_active_primary_membership (3):", output)
+        self.assertIn("small_group_unmapped (3):", output)
         self.assertIn("stopped at --limit 1", output)
         self.assertIn("diagnostic/backfill commands", output)
 
     def test_command_is_read_only(self):
-        user = self.make_user("readonly", small_group=self.group)
+        self.make_user("readonly")
         event = self.make_service_event()
         session = self.make_v1_session()
 
-        before_profile_group = user.profile.small_group_id
         before_event = (event.title, event.status)
         before_session = (session.scope_type, session.district_id, session.small_group_id)
         before_counts = {
@@ -254,11 +247,9 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             stdout=StringIO(),
         )
 
-        user.profile.refresh_from_db()
         event.refresh_from_db()
         session.refresh_from_db()
 
-        self.assertEqual(user.profile.small_group_id, before_profile_group)
         self.assertEqual((event.title, event.status), before_event)
         self.assertEqual(
             (session.scope_type, session.district_id, session.small_group_id),
@@ -322,6 +313,29 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             "reflection_group_comments_with_small_group_at_post", output
         )
         self.assertNotIn("reflection_small_group_at_post_removal_blockers", output)
+
+    def test_profile_small_group_commands_no_longer_listed(self):
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
+        # guarded cleanup command, the profile-vs-membership belonging drift audit,
+        # the membership backfill that sourced from the field, and the
+        # group-progress legacy shadow diagnostic, so none of them may appear in
+        # the diagnostic/backfill command list.
+        out = StringIO()
+        call_command("audit_legacy_structure_retirement_readiness", stdout=out)
+        output = out.getvalue()
+
+        for command in (
+            "accounts.management.commands.cleanup_profile_small_group",
+            "accounts.management.commands.audit_structure_belonging",
+            "accounts.management.commands.backfill_church_structure_memberships",
+            "reading.management.commands.audit_group_progress_shadow",
+        ):
+            self.assertNotIn(command, output)
+
+        # The profile-vs-membership drift counters that queried Profile.small_group
+        # are gone.
+        self.assertNotIn("profiles_with_small_group", output)
+        self.assertNotIn("profile_small_group_removal_blockers", output)
 
     def test_backfill_structure_role_scopes_command_no_longer_listed(self):
         # ROLE-FIELD-RETIRE.1A retired the backfill command together with the

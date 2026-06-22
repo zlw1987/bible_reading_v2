@@ -18,8 +18,9 @@ LEGACY_RUNTIME_NOTE = (
     "now use active primary ChurchStructureMembership or structure snapshots, "
     "including ServiceEvent audience rows, Bible Study v2 audience rows and "
     "role/worship pickers, prayer groups, group progress, and reflection "
-    "read/write paths. Profile.small_group remains legacy/admin/archive/audit/"
-    "backfill/support data. Zero-row ServiceEvents fail closed for ordinary "
+    "read/write paths. The legacy Profile.small_group field was removed in "
+    "PROFILE-SG-FIELD-RETIRE.1A; ChurchStructureMembership is the canonical "
+    "belonging source. Zero-row ServiceEvents fail closed for ordinary "
     "users. Do not delete until migration is complete."
 )
 
@@ -41,10 +42,11 @@ MEMBERSHIP_NOTE = (
     "Church Structure Membership / 教会结构归属（归属基础）: runtime source for "
     "several ordinary-member visibility/access paths, including ServiceEvent "
     "audience rows, Bible Study v2 audience rows and role/worship pickers, "
-    "prayer groups, group progress, and reflection read/write paths. "
-    "Profile.small_group remains legacy/admin/archive/audit/backfill/support "
-    "data, and V1 legacy BibleStudySession still reads legacy group fields. "
-    "Zero-row ServiceEvents fail closed for ordinary users. Membership does "
+    "prayer groups, group progress, and reflection read/write paths. The "
+    "legacy Profile.small_group field was removed in "
+    "PROFILE-SG-FIELD-RETIRE.1A, and V1 legacy BibleStudySession still reads "
+    "legacy group fields. Zero-row ServiceEvents fail closed for ordinary "
+    "users. Membership does "
     "not grant staff capabilities, role assignments, or TeamAssignment/My "
     "Serving. Notes must stay operational and non-sensitive."
 )
@@ -313,6 +315,6 @@ class ChurchRoleAssignmentAdmin(admin.ModelAdmin):
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ("user", "small_group", "preferred_language", "must_change_password")
-    list_filter = ("small_group", "preferred_language", "must_change_password")
-    search_fields = ("user__username", "user__email", "small_group__name")
+    list_display = ("user", "preferred_language", "must_change_password")
+    list_filter = ("preferred_language", "must_change_password")
+    search_fields = ("user__username", "user__email")

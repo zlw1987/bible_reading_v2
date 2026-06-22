@@ -1,13 +1,12 @@
 """Read-only Reading structure-runtime readiness audit command (READING-STRUCT.1A).
 
 Thin wrapper over ``reading.structure_runtime_readiness.run_audit``. It prints a
-resolvability inventory for the remaining legacy small-group data behind the
-reading / reflection / progress runtime and reports whether any blocker stands in
-the way of retiring the legacy ``Profile.small_group`` data. (As of
-READING-STRUCT.1D the Reading runtime no longer *reads* ``Profile.small_group``;
-the legacy ``ReflectionComment.small_group_at_post`` mirror was removed in
-REFLECTION-MIRROR.1H, so reflection readiness now keys solely off the
-structure snapshot.)
+resolvability inventory for the structure data behind the reading / reflection /
+progress runtime and reports whether any blocker stands in the way of the next
+reading-structure slice. (The Reading runtime is membership-core: the legacy
+``ReflectionComment.small_group_at_post`` mirror was removed in REFLECTION-MIRROR.1H,
+so reflection readiness keys solely off the structure snapshot, and the
+``Profile.small_group`` field was removed in PROFILE-SG-FIELD-RETIRE.1A.)
 
 This command is **read-only**: it has no ``--apply`` and writes nothing. It does
 not switch any runtime source. Use it as real-data evidence before the next

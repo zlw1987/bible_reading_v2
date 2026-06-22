@@ -531,13 +531,6 @@ class Profile(models.Model):
         on_delete=models.CASCADE,
         related_name="profile",
     )
-    small_group = models.ForeignKey(
-        SmallGroup,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="members",
-    )
     preferred_language = models.CharField(
         max_length=2,
         choices=LANGUAGE_CHOICES,

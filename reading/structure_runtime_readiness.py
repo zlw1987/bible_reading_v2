@@ -1,29 +1,22 @@
 """Read-only Reading / Reflection / Progress structure-runtime readiness audit.
 
-READING-STRUCT.1A diagnostic helpers. This is an *inventory + blocker* audit,
-complementary to the membership-core drift comparator
-``audit_group_progress_shadow`` (CS-CORE.4E.1). That one compares legacy vs
-membership-core answers row-by-row; this one instead measures, in absolute
-terms, how *resolvable* the remaining legacy small-group data is to active
-``ChurchStructureUnit`` rows and whether anything blocks retiring the last
-legacy ``Profile.small_group`` reads in the reading runtime. (The reflection
+READING-STRUCT.1A diagnostic helpers. This is an *inventory + blocker* audit
+that measures, in absolute terms, how *resolvable* the structure data is to
+active ``ChurchStructureUnit`` rows for the reading runtime. (The reflection
 half of the former CS-CORE.4B comparator ``audit_reading_privacy_membership_readiness``
 was retired in REFLECTION-MIRROR.1H together with the removed
-``ReflectionComment.small_group_at_post`` mirror.)
+``ReflectionComment.small_group_at_post`` mirror. The legacy ``Profile.small_group``
+counters this audit once carried were dropped in PROFILE-SG-FIELD-RETIRE.1A when
+that field was removed; belonging is membership-core.)
 
-Current runtime state this audit is written against (verified in the worktree):
+Current runtime state this audit is written against:
 
-- Group-shared ``ReflectionComment`` visibility (read + write) is already
-  structure-native (CS-CORE.4G.2): it keys off ``structure_unit_at_post`` plus
-  the viewer's single active primary ``ChurchStructureMembership``.
-  ``Profile.small_group`` is legacy compatibility data only (the legacy
-  ``ReflectionComment.small_group_at_post`` mirror was removed in
-  REFLECTION-MIRROR.1H).
+- Group-shared ``ReflectionComment`` visibility (read + write) is structure-native
+  (CS-CORE.4G.2): it keys off ``structure_unit_at_post`` plus the viewer's single
+  active primary ``ChurchStructureMembership``.
 - Group-progress roster is membership-core (CS-CORE.4F.1) and the no-``?group=``
-  default is a permission-fenced membership-core candidate (CS-CORE.4F.2). Since
-  READING-STRUCT.1D the legacy ``Profile.small_group`` default fallback has been
-  removed, so ``Profile.small_group`` is no longer a Reading runtime source at
-  all; it is read here only to inventory readiness, not to drive behavior.
+  default is a permission-fenced membership-core candidate (CS-CORE.4F.2).
+  ``Profile.small_group`` no longer exists; belonging is membership-core.
 
 So the readiness questions this audit answers are:
 
@@ -31,9 +24,8 @@ So the readiness questions this audit answers are:
   active small-group units, or are some group-visible posts effectively invisible
   (legacy-only, missing/invalid snapshot)?
 - Do active legacy progress groups all map to an active small-group unit?
-- Do users carry an unambiguous single active primary membership, and which
-  profile-only users would lack a membership equivalent once the legacy
-  ``Profile.small_group`` data is finally retired?
+- Do users carry an unambiguous single active primary membership (no ambiguous
+  multiple active primary memberships)?
 
 It writes nothing: no reflection, profile, membership, group, unit, progress,
 role, permission, or reading row is created, edited, or deleted. It has no
@@ -43,7 +35,6 @@ role, permission, or reading row is created, edited, or deleted. It has no
 from collections import OrderedDict, defaultdict
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from django.utils import timezone
 
@@ -77,12 +68,9 @@ PROGRESS_COUNTER_KEYS = (
 
 MEMBERSHIP_COUNTER_KEYS = (
     "users_total",
-    "users_with_profile_small_group",
     "users_with_single_active_primary_membership",
     "users_with_multiple_active_primary_membership",
     "users_with_no_active_primary_membership",
-    "users_profile_group_without_single_membership",
-    "users_single_membership_without_profile_group",
 )
 
 # Nonzero values for any of these mean a switch / legacy-retirement is not yet
@@ -93,7 +81,6 @@ BLOCKER_KEYS = (
     "progress_groups_inactive_unit",
     "progress_groups_wrong_unit_type",
     "users_with_multiple_active_primary_membership",
-    "users_profile_group_without_single_membership",
 )
 
 VERBOSE_DETAIL_KEYS = (
@@ -105,7 +92,6 @@ VERBOSE_DETAIL_KEYS = (
     "progress_groups_inactive_unit",
     "progress_groups_wrong_unit_type",
     "users_with_multiple_active_primary_membership",
-    "users_profile_group_without_single_membership",
 )
 
 
@@ -140,13 +126,6 @@ def _active_primary_membership_counts_by_user(target_date):
     for user_id in rows:
         counts[user_id] += 1
     return counts
-
-
-def _profile_small_group(user):
-    try:
-        return user.profile.small_group
-    except ObjectDoesNotExist:
-        return None
 
 
 def _group_label(group):
@@ -256,16 +235,10 @@ def run_audit(target_date=None):
     # --- User membership inventory ----------------------------------------------
     membership_counts = _active_primary_membership_counts_by_user(target_date)
     User = get_user_model()
-    users = User.objects.select_related("profile__small_group").order_by(
-        "username", "id"
-    )
+    users = User.objects.order_by("username", "id")
     for user in users.iterator():
         stats["users_total"] += 1
-        profile_group = _profile_small_group(user)
         active_primary_count = membership_counts.get(user.id, 0)
-
-        if profile_group is not None:
-            stats["users_with_profile_small_group"] += 1
 
         if active_primary_count == 1:
             stats["users_with_single_active_primary_membership"] += 1
@@ -277,22 +250,6 @@ def run_audit(target_date=None):
             )
         else:
             stats["users_with_no_active_primary_membership"] += 1
-
-        # Profile-only users: a legacy Profile.small_group but no single active
-        # primary membership to represent the same belonging. Runtime no longer
-        # uses Profile.small_group (READING-STRUCT.1D), so these are not a runtime
-        # fallback; they are the readiness gap to close before the legacy field
-        # can be retired.
-        if profile_group is not None and active_primary_count != 1:
-            stats["users_profile_group_without_single_membership"] += 1
-            details["users_profile_group_without_single_membership"].append(
-                f"  user_id={user.id} | username={user.get_username()} | "
-                f"profile_small_group={_group_label(profile_group)} | "
-                f"active_primary_memberships={active_primary_count}"
-            )
-
-        if profile_group is None and active_primary_count == 1:
-            stats["users_single_membership_without_profile_group"] += 1
 
     blockers = [key for key in BLOCKER_KEYS if stats[key]]
 

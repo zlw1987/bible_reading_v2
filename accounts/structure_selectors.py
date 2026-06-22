@@ -10,37 +10,6 @@ from accounts.models import (
 )
 
 
-def get_user_legacy_small_group(user):
-    """Return the legacy belonging source (Profile.small_group) for a user."""
-    profile = getattr(user, "profile", None)
-    return getattr(profile, "small_group", None)
-
-
-def get_user_legacy_structure_unit(user):
-    """Return the structure unit derived from Profile.small_group only."""
-    small_group = get_user_legacy_small_group(user)
-    if small_group is None:
-        return None
-    return small_group.church_structure_unit
-
-
-def get_user_legacy_structure_units(user, include_ancestors=False):
-    """Return legacy-derived structure units for a user.
-
-    This function intentionally derives from Profile.small_group and the legacy
-    mapping bridge only. It never reads ChurchStructureMembership; use the
-    membership-core helpers below for that source.
-    """
-    unit = get_user_legacy_structure_unit(user)
-    if unit is None:
-        return []
-
-    if include_ancestors:
-        return unit.get_ancestors() + [unit]
-
-    return [unit]
-
-
 def get_user_primary_membership_unit(user, target_date=None):
     """Return the unit of the user's single active primary membership.
 
@@ -175,35 +144,12 @@ def user_matches_membership_structure_audience(user, units, target_date=None):
     return membership_unit.id in _collect_unit_and_descendant_ids(units)
 
 
-def user_matches_legacy_structure_audience(user, units):
-    """Return whether a user matches audience units via the legacy source.
-
-    Legacy behavior preserved for tests, diagnostics, and rollback clarity:
-    root audiences match all authenticated users, non-root audiences match
-    Profile.small_group through resolve_units_to_small_groups.
-    ChurchStructureMembership is not read here.
-    """
-    if not getattr(user, "is_authenticated", False):
-        return False
-
-    units = list(units)
-    if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
-        return True
-
-    small_group = get_user_legacy_small_group(user)
-    if small_group is None:
-        return False
-
-    return resolve_units_to_small_groups(units).filter(id=small_group.id).exists()
-
-
 def user_matches_structure_audience(user, units):
     """Return whether a user matches selected structure audience units.
 
     Canonical matcher for ServiceEvent structure-audience rows. As of
     CS-CORE.2B-A this delegates to membership-core matching
-    (ChurchStructureMembership active primary); Profile.small_group alone no
-    longer grants structure-audience visibility. Events with zero audience
-    rows never reach this helper and keep their legacy fallback behavior.
+    (ChurchStructureMembership active primary). Events with zero audience
+    rows never reach this helper and fail closed for ordinary users.
     """
     return user_matches_membership_structure_audience(user, units)

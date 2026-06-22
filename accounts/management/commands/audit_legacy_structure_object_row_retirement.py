@@ -55,18 +55,9 @@ CONSUMER_INVENTORY = (
         CATEGORY_SETUP_BRIDGE,
         "legacy resolver retained for coexistence, generation, and diagnostics",
     ),
-    (
-        "get_user_legacy_small_group",
-        "accounts.structure_selectors.get_user_legacy_small_group",
-        CATEGORY_DIAGNOSTIC_SUPPORT,
-        "legacy-profile reader retained for audits and comparison helpers",
-    ),
-    (
-        "get_user_legacy_structure_unit",
-        "accounts.structure_selectors.get_user_legacy_structure_unit",
-        CATEGORY_DIAGNOSTIC_SUPPORT,
-        "legacy-profile mapping reader retained for audits and comparison helpers",
-    ),
+    # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
+    # legacy-profile selector helpers (get_user_legacy_small_group,
+    # get_user_legacy_structure_unit), so they are no longer listed here.
     (
         "seed_church_structure_units",
         "accounts.management.commands.seed_church_structure_units",

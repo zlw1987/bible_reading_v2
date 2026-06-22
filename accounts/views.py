@@ -279,9 +279,7 @@ def staff_structure_map(request):
         start_date__lte=today,
     ).filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
     primary_memberships = list(
-        active_memberships.filter(is_primary=True).select_related(
-            "user__profile__small_group",
-        )
+        active_memberships.filter(is_primary=True)
     )
     direct_primary_user_ids_by_unit = {}
     for membership in primary_memberships:
@@ -362,27 +360,6 @@ def staff_structure_map(request):
         if unit.id not in visited:
             walk(unit, 0, False, [])
 
-    # Drift between the current runtime group and the approved active primary
-    # membership. Categories are reported separately and may overlap with the
-    # unmapped-group indicator; an unmapped current group counts as a mismatch
-    # because it cannot agree with any membership unit.
-    membership_without_group = 0
-    membership_group_mismatch = 0
-    primary_user_ids = set()
-    for membership in primary_memberships:
-        primary_user_ids.add(membership.user_id)
-        profile = getattr(membership.user, "profile", None)
-        group = getattr(profile, "small_group", None)
-        if group is None:
-            membership_without_group += 1
-        elif group.church_structure_unit_id != membership.unit_id:
-            membership_group_mismatch += 1
-    group_without_membership = (
-        Profile.objects.filter(small_group__isnull=False)
-        .exclude(user_id__in=primary_user_ids)
-        .count()
-    )
-
     indicators = {
         "unmapped_ministry_contexts": MinistryContext.objects.filter(
             is_active=True,
@@ -399,13 +376,6 @@ def staff_structure_map(request):
         "units_without_linked_records": counters["without_linked_records"],
         "units_under_holding": counters["under_holding"],
         "direct_parent_memberships": counters["direct_parent_memberships"],
-        "users_in_unmapped_group": Profile.objects.filter(
-            small_group__isnull=False,
-            small_group__church_structure_unit__isnull=True,
-        ).count(),
-        "membership_without_group": membership_without_group,
-        "group_without_membership": group_without_membership,
-        "membership_group_mismatch": membership_group_mismatch,
         "active_root_units": ChurchStructureUnit.objects.filter(
             is_active=True,
             unit_type=ChurchStructureUnit.UNIT_ROOT,
@@ -807,7 +777,7 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
 
     It writes nothing else directly: no unit lifecycle, no membership, no
     audience-scope rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope),
-    no TeamAssignment, and no Profile.small_group. It does not edit members,
+    and no TeamAssignment. It does not edit members,
     audience rows, serving schedules, or permissions. Since CS-CORE.2B-A,
     ServiceEvent audience rows match by active primary ChurchStructureMembership
     instead of this mapping bridge. Bible Study schedule resolution/generation
@@ -1157,8 +1127,9 @@ def profile(request):
         form = ProfileForm(user=request.user, request=request)
 
     # CS-RETIRE.1A: the user's "current confirmed group" display is the active
-    # primary ChurchStructureMembership (the source of truth), not the legacy
-    # Profile.small_group field. No membership => the no-group state.
+    # primary ChurchStructureMembership (the source of truth). The legacy
+    # Profile.small_group field was removed in PROFILE-SG-FIELD-RETIRE.1A. No
+    # membership => the no-group state.
     active_primary_membership = ChurchStructureMembership.current_primary_for_user(
         request.user,
     )
@@ -1210,7 +1181,7 @@ def staff_user_list(request):
 
     users = (
         User.objects
-        .select_related("profile", "profile__small_group")
+        .select_related("profile")
         .order_by("username")
     )
 
@@ -1218,7 +1189,6 @@ def staff_user_list(request):
         users = users.filter(
             Q(username__icontains=query)
             | Q(email__icontains=query)
-            | Q(profile__small_group__name__icontains=query)
         ).distinct()
 
     return render(
@@ -1236,7 +1206,7 @@ def staff_user_password_reset(request, user_id):
     User = get_user_model()
 
     target_user = get_object_or_404(
-        User.objects.select_related("profile", "profile__small_group"),
+        User.objects.select_related("profile"),
         id=user_id,
     )
 
@@ -1282,7 +1252,6 @@ def staff_membership_request_list(request):
         .select_related(
             "user",
             "user__profile",
-            "user__profile__small_group",
             "unit",
             "unit__parent",
             "requested_by",
@@ -1316,7 +1285,6 @@ def get_requested_membership_or_404(membership_id):
         ChurchStructureMembership.objects.select_related(
             "user",
             "user__profile",
-            "user__profile__small_group",
             "unit",
             "unit__parent",
             "requested_by",
@@ -1334,10 +1302,10 @@ def staff_membership_request_detail(request, membership_id):
         membership.user,
     )
 
-    # CS-RETIRE.1A: approval no longer writes Profile.small_group. The legacy
-    # profile group is shown read-only as archive/reference context only; there is
-    # no "sync target" and no sync-on-approval warning, because membership is now
-    # the source of truth.
+    # CS-RETIRE.1A: approval no longer writes any legacy profile group; the
+    # legacy Profile.small_group field was removed in PROFILE-SG-FIELD-RETIRE.1A.
+    # There is no "sync target" and no sync-on-approval warning, because the
+    # active primary ChurchStructureMembership is the source of truth.
     return render(
         request,
         "accounts/staff/membership_request_detail.html",
@@ -1379,15 +1347,14 @@ def staff_membership_request_approve(request, membership_id):
     membership.approved_at = timezone.now()
     membership.save()
 
-    # CS-RETIRE.1A: the approved ChurchStructureMembership is now the source of
-    # truth for belonging. We intentionally no longer mirror the approval into the
-    # legacy Profile.small_group field (it is legacy archive/audit data only, not a
-    # runtime source for Reading, Bible Study, or events).
+    # CS-RETIRE.1A: the approved ChurchStructureMembership is the source of truth
+    # for belonging. The legacy Profile.small_group field was removed in
+    # PROFILE-SG-FIELD-RETIRE.1A, so there is no legacy profile group to mirror.
     messages.success(
         request,
         (
             "Group request approved as the user's active primary church-structure "
-            "membership. The legacy Profile.small_group field was not changed."
+            "membership."
         ),
     )
     return redirect("staff_membership_request_list")

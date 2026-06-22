@@ -2,27 +2,25 @@
 
 LEGACY-RETIRE.1A inventory/readiness command. It reports remaining data and
 code-adjacent blockers before retiring legacy structure objects such as
-``Profile.small_group``, ``SmallGroup``, ``District``, ``MinistryContext``,
+``SmallGroup``, ``District``, and ``MinistryContext``. (``Profile.small_group``,
 legacy ServiceEvent/Bible Study scope fields, reflection legacy snapshots, and
-legacy role-scope fields.
+legacy role-scope fields have already been removed; only immutable historical
+migrations still name them.)
 
 The command is deliberately read-only. It has no ``--apply`` option, writes no
 rows, changes no runtime behavior, and never reconciles legacy fields.
 """
 
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import (
     ChurchRoleAssignment,
-    ChurchStructureMembership,
     ChurchStructureUnit,
     District,
     MinistryContext,
-    Profile,
     SmallGroup,
 )
 from comments.models import ReflectionComment
@@ -38,22 +36,11 @@ from studies.models import (
 
 SECTION_KEYS = OrderedDict(
     [
-        (
-            "Profile.small_group",
-            (
-                "profiles_checked",
-                "profiles_with_small_group",
-                "profiles_without_small_group",
-                "profiles_with_small_group_and_active_primary_membership",
-                "profiles_with_small_group_no_active_primary_membership",
-                "profile_membership_unit_matches_group_mapping",
-                "profile_membership_unit_mismatch_group_mapping",
-                "profile_group_unmapped",
-                "multiple_active_primary_memberships",
-                "profile_small_group_unrepresented_by_membership_blockers",
-                "profile_small_group_removal_blockers",
-            ),
-        ),
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group; its data
+        # counters (profiles_with_small_group, profile_small_group_removal_blockers,
+        # etc.) were retired with the field. Belonging is membership-core
+        # (ChurchStructureMembership). Only immutable historical migrations still
+        # name the field.
         (
             "SmallGroup",
             (
@@ -168,8 +155,6 @@ SECTION_KEYS = OrderedDict(
 COUNTER_KEYS = tuple(key for keys in SECTION_KEYS.values() for key in keys)
 
 BLOCKER_KEYS = (
-    "profile_small_group_removal_blockers",
-    "profile_small_group_unrepresented_by_membership_blockers",
     "small_group_retirement_blocker_references",
     "district_retirement_blocker_references",
     "ministry_context_retirement_blocker_references",
@@ -180,10 +165,6 @@ BLOCKER_KEYS = (
 )
 
 DETAIL_KEYS = (
-    "profile_no_active_primary_membership",
-    "profile_membership_unit_mismatch",
-    "profile_group_unmapped",
-    "profile_multiple_active_primary_memberships",
     "small_group_unmapped",
     "small_group_inactive_unit",
     "small_group_wrong_unit_type",
@@ -202,18 +183,11 @@ DETAIL_KEYS = (
 )
 
 DIAGNOSTIC_BACKFILL_COMMANDS = (
-    (
-        "accounts.management.commands.audit_structure_belonging",
-        "diagnostic/audit/backfill support",
-    ),
-    (
-        "accounts.management.commands.backfill_church_structure_memberships",
-        "backfill support; mutation only when explicitly run with its apply option",
-    ),
-    (
-        "accounts.management.commands.cleanup_profile_small_group",
-        "guarded cleanup tooling for Profile.small_group; dry-run by default",
-    ),
+    # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with its
+    # guarded cleanup command (cleanup_profile_small_group), the legacy
+    # profile-vs-membership belonging drift audit (audit_structure_belonging),
+    # and the membership backfill that sourced from the field
+    # (backfill_church_structure_memberships), so none are listed here.
     (
         "accounts.management.commands.seed_church_structure_units",
         "setup/backfill support for legacy-to-structure mappings",
@@ -269,10 +243,10 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "reading.management.commands.audit_reading_structure_runtime_readiness",
         "standing diagnostic/audit guard",
     ),
-    (
-        "reading.management.commands.audit_group_progress_shadow",
-        "shadow diagnostic; not an ordinary runtime blocker",
-    ),
+    # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
+    # legacy group-progress shadow diagnostic (audit_group_progress_shadow), which
+    # compared the legacy Profile.small_group roster against the membership-core
+    # roster, so it is no longer listed here.
     # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post together
     # with the reflection mirror cleanup commands
     # (cleanup_reflection_small_group_mirrors,
@@ -292,26 +266,6 @@ def _new_stats():
 
 def _new_details():
     return OrderedDict((key, []) for key in DETAIL_KEYS)
-
-
-def _active_primary_memberships(target_date):
-    return (
-        ChurchStructureMembership.objects.filter(
-            status=ChurchStructureMembership.STATUS_ACTIVE,
-            is_primary=True,
-            start_date__lte=target_date,
-        )
-        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
-        .select_related("unit")
-        .order_by("user_id", "id")
-    )
-
-
-def _memberships_by_user(target_date):
-    memberships_by_user = defaultdict(list)
-    for membership in _active_primary_memberships(target_date):
-        memberships_by_user[membership.user_id].append(membership)
-    return memberships_by_user
 
 
 def _unit_label(unit):
@@ -373,99 +327,6 @@ def _append(details, key, line):
     details[key].append(line)
 
 
-def _scan_profiles(stats, details, target_date):
-    memberships_by_user = _memberships_by_user(target_date)
-    profiles = (
-        Profile.objects.select_related(
-            "user",
-            "small_group",
-            "small_group__church_structure_unit",
-        )
-        .all()
-        .order_by("user__username", "id")
-    )
-
-    for profile in profiles:
-        stats["profiles_checked"] += 1
-        group = profile.small_group
-        memberships = memberships_by_user.get(profile.user_id, [])
-
-        if group is None:
-            stats["profiles_without_small_group"] += 1
-            if len(memberships) > 1:
-                stats["multiple_active_primary_memberships"] += 1
-            continue
-
-        stats["profiles_with_small_group"] += 1
-        if memberships:
-            stats["profiles_with_small_group_and_active_primary_membership"] += 1
-        else:
-            stats["profiles_with_small_group_no_active_primary_membership"] += 1
-            _append(
-                details,
-                "profile_no_active_primary_membership",
-                "user_id={user_id} username={username} profile_small_group={group}".format(
-                    user_id=profile.user_id,
-                    username=profile.user.get_username(),
-                    group=_group_label(group),
-                ),
-            )
-
-        group_unit = group.church_structure_unit
-        if group_unit is None:
-            stats["profile_group_unmapped"] += 1
-            _append(
-                details,
-                "profile_group_unmapped",
-                "user_id={user_id} username={username} profile_small_group={group}".format(
-                    user_id=profile.user_id,
-                    username=profile.user.get_username(),
-                    group=_group_label(group),
-                ),
-            )
-
-        if len(memberships) > 1:
-            stats["multiple_active_primary_memberships"] += 1
-            _append(
-                details,
-                "profile_multiple_active_primary_memberships",
-                "user_id={user_id} username={username} membership_ids={ids}".format(
-                    user_id=profile.user_id,
-                    username=profile.user.get_username(),
-                    ids=",".join(str(membership.id) for membership in memberships),
-                ),
-            )
-        elif len(memberships) == 1 and group_unit is not None:
-            membership = memberships[0]
-            if membership.unit_id == group_unit.id:
-                stats["profile_membership_unit_matches_group_mapping"] += 1
-            else:
-                stats["profile_membership_unit_mismatch_group_mapping"] += 1
-                _append(
-                    details,
-                    "profile_membership_unit_mismatch",
-                    (
-                        "user_id={user_id} username={username} "
-                        "profile_small_group={group} profile_unit={profile_unit} "
-                        "membership_unit={membership_unit}"
-                    ).format(
-                        user_id=profile.user_id,
-                        username=profile.user.get_username(),
-                        group=_group_label(group),
-                        profile_unit=_unit_label(group_unit),
-                        membership_unit=_unit_label(membership.unit),
-                    ),
-                )
-
-    stats["profile_small_group_unrepresented_by_membership_blockers"] = (
-        stats["profiles_with_small_group_no_active_primary_membership"]
-        + stats["profile_membership_unit_mismatch_group_mapping"]
-        + stats["profile_group_unmapped"]
-        + stats["multiple_active_primary_memberships"]
-    )
-    stats["profile_small_group_removal_blockers"] = stats["profiles_with_small_group"]
-
-
 def _scan_small_groups(stats, details):
     groups = (
         SmallGroup.objects.select_related("church_structure_unit")
@@ -514,7 +375,9 @@ def _scan_small_groups(stats, details):
                     ),
                 )
 
-    stats["profile_small_group_references"] = stats["profiles_with_small_group"]
+    # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so profiles are no
+    # longer an inbound SmallGroup reference.
+    stats["profile_small_group_references"] = 0
     # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group, so the V2
     # meeting is no longer an inbound SmallGroup reference.
     stats["bible_study_v2_meeting_small_group_references"] = 0
@@ -889,7 +752,6 @@ def run_audit(target_date=None, now=None):
     stats = _new_stats()
     details = _new_details()
 
-    _scan_profiles(stats, details, target_date)
     _scan_small_groups(stats, details)
     _scan_districts(stats, details)
     _scan_ministry_contexts(stats, details)
@@ -916,9 +778,10 @@ class Command(BaseCommand):
     help = (
         "LEGACY-RETIRE.1A read-only comprehensive audit for legacy Church "
         "Structure retirement readiness. Reports remaining blockers for "
-        "Profile.small_group, SmallGroup, District, MinistryContext, legacy "
+        "SmallGroup, District, and MinistryContext (Profile.small_group, legacy "
         "ServiceEvent/Bible Study scope fields, reflection legacy snapshots, "
-        "and legacy role-scope fields. Writes nothing and has no --apply."
+        "and legacy role-scope fields have already been removed). Writes nothing "
+        "and has no --apply."
     )
 
     def add_arguments(self, parser):
@@ -999,7 +862,7 @@ class Command(BaseCommand):
 
         write("")
         write(
-            "Audit only: no Profile.small_group, ChurchStructureMembership, "
+            "Audit only: no ChurchStructureMembership, "
             "ChurchStructureUnit, SmallGroup, District, MinistryContext, "
             "ServiceEvent, Bible Study, ReflectionComment, ChurchRoleAssignment, "
             "audience, role, or permission rows were changed. ServiceEvent "

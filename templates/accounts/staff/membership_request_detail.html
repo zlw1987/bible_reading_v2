@@ -44,21 +44,7 @@
     </dl>
 </div>
 
-<div class="grid grid-2 membership-request-context-grid">
-    <section class="card membership-request-detail-card">
-        <h2 class="card-title">{{ ui.current_runtime_context }}</h2>
-        <dl class="detail-list">
-            <dt>{{ ui.current_runtime_small_group }}</dt>
-            <dd>
-                {% if membership.user.profile.small_group %}
-                {{ membership.user.profile.small_group.name }}
-                {% else %}
-                -
-                {% endif %}
-            </dd>
-        </dl>
-    </section>
-
+<div class="membership-request-context-grid">
     <section class="card membership-request-detail-card">
         <h2 class="card-title">{{ ui.future_foundation_context }}</h2>
         <dl class="detail-list">

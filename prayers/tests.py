@@ -47,24 +47,18 @@ class PrayerRequestFlowTests(TestCase):
             username="levin",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         create_primary_membership(self.user, self.group_unit)
 
         self.same_group_user = User.objects.create_user(
             username="same_group",
             password="TestPass123!",
         )
-        self.same_group_user.profile.small_group = self.group
-        self.same_group_user.profile.save()
         create_primary_membership(self.same_group_user, self.group_unit)
 
         self.other_group_user = User.objects.create_user(
             username="other_group",
             password="TestPass123!",
         )
-        self.other_group_user.profile.small_group = self.other_group
-        self.other_group_user.profile.save()
         create_primary_membership(self.other_group_user, self.other_group_unit)
 
         self.staff_user = User.objects.create_user(
@@ -251,8 +245,6 @@ class PrayerRequestFlowTests(TestCase):
             username="legacy_only",
             password="TestPass123!",
         )
-        legacy_only_user.profile.small_group = self.group
-        legacy_only_user.profile.save()
         PrayerRequest.objects.create(
             user=self.user,
             title="Membership only visible prayer",
@@ -294,8 +286,6 @@ class PrayerRequestFlowTests(TestCase):
             username="mismatch",
             password="TestPass123!",
         )
-        mismatch_user.profile.small_group = self.other_group
-        mismatch_user.profile.save()
         create_primary_membership(mismatch_user, self.group_unit)
         PrayerRequest.objects.create(
             user=self.user,
@@ -1212,8 +1202,6 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
             username="mirror_user",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         create_primary_membership(self.user, self.group_unit)
 
         self.viewer = User.objects.create_user(
@@ -1343,8 +1331,6 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
             username="legacy_only",
             password="TestPass123!",
         )
-        legacy_only.profile.small_group = self.group
-        legacy_only.profile.save()
         # Deliberately no ChurchStructureMembership for legacy_only.
 
         self.assertFalse(prayer.can_be_seen_by(legacy_only))
@@ -1462,24 +1448,18 @@ class PrayerListTabAudienceTests(TestCase):
             username="levin",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         create_primary_membership(self.user, self.group_unit)
 
         self.same_group_user = User.objects.create_user(
             username="same_group",
             password="TestPass123!",
         )
-        self.same_group_user.profile.small_group = self.group
-        self.same_group_user.profile.save()
         create_primary_membership(self.same_group_user, self.group_unit)
 
         self.other_group_user = User.objects.create_user(
             username="other_group",
             password="TestPass123!",
         )
-        self.other_group_user.profile.small_group = self.other_group
-        self.other_group_user.profile.save()
         create_primary_membership(self.other_group_user, self.other_group_unit)
 
         self.no_group_user = User.objects.create_user(
@@ -1667,8 +1647,6 @@ class PrayerListLabelRenderingTests(TestCase):
             username="levin",
             password="TestPass123!",
         )
-        self.user.profile.small_group = self.group
-        self.user.profile.save()
         create_primary_membership(self.user, self.group_unit)
         # A church-wide prayer so a card (and its scope badge) renders.
         PrayerRequest.objects.create(

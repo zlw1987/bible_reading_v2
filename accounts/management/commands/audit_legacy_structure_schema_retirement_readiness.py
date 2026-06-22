@@ -18,7 +18,6 @@ from django.core.management.base import BaseCommand, CommandError
 from accounts.models import (
     District,
     MinistryContext,
-    Profile,
     SmallGroup,
 )
 from comments.models import ReflectionComment
@@ -64,35 +63,28 @@ def _refs(*items):
 
 CANDIDATE_DEFINITIONS = (
     {
-        "candidate_name": "Profile.small_group",
+        "candidate_name": "Profile.small_group (removed)",
         "model_table": "accounts.Profile",
         "field_name": "small_group",
         "candidate_type": "field",
-        "app_read_references": _refs(
-            "accounts.structure_selectors.get_user_legacy_small_group (diagnostic/helper)",
-            "reading.group_progress_shadow legacy comparison baseline",
+        "migration_history_references": _refs(
+            "accounts migrations (field added then removed)"
         ),
-        "admin_references": _refs("accounts.admin.ProfileAdmin"),
-        "template_display_references": _refs(
-            "templates/accounts/staff/user_list.html",
-            "templates/accounts/staff/password_reset.html",
-            "membership request staff legacy/archive display",
-        ),
-        "diagnostic_cleanup_references": _refs(
-            "audit_structure_belonging",
-            "audit_group_progress_shadow",
-            "cleanup_profile_small_group",
-            "audit_legacy_structure_retirement_readiness",
-        ),
-        "test_fixture_references": _refs("focused tests create legacy profile fixtures"),
-        "migration_history_references": _refs("accounts migrations"),
-        "data_counter": "profile_small_group",
         "recommended_next_action": (
-            "Keep field until target DB cleanup/audit confirms all stored values "
-            "are cleared or explicitly archived; then remove staff/admin/display "
-            "surfaces before a separate migration slice."
+            "Completed. PROFILE-SG-FIELD-RETIRE.1A removed the Profile.small_group "
+            "model field after preflight audits confirmed zero populated values and "
+            "no live runtime/visibility/permission/app-write dependency. Belonging "
+            "is membership-core (active primary ChurchStructureMembership). The "
+            "guarded cleanup command (cleanup_profile_small_group), the legacy "
+            "profile-vs-membership belonging drift audit (audit_structure_belonging), "
+            "the membership backfill that sourced from the field "
+            "(backfill_church_structure_memberships), and the group-progress legacy "
+            "shadow diagnostic (audit_group_progress_shadow) were retired with it; "
+            "staff/admin/template display surfaces were removed. Only immutable "
+            "historical migrations still name it; no active schema blocker remains. "
+            "This did not remove the SmallGroup table."
         ),
-        "suggested_removal_phase": "phase 1 then phase 2",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "SmallGroup model/table",
@@ -109,7 +101,6 @@ CANDIDATE_DEFINITIONS = (
             "reading/group_progress selected group display",
         ),
         "diagnostic_cleanup_references": _refs(
-            "cleanup_profile_small_group",
             "cleanup_legacy_structure_parent_links",
             "audit_legacy_structure_object_row_retirement",
         ),
@@ -118,7 +109,9 @@ CANDIDATE_DEFINITIONS = (
         "data_counter": "small_group_rows",
         "recommended_next_action": (
             "Do not remove table yet. Keep as bridge/admin/diagnostic context "
-            "until all inbound FKs and mapping decisions are retired or replaced."
+            "until all inbound FKs and mapping decisions are retired or replaced. "
+            "PROFILE-SG-FIELD-RETIRE.1A already removed the Profile.small_group "
+            "inbound FK."
         ),
         "suggested_removal_phase": "phase 5",
     },
@@ -154,12 +147,11 @@ CANDIDATE_DEFINITIONS = (
         "app_read_references": _refs(
             "structure-to-legacy mapping bridge",
             "Bible Study old-row compatibility and diagnostics",
-            "profile/reflection cleanup safety checks",
+            "reflection cleanup safety checks",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
-            "cleanup_profile_small_group",
             "audit_bible_study_generation_bridge_retirement",
         ),
         "test_fixture_references": _refs("mapping bridge fixtures"),
@@ -686,9 +678,8 @@ CANDIDATE_DEFINITIONS = (
 
 def _data_counts():
     return {
-        "profile_small_group": Profile.objects.filter(
-            small_group__isnull=False
-        ).count(),
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so there is no
+        # longer a queryable data counter for it.
         "small_group_rows": SmallGroup.objects.count(),
         "small_group_district": SmallGroup.objects.filter(
             district__isnull=False

@@ -467,6 +467,33 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
         self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
 
+    def test_legacy_parent_fk_admin_display_is_retired(self):
+        # LEGACY-OBJECT-ADMIN-FK.1A stripped the SmallGroup.district and
+        # District.ministry_context parent FKs from SmallGroupAdmin / DistrictAdmin
+        # (the admins stay registered and still surface the church_structure_unit
+        # mapping bridge). Neither parent FK is named by an admin surface anymore,
+        # so the schema audit must no longer report an admin_reference for them.
+        # With parent/context links already clear, District.ministry_context (zero
+        # populated rows in the fixture) advances from blocked_by_display_or_admin
+        # to blocked_by_diagnostic_tooling; only the parent-link/seed diagnostic
+        # tooling and the legacy bridge read remain.
+        audit = run_audit()
+
+        small_group_district = _candidate(audit, "SmallGroup.district")
+        district_ministry_context = _candidate(audit, "District.ministry_context")
+
+        self.assertEqual(small_group_district["admin_references"], ())
+        self.assertEqual(district_ministry_context["admin_references"], ())
+
+        # The fixture leaves District.ministry_context unset (0 populated), so the
+        # parent-FK field is no longer admin/display-blocked and advances to the
+        # diagnostic-tooling phase.
+        self.assertEqual(district_ministry_context["data_blocker_count"], 0)
+        self.assertEqual(
+            district_ministry_context["schema_removal_status"],
+            STATUS_DIAGNOSTIC,
+        )
+
     def test_reflection_mirror_is_historical_after_field_removal(self):
         # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post
         # model field (migration comments/0007) after 1D-1G retired its

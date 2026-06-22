@@ -124,7 +124,9 @@ CANDIDATE_DEFINITIONS = (
             "accounts.structure_selectors.resolve_units_to_small_groups fallback branches",
             "BibleStudySeries.get_eligible_small_groups (audience-row resolver)",
         ),
-        "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
+        # LEGACY-OBJECT-ADMIN-FK.1A removed the SmallGroup.district column from
+        # SmallGroupAdmin, so the admin no longer surfaces this parent FK.
+        "admin_references": _refs(),
         "diagnostic_cleanup_references": _refs(
             "cleanup_legacy_structure_parent_links",
             "seed_church_structure_units historical setup bridge",
@@ -133,9 +135,12 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "small_group_district",
         "recommended_next_action": (
-            "Clear only through the guarded parent-link cleanup after dry-run "
-            "review; do not remove the field until the bridge resolver and seed "
-            "story are retired or replaced."
+            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A; "
+            "parent/context links are already clear (0 present). Remaining "
+            "references are the legacy bridge resolver read "
+            "(resolve_units_to_small_groups / get_eligible_small_groups) and the "
+            "parent-link/seed diagnostic tooling. Remove the field only after the "
+            "bridge resolver read and seed/cleanup tooling are retired or replaced."
         ),
         "suggested_removal_phase": "phase 4",
     },
@@ -195,7 +200,9 @@ CANDIDATE_DEFINITIONS = (
             "legacy hierarchy fallback for old Bible Study schedule scope",
             "structure mapping diagnostics",
         ),
-        "admin_references": _refs("accounts.admin.DistrictAdmin"),
+        # LEGACY-OBJECT-ADMIN-FK.1A removed the District.ministry_context column
+        # from DistrictAdmin, so the admin no longer surfaces this parent FK.
+        "admin_references": _refs(),
         "diagnostic_cleanup_references": _refs(
             "cleanup_legacy_structure_parent_links",
             "seed_church_structure_units historical setup bridge",
@@ -204,8 +211,11 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "district_ministry_context",
         "recommended_next_action": (
-            "Clear only through guarded parent-link cleanup after target DB dry-run "
-            "review; field removal waits for bridge/tooling retirement."
+            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A; "
+            "parent/context links are already clear (0 present). Remaining "
+            "references are the legacy Bible Study schedule fallback read plus the "
+            "parent-link/seed diagnostic tooling. Remove the field only after the "
+            "bridge read and seed/cleanup tooling are retired or replaced."
         ),
         "suggested_removal_phase": "phase 4",
     },

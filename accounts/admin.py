@@ -11,31 +11,42 @@ from .models import (
 
 
 LEGACY_RUNTIME_NOTE = (
-    "Legacy bridge/archive model / 旧模型（当前桥接）: keep for compatibility, "
-    "admin, audit, backfill, support, and rollback context. V1 legacy "
-    "BibleStudySession still reads legacy group fields; Bible Study generation "
-    "still uses the legacy SmallGroup bridge. Migrated ordinary-member paths "
-    "now use active primary ChurchStructureMembership or structure snapshots, "
-    "including ServiceEvent audience rows, Bible Study v2 audience rows and "
-    "role/worship pickers, prayer groups, group progress, and reflection "
-    "read/write paths. The legacy Profile.small_group field was removed in "
+    "Legacy bridge/archive model / 旧模型（桥接/归档）: kept for the "
+    "church_structure_unit mapping bridge, admin, audit/diagnostic, and "
+    "table-retirement context. Migrated ordinary-member paths use active "
+    "primary ChurchStructureMembership or structure snapshots, including "
+    "ServiceEvent audience rows, Bible Study v2 audience rows and role/worship "
+    "pickers, prayer groups, group progress, and reflection read/write paths. "
+    "V1 BibleStudySession app runtime and the V1 Django Admin surface are "
+    "retired. V2 Bible Study meeting visibility and generation are "
+    "structure-native through BibleStudyMeetingAudienceScope, generation_key, "
+    "and anchor_unit. The legacy Profile.small_group field was removed in "
     "PROFILE-SG-FIELD-RETIRE.1A; ChurchStructureMembership is the canonical "
-    "belonging source. Zero-row ServiceEvents fail closed for ordinary "
-    "users. Do not delete until migration is complete."
+    "belonging source. Zero-row ServiceEvents fail closed for ordinary users. "
+    "The church_structure_unit mapping bridge remains live until a separate "
+    "approved object-row/table retirement slice; do not delete legacy object "
+    "tables or mapping FKs before then."
 )
 
 MINISTRY_CONTEXT_NOTE = (
-    "Ministry Context / 事工范围（当前桥接）: Bible Study generation still uses "
-    "this short-term bridge. ServiceEvent audience rows now match active "
-    "primary ChurchStructureMembership instead of this mapping bridge. Do not "
-    "delete until migration is complete."
+    "Ministry Context / 事工范围（桥接/归档）: retained as a "
+    "church_structure_unit mapping bridge and admin/diagnostic context. "
+    "ServiceEvent audience rows match active primary ChurchStructureMembership, "
+    "and V2 Bible Study generation is structure-native through "
+    "BibleStudyMeetingAudienceScope, generation_key, and anchor_unit, not this "
+    "mapping bridge. The mapping bridge remains live until a separate approved "
+    "object-row/table retirement slice; do not delete the table or mapping FK "
+    "before then."
 )
 
 STRUCTURE_UNIT_NOTE = (
     "Church Structure Unit / 教会结构单元（结构基础）: flexible structure "
     "foundation. ServiceEvent audience rows use selected units with active "
-    "primary ChurchStructureMembership after CS-CORE.2B-A; Bible Study still "
-    "resolves selected units through legacy mappings."
+    "primary ChurchStructureMembership after CS-CORE.2B-A, and V2 Bible Study "
+    "meeting visibility/generation is structure-native through "
+    "BibleStudyMeetingAudienceScope, generation_key, and anchor_unit. Legacy "
+    "SmallGroup / District / MinistryContext rows remain only as "
+    "bridge/admin/diagnostic and table-retirement context."
 )
 
 MEMBERSHIP_NOTE = (
@@ -44,8 +55,8 @@ MEMBERSHIP_NOTE = (
     "audience rows, Bible Study v2 audience rows and role/worship pickers, "
     "prayer groups, group progress, and reflection read/write paths. The "
     "legacy Profile.small_group field was removed in "
-    "PROFILE-SG-FIELD-RETIRE.1A, and V1 legacy BibleStudySession still reads "
-    "legacy group fields. Zero-row ServiceEvents fail closed for ordinary "
+    "PROFILE-SG-FIELD-RETIRE.1A, and V1 BibleStudySession app runtime is "
+    "retired. Zero-row ServiceEvents fail closed for ordinary "
     "users. Membership does "
     "not grant staff capabilities, role assignments, or TeamAssignment/My "
     "Serving. Notes must stay operational and non-sensitive."
@@ -93,7 +104,7 @@ class MinistryContextAdmin(LegacyStructureAdminMixin, admin.ModelAdmin):
     )
     fieldsets = (
         (
-            "Ministry Contexts / 事工范围（当前桥接）",
+            "Ministry Contexts / 事工范围（桥接/归档）",
             {
                 "fields": (
                     "admin_runtime_note",
@@ -119,32 +130,30 @@ class MinistryContextAdmin(LegacyStructureAdminMixin, admin.ModelAdmin):
 
 @admin.register(District)
 class DistrictAdmin(LegacyStructureAdminMixin, admin.ModelAdmin):
+    # LEGACY-OBJECT-ADMIN-FK.1A: the legacy District.ministry_context parent FK
+    # is no longer surfaced here. The mapping bridge (church_structure_unit) and
+    # mapping_status remain, since that bridge is still live and data-blocked.
     list_display = (
         "name",
-        "ministry_context",
         "mapping_status",
         "church_structure_unit",
         "is_active",
         "created_at",
     )
-    list_filter = ("ministry_context", "church_structure_unit", "is_active")
+    list_filter = ("church_structure_unit", "is_active")
     search_fields = (
         "name",
-        "ministry_context__code",
-        "ministry_context__name",
-        "ministry_context__name_en",
         "church_structure_unit__code",
         "church_structure_unit__name",
         "church_structure_unit__name_en",
     )
     fieldsets = (
         (
-            "Legacy Districts / 旧区（当前仍驱动系统）",
+            "Legacy Districts / 旧区（桥接/归档）",
             {
                 "fields": (
                     "admin_runtime_note",
                     "name",
-                    "ministry_context",
                     "is_active",
                     "mapping_status",
                     "church_structure_unit",
@@ -156,29 +165,29 @@ class DistrictAdmin(LegacyStructureAdminMixin, admin.ModelAdmin):
 
 @admin.register(SmallGroup)
 class SmallGroupAdmin(LegacyStructureAdminMixin, admin.ModelAdmin):
+    # LEGACY-OBJECT-ADMIN-FK.1A: the legacy SmallGroup.district parent FK is no
+    # longer surfaced here. The mapping bridge (church_structure_unit) and
+    # mapping_status remain, since that bridge is still live and data-blocked.
     list_display = (
         "name",
-        "district",
         "mapping_status",
         "church_structure_unit",
         "is_active",
     )
-    list_filter = ("district", "church_structure_unit", "is_active")
+    list_filter = ("church_structure_unit", "is_active")
     search_fields = (
         "name",
-        "district__name",
         "church_structure_unit__code",
         "church_structure_unit__name",
         "church_structure_unit__name_en",
     )
     fieldsets = (
         (
-            "Legacy Small Groups / 旧小组（当前仍驱动系统）",
+            "Legacy Small Groups / 旧小组（桥接/归档）",
             {
                 "fields": (
                     "admin_runtime_note",
                     "name",
-                    "district",
                     "is_active",
                     "mapping_status",
                     "church_structure_unit",

@@ -1,15 +1,22 @@
 from django.contrib import admin
 
 from .models import (
-    BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
+
+# BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface for the legacy
+# V1 Bible Study path. ``BibleStudySession`` and its V1-only child models
+# ``BibleStudyGuide`` / ``BibleStudyWorshipSong`` are intentionally NOT
+# registered: V1 app-level runtime is already retired (BS-V1-RETIRE.1A) and
+# there is no longer a staff create/edit/delete/maintenance surface for V1
+# sessions. The models, tables, and rows are unchanged; remaining V1 rows are
+# purged only through the guarded ``purge_legacy_bible_study_v1_sessions``
+# command, and V1 model/table/schema removal stays a later separate slice.
+# Do not re-register these admins. The active V2 path uses ``BibleStudyMeeting``.
 
 
 @admin.register(BibleStudySeries)
@@ -27,22 +34,6 @@ class BibleStudySeriesAdmin(admin.ModelAdmin):
         "is_active",
     )
     search_fields = ("title", "title_en")
-    readonly_fields = ("created_at", "updated_at", "published_at")
-
-
-@admin.register(BibleStudySession)
-class BibleStudySessionAdmin(admin.ModelAdmin):
-    list_display = (
-        "title",
-        "series",
-        "study_datetime",
-        "prestudy_datetime",
-        "scope_type",
-        "status",
-        "created_by",
-    )
-    list_filter = ("status", "scope_type", "series", "study_datetime")
-    search_fields = ("title", "title_en", "scripture_reference", "location")
     readonly_fields = ("created_at", "updated_at", "published_at")
 
 
@@ -160,28 +151,7 @@ class BibleStudyMeetingRoleAdmin(admin.ModelAdmin):
         )
 
 
-@admin.register(BibleStudyGuide)
-class BibleStudyGuideAdmin(admin.ModelAdmin):
-    list_display = ("session", "updated_at")
-    search_fields = (
-        "session__title",
-        "guide_body",
-        "discussion_questions",
-        "prestudy_notes",
-    )
-    readonly_fields = ("created_at", "updated_at")
-
-
-@admin.register(BibleStudyWorshipSong)
-class BibleStudyWorshipSongAdmin(admin.ModelAdmin):
-    list_display = ("session", "sort_order", "title", "song_key", "updated_at")
-    list_filter = ("session",)
-    search_fields = (
-        "title",
-        "title_en",
-        "song_key",
-        "note",
-        "note_en",
-        "session__title",
-    )
-    readonly_fields = ("created_at", "updated_at")
+# NOTE: BibleStudyGuideAdmin and BibleStudyWorshipSongAdmin (the V1-only child
+# models keyed on BibleStudySession) were unregistered in BS-V1-ADMIN-RETIRE.1A
+# together with BibleStudySessionAdmin. See the module header. The active V2
+# worship surface is BibleStudyMeetingWorshipSongAdmin above.

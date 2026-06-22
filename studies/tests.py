@@ -2,13 +2,14 @@ from datetime import date, datetime, timezone as datetime_timezone
 from io import StringIO
 from unittest import mock
 
+from django.contrib import admin
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command, CommandError
 from django.db import connection
 from django.db.models import ProtectedError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -6418,3 +6419,28 @@ class BibleStudyModuleTests(TestCase):
         self.assertNotIn(cancelled, listed)
         # Generation preview still treats the cancelled meeting as existing.
         self.assertEqual(response.context["generation_preview"]["existing_count"], 2)
+
+
+class BibleStudyV1AdminRetirementTests(SimpleTestCase):
+    """BS-V1-ADMIN-RETIRE.1A: the active V1 Bible Study Django Admin surface is
+    retired (unregistered), while the active V2 admin surface is unaffected.
+
+    V1 app-level runtime was already retired (BS-V1-RETIRE.1A); this slice
+    removes the remaining staff admin maintenance/display surface so V1 has no
+    active display/admin blocker. The V1 models, tables, and rows are unchanged.
+    """
+
+    def test_v1_session_admin_is_unregistered(self):
+        self.assertNotIn(BibleStudySession, admin.site._registry)
+
+    def test_v1_only_child_admins_are_unregistered(self):
+        # BibleStudyGuide and BibleStudyWorshipSong are V1-only child models
+        # keyed on BibleStudySession; their admins were retired together with
+        # the session admin so staff cannot maintain V1 child data via admin.
+        self.assertNotIn(BibleStudyGuide, admin.site._registry)
+        self.assertNotIn(BibleStudyWorshipSong, admin.site._registry)
+
+    def test_v2_meeting_admin_remains_registered(self):
+        # The active V2 Bible Study path must remain administrable.
+        self.assertIn(BibleStudyMeeting, admin.site._registry)
+        self.assertIn(BibleStudyMeetingWorshipSong, admin.site._registry)

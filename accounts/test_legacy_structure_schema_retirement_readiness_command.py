@@ -443,6 +443,30 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
                 "not in legacy removal sequence",
             )
 
+    def test_bible_study_v1_session_admin_surface_is_retired(self):
+        # BS-V1-ADMIN-RETIRE.1A unregistered the active V1 Django Admin surface
+        # (BibleStudySessionAdmin and the V1-only BibleStudyGuideAdmin /
+        # BibleStudyWorshipSongAdmin), so the V1 BibleStudySession candidate no
+        # longer carries an active display/admin reference and is no longer
+        # classified as blocked_by_display_or_admin. With zero V1 rows in the
+        # test DB and no remaining admin/template surface, the only remaining
+        # references are purge/audit diagnostic tooling, so the candidate is
+        # classified as blocked_by_diagnostic_tooling (the next cleanup phase),
+        # not by live runtime, app writes, or display/admin.
+        audit = run_audit()
+        candidate = _candidate(
+            audit, "BibleStudySession (V1 model/table and scope fields)"
+        )
+
+        self.assertEqual(candidate["admin_references"], ())
+        self.assertEqual(candidate["template_display_references"], ())
+        self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertEqual(candidate["app_write_references"], ())
+        self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["data_blocker_count"], 0)
+        self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
+
     def test_reflection_mirror_is_historical_after_field_removal(self):
         # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post
         # model field (migration comments/0007) after 1D-1G retired its

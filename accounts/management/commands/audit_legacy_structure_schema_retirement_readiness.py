@@ -556,7 +556,6 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "studies.BibleStudySession",
         "field_name": "scope_type, district, small_group",
         "candidate_type": "model/table",
-        "admin_references": _refs("studies.admin.BibleStudySessionAdmin"),
         "diagnostic_cleanup_references": _refs(
             "purge_legacy_bible_study_v1_sessions",
             "audit_legacy_structure_retirement_readiness",
@@ -565,8 +564,16 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("studies migrations"),
         "data_counter": "v1_sessions",
         "recommended_next_action": (
-            "Do not migrate V1 to membership-core. Purge pilot/archive rows only "
-            "through the guarded V1 purge command, then plan a later schema slice."
+            "BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface "
+            "(BibleStudySessionAdmin and the V1-only BibleStudyGuideAdmin / "
+            "BibleStudyWorshipSongAdmin were unregistered), so V1 no longer has "
+            "an active display/admin blocker. V1 app-level runtime was already "
+            "retired (BS-V1-RETIRE.1A). Do not migrate V1 to membership-core. "
+            "Purge any remaining pilot/archive rows only through the guarded V1 "
+            "purge command (purge_legacy_bible_study_v1_sessions), then plan a "
+            "later separate schema slice to remove the V1 model/table; until "
+            "then the remaining references are purge/audit tooling, test "
+            "fixtures, and immutable historical migrations."
         ),
         "suggested_removal_phase": "phase 5",
     },

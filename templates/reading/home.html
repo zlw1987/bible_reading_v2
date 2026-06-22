@@ -13,18 +13,19 @@
     <p class="page-subtitle">{{ ui.today_subtitle }}</p>
 </div>
 
-{# --- Zone 1: Needs your attention ------------------------------------- #}
-{% if needs_attention %}
+{# --- Zone 1: Serving action center ------------------------------------ #}
+{% if serving_summary %}
+{% if serving_summary.is_pending %}
 <div class="card dashboard-reminder">
-    <h2 class="card-title">{% if language == "zh" %}需要你留意{% else %}Needs your attention{% endif %}</h2>
+    <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}Needs your attention{% endif %}</h2>
     <p class="muted">
         {% if language == "zh" %}
-            以下服事安排正在等待你的确认。
+            你有 {{ serving_summary.pending_count }} 个服事安排等待确认。
         {% else %}
-            These serving assignments are waiting for your confirmation.
+            You have {{ serving_summary.pending_count }} serving assignment{{ serving_summary.pending_count|pluralize }} waiting for confirmation.
         {% endif %}
     </p>
-    {% for item in needs_attention %}
+    {% for item in serving_summary.items %}
     <div class="dashboard-attention-row">
         <p>
             <strong>{{ item.assignment.service_event|event_title:language }}</strong>
@@ -37,9 +38,36 @@
     </div>
     {% endfor %}
     <a class="button" href="{% url 'my_serving' %}">
-        {% if language == "zh" %}去「我的服事」确认{% else %}Confirm in My Serving{% endif %}
+        {% if language == "zh" %}去确认{% else %}Confirm in My Serving{% endif %}
     </a>
 </div>
+{% else %}
+<div class="card dashboard-reminder">
+    <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+            你有一个即将到来的服事安排。
+        {% else %}
+            You have an upcoming serving assignment.
+        {% endif %}
+    </p>
+    {% for item in serving_summary.items %}
+    <div class="dashboard-attention-row">
+        <p>
+            <strong>{{ item.assignment.service_event|event_title:language }}</strong>
+            <span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span>
+        </p>
+        <p class="muted">
+            {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
+            {{ item.assignment.ministry_team|ministry_team_name:language }}
+        </p>
+    </div>
+    {% endfor %}
+    <a class="button" href="{% url 'my_serving' %}">
+        {% if language == "zh" %}查看我的服事{% else %}View in My Serving{% endif %}
+    </a>
+</div>
+{% endif %}
 {% endif %}
 
 {# --- Zone 2: Today's Reading ------------------------------------------ #}

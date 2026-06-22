@@ -19,6 +19,7 @@ from accounts.models import (
     SmallGroup,
 )
 from events.models import ServiceEvent
+from reading.templatetags.datetime_extras import member_datetime
 from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
 
 from .models import (
@@ -1353,20 +1354,26 @@ class TeamAssignmentV1Tests(TestCase):
 
     def test_assigned_user_sees_own_upcoming_assignment_on_my_serving(self):
         self.set_language("en")
-        self.event.start_datetime = datetime(
-            2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc
+        # Use an upcoming datetime relative to now so the My Serving "upcoming"
+        # filter includes it (a hardcoded calendar date drifts into the past).
+        # Assert the abbreviated, member-formatted rendering, which never shows
+        # the year unlike Django's default verbose datetime format.
+        upcoming = (timezone.now() + timezone.timedelta(days=5)).replace(
+            hour=19, minute=30, second=0, microsecond=0
         )
+        self.event.start_datetime = upcoming
         self.event.save()
         self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
 
         response = self.client.get(reverse("my_serving"))
 
+        local = timezone.localtime(upcoming)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My Serving")
         self.assertContains(response, "Sunday Service")
-        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
-        self.assertNotContains(response, "June 12, 2026")
+        self.assertContains(response, member_datetime(upcoming, "en"))
+        self.assertNotContains(response, f"{local:%B} {local.day}, {local.year}")
         self.assertContains(response, "Lighting Team")
         self.assertContains(response, "Operational note.")
         self.assertContains(response, "https://example.com/playbook")

@@ -574,6 +574,9 @@ def delete_reading_guide_post(request, guide_id):
 THIS_WEEK_DAYS = 7
 THIS_WEEK_STAFF_EVENT_CAP = 5
 NEEDS_ATTENTION_CAP = 5
+# Window for surfacing a confirmed assignment as a lightweight upcoming reminder
+# when nothing is pending confirmation.
+NEAR_TERM_CONFIRMED_DAYS = 30
 
 
 def _user_serving_members(user):
@@ -586,15 +589,52 @@ def _user_serving_members(user):
     )
 
 
-def get_today_needs_attention(user, limit=NEEDS_ATTENTION_CAP):
-    """Pending ministry-team assignment confirmations for the signed-in user.
+def get_today_serving_summary(user):
+    """Count-aware Today serving reminder for the signed-in user (action center).
 
-    Reuses My Serving's personal-assignment selector and keeps only upcoming,
-    non-cancelled assignments still awaiting confirmation. An empty list means
-    the "Needs your attention" section is hidden entirely on Today.
+    Pending confirmations take priority: the summary reports the total pending
+    count (``pending_count``) and surfaces the near-term pending rows (this-week
+    window) so a far-future pending assignment is counted but not shown as a full
+    row. When nothing is pending, a confirmed upcoming assignment within
+    ``NEAR_TERM_CONFIRMED_DAYS`` surfaces as a lightweight reminder instead.
+
+    Reuses My Serving's personal-assignment selector (upcoming, non-cancelled).
+    Returns ``None`` when there is nothing to show, hiding the section on Today.
     """
-    pending = _user_serving_members(user).filter(confirmed_at__isnull=True)
-    return list(pending[:limit])
+    now = timezone.now()
+    upcoming = _user_serving_members(user)
+
+    pending = list(upcoming.filter(confirmed_at__isnull=True)[:NEEDS_ATTENTION_CAP])
+    pending_count = upcoming.filter(confirmed_at__isnull=True).count()
+    if pending_count:
+        week_cutoff = now + timedelta(days=THIS_WEEK_DAYS)
+        near_term = [
+            member
+            for member in pending
+            if member.assignment.service_event.start_datetime <= week_cutoff
+        ]
+        return {
+            "is_pending": True,
+            "pending_count": pending_count,
+            "items": near_term or pending[:1],
+        }
+
+    confirmed_upcoming = (
+        upcoming.filter(confirmed_at__isnull=False)
+        .filter(
+            assignment__service_event__start_datetime__lte=now
+            + timedelta(days=NEAR_TERM_CONFIRMED_DAYS),
+        )
+        .first()
+    )
+    if confirmed_upcoming:
+        return {
+            "is_pending": False,
+            "pending_count": 0,
+            "items": [confirmed_upcoming],
+        }
+
+    return None
 
 
 def get_week_serving_notes(user):
@@ -772,7 +812,7 @@ def home(request):
         {
             "today_items": today_items,
             "ended_plan_count": ended_plan_count,
-            "needs_attention": get_today_needs_attention(request.user),
+            "serving_summary": get_today_serving_summary(request.user),
             "week_gatherings": week_gatherings,
             "show_all_gatherings_link": show_all_gatherings_link,
             "study_meeting_context": study_meeting_context,

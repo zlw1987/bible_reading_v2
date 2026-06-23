@@ -80,13 +80,14 @@ def _collect_unit_and_descendant_ids(units):
 
 
 def resolve_units_to_small_groups(units):
-    """Resolve selected ChurchStructureUnit rows to active legacy SmallGroups.
+    """Resolve selected units to active legacy SmallGroups for diagnostics.
 
-    Retained bridge/admin/diagnostic helper only. Normal Bible Study V2
-    generation is structure-native and does not call this resolver. It maps
-    through ``SmallGroup.church_structure_unit`` only: a non-root selection
-    resolves to the active groups whose mapped unit is one of the selected units
-    or a descendant of one (via ``ChurchStructureUnit.parent``). The legacy
+    Retained diagnostic/setup bridge only, while the legacy object tables are
+    still being prepared for final retirement. Normal Bible Study V2 generation
+    and ordinary-member visibility do not call this resolver. It maps through
+    ``SmallGroup.church_structure_unit`` only: a non-root selection resolves to
+    the active groups whose mapped unit is one of the selected units or a
+    descendant of one (via ``ChurchStructureUnit.parent``). The legacy
     parent/context fields ``SmallGroup.district`` and
     ``District.ministry_context`` were removed in
     LEGACY-PARENT-FK-FIELD-RETIRE.1A and are no longer read here; this resolver

@@ -4315,16 +4315,16 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "edit one setup mapping at a time",
+            "final-retirement preparation, setup checks, and diagnostics",
         )
         # The boundary names the direct non-effects ...
         self.assertContains(
             response,
-            "A mapping edit does not directly edit members, audience rows, serving schedules, or permissions.",
+            "A mapping edit does not directly edit members, audience rows, serving schedules, permissions, ordinary visibility, or normal Bible Study V2 generation.",
         )
-        # ... and is honest about the post-CS-CORE.2B-A split: ServiceEvent
-        # audience-row matching moved to membership, while Bible Study still
-        # resolves through the mapping bridge.
+        # ... and is honest about the post-CS-CORE.2B-A / BS bridge-retirement
+        # split: ServiceEvent audience-row matching moved to membership, and
+        # normal V2 Bible Study generation no longer resolves through mappings.
         self.assertContains(
             response,
             "mapping edits no longer affect ServiceEvent structure-audience row matching",
@@ -4335,7 +4335,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect remaining Bible Study bridge/admin/diagnostic resolution.",
+            "Mapping edits are retained for final-retirement preparation, setup checks, admin, and diagnostic resolution only.",
         )
         self.assertContains(
             response,
@@ -4366,7 +4366,7 @@ class StaffStructureMappingReviewTests(TestCase):
         # CS-CORE.2B-B: corrected, honest ZH safety copy.
         self.assertContains(
             response,
-            "编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限",
+            "编辑对应关系不会直接编辑成员、适用范围记录、服事安排、权限、普通用户可见性，或一般 V2 查经生成",
         )
         self.assertContains(
             response,
@@ -4378,7 +4378,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "对应关系改变仍可能影响查经安排解析和生成的小组查经聚会",
+            "这里的对应关系只保留给最终退役准备、设置检查、管理或诊断解析",
         )
         self.assertContains(
             response,
@@ -4390,7 +4390,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "有权限时可逐条编辑设置对应关系",
+            "有权限时可逐条编辑对应关系",
         )
 
     def test_mapping_review_uses_awaiting_placement_wording_en(self):
@@ -4724,8 +4724,9 @@ class StaffStructureMappingReviewTests(TestCase):
 
     def test_scope_copy_names_direct_non_effects_and_scope_impact(self):
         # CS-CORE.2B-B: the page must name the direct non-effects (members,
-        # audience rows, schedules, permissions) AND distinguish ServiceEvent
-        # membership matching from Bible Study mapping-bridge resolution.
+        # audience rows, schedules, permissions, ordinary visibility, normal V2
+        # generation) AND distinguish ServiceEvent membership matching from
+        # final-retirement/setup diagnostic mapping use.
         self.set_language("en")
         self.login_viewer()
 
@@ -4734,13 +4735,15 @@ class StaffStructureMappingReviewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "This page reviews and edits how current records link to church "
-            "structure units.",
+            "This final-retirement maintenance page reviews and edits how "
+            "legacy records link to church structure units for setup checks "
+            "and diagnostics.",
         )
         self.assertContains(
             response,
             "A mapping edit does not directly edit members, audience rows, "
-            "serving schedules, or permissions.",
+            "serving schedules, permissions, ordinary visibility, or normal "
+            "Bible Study V2 generation.",
         )
         self.assertContains(
             response,
@@ -4754,8 +4757,8 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect remaining Bible Study "
-            "bridge/admin/diagnostic resolution.",
+            "Mapping edits are retained for final-retirement preparation, "
+            "setup checks, admin, and diagnostic resolution only.",
         )
         self.assertContains(
             response,
@@ -5213,12 +5216,12 @@ class StaffStructureMappingEditTests(TestCase):
         # Warning copy (CS-CORE.2B-B) + acknowledgement + Save / Cancel.
         self.assertContains(
             response,
-            "This updates how this current record links to a church structure unit.",
+            "This updates how this legacy record links to a church structure unit for final-retirement preparation, setup checks, and diagnostics.",
         )
         self.assertContains(
             response,
             "It does not directly edit members, audience rows, serving "
-            "schedules, or permissions.",
+            "schedules, permissions, ordinary visibility, or normal Bible Study V2 generation.",
         )
         self.assertContains(
             response,
@@ -5232,8 +5235,8 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect remaining Bible Study "
-            "bridge/admin/diagnostic resolution.",
+            "Mapping edits are retained for final-retirement preparation, "
+            "setup checks, admin, and diagnostic resolution only.",
         )
         self.assertContains(
             response,
@@ -5249,8 +5252,8 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, 'name="acknowledge_impact"')
         self.assertContains(
             response,
-            "I understand this mapping change may affect remaining Bible Study "
-            "bridge/admin/diagnostic resolution.",
+            "I understand this mapping change is for final-retirement preparation, "
+            "setup checks, admin, or diagnostic resolution.",
         )
         self.assertContains(response, "Save mapping")
         self.assertContains(response, "Cancel")
@@ -5281,7 +5284,7 @@ class StaffStructureMappingEditTests(TestCase):
         # CS-CORE.2B-B: corrected ZH warning + acknowledgement copy.
         self.assertContains(
             response,
-            "这里会更新这条现有记录与教会结构单元的对应关系",
+            "这里会更新这条旧记录与教会结构单元的对应关系",
         )
         self.assertContains(
             response,
@@ -5289,7 +5292,7 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "保存此更改仍可能影响查经安排解析和生成的小组查经聚会",
+            "这里的对应关系只保留给最终退役准备、设置检查、管理或诊断解析",
         )
         self.assertContains(
             response,
@@ -5301,7 +5304,7 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "我了解此对应关系更改仍可能影响查经安排解析和生成的小组查经聚会。",
+            "我了解此对应关系更改仅用于最终退役准备、设置检查、管理或诊断解析。",
         )
         self.assertContains(response, "尚未对应教会结构单元")
         self.assertNotContains(response, "尚未对应教会结构单位")
@@ -5531,8 +5534,9 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Please confirm that you understand this mapping change may affect "
-            "remaining Bible Study bridge/admin/diagnostic resolution before saving.",
+            "Please confirm that you understand this mapping change is for "
+            "final-retirement preparation, setup checks, admin, or diagnostic "
+            "resolution before saving.",
         )
         self.group.refresh_from_db()
         self.assertIsNone(self.group.church_structure_unit_id)
@@ -5549,7 +5553,7 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "保存前请确认你了解此对应关系更改可能影响查经安排解析和生成的小组查经聚会。",
+            "保存前请确认你了解此对应关系更改仅用于最终退役准备、设置检查、管理或诊断解析。",
         )
         self.group.refresh_from_db()
         self.assertIsNone(self.group.church_structure_unit_id)
@@ -5646,9 +5650,9 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
     def test_mapping_change_affects_canonical_unit_group_resolution(self):
-        # Documents that the retained canonical resolver reads the mapping
-        # fields, so a mapping edit changes which legacy groups a structure unit
-        # resolves to for remaining bridge/admin/diagnostic consumers.
+        # Documents that the retained diagnostic/setup resolver reads the
+        # mapping fields, so a mapping edit changes which legacy groups a
+        # structure unit resolves to for remaining admin/diagnostic consumers.
         from accounts.structure_selectors import resolve_units_to_small_groups
 
         self.group.church_structure_unit = self.sg_unit_1

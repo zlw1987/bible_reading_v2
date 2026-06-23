@@ -17,6 +17,7 @@ from accounts.models import ChurchStructureUnit, District, MinistryContext, Smal
 
 
 CATEGORY_RUNTIME_AUTHORITY = "runtime authority"
+CATEGORY_FINAL_TABLE_RETIREMENT = "final table-retirement blocker"
 CATEGORY_DISPLAY_ONLY = "display-only"
 CATEGORY_ADMIN_MAINTENANCE = "admin/emergency maintenance"
 CATEGORY_DIAGNOSTIC_SUPPORT = "diagnostic/audit/backfill/cleanup support"
@@ -28,8 +29,8 @@ CONSUMER_INVENTORY = (
     (
         "SmallGroup / District / MinistryContext model rows",
         "accounts.models",
-        CATEGORY_SETUP_BRIDGE,
-        "legacy row container and bridge mapping for setup/admin/diagnostics",
+        CATEGORY_FINAL_TABLE_RETIREMENT,
+        "remaining rows block final legacy table retirement, not ordinary visibility",
     ),
     (
         "SmallGroup.church_structure_unit",
@@ -53,7 +54,7 @@ CONSUMER_INVENTORY = (
         "resolve_units_to_small_groups",
         "accounts.structure_selectors.resolve_units_to_small_groups",
         CATEGORY_SETUP_BRIDGE,
-        "legacy resolver retained for bridge/admin/diagnostic coexistence",
+        "diagnostic/setup-only resolver retained while bridge rows still exist",
     ),
     # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
     # legacy-profile selector helpers (get_user_legacy_small_group,
@@ -137,6 +138,7 @@ STATS_KEYS = (
     "dead_stale_consumers_found",
     "candidate_rows_for_future_archive",
     "candidate_rows_for_future_delete",
+    "final_table_retirement_blocker_rows",
     "rows_requiring_mapping_bridge_decision",
     "rows_requiring_special_handling",
 )
@@ -239,6 +241,7 @@ def _reason_for(state, *, is_special):
 def _scan_row(stats, details, object_type, obj, unit):
     state = _mapping_state(object_type, unit)
     is_special = _is_special_unassigned_mapping(object_type, obj, unit)
+    stats["final_table_retirement_blocker_rows"] += 1
 
     if state == "unmapped":
         stats["unmapped_rows"] += 1
@@ -261,16 +264,14 @@ def _scan_row(stats, details, object_type, obj, unit):
     elif state == "active_expected_type":
         stats["candidate_rows_for_future_archive"] += 1
 
-    category = CATEGORY_SETUP_BRIDGE
-    if state in {"inactive", "wrong_type", "unmapped"} or is_special:
-        category = CATEGORY_DIAGNOSTIC_SUPPORT
-
     line = (
-        "{object_label} {unit_label} category={category} reason={reason} "
+        "{object_label} {unit_label} category={category} "
+        "diagnostic_state={diagnostic_state} reason={reason} "
         "final_retirement_recommendation={recommendation}".format(
             object_label=_object_label(object_type, obj),
             unit_label=_unit_label(unit),
-            category=category,
+            category=CATEGORY_FINAL_TABLE_RETIREMENT,
+            diagnostic_state=state,
             reason=_reason_for(state, is_special=is_special),
             recommendation=_recommendation_for(state, is_special=is_special),
         )
@@ -354,6 +355,13 @@ def _blocking_items(stats):
         blockers.append(
             ("live_runtime_consumers_found", stats["live_runtime_consumers_found"])
         )
+    if stats["final_table_retirement_blocker_rows"]:
+        blockers.append(
+            (
+                "final_table_retirement_blocker_rows",
+                stats["final_table_retirement_blocker_rows"],
+            )
+        )
     if stats["rows_requiring_special_handling"]:
         blockers.append(
             ("rows_requiring_special_handling", stats["rows_requiring_special_handling"])
@@ -384,8 +392,9 @@ class Command(BaseCommand):
             "--fail-on-blockers",
             action="store_true",
             help=(
-                "Exit nonzero when ordinary runtime consumers or row special "
-                "handling blockers are found. Still read-only."
+                "Exit nonzero when ordinary runtime consumers, remaining final "
+                "table-retirement rows, or row special-handling blockers are "
+                "found. Still read-only."
             ),
         )
 
@@ -424,6 +433,10 @@ class Command(BaseCommand):
 
         write("")
         write("ordinary_member_runtime_dependency: none_found")
+        write(
+            "legacy_object_rows_are: final table-retirement blockers, not "
+            "ordinary-member runtime blockers"
+        )
         write(
             "canonical_structure_tree: ChurchStructureUnit; "
             "canonical_belonging: ChurchStructureMembership"

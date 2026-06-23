@@ -195,7 +195,9 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
             "setup/maintenance support for legacy-to-structure mappings; "
             "MinistryContext units are still seeded, but after "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A District/SmallGroup hierarchy is no "
-            "longer reconstructed from removed legacy parent links"
+            "longer reconstructed from removed legacy parent links; unmapped "
+            "legacy rows require manual placement or a final row/table retirement "
+            "decision"
         ),
     ),
     # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district /
@@ -858,6 +860,12 @@ class Command(BaseCommand):
             write("  (none)")
             write("retirement_readiness: CLEAN")
 
+        write("")
+        write(
+            "legacy_object_row_status: remaining SmallGroup, District, and "
+            "MinistryContext rows are final table-retirement blockers, not "
+            "ordinary-member runtime visibility blockers."
+        )
         write("")
         write("diagnostic/backfill commands (support tooling, not runtime blockers):")
         for command_name, classification in audit["diagnostic_commands"]:

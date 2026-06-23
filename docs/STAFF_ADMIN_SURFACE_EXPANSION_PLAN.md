@@ -47,7 +47,7 @@ Gaps:
 Current state:
 - Bible Study V1/V2 flow includes V2 schedule/series, guides, Thursday pre-study, Friday study schedule, generated structure-native meetings, audience rows, lifecycle fields, and permission-controlled editing. Historical V1 sessions/guides and removed legacy scope fields remain archive/schema cleanup context only.
 - `BibleStudySeries` currently acts as the internal Bible Study Schedule model.
-- Bible Study Schedule audience resolution and meeting generation still use legacy `SmallGroup` rows; since BS-STRUCT.2A, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility, `/studies/` / Today, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, and zero-row V2 meetings fail closed for ordinary users.
+- Bible Study Schedule audience resolution and normal V2 meeting generation are structure-native through `BibleStudySeriesAudienceScope`, active descendant/self small-group `ChurchStructureUnit` leaf targets, `generation_key`, `anchor_unit`, and meeting audience rows. Since BS-STRUCT.2A, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility, `/studies/` / Today, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, and zero-row V2 meetings fail closed for ordinary users.
 
 Gaps:
 - Staff may need a clearer setup checklist or overview for schedules, guide publishing, generated meetings, and meeting-role coverage.

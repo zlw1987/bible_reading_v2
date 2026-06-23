@@ -1,6 +1,17 @@
 # Church Structure Mapping and Membership Strategy
 
-> **Status note (CS-CORE.0A / CS-CORE.2C-B):** this document is the CS-H-era strategy record and is preserved as historical background. Statements below that the legacy-to-`ChurchStructureUnit` mapping fields "do not drive runtime behavior" were true when written but are now historical: since BS-AS.1 and SE-AS.4, structure-based Bible Study Schedule and ServiceEvent audience scopes resolve through those mapping fields at runtime, so mapping edits can change structure-based resolution. Since CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility also uses active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged. Current architecture direction and the staged migration plan live in `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`.
+> **Status note (CS-CORE.0A / current superseded-state):** this document is the
+> CS-H-era strategy record and is preserved as historical background. Statements
+> below that legacy mapping fields "do not drive runtime behavior," that
+> `Profile.small_group` is current runtime source, or that Bible Study schedule
+> generation continues to resolve selected audience units to legacy `SmallGroup`
+> rows are superseded. Current normal Bible Study V2 generation is
+> structure-native through audience rows, `generation_key`, and `anchor_unit`;
+> ServiceEvent audience rows match active primary `ChurchStructureMembership`;
+> `Profile.small_group` and multiple legacy scope/mirror fields have been
+> removed. Current architecture direction and the staged migration plan live in
+> `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` and
+> `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
 
 ## 1. Purpose
 

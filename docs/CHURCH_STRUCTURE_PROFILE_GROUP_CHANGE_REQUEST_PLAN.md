@@ -1,5 +1,13 @@
 # Church Structure Profile Group-Change Request Plan
 
+> **Status note (superseded):** this is the CS-H.6C/6D transition plan from
+> before `Profile.small_group` field retirement. `Profile.small_group` was later
+> removed in PROFILE-SG-FIELD-RETIRE.1A, and approved migrated runtime paths now
+> use active primary `ChurchStructureMembership` or structure/audience rows as
+> documented in `docs/LEGACY_PROFILE_SMALL_GROUP_CONSUMER_INVENTORY.md`.
+> Statements below that call `Profile.small_group` current runtime or current
+> Profile form state are preserved as historical implementation context only.
+
 ## 1. Purpose
 
 CS-H.6C planned a future implementation slice for logged-in users to request a group/unit change from Profile without directly editing `Profile.small_group`. CS-H.6D implements the normal-user Profile request capture portion of that plan.

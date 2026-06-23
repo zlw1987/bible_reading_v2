@@ -9,9 +9,9 @@
     <h1 class="page-title">{% if language == "zh" %}教会结构对应检查{% else %}Structure Mapping Review{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        在一处查看现有事工范围、区、小组与教会结构单元之间的对应关系；有权限时可逐条编辑设置对应关系。
+        在一处查看旧事工范围、区、小组与教会结构单元之间的对应关系，用于最终退役准备、设置检查和诊断；有权限时可逐条编辑对应关系。
         {% else %}
-        Review current ministry contexts, districts, and small groups and, when permitted, edit one setup mapping at a time.
+        Review legacy ministry context, district, and small group mappings for final-retirement preparation, setup checks, and diagnostics; when permitted, edit one mapping at a time.
         {% endif %}
     </p>
 </section>
@@ -19,9 +19,9 @@
 <section class="notice-panel">
     <p>
         {% if language == "zh" %}
-        本页用于检查和编辑现有资料与教会结构单元的对应关系。编辑对应关系不会直接编辑成员、适用范围记录、服事安排或权限。CS-CORE.2B-A 之后，ServiceEvent / 教会聚会中已经选择结构适用范围的记录，不再因为这里的对应关系改变而改变匹配；它们按已生效的主要 ChurchStructureMembership / 教会结构归属来匹配。一般 V2 查经生成已改为结构单元原生；这里的对应关系仍可能被保留的查经桥接、管理或诊断解析读取。SE-RETIRE.1B 之后，没有结构适用范围记录的教会聚会对普通用户一律不可见（已停用按 Profile.small_group 的旧版 fallback），也不由这里的对应关系控制。
+        本页用于最终退役准备、设置检查和诊断，检查或更正旧资料与教会结构单元的对应关系。编辑对应关系不会直接编辑成员、适用范围记录、服事安排、权限、普通用户可见性，或一般 V2 查经生成。CS-CORE.2B-A 之后，ServiceEvent / 教会聚会中已经选择结构适用范围的记录，不再因为这里的对应关系改变而改变匹配；它们按已生效的主要 ChurchStructureMembership / 教会结构归属来匹配。一般 V2 查经生成已改为结构单元原生；这里的对应关系只保留给最终退役准备、设置检查、管理或诊断解析。SE-RETIRE.1B 之后，没有结构适用范围记录的教会聚会对普通用户一律不可见（已停用按 Profile.small_group 的旧版 fallback），也不由这里的对应关系控制。
         {% else %}
-        This page reviews and edits how current records link to church structure units. A mapping edit does not directly edit members, audience rows, serving schedules, or permissions. After CS-CORE.2B-A, mapping edits no longer affect ServiceEvent structure-audience row matching; ServiceEvent audience rows match by active primary ChurchStructureMembership. Normal Bible Study V2 generation is structure-native. Mapping edits can still affect remaining Bible Study bridge/admin/diagnostic resolution. ServiceEvents with no audience rows fail closed for ordinary users after SE-RETIRE.1B (the zero-row legacy Profile.small_group fallback was retired); they are not controlled by this mapping bridge.
+        This final-retirement maintenance page reviews and edits how legacy records link to church structure units for setup checks and diagnostics. A mapping edit does not directly edit members, audience rows, serving schedules, permissions, ordinary visibility, or normal Bible Study V2 generation. After CS-CORE.2B-A, mapping edits no longer affect ServiceEvent structure-audience row matching; ServiceEvent audience rows match by active primary ChurchStructureMembership. Normal Bible Study V2 generation is structure-native. Mapping edits are retained for final-retirement preparation, setup checks, admin, and diagnostic resolution only. ServiceEvents with no audience rows fail closed for ordinary users after SE-RETIRE.1B (the zero-row legacy Profile.small_group fallback was retired); they are not controlled by this mapping bridge.
         {% endif %}
     </p>
 </section>

@@ -92,7 +92,8 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "",
         "candidate_type": "model/table",
         "app_read_references": _refs(
-            "accounts.structure_selectors.resolve_units_to_small_groups",
+            "accounts.structure_selectors.resolve_units_to_small_groups "
+            "(diagnostic/setup-only)",
             "reading group-progress compatibility group lists",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
@@ -145,7 +146,7 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "church_structure_unit",
         "candidate_type": "bridge-field",
         "app_read_references": _refs(
-            "structure-to-legacy mapping bridge",
+            "structure-to-legacy mapping bridge for diagnostics/setup",
             "non-V2 bridge/admin/diagnostic compatibility",
             "reflection cleanup safety checks",
         ),
@@ -169,8 +170,8 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "",
         "candidate_type": "model/table",
         "app_read_references": _refs(
-            "legacy hierarchy bridge",
-            "ServiceEvent/BibleStudy stored context",
+            "legacy object-row/table-retirement context",
+            "setup/admin/diagnostic mapping bridge",
         ),
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
@@ -214,7 +215,9 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "accounts.District",
         "field_name": "church_structure_unit",
         "candidate_type": "bridge-field",
-        "app_read_references": _refs("legacy district to structure mapping bridge"),
+        "app_read_references": _refs(
+            "legacy district to structure mapping bridge for diagnostics/setup"
+        ),
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
@@ -262,7 +265,7 @@ CANDIDATE_DEFINITIONS = (
         "field_name": "church_structure_unit",
         "candidate_type": "bridge-field",
         "app_read_references": _refs(
-            "legacy ministry context to structure mapping bridge",
+            "legacy ministry context to structure mapping bridge for diagnostics/setup",
         ),
         "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
         "diagnostic_cleanup_references": _refs(

@@ -17,7 +17,8 @@ class Command(BaseCommand):
         "ChurchStructureUnit.parent and church_structure_unit mapping are treated "
         "as authoritative. Unmapped District/SmallGroup rows are reported as "
         "needing manual placement instead of being silently reparented to an "
-        "unassigned holding unit."
+        "unassigned holding unit. UNASSIGNED-GROUPS is only a special "
+        "final-retirement/holding-bucket decision item, not a normal hierarchy fix."
     )
 
     ROOT_CODE = "CHURCH"
@@ -232,8 +233,9 @@ class Command(BaseCommand):
             f"{legacy_kind} parent/context FK was removed in "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A, so this command can no longer "
             "rebuild its hierarchy from raw legacy links. Map it via the staff "
-            "structure mapping tools; it was not reparented to an unassigned "
-            "holding unit."
+            "structure mapping tools only when that bridge is still needed for "
+            "diagnostics/setup, or leave it for final row/table retirement "
+            "decision. It was not reparented to an unassigned holding unit."
         )
 
     def _ensure_unit(self, unit, lookup_parent, lookup_code, values, label):
@@ -341,6 +343,6 @@ class Command(BaseCommand):
         self.stdout.write(f"  skipped: {self.stats['skipped']}")
         self.stdout.write(
             f"  unreconstructable (unmapped District/SmallGroup, manual placement "
-            f"needed): {self.stats['unreconstructable']}"
+            f"or final retirement decision needed): {self.stats['unreconstructable']}"
         )
         self.stdout.write(f"  warnings: {self.stats['warnings']}")

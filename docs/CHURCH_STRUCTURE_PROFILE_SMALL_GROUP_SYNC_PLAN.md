@@ -1,5 +1,12 @@
 # Church Structure Profile.small_group Sync Plan
 
+> **Status note (superseded):** this CS-H.7E transition plan predates
+> PROFILE-SG-FIELD-RETIRE.1A. `Profile.small_group` was later removed, and the
+> approval-sync behavior described here is historical only. Current approved
+> migrated runtime paths use active primary `ChurchStructureMembership` or
+> structure/audience rows as documented in
+> `docs/LEGACY_PROFILE_SMALL_GROUP_CONSUMER_INVENTORY.md`.
+
 ## 1. Purpose
 
 CS-H.7E implements transition behavior for syncing `Profile.small_group` when staff approve a mapped small-group `ChurchStructureMembership`.

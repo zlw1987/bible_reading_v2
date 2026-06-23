@@ -531,8 +531,8 @@ def staff_structure_mapping_review(request):
     """Legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2 / .1D.1 /
     .1D.2 / .1D.3).
 
-    Staff-only page that lists every legacy MinistryContext / District /
-    SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
+    Staff-only final-retirement/setup diagnostic page that lists every legacy
+    MinistryContext / District / SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
     mapping-status label and (CS-SETUP.1D.2) display-only type-mismatch /
     duplicate-active conflict badges. CS-SETUP.1C.2 adds summary counts and
     primary ``?status=`` filter links so a long mapping list can be narrowed to
@@ -548,12 +548,12 @@ def staff_structure_mapping_review(request):
     ``staff_structure_mapping_edit`` view; Django Admin edit links appear under
     the same permission. Those edits change the legacy -> structure mapping
     only: they do not directly edit members, audience rows, serving schedules,
-    or permissions. Like /staff/structure/, this page never uses
-    ChurchStructureMembership as a runtime visibility source. Since
-    CS-CORE.2B-A, ServiceEvent audience rows match by active primary membership
-    instead of these mapping fields; normal Bible Study V2 generation is now
-    structure-native, while remaining bridge/admin/diagnostic resolution can
-    still read this mapping (CS-CORE.2B-B).
+    permissions, ordinary visibility, or normal Bible Study V2 generation. Like
+    /staff/structure/, this page never uses ChurchStructureMembership as a
+    runtime visibility source. Since CS-CORE.2B-A, ServiceEvent audience rows
+    match by active primary membership instead of these mapping fields; normal
+    Bible Study V2 generation is now structure-native, while final-retirement
+    setup/admin/diagnostic resolution can still read this mapping.
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
@@ -781,8 +781,8 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     audience rows, serving schedules, or permissions. Since CS-CORE.2B-A,
     ServiceEvent audience rows match by active primary ChurchStructureMembership
     instead of this mapping bridge. Normal Bible Study V2 generation is now
-    structure-native, while remaining bridge/admin/diagnostic resolution can
-    still read this mapping. To keep that effect explicit, the POST requires a
+    structure-native, while final-retirement setup/admin/diagnostic resolution
+    can still read this mapping. To keep that effect explicit, the POST requires a
     staff acknowledgement checkbox before it will save; without it the mapping
     is left unchanged. Each successful update
     is audited via a Django admin
@@ -894,11 +894,11 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
         # type / duplicate) keep surfacing unchanged for an invalid target.
         if error is None and not acknowledged:
             error = (
-                "保存前请确认你了解此对应关系更改可能影响查经桥接、管理或诊断解析。"
+                "保存前请确认你了解此对应关系更改仅用于最终退役准备、设置检查、管理或诊断解析。"
                 if language == "zh"
                 else "Please confirm that you understand this mapping change "
-                "may affect remaining Bible Study bridge/admin/diagnostic "
-                "resolution before saving."
+                "is for final-retirement preparation, setup checks, admin, or "
+                "diagnostic resolution before saving."
             )
 
         if error is None:

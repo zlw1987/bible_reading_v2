@@ -98,6 +98,7 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         self.assertEqual(stats["unmapped_rows"], 0)
         self.assertEqual(stats["candidate_rows_for_future_archive"], 3)
         self.assertEqual(stats["candidate_rows_for_future_delete"], 0)
+        self.assertEqual(stats["final_table_retirement_blocker_rows"], 3)
         self.assertEqual(stats["rows_requiring_mapping_bridge_decision"], 3)
         self.assertEqual(stats["rows_requiring_special_handling"], 0)
         self.assertEqual(stats["live_runtime_consumers_found"], 0)
@@ -122,6 +123,7 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         self.assertEqual(stats["unmapped_rows"], 1)
         self.assertEqual(stats["inactive_mapping_units"], 1)
         self.assertEqual(stats["wrong_type_mapping_units"], 1)
+        self.assertEqual(stats["final_table_retirement_blocker_rows"], 6)
         self.assertEqual(stats["rows_requiring_special_handling"], 2)
 
         details = "\n".join(audit["details"])
@@ -130,8 +132,9 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         self.assertIn("unit_active=false", details)
         self.assertIn("unit_code=UNASSIGNED-GROUPS", details)
         self.assertIn("legacy unassigned/custom holding-bucket mapping", details)
+        self.assertIn("category=final table-retirement blocker", details)
 
-    def test_fail_on_blockers_exits_nonzero_for_special_handling(self):
+    def test_fail_on_blockers_exits_nonzero_for_final_table_retirement_rows(self):
         District.objects.create(
             name="Unassigned Legacy District",
             church_structure_unit=self.unassigned_unit,
@@ -145,7 +148,9 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
                 stdout=out,
             )
 
+        self.assertIn("final_table_retirement_blocker_rows=4", str(context.exception))
         self.assertIn("rows_requiring_special_handling=1", str(context.exception))
+        self.assertIn("final_table_retirement_blocker_rows: 4", out.getvalue())
         self.assertIn("rows_requiring_special_handling: 1", out.getvalue())
 
     def test_command_is_read_only(self):
@@ -185,6 +190,10 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         self.assertIn("data_mutated: false", out.getvalue())
         self.assertIn("schema_mutated: false", out.getvalue())
         self.assertIn("apply_option_present: false", out.getvalue())
+        self.assertIn(
+            "legacy_object_rows_are: final table-retirement blockers",
+            out.getvalue(),
+        )
 
     def test_verbose_output_does_not_print_private_free_text(self):
         out = StringIO()

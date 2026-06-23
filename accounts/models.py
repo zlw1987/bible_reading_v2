@@ -44,13 +44,9 @@ class MinistryContext(models.Model):
 
 class District(models.Model):
     name = models.CharField(max_length=120, unique=True)
-    ministry_context = models.ForeignKey(
-        MinistryContext,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="districts",
-    )
+    # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy ``ministry_context``
+    # parent FK. District hierarchy is the canonical ``ChurchStructureUnit.parent``
+    # chain reached via the ``church_structure_unit`` mapping bridge below.
     church_structure_unit = models.ForeignKey(
         "ChurchStructureUnit",
         on_delete=models.SET_NULL,
@@ -77,13 +73,9 @@ class District(models.Model):
 
 class SmallGroup(models.Model):
     name = models.CharField(max_length=80, unique=True)
-    district = models.ForeignKey(
-        District,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="small_groups",
-    )
+    # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy ``district`` parent FK.
+    # Small-group hierarchy is the canonical ``ChurchStructureUnit.parent`` chain
+    # reached via the ``church_structure_unit`` mapping bridge below.
     church_structure_unit = models.ForeignKey(
         "ChurchStructureUnit",
         on_delete=models.SET_NULL,

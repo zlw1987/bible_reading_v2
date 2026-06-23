@@ -60,7 +60,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
 

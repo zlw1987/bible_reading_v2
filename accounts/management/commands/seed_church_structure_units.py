@@ -7,13 +7,20 @@ from accounts.models import ChurchStructureUnit, District, MinistryContext, Smal
 
 class Command(BaseCommand):
     help = (
-        "Seed ChurchStructureUnit rows from MinistryContext, District, and "
-        "SmallGroup records. Defaults to dry-run; pass --apply to write changes."
+        "Seed/maintain ChurchStructureUnit rows for MinistryContext, District, "
+        "and SmallGroup records. Defaults to dry-run; pass --apply to write "
+        "changes. After LEGACY-PARENT-FK-FIELD-RETIRE.1A the legacy parent/context "
+        "FKs (SmallGroup.district, District.ministry_context) no longer exist, so "
+        "this command can no longer reconstruct the District/SmallGroup hierarchy "
+        "from raw legacy links. MinistryContext units (whose parent is always the "
+        "root) are still seeded normally; for District/SmallGroup rows the existing "
+        "ChurchStructureUnit.parent and church_structure_unit mapping are treated "
+        "as authoritative. Unmapped District/SmallGroup rows are reported as "
+        "needing manual placement instead of being silently reparented to an "
+        "unassigned holding unit."
     )
 
     ROOT_CODE = "CHURCH"
-    UNASSIGNED_DISTRICTS_CODE = "UNASSIGNED-DISTRICTS"
-    UNASSIGNED_GROUPS_CODE = "UNASSIGNED-GROUPS"
 
     MIRROR_FIELDS = [
         "parent",
@@ -50,10 +57,8 @@ class Command(BaseCommand):
             "linked": 0,
             "skipped": 0,
             "warnings": 0,
+            "unreconstructable": 0,
         }
-        self.ministry_units = {}
-        self.district_units = {}
-        self.planned_holding_codes = set()
 
         mode = "APPLY" if self.apply else "DRY RUN"
         self.stdout.write(f"Church structure unit seeding mode: {mode}")
@@ -139,119 +144,96 @@ class Command(BaseCommand):
                 },
                 label=f"MinistryContext {context.pk} {code}",
             )
-            self.ministry_units[context.pk] = unit
             self._ensure_mapping(context, unit, "MinistryContext")
 
     def _seed_districts(self, root):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed District.ministry_context, so the
+        # district hierarchy can no longer be reconstructed from a legacy parent FK.
+        # Only already-mapped districts are maintained (their existing
+        # ChurchStructureUnit.parent is authoritative and is never changed here);
+        # unmapped districts are reported for manual placement.
         for district in District.objects.select_related(
-            "ministry_context",
-            "church_structure_unit",
-            "ministry_context__church_structure_unit",
+            "church_structure_unit"
         ).order_by("id"):
-            parent = None
-            if district.ministry_context_id:
-                parent = self.ministry_units.get(district.ministry_context_id)
-                if parent is None:
-                    parent = district.ministry_context.church_structure_unit
-
-            if parent is None:
-                parent = self._ensure_holding_unit(
-                    root=root,
-                    code=self.UNASSIGNED_DISTRICTS_CODE,
-                    name="未分配区",
-                    name_en="Unassigned Districts",
-                    sort_order=9000,
-                    needed_label=f"District {district.pk} {district.name}",
+            unit = district.church_structure_unit
+            if unit is None:
+                self._warn_unreconstructable(
+                    legacy_label=f"District {district.pk} {district.name}",
+                    legacy_kind="District",
                 )
+                continue
 
-            code = f"DISTRICT-{district.id}"
-            unit = self._ensure_unit(
-                unit=district.church_structure_unit,
-                lookup_parent=parent,
-                lookup_code=code,
-                values={
-                    "parent": parent,
-                    "unit_type": ChurchStructureUnit.UNIT_DISTRICT,
-                    "code": code,
-                    "name": district.name,
-                    "name_en": "",
-                    "description": "",
-                    "description_en": "",
-                    "is_active": district.is_active,
-                    "sort_order": 0,
-                },
-                label=f"District {district.pk} {district.name}",
+            self._maintain_mapped_unit(
+                legacy_obj=district,
+                unit=unit,
+                unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+                name=district.name,
+                is_active=district.is_active,
+                legacy_label=f"District {district.pk} {district.name}",
+                legacy_kind="District",
             )
-            self.district_units[district.pk] = unit
-            self._ensure_mapping(district, unit, "District")
 
     def _seed_small_groups(self, root):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district, so the
+        # small-group hierarchy can no longer be reconstructed from a legacy parent
+        # FK. Only already-mapped groups are maintained (their existing
+        # ChurchStructureUnit.parent is authoritative and is never changed here);
+        # unmapped groups are reported for manual placement.
         for group in SmallGroup.objects.select_related(
-            "district",
-            "church_structure_unit",
-            "district__church_structure_unit",
+            "church_structure_unit"
         ).order_by("id"):
-            parent = None
-            if group.district_id:
-                parent = self.district_units.get(group.district_id)
-                if parent is None:
-                    parent = group.district.church_structure_unit
-
-            if parent is None:
-                parent = self._ensure_holding_unit(
-                    root=root,
-                    code=self.UNASSIGNED_GROUPS_CODE,
-                    name="未分配小组",
-                    name_en="Unassigned Groups",
-                    sort_order=9010,
-                    needed_label=f"SmallGroup {group.pk} {group.name}",
+            unit = group.church_structure_unit
+            if unit is None:
+                self._warn_unreconstructable(
+                    legacy_label=f"SmallGroup {group.pk} {group.name}",
+                    legacy_kind="SmallGroup",
                 )
+                continue
 
-            code = f"SMALLGROUP-{group.id}"
-            unit = self._ensure_unit(
-                unit=group.church_structure_unit,
-                lookup_parent=parent,
-                lookup_code=code,
-                values={
-                    "parent": parent,
-                    "unit_type": ChurchStructureUnit.UNIT_SMALL_GROUP,
-                    "code": code,
-                    "name": group.name,
-                    "name_en": "",
-                    "description": "",
-                    "description_en": "",
-                    "is_active": group.is_active,
-                    "sort_order": 0,
-                },
-                label=f"SmallGroup {group.pk} {group.name}",
+            self._maintain_mapped_unit(
+                legacy_obj=group,
+                unit=unit,
+                unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+                name=group.name,
+                is_active=group.is_active,
+                legacy_label=f"SmallGroup {group.pk} {group.name}",
+                legacy_kind="SmallGroup",
             )
-            self._ensure_mapping(group, unit, "SmallGroup")
 
-    def _ensure_holding_unit(self, root, code, name, name_en, sort_order, needed_label):
-        if root is None and not self.apply:
-            if code not in self.planned_holding_codes:
-                self.planned_holding_codes.add(code)
-                self._would_create(
-                    f"holding unit {code} for {needed_label}; root would be its parent"
-                )
-            return None
-
-        return self._ensure_unit(
-            unit=None,
-            lookup_parent=root,
-            lookup_code=code,
+    def _maintain_mapped_unit(
+        self, legacy_obj, unit, unit_type, name, is_active, legacy_label, legacy_kind
+    ):
+        # The existing mapped unit's parent and code are authoritative and are
+        # preserved; only the descriptive name/active fields are refreshed from the
+        # legacy row. This never reparents and never moves rows between branches.
+        self._ensure_unit(
+            unit=unit,
+            lookup_parent=unit.parent,
+            lookup_code=unit.code,
             values={
-                "parent": root,
-                "unit_type": ChurchStructureUnit.UNIT_CUSTOM,
-                "code": code,
+                "parent": unit.parent,
+                "unit_type": unit_type,
+                "code": unit.code,
                 "name": name,
-                "name_en": name_en,
-                "description": "",
-                "description_en": "",
-                "is_active": True,
-                "sort_order": sort_order,
+                "name_en": unit.name_en,
+                "description": unit.description,
+                "description_en": unit.description_en,
+                "is_active": is_active,
+                "sort_order": unit.sort_order,
             },
-            label=f"holding unit {code}",
+            label=legacy_label,
+        )
+        self._ensure_mapping(legacy_obj, unit, legacy_kind)
+
+    def _warn_unreconstructable(self, legacy_label, legacy_kind):
+        self.stats["unreconstructable"] += 1
+        self._warn(
+            f"{legacy_label} has no church_structure_unit mapping. The legacy "
+            f"{legacy_kind} parent/context FK was removed in "
+            "LEGACY-PARENT-FK-FIELD-RETIRE.1A, so this command can no longer "
+            "rebuild its hierarchy from raw legacy links. Map it via the staff "
+            "structure mapping tools; it was not reparented to an unassigned "
+            "holding unit."
         )
 
     def _ensure_unit(self, unit, lookup_parent, lookup_code, values, label):
@@ -357,4 +339,8 @@ class Command(BaseCommand):
         self.stdout.write(f"  {prefix}updated: {self.stats['updated']}")
         self.stdout.write(f"  {prefix}linked: {self.stats['linked']}")
         self.stdout.write(f"  skipped: {self.stats['skipped']}")
+        self.stdout.write(
+            f"  unreconstructable (unmapped District/SmallGroup, manual placement "
+            f"needed): {self.stats['unreconstructable']}"
+        )
         self.stdout.write(f"  warnings: {self.stats['warnings']}")

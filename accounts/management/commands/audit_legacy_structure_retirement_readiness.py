@@ -190,16 +190,16 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
     # (backfill_church_structure_memberships), so none are listed here.
     (
         "accounts.management.commands.seed_church_structure_units",
-        "setup/backfill support for legacy-to-structure mappings",
-    ),
-    (
-        "accounts.management.commands.cleanup_legacy_structure_parent_links",
         (
-            "guarded cleanup tooling for legacy SmallGroup.district / "
-            "District.ministry_context parent links already represented by "
-            "ChurchStructureUnit.parent; dry-run by default"
+            "setup/maintenance support for legacy-to-structure mappings; "
+            "MinistryContext units are still seeded, but after "
+            "LEGACY-PARENT-FK-FIELD-RETIRE.1A District/SmallGroup hierarchy is no "
+            "longer reconstructed from removed legacy parent links"
         ),
     ),
+    # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district /
+    # District.ministry_context together with their only guarded cleanup tooling
+    # (cleanup_legacy_structure_parent_links), so it is no longer listed here.
     (
         "accounts.management.commands.audit_structure_role_scopes",
         "read-only diagnostic validating explicit structure_unit role scope",
@@ -448,9 +448,9 @@ def _scan_districts(stats, details):
                     ),
                 )
 
-    stats["small_groups_with_district"] = (
-        SmallGroup.objects.filter(district__isnull=False).count()
-    )
+    # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district, so the small
+    # group is no longer an inbound District reference.
+    stats["small_groups_with_district"] = 0
     # SE-FIELD-RETIRE.1A removed ServiceEvent.district, so ServiceEvent is no
     # longer an inbound District reference.
     stats["service_events_with_district"] = 0
@@ -515,9 +515,9 @@ def _scan_ministry_contexts(stats, details):
                     ),
                 )
 
-    stats["districts_with_ministry_context"] = (
-        District.objects.filter(ministry_context__isnull=False).count()
-    )
+    # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed District.ministry_context, so the
+    # district is no longer an inbound MinistryContext reference.
+    stats["districts_with_ministry_context"] = 0
     # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context and
     # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.ministry_context, so
     # neither FK is a MinistryContext retirement blocker and neither is counted

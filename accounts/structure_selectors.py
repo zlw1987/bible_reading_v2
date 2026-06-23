@@ -85,9 +85,10 @@ def resolve_units_to_small_groups(units):
     This is the shared resolver for structure audience units. It maps through
     ``SmallGroup.church_structure_unit`` only: a non-root selection resolves to
     the active groups whose mapped unit is one of the selected units or a
-    descendant of one (via ``ChurchStructureUnit.parent``). It does not read the
-    legacy parent/context fields ``SmallGroup.district`` or
-    ``District.ministry_context`` and never consults ChurchStructureMembership.
+    descendant of one (via ``ChurchStructureUnit.parent``). The legacy
+    parent/context fields ``SmallGroup.district`` and ``District.ministry_context``
+    were removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A and are no longer read here;
+    this resolver never consults ChurchStructureMembership.
     """
     groups = SmallGroup.objects.filter(is_active=True)
     units = list(units)

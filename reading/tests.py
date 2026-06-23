@@ -1812,12 +1812,10 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.other_district.save()
         self.group = SmallGroup.objects.create(
             name="Invariant Progress Group",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Invariant Progress Other Group",
-            district=self.other_district,
             church_structure_unit=self.other_group_unit,
         )
 
@@ -1974,7 +1972,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         sibling_unit = self.create_unit("INV-SIBLING", parent=self.district_unit)
         sibling_group = SmallGroup.objects.create(
             name="Invariant Sibling Group",
-            district=self.district,
             church_structure_unit=sibling_unit,
         )
         self.create_membership(self.viewer, self.other_group_unit)
@@ -2007,7 +2004,6 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         )
         district_group_b = SmallGroup.objects.create(
             name="Invariant District Group B",
-            district=self.district,
             church_structure_unit=district_group_b_unit,
         )
         leader = self.create_user("progress_district_leader")
@@ -2070,12 +2066,10 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         self.other_group_unit = self.create_unit("SWITCH-OTHER")
         self.group = SmallGroup.objects.create(
             name="Switch Group",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Switch Other Group",
-            district=self.other_district,
             church_structure_unit=self.other_group_unit,
         )
 
@@ -2197,7 +2191,6 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         )
         unmapped_group = SmallGroup.objects.create(
             name="Switch Unmapped",
-            district=self.district,
             church_structure_unit=None,
         )
 
@@ -2255,7 +2248,6 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         )
         unmapped_group = SmallGroup.objects.create(
             name="Switch Helper Unmapped",
-            district=self.district,
             church_structure_unit=None,
         )
         self.assertEqual(
@@ -2304,18 +2296,15 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.unit_c = self.create_unit("DEF-C", parent=self.other_district_unit)
         self.group_a = SmallGroup.objects.create(
             name="Default Group A",
-            district=self.district,
             church_structure_unit=self.unit_a,
         )
         self.group_b = SmallGroup.objects.create(
             name="Default Group B",
-            district=self.district,
             church_structure_unit=self.unit_b,
         )
         # group_c is in another district: out of a self.district leader's scope.
         self.group_c = SmallGroup.objects.create(
             name="Default Group C",
-            district=self.other_district,
             church_structure_unit=self.unit_c,
         )
 
@@ -3704,8 +3693,8 @@ class BibleReadingFlowTests(TestCase):
     def test_district_leader_can_select_group_in_assigned_district(self):
         self.set_language("en")
         district = District.objects.create(name="North District")
-        group_a = SmallGroup.objects.create(name="North Group A", district=district)
-        group_b = SmallGroup.objects.create(name="North Group B", district=district)
+        group_a = SmallGroup.objects.create(name="North Group A")
+        group_b = SmallGroup.objects.create(name="North Group B")
         # CS-CORE.2D-B: a district-leader scope resolves through the mapped district
         # unit and covers its descendant small-group units.
         district_unit = ChurchStructureUnit.objects.create(
@@ -3758,10 +3747,9 @@ class BibleReadingFlowTests(TestCase):
         self.set_language("en")
         district = District.objects.create(name="East District")
         outside_district = District.objects.create(name="West District")
-        inside_group = SmallGroup.objects.create(name="East Group", district=district)
+        inside_group = SmallGroup.objects.create(name="East Group")
         outside_group = SmallGroup.objects.create(
             name="West Group",
-            district=outside_district,
         )
         # CS-CORE.2D-B: map both districts/groups so the structure-aware district
         # scope covers the in-district group but never the out-of-district one.

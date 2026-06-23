@@ -78,17 +78,14 @@ class ServiceEventFoundationTests(TestCase):
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.north,
             church_structure_unit=self.group_unit,
         )
         self.same_district_group = SmallGroup.objects.create(
             name="Rainbow 4B",
-            district=self.north,
             church_structure_unit=self.group_b_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
-            district=self.south,
             church_structure_unit=self.other_group_unit,
         )
         self.required_team = MinistryTeam.objects.create(
@@ -2414,37 +2411,30 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         )
         self.north = District.objects.create(
             name="North",
-            ministry_context=self.cm,
             church_structure_unit=self.north_unit,
         )
         self.south = District.objects.create(
             name="South",
-            ministry_context=self.cm,
             church_structure_unit=self.south_unit,
         )
         # EM district stays unmapped on purpose; its group maps directly.
         self.em_district = District.objects.create(
             name="EM Adults",
-            ministry_context=self.em,
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.north,
             church_structure_unit=self.group_unit,
         )
         self.group_b = SmallGroup.objects.create(
             name="Rainbow 4B",
-            district=self.north,
             church_structure_unit=self.group_b_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
-            district=self.south,
             church_structure_unit=self.other_group_unit,
         )
         self.em_group = SmallGroup.objects.create(
             name="English Adult 1",
-            district=self.em_district,
             church_structure_unit=self.em_group_unit,
         )
 

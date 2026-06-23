@@ -61,7 +61,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
 
@@ -467,32 +466,38 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
         self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
 
-    def test_legacy_parent_fk_admin_display_is_retired(self):
-        # LEGACY-OBJECT-ADMIN-FK.1A stripped the SmallGroup.district and
-        # District.ministry_context parent FKs from SmallGroupAdmin / DistrictAdmin
-        # (the admins stay registered and still surface the church_structure_unit
-        # mapping bridge). Neither parent FK is named by an admin surface anymore,
-        # so the schema audit must no longer report an admin_reference for them.
-        # With parent/context links already clear, District.ministry_context (zero
-        # populated rows in the fixture) advances from blocked_by_display_or_admin
-        # to blocked_by_diagnostic_tooling; only the parent-link/seed diagnostic
-        # tooling and the legacy bridge read remain.
+    def test_legacy_parent_fks_are_historical_after_field_removal(self):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district
+        # and District.ministry_context parent/context FKs (migration
+        # accounts/0013) after LEGACY-OBJECT-ADMIN-FK.1A retired their admin display
+        # and LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver fallback reads.
+        # The guarded cleanup_legacy_structure_parent_links command was retired
+        # with the fields, and seed_church_structure_units no longer reconstructs
+        # the District/SmallGroup hierarchy from them. Only immutable historical
+        # migrations still name them, so both candidates are now historical-only
+        # with no active schema blocker and no queryable data counter.
         audit = run_audit()
 
-        small_group_district = _candidate(audit, "SmallGroup.district")
-        district_ministry_context = _candidate(audit, "District.ministry_context")
+        for name in (
+            "SmallGroup.district (removed)",
+            "District.ministry_context (removed)",
+        ):
+            candidate = _candidate(audit, name)
+            self.assertEqual(candidate["live_runtime_references"], ())
+            self.assertEqual(candidate["app_write_references"], ())
+            self.assertEqual(candidate["app_read_references"], ())
+            self.assertEqual(candidate["admin_references"], ())
+            self.assertEqual(candidate["template_display_references"], ())
+            self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+            self.assertEqual(candidate["data_blocker_count"], 0)
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+            self.assertFalse(
+                candidate["schema_removal_status"].startswith("blocked_by_")
+            )
 
-        self.assertEqual(small_group_district["admin_references"], ())
-        self.assertEqual(district_ministry_context["admin_references"], ())
-
-        # The fixture leaves District.ministry_context unset (0 populated), so the
-        # parent-FK field is no longer admin/display-blocked and advances to the
-        # diagnostic-tooling phase.
-        self.assertEqual(district_ministry_context["data_blocker_count"], 0)
-        self.assertEqual(
-            district_ministry_context["schema_removal_status"],
-            STATUS_DIAGNOSTIC,
-        )
+        # The removed fields no longer have queryable data counters.
+        self.assertNotIn("small_group_district", audit["data_counts"])
+        self.assertNotIn("district_ministry_context", audit["data_counts"])
 
     def test_reflection_mirror_is_historical_after_field_removal(self):
         # REFLECTION-MIRROR.1H removed the ReflectionComment.small_group_at_post

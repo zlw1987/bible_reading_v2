@@ -101,7 +101,6 @@ CANDIDATE_DEFINITIONS = (
             "reading/group_progress selected group display",
         ),
         "diagnostic_cleanup_references": _refs(
-            "cleanup_legacy_structure_parent_links",
             "audit_legacy_structure_object_row_retirement",
         ),
         "test_fixture_references": _refs("many focused visibility/cleanup fixtures"),
@@ -110,42 +109,34 @@ CANDIDATE_DEFINITIONS = (
         "recommended_next_action": (
             "Do not remove table yet. Keep as bridge/admin/diagnostic context "
             "until all inbound FKs and mapping decisions are retired or replaced. "
-            "PROFILE-SG-FIELD-RETIRE.1A already removed the Profile.small_group "
-            "inbound FK."
+            "PROFILE-SG-FIELD-RETIRE.1A removed the Profile.small_group inbound FK "
+            "and LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the SmallGroup.district "
+            "parent FK."
         ),
         "suggested_removal_phase": "phase 5",
     },
     {
-        "candidate_name": "SmallGroup.district",
+        "candidate_name": "SmallGroup.district (removed)",
         "model_table": "accounts.SmallGroup",
         "field_name": "district",
-        "candidate_type": "bridge-field",
-        # LEGACY-BRIDGE-RESOLVER-NARROW.1A stopped resolve_units_to_small_groups
-        # (and therefore BibleStudySeries.get_eligible_small_groups) reading this
-        # parent FK; the resolver now maps only through
-        # SmallGroup.church_structure_unit, so there is no live app read left.
-        "app_read_references": _refs(),
-        # LEGACY-OBJECT-ADMIN-FK.1A removed the SmallGroup.district column from
-        # SmallGroupAdmin, so the admin no longer surfaces this parent FK.
-        "admin_references": _refs(),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_legacy_structure_parent_links",
-            "seed_church_structure_units historical setup bridge",
-        ),
-        "test_fixture_references": _refs("legacy structure mapping fixtures"),
-        "migration_history_references": _refs("accounts migrations"),
-        "data_counter": "small_group_district",
+        "candidate_type": "field",
+        "migration_history_references": _refs("accounts migrations (field added then removed)"),
         "recommended_next_action": (
-            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A and the "
-            "resolver fallback read retired in LEGACY-BRIDGE-RESOLVER-NARROW.1A "
-            "(resolve_units_to_small_groups / get_eligible_small_groups now map "
-            "only through SmallGroup.church_structure_unit). Parent/context links "
-            "are already clear (0 present). Remaining blockers are the "
-            "parent-link/seed diagnostic tooling, legacy mapping test fixtures, "
-            "and migration history. Remove the field only after the seed/cleanup "
-            "diagnostic tooling is retired or replaced."
+            "Completed. LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy "
+            "SmallGroup.district parent FK (migration accounts/0013) after "
+            "LEGACY-OBJECT-ADMIN-FK.1A retired its admin display and "
+            "LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver fallback read "
+            "(resolve_units_to_small_groups / get_eligible_small_groups map only "
+            "through SmallGroup.church_structure_unit). Parent/context links were "
+            "already clear (0 present). The guarded "
+            "cleanup_legacy_structure_parent_links command was retired with the "
+            "field, and seed_church_structure_units no longer reconstructs the "
+            "SmallGroup hierarchy from this link. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove the SmallGroup table or the church_structure_unit mapping "
+            "FK."
         ),
-        "suggested_removal_phase": "phase 4",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "SmallGroup.church_structure_unit",
@@ -182,7 +173,6 @@ CANDIDATE_DEFINITIONS = (
         ),
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
-            "cleanup_legacy_structure_parent_links",
             "audit_legacy_structure_object_row_retirement",
         ),
         "test_fixture_references": _refs("legacy district fixtures"),
@@ -190,39 +180,33 @@ CANDIDATE_DEFINITIONS = (
         "data_counter": "district_rows",
         "recommended_next_action": (
             "Do not remove table yet. Resolve object rows, inbound FKs, and the "
-            "UNASSIGNED-GROUPS placeholder decision first."
+            "UNASSIGNED-GROUPS placeholder decision first. "
+            "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
+            "SmallGroup.district and District.ministry_context parent FKs."
         ),
         "suggested_removal_phase": "phase 5",
     },
     {
-        "candidate_name": "District.ministry_context",
+        "candidate_name": "District.ministry_context (removed)",
         "model_table": "accounts.District",
         "field_name": "ministry_context",
-        "candidate_type": "bridge-field",
-        # LEGACY-BRIDGE-RESOLVER-NARROW.1A removed the resolver's
-        # district__ministry_context fallback branch, so the legacy Bible Study
-        # schedule resolver no longer reads this parent/context FK.
-        "app_read_references": _refs(),
-        # LEGACY-OBJECT-ADMIN-FK.1A removed the District.ministry_context column
-        # from DistrictAdmin, so the admin no longer surfaces this parent FK.
-        "admin_references": _refs(),
-        "diagnostic_cleanup_references": _refs(
-            "cleanup_legacy_structure_parent_links",
-            "seed_church_structure_units historical setup bridge",
-        ),
-        "test_fixture_references": _refs("legacy hierarchy fixtures"),
-        "migration_history_references": _refs("accounts migrations"),
-        "data_counter": "district_ministry_context",
+        "candidate_type": "field",
+        "migration_history_references": _refs("accounts migrations (field added then removed)"),
         "recommended_next_action": (
-            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A and the "
-            "resolver district__ministry_context fallback retired in "
-            "LEGACY-BRIDGE-RESOLVER-NARROW.1A. Parent/context links are already "
-            "clear (0 present). Remaining blockers are the parent-link/seed "
-            "diagnostic tooling, legacy hierarchy test fixtures, and migration "
-            "history. Remove the field only after the seed/cleanup diagnostic "
-            "tooling is retired or replaced."
+            "Completed. LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy "
+            "District.ministry_context parent/context FK (migration accounts/0013) "
+            "after LEGACY-OBJECT-ADMIN-FK.1A retired its admin display and "
+            "LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver "
+            "district__ministry_context fallback. Parent/context links were "
+            "already clear (0 present). The guarded "
+            "cleanup_legacy_structure_parent_links command was retired with the "
+            "field, and seed_church_structure_units no longer reconstructs the "
+            "District hierarchy from this link. Only immutable historical "
+            "migrations still name it; no active schema blocker remains. This did "
+            "not remove the District / MinistryContext tables or the "
+            "church_structure_unit mapping FKs."
         ),
-        "suggested_removal_phase": "phase 4",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "District.church_structure_unit",
@@ -233,7 +217,6 @@ CANDIDATE_DEFINITIONS = (
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
             "seed_church_structure_units",
-            "cleanup_legacy_structure_parent_links",
         ),
         "test_fixture_references": _refs("district mapping fixtures"),
         "migration_history_references": _refs("accounts migrations"),
@@ -249,8 +232,12 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "accounts.MinistryContext",
         "field_name": "",
         "candidate_type": "model/table",
+        # The legacy Bible Study schedule resolver no longer reads any
+        # MinistryContext field after LEGACY-BRIDGE-RESOLVER-NARROW.1A narrowed it
+        # to SmallGroup.church_structure_unit; the remaining live read is the
+        # structure mapping bridge surfaced for setup diagnostics.
         "app_read_references": _refs(
-            "legacy Bible Study schedule fallback context",
+            "legacy ministry-context to structure mapping bridge (setup diagnostics)",
         ),
         "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
         "diagnostic_cleanup_references": _refs(
@@ -262,7 +249,9 @@ CANDIDATE_DEFINITIONS = (
         "recommended_next_action": (
             "Do not remove table yet. Finish remaining MinistryContext bridge "
             "decisions first. ServiceEvent.ministry_context display cleanup is "
-            "complete (SERVICE-EVENT-CONTEXT.1C removed the FK)."
+            "complete (SERVICE-EVENT-CONTEXT.1C removed the FK), and "
+            "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
+            "District.ministry_context parent FK."
         ),
         "suggested_removal_phase": "phase 5",
     },
@@ -703,16 +692,14 @@ def _data_counts():
         # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so there is no
         # longer a queryable data counter for it.
         "small_group_rows": SmallGroup.objects.count(),
-        "small_group_district": SmallGroup.objects.filter(
-            district__isnull=False
-        ).count(),
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district, so there is
+        # no longer a queryable data counter for it.
         "small_group_mapping": SmallGroup.objects.filter(
             church_structure_unit__isnull=False
         ).count(),
         "district_rows": District.objects.count(),
-        "district_ministry_context": District.objects.filter(
-            ministry_context__isnull=False
-        ).count(),
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed District.ministry_context, so
+        # there is no longer a queryable data counter for it.
         "district_mapping": District.objects.filter(
             church_structure_unit__isnull=False
         ).count(),

@@ -62,12 +62,10 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         )
         self.district = District.objects.create(
             name="District 1",
-            ministry_context=self.context,
             church_structure_unit=self.district_unit,
         )
         self.group = SmallGroup.objects.create(
             name="Group 1",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
 
@@ -159,7 +157,6 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         }
         before_group = (
             self.group.name,
-            self.group.district_id,
             self.group.church_structure_unit_id,
         )
 
@@ -180,7 +177,6 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
         self.assertEqual(
             (
                 self.group.name,
-                self.group.district_id,
                 self.group.church_structure_unit_id,
             ),
             before_group,

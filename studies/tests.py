@@ -51,11 +51,11 @@ class BibleStudyModuleTests(TestCase):
     def setUp(self):
         self.cm = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         self.em = MinistryContext.objects.create(code="EM", name="English Ministry")
-        self.north = District.objects.create(name="North", ministry_context=self.cm)
-        self.south = District.objects.create(name="South", ministry_context=self.em)
-        self.group = SmallGroup.objects.create(name="Rainbow 4", district=self.north)
-        self.same_group = SmallGroup.objects.create(name="Rainbow 4B", district=self.north)
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5", district=self.south)
+        self.north = District.objects.create(name="North")
+        self.south = District.objects.create(name="South")
+        self.group = SmallGroup.objects.create(name="Rainbow 4")
+        self.same_group = SmallGroup.objects.create(name="Rainbow 4B")
+        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
 
         # ChurchStructureUnit tree mirroring the legacy structure (BS-AS.1).
         self.root_unit = ChurchStructureUnit.objects.create(
@@ -5340,7 +5340,6 @@ class BibleStudyModuleTests(TestCase):
     def test_get_eligible_small_groups_resolves_root_to_all_active(self):
         inactive_group = SmallGroup.objects.create(
             name="Inactive Root Group",
-            district=self.north,
             is_active=False,
         )
         series = self._make_unit_series(self.root_unit)
@@ -5390,7 +5389,6 @@ class BibleStudyModuleTests(TestCase):
     def test_get_eligible_small_groups_excludes_inactive_for_units(self):
         inactive_group = SmallGroup.objects.create(
             name="Inactive North Unit Group",
-            district=self.north,
             is_active=False,
         )
         series = self._make_unit_series(self.north_unit)

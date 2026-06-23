@@ -2,7 +2,7 @@
 
 ## Current Status Summary
 
-LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B added the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. **BS-SERIES-FIELD-RETIRE.1A then removed those four legacy `BibleStudySeries` scope fields** (migration `studies/0010`) after local/dev audit confirmed zero populated legacy scope fields with all series carrying `BibleStudySeriesAudienceScope` rows; normal generation is structure-unit-native and fails closed on zero audience rows, and the now-orphaned `cleanup_bible_study_series_legacy_scope_fields` command was retired with the fields. This did not remove `BibleStudyMeeting.anchor_unit`, `generation_key`, `BibleStudySeriesAudienceScope`, `BibleStudyMeetingAudienceScope`, V1 `BibleStudySession`, or the `SmallGroup` / `District` / `MinistryContext` tables. STRUCTURE-BRIDGE.1A adds the read-only `audit_bible_study_generation_bridge_retirement` inventory: ordinary Bible Study V2 visibility is already audience-row + membership-core, normal generation is already structure-unit-native. **BS-MEETING-MIRROR.1A then removed the legacy `BibleStudyMeeting.small_group` mirror FK** (migration `studies/0011`) after preflight audits confirmed zero populated values and no live runtime/visibility/display/admin/generation dependency; V2 meeting visibility remains `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, normal generation stays structure-unit-native via `generation_key` and `anchor_unit`, and display/grouping uses `anchor_unit` and audience rows. The guarded mirror cleanup command (`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror→audience backfill (`backfill_bible_study_meeting_audience_scopes`), and the legacy-vs-membership shadow audit (`audit_bible_study_membership_readiness`) were retired with the field, and the meeting-mirror counters were removed from the generation-bridge / schema / umbrella retirement audits. This did not remove V1 `BibleStudySession` or the `SmallGroup` / `District` / `MinistryContext` tables. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. SERVICE-EVENT-CONTEXT.1A added an audience-derived Host / Language display fallback for `ServiceEvent.ministry_context` and stopped normal app-level writes to that FK; SERVICE-EVENT-CONTEXT.1B adds display-only `ServiceEvent.host_language_unit`, dry-run-first `backfill_service_event_host_language_units`, and cleanup support so matching legacy FK values can be cleared after the structure-native display context is populated. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows with matching structure-native Host / Language display context, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate. **Current state (post-checkpoint):** the field-retirement slices referenced above as "stops writes / adds cleanup" have since completed — `ServiceEvent.scope_type` / `district` / `small_group` (SE-FIELD-RETIRE.1A, `events/0007`), `ServiceEvent.ministry_context` (SERVICE-EVENT-CONTEXT.1C, `events/0008`), `BibleStudySeries.scope_type` / `ministry_context` / `district` / `small_group` (BS-SERIES-FIELD-RETIRE.1A, `studies/0010`), `BibleStudyMeeting.small_group` (BS-MEETING-MIRROR.1A, `studies/0011`), `ChurchRoleAssignment.district` / `small_group` (ROLE-FIELD-RETIRE.1A, `accounts/0011`), `PrayerRequest.small_group_at_post` (PRAYER-MIRROR.1D, `prayers/0004`), `ReflectionComment.small_group_at_post` (REFLECTION-MIRROR.1H, `comments/0007`), and `Profile.small_group` (PROFILE-SG-FIELD-RETIRE.1A, `accounts/0012`) are all removed, each retiring its now-orphaned cleanup/backfill/audit tooling; only immutable historical migrations still name them. **BS-V1-ADMIN-RETIRE.1A** then retired the active V1 Django Admin surface (unregistered `BibleStudySessionAdmin` plus the V1-only `BibleStudyGuideAdmin` / `BibleStudyWorshipSongAdmin` in `studies/admin.py`); this was admin-only — no V1 data was deleted, no V1 model/table/field was removed, and the guarded purge was not applied — so V1 `BibleStudySession` is no longer a display/admin blocker and the schema-retirement audit reclassifies it from `blocked_by_display_or_admin` to `blocked_by_diagnostic_tooling` (purge/audit tooling, test fixtures, immutable historical migrations). Remaining blockers are the legacy `SmallGroup` / `District` / `MinistryContext` rows/tables, their bridge mapping fields and parent/context links, admin/diagnostic/setup surfaces, and V1 `BibleStudySession` pilot/archive cleanup plus its later model/table/schema removal slice.
+LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy Church Structure compatibility layer. It does not delete fields, tables, models, migrations, routes, forms, templates, admin surfaces, or data. It did not change runtime visibility, permissions, membership, serving, Bible Study, ServiceEvent, reflection, or role behavior. BS-V1-RETIRE.1A later retired legacy V1 `BibleStudySession` from app-level runtime while preserving rows for explicit cleanup. BS-V1-PURGE.1A adds a guarded dry-run-first purge command for V1 pilot rows and V1-only child rows; the command is not automatically run by runtime code. BS-V2-MIRROR.1A later moved V2 Bible Study display labels toward `anchor_unit` / meeting audience units without changing runtime behavior, data, schema, forms, generation, or audience rows. BS-V2-MIRROR.1B later stopped new V2 normal meeting writes from setting `BibleStudyMeeting.small_group`; BS-V2-MIRROR.1C adds a dry-run-first guarded cleanup command for existing mirror values, but no cleanup runs automatically. BS-SERIES-SCOPE.1A stops normal app-level Bible Study schedule create/edit saves from writing legacy `BibleStudySeries.scope_type`, `ministry_context`, `district`, or `small_group`; BS-SERIES-SCOPE.1B added the dry-run-first guarded `cleanup_bible_study_series_legacy_scope_fields` command for existing values. **BS-SERIES-FIELD-RETIRE.1A then removed those four legacy `BibleStudySeries` scope fields** (migration `studies/0010`) after local/dev audit confirmed zero populated legacy scope fields with all series carrying `BibleStudySeriesAudienceScope` rows; normal generation is structure-unit-native and fails closed on zero audience rows, and the now-orphaned `cleanup_bible_study_series_legacy_scope_fields` command was retired with the fields. This did not remove `BibleStudyMeeting.anchor_unit`, `generation_key`, `BibleStudySeriesAudienceScope`, `BibleStudyMeetingAudienceScope`, V1 `BibleStudySession`, or the `SmallGroup` / `District` / `MinistryContext` tables. STRUCTURE-BRIDGE.1A adds the read-only `audit_bible_study_generation_bridge_retirement` inventory: ordinary Bible Study V2 visibility is already audience-row + membership-core, normal generation is already structure-unit-native. **BS-MEETING-MIRROR.1A then removed the legacy `BibleStudyMeeting.small_group` mirror FK** (migration `studies/0011`) after preflight audits confirmed zero populated values and no live runtime/visibility/display/admin/generation dependency; V2 meeting visibility remains `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, normal generation stays structure-unit-native via `generation_key` and `anchor_unit`, and display/grouping uses `anchor_unit` and audience rows. The guarded mirror cleanup command (`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror→audience backfill (`backfill_bible_study_meeting_audience_scopes`), and the legacy-vs-membership shadow audit (`audit_bible_study_membership_readiness`) were retired with the field, and the meeting-mirror counters were removed from the generation-bridge / schema / umbrella retirement audits. This did not remove V1 `BibleStudySession` or the `SmallGroup` / `District` / `MinistryContext` tables. SE-SCOPE.1A stops normal app-level ServiceEvent create/edit and recurring saves from writing legacy `ServiceEvent.scope_type`, `district`, or `small_group`; SE-SCOPE.1B adds the dry-run-first guarded `cleanup_service_event_legacy_scope_fields` command for existing values. SERVICE-EVENT-CONTEXT.1A added an audience-derived Host / Language display fallback for `ServiceEvent.ministry_context` and stopped normal app-level writes to that FK; SERVICE-EVENT-CONTEXT.1B adds display-only `ServiceEvent.host_language_unit`, dry-run-first `backfill_service_event_host_language_units`, and cleanup support so matching legacy FK values can be cleared after the structure-native display context is populated. PROFILE-SG.1B adds the dry-run-first guarded `cleanup_profile_small_group` command for existing `Profile.small_group` values that are already safely represented by a single active primary membership mapped to the same active small-group unit. Safe cleanup only clears ServiceEvent rows with matching structure-native Host / Language display context, series rows that already have valid `BibleStudySeriesAudienceScope` rows, and profile rows whose active primary membership safely represents the same legacy group mapping. Unsafe/mismatched rows remain blocked for review, no cleanup runs automatically, and model-field/DB-constraint cleanup remains separate. **Current state (post-checkpoint):** the field-retirement slices referenced above as "stops writes / adds cleanup" have since completed — `ServiceEvent.scope_type` / `district` / `small_group` (SE-FIELD-RETIRE.1A, `events/0007`), `ServiceEvent.ministry_context` (SERVICE-EVENT-CONTEXT.1C, `events/0008`), `BibleStudySeries.scope_type` / `ministry_context` / `district` / `small_group` (BS-SERIES-FIELD-RETIRE.1A, `studies/0010`), `BibleStudyMeeting.small_group` (BS-MEETING-MIRROR.1A, `studies/0011`), `ChurchRoleAssignment.district` / `small_group` (ROLE-FIELD-RETIRE.1A, `accounts/0011`), `PrayerRequest.small_group_at_post` (PRAYER-MIRROR.1D, `prayers/0004`), `ReflectionComment.small_group_at_post` (REFLECTION-MIRROR.1H, `comments/0007`), and `Profile.small_group` (PROFILE-SG-FIELD-RETIRE.1A, `accounts/0012`) are all removed, each retiring its now-orphaned cleanup/backfill/audit tooling; only immutable historical migrations still name them. **BS-V1-ADMIN-RETIRE.1A** then retired the active V1 Django Admin surface (unregistered `BibleStudySessionAdmin` plus the V1-only `BibleStudyGuideAdmin` / `BibleStudyWorshipSongAdmin` in `studies/admin.py`); this was admin-only — no V1 data was deleted, no V1 model/table/field was removed, and the guarded purge was not applied — so V1 `BibleStudySession` is no longer a display/admin blocker and the schema-retirement audit reclassifies it from `blocked_by_display_or_admin` to `blocked_by_diagnostic_tooling` (purge/audit tooling, test fixtures, immutable historical migrations). **LEGACY-PARENT-FK-FIELD-RETIRE.1A** then removed the now-redundant legacy parent/context FK fields `SmallGroup.district` and `District.ministry_context` (migration `accounts/0013`) after their admin display (LEGACY-OBJECT-ADMIN-FK.1A/1B) and resolver fallback (LEGACY-BRIDGE-RESOLVER-NARROW.1A) reads were already retired and target-DB dry-run confirmed parent/context links already clear (0 present, `data_blocker_count=0`); the guarded `cleanup_legacy_structure_parent_links` command (its only purpose being to clear those two fields before removal) was retired with them, and `seed_church_structure_units` no longer reconstructs the `District` / `SmallGroup` hierarchy from raw legacy links. This did not remove the `SmallGroup` / `District` / `MinistryContext` rows/tables or the `church_structure_unit` mapping FKs. Remaining blockers are the legacy `SmallGroup` / `District` / `MinistryContext` rows/tables, their bridge mapping fields, admin/diagnostic/setup surfaces, and V1 `BibleStudySession` pilot/archive cleanup plus its later model/table/schema removal slice.
 
 New audit command:
 
@@ -205,68 +205,44 @@ retirement: old-row idempotency matching, fallback display, admin maintenance,
 and diagnostic/backfill/cleanup tooling. No deletion, field removal, or
 replacement bridge is approved by this slice.
 
-Legacy structure parent/context link cleanup command:
+Legacy structure parent/context FK fields removed (LEGACY-PARENT-FK-FIELD-RETIRE.1A):
 
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_legacy_structure_parent_links
-```
+**LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy parent/context FK fields
+`SmallGroup.district` and `District.ministry_context`** (migration
+`accounts/0013`). They duplicated the canonical `ChurchStructureUnit.parent`
+hierarchy and were no longer read by live runtime/admin/display/resolver code
+after LEGACY-OBJECT-ADMIN-FK.1A/1B (admin display),
+SE-EVENT-LEGACY-WARNING-RETIRE.1A, and LEGACY-BRIDGE-RESOLVER-NARROW.1A
+(resolver fallback). Parent/context links were confirmed already clear
+(`small_group_district_links_present: 0`,
+`district_ministry_context_links_present: 0`, both `data_blocker_count=0`) on
+the target DB before removal.
 
-LEGACY-OBJECT-LINKS.1A adds this dry-run-first command. It clears legacy
-parent/context FK links that are already fully represented by the
-`ChurchStructureUnit` hierarchy:
+The dry-run-first `cleanup_legacy_structure_parent_links` command — whose only
+purpose was to clear these two fields before removal — was retired in the same
+slice along with its test module
+(`accounts/test_cleanup_legacy_structure_parent_links_command.py`). Only
+immutable historical migrations still name the two fields.
 
-- `SmallGroup.district` → `None`, and
-- `District.ministry_context` → `None`.
+This did **not** remove the `SmallGroup` / `District` / `MinistryContext` rows or
+tables, the `church_structure_unit` mapping bridge FKs, or any V1
+`BibleStudySession` legacy scope field. Ordinary visibility still runs on
+audience rows plus active primary `ChurchStructureMembership`, and
+`resolve_units_to_small_groups()` /
+`BibleStudySeries.get_eligible_small_groups()` resolve eligible groups through
+`ChurchStructureUnit` hierarchy descendants mapped via
+`SmallGroup.church_structure_unit` only.
 
-A link is cleared only when both the child and parent legacy objects map to
-active `ChurchStructureUnit` rows of the expected unit types and the child
-unit's `parent` already equals the parent legacy object's mapped unit (so
-`ChurchStructureUnit.parent` already proves the same relationship). Links whose
-mapping is missing, inactive, wrong-type, or whose hierarchy parent does not
-match are skipped and reported. Both target FKs were verified nullable before
-implementation; a non-nullable target would be detected, reported via
-`skipped_not_nullable`, and left untouched.
-
-This command does not scan `ServiceEvent` at all. The legacy
-`ServiceEvent.ministry_context` display FK was removed in
-SERVICE-EVENT-CONTEXT.1C (migration `events/0008`); its display-only tooling
-(`backfill_service_event_host_language_units`,
-`cleanup_service_event_ministry_context_labels`) was retired with it, and the
-`service_event_*` counters were dropped from this command. Host / Language
-display now uses structure-native `ServiceEvent.host_language_unit` plus the
-audience-derived structure fallback.
-
-Apply requires both explicit flags:
-
-```powershell
-.venv\Scripts\python.exe manage.py cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup
-```
-
-`--verbose` prints per-link decisions (object type, id/name/title, legacy FK
-id/name/code, mapped/parent unit id/code/type, decision/reason) and never prints
-event descriptions or other free-text body content. `--limit N` caps printed
-rows per object type only; it does not narrow scan or apply scope. The command
-deletes no `SmallGroup` / `District` / `MinistryContext` rows, removes no
-fields, runs no schema migration (`schema_mutated: false`), and switches no
-runtime source of truth (`runtime_mutated: false`).
-
-This is safe for the migrated runtime because ordinary visibility already runs
-on audience rows plus active primary `ChurchStructureMembership`, and the
-remaining structure-mapping resolver `resolve_units_to_small_groups()` matches
-eligible groups through `ChurchStructureUnit` hierarchy descendants mapped via
-`SmallGroup.church_structure_unit` only. **LEGACY-BRIDGE-RESOLVER-NARROW.1A
-removed the resolver's `SmallGroup.district` / `District.ministry_context`
-fallback branches**, so neither the resolver nor
-`BibleStudySeries.get_eligible_small_groups()` reads those legacy parent/context
-fields anymore.
-
-Caution for re-seeding: `seed_church_structure_units` derives a unit's parent
-from these legacy links when first building the tree. After the links are
-cleared, the hierarchy lives authoritatively in `ChurchStructureUnit.parent`;
-do not re-run the seed command in `--apply` mode expecting it to re-derive
-parents from the (now cleared) legacy links — it would reparent affected units
-under the "Unassigned" holding units. Treat the seed command as superseded for
-already-mapped rows.
+Seed command after field retirement: `seed_church_structure_units` no longer
+reads the removed legacy parent/context FKs and can no longer reconstruct the
+`District` / `SmallGroup` hierarchy from raw legacy links. `MinistryContext`
+units (whose parent is always the root) are still seeded normally; for already-
+mapped `District` / `SmallGroup` rows the existing `ChurchStructureUnit.parent`
+and `church_structure_unit` mapping are authoritative and are never reparented.
+Unmapped `District` / `SmallGroup` rows are now reported as needing manual
+placement (counted as `unreconstructable`) instead of being silently reparented
+to an "Unassigned" holding unit; the seed no longer creates
+`UNASSIGNED-DISTRICTS` / `UNASSIGNED-GROUPS` buckets for them.
 
 Do not run that `--apply` command against the local/dev database during the
 LEGACY-OBJECT-LINKS.1A implementation task. This task does not delete
@@ -381,7 +357,7 @@ Blockers:
 - Existing `SmallGroup` rows and FK references block table retirement.
 - `PrayerRequest.small_group_at_post`: **removed in PRAYER-MIRROR.1D.** After 1A stopped the write, 1B cleared the stored data, and 1C removed the admin/display read surfaces, 1D dropped the model field (migration `prayers/0004`), retired the `cleanup_prayer_small_group_mirrors` command and `resolve_legacy_small_group_mirror` helper, and reclassified the schema-prep candidate as historical-only. This inbound `SmallGroup` reference no longer exists. The `SmallGroup` table itself is unaffected by this prayer-only field removal.
 - Unmapped/inactive/wrong-type bridge mappings are readiness blockers for any non-lossy migration or final archive step.
-- `SmallGroup.district` parent links are redundant with `ChurchStructureUnit.parent`. LEGACY-OBJECT-LINKS.1A adds dry-run-first `cleanup_legacy_structure_parent_links` to clear eligible links (child unit `parent` equals the district's mapped active district unit); unsafe/mismatched links stay set. This does not delete `SmallGroup` rows or remove the field.
+- `SmallGroup.district`: **removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A** (migration `accounts/0013`). The legacy parent FK was redundant with `ChurchStructureUnit.parent`; after its admin display and resolver fallback reads were retired and target-DB dry-run confirmed 0 links present, the field was removed and the guarded `cleanup_legacy_structure_parent_links` command was retired with it. This inbound `District` reference no longer exists. The `SmallGroup` rows/table and `church_structure_unit` mapping FK are unaffected.
 - ROW-RETIRE.1A separately counts the remaining `SmallGroup` rows as future
   archive candidates when they map to active small-group units, but it does not
   approve deletion. If a dedicated compatibility/mapping model replaces the old
@@ -391,7 +367,7 @@ Blockers:
 
 Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wrong-type mapped units, and references from:
 
-- `SmallGroup.district`
+- `SmallGroup.district` (removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A; no longer an inbound `District` reference)
 - `ServiceEvent.district`
 - `BibleStudySeries.district` (removed in BS-SERIES-FIELD-RETIRE.1A; no longer an inbound `District` reference)
 - V1 `BibleStudySession.district`
@@ -401,7 +377,7 @@ Blockers:
 
 - Existing rows and FK references block table retirement.
 - Wrong/missing bridge mappings block safe bridge-based backfill, audit, or final archive decisions.
-- `District.ministry_context` parent links are redundant with `ChurchStructureUnit.parent`. LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links` clears eligible links (district unit `parent` equals the ministry context's mapped active ministry-context unit); unsafe/mismatched links stay set. It does not delete `District` rows or remove the field.
+- `District.ministry_context`: **removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A** (migration `accounts/0013`). The legacy parent/context FK was redundant with `ChurchStructureUnit.parent`; after its admin display and resolver fallback reads were retired and target-DB dry-run confirmed 0 links present, the field was removed and the guarded `cleanup_legacy_structure_parent_links` command was retired with it. This inbound `MinistryContext` reference no longer exists. The `District` rows/table and `church_structure_unit` mapping FK are unaffected.
 - ROW-RETIRE.1A highlights `District #13 未分配小组` mapped to
   `#22 UNASSIGNED-GROUPS` as special handling: the mapped unit is `custom`, not
   `district`, so it is likely a legacy placeholder/holding bucket. Do not
@@ -414,14 +390,14 @@ Blockers:
 
 Audit counters include active/inactive rows, mapped/unmapped rows, inactive/wrong-type mapped units, and references from:
 
-- `District.ministry_context`
+- (`District.ministry_context` was removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A and is no longer a `MinistryContext` inbound reference.)
 - (`BibleStudySeries.ministry_context` was removed in BS-SERIES-FIELD-RETIRE.1A and is no longer a `MinistryContext` inbound reference.)
 - (`ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C and is no longer a `MinistryContext` inbound reference.)
 
 Blockers:
 
 - Existing rows and references block table retirement.
-- `District.ministry_context` parent links are cleared (when eligible) by LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links`, reducing `MinistryContext` inbound references. `ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C (migration `events/0008`); Host / Language display now uses structure-native `ServiceEvent.host_language_unit` plus the audience-derived structure fallback, and the display-only backfill/cleanup tooling (`backfill_service_event_host_language_units`, `cleanup_service_event_ministry_context_labels`) was retired with it. The `MinistryContext` rows and table remain.
+- `District.ministry_context` was removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A (migration `accounts/0013`), removing this inbound `MinistryContext` reference. `ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C (migration `events/0008`); Host / Language display now uses structure-native `ServiceEvent.host_language_unit` plus the audience-derived structure fallback, and the display-only backfill/cleanup tooling (`backfill_service_event_host_language_units`, `cleanup_service_event_ministry_context_labels`) was retired with it. The `MinistryContext` rows and table remain.
 - ROW-RETIRE.1A counts all remaining `MinistryContext` rows as bridge/admin/
   diagnostic row-retirement blockers until the Host / Language display cleanup,
   mapping bridge, and final table-retirement path are explicitly approved.
@@ -539,7 +515,7 @@ Blockers:
 5. Prayer legacy small-group mirror cleanup is **done/retired**: `PrayerRequest.small_group_at_post` was removed in PRAYER-MIRROR.1D (migration `prayers/0004`), and the guarded `cleanup_prayer_small_group_mirrors` command and the `resolve_legacy_small_group_mirror` helper were retired with the field. Prayer group visibility uses `PrayerRequest.structure_unit_at_post` plus active primary `ChurchStructureMembership`. No prayer cleanup command remains to run.
 6. Role legacy field retirement is **done** (ROLE-FIELD-RETIRE.1A removed `ChurchRoleAssignment.district` / `small_group`, migration `accounts/0011`). The only remaining role readiness check is that no scoped assignment lacks an explicit valid `structure_unit`; local/dev audit shows zero.
 7. `Profile.small_group` cleanup is **done/retired**: the field was removed in PROFILE-SG-FIELD-RETIRE.1A (migration `accounts/0012`), and the guarded `cleanup_profile_small_group` command plus `audit_structure_belonging`, `backfill_church_structure_memberships`, and `audit_group_progress_shadow` were retired with it. `ChurchStructureMembership` is the canonical belonging source. No profile cleanup command remains to run.
-8. Retire redundant legacy parent/context links before table retirement: dry-run `cleanup_legacy_structure_parent_links`, review the per-link decisions, then run `cleanup_legacy_structure_parent_links --apply --confirm-legacy-structure-parent-link-cleanup` only after explicit approval per target DB. This clears only `SmallGroup.district` / `District.ministry_context` links already represented by `ChurchStructureUnit.parent`. It deletes no rows and removes no fields. (`ServiceEvent.ministry_context` was already removed in SERVICE-EVENT-CONTEXT.1C and has no remaining cleanup path.)
+8. Legacy parent/context FK field retirement is **done/retired**: the redundant `SmallGroup.district` / `District.ministry_context` parent FKs were removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A (migration `accounts/0013`) after their admin display and resolver fallback reads were retired and target-DB dry-run confirmed 0 links present (`data_blocker_count=0`). The guarded `cleanup_legacy_structure_parent_links` command (its only purpose being to clear those two fields before removal) was retired with them, and `seed_church_structure_units` no longer reconstructs the `District` / `SmallGroup` hierarchy from raw legacy links. No parent-link cleanup command remains to run; only immutable historical migrations still name the two fields. The `SmallGroup` / `District` / `MinistryContext` rows/tables and `church_structure_unit` mapping FKs remain.
 9. ServiceEvent Host / Language display retirement is **done/retired**: `ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C (migration `events/0008`), and the display-only `backfill_service_event_host_language_units` / `cleanup_service_event_ministry_context_labels` tooling was retired with it. Host / Language display uses structure-native `ServiceEvent.host_language_unit` plus the audience-derived structure fallback. The `MinistryContext` row/table retirement decision remains later (see steps 11–12).
 10. Run `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50`
    before proposing any field/table removal. Use it to identify which legacy
@@ -570,12 +546,10 @@ git diff --stat
 git status --short
 ```
 
-For LEGACY-OBJECT-LINKS.1A, also run:
-
-```powershell
-.venv\Scripts\python.exe manage.py test accounts.test_cleanup_legacy_structure_parent_links_command -v 2
-.venv\Scripts\python.exe manage.py cleanup_legacy_structure_parent_links --verbose --limit 30
-```
+LEGACY-OBJECT-LINKS.1A's `cleanup_legacy_structure_parent_links` command and its
+test module were retired in LEGACY-PARENT-FK-FIELD-RETIRE.1A together with the
+`SmallGroup.district` / `District.ministry_context` fields, so there is no
+longer a parent-link command or test to run.
 
 For ROW-RETIRE.1A, also run:
 

@@ -10,7 +10,8 @@ ancestry.
 
 Source of hierarchy is ``ChurchStructureUnit.parent`` only. It never consults
 ``District.ministry_context`` or ``SmallGroup.district`` (those legacy parent
-links have been cleared) and never changes audience visibility.
+FK fields were removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A) and never changes
+audience visibility.
 """
 
 from accounts.models import ChurchStructureUnit

@@ -381,10 +381,8 @@ class AccountProfileTests(TestCase):
         self.user.profile.refresh_from_db()
 
     def test_profile_request_does_not_grant_runtime_access_or_permissions(self):
-        district = District.objects.create(name="Profile District")
         district_group = SmallGroup.objects.create(
             name="Profile District Group",
-            district=district,
         )
         event = ServiceEvent.objects.create(
             title="Profile District Service",
@@ -964,21 +962,21 @@ class MinistryContextBridgeTests(TestCase):
 
         self.assertEqual(context.code, "EM")
 
-    def test_district_can_be_linked_to_ministry_context(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="District 1",
-            ministry_context=context,
+    def test_district_has_no_legacy_ministry_context_parent_fk(self):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy
+        # District.ministry_context parent FK; hierarchy is the canonical
+        # ChurchStructureUnit.parent chain via the church_structure_unit bridge.
+        self.assertFalse(
+            any(
+                field.name == "ministry_context"
+                for field in District._meta.get_fields()
+            )
         )
 
-        self.assertEqual(district.ministry_context, context)
-        self.assertIn(district, context.districts.all())
-
-    def test_existing_district_without_ministry_context_remains_valid(self):
-        district = District.objects.create(name="District without context")
+    def test_existing_district_without_mapping_remains_valid(self):
+        district = District.objects.create(name="District without mapping")
 
         district.full_clean()
-        self.assertIsNone(district.ministry_context)
         self.assertIsNone(district.church_structure_unit)
 
     def test_small_group_can_be_created_without_church_structure_unit(self):
@@ -987,12 +985,16 @@ class MinistryContextBridgeTests(TestCase):
         group.full_clean()
         self.assertIsNone(group.church_structure_unit)
 
-    def test_small_group_still_belongs_to_district(self):
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
-
-        self.assertEqual(group.district, district)
-        self.assertIn(group, district.small_groups.all())
+    def test_small_group_has_no_legacy_district_parent_fk(self):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district
+        # parent FK; hierarchy is the canonical ChurchStructureUnit.parent chain
+        # via the church_structure_unit bridge.
+        self.assertFalse(
+            any(
+                field.name == "district"
+                for field in SmallGroup._meta.get_fields()
+            )
+        )
 
     def test_ministry_context_can_link_to_church_structure_unit(self):
         unit = ChurchStructureUnit.objects.create(
@@ -1042,8 +1044,7 @@ class MinistryContextBridgeTests(TestCase):
         # zero-row ServiceEvent scope. The zero-row legacy runtime fallback is
         # retired, so an event with no ServiceEventAudienceScope rows fails
         # closed for ordinary users regardless of Profile.small_group.
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        group = SmallGroup.objects.create(name="Rainbow 4")
         other_group = SmallGroup.objects.create(name="Rainbow 5")
         user = User.objects.create_user(
             username="service_event_member",
@@ -1312,32 +1313,29 @@ class ChurchStructureSelectorLayerTests(TestCase):
         )
         self.north = District.objects.create(
             name="North",
-            ministry_context=self.cm,
             church_structure_unit=self.north_unit,
         )
         self.south = District.objects.create(
             name="South",
-            ministry_context=self.cm,
             church_structure_unit=self.south_unit,
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.north,
             church_structure_unit=self.group_unit,
         )
         self.sibling_group = SmallGroup.objects.create(
             name="Rainbow 4B",
-            district=self.north,
             church_structure_unit=self.sibling_group_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
-            district=self.south,
             church_structure_unit=self.other_group_unit,
         )
+        # Intentionally unmapped: no church_structure_unit, so non-root selections
+        # never resolve it (the legacy district parent FK that once linked it to
+        # South was removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A).
         self.unmapped_group = SmallGroup.objects.create(
             name="Unmapped Legacy Group",
-            district=self.south,
         )
 
         self.group_user = self.create_user("selector_group", self.group)
@@ -1376,15 +1374,14 @@ class ChurchStructureSelectorLayerTests(TestCase):
 
         LEGACY-BRIDGE-RESOLVER-NARROW.1A stopped the resolver reading the legacy
         ``SmallGroup.district`` / ``District.ministry_context`` parent/context
-        fields. ``unmapped_group`` has no ``church_structure_unit`` mapping, so
-        even though its legacy ``district`` (South) sits under the Chinese
-        Ministry, selecting ``cm_unit`` no longer returns it.
+        fields, which were later removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A.
+        ``unmapped_group`` has no ``church_structure_unit`` mapping, so selecting
+        ``cm_unit`` does not return it.
         """
         from accounts.structure_selectors import resolve_units_to_small_groups
 
         inactive_group = SmallGroup.objects.create(
             name="Inactive Group",
-            district=self.north,
             church_structure_unit=self.group_unit,
             is_active=False,
         )
@@ -1416,8 +1413,9 @@ class ChurchStructureSelectorLayerTests(TestCase):
 
     def test_resolve_units_ignores_legacy_district_without_mapping(self):
         """A group mapped only via legacy district is excluded for non-root units."""
-        # unmapped_group.district == South (under Chinese Ministry) but it has no
-        # church_structure_unit, so selecting the South unit must not return it.
+        # unmapped_group has no church_structure_unit (its legacy district parent
+        # FK was removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A), so selecting the
+        # South unit must not return it.
         self.assert_resolved_groups([self.south_unit], [self.other_group])
         self.assert_resolved_groups([self.cm_unit], [
             self.group,
@@ -1425,21 +1423,23 @@ class ChurchStructureSelectorLayerTests(TestCase):
             self.other_group,
         ])
 
-    def test_resolve_units_uses_mapping_not_legacy_district(self):
-        """A group whose legacy district is elsewhere still resolves by its mapping."""
-        # Legacy district points at South, but the structure mapping puts this
-        # group under the North branch; selecting North must return it.
-        cross_group = SmallGroup.objects.create(
-            name="Cross-Wired Group",
-            district=self.south,
+    def test_resolve_units_uses_structure_mapping_for_group_under_north(self):
+        """A group resolves purely by its church_structure_unit mapping.
+
+        LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district
+        parent FK, so the mapped unit is the only thing that places a group in the
+        hierarchy. This group maps under the North branch, so selecting North must
+        return it and selecting South must not.
+        """
+        mapped_group = SmallGroup.objects.create(
+            name="North-Mapped Group",
             church_structure_unit=self.sibling_group_unit,
         )
 
         self.assert_resolved_groups(
             [self.north_unit],
-            [self.group, self.sibling_group, cross_group],
+            [self.group, self.sibling_group, mapped_group],
         )
-        # Its legacy district (South) must not pull it into the South selection.
         self.assert_resolved_groups([self.south_unit], [self.other_group])
 
     def test_resolve_units_to_small_groups_does_not_duplicate_groups(self):
@@ -1837,9 +1837,12 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         return output.getvalue()
 
     def test_dry_run_creates_no_units_or_mappings(self):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy parent/context FKs,
+        # so the district and group start out unmapped and the dry run mirrors
+        # nothing.
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(name="District 1", ministry_context=context)
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        district = District.objects.create(name="District 1")
+        group = SmallGroup.objects.create(name="Rainbow 4")
 
         output = self.run_seed_command("--dry-run")
 
@@ -1853,7 +1856,10 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertIsNone(district.church_structure_unit)
         self.assertIsNone(group.church_structure_unit)
 
-    def test_apply_creates_root_and_maps_current_structure(self):
+    def test_apply_seeds_ministry_contexts_under_root(self):
+        # MinistryContext units (whose parent is always the root) are still seeded
+        # normally; the legacy District/SmallGroup hierarchy is no longer rebuilt
+        # from removed parent links.
         context = MinistryContext.objects.create(
             code="cm",
             name="中文事工",
@@ -1862,8 +1868,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
             description_en="Chinese ministry description",
             sort_order=10,
         )
-        district = District.objects.create(name="第一区", ministry_context=context)
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
 
         output = self.run_seed_command("--apply")
 
@@ -1878,9 +1882,6 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertEqual(root.name_en, "Whole Church")
 
         context.refresh_from_db()
-        district.refresh_from_db()
-        group.refresh_from_db()
-
         self.assertEqual(context.church_structure_unit.parent, root)
         self.assertEqual(
             context.church_structure_unit.unit_type,
@@ -1890,62 +1891,94 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertEqual(context.church_structure_unit.name, "中文事工")
         self.assertEqual(context.church_structure_unit.name_en, "Chinese Ministry")
 
-        self.assertEqual(district.church_structure_unit.parent, context.church_structure_unit)
-        self.assertEqual(district.church_structure_unit.code, f"DISTRICT-{district.id}")
-        self.assertEqual(
-            district.church_structure_unit.unit_type,
-            ChurchStructureUnit.UNIT_DISTRICT,
-        )
+    def test_apply_reports_unmapped_district_and_group_without_reparenting(self):
+        # Without the legacy parent FKs an unmapped district/group can no longer be
+        # auto-placed. The command must report them explicitly and must NOT create
+        # unassigned holding units or silently reparent them.
+        district = District.objects.create(name="District without mapping")
+        group = SmallGroup.objects.create(name="Group without mapping")
 
-        self.assertEqual(group.church_structure_unit.parent, district.church_structure_unit)
-        self.assertEqual(group.church_structure_unit.code, f"SMALLGROUP-{group.id}")
-        self.assertEqual(
-            group.church_structure_unit.unit_type,
-            ChurchStructureUnit.UNIT_SMALL_GROUP,
-        )
+        output = self.run_seed_command("--apply")
 
-    def test_apply_handles_orphan_district_and_group_with_holding_units(self):
-        district = District.objects.create(name="District without context")
-        group = SmallGroup.objects.create(name="Group without district")
+        self.assertIn("has no church_structure_unit mapping", output)
+        self.assertIn("not reparented to an unassigned holding unit", output)
+        self.assertIn("unreconstructable", output)
 
-        dry_run_output = self.run_seed_command("--dry-run")
-
-        self.assertEqual(
-            dry_run_output.count("Would create holding unit UNASSIGNED-DISTRICTS"),
-            1,
-        )
-        self.assertEqual(
-            dry_run_output.count("Would create holding unit UNASSIGNED-GROUPS"),
-            1,
-        )
-
-        self.run_seed_command("--apply")
-
-        root = ChurchStructureUnit.objects.get(
-            parent__isnull=True,
-            code="CHURCH",
-        )
-        unassigned_districts = ChurchStructureUnit.objects.get(
-            parent=root,
-            code="UNASSIGNED-DISTRICTS",
-        )
-        unassigned_groups = ChurchStructureUnit.objects.get(
-            parent=root,
-            code="UNASSIGNED-GROUPS",
+        self.assertFalse(
+            ChurchStructureUnit.objects.filter(
+                code__in=["UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"]
+            ).exists()
         )
 
         district.refresh_from_db()
         group.refresh_from_db()
+        self.assertIsNone(district.church_structure_unit)
+        self.assertIsNone(group.church_structure_unit)
 
-        self.assertEqual(district.church_structure_unit.parent, unassigned_districts)
-        self.assertEqual(group.church_structure_unit.parent, unassigned_groups)
-        self.assertEqual(unassigned_districts.name_en, "Unassigned Districts")
-        self.assertEqual(unassigned_groups.name_en, "Unassigned Groups")
+    def test_apply_maintains_already_mapped_rows_without_reparenting(self):
+        # Already-mapped districts/groups are maintained against their existing
+        # ChurchStructureUnit.parent (authoritative); the command refreshes the
+        # display name from the legacy row but never moves the unit to a new
+        # parent.
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        cm_unit = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="Chinese Ministry",
+        )
+        district_unit = ChurchStructureUnit.objects.create(
+            parent=cm_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="Old North",
+        )
+        group_unit = ChurchStructureUnit.objects.create(
+            parent=district_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Old Rainbow",
+        )
+        context = MinistryContext.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            church_structure_unit=cm_unit,
+        )
+        district = District.objects.create(
+            name="North",
+            church_structure_unit=district_unit,
+        )
+        group = SmallGroup.objects.create(
+            name="Rainbow 4",
+            church_structure_unit=group_unit,
+        )
+
+        self.run_seed_command("--apply")
+
+        district_unit.refresh_from_db()
+        group_unit.refresh_from_db()
+
+        # Parents preserved (no reparenting).
+        self.assertEqual(district_unit.parent, cm_unit)
+        self.assertEqual(group_unit.parent, district_unit)
+        # Codes preserved; display names refreshed from the legacy rows.
+        self.assertEqual(district_unit.code, "NORTH")
+        self.assertEqual(group_unit.code, "R4")
+        self.assertEqual(district_unit.name, "North")
+        self.assertEqual(group_unit.name, "Rainbow 4")
+
+        district.refresh_from_db()
+        group.refresh_from_db()
+        self.assertEqual(district.church_structure_unit, district_unit)
+        self.assertEqual(group.church_structure_unit, group_unit)
 
     def test_apply_is_idempotent(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(name="District 1", ministry_context=context)
-        SmallGroup.objects.create(name="Rainbow 4", district=district)
+        MinistryContext.objects.create(code="CM", name="Chinese Ministry")
 
         self.run_seed_command("--apply")
         first_unit_count = ChurchStructureUnit.objects.count()
@@ -1959,9 +1992,8 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertIn("would linked: 0", dry_run_output)
 
     def test_apply_preserves_existing_runtime_behavior(self):
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(name="District 1", ministry_context=context)
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        MinistryContext.objects.create(code="CM", name="Chinese Ministry")
+        group = SmallGroup.objects.create(name="Rainbow 4")
         other_group = SmallGroup.objects.create(name="Rainbow 5")
         user = User.objects.create_user(
             username="seeded_member",
@@ -2252,8 +2284,7 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         self.assertIn("financial", help_text)
 
     def test_membership_does_not_change_service_event_visibility(self):
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="Rainbow 4", district=district)
+        group = SmallGroup.objects.create(name="Rainbow 4")
         unit = self.create_unit()
         user = User.objects.create_user(username="event_membership")
         ChurchStructureMembership.objects.create(
@@ -2314,7 +2345,7 @@ class ChurchStructureAdminClarityTests(TestCase):
 
     def test_legacy_district_and_ministry_context_admin_labels_are_clear(self):
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(name="一区", ministry_context=context)
+        district = District.objects.create(name="一区")
 
         context_response = self.client.get(
             reverse("admin:accounts_ministrycontext_change", args=[context.pk])
@@ -2438,12 +2469,10 @@ class ChurchRolePermissionTests(TestCase):
         self.other_district.save()
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Rainbow 5",
-            district=self.other_district,
             church_structure_unit=self.other_group_unit,
         )
         self.user = User.objects.create_user(
@@ -2465,10 +2494,15 @@ class ChurchRolePermissionTests(TestCase):
             start_date=timezone.localdate(),
         )
 
-    def test_district_can_be_created_and_assigned_to_small_group(self):
+    def test_small_group_structure_unit_sits_under_district_structure_unit(self):
+        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district
+        # parent FK; the small-group/district relationship is now the canonical
+        # ChurchStructureUnit.parent chain via the church_structure_unit bridge.
         self.assertEqual(str(self.district), "North")
-        self.assertEqual(self.group.district, self.district)
-        self.assertIn(self.group, self.district.small_groups.all())
+        self.assertEqual(
+            self.group.church_structure_unit.parent,
+            self.district.church_structure_unit,
+        )
 
     def test_global_scope_rejects_structure_unit(self):
         # ROLE-FIELD-RETIRE.1A: only structure_unit remains scoped; global roles
@@ -3083,7 +3117,6 @@ class StaffMembershipRequestListTests(TestCase):
         district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(
             name="District Group",
-            district=district,
             church_structure_unit=self.unit,
         )
         self.create_membership(user=self.normal_user)
@@ -3103,8 +3136,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_unmapped_approved_membership_does_not_change_service_event_visibility(self):
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="District Group", district=district)
+        group = SmallGroup.objects.create(name="District Group")
         membership = self.create_membership(user=self.normal_user)
         event = ServiceEvent.objects.create(
             title="District Service",
@@ -3131,10 +3163,8 @@ class StaffMembershipRequestListTests(TestCase):
         # no longer flips a legacy zero-row-fallback ServiceEvent's visibility via
         # the profile group. The membership is the source of truth; the legacy
         # field (and the legacy event fallback that reads it) is left untouched.
-        district = District.objects.create(name="Mapped District 1")
         SmallGroup.objects.create(
             name="Mapped District Group",
-            district=district,
             church_structure_unit=self.unit,
         )
         membership = self.create_membership(user=self.normal_user)
@@ -3158,8 +3188,7 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
     def test_rejected_membership_does_not_change_service_event_visibility(self):
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="District Group", district=district)
+        group = SmallGroup.objects.create(name="District Group")
         membership = self.create_membership(user=self.normal_user)
         event = ServiceEvent.objects.create(
             title="District Service",
@@ -3185,14 +3214,9 @@ class StaffMembershipRequestListTests(TestCase):
         # CS-RETIRE.1A: approval no longer writes Profile.small_group, so it no
         # longer flips a legacy V1 BibleStudySession's profile-based visibility.
         # The V1 session stays invisible because the profile group is never written.
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(
-            name="Mapped District 2",
-            ministry_context=context,
-        )
+        MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         group = SmallGroup.objects.create(
             name="Mapped Bible Study Group",
-            district=district,
             church_structure_unit=self.unit,
         )
         membership = self.create_membership(user=self.normal_user)
@@ -6192,10 +6216,8 @@ class AccountSignupLanguageTests(TestCase):
         self.assertIsNone(membership.start_date)
 
     def test_requested_signup_membership_does_not_grant_service_event_visibility(self):
-        district = District.objects.create(name="District 1")
         group = SmallGroup.objects.create(
             name="District Group",
-            district=district,
             church_structure_unit=self.unit,
         )
         event = ServiceEvent.objects.create(
@@ -6967,17 +6989,14 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         )
         self.group = SmallGroup.objects.create(
             name="Perm2DB Group",
-            district=self.district,
             church_structure_unit=self.group_unit,
         )
         self.sibling_group = SmallGroup.objects.create(
             name="Perm2DB Sibling Group",
-            district=self.district,
             church_structure_unit=self.sibling_unit,
         )
         self.other_group = SmallGroup.objects.create(
             name="Perm2DB Other Group",
-            district=self.other_district,
             church_structure_unit=self.other_group_unit,
         )
 

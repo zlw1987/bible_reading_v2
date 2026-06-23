@@ -120,10 +120,11 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "accounts.SmallGroup",
         "field_name": "district",
         "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "accounts.structure_selectors.resolve_units_to_small_groups fallback branches",
-            "BibleStudySeries.get_eligible_small_groups (audience-row resolver)",
-        ),
+        # LEGACY-BRIDGE-RESOLVER-NARROW.1A stopped resolve_units_to_small_groups
+        # (and therefore BibleStudySeries.get_eligible_small_groups) reading this
+        # parent FK; the resolver now maps only through
+        # SmallGroup.church_structure_unit, so there is no live app read left.
+        "app_read_references": _refs(),
         # LEGACY-OBJECT-ADMIN-FK.1A removed the SmallGroup.district column from
         # SmallGroupAdmin, so the admin no longer surfaces this parent FK.
         "admin_references": _refs(),
@@ -135,12 +136,14 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "small_group_district",
         "recommended_next_action": (
-            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A; "
-            "parent/context links are already clear (0 present). Remaining "
-            "references are the legacy bridge resolver read "
-            "(resolve_units_to_small_groups / get_eligible_small_groups) and the "
-            "parent-link/seed diagnostic tooling. Remove the field only after the "
-            "bridge resolver read and seed/cleanup tooling are retired or replaced."
+            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A and the "
+            "resolver fallback read retired in LEGACY-BRIDGE-RESOLVER-NARROW.1A "
+            "(resolve_units_to_small_groups / get_eligible_small_groups now map "
+            "only through SmallGroup.church_structure_unit). Parent/context links "
+            "are already clear (0 present). Remaining blockers are the "
+            "parent-link/seed diagnostic tooling, legacy mapping test fixtures, "
+            "and migration history. Remove the field only after the seed/cleanup "
+            "diagnostic tooling is retired or replaced."
         ),
         "suggested_removal_phase": "phase 4",
     },
@@ -196,10 +199,10 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "accounts.District",
         "field_name": "ministry_context",
         "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "legacy hierarchy fallback for old Bible Study schedule scope",
-            "structure mapping diagnostics",
-        ),
+        # LEGACY-BRIDGE-RESOLVER-NARROW.1A removed the resolver's
+        # district__ministry_context fallback branch, so the legacy Bible Study
+        # schedule resolver no longer reads this parent/context FK.
+        "app_read_references": _refs(),
         # LEGACY-OBJECT-ADMIN-FK.1A removed the District.ministry_context column
         # from DistrictAdmin, so the admin no longer surfaces this parent FK.
         "admin_references": _refs(),
@@ -211,11 +214,13 @@ CANDIDATE_DEFINITIONS = (
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "district_ministry_context",
         "recommended_next_action": (
-            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A; "
-            "parent/context links are already clear (0 present). Remaining "
-            "references are the legacy Bible Study schedule fallback read plus the "
-            "parent-link/seed diagnostic tooling. Remove the field only after the "
-            "bridge read and seed/cleanup tooling are retired or replaced."
+            "Admin parent-FK display retired in LEGACY-OBJECT-ADMIN-FK.1A and the "
+            "resolver district__ministry_context fallback retired in "
+            "LEGACY-BRIDGE-RESOLVER-NARROW.1A. Parent/context links are already "
+            "clear (0 present). Remaining blockers are the parent-link/seed "
+            "diagnostic tooling, legacy hierarchy test fixtures, and migration "
+            "history. Remove the field only after the seed/cleanup diagnostic "
+            "tooling is retired or replaced."
         ),
         "suggested_removal_phase": "phase 4",
     },

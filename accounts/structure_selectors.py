@@ -4,8 +4,6 @@ from django.utils import timezone
 from accounts.models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    MinistryContext,
     SmallGroup,
 )
 
@@ -84,9 +82,12 @@ def _collect_unit_and_descendant_ids(units):
 def resolve_units_to_small_groups(units):
     """Resolve selected ChurchStructureUnit rows to eligible active SmallGroups.
 
-    This is the shared legacy-parity resolver for structure audience units.
-    It bridges through the optional legacy mapping fields and never consults
-    ChurchStructureMembership.
+    This is the shared resolver for structure audience units. It maps through
+    ``SmallGroup.church_structure_unit`` only: a non-root selection resolves to
+    the active groups whose mapped unit is one of the selected units or a
+    descendant of one (via ``ChurchStructureUnit.parent``). It does not read the
+    legacy parent/context fields ``SmallGroup.district`` or
+    ``District.ministry_context`` and never consults ChurchStructureMembership.
     """
     groups = SmallGroup.objects.filter(is_active=True)
     units = list(units)
@@ -101,24 +102,7 @@ def resolve_units_to_small_groups(units):
     if not target_unit_ids:
         return groups.none()
 
-    context_ids = list(
-        MinistryContext.objects.filter(
-            church_structure_unit_id__in=target_unit_ids,
-        ).values_list("id", flat=True)
-    )
-    district_ids = list(
-        District.objects.filter(
-            church_structure_unit_id__in=target_unit_ids,
-        ).values_list("id", flat=True)
-    )
-
-    match = models.Q(church_structure_unit_id__in=target_unit_ids)
-    if context_ids:
-        match |= models.Q(district__ministry_context_id__in=context_ids)
-    if district_ids:
-        match |= models.Q(district_id__in=district_ids)
-
-    return groups.filter(match).distinct()
+    return groups.filter(church_structure_unit_id__in=target_unit_ids).distinct()
 
 
 def user_matches_membership_structure_audience(user, units, target_date=None):

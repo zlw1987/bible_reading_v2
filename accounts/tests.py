@@ -1371,15 +1371,25 @@ class ChurchStructureSelectorLayerTests(TestCase):
             set(expected_groups),
         )
 
-    def test_resolve_units_to_small_groups_preserves_legacy_semantics(self):
+    def test_resolve_units_to_small_groups_uses_structure_mapping_only(self):
+        """Non-root selections resolve via SmallGroup.church_structure_unit only.
+
+        LEGACY-BRIDGE-RESOLVER-NARROW.1A stopped the resolver reading the legacy
+        ``SmallGroup.district`` / ``District.ministry_context`` parent/context
+        fields. ``unmapped_group`` has no ``church_structure_unit`` mapping, so
+        even though its legacy ``district`` (South) sits under the Chinese
+        Ministry, selecting ``cm_unit`` no longer returns it.
+        """
         from accounts.structure_selectors import resolve_units_to_small_groups
 
         inactive_group = SmallGroup.objects.create(
             name="Inactive Group",
             district=self.north,
+            church_structure_unit=self.group_unit,
             is_active=False,
         )
 
+        # Root still returns every active group, including the unmapped one.
         self.assert_resolved_groups(
             [self.root_unit],
             [self.group, self.sibling_group, self.other_group, self.unmapped_group],
@@ -1389,9 +1399,11 @@ class ChurchStructureSelectorLayerTests(TestCase):
             [self.north_unit],
             [self.group, self.sibling_group],
         )
+        # cm_unit descendants cover the three mapped groups; the unmapped legacy
+        # group is no longer pulled in via district/ministry_context fallback.
         self.assert_resolved_groups(
             [self.cm_unit],
-            [self.group, self.sibling_group, self.other_group, self.unmapped_group],
+            [self.group, self.sibling_group, self.other_group],
         )
         self.assert_resolved_groups([self.unmapped_unit], [])
 
@@ -1402,6 +1414,34 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self.assertIn(self.group, root_groups)
         self.assertNotIn(inactive_group, root_groups)
 
+    def test_resolve_units_ignores_legacy_district_without_mapping(self):
+        """A group mapped only via legacy district is excluded for non-root units."""
+        # unmapped_group.district == South (under Chinese Ministry) but it has no
+        # church_structure_unit, so selecting the South unit must not return it.
+        self.assert_resolved_groups([self.south_unit], [self.other_group])
+        self.assert_resolved_groups([self.cm_unit], [
+            self.group,
+            self.sibling_group,
+            self.other_group,
+        ])
+
+    def test_resolve_units_uses_mapping_not_legacy_district(self):
+        """A group whose legacy district is elsewhere still resolves by its mapping."""
+        # Legacy district points at South, but the structure mapping puts this
+        # group under the North branch; selecting North must return it.
+        cross_group = SmallGroup.objects.create(
+            name="Cross-Wired Group",
+            district=self.south,
+            church_structure_unit=self.sibling_group_unit,
+        )
+
+        self.assert_resolved_groups(
+            [self.north_unit],
+            [self.group, self.sibling_group, cross_group],
+        )
+        # Its legacy district (South) must not pull it into the South selection.
+        self.assert_resolved_groups([self.south_unit], [self.other_group])
+
     def test_resolve_units_to_small_groups_does_not_duplicate_groups(self):
         from accounts.structure_selectors import resolve_units_to_small_groups
 
@@ -1410,7 +1450,7 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self.assertEqual(len(groups), len({group.id for group in groups}))
         self.assertEqual(
             set(groups),
-            {self.group, self.sibling_group, self.other_group, self.unmapped_group},
+            {self.group, self.sibling_group, self.other_group},
         )
 
     def test_get_user_primary_membership_unit_returns_single_active_primary(self):

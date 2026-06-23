@@ -252,12 +252,13 @@ runtime source of truth (`runtime_mutated: false`).
 
 This is safe for the migrated runtime because ordinary visibility already runs
 on audience rows plus active primary `ChurchStructureMembership`, and the
-remaining legacy-parity resolver `resolve_units_to_small_groups()` matches
-eligible groups through `ChurchStructureUnit` hierarchy descendants — its
-`SmallGroup.district` / `District.ministry_context` branches are redundant for
-exactly the links this command clears. `BibleStudySeries.get_eligible_small_groups()`
-only uses those legacy branches as a coexistence fallback for series with
-legacy scope and **no** audience rows (current data: zero such series).
+remaining structure-mapping resolver `resolve_units_to_small_groups()` matches
+eligible groups through `ChurchStructureUnit` hierarchy descendants mapped via
+`SmallGroup.church_structure_unit` only. **LEGACY-BRIDGE-RESOLVER-NARROW.1A
+removed the resolver's `SmallGroup.district` / `District.ministry_context`
+fallback branches**, so neither the resolver nor
+`BibleStudySeries.get_eligible_small_groups()` reads those legacy parent/context
+fields anymore.
 
 Caution for re-seeding: `seed_church_structure_units` derives a unit's parent
 from these legacy links when first building the tree. After the links are

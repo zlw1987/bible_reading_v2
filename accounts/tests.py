@@ -2330,11 +2330,17 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "Legacy Small Groups")
         self.assertContains(response, "旧小组")
         self.assertContains(response, "Legacy bridge/archive model")
+        self.assertContains(response, "not canonical ordinary-member")
         self.assertContains(response, "V1 legacy BibleStudySession")
         self.assertContains(response, "Bible Study generation")
         self.assertContains(response, "Migrated ordinary-member paths")
         self.assertContains(response, "Zero-row ServiceEvents fail closed")
         self.assertContains(response, "Profile.small_group")
+        self.assertContains(
+            response,
+            "SmallGroup.district / District.ministry_context were removed in",
+        )
+        self.assertContains(response, "ChurchStructureUnit.parent")
         self.assertContains(
             response,
             "Bible Study v2 audience rows and role/worship pickers",
@@ -2359,6 +2365,11 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(context_response, "事工范围")
         self.assertContains(context_response, "Bible Study generation")
         self.assertContains(context_response, "ServiceEvent audience rows")
+        self.assertContains(
+            context_response,
+            "ServiceEvent Host/Language display no longer uses a MinistryContext FK",
+        )
+        self.assertContains(context_response, "host_language_unit")
 
         self.assertEqual(district_response.status_code, 200)
         self.assertContains(district_response, "Legacy Districts")
@@ -2382,8 +2393,13 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "教会结构单元")
         self.assertContains(response, "结构基础")
         self.assertContains(response, "flexible structure foundation")
+        self.assertContains(response, "ChurchStructureUnit.parent hierarchy is authoritative")
         self.assertContains(response, "ServiceEvent audience rows use selected units")
         self.assertContains(response, "Bible Study still resolves selected units")
+        self.assertContains(
+            response,
+            "Membership/belonging is separate from serving",
+        )
         self.assertContains(response, "Path label")
 
     def test_church_structure_membership_admin_explains_belonging_status(self):
@@ -2412,6 +2428,10 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "Church Structure Memberships")
         self.assertContains(response, "教会结构归属")
         self.assertContains(response, "归属基础")
+        self.assertContains(
+            response,
+            "active primary membership is the canonical belonging source",
+        )
         self.assertContains(
             response,
             "runtime source for several ordinary-member visibility/access paths",

@@ -628,7 +628,7 @@ Suggested phase coverage:
 BS-V2.1:
 - model creation and validation
 - status transitions / `published_at`
-- unique `(lesson, small_group)` meeting behavior
+- Historical/superseded: unique `(lesson, small_group)` meeting behavior; current V2 idempotency uses `generation_key`, `anchor_unit`, and matching meeting audience rows.
 - worship song ordering and unique order per meeting
 - role validation
 

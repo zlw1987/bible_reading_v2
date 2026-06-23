@@ -3,19 +3,12 @@
 from django.db import models
 from django.utils import timezone
 
-from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
     has_capability,
 )
-
-
-def get_small_group_structure_unit(small_group):
-    """Return a legacy SmallGroup's mapped structure unit, if any."""
-    if small_group is None:
-        return None
-    return small_group.church_structure_unit
 
 
 def user_has_bible_study_manager_override(user):
@@ -77,12 +70,6 @@ def _collect_units_and_descendant_ids(unit_ids):
     return collected
 
 
-def _collect_unit_and_descendant_ids(unit):
-    if unit is None or unit.id is None:
-        return set()
-    return _collect_units_and_descendant_ids([unit.id])
-
-
 def meeting_has_audience_scope_rows(meeting):
     """Return whether a meeting has any BibleStudyMeetingAudienceScope rows."""
     return meeting.audience_scope_links.exists()
@@ -140,53 +127,6 @@ def get_membership_audience_candidate_unit_ids(user, target_date=None):
     ]
 
 
-def user_matches_meeting_small_group_membership(user, small_group, target_date=None):
-    """Match an ordinary member to a v2 meeting's legacy SmallGroup bridge.
-
-    Bible Study meetings are small-group meetings. A legacy group mapped to
-    root, district, ministry-context, fellowship, department, or custom units is
-    mapping drift for this runtime path and fails closed.
-    """
-    unit = get_small_group_structure_unit(small_group)
-    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
-        return False
-
-    membership_unit = _get_single_active_primary_membership_unit(
-        user, target_date=target_date
-    )
-    if membership_unit is None:
-        return False
-
-    return membership_unit.id in _collect_unit_and_descendant_ids(unit)
-
-
-def filter_users_for_meeting_small_group_membership(users, small_group, target_date=None):
-    """Filter a user queryset to active-primary members of a meeting SmallGroup."""
-    unit = get_small_group_structure_unit(small_group)
-    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
-        return users.none()
-
-    target_date = target_date or timezone.localdate()
-    active_primary_memberships = ChurchStructureMembership.objects.filter(
-        status=ChurchStructureMembership.STATUS_ACTIVE,
-        is_primary=True,
-        start_date__lte=target_date,
-    ).filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date))
-    single_active_primary_user_ids = (
-        active_primary_memberships.values("user_id")
-        .annotate(active_primary_count=models.Count("id"))
-        .filter(active_primary_count=1)
-        .values("user_id")
-    )
-    matching_user_ids = active_primary_memberships.filter(
-        unit_id__in=_collect_unit_and_descendant_ids(unit),
-    ).values("user_id")
-
-    return users.filter(id__in=matching_user_ids).filter(
-        id__in=single_active_primary_user_ids,
-    )
-
-
 def filter_users_for_meeting_audience(users, meeting, target_date=None):
     """Filter a user queryset to a meeting's audience-row candidate members.
 
@@ -197,8 +137,8 @@ def filter_users_for_meeting_audience(users, meeting, target_date=None):
     units or a descendant of one of them. The audience unit may be any structure
     level (small group, district, CM/EM, custom/fellowship, ...), so no
     ``UNIT_SMALL_GROUP`` gate is applied and ``Profile.small_group`` is never
-    consulted. Legacy ``small_group`` remains mirror/display/backfill context
-    only.
+    consulted. The legacy ``BibleStudyMeeting.small_group`` mirror was removed
+    in BS-MEETING-MIRROR.1A.
 
     Fail-closed: no meeting, zero audience rows, no single active primary
     membership, or a membership outside every audience unit's subtree excludes
@@ -232,24 +172,3 @@ def filter_users_for_meeting_audience(users, meeting, target_date=None):
     return users.filter(id__in=matching_user_ids).filter(
         id__in=single_active_primary_user_ids,
     )
-
-
-def get_membership_visible_small_groups(user, target_date=None):
-    """Return legacy SmallGroups visible to a user through membership-core."""
-    membership_unit = _get_single_active_primary_membership_unit(
-        user, target_date=target_date
-    )
-    if membership_unit is None:
-        return SmallGroup.objects.none()
-
-    candidate_unit_ids = [
-        unit.id
-        for unit in membership_unit.get_ancestors() + [membership_unit]
-        if unit.unit_type == ChurchStructureUnit.UNIT_SMALL_GROUP
-    ]
-    if not candidate_unit_ids:
-        return SmallGroup.objects.none()
-
-    return SmallGroup.objects.filter(
-        church_structure_unit_id__in=candidate_unit_ids,
-    ).distinct()

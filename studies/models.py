@@ -4,14 +4,6 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit, District, SmallGroup
-from accounts.structure_selectors import (
-    resolve_units_to_small_groups as resolve_structure_units_to_small_groups,
-)
-
-
-def resolve_units_to_small_groups(units):
-    """Compatibility wrapper for the shared church-structure resolver."""
-    return resolve_structure_units_to_small_groups(units)
 
 
 class BibleStudySeries(models.Model):
@@ -101,23 +93,13 @@ class BibleStudySeries(models.Model):
             bible_study_series_audience_scopes__series_id=self.pk,
         ).distinct()
 
-    def get_eligible_small_groups(self):
-        """Resolve the schedule's audience-scope units to active SmallGroups.
-
-        BS-SERIES-FIELD-RETIRE.1A removed the legacy ``scope_type`` /
-        ``ministry_context`` / ``district`` / ``small_group`` fields. Eligibility
-        is now derived solely from ``BibleStudySeriesAudienceScope`` rows; a
-        schedule with no audience rows resolves to no groups (fail closed).
-        """
-        return resolve_units_to_small_groups(list(self.get_audience_scope_units()))
-
-
 class BibleStudySeriesAudienceScope(models.Model):
     """App-specific audience-scope join from a schedule to ChurchStructureUnit.
 
     Selected units are the BS-AS.1 audience-scope foundation for Bible Study
-    Schedule. They resolve to legacy ``SmallGroup`` rows for meeting generation;
-    they do not directly grant ordinary-member visibility. Since CS-CORE.2C-B,
+    Schedule. Normal generation expands them to active small-group
+    ``ChurchStructureUnit`` leaf targets; they do not directly grant
+    ordinary-member visibility. Since CS-CORE.2C-B,
     ordinary v2 ``BibleStudyMeeting`` visibility uses active primary
     ``ChurchStructureMembership`` through meeting audience rows. Since
     BS-V1-RETIRE.1A, legacy ``BibleStudySession`` app visibility is retired.

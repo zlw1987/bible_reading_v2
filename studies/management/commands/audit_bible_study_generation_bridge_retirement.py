@@ -5,7 +5,8 @@ diagnostics to legacy ``SmallGroup`` *table* rows. BS-MEETING-MIRROR.1A removed
 the legacy ``BibleStudyMeeting.small_group`` mirror field, so this audit no
 longer inspects a per-meeting mirror; remaining Bible Study blockers are series
 audience-row coverage and structure-native generation-key / anchor readiness,
-plus the diagnostic resolvers that still read the ``SmallGroup`` table.
+plus non-V2 bridge/admin/diagnostic consumers that still read the
+``SmallGroup`` table.
 
 It is strictly read-only: no ``--apply``, no row writes, no runtime changes, and
 no schema changes.
@@ -71,18 +72,6 @@ class ConsumerPath:
 # Remaining Bible Study dependencies on the legacy ``SmallGroup`` *table* after
 # BS-MEETING-MIRROR.1A removed the ``BibleStudyMeeting.small_group`` mirror.
 _CONSUMER_PATHS = (
-    ConsumerPath(
-        category="diagnostic/audit/backfill/cleanup support",
-        path=(
-            "studies.models.resolve_units_to_small_groups / "
-            "BibleStudySeries.get_eligible_small_groups"
-        ),
-        reason=(
-            "structure-audience resolver (audience rows -> active SmallGroups) "
-            "retained for coexistence diagnostics; normal generation is "
-            "structure-unit-native and does not call this as its target source"
-        ),
-    ),
     ConsumerPath(
         category="diagnostic/audit/backfill/cleanup support",
         path="studies.management.commands.backfill_bible_study_v2_generation_keys",
@@ -455,8 +444,8 @@ class Command(BaseCommand):
             "legacy BibleStudyMeeting.small_group mirror. Remaining Bible Study "
             "blockers are series audience-row coverage and structure-native "
             "generation-key / anchor readiness; remaining SmallGroup dependencies "
-            "are diagnostic resolvers on the SmallGroup table. No deletion/removal "
-            "is approved here."
+            "are non-V2 bridge/admin/diagnostic consumers of the SmallGroup table. "
+            "No deletion/removal is approved here."
         )
         write(
             "Audit only: no series, meeting, audience row, SmallGroup, unit, "

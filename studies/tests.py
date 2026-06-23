@@ -44,7 +44,10 @@ from .models import (
     BibleStudySession,
     BibleStudyWorshipSong,
 )
-from .services import cancel_bible_study_lesson_with_meetings
+from .services import (
+    cancel_bible_study_lesson_with_meetings,
+    resolve_normal_generation_targets,
+)
 
 
 class BibleStudyModuleTests(TestCase):
@@ -5337,74 +5340,99 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(meeting.meeting_kind, BibleStudyMeeting.KIND_NORMAL)
 
-    def test_get_eligible_small_groups_resolves_root_to_all_active(self):
-        inactive_group = SmallGroup.objects.create(
-            name="Inactive Root Group",
+    def test_generation_targets_expand_root_to_all_active_small_group_units(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVE",
+            name="Inactive Group",
             is_active=False,
         )
         series = self._make_unit_series(self.root_unit)
 
-        groups = list(series.get_eligible_small_groups())
+        targets, warnings = resolve_normal_generation_targets(series)
+        target_units = {target.unit for target in targets}
 
-        self.assertIn(self.group, groups)
-        self.assertIn(self.same_group, groups)
-        self.assertIn(self.other_group, groups)
-        self.assertNotIn(inactive_group, groups)
+        self.assertEqual(warnings, [])
+        self.assertIn(self.group_unit, target_units)
+        self.assertIn(self.same_group_unit, target_units)
+        self.assertIn(self.other_group_unit, target_units)
+        self.assertNotIn(inactive_unit, target_units)
 
-    def test_get_eligible_small_groups_resolves_ministry_context_unit(self):
+    def test_generation_targets_expand_ministry_context_unit(self):
         series = self._make_unit_series(self.cm_unit)
 
+        targets, warnings = resolve_normal_generation_targets(series)
+
+        self.assertEqual(warnings, [])
         self.assertEqual(
-            set(series.get_eligible_small_groups()),
-            {self.group, self.same_group},
+            {target.unit for target in targets},
+            {self.group_unit, self.same_group_unit},
         )
 
-    def test_get_eligible_small_groups_unions_multiple_district_units(self):
+    def test_generation_targets_union_multiple_district_units(self):
         series = self._make_unit_series(self.north_unit, self.south_unit)
 
+        targets, warnings = resolve_normal_generation_targets(series)
+
+        self.assertEqual(warnings, [])
         self.assertEqual(
-            set(series.get_eligible_small_groups()),
-            {self.group, self.same_group, self.other_group},
+            {target.unit for target in targets},
+            {self.group_unit, self.same_group_unit, self.other_group_unit},
         )
 
-    def test_get_eligible_small_groups_resolves_multiple_small_group_units(self):
+    def test_generation_targets_resolve_multiple_small_group_units(self):
         series = self._make_unit_series(self.group_unit, self.other_group_unit)
 
+        targets, warnings = resolve_normal_generation_targets(series)
+
+        self.assertEqual(warnings, [])
         self.assertEqual(
-            set(series.get_eligible_small_groups()),
-            {self.group, self.other_group},
+            {target.unit for target in targets},
+            {self.group_unit, self.other_group_unit},
         )
 
-    def test_get_eligible_small_groups_cross_branch_has_no_duplicates(self):
+    def test_generation_targets_cross_branch_has_no_duplicates(self):
         series = self._make_unit_series(self.cm_unit, self.other_group_unit)
 
-        groups = list(series.get_eligible_small_groups())
+        targets, warnings = resolve_normal_generation_targets(series)
+        target_units = [target.unit for target in targets]
 
-        self.assertEqual(len(groups), len({group.id for group in groups}))
+        self.assertEqual(warnings, [])
         self.assertEqual(
-            set(groups),
-            {self.group, self.same_group, self.other_group},
+            len(target_units),
+            len({unit.id for unit in target_units}),
+        )
+        self.assertEqual(
+            set(target_units),
+            {self.group_unit, self.same_group_unit, self.other_group_unit},
         )
 
-    def test_get_eligible_small_groups_excludes_inactive_for_units(self):
-        inactive_group = SmallGroup.objects.create(
+    def test_generation_targets_exclude_inactive_units(self):
+        inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVE-NORTH",
             name="Inactive North Unit Group",
             is_active=False,
         )
         series = self._make_unit_series(self.north_unit)
 
-        self.assertNotIn(inactive_group, list(series.get_eligible_small_groups()))
+        targets, warnings = resolve_normal_generation_targets(series)
 
-    def test_get_eligible_small_groups_without_audience_rows_is_empty(self):
-        # BS-SERIES-FIELD-RETIRE.1A removed the legacy scope fallback, so a
-        # schedule with no BibleStudySeriesAudienceScope rows resolves to no
-        # eligible groups (fail closed).
+        self.assertEqual(warnings, [])
+        self.assertNotIn(inactive_unit, [target.unit for target in targets])
+
+    def test_generation_targets_without_audience_rows_fail_closed(self):
         series = BibleStudySeries.objects.create(title="无范围安排")
 
-        self.assertFalse(series.audience_scope_links.exists())
-        self.assertEqual(list(series.get_eligible_small_groups()), [])
+        targets, warnings = resolve_normal_generation_targets(series)
 
-    def test_audience_unit_without_legacy_mapping_resolves_empty(self):
+        self.assertFalse(series.audience_scope_links.exists())
+        self.assertEqual(targets, [])
+        self.assertEqual(len(warnings), 1)
+
+    def test_custom_audience_unit_without_small_group_leaf_resolves_empty(self):
         custom_unit = ChurchStructureUnit.objects.create(
             parent=self.root_unit,
             unit_type=ChurchStructureUnit.UNIT_CUSTOM,
@@ -5413,7 +5441,10 @@ class BibleStudyModuleTests(TestCase):
         )
         series = self._make_unit_series(custom_unit)
 
-        self.assertEqual(list(series.get_eligible_small_groups()), [])
+        targets, warnings = resolve_normal_generation_targets(series)
+
+        self.assertEqual(warnings, [])
+        self.assertEqual(targets, [])
 
     def test_schedule_form_saves_multiple_audience_units(self):
         self.set_language("en")
@@ -5434,9 +5465,11 @@ class BibleStudyModuleTests(TestCase):
             set(schedule.get_audience_scope_units()),
             {self.north_unit, self.south_unit},
         )
+        targets, warnings = resolve_normal_generation_targets(schedule)
+        self.assertEqual(warnings, [])
         self.assertEqual(
-            set(schedule.get_eligible_small_groups()),
-            {self.group, self.same_group, self.other_group},
+            {target.unit for target in targets},
+            {self.group_unit, self.same_group_unit, self.other_group_unit},
         )
 
     def test_editing_schedule_replaces_audience_units(self):

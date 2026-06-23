@@ -1816,20 +1816,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
             user_matches_structure_audience(self.no_group_user, [self.unmapped_unit])
         )
 
-    def test_studies_resolver_compatibility_wrapper_matches_selector(self):
-        from accounts.structure_selectors import resolve_units_to_small_groups
-        from studies.models import (
-            resolve_units_to_small_groups as studies_resolve_units_to_small_groups,
-        )
-
-        units = [self.cm_unit, self.other_group_unit]
-
-        self.assertEqual(
-            set(studies_resolve_units_to_small_groups(units)),
-            set(resolve_units_to_small_groups(units)),
-        )
-
-
 class ChurchStructureUnitSeedingCommandTests(TestCase):
     def run_seed_command(self, *args):
         output = StringIO()
@@ -4346,7 +4332,7 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect Bible Study structure-audience resolution and generated legacy SmallGroup meetings.",
+            "Mapping edits can still affect remaining Bible Study bridge/admin/diagnostic resolution.",
         )
         self.assertContains(
             response,
@@ -4765,8 +4751,8 @@ class StaffStructureMappingReviewTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect Bible Study structure-audience "
-            "resolution and generated legacy SmallGroup meetings.",
+            "Mapping edits can still affect remaining Bible Study "
+            "bridge/admin/diagnostic resolution.",
         )
         self.assertContains(
             response,
@@ -5243,8 +5229,8 @@ class StaffStructureMappingEditTests(TestCase):
         )
         self.assertContains(
             response,
-            "Mapping edits can still affect Bible Study structure-audience "
-            "resolution and generated legacy SmallGroup meetings.",
+            "Mapping edits can still affect remaining Bible Study "
+            "bridge/admin/diagnostic resolution.",
         )
         self.assertContains(
             response,
@@ -5260,9 +5246,8 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(response, 'name="acknowledge_impact"')
         self.assertContains(
             response,
-            "I understand this mapping change may affect Bible Study "
-            "structure-audience resolution and generated legacy SmallGroup "
-            "meetings.",
+            "I understand this mapping change may affect remaining Bible Study "
+            "bridge/admin/diagnostic resolution.",
         )
         self.assertContains(response, "Save mapping")
         self.assertContains(response, "Cancel")
@@ -5544,8 +5529,7 @@ class StaffStructureMappingEditTests(TestCase):
         self.assertContains(
             response,
             "Please confirm that you understand this mapping change may affect "
-            "Bible Study structure-audience resolution and generated legacy "
-            "SmallGroup meetings before saving.",
+            "remaining Bible Study bridge/admin/diagnostic resolution before saving.",
         )
         self.group.refresh_from_db()
         self.assertIsNone(self.group.church_structure_unit_id)
@@ -5658,11 +5642,11 @@ class StaffStructureMappingEditTests(TestCase):
         # group mapping edits no longer change ServiceEvent audience results.
         self.assertTrue(event.can_be_seen_by(self.normal_user))
 
-    def test_mapping_change_affects_bible_study_unit_group_resolution(self):
-        # Documents that the Bible Study resolver used by future schedule
-        # helpers/generation reads the same mapping fields, so a mapping edit
-        # changes which legacy groups a structure unit resolves to.
-        from studies.models import resolve_units_to_small_groups
+    def test_mapping_change_affects_canonical_unit_group_resolution(self):
+        # Documents that the retained canonical resolver reads the mapping
+        # fields, so a mapping edit changes which legacy groups a structure unit
+        # resolves to for remaining bridge/admin/diagnostic consumers.
+        from accounts.structure_selectors import resolve_units_to_small_groups
 
         self.group.church_structure_unit = self.sg_unit_1
         self.group.save(update_fields=["church_structure_unit"])

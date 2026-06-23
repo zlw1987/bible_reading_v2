@@ -12,7 +12,7 @@ DOCS-AS.1 alignment: `ServiceEvent` / Church Gatherings shares the same `ChurchS
 
 ## 2. Current State
 
-> **Current status (superseded):** This section captured the SE-AS.1-era state. ServiceEvent visibility has since moved to `ServiceEventAudienceScope` rows when an event has them (SE-AS.4), with zero-row events still using the legacy `scope_type` / `district` / `small_group` + `Profile.small_group` behavior described below; SE-AS.5 added the staff audience picker, and CS-CORE.2B-A later switched audience-row matching to active primary `ChurchStructureMembership`. The legacy behavior below remains accurate as the fallback path and as editable fallback fields.
+> **Current status (superseded):** This section captured the SE-AS.1-era state. ServiceEvent visibility later moved to `ServiceEventAudienceScope` rows when an event has them (SE-AS.4), SE-AS.5 added the staff audience picker, CS-CORE.2B-A switched audience-row matching to active primary `ChurchStructureMembership`, SE-RETIRE.1B retired the zero-row legacy fallback, and SE-FIELD-RETIRE.1A removed the legacy `scope_type` / `district` / `small_group` fields. The legacy behavior below is historical design context only.
 
 `ServiceEvent` audience behavior still uses legacy fields:
 

@@ -61,7 +61,7 @@ Current V2:
 `BibleStudySeries`
 - functions as Bible Study Schedule / 查经安排
 - fields: `title`, `title_en`, `description`, `description_en`, `is_active`, `start_date`, `end_date`, `status`, `published_at`, `created_by`, `scope_type`, `ministry_context`, `district`, `small_group`
-- `get_eligible_small_groups()` supports whole church/global, ministry_context, district, and small_group scope for generation
+- Historical/superseded: the old eligible-small-groups helper supported whole church/global, ministry_context, district, and small_group scope for generation. Current normal V2 generation uses `BibleStudySeriesAudienceScope` rows and expands selected units to active small-group `ChurchStructureUnit` leaf targets.
 - `BibleStudyLesson.series` is the schedule relationship
 - `BibleStudyMeeting` derives schedule through `meeting.lesson.series`
 
@@ -74,7 +74,7 @@ Current V2:
 - linked to `BibleStudyLesson` and `SmallGroup`
 - per-group meeting setup and group preparation
 - optional `service_event`
-- unique `(lesson, small_group)` constraint, useful for idempotent generation
+- Historical/superseded: the old unique `(lesson, small_group)` constraint supported legacy idempotent generation; current V2 idempotency is structure-native through `generation_key`, `anchor_unit`, and matching meeting audience rows.
 - currently still includes discussion leader fields even though `BibleStudyMeetingRole` now owns meeting responsibilities
 
 `BibleStudyMeetingRole`

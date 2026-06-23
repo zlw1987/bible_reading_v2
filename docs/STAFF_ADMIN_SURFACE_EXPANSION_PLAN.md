@@ -69,7 +69,7 @@ Current state:
 
 Gaps:
 - Staff may need a simple event operations overview for upcoming events, draft events, missing setup fields, and related ministry assignments.
-- ServiceEvent visibility now uses `ServiceEventAudienceScope` rows matched by active primary `ChurchStructureMembership`; events with no audience rows fail closed for ordinary users after SE-RETIRE.1B. The legacy `scope_type` / `district` / `small_group` fields remain editable/stored as display, admin, backfill, audit, and rollback data until a separate field-retirement slice.
+- ServiceEvent visibility now uses `ServiceEventAudienceScope` rows matched by active primary `ChurchStructureMembership`; events with no audience rows fail closed for ordinary users after SE-RETIRE.1B. SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields and retired their cleanup/backfill/audit tooling.
 - ServiceEvent should not become Community Activities, full event management, or scheduling automation without separate planning.
 
 ### MinistryTeam / TeamAssignment / My Serving Support

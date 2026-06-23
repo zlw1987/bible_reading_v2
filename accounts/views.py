@@ -551,9 +551,9 @@ def staff_structure_mapping_review(request):
     or permissions. Like /staff/structure/, this page never uses
     ChurchStructureMembership as a runtime visibility source. Since
     CS-CORE.2B-A, ServiceEvent audience rows match by active primary membership
-    instead of these mapping fields; Bible Study schedule resolution/generation
-    still resolves through this bridge, so a mapping edit can still affect
-    generated legacy SmallGroup meetings (CS-CORE.2B-B).
+    instead of these mapping fields; normal Bible Study V2 generation is now
+    structure-native, while remaining bridge/admin/diagnostic resolution can
+    still read this mapping (CS-CORE.2B-B).
     """
     language = get_user_language(request)
     holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
@@ -780,11 +780,11 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     and no TeamAssignment. It does not edit members,
     audience rows, serving schedules, or permissions. Since CS-CORE.2B-A,
     ServiceEvent audience rows match by active primary ChurchStructureMembership
-    instead of this mapping bridge. Bible Study schedule resolution/generation
-    still resolves selected units through these mapping fields, so a mapping
-    change can still affect generated legacy SmallGroup meetings. To keep that
-    effect explicit, the POST requires a staff acknowledgement checkbox before it
-    will save; without it the mapping is left unchanged. Each successful update
+    instead of this mapping bridge. Normal Bible Study V2 generation is now
+    structure-native, while remaining bridge/admin/diagnostic resolution can
+    still read this mapping. To keep that effect explicit, the POST requires a
+    staff acknowledgement checkbox before it will save; without it the mapping
+    is left unchanged. Each successful update
     is audited via a Django admin
     ``LogEntry`` CHANGE record carrying the before/after mapped-unit context.
     """
@@ -827,9 +827,8 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
     if request.method == "POST":
         # Required impact acknowledgement (CS-SETUP.1D.4). A mapping edit does
         # not directly touch members/audience/schedule/permission rows, but it
-        # can still change Bible Study structure-audience resolution and
-        # generated legacy SmallGroup meetings, so staff must confirm they
-        # understand that before any save.
+        # can still affect remaining Bible Study bridge/admin/diagnostic
+        # resolution, so staff must confirm they understand that before any save.
         acknowledged = bool(request.POST.get("acknowledge_impact"))
         raw = (request.POST.get("church_structure_unit") or "").strip()
         selected_unit_id = None
@@ -895,11 +894,11 @@ def staff_structure_mapping_edit(request, legacy_type, legacy_id):
         # type / duplicate) keep surfacing unchanged for an invalid target.
         if error is None and not acknowledged:
             error = (
-                "保存前请确认你了解此对应关系更改可能影响查经安排解析和生成的小组查经聚会。"
+                "保存前请确认你了解此对应关系更改可能影响查经桥接、管理或诊断解析。"
                 if language == "zh"
                 else "Please confirm that you understand this mapping change "
-                "may affect Bible Study structure-audience resolution and "
-                "generated legacy SmallGroup meetings before saving."
+                "may affect remaining Bible Study bridge/admin/diagnostic "
+                "resolution before saving."
             )
 
         if error is None:

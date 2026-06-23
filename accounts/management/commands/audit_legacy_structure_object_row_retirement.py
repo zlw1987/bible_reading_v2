@@ -53,7 +53,7 @@ CONSUMER_INVENTORY = (
         "resolve_units_to_small_groups",
         "accounts.structure_selectors.resolve_units_to_small_groups",
         CATEGORY_SETUP_BRIDGE,
-        "legacy resolver retained for coexistence, generation, and diagnostics",
+        "legacy resolver retained for bridge/admin/diagnostic coexistence",
     ),
     # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
     # legacy-profile selector helpers (get_user_legacy_small_group,
@@ -98,10 +98,10 @@ CONSUMER_INVENTORY = (
         "progress UI still names legacy SmallGroup rows after membership-core gating",
     ),
     (
-        "Bible Study generation/idempotency compatibility",
-        "studies.services and studies.models",
+        "Bible Study bridge/admin/diagnostic compatibility",
+        "studies services/docs and legacy mapping surfaces",
         CATEGORY_SETUP_BRIDGE,
-        "V2 generation and old-row compatibility still account for legacy groups",
+        "V2 generation is structure-native; remaining legacy rows are table-retirement context",
     ),
     (
         "Legacy retirement/readiness commands",

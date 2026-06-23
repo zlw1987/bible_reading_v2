@@ -203,4 +203,4 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
 
         output = self.run_command()
 
-        self.assertIn("diagnostic_paths_using_small_group_table: 3", output)
+        self.assertIn("diagnostic_paths_using_small_group_table: 2", output)

@@ -93,7 +93,6 @@ CANDIDATE_DEFINITIONS = (
         "candidate_type": "model/table",
         "app_read_references": _refs(
             "accounts.structure_selectors.resolve_units_to_small_groups",
-            "studies.BibleStudySeries.get_eligible_small_groups audience-row resolver",
             "reading group-progress compatibility group lists",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
@@ -126,7 +125,7 @@ CANDIDATE_DEFINITIONS = (
             "SmallGroup.district parent FK (migration accounts/0013) after "
             "LEGACY-OBJECT-ADMIN-FK.1A retired its admin display and "
             "LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver fallback read "
-            "(resolve_units_to_small_groups / get_eligible_small_groups map only "
+            "(resolve_units_to_small_groups maps only "
             "through SmallGroup.church_structure_unit). Parent/context links were "
             "already clear (0 present). The guarded "
             "cleanup_legacy_structure_parent_links command was retired with the "

@@ -217,7 +217,7 @@ Bible Study V2 near-term uses `BibleStudySeries` scope:
 - district
 - small group
 
-Schedule generation uses the current `MinistryContext` -> `District` -> `SmallGroup` bridge through `BibleStudySeries.get_eligible_small_groups()`.
+Historical note: early schedule generation used the `MinistryContext` -> `District` -> `SmallGroup` bridge through the `BibleStudySeries` eligible-small-groups helper. Current normal V2 generation is structure-native from `BibleStudySeriesAudienceScope` rows to active small-group `ChurchStructureUnit` leaf targets.
 
 Future Bible Study schedule scope may use `ChurchStructureUnit` or audience segments.
 

@@ -76,11 +76,11 @@ that followed BS-STRUCT.1A are now implemented:
 - BS-V2-MIRROR.1B stops new V2 normal meeting writes from setting
   `BibleStudyMeeting.small_group`: generation and manual create now leave the
   mirror unset while writing `generation_key`, `anchor_unit`, and one
-  `BibleStudyMeetingAudienceScope` row. Existing stored mirror values are not
-  bulk-cleared in this slice; old rows may still be recognized by compatibility
-  detection, and `small_group` remains fallback display / diagnostic / old-row
-  compatibility only. **Superseded:** BS-MEETING-MIRROR.1A later removed the
-  mirror field after cleanup and audit;
+  `BibleStudyMeetingAudienceScope` row. Historical/superseded for this slice:
+  existing stored mirror values were not bulk-cleared, old rows could still be
+  recognized by compatibility detection, and `small_group` remained fallback
+  display / diagnostic / old-row compatibility only. **Superseded:**
+  BS-MEETING-MIRROR.1A later removed the mirror field after cleanup and audit;
 - BS-V2-MIRROR.1C adds the dry-run-first guarded cleanup command
   `cleanup_bible_study_v2_small_group_mirrors` for existing V2
   `BibleStudyMeeting.small_group` mirrors. Safe cleanup only clears rows that
@@ -525,9 +525,10 @@ The former V2 meeting-runtime blockers have been cleared:
    meetings fail closed for ordinary users.
 4. Existing production V2 meetings were audited/backfilled: 29 checked, 29 with
    audience rows, zero zero-row blockers.
-5. `BibleStudyMeeting.small_group` remains only mirror/display/backfill/history/
-   idempotency compatibility. It is not an ordinary-member V2 visibility,
-   landing/Today, or role/worship picker fallback.
+5. Historical/superseded: `BibleStudyMeeting.small_group` remained only mirror/
+   display/backfill/history/idempotency compatibility. It was later removed in
+   BS-MEETING-MIRROR.1A and is not an ordinary-member V2 visibility,
+   landing/Today, role/worship picker, generation, or display source.
 
 Remaining migration work is now field-level cleanup, the generation/idempotency
 bridge, and V1 `BibleStudySession` archive/retirement.
@@ -992,8 +993,10 @@ the meeting-identity decision (Section 4.5).
       not a `small_group` fallback path;
     - **generation** is now structure-unit-native after BS-STRUCT.1L/1M: normal
       generation targets active `UNIT_SMALL_GROUP` leaves, writes audience rows,
-      and keys primary idempotency on `generation_key`; `small_group` remains an
-      optional mirror and secondary compatibility/idempotency guard only;
+      and keys primary idempotency on `generation_key`; historical/superseded:
+      `small_group` remained an optional mirror and secondary compatibility/
+      idempotency guard only in this slice, then was removed in
+      BS-MEETING-MIRROR.1A;
     - **manage-list filters** now filter by audience rows only while tolerating
       old `?small_group=` URLs as a mapping to `unit`;
     - **series zero-row legacy generation fallback is retired**: schedules with
@@ -1248,8 +1251,9 @@ the meeting-identity decision (Section 4.5).
   through legacy `small_group`; role/worship candidate filtering returns no
   ordinary candidates for zero-row meetings; the manage-list unit filter matches
   audience rows only while still tolerating legacy `?small_group=<id>` URLs as a
-  mapping to `unit`. `BibleStudyMeeting.small_group` remains mirror/display/
-  backfill/history/idempotency compatibility only. V1 `BibleStudySession` app
+  mapping to `unit`. Historical/superseded: `BibleStudyMeeting.small_group`
+  remained mirror/display/backfill/history/idempotency compatibility only in
+  this slice, then was removed in BS-MEETING-MIRROR.1A. V1 `BibleStudySession` app
   runtime was later retired in BS-V1-RETIRE.1A and remains a data cleanup target.
   No schema field/model was deleted and no migration was created. Readiness reported 29
   meetings checked, 29 with audience rows, zero zero-row blockers,
@@ -1260,9 +1264,10 @@ the meeting-identity decision (Section 4.5).
   templates and the Django admin meeting list now call
   `BibleStudyMeeting.get_structure_display_label()`, which prefers an active
   `anchor_unit`, then one or more `BibleStudyMeetingAudienceScope.unit` labels,
-  then falls back to `small_group.name` only for legacy/invalid data, then a
-  bilingual unassigned label. `BibleStudyMeeting.small_group` remains stored and
-  is not removed, renamed, nulled, or stopped from being written in this slice.
+  then fell back to `small_group.name` only for legacy/invalid data, then a
+  bilingual unassigned label. Historical/superseded: `BibleStudyMeeting.small_group`
+  remained stored in this slice and was not removed, renamed, nulled, or stopped
+  from being written here; it was later removed in BS-MEETING-MIRROR.1A.
   Runtime visibility, permissions, generation, forms, audience rows, data, and
   schema are unchanged. This prepares a later slice that can stop writing the
   mirror and then clean existing mirror values after audit approval.

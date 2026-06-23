@@ -136,7 +136,9 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         self.assertIn("meetings_missing_generation_key: 0", output)
         self.assertIn("meetings_with_anchor_unit: 1", output)
         self.assertIn("meetings_with_audience_rows: 1", output)
+        self.assertIn("normal_meetings_without_audience_rows: 0", output)
         self.assertIn("ordinary_visibility_paths_using_small_group: 0", output)
+        self.assertIn("structure_native_generation_readiness_blockers: 0", output)
         self.assertIn("blockers_for_small_group_table_retirement: 0", output)
 
     def test_generation_key_anchor_audience_is_structure_native(self):
@@ -156,7 +158,8 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
 
         self.assertIn("meetings_missing_generation_key: 1", output)
         self.assertIn("decision: blocker", output)
-        self.assertNotIn("blockers_for_small_group_table_retirement: 0", output)
+        self.assertIn("structure_native_generation_readiness_blockers: 1", output)
+        self.assertIn("blockers_for_small_group_table_retirement: 0", output)
 
     def test_series_without_audience_rows_is_blocker(self):
         self.make_meeting(
@@ -179,17 +182,15 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         self.assertNotIn("DO-NOT-PRINT-DISCUSSION-BODY", output)
         self.assertNotIn("DO-NOT-PRINT-PRESTUDY-NOTES", output)
 
-    def test_fail_on_blockers_exits_nonzero_when_blockers_exist(self):
-        # Active series without audience rows is a generation-readiness blocker.
+    def test_fail_on_blockers_ignores_structure_native_readiness(self):
+        # Active series without audience rows is a generation-readiness issue,
+        # not a legacy SmallGroup table-retirement blocker.
         self.make_meeting(anchor_unit=self.group_unit)
 
-        with self.assertRaises(CommandError) as context:
-            self.run_command("--fail-on-blockers")
+        output = self.run_command("--fail-on-blockers")
 
-        self.assertIn(
-            "blockers_for_small_group_table_retirement=",
-            str(context.exception),
-        )
+        self.assertIn("structure_native_generation_readiness_blockers: 3", output)
+        self.assertIn("blockers_for_small_group_table_retirement: 0", output)
 
     def test_ordinary_runtime_visibility_counter_is_zero(self):
         self.make_structure_native_meeting()

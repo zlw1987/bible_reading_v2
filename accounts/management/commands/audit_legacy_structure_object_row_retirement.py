@@ -29,7 +29,7 @@ CONSUMER_INVENTORY = (
         "SmallGroup / District / MinistryContext model rows",
         "accounts.models",
         CATEGORY_SETUP_BRIDGE,
-        "legacy row container and bridge mapping while fields still exist",
+        "legacy row container and bridge mapping for setup/admin/diagnostics",
     ),
     (
         "SmallGroup.church_structure_unit",
@@ -101,7 +101,7 @@ CONSUMER_INVENTORY = (
         "Bible Study bridge/admin/diagnostic compatibility",
         "studies services/docs and legacy mapping surfaces",
         CATEGORY_SETUP_BRIDGE,
-        "V2 generation is structure-native; remaining legacy rows are table-retirement context",
+        "normal V2 generation is structure-native; remaining legacy rows are table-retirement context",
     ),
     (
         "Legacy retirement/readiness commands",

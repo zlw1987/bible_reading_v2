@@ -107,10 +107,12 @@ CANDIDATE_DEFINITIONS = (
         "data_counter": "small_group_rows",
         "recommended_next_action": (
             "Do not remove table yet. Keep as bridge/admin/diagnostic context "
-            "until all inbound FKs and mapping decisions are retired or replaced. "
+            "until remaining display/setup/table-retirement dependencies and "
+            "mapping decisions are retired or replaced. "
             "PROFILE-SG-FIELD-RETIRE.1A removed the Profile.small_group inbound FK "
             "and LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the SmallGroup.district "
-            "parent FK."
+            "parent FK; normal Bible Study V2 generation is not a SmallGroup "
+            "table-retirement blocker."
         ),
         "suggested_removal_phase": "phase 5",
     },
@@ -144,7 +146,7 @@ CANDIDATE_DEFINITIONS = (
         "candidate_type": "bridge-field",
         "app_read_references": _refs(
             "structure-to-legacy mapping bridge",
-            "Bible Study old-row compatibility and diagnostics",
+            "non-V2 bridge/admin/diagnostic compatibility",
             "reflection cleanup safety checks",
         ),
         "admin_references": _refs("accounts.admin.SmallGroupAdmin"),

@@ -148,7 +148,7 @@ This section is the focused CS-F.2A closure path for MinistryContext-scoped Bibl
 MinistryContext -> District -> SmallGroup
 ```
 
-Historical note: this checklist section predates CS-CORE.2C-B. As of CS-CORE.2C-B, generation still resolves schedules to legacy `SmallGroup` rows, but ordinary `/studies/` and v2 `BibleStudyMeeting` visibility use active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession` visibility remains unchanged.
+Historical note: this checklist section predates CS-CORE.2C-B. As of CS-CORE.2C-B, ordinary `/studies/` and v2 `BibleStudyMeeting` visibility moved to active primary `ChurchStructureMembership`; later slices made normal V2 generation structure-native through schedule audience rows, `generation_key`, `anchor_unit`, and meeting audience rows. `Profile.small_group` and the removed `BibleStudyMeeting.small_group` field no longer grant v2 meeting visibility. Legacy `BibleStudySession` app runtime was later retired and remains archive/schema cleanup context.
 
 It must not expand scope into Community Activities, ServiceEvent audience filtering, Checklist V1, scheduling, reminders, attendance, availability, swaps, or role-aware permissions.
 

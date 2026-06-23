@@ -6,7 +6,7 @@ CS-H.7A plans future implementation for staff/admin approval of requested `Churc
 
 This is docs-only. It does not change code, models, migrations, views, forms, templates, URLs, capabilities, signup behavior, `Profile.small_group`, or any runtime consumer.
 
-Runtime still uses `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`. `ChurchStructureMembership` exists and has been backfilled, but no runtime consumer uses it. Requested membership grants no visibility.
+Historical/superseded for this CS-H.7 planning slice: runtime still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`, and no runtime consumer used `ChurchStructureMembership`. Current approved migrated consumers use active primary `ChurchStructureMembership`, `Profile.small_group` was removed, and remaining legacy object rows/mappings are bridge/admin/diagnostic/setup/table-retirement context.
 
 ## 2. Implementation Slices
 
@@ -56,7 +56,7 @@ CS-H.7D implementation status:
 CS-H.7E implementation status:
 - Approval syncs `Profile.small_group` only when the approved active primary membership unit maps to exactly one active legacy `SmallGroup`.
 - Unmapped, multi-mapped, inactive legacy group, rejected, blocked, and non-POST cases do not sync `Profile.small_group`.
-- Runtime still uses `Profile.small_group`; no signup capture, audience filtering, or consumer migration was added.
+- Historical/superseded: runtime still used `Profile.small_group` in this slice; no signup capture, audience filtering, or consumer migration was added by the slice itself. Later slices removed `Profile.small_group` and switched approved consumers separately.
 
 CS-H.7F closure status:
 - Browser/manual QA was completed against an isolated local Django server and throwaway SQLite database.

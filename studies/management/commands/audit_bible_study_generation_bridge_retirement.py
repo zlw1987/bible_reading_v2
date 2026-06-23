@@ -1,11 +1,13 @@
 """Read-only Bible Study generation bridge retirement inventory.
 
-This command reports what still ties Bible Study V2 generation/idempotency and
-diagnostics to legacy ``SmallGroup`` *table* rows. BS-MEETING-MIRROR.1A removed
-the legacy ``BibleStudyMeeting.small_group`` mirror field, so this audit no
-longer inspects a per-meeting mirror; remaining Bible Study blockers are series
-audience-row coverage and structure-native generation-key / anchor readiness,
-plus non-V2 bridge/admin/diagnostic consumers that still read the
+This command reports post-retirement Bible Study V2 generation/idempotency
+readiness and any remaining non-V2 diagnostics tied to legacy ``SmallGroup``
+*table* rows. BS-MEETING-MIRROR.1A removed the legacy
+``BibleStudyMeeting.small_group`` mirror field and
+BS-SMALLGROUP-GENERATION-BRIDGE-RETIRE.1A retired the normal-generation bridge,
+so normal V2 generation is structure-native. Remaining Bible Study blockers are
+series audience-row coverage and structure-native generation-key / anchor
+readiness, plus non-V2 bridge/admin/diagnostic consumers that still read the
 ``SmallGroup`` table.
 
 It is strictly read-only: no ``--apply``, no row writes, no runtime changes, and
@@ -41,8 +43,10 @@ _STAT_KEYS = (
     "meetings_missing_anchor_unit",
     "meetings_with_audience_rows",
     "meetings_without_audience_rows",
+    "normal_meetings_without_audience_rows",
     "diagnostic_paths_using_small_group_table",
     "ordinary_visibility_paths_using_small_group",
+    "structure_native_generation_readiness_blockers",
     "blockers_for_small_group_table_retirement",
 )
 
@@ -301,6 +305,8 @@ def _classify_meeting(meeting, stats):
         stats["meetings_with_audience_rows"] += 1
     else:
         stats["meetings_without_audience_rows"] += 1
+        if is_normal:
+            stats["normal_meetings_without_audience_rows"] += 1
 
     if is_normal and (not current_key or not meeting.anchor_unit_id or not audience_links):
         return _meeting_line(
@@ -339,11 +345,13 @@ def _classify_meeting(meeting, stats):
 
 
 def _finalize_blockers(stats):
-    stats["blockers_for_small_group_table_retirement"] = (
+    stats["structure_native_generation_readiness_blockers"] = (
         stats["active_series_without_audience_rows"]
+        + stats["normal_meetings_without_audience_rows"]
         + stats["meetings_missing_generation_key"]
         + stats["normal_meetings_missing_anchor_unit"]
     )
+    stats["blockers_for_small_group_table_retirement"] = 0
 
 
 def run_audit():
@@ -368,8 +376,9 @@ def _blockers_present(stats):
 class Command(BaseCommand):
     help = (
         "Read-only Bible Study generation/idempotency bridge retirement audit. "
-        "Inventories remaining SmallGroup table dependencies and structure-native "
-        "generation readiness without changing data, schema, or runtime behavior."
+        "Inventories structure-native generation readiness and remaining non-V2 "
+        "SmallGroup table dependencies without changing data, schema, or runtime "
+        "behavior."
     )
 
     def add_arguments(self, parser):
@@ -442,9 +451,10 @@ class Command(BaseCommand):
             "Recommendation: ordinary Bible Study V2 visibility is already "
             "audience-row + membership-core, and BS-MEETING-MIRROR.1A removed the "
             "legacy BibleStudyMeeting.small_group mirror. Remaining Bible Study "
-            "blockers are series audience-row coverage and structure-native "
-            "generation-key / anchor readiness; remaining SmallGroup dependencies "
-            "are non-V2 bridge/admin/diagnostic consumers of the SmallGroup table. "
+            "readiness work is series audience-row coverage and structure-native "
+            "generation-key / anchor readiness; this is not a SmallGroup table "
+            "retirement blocker. Remaining SmallGroup dependencies are non-V2 "
+            "bridge/admin/diagnostic consumers of the SmallGroup table. "
             "No deletion/removal is approved here."
         )
         write(

@@ -102,7 +102,7 @@ SECTION_KEYS = OrderedDict(
             ),
         ),
         (
-            "Bible Study legacy fields / V1 / generation bridge",
+            "Bible Study legacy fields / V1 / structure-native readiness",
             (
                 "bible_study_series_checked",
                 "bible_study_series_with_audience_rows",
@@ -112,6 +112,7 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_v2_meetings_with_audience_rows",
                 "bible_study_v2_meetings_without_audience_rows",
                 "bible_study_normal_meetings_missing_generation_key",
+                "bible_study_structure_native_readiness_blockers",
                 "bible_study_v1_sessions_checked",
                 "bible_study_v1_sessions_with_legacy_scope_fields_set",
                 "bible_study_v1_pilot_records_present",
@@ -652,10 +653,12 @@ def _scan_bible_study(stats, details):
         "bible_study_v1_sessions_checked"
     ]
     stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
-    stats["bible_study_legacy_retirement_blockers"] = (
+    stats["bible_study_structure_native_readiness_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
         + stats["bible_study_v2_meetings_without_audience_rows"]
         + stats["bible_study_normal_meetings_missing_generation_key"]
+    )
+    stats["bible_study_legacy_retirement_blockers"] = (
         + stats["bible_study_v1_purge_pending"]
         + stats["bible_study_v1_app_runtime_legacy_blockers"]
     )

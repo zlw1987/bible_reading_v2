@@ -6,7 +6,7 @@ This document records production/staging verification of `backfill_church_struct
 
 Verification is based on the user's attested GoDaddy execution. Exact command-output counts were not provided, so this document does not invent them.
 
-Historical note: at the time of this CS-H.5D backfill verification, runtime behavior remained unchanged and `Profile.small_group` was still the current runtime source for Bible Study visibility, reading group progress, and current group-scoped behavior. As of CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses active primary `ChurchStructureMembership`; legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged.
+Historical note: at the time of this CS-H.5D backfill verification, runtime behavior remained unchanged and `Profile.small_group` was still the current runtime source for Bible Study visibility, reading group progress, and current group-scoped behavior. Current state supersedes that: approved migrated consumers use active primary `ChurchStructureMembership`, `Profile.small_group` was removed, V1 `BibleStudySession` app runtime is retired, and remaining legacy rows/tables are bridge/admin/diagnostic/setup/table-retirement context.
 
 Current state: membership is a runtime source only for explicitly switched consumers: ServiceEvent structure-audience row matching since CS-CORE.2B-A, and Bible Study v2 `BibleStudyMeeting` ordinary-member visibility plus the `/studies/` / Today v2 meeting pre-filter since CS-CORE.2C-B. Requested/rejected/cancelled/ended/future/expired memberships still grant nothing.
 

@@ -4,17 +4,17 @@
 
 SE-AS.1 is a docs-only redesign plan for future `ServiceEvent` audience scope.
 
-The goal is to define how `ServiceEvent` audience selection should eventually move from the current legacy scope fields to the flexible `ChurchStructureUnit` tree, without changing runtime behavior now.
+Historical/superseded goal: define how `ServiceEvent` audience selection should eventually move from the then-current legacy scope fields to the flexible `ChurchStructureUnit` tree, without changing runtime behavior in that docs-only slice. Current ServiceEvent visibility uses `ServiceEventAudienceScope` rows plus active primary `ChurchStructureMembership`, zero-row events fail closed, and the legacy scope fields were removed in SE-FIELD-RETIRE.1A.
 
 This plan does not implement app code, schema changes, migrations, filtering, permissions, or consumer migration.
 
-DOCS-AS.1 alignment: `ServiceEvent` / Church Gatherings shares the same `ChurchStructureUnit` audience-scope foundation as Bible Study Schedule and future Community Activities. Under DOCS-AS.1, Bible Study Schedule audience scope is the first narrow runtime consumer, now implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A), because it can safely resolve selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation. Historical note: this originally kept member visibility on `Profile.small_group`; since CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` visibility uses active primary `ChurchStructureMembership`. `ServiceEvent` follows the same foundation in a later milestone. **Current status (post-SE-AS.1):** that later milestone has since landed — SE-AS.4 makes `ServiceEventAudienceScope` rows the ordinary-user visibility source when an event has them, SE-AS.5 adds the staff picker, and CS-CORE.2B-A later switched audience-row matching to active primary `ChurchStructureMembership`; zero-row events still fall back to legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. This SE-AS.1 plan is the historical redesign record; it did not itself migrate `ServiceEvent` runtime.
+DOCS-AS.1 alignment: `ServiceEvent` / Church Gatherings shares the same `ChurchStructureUnit` audience-scope foundation as Bible Study Schedule and future Community Activities. Under DOCS-AS.1, Bible Study Schedule audience scope was the first narrow runtime consumer (BS-AS.1 / BS-AS.2 / BS-AS.2A). Historical note: it originally resolved selected `ChurchStructureUnit` rows into legacy `SmallGroup` rows for meeting generation and kept member visibility on `Profile.small_group`. **Current status:** Bible Study V2 generation is structure-native; `ServiceEventAudienceScope` rows are the ordinary-user visibility source, CS-CORE.2B-A switched audience-row matching to active primary `ChurchStructureMembership`, SE-RETIRE.1B retired the zero-row fallback, and SE-FIELD-RETIRE.1A removed the legacy `scope_type` / `district` / `small_group` fields. This SE-AS.1 plan is the historical redesign record; it did not itself migrate `ServiceEvent` runtime.
 
 ## 2. Current State
 
 > **Current status (superseded):** This section captured the SE-AS.1-era state. ServiceEvent visibility later moved to `ServiceEventAudienceScope` rows when an event has them (SE-AS.4), SE-AS.5 added the staff audience picker, CS-CORE.2B-A switched audience-row matching to active primary `ChurchStructureMembership`, SE-RETIRE.1B retired the zero-row legacy fallback, and SE-FIELD-RETIRE.1A removed the legacy `scope_type` / `district` / `small_group` fields. The legacy behavior below is historical design context only.
 
-`ServiceEvent` audience behavior still uses legacy fields:
+Historical/superseded SE-AS.1-era behavior: `ServiceEvent` audience behavior still used legacy fields:
 
 - `scope_type`
   - `global`
@@ -23,14 +23,14 @@ DOCS-AS.1 alignment: `ServiceEvent` / Church Gatherings shares the same `ChurchS
 - `district`
 - `small_group`
 
-Normal-user visibility still depends on `Profile.small_group`:
+Historical/superseded SE-AS.1-era visibility: normal-user visibility still depended on `Profile.small_group`:
 
 - Global published/completed events can be seen by normal authenticated users.
 - District-scoped events are visible when the user's current `Profile.small_group` belongs to the matching legacy district.
 - Small-group-scoped events are visible when the user's current `Profile.small_group` matches the event small group.
 - Staff/service-event managers can see events through existing management rules.
 
-Current supporting fields must stay distinct:
+SE-AS.1-era supporting fields, now partly superseded by later field retirements:
 
 - `ServiceEvent.ministry_context` is Host / Language Label / 主办/语言标签 only. It may describe broad context, language ministry, host, or legacy grouping, but it must not control visibility, serving assignment, or permissions.
 - `ServiceEvent.required_teams` records Required Ministry Teams / 需要的事工团队 as event-level scheduling expectations.
@@ -39,10 +39,10 @@ Current supporting fields must stay distinct:
 
 Current church-structure foundations:
 
-- `ChurchStructureUnit` exists as the future flexible structure tree.
-- `ChurchStructureMembership` exists as the future belonging/membership foundation.
-- `ServiceEventAudienceScope` now exists as a model-only audience-scope foundation (SE-AS.2) linking `ServiceEvent` to `ChurchStructureUnit`, but it is not the current runtime source of truth and does not affect `ServiceEvent.can_be_seen_by`.
-- Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain current runtime source of truth until a separately approved consumer migration.
+- `ChurchStructureUnit` is the flexible structure tree.
+- `ChurchStructureMembership` is the ordinary-member belonging source for migrated consumers, including ServiceEvent audience-row matching.
+- `ServiceEventAudienceScope` links `ServiceEvent` to `ChurchStructureUnit` and is the current ordinary-user runtime visibility source when rows exist.
+- Historical/superseded: at SE-AS.1 time, legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remained the current runtime source until separately approved consumer migration. That is no longer current ServiceEvent behavior.
 - Requested memberships do not grant access.
 
 ## 3. Target Model
@@ -161,7 +161,7 @@ Completed scope:
 
 Explicitly not included (still future):
 
-- Runtime `ServiceEvent` visibility still uses legacy `scope_type` / `district` / `small_group` and `Profile.small_group`. `ServiceEventAudienceScope` is not the current runtime source of truth.
+- Historical/superseded for SE-AS.1 only: runtime `ServiceEvent` visibility still used legacy `scope_type` / `district` / `small_group` and `Profile.small_group`, and `ServiceEventAudienceScope` was not yet the current runtime source of truth. Current ServiceEvent visibility uses audience rows plus active primary membership, zero-row events fail closed, and the legacy scope fields were removed.
 - No staff UI selector, forms, templates, routes, admin surface, or read-only display.
 - No audience filtering, visibility migration, or consumer migration.
 - No `ServiceEvent.can_be_seen_by` change; requested `ChurchStructureMembership` still does not grant event visibility.
@@ -213,7 +213,7 @@ Likely scope:
 ## 6. Compatibility Rules
 
 - Existing events must keep working.
-- Current global/district/small_group scope must continue to drive runtime visibility until a separately approved migration.
+- Historical/superseded: at SE-AS.1 time, global/district/small_group scope had to continue driving runtime visibility until a separately approved migration.
 - Where legacy records already map to `ChurchStructureUnit`, they can inform future scope backfill or preview.
 - Missing or ambiguous mapping must not break event detail, event lists, staff workflows, or normal-user visibility.
 - No observable `ServiceEvent` visibility behavior should change through SE-AS.3.

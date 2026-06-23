@@ -18,7 +18,7 @@ Current runtime behavior still uses:
 
 `ChurchStructureMembership` exists and may contain requested or active records in future phases, but no runtime consumer uses it yet. Requested memberships may be created by a future signup/request-capture implementation, but that implementation does not exist today.
 
-No approval UI exists. `Profile.small_group` remains the current runtime source for belonging behavior.
+Historical/superseded: at this design point no approval UI existed and `Profile.small_group` remained the current runtime source for belonging behavior. Current approval/display behavior uses active primary `ChurchStructureMembership`, and `Profile.small_group` was removed in PROFILE-SG-FIELD-RETIRE.1A.
 
 ## 3. Approval Principles
 

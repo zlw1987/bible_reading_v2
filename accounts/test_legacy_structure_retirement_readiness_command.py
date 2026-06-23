@@ -178,7 +178,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("bible_study_series_with_legacy_scope_fields_set", stats)
         self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
-    def test_active_bible_study_series_without_audience_rows_is_a_blocker(self):
+    def test_active_bible_study_series_without_audience_rows_is_readiness_only(self):
         BibleStudySeries.objects.create(
             title="Zero-audience Schedule",
             status=BibleStudySeries.STATUS_PUBLISHED,
@@ -190,7 +190,8 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
         self.assertEqual(stats["bible_study_series_without_audience_rows"], 1)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 1)
-        self.assertGreaterEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+        self.assertEqual(stats["bible_study_structure_native_readiness_blockers"], 1)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
     def test_fail_on_blockers_exits_nonzero(self):
         # setUp already created a SmallGroup row, so the SmallGroup table

@@ -102,7 +102,7 @@ CS-H.5A implementation status:
 CS-H.5B hardening status:
 - `ChurchStructureMembership` has active/date-window query helpers.
 - Requested, rejected, cancelled, and ended memberships do not count as active.
-- Runtime still uses `Profile.small_group`.
+- Historical/superseded: runtime still used `Profile.small_group` at this CS-H.5 stage. Current approved migrated consumers use active primary `ChurchStructureMembership`, and `Profile.small_group` was removed in PROFILE-SG-FIELD-RETIRE.1A.
 
 CS-H.5C backfill command status:
 - `backfill_church_structure_memberships` defaults to dry-run and supports `--apply`.
@@ -113,7 +113,7 @@ CS-H.5D verification status:
 - GoDaddy production/staging backfill verification is complete by user-attested run.
 - Exact command-output counts were not recorded.
 - No unresolved warning, error, or data QA item was reported.
-- Runtime still uses `Profile.small_group`.
+- Historical/superseded: runtime still used `Profile.small_group` at this CS-H.5D verification point. Current approved migrated consumers use active primary `ChurchStructureMembership`, and `Profile.small_group` was removed in PROFILE-SG-FIELD-RETIRE.1A.
 
 CS-H.5E admin clarity status:
 - Django Admin distinguishes legacy current-runtime models from future foundation models.

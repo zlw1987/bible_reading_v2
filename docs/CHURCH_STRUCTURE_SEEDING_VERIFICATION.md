@@ -103,7 +103,7 @@ CS-H.3E closes this item. The legacy data was corrected or otherwise handled fir
 
 After resolving the legacy data issue and rerunning the seed/apply flow, this item should remain closed as long as the final dry-run reports zero create/update/link changes.
 
-Do not regress this by manually moving only the `ChurchStructureUnit`, because the legacy `SmallGroup` model is still the current runtime source of truth.
+Historical/superseded caution: at this seeding-verification milestone, manually moving only the `ChurchStructureUnit` could diverge from the legacy `SmallGroup` runtime source. Current normal V2 generation is structure-native, and remaining `SmallGroup` rows/mappings are setup/admin/diagnostic/table-retirement context.
 
 ## 6. Runtime Behavior Confirmation
 

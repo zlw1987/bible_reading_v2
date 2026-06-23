@@ -20,9 +20,9 @@ class MinistryContext(models.Model):
         related_name="legacy_ministry_contexts",
         help_text=(
             "Legacy-to-structure bridge for setup diagnostics and compatibility. "
-            "May affect Bible Study structure-audience resolution/generation; "
-            "does not directly edit memberships, audience rows, serving "
-            "assignments, permissions, or ServiceEvent audience matching."
+            "Does not affect normal Bible Study V2 generation, memberships, "
+            "audience rows, serving assignments, permissions, or ServiceEvent "
+            "audience matching."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -55,10 +55,10 @@ class District(models.Model):
         related_name="legacy_districts",
         help_text=(
             "Legacy-to-structure bridge for setup diagnostics and compatibility. "
-            "May affect Bible Study structure-audience resolution/generation "
-            "and generated legacy SmallGroup meetings; does not directly edit "
-            "memberships, audience rows, serving assignments, permissions, or "
-            "ServiceEvent audience matching."
+            "Does not affect normal Bible Study V2 generation or create legacy "
+            "SmallGroup meetings; does not directly edit memberships, audience "
+            "rows, serving assignments, permissions, or ServiceEvent audience "
+            "matching."
         ),
     )
     is_active = models.BooleanField(default=True)
@@ -84,10 +84,10 @@ class SmallGroup(models.Model):
         related_name="legacy_small_groups",
         help_text=(
             "Legacy-to-structure bridge for setup diagnostics and compatibility. "
-            "May affect Bible Study structure-audience resolution/generation "
-            "and generated legacy SmallGroup meetings; does not directly edit "
-            "memberships, audience rows, serving assignments, permissions, or "
-            "ServiceEvent audience matching."
+            "Does not affect normal Bible Study V2 generation or create legacy "
+            "SmallGroup meetings; does not directly edit memberships, audience "
+            "rows, serving assignments, permissions, or ServiceEvent audience "
+            "matching."
         ),
     )
     is_active = models.BooleanField(default=True)

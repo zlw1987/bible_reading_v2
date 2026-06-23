@@ -159,7 +159,7 @@ Rules:
 - CS-H.5B query helpers count only active memberships within their date window; requested, rejected, cancelled, and ended memberships are excluded.
 - CS-H.5C adds a command to backfill active primary memberships from existing `Profile.small_group` values where the small group is mapped to `ChurchStructureUnit`; it does not change `Profile.small_group` or switch runtime consumers.
 - CS-H.5D records production/staging backfill verification by user confirmation; membership still does not drive runtime visibility.
-- CS-H.5E improves admin clarity only; legacy `SmallGroup`, `District`, `MinistryContext`, and `Profile.small_group` remain current runtime source during transition.
+- CS-H.5E improves admin clarity only. Historical/superseded: at that point legacy `SmallGroup`, `District`, `MinistryContext`, and `Profile.small_group` remained current runtime source during transition. Current migrated runtime uses structure units / memberships where separately switched, and `Profile.small_group` has been removed.
 - Do not import phone/private/sensitive data.
 - Do not do full historical import in the first version.
 

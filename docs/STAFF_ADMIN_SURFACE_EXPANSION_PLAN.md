@@ -19,7 +19,7 @@ Current state:
 Gaps:
 - Staff workflow remains narrow and task-specific.
 - Needs-clarification handling, transfer history, richer filters, and operational status views remain future.
-- Staff may need clearer side-by-side labels for "current runtime small group" and "future foundation membership."
+- Historical/superseded wording note: staff once needed side-by-side labels for "current runtime small group" and "future foundation membership." Current labels should distinguish confirmed membership, selected audience rows, and legacy mapping rows.
 
 ### Reading Plans and Guides
 
@@ -45,7 +45,7 @@ Gaps:
 ### Bible Study Schedules, Guides, and Meetings
 
 Current state:
-- Bible Study V1/V2 flow includes schedule/series, sessions/guides, Thursday pre-study, Friday study schedule, generated small-group meetings, scope fields, lifecycle fields, and permission-controlled editing.
+- Bible Study V1/V2 flow includes V2 schedule/series, guides, Thursday pre-study, Friday study schedule, generated structure-native meetings, audience rows, lifecycle fields, and permission-controlled editing. Historical V1 sessions/guides and removed legacy scope fields remain archive/schema cleanup context only.
 - `BibleStudySeries` currently acts as the internal Bible Study Schedule model.
 - Bible Study Schedule audience resolution and meeting generation still use legacy `SmallGroup` rows; since BS-STRUCT.2A, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility, `/studies/` / Today, and role/worship pickers use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, and zero-row V2 meetings fail closed for ordinary users.
 
@@ -219,7 +219,7 @@ Completed scope:
 Boundaries:
 - Follows the PP-SA.2/PP-SA.4/PP-SA.5 read-only staff surface pattern: zero write actions, no schema changes, no new states, links only to existing Django Admin and staff workflows.
 - Counts only; no member rosters.
-- No runtime visibility change was added by CS-MAP.2 itself. Current ordinary-user matching is consumer-specific: ServiceEvent structure-audience rows, Prayer group requests, Bible Study v2 `BibleStudyMeeting` audience rows, reading/progress/reflection switched slices, and group-progress permissions use their separately approved sources, while legacy `BibleStudySession` and remaining legacy/archive/display/audit consumers still resolve through legacy `Profile.small_group` and legacy mappings where documented. Implemented per-module audience rows such as `ServiceEventAudienceScope` and `BibleStudySeriesAudienceScope` can depend on the unit tree where those modules explicitly use them.
+- No runtime visibility change was added by CS-MAP.2 itself. Current ordinary-user matching is consumer-specific: ServiceEvent structure-audience rows, Prayer group requests, Bible Study v2 `BibleStudyMeeting` audience rows, reading/progress/reflection switched slices, and group-progress permissions use their separately approved sources. Historical/superseded: at CS-MAP.2 time, some legacy/archive/display/audit consumers still resolved through legacy `Profile.small_group` and legacy mappings where documented. Current remaining legacy object rows/mappings are bridge/admin/diagnostic/setup/table-retirement context, and V1 `BibleStudySession` is archive/schema cleanup context.
 - No setup/edit UI; Django Admin remains the structure write surface during transition.
 
 ## 5. Permission and Capability Boundaries
@@ -243,11 +243,11 @@ Normal-user UI:
 - Keep EN/ZH copy paired and natural, especially for church/user wording.
 
 Staff/admin UI:
-- Clearly distinguish current runtime structure from future foundation structure.
-- Current runtime structure is split by consumer. Legacy `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain active for legacy/archive/display/audit consumers and bridge paths; `ChurchStructureUnit` and `ChurchStructureMembership` are already runtime sources only for separately switched consumers such as ServiceEvent audience rows, Prayer group requests, Bible Study v2 audience-row meetings/pickers, reading/reflection slices, and group-progress slices.
-- Future foundation structure still centers on `ChurchStructureUnit` and `ChurchStructureMembership`, but they are not universal runtime sources.
-- Use labels such as "Current runtime small group" and "Future foundation membership" when both appear together.
-- Do not imply `ChurchStructureMembership` or the unit tree is a universal runtime source of truth. Be precise: ServiceEvent structure-audience rows, Prayer group requests, Bible Study v2 meeting visibility / Today / role-worship pickers, and the completed reading/progress/reflection slices are switched consumers; remaining legacy/archive consumers still resolve through legacy `Profile.small_group` / legacy mappings until separately approved migration or retirement.
+- Clearly distinguish current runtime audience/belonging sources from remaining legacy object-row and mapping context.
+- Current runtime structure is split by consumer. `ChurchStructureUnit` audience rows and active primary `ChurchStructureMembership` are runtime sources for separately switched consumers such as ServiceEvent audience rows, Prayer group requests, Bible Study v2 audience-row meetings/pickers, reading/reflection slices, and group-progress slices. Remaining `MinistryContext`, `District`, and `SmallGroup` rows are legacy bridge/admin/diagnostic/setup/table-retirement context unless a specific V1/archive path says otherwise; `Profile.small_group` has been removed.
+- `ChurchStructureUnit` and `ChurchStructureMembership` are important current foundations, but they are not universal runtime sources for serving, roles, or every archive/diagnostic path.
+- Use labels such as "Confirmed membership group" and "Legacy mapping row" when both appear together.
+- Do not imply `ChurchStructureMembership` or the unit tree is a universal runtime source of truth. Be precise: ServiceEvent structure-audience rows, Prayer group requests, Bible Study v2 meeting visibility / Today / role-worship pickers, and the completed reading/progress/reflection slices are switched consumers. Historical/superseded: earlier remaining legacy/archive consumers still resolved through legacy `Profile.small_group` / legacy mappings; current remaining legacy object rows/mappings are bridge/admin/diagnostic/setup/table-retirement context, and V1 `BibleStudySession` is archive/schema cleanup context.
 
 ## 7. Runtime Source-of-Truth Boundary
 
@@ -258,7 +258,7 @@ Current runtime boundaries:
 - `/studies/` v2 meeting visibility, Today, and role/worship pickers now use `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; zero-row V2 meetings fail closed for ordinary users after BS-STRUCT.2A.
 - `ServiceEvent` ordinary-user visibility uses `ServiceEventAudienceScope` rows matched by active primary `ChurchStructureMembership` after CS-CORE.2B-A. Zero-row events fail closed for ordinary users after SE-RETIRE.1B; the legacy `scope_type` / `district` / `small_group` fields are stored/editable compatibility data only.
 - My Serving and `TeamAssignment` support remain independent of church-structure membership and audience scope.
-- Other consumers that currently use legacy models or `Profile.small_group` are not migrated by this plan.
+- Historical/superseded: other consumers that used legacy models or `Profile.small_group` were not migrated by this plan. Later slices removed `Profile.small_group` and switched approved consumers separately.
 
 `ChurchStructureMembership` remains the future foundation for belonging and current staff request workflow data. Requested membership must not grant visibility, permissions, serving assignment, audience eligibility, or runtime access.
 

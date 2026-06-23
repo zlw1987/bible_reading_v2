@@ -23,10 +23,10 @@ Staff/admin surfaces may expose more operational and technical context when it h
 
 Rules:
 - Technical context should still be purposeful. Do not expose raw implementation detail when a clear operational label is enough.
-- Clearly distinguish current legacy runtime models from future foundation models whenever both appear in the same staff/admin surface or documentation.
-- Current runtime structure includes `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`.
-- Future foundation structure includes `ChurchStructureUnit` and `ChurchStructureMembership`.
-- Staff labels should make transition state explicit, for example "Current runtime small group" versus "Future foundation membership."
+- Clearly distinguish remaining legacy object/admin/diagnostic context from migrated runtime sources whenever both appear in the same staff/admin surface or documentation.
+- Current migrated runtime sources include `ChurchStructureUnit` audience rows and active primary `ChurchStructureMembership`; `Profile.small_group` and multiple legacy scope fields have been removed.
+- Remaining `MinistryContext`, `District`, and `SmallGroup` rows are table-retirement/setup/admin/diagnostic context unless a specific legacy/archive surface says otherwise.
+- Staff labels should make transition state explicit, for example "Confirmed membership group" versus "Legacy mapping row."
 - Do not imply that future foundation models are already runtime sources of truth until consumers have intentionally migrated.
 
 ## 4. Bilingual Copy Rules

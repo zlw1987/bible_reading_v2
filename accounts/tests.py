@@ -2381,7 +2381,10 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "flexible structure foundation")
         self.assertContains(response, "ChurchStructureUnit.parent hierarchy is authoritative")
         self.assertContains(response, "ServiceEvent audience rows use selected units")
-        self.assertContains(response, "Bible Study still resolves selected units")
+        self.assertContains(
+            response,
+            "V2 Bible Study meeting visibility and normal generation are structure-native",
+        )
         self.assertContains(
             response,
             "Membership/belonging is separate from serving",

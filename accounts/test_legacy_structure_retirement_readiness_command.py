@@ -18,9 +18,11 @@ from accounts.models import (
 )
 from events.models import ServiceEvent
 from studies.models import (
+    BibleStudyGuide,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
     BibleStudySession,
+    BibleStudyWorshipSong,
 )
 
 
@@ -119,6 +121,11 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(stats["small_groups_without_church_structure_unit"], 1)
         self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
         self.assertEqual(stats["bible_study_v1_pilot_records_present"], 1)
+        self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
+        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 1)
+        self.assertEqual(stats["bible_study_v1_guides_checked"], 0)
+        self.assertEqual(stats["bible_study_v1_worship_songs_checked"], 0)
+        self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 0)
         self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
         self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
@@ -267,6 +274,8 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertIn("bible_study_v1_pilot_records_present: 1", out.getvalue())
         self.assertIn("bible_study_v1_app_runtime_retired: 1", out.getvalue())
         self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())
+        self.assertIn("bible_study_v1_child_rows_purge_pending: 0", out.getvalue())
+        self.assertIn("legacy_bible_study_v1_status", out.getvalue())
         self.assertIn(
             "studies.management.commands.purge_legacy_bible_study_v1_sessions",
             out.getvalue(),
@@ -385,10 +394,35 @@ class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
         self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
         self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
+        self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
+        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 0)
+        self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 0)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_v2_meetings_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_normal_meetings_missing_generation_key"], 0)
         self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+
+    def test_v1_child_rows_count_as_purge_pending_cleanup_blockers(self):
+        session = self.make_v1_only_purge_pending_session()
+        BibleStudyGuide.objects.create(session=session)
+        BibleStudyWorshipSong.objects.create(
+            session=session,
+            sort_order=1,
+            title="Legacy Song",
+        )
+
+        audit = run_audit(now=self.now)
+        stats = audit["stats"]
+
+        self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
+        self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
+        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 0)
+        self.assertEqual(stats["bible_study_v1_guides_checked"], 1)
+        self.assertEqual(stats["bible_study_v1_worship_songs_checked"], 1)
+        self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 2)
+        self.assertEqual(stats["bible_study_v1_purge_pending"], 3)
+        self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 3)
 
     def test_fail_on_blockers_exits_nonzero_for_v1_purge_pending_data_blocker(self):
         self.make_v1_only_purge_pending_session()

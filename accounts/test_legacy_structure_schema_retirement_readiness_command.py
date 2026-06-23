@@ -10,6 +10,7 @@ from accounts.management.commands.audit_legacy_structure_schema_retirement_readi
     Command,
     STATUS_DIAGNOSTIC,
     STATUS_HISTORICAL,
+    STATUS_SCHEMA,
     STATUS_WRITE,
     run_audit,
 )
@@ -21,7 +22,12 @@ from accounts.models import (
 )
 from events.models import ServiceEvent
 from prayers.models import PrayerRequest
-from studies.models import BibleStudySeries
+from studies.models import (
+    BibleStudyGuide,
+    BibleStudySeries,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 User = get_user_model()
@@ -172,6 +178,8 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertIn("Profile.small_group (removed)", output)
         self.assertIn("ServiceEvent.scope_type (removed)", output)
         self.assertIn("BibleStudyMeeting.small_group (removed)", output)
+        self.assertIn("BibleStudyGuide (V1 child table)", output)
+        self.assertIn("BibleStudyWorshipSong (V1 child table)", output)
         self.assertIn("ReflectionComment.small_group_at_post", output)
         self.assertIn("PrayerRequest.small_group_at_post", output)
         self.assertIn("SmallGroup model/table", output)
@@ -448,10 +456,10 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         # BibleStudyWorshipSongAdmin), so the V1 BibleStudySession candidate no
         # longer carries an active display/admin reference and is no longer
         # classified as blocked_by_display_or_admin. With zero V1 rows in the
-        # test DB and no remaining admin/template surface, the only remaining
-        # references are purge/audit diagnostic tooling, so the candidate is
-        # classified as blocked_by_diagnostic_tooling (the next cleanup phase),
-        # not by live runtime, app writes, or display/admin.
+        # test DB and no remaining admin/template surface, the V1 model/table
+        # and its legacy scope FKs still require a separate schema slice before
+        # final table retirement. That is a schema blocker, not live runtime,
+        # app write, display/admin, or ordinary visibility.
         audit = run_audit()
         candidate = _candidate(
             audit, "BibleStudySession (V1 model/table and scope fields)"
@@ -464,7 +472,34 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(candidate["app_read_references"], ())
         self.assertEqual(candidate["data_blocker_count"], 0)
         self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
-        self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_SCHEMA)
+
+    def test_bible_study_v1_child_tables_are_purge_schema_blockers(self):
+        series = BibleStudySeries.objects.create(title="Legacy V1 Series")
+        session = BibleStudySession.objects.create(
+            series=series,
+            title="Legacy V1 Session",
+            study_datetime=self.now + timezone.timedelta(days=3),
+            scope_type=BibleStudySession.SCOPE_GLOBAL,
+            status=BibleStudySession.STATUS_PUBLISHED,
+        )
+        BibleStudyGuide.objects.create(session=session)
+        BibleStudyWorshipSong.objects.create(
+            session=session,
+            sort_order=1,
+            title="Legacy Song",
+        )
+
+        audit = run_audit()
+        guide = _candidate(audit, "BibleStudyGuide (V1 child table)")
+        song = _candidate(audit, "BibleStudyWorshipSong (V1 child table)")
+
+        self.assertEqual(guide["data_blocker_count"], 1)
+        self.assertEqual(song["data_blocker_count"], 1)
+        self.assertGreater(len(guide["diagnostic_cleanup_references"]), 0)
+        self.assertGreater(len(song["diagnostic_cleanup_references"]), 0)
+        self.assertEqual(guide["schema_removal_status"], "blocked_by_data")
+        self.assertEqual(song["schema_removal_status"], "blocked_by_data")
 
     def test_legacy_parent_fks_are_historical_after_field_removal(self):
         # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district

@@ -16,6 +16,11 @@ from studies.models import (
 )
 
 
+EXPECTED_V1_CHILD_MODELS = {
+    BibleStudyGuide,
+    BibleStudyWorshipSong,
+}
+
 _ZERO_PROTECTED_COUNTERS = (
     "v2_series_deleted",
     "v2_lessons_deleted",
@@ -36,6 +41,12 @@ def _group_label(group):
     return f"#{group.id} {group.name}"
 
 
+def _district_label(district):
+    if district is None:
+        return "(none)"
+    return f"#{district.id} {district.name}"
+
+
 def _series_label(series):
     if series is None:
         return "(none)"
@@ -45,6 +56,7 @@ def _series_label(series):
 def _build_session_queryset(*, session_id=None, status=None, before=None):
     sessions = BibleStudySession.objects.select_related(
         "series",
+        "district",
         "small_group",
     ).order_by("id")
 
@@ -56,6 +68,44 @@ def _build_session_queryset(*, session_id=None, status=None, before=None):
         sessions = sessions.filter(study_datetime__date__lt=before)
 
     return sessions
+
+
+def _count_sessions_by_scope(session_ids):
+    counts = {choice[0]: 0 for choice in BibleStudySession.SCOPE_CHOICES}
+    rows = (
+        BibleStudySession.objects.filter(id__in=session_ids)
+        .values_list("scope_type")
+        .order_by()
+    )
+    for (scope_type,) in rows:
+        counts[scope_type] = counts.get(scope_type, 0) + 1
+    return counts
+
+
+def _collect_unexpected_inbound_dependencies(session_ids):
+    dependency_rows = []
+    total = 0
+    for relation in BibleStudySession._meta.related_objects:
+        related_model = relation.related_model
+        if related_model in EXPECTED_V1_CHILD_MODELS:
+            continue
+
+        filter_key = f"{relation.field.name}__in"
+        count = related_model._default_manager.filter(
+            **{filter_key: session_ids},
+        ).count()
+        if not count:
+            continue
+
+        label = "{app_label}.{model_name}.{field_name}".format(
+            app_label=related_model._meta.app_label,
+            model_name=related_model.__name__,
+            field_name=relation.field.name,
+        )
+        dependency_rows.append((label, count))
+        total += count
+
+    return total, tuple(dependency_rows)
 
 
 def _collect_plan(*, session_id=None, status=None, before=None, example_limit=20):
@@ -70,11 +120,23 @@ def _collect_plan(*, session_id=None, status=None, before=None, example_limit=20
     worship_songs = BibleStudyWorshipSong.objects.filter(session_id__in=session_ids)
 
     examples = list(sessions[:example_limit]) if example_limit else []
+    unexpected_total, unexpected_rows = _collect_unexpected_inbound_dependencies(
+        session_ids,
+    )
     return {
         "session_ids": session_ids,
         "v1_sessions_matched": len(session_ids),
         "v1_guides_matched": guides.count(),
         "v1_worship_songs_matched": worship_songs.count(),
+        "v1_sessions_by_scope_type": _count_sessions_by_scope(session_ids),
+        "v1_sessions_with_district_id": sessions.filter(
+            district_id__isnull=False
+        ).count(),
+        "v1_sessions_with_small_group_id": sessions.filter(
+            small_group_id__isnull=False
+        ).count(),
+        "unexpected_inbound_dependency_rows": unexpected_total,
+        "unexpected_inbound_dependency_details": unexpected_rows,
         "examples": examples,
         "example_limit": example_limit,
         "examples_omitted": max(len(session_ids) - len(examples), 0),
@@ -242,6 +304,25 @@ class Command(BaseCommand):
         write(f"v1_sessions_matched: {plan['v1_sessions_matched']}")
         write(f"v1_guides_matched: {plan['v1_guides_matched']}")
         write(f"v1_worship_songs_matched: {plan['v1_worship_songs_matched']}")
+        for scope_type, _label in BibleStudySession.SCOPE_CHOICES:
+            write(
+                "v1_sessions_scope_type_{scope_type}: {count}".format(
+                    scope_type=scope_type,
+                    count=plan["v1_sessions_by_scope_type"].get(scope_type, 0),
+                )
+            )
+        write(
+            f"v1_sessions_with_district_id: "
+            f"{plan['v1_sessions_with_district_id']}"
+        )
+        write(
+            f"v1_sessions_with_small_group_id: "
+            f"{plan['v1_sessions_with_small_group_id']}"
+        )
+        write(
+            f"unexpected_inbound_dependency_rows: "
+            f"{plan['unexpected_inbound_dependency_rows']}"
+        )
         write(f"v1_sessions_deleted: {deleted['v1_sessions_deleted']}")
         write(f"v1_guides_deleted: {deleted['v1_guides_deleted']}")
         write(f"v1_worship_songs_deleted: {deleted['v1_worship_songs_deleted']}")
@@ -269,12 +350,13 @@ class Command(BaseCommand):
                     write(
                         "  session id: {id} | title: {title} | series: {series} "
                         "| study_datetime: {study_datetime} | status: {status} "
-                        "| small_group: {small_group}".format(
+                        "| district: {district} | small_group: {small_group}".format(
                             id=session.id,
                             title=session.title,
                             series=_series_label(session.series),
                             study_datetime=session.study_datetime,
                             status=session.status,
+                            district=_district_label(session.district),
                             small_group=_group_label(session.small_group),
                         )
                     )
@@ -288,3 +370,7 @@ class Command(BaseCommand):
                         omitted=plan["examples_omitted"],
                     )
                 )
+            if plan["unexpected_inbound_dependency_details"]:
+                write("unexpected_inbound_dependency_details:")
+                for label, count in plan["unexpected_inbound_dependency_details"]:
+                    write(f"  {label}: {count}")

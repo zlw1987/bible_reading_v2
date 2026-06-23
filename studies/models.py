@@ -325,8 +325,9 @@ class BibleStudySession(models.Model):
         if not getattr(user, "is_authenticated", False):
             return False
 
-        # BS-V1-RETIRE.1A: V1 app-level runtime is fully retired. Django Admin
-        # remains the emergency maintenance path for any remaining pilot rows.
+        # BS-V1-RETIRE.1A / BS-V1-ADMIN-RETIRE.1A: V1 app-level runtime and
+        # admin are retired. Remaining pilot/archive rows are handled only by
+        # explicit guarded purge/schema-retirement slices.
         return False
 
 

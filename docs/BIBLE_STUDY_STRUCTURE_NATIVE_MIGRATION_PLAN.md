@@ -147,11 +147,13 @@ The active V2 stack (`studies/models.py`):
 
 - **`BibleStudySeries`** — internal model used user-facing as *Bible Study
   Schedule / 查经安排*. Period-level container with `start_date` / `end_date` /
-  `status` / `published_at`. Carries **two** scope mechanisms:
-  - legacy scope fields: `scope_type` (`global` / `ministry_context` /
-    `district` / `small_group`), `ministry_context`, `district`, `small_group`;
-  - structure audience rows via **`BibleStudySeriesAudienceScope(series, unit)`**
-    (BS-AS.1), a many-to-`ChurchStructureUnit` join.
+  `status` / `published_at`. **Audience scope is structure-native:** it uses
+  structure audience rows via **`BibleStudySeriesAudienceScope(series, unit)`**
+  (BS-AS.1), a many-to-`ChurchStructureUnit` join, as the only scope mechanism.
+  **Historical/superseded:** the legacy scope fields (`scope_type`,
+  `ministry_context`, `district`, `small_group`) were removed in
+  BS-SERIES-FIELD-RETIRE.1A (migration `studies/0010`); only immutable historical
+  migrations still name them.
 - **`BibleStudySeriesAudienceScope`** — series-level audience join to
   `ChurchStructureUnit`. Validates: active unit, no whole-church-root combined
   with other units, no ancestor+descendant for the same series. This is the
@@ -166,27 +168,26 @@ The active V2 stack (`studies/models.py`):
   `meeting_datetime`, `location[_en]`, `meeting_link`, group-local
   `group_direction[_en]` / `group_questions[_en]`, `status`, optional
   `service_event` FK, and de-emphasized `discussion_leader_user` /
-  `discussion_leader_name` compatibility fields. Structure-native fields added
-  through BS-STRUCT.1B onward:
-  - `small_group = FK(SmallGroup, null=True, blank=True, on_delete=SET_NULL)`
-    is now **nullable/blank** and a **compatibility mirror**, not the source of
-    truth. Historically normal group-level meetings set it one-to-one with a
-    leaf group; after BS-V2-MIRROR.1B, new normal V2 meetings also leave it null
-    and rely on `generation_key`, `anchor_unit`, and meeting audience rows.
-  - **`BibleStudyMeetingAudienceScope(meeting, unit)` rows exist** and are the
-    **row-first meeting audience source** when one or more rows are present
+  `discussion_leader_name` compatibility fields. Structure-native audience /
+  identity is carried by:
+  - **`BibleStudyMeetingAudienceScope(meeting, unit)` rows** — the
+    **row-first meeting audience source** and the V2 runtime source of truth
     (visibility, V2 landing/Today, and role/worship pickers read them — see 1.5).
   - `anchor_unit = FK(ChurchStructureUnit, null=True, blank=True,
     on_delete=SET_NULL)` exists for **display / grouping / ownership only**, not
     visibility.
   - `generation_key` (nullable CharField) exists with a conditional
-    `(lesson, generation_key)` unique constraint, but **no runtime reads it yet**.
+    `(lesson, generation_key)` unique constraint and is the structure-native
+    idempotency key written by normal generation and manual normal create/edit.
   - `meeting_kind` (CharField: `normal` default / `higher_level` / `joint` /
     `cancelled_replacement`) exists as a rotation/replacement-readiness marker.
-  - The legacy **`(lesson, small_group)` unique constraint is now conditional on
-    a non-null `small_group`** (BS-STRUCT.1B), so normal group-level duplicates
-    are still rejected while multiple null-`small_group` higher-level/joint
-    meetings per lesson are allowed.
+  - **Historical/superseded:** `small_group` was a nullable `FK(SmallGroup, ...)`
+    compatibility mirror, not the source of truth; it was **removed in
+    BS-MEETING-MIRROR.1A** (migration `studies/0011`). The legacy
+    `(lesson, small_group)` unique constraint (made conditional on a non-null
+    `small_group` in BS-STRUCT.1B) was removed with that mirror; current V2
+    meeting idempotency keys on the conditional `(lesson, generation_key)`
+    constraint.
 - **`BibleStudyMeetingRole`** — per-meeting responsibilities (discussion leader,
   worship lead, pianist, support, host); user FK (nullable) + display-name
   fallback.
@@ -201,7 +202,12 @@ Legacy V1 stack, retired from app runtime (`docs/LEGACY_BIBLE_STUDY_SESSION_RETI
   / `small_group` no longer grant V1 app access. App-level create/detail/edit/
   delete/worship routes redirect with retirement messaging. **Decision: do not
   migrate V1 to membership-core or to structure audience; it is pilot/archive
-  data pending explicit purge, not part of this migration.**
+  data pending explicit destructive purge, not part of this migration.**
+  BS-V1-SCHEMA-RETIRE-GATE.1A keeps the purge dry-run preflight explicit about
+  V1 session rows, V1 guide/worship child rows, `scope_type`, `district`, and
+  `small_group`; V1 `small_group` and `district` schema FKs continue to block
+  final `SmallGroup` / `District` table retirement until purge plus a later
+  separate V1 schema migration.
 
 ### 1.2 How weekly guides / questions are represented
 
@@ -263,8 +269,8 @@ slice (BS-STRUCT.1G).**
 | Concept | Where used in `studies/` |
 | --- | --- |
 | `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, the manual-form source field, the preferred V2 display label source, a new-write mirror, or a generation/idempotency helper for normal V2 meetings.** `BibleStudyMeeting.small_group` and `BibleStudySeries.small_group` were removed; V1 `BibleStudySession.small_group` remains for V1 archive/schema context only. |
-| `District` | `BibleStudySeries.district` / `BibleStudySession.district` legacy scope fields only. |
-| `Profile.small_group` | **No longer read by V2 meeting visibility or pickers, and no longer grants V1 app access after BS-V1-RETIRE.1A.** Still read by the read-only audit comparator in `structure_readiness.py` (`get_user_legacy_small_group`). |
+| `District` | `BibleStudySession.district` remains for V1 archive/schema context only; `BibleStudySeries.district` was removed in BS-SERIES-FIELD-RETIRE.1A. |
+| `Profile.small_group` | **Removed in PROFILE-SG-FIELD-RETIRE.1A.** No longer read by V2 meeting visibility or pickers, no longer grants V1 app access after BS-V1-RETIRE.1A, and no longer exists as a queryable comparator source. |
 | `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, V2 runtime source of truth)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**. Legacy `SmallGroup.church_structure_unit` remains a bridge/admin/diagnostic mapping target outside V2 generation. |
 | `ChurchStructureMembership` | **The V2 runtime user-belonging source** for meeting visibility (`studies/visibility.py`, CS-CORE.2C-B) and for role/worship user pickers (CS-CORE.3B). Single active primary membership only; multiple/none fails closed. |
 
@@ -324,8 +330,12 @@ do not appear for ordinary users. `Profile.small_group` is not consulted.
 
 V1 `BibleStudySession` create/detail/edit/delete/worship app routes redirect
 with retirement messaging after BS-V1-RETIRE.1A. Direct detail is no longer an
-app archive surface for ordinary users or managers. Django Admin remains the
-emergency maintenance path until a later explicit V1 pilot-data purge slice.
+app archive surface for ordinary users or managers. BS-V1-ADMIN-RETIRE.1A
+retired the active V1 Django Admin surface. Remaining V1 rows and V1-only child
+rows are pilot/archive cleanup context only; the guarded purge is explicit and
+destructive, and V1 schema/table removal remains a later migration slice. Do not
+migrate V1 rows to V2 or wire V1 visibility into membership-core as part of this
+cleanup path.
 **Out of scope for this migration** — see Section 7 open question on V1 data
 cleanup.
 

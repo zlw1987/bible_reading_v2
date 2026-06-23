@@ -194,6 +194,10 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
             "legacy_object_rows_are: final table-retirement blockers",
             out.getvalue(),
         )
+        self.assertIn(
+            "legacy_bible_study_v1_schema_status",
+            out.getvalue(),
+        )
 
     def test_verbose_output_does_not_print_private_free_text(self):
         out = StringIO()

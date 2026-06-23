@@ -26,11 +26,13 @@ from accounts.models import (
 from comments.models import ReflectionComment
 from events.models import ServiceEvent, ServiceEventAudienceScope
 from studies.models import (
+    BibleStudyGuide,
     BibleStudyMeeting,
     BibleStudyMeetingAudienceScope,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
     BibleStudySession,
+    BibleStudyWorshipSong,
 )
 
 
@@ -115,6 +117,11 @@ SECTION_KEYS = OrderedDict(
                 "bible_study_structure_native_readiness_blockers",
                 "bible_study_v1_sessions_checked",
                 "bible_study_v1_sessions_with_legacy_scope_fields_set",
+                "bible_study_v1_sessions_with_district_id",
+                "bible_study_v1_sessions_with_small_group_id",
+                "bible_study_v1_guides_checked",
+                "bible_study_v1_worship_songs_checked",
+                "bible_study_v1_child_rows_purge_pending",
                 "bible_study_v1_pilot_records_present",
                 "bible_study_v1_app_runtime_retired",
                 "bible_study_v1_purge_pending",
@@ -634,6 +641,10 @@ def _scan_bible_study(stats, details):
         stats["bible_study_v1_sessions_checked"] += 1
         if _bible_study_session_has_legacy_scope_fields(session):
             stats["bible_study_v1_sessions_with_legacy_scope_fields_set"] += 1
+        if session.district_id:
+            stats["bible_study_v1_sessions_with_district_id"] += 1
+        if session.small_group_id:
+            stats["bible_study_v1_sessions_with_small_group_id"] += 1
         _append(
             details,
             "bible_study_v1_session",
@@ -647,13 +658,21 @@ def _scan_bible_study(stats, details):
     stats["bible_study_v1_pilot_records_present"] = stats[
         "bible_study_v1_sessions_checked"
     ]
+    stats["bible_study_v1_guides_checked"] = BibleStudyGuide.objects.count()
+    stats["bible_study_v1_worship_songs_checked"] = (
+        BibleStudyWorshipSong.objects.count()
+    )
+    stats["bible_study_v1_child_rows_purge_pending"] = (
+        stats["bible_study_v1_guides_checked"]
+        + stats["bible_study_v1_worship_songs_checked"]
+    )
     # BS-V1-RETIRE.1A: V1 app-level runtime is retired for ordinary users and
     # managers. Remaining pilot rows are data-retirement/purge work, not app
     # visibility blockers.
     stats["bible_study_v1_app_runtime_retired"] = 1
     stats["bible_study_v1_purge_pending"] = stats[
         "bible_study_v1_sessions_checked"
-    ]
+    ] + stats["bible_study_v1_child_rows_purge_pending"]
     stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
     stats["bible_study_structure_native_readiness_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
@@ -865,6 +884,13 @@ class Command(BaseCommand):
             "legacy_object_row_status: remaining SmallGroup, District, and "
             "MinistryContext rows are final table-retirement blockers, not "
             "ordinary-member runtime visibility blockers."
+        )
+        write(
+            "legacy_bible_study_v1_status: app runtime/admin are retired; "
+            "remaining BibleStudySession rows, V1 child rows, and "
+            "BibleStudySession.district / small_group schema are explicit "
+            "purge/schema blockers until a future approved purge plus separate "
+            "schema migration."
         )
         write("")
         write("diagnostic/backfill commands (support tooling, not runtime blockers):")

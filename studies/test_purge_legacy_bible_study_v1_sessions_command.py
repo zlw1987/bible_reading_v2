@@ -5,7 +5,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit, District, SmallGroup
 from studies.models import (
     BibleStudyGuide,
     BibleStudyLesson,
@@ -36,6 +36,16 @@ class PurgeLegacyBibleStudyV1SessionsCommandTests(TestCase):
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="R4",
             name="Rainbow 4",
+        )
+        self.district_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="District 1",
+        )
+        self.district = District.objects.create(
+            name="District 1",
+            church_structure_unit=self.district_unit,
         )
         self.group = SmallGroup.objects.create(
             name="Rainbow 4",
@@ -80,7 +90,8 @@ class PurgeLegacyBibleStudyV1SessionsCommandTests(TestCase):
         )
         meeting = BibleStudyMeeting.objects.create(
             lesson=lesson,
-            small_group=self.group,
+            anchor_unit=self.group_unit,
+            generation_key=f"normal-unit:{self.group_unit.id}",
             meeting_datetime=self.now + timezone.timedelta(days=7),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
@@ -121,7 +132,38 @@ class PurgeLegacyBibleStudyV1SessionsCommandTests(TestCase):
         self.assertIn("v1_sessions_matched: 1", output)
         self.assertIn("v1_guides_matched: 1", output)
         self.assertIn("v1_worship_songs_matched: 1", output)
+        self.assertIn("v1_sessions_scope_type_global: 0", output)
+        self.assertIn("v1_sessions_scope_type_district: 0", output)
+        self.assertIn("v1_sessions_scope_type_small_group: 1", output)
+        self.assertIn("v1_sessions_with_district_id: 0", output)
+        self.assertIn("v1_sessions_with_small_group_id: 1", output)
+        self.assertIn("unexpected_inbound_dependency_rows: 0", output)
         self.assertIn("v2_meetings_deleted: 0", output)
+
+    def test_dry_run_reports_scope_and_legacy_fk_distribution(self):
+        self.make_v1_session()
+        self.make_v1_session(
+            title="Legacy District Session",
+            scope_type=BibleStudySession.SCOPE_DISTRICT,
+            district=self.district,
+            small_group=None,
+        )
+        self.make_v1_session(
+            title="Legacy Global Session",
+            scope_type=BibleStudySession.SCOPE_GLOBAL,
+            district=None,
+            small_group=None,
+        )
+
+        output = self.run_command()
+
+        self.assertIn("v1_sessions_matched: 3", output)
+        self.assertIn("v1_sessions_scope_type_global: 1", output)
+        self.assertIn("v1_sessions_scope_type_district: 1", output)
+        self.assertIn("v1_sessions_scope_type_small_group: 1", output)
+        self.assertIn("v1_sessions_with_district_id: 1", output)
+        self.assertIn("v1_sessions_with_small_group_id: 1", output)
+        self.assertIn("unexpected_inbound_dependency_rows: 0", output)
 
     def test_apply_without_confirmation_fails_and_deletes_nothing(self):
         session = self.make_v1_session()

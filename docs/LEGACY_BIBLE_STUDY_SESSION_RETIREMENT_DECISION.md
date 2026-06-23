@@ -6,7 +6,7 @@ This began as a docs-only decision record. It clarifies the boundary between Bib
 
 CS-CORE.3C did not authorize any runtime, template, URL, form, model, schema, migration, permission, admin, test-behavior, or data change. CS-CORE.3D is the separately approved runtime slice for freezing app-level V1 creation only.
 
-> **Current-state update — BS-V1-ADMIN-RETIRE.1A (admin-only):** the active Django Admin surface for legacy V1 was retired. `BibleStudySessionAdmin` and the V1-only child admins `BibleStudyGuideAdmin` / `BibleStudyWorshipSongAdmin` were **unregistered** in `studies/admin.py`, so staff can no longer create/edit/delete/maintain V1 sessions or V1-only guide/worship rows through Django Admin. This was admin-only: no V1 data was deleted, no V1 model/table/field was removed, the guarded `purge_legacy_bible_study_v1_sessions` command was not run with `--apply`, and no V2 admin/runtime/schema/data changed (V2 `BibleStudyMeeting` admin is unaffected). The schema-retirement audit now classifies the V1 `BibleStudySession` candidate as `blocked_by_diagnostic_tooling` (purge/audit tooling, test fixtures, and immutable historical migrations) rather than `blocked_by_display_or_admin`. Local/dev V1 data blockers remain 0; V1 model/table/schema removal stays a later separately approved slice. Sentences below that describe `BibleStudySessionAdmin` / Django Admin as still present are historical as of this update.
+> **Current-state update — BS-V1-ADMIN-RETIRE.1A / BS-V1-SCHEMA-RETIRE-GATE.1A:** the active Django Admin surface for legacy V1 was retired. `BibleStudySessionAdmin` and the V1-only child admins `BibleStudyGuideAdmin` / `BibleStudyWorshipSongAdmin` were **unregistered** in `studies/admin.py`, so staff can no longer create/edit/delete/maintain V1 sessions or V1-only guide/worship rows through Django Admin. This was admin-only: no V1 data was deleted, no V1 model/table/field was removed, the guarded `purge_legacy_bible_study_v1_sessions` command was not run with `--apply`, and no V2 admin/runtime/schema/data changed (V2 `BibleStudyMeeting` admin is unaffected). `BS-V1-SCHEMA-RETIRE-GATE.1A` then hardened the dry-run purge preflight and retirement audits so V1 `BibleStudySession` rows, V1-only child rows, `BibleStudySession.small_group`, and `BibleStudySession.district` are explicit purge/schema blockers for later `SmallGroup` / `District` table retirement. V1 app runtime/admin remain retired; V1 model/table/schema removal stays a later separately approved slice. Sentences below that describe `BibleStudySessionAdmin` / Django Admin as still present are historical as of this update.
 
 Related docs:
 
@@ -146,7 +146,7 @@ BS-V1-RETIRE.1A fully retires legacy V1 `BibleStudySession` from app-level runti
 
 BS-V1-PURGE.1A adds `purge_legacy_bible_study_v1_sessions` as guarded cleanup tooling for retired V1 pilot data.
 
-- Dry-run is the default and reports matched V1 `BibleStudySession`, `BibleStudyGuide`, and `BibleStudyWorshipSong` rows without writing anything.
+- Dry-run is the default and reports matched V1 `BibleStudySession`, `BibleStudyGuide`, and `BibleStudyWorshipSong` rows without writing anything. The preflight also reports session counts by `scope_type`, sessions with `district_id`, sessions with `small_group_id`, and unexpected inbound dependency rows, so future apply approval can review V1 schema/table-retirement blockers before any destructive action.
 - Destructive mode requires both `--apply` and `--confirm-v1-bible-study-retirement`.
 - The command is not called by runtime code and should not be run with `--apply` against the local/dev database during the implementation task.
 - The explicit apply command is:
@@ -156,8 +156,8 @@ BS-V1-PURGE.1A adds `purge_legacy_bible_study_v1_sessions` as guarded cleanup to
   ```
 
 - The command does not delete `BibleStudySeries`, `BibleStudyLesson`, `BibleStudyMeeting`, `BibleStudyMeetingAudienceScope`, `BibleStudyMeetingRole`, `BibleStudyMeetingWorshipSong`, or church-structure rows, and it does not change V2 behavior.
-- Until the guarded apply succeeds, `audit_legacy_structure_retirement_readiness` counts purge-pending V1 rows as data/table-retirement blockers while keeping V1 app-runtime blocker counters at zero.
-- The V1 models/tables remain in schema after the purge tooling; schema cleanup is a later migration slice.
+- Until the guarded apply succeeds, `audit_legacy_structure_retirement_readiness` counts purge-pending V1 session rows and V1 child rows as data/table-retirement blockers while keeping V1 app-runtime blocker counters at zero.
+- The V1 models/tables and the V1 `district` / `small_group` schema fields remain after the purge tooling; schema cleanup is a later migration slice.
 
 ## 6. Non-Goals
 

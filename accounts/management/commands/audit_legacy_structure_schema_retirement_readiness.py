@@ -22,7 +22,12 @@ from accounts.models import (
 )
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
-from studies.models import BibleStudyMeeting, BibleStudySession
+from studies.models import (
+    BibleStudyGuide,
+    BibleStudyMeeting,
+    BibleStudySession,
+    BibleStudyWorshipSong,
+)
 
 
 STATUS_READY = "ready_for_schema_removal"
@@ -30,6 +35,7 @@ STATUS_RUNTIME = "blocked_by_live_runtime"
 STATUS_WRITE = "blocked_by_app_write"
 STATUS_DISPLAY = "blocked_by_display_or_admin"
 STATUS_DATA = "blocked_by_data"
+STATUS_SCHEMA = "blocked_by_schema_fk_or_table"
 STATUS_DIAGNOSTIC = "blocked_by_diagnostic_tooling"
 STATUS_BRIDGE = "blocked_by_bridge_decision"
 STATUS_HISTORICAL = "historical_only"
@@ -51,6 +57,7 @@ STATUS_KEYS = (
     STATUS_WRITE,
     STATUS_DISPLAY,
     STATUS_DATA,
+    STATUS_SCHEMA,
     STATUS_DIAGNOSTIC,
     STATUS_BRIDGE,
     STATUS_HISTORICAL,
@@ -571,17 +578,61 @@ CANDIDATE_DEFINITIONS = (
         "test_fixture_references": _refs("V1 retirement/purge fixtures"),
         "migration_history_references": _refs("studies migrations"),
         "data_counter": "v1_sessions",
+        "schema_fk_or_table_blocker": True,
         "recommended_next_action": (
             "BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface "
             "(BibleStudySessionAdmin and the V1-only BibleStudyGuideAdmin / "
             "BibleStudyWorshipSongAdmin were unregistered), so V1 no longer has "
             "an active display/admin blocker. V1 app-level runtime was already "
             "retired (BS-V1-RETIRE.1A). Do not migrate V1 to membership-core. "
-            "Purge any remaining pilot/archive rows only through the guarded V1 "
-            "purge command (purge_legacy_bible_study_v1_sessions), then plan a "
-            "later separate schema slice to remove the V1 model/table; until "
-            "then the remaining references are purge/audit tooling, test "
-            "fixtures, and immutable historical migrations."
+            "The stored scope_type, district, and small_group fields remain "
+            "schema-retirement blockers for V1 and, where populated, for "
+            "District / SmallGroup table retirement. Purge any remaining "
+            "pilot/archive rows only through the guarded V1 purge command "
+            "(purge_legacy_bible_study_v1_sessions), then plan a later separate "
+            "schema slice to remove the V1 model/table and fields; until then "
+            "the remaining references are purge/audit tooling, test fixtures, "
+            "and immutable historical migrations."
+        ),
+        "suggested_removal_phase": "phase 5",
+    },
+    {
+        "candidate_name": "BibleStudyGuide (V1 child table)",
+        "model_table": "studies.BibleStudyGuide",
+        "field_name": "session",
+        "candidate_type": "model/table",
+        "diagnostic_cleanup_references": _refs(
+            "purge_legacy_bible_study_v1_sessions",
+        ),
+        "test_fixture_references": _refs("V1 purge fixtures"),
+        "migration_history_references": _refs("studies migrations"),
+        "data_counter": "v1_guides",
+        "schema_fk_or_table_blocker": True,
+        "recommended_next_action": (
+            "V1 child data must be cleaned up only by the guarded V1 purge path "
+            "after explicit user approval. Do not keep or migrate this table as "
+            "membership-core; after purge, remove it only in a later schema "
+            "migration slice together with the V1 session table."
+        ),
+        "suggested_removal_phase": "phase 5",
+    },
+    {
+        "candidate_name": "BibleStudyWorshipSong (V1 child table)",
+        "model_table": "studies.BibleStudyWorshipSong",
+        "field_name": "session",
+        "candidate_type": "model/table",
+        "diagnostic_cleanup_references": _refs(
+            "purge_legacy_bible_study_v1_sessions",
+        ),
+        "test_fixture_references": _refs("V1 purge fixtures"),
+        "migration_history_references": _refs("studies migrations"),
+        "data_counter": "v1_worship_songs",
+        "schema_fk_or_table_blocker": True,
+        "recommended_next_action": (
+            "V1 child data must be cleaned up only by the guarded V1 purge path "
+            "after explicit user approval. Do not keep or migrate this table as "
+            "membership-core; after purge, remove it only in a later schema "
+            "migration slice together with the V1 session table."
         ),
         "suggested_removal_phase": "phase 5",
     },
@@ -733,6 +784,8 @@ def _data_counts():
         .exclude(generation_key="")
         .count(),
         "v1_sessions": BibleStudySession.objects.count(),
+        "v1_guides": BibleStudyGuide.objects.count(),
+        "v1_worship_songs": BibleStudyWorshipSong.objects.count(),
         "reflection_structure_unit_at_post": ReflectionComment.objects.filter(
             structure_unit_at_post__isnull=False
         ).count(),
@@ -749,6 +802,8 @@ def _status_for(candidate):
         return STATUS_WRITE
     if candidate["data_blocker_count"]:
         return STATUS_DATA
+    if candidate.get("schema_fk_or_table_blocker"):
+        return STATUS_SCHEMA
     if candidate["admin_references"] or candidate["template_display_references"]:
         return STATUS_DISPLAY
     if candidate["diagnostic_cleanup_references"]:

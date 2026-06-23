@@ -6,7 +6,8 @@ ordinary-member authority. The command inventories those rows and the live code
 surfaces that still justify keeping the old models as a bridge.
 
 It is deliberately read-only. It has no ``--apply`` option, writes no rows,
-changes no runtime behavior, and does not recommend deleting rows blindly.
+changes no runtime behavior, and points destructive row-retirement work to the
+separate dry-run-first ``purge_legacy_structure_object_rows`` gate.
 """
 
 from collections import Counter, OrderedDict
@@ -110,6 +111,14 @@ CONSUMER_INVENTORY = (
         "accounts/events/reading/studies management commands",
         CATEGORY_DIAGNOSTIC_SUPPORT,
         "read-only audits and dry-run-first cleanup/backfill support",
+    ),
+    (
+        "purge_legacy_structure_object_rows",
+        "accounts.management.commands.purge_legacy_structure_object_rows",
+        CATEGORY_DIAGNOSTIC_SUPPORT,
+        "guarded dry-run-first final preflight/apply path for deleting only "
+        "SmallGroup, District, and MinistryContext object rows after explicit "
+        "confirmation",
     ),
     (
         "Historical migrations and focused fixtures",
@@ -445,6 +454,15 @@ class Command(BaseCommand):
         write(
             "legacy_rows_status: compatibility/mapping/admin/diagnostic bridge "
             "until a later approved row/table retirement slice"
+        )
+        write(
+            "next_purge_gate_command: purge_legacy_structure_object_rows "
+            "--verbose --limit 50"
+        )
+        write(
+            "next_purge_gate_safety: dry-run by default; future apply requires "
+            "--apply --confirm-legacy-structure-object-row-retirement and must "
+            "not delete ChurchStructureUnit or runtime product rows"
         )
         write(
             "legacy_bible_study_v1_schema_status: V1 BibleStudySession, "

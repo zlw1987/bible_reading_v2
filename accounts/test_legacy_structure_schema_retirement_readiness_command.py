@@ -277,6 +277,27 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
 
         self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
         self.assertEqual(candidate["live_runtime_references"], ())
+        self.assertIn(
+            "purge_legacy_structure_object_rows",
+            candidate["diagnostic_cleanup_references"],
+        )
+
+    def test_legacy_object_tables_recommend_guarded_purge_gate(self):
+        audit = run_audit()
+        for name in (
+            "SmallGroup model/table",
+            "District model/table",
+            "MinistryContext model/table",
+        ):
+            candidate = _candidate(audit, name)
+            self.assertIn(
+                "purge_legacy_structure_object_rows",
+                candidate["diagnostic_cleanup_references"],
+            )
+            self.assertIn(
+                "final table-retirement blockers",
+                candidate["recommended_next_action"],
+            )
 
     def test_migration_history_is_distinguished_from_live_code_blockers(self):
         audit = run_audit()

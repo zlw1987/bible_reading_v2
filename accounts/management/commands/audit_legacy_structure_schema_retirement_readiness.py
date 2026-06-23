@@ -106,14 +106,17 @@ CANDIDATE_DEFINITIONS = (
         ),
         "diagnostic_cleanup_references": _refs(
             "audit_legacy_structure_object_row_retirement",
+            "purge_legacy_structure_object_rows",
         ),
         "test_fixture_references": _refs("many focused visibility/cleanup fixtures"),
         "migration_history_references": _refs("accounts/studies/events/comments migrations"),
         "data_counter": "small_group_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Keep as bridge/admin/diagnostic context "
-            "until remaining display/setup/table-retirement dependencies and "
-            "mapping decisions are retired or replaced. "
+            "Do not remove table yet. Remaining rows are final table-retirement "
+            "blockers, not ordinary runtime authority. Run the guarded "
+            "purge_legacy_structure_object_rows dry-run as the explicit "
+            "preflight/apply path, then keep the table until later schema "
+            "removal is separately approved. "
             "PROFILE-SG-FIELD-RETIRE.1A removed the Profile.small_group inbound FK "
             "and LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the SmallGroup.district "
             "parent FK; normal Bible Study V2 generation is not a SmallGroup "
@@ -180,13 +183,17 @@ CANDIDATE_DEFINITIONS = (
         "admin_references": _refs("accounts.admin.DistrictAdmin"),
         "diagnostic_cleanup_references": _refs(
             "audit_legacy_structure_object_row_retirement",
+            "purge_legacy_structure_object_rows",
         ),
         "test_fixture_references": _refs("legacy district fixtures"),
         "migration_history_references": _refs("accounts/events/studies migrations"),
         "data_counter": "district_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Resolve object rows, inbound FKs, and the "
-            "UNASSIGNED-GROUPS placeholder decision first. "
+            "Do not remove table yet. Remaining rows are final table-retirement "
+            "blockers, not ordinary runtime authority. Resolve object rows, "
+            "inbound FKs, and the UNASSIGNED-GROUPS placeholder decision through "
+            "the guarded purge_legacy_structure_object_rows dry-run/apply gate "
+            "before any later schema-removal slice. "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
             "SmallGroup.district and District.ministry_context parent FKs."
         ),
@@ -250,13 +257,17 @@ CANDIDATE_DEFINITIONS = (
         "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
         "diagnostic_cleanup_references": _refs(
             "audit_legacy_structure_object_row_retirement",
+            "purge_legacy_structure_object_rows",
         ),
         "test_fixture_references": _refs("ministry-context display/cleanup fixtures"),
         "migration_history_references": _refs("accounts/events/studies migrations"),
         "data_counter": "ministry_context_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Finish remaining MinistryContext bridge "
-            "decisions first. ServiceEvent.ministry_context display cleanup is "
+            "Do not remove table yet. Remaining rows are final table-retirement "
+            "blockers, not ordinary runtime authority. Run the guarded "
+            "purge_legacy_structure_object_rows dry-run/apply gate before any "
+            "later MinistryContext model/table removal. "
+            "ServiceEvent.ministry_context display cleanup is "
             "complete (SERVICE-EVENT-CONTEXT.1C removed the FK), and "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
             "District.ministry_context parent FK."
@@ -697,6 +708,7 @@ CANDIDATE_DEFINITIONS = (
         "diagnostic_cleanup_references": _refs(
             "audit_legacy_structure_retirement_readiness",
             "audit_legacy_structure_object_row_retirement",
+            "purge_legacy_structure_object_rows",
             "audit_bible_study_generation_bridge_retirement",
             "cleanup_* guarded dry-run-first commands",
         ),
@@ -974,8 +986,10 @@ class Command(BaseCommand):
             "church_structure_unit bridge FKs and resolver dependencies."
         )
         write(
-            "  5. Remove legacy object rows/tables last, after all inbound FKs and "
-            "bridge decisions are resolved."
+            "  5. Run purge_legacy_structure_object_rows dry-run, review "
+            "UNASSIGNED-GROUPS and collector safety, then remove legacy object "
+            "rows only under explicit confirmation; table/model/mapping-FK "
+            "schema removal remains a later slice."
         )
 
         if not verbose:

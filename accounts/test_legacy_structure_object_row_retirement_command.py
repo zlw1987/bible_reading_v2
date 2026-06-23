@@ -198,6 +198,14 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
             "legacy_bible_study_v1_schema_status",
             out.getvalue(),
         )
+        self.assertIn(
+            "next_purge_gate_command: purge_legacy_structure_object_rows",
+            out.getvalue(),
+        )
+        self.assertIn(
+            "--confirm-legacy-structure-object-row-retirement",
+            out.getvalue(),
+        )
 
     def test_verbose_output_does_not_print_private_free_text(self):
         out = StringIO()
@@ -211,5 +219,6 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
 
         output = out.getvalue()
         self.assertIn("consumer inventory:", output)
+        self.assertIn("purge_legacy_structure_object_rows", output)
         self.assertIn("row examples:", output)
         self.assertNotIn("DO NOT PRINT PRIVATE", output)

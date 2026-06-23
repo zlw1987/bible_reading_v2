@@ -6,6 +6,8 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 
 > **Current-state supersession — BS-V1-SCHEMA-RETIRE.1A:** the final sentence above is historical for V1. BS-V1-SCHEMA-RETIRE.1A removes `BibleStudySession`, `BibleStudyGuide`, and `BibleStudyWorshipSong` models/tables behind a migration guard after local/current preflight reported zero V1 session rows, zero V1 child rows, zero V1 scope/FK counters, zero unexpected inbound dependency rows, and `data_mutated: false`. V1 no longer actively blocks final `SmallGroup` / `District` table retirement after that guarded migration is applied. Remaining blockers are the legacy `SmallGroup` / `District` / `MinistryContext` rows/tables, their `church_structure_unit` mapping FKs, admin/diagnostic/setup surfaces, and the `UNASSIGNED-GROUPS` decision.
 
+> **Current-state supersession — LEGACY-OBJECT-ROW-PURGE-GATE.1A:** `purge_legacy_structure_object_rows` now exists as the guarded dry-run-first final preflight/apply path for the remaining legacy `SmallGroup` / `District` / `MinistryContext` object rows. Dry-run reports row counts, mapped/unmapped/wrong-type/inactive mapping counts, special `UNASSIGNED-GROUPS` decision rows, deletion-collector safety, protected runtime-row counters, and `data_mutated: false`. Future apply is destructive and requires both `--apply` and `--confirm-legacy-structure-object-row-retirement`; it deletes only the three legacy object row types, must not delete `ChurchStructureUnit` rows or runtime product rows, and must abort if unexpected inbound dependencies appear. Row purge remains separate from later model/table and `church_structure_unit` mapping-FK schema removal; do not run apply automatically.
+
 New audit command:
 
 ```powershell
@@ -41,6 +43,24 @@ bridge/admin/diagnostic role, not ordinary-member runtime visibility authority.
 `ChurchStructureMembership` is the canonical belonging source for migrated
 ordinary-member paths. The legacy rows must not be used as ordinary-member
 visibility authority. Final table/field deletion is not approved yet.
+
+Guarded object-row purge/preflight command:
+
+```powershell
+.venv\Scripts\python.exe manage.py purge_legacy_structure_object_rows
+```
+
+LEGACY-OBJECT-ROW-PURGE-GATE.1A adds this dry-run-first command for the same
+remaining object rows. It has `--apply`, but future apply requires the explicit
+`--confirm-legacy-structure-object-row-retirement` flag. Dry-run and apply use
+the same collected deletion plan; apply must abort if the deletion collector
+would touch anything outside `SmallGroup`, `District`, and `MinistryContext`
+rows or would require protected field updates/fast deletes. The command never
+deletes `ChurchStructureUnit` rows, users, memberships, roles, ServiceEvents,
+Bible Study V2 rows, prayers, reflections/comments, group-progress/runtime data,
+or TeamAssignment / My Serving data. `UNASSIGNED-GROUPS` is reported as a
+special final-retirement decision row rather than normalized as a real district.
+This command does not approve table/model removal or mapping-FK schema removal.
 
 Schema-retirement preparation inventory command:
 
@@ -322,6 +342,7 @@ Each row is classified into exactly one LEGACY-RETIRE.1A category.
 | Role explicit structure scope | `ChurchRoleAssignment.structure_unit` | already runtime-retired / historical only | Current non-global role runtime scope source; membership is not used to infer role scope. |
 | Legacy bridge mappings | `MinistryContext.church_structure_unit`, `District.church_structure_unit`, `SmallGroup.church_structure_unit` | setup/admin/diagnostic bridge | Still needed for setup diagnostics, remaining bridge/admin surfaces, object-row retirement planning, and historical/test compatibility. Normal Bible Study V2 generation is structure-native and no longer depends on these mappings. |
 | Legacy object-row retirement inventory | `accounts.management.commands.audit_legacy_structure_object_row_retirement` | final table-retirement blocker / diagnostic tooling | Read-only inventory for remaining `SmallGroup`, `District`, and `MinistryContext` rows. It classifies consumers, reports mapped/unmapped/inactive/wrong-type rows, reports row existence as final table-retirement blockers rather than ordinary-member runtime blockers, and highlights the `UNASSIGNED-GROUPS` custom-unit placeholder decision without deleting rows or changing schema/runtime behavior. |
+| Legacy object-row purge gate | `accounts.management.commands.purge_legacy_structure_object_rows` | guarded final preflight / destructive apply path | Dry-run by default. Future apply requires `--apply --confirm-legacy-structure-object-row-retirement`, deletes only `SmallGroup`, `District`, and `MinistryContext` rows, and aborts if the deletion plan would touch `ChurchStructureUnit` or runtime product rows. Row purge is separate from later model/table and mapping-FK schema removal. |
 | Legacy structure parent/context links | `SmallGroup.district`, `District.ministry_context` (**removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A**) | removed / historical only | **Removed in LEGACY-PARENT-FK-FIELD-RETIRE.1A** (migration `accounts/0013`) after LEGACY-OBJECT-ADMIN-FK.1A/1B retired their admin display and LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver fallback read; target-DB dry-run confirmed 0 links present (`data_blocker_count=0`). The canonical hierarchy is `ChurchStructureUnit.parent` via the `church_structure_unit` mapping bridge. The guarded `cleanup_legacy_structure_parent_links` command (its only purpose being to clear these two fields) was retired with them, and `seed_church_structure_units` no longer reconstructs the `District` / `SmallGroup` hierarchy from raw legacy links. The legacy-parity resolver `resolve_units_to_small_groups()` now maps through `SmallGroup.church_structure_unit` only. Only immutable historical migrations still name these fields; the `SmallGroup` / `District` / `MinistryContext` rows/tables and `church_structure_unit` mapping FKs remain. |
 | ServiceEvent Host / Language display | `ServiceEvent.host_language_unit`, `events.templatetags.event_extras.event_host_language_label`, `events.ministry_context_display` | removed / historical only (display now structure-native) | **`ServiceEvent.ministry_context` was removed in SERVICE-EVENT-CONTEXT.1C** (migration `events/0008`). "Host / Language" display now uses structure-native `ServiceEvent.host_language_unit`, then an audience-derived `ChurchStructureUnit.parent` fallback; `host_language_unit` is display-only and does not control audience/visibility. The display-only backfill/cleanup tooling (`backfill_service_event_host_language_units`, `cleanup_service_event_ministry_context_labels`) was retired with the field. This did not remove the `MinistryContext` table, whose row/table retirement remains a later decision. |
 | `Profile.small_group` field removal | `accounts.models.Profile.small_group`, `ProfileAdmin` | completed field-level removal | **Done in PROFILE-SG-FIELD-RETIRE.1A** (migration `accounts/0012`). No normal app-level write remained; preflight audits confirmed zero populated values and no live runtime/app-write/display/admin dependency. Belonging is `ChurchStructureMembership`. Staff/admin/template display surfaces, the profile cleanup/belonging-drift/backfill/shadow tooling, and the legacy profile selector helpers were retired with the field. `SmallGroup`/`District`/`MinistryContext` tables were untouched. |
@@ -542,7 +563,15 @@ Blockers:
    runtime blockers. The current recommendation is conservative: keep the rows
    as a bridge until a separate final-retirement slice is approved, and treat
    `UNASSIGNED-GROUPS` as a special placeholder decision.
-12. Plan `SmallGroup` / `District` / `MinistryContext` table/field retirement last, after all FK references and bridge consumers are gone or explicitly archived.
+12. Run `purge_legacy_structure_object_rows --verbose --limit 50` as the guarded
+   final row-purge dry-run before any destructive decision. Review the row
+   counts, protected deletion counters, collector safety, and
+   `UNASSIGNED-GROUPS` decision. Future apply is destructive and requires
+   `--apply --confirm-legacy-structure-object-row-retirement`; do not run apply
+   automatically.
+13. Plan `SmallGroup` / `District` / `MinistryContext` table/model and
+   `church_structure_unit` mapping-FK retirement last, after row purge and all
+   bridge consumers are gone or explicitly archived.
 
 ## Verification for LEGACY-RETIRE.1A
 
@@ -567,6 +596,13 @@ For ROW-RETIRE.1A, also run:
 ```powershell
 .venv\Scripts\python.exe manage.py test accounts.test_legacy_structure_object_row_retirement_command -v 2
 .venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 30
+```
+
+For LEGACY-OBJECT-ROW-PURGE-GATE.1A, also run:
+
+```powershell
+.venv\Scripts\python.exe manage.py test accounts.test_purge_legacy_structure_object_rows_command -v 2
+.venv\Scripts\python.exe manage.py purge_legacy_structure_object_rows --verbose --limit 50
 ```
 
 For LEGACY-SCHEMA-PREP.1A, also run:

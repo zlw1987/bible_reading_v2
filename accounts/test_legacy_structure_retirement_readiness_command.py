@@ -252,6 +252,11 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertIn("bible_study_v1_purge_pending: 0", out.getvalue())
         self.assertIn("bible_study_v1_child_rows_purge_pending: 0", out.getvalue())
         self.assertIn("legacy_bible_study_v1_status", out.getvalue())
+        self.assertIn("legacy_object_row_purge_gate", out.getvalue())
+        self.assertIn(
+            "accounts.management.commands.purge_legacy_structure_object_rows",
+            out.getvalue(),
+        )
         self.assertNotIn(
             "studies.management.commands.purge_legacy_bible_study_v1_sessions",
             out.getvalue(),

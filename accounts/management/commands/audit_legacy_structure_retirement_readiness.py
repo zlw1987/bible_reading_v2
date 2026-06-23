@@ -204,6 +204,14 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
             "decision"
         ),
     ),
+    (
+        "accounts.management.commands.purge_legacy_structure_object_rows",
+        (
+            "guarded dry-run-first final preflight/apply gate for deleting only "
+            "SmallGroup, District, and MinistryContext rows after explicit "
+            "confirmation; not runtime authority and not table/schema removal"
+        ),
+    ),
     # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district /
     # District.ministry_context together with their only guarded cleanup tooling
     # (cleanup_legacy_structure_parent_links), so it is no longer listed here.
@@ -845,6 +853,12 @@ class Command(BaseCommand):
             "legacy_object_row_status: remaining SmallGroup, District, and "
             "MinistryContext rows are final table-retirement blockers, not "
             "ordinary-member runtime visibility blockers."
+        )
+        write(
+            "legacy_object_row_purge_gate: purge_legacy_structure_object_rows is "
+            "the dry-run-first preflight path; future apply requires --apply "
+            "--confirm-legacy-structure-object-row-retirement and must not "
+            "delete ChurchStructureUnit or runtime product rows."
         )
         write(
             "legacy_bible_study_v1_status: app runtime/admin are retired; "

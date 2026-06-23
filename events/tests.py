@@ -1501,7 +1501,11 @@ class ServiceEventFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Audience")
         self.assertContains(response, "Youth Fellowship")
-        self.assertContains(
+        # SE-EVENT-LEGACY-WARNING-RETIRE.1A: the stale legacy-group warning was
+        # removed; ServiceEvent ordinary visibility is membership-core
+        # (audience rows + active primary membership), not legacy small-group
+        # resolution, so the "active legacy groups" note is no longer shown.
+        self.assertNotContains(
             response,
             "This selection currently matches no ordinary users because it is not mapped to active legacy groups.",
         )

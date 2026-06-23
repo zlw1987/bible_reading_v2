@@ -110,22 +110,6 @@ def event_effective_audience_labels(event, language):
 
 
 @register.filter
-def event_structure_audience_has_no_legacy_groups(event):
-    if not event:
-        return False
-
-    units = _audience_units(event)
-    if not units:
-        return False
-    if any(unit.unit_type == "root" for unit in units):
-        return False
-
-    from studies.models import resolve_units_to_small_groups
-
-    return not resolve_units_to_small_groups(units).exists()
-
-
-@register.filter
 def event_host_language_label(event, language):
     """Host/language ("ministry context") label with structure-native fallback.
 

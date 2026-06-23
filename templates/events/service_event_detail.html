@@ -105,12 +105,6 @@
     </p>
     {% endif %}
 
-    {% if event|event_structure_audience_has_no_legacy_groups %}
-    <p class="muted">
-        {% if language == "zh" %}此选择目前没有匹配到普通用户，因为它尚未映射到启用的小组。{% else %}This selection currently matches no ordinary users because it is not mapped to active legacy groups.{% endif %}
-    </p>
-    {% endif %}
-
     {% if event.rotation_anchor_team_id %}
     <p>
         <strong>{% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:</strong>

@@ -9,14 +9,9 @@ from .models import (
 )
 
 # BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface for the legacy
-# V1 Bible Study path. ``BibleStudySession`` and its V1-only child models
-# ``BibleStudyGuide`` / ``BibleStudyWorshipSong`` are intentionally NOT
-# registered: V1 app-level runtime is already retired (BS-V1-RETIRE.1A) and
-# there is no longer a staff create/edit/delete/maintenance surface for V1
-# sessions. The models, tables, and rows are unchanged; remaining V1 rows are
-# purged only through the guarded ``purge_legacy_bible_study_v1_sessions``
-# command, and V1 model/table/schema removal stays a later separate slice.
-# Do not re-register these admins. The active V2 path uses ``BibleStudyMeeting``.
+# V1 Bible Study path, and BS-V1-SCHEMA-RETIRE.1A removes the V1 models/tables
+# behind a guarded migration. Do not reintroduce ``BibleStudySession`` or its
+# V1-only child admins. The active V2 path uses ``BibleStudyMeeting``.
 
 
 @admin.register(BibleStudySeries)
@@ -151,7 +146,6 @@ class BibleStudyMeetingRoleAdmin(admin.ModelAdmin):
         )
 
 
-# NOTE: BibleStudyGuideAdmin and BibleStudyWorshipSongAdmin (the V1-only child
-# models keyed on BibleStudySession) were unregistered in BS-V1-ADMIN-RETIRE.1A
+# NOTE: the V1-only child admins were unregistered in BS-V1-ADMIN-RETIRE.1A
 # together with BibleStudySessionAdmin. See the module header. The active V2
 # worship surface is BibleStudyMeetingWorshipSongAdmin above.

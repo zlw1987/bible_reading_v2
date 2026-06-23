@@ -194,20 +194,20 @@ The active V2 stack (`studies/models.py`):
 - **`BibleStudyMeetingWorshipSong`** — per-meeting worship set (order, title,
   key, links, arrangement/support notes, worship-lead user/name fallback).
 
-Legacy V1 stack, retired from app runtime (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`):
+Legacy V1 stack, removed by guarded schema retirement
+(`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`):
 
 - **`BibleStudySession`** (+ `BibleStudyGuide` one-to-one, +
-  `BibleStudyWorshipSong`). BS-V1-RETIRE.1A retires app-level V1 visibility for
+  `BibleStudyWorshipSong`). BS-V1-RETIRE.1A retired app-level V1 visibility for
   ordinary users and managers; `Profile.small_group` / `scope_type` / `district`
-  / `small_group` no longer grant V1 app access. App-level create/detail/edit/
-  delete/worship routes redirect with retirement messaging. **Decision: do not
-  migrate V1 to membership-core or to structure audience; it is pilot/archive
-  data pending explicit destructive purge, not part of this migration.**
-  BS-V1-SCHEMA-RETIRE-GATE.1A keeps the purge dry-run preflight explicit about
-  V1 session rows, V1 guide/worship child rows, `scope_type`, `district`, and
-  `small_group`; V1 `small_group` and `district` schema FKs continue to block
-  final `SmallGroup` / `District` table retirement until purge plus a later
-  separate V1 schema migration.
+  / `small_group` no longer granted V1 app access. **Decision: do not migrate V1
+  to membership-core, structure audience, or V2.** BS-V1-SCHEMA-RETIRE.1A then
+  removed the V1 models/tables behind migration `studies/0012` after local
+  preflight reported zero V1 session rows, zero V1 child rows, zero V1 scope/FK
+  counters, zero unexpected inbound dependency rows, and `data_mutated: false`.
+  The migration guard aborts on target DBs where any V1 rows remain. After the
+  guarded migration applies, V1 no longer actively blocks final `SmallGroup` /
+  `District` table retirement.
 
 ### 1.2 How weekly guides / questions are represented
 
@@ -268,8 +268,8 @@ slice (BS-STRUCT.1G).**
 
 | Concept | Where used in `studies/` |
 | --- | --- |
-| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, the manual-form source field, the preferred V2 display label source, a new-write mirror, or a generation/idempotency helper for normal V2 meetings.** `BibleStudyMeeting.small_group` and `BibleStudySeries.small_group` were removed; V1 `BibleStudySession.small_group` remains for V1 archive/schema context only. |
-| `District` | `BibleStudySession.district` remains for V1 archive/schema context only; `BibleStudySeries.district` was removed in BS-SERIES-FIELD-RETIRE.1A. |
+| `SmallGroup` | **No longer the V2 visibility / picker source, the manage-list filter, the manual-form source field, the preferred V2 display label source, a new-write mirror, or a generation/idempotency helper for normal V2 meetings.** `BibleStudyMeeting.small_group` and `BibleStudySeries.small_group` were removed; the former V1 `BibleStudySession.small_group` FK/schema is removed by BS-V1-SCHEMA-RETIRE.1A behind migration `studies/0012`'s target-DB guard. |
+| `District` | The former V1 `BibleStudySession.district` FK/schema is removed by BS-V1-SCHEMA-RETIRE.1A behind migration `studies/0012`'s target-DB guard; `BibleStudySeries.district` was removed in BS-SERIES-FIELD-RETIRE.1A. |
 | `Profile.small_group` | **Removed in PROFILE-SG-FIELD-RETIRE.1A.** No longer read by V2 meeting visibility or pickers, no longer grants V1 app access after BS-V1-RETIRE.1A, and no longer exists as a queryable comparator source. |
 | `ChurchStructureUnit` | `BibleStudySeriesAudienceScope.unit` (series audience), **`BibleStudyMeetingAudienceScope.unit` (meeting audience, V2 runtime source of truth)**, and **`BibleStudyMeeting.anchor_unit` (display/grouping/ownership)**. Legacy `SmallGroup.church_structure_unit` remains a bridge/admin/diagnostic mapping target outside V2 generation. |
 | `ChurchStructureMembership` | **The V2 runtime user-belonging source** for meeting visibility (`studies/visibility.py`, CS-CORE.2C-B) and for role/worship user pickers (CS-CORE.3B). Single active primary membership only; multiple/none fails closed. |
@@ -326,16 +326,17 @@ do not appear for ordinary users. `Profile.small_group` is not consulted.
   permissions yet (BS-V2.7 deferred). No automatic assignment, rotation,
   availability, swap, or reminders.
 
-### 1.8 Current V1 retired app paths
+### 1.8 Current V1 removed app/schema path
 
-V1 `BibleStudySession` create/detail/edit/delete/worship app routes redirect
-with retirement messaging after BS-V1-RETIRE.1A. Direct detail is no longer an
-app archive surface for ordinary users or managers. BS-V1-ADMIN-RETIRE.1A
-retired the active V1 Django Admin surface. Remaining V1 rows and V1-only child
-rows are pilot/archive cleanup context only; the guarded purge is explicit and
-destructive, and V1 schema/table removal remains a later migration slice. Do not
-migrate V1 rows to V2 or wire V1 visibility into membership-core as part of this
-cleanup path.
+V1 `BibleStudySession` direct create/detail/edit/delete/worship app routes,
+forms, and templates are removed after app-runtime retirement. The `/studies/`
+route name remains as the V2 landing surface. BS-V1-ADMIN-RETIRE.1A retired the
+active V1 Django Admin surface, and BS-V1-SCHEMA-RETIRE.1A removes
+`BibleStudySession`, `BibleStudyGuide`, and `BibleStudyWorshipSong` models/tables
+behind migration `studies/0012`'s row-count guard. The former guarded purge
+command is historical/retired with the models; target DBs with any V1 rows must
+handle that blocker before applying the schema migration. Do not migrate V1 rows
+to V2 or wire V1 visibility into membership-core as part of this cleanup path.
 **Out of scope for this migration** — see Section 7 open question on V1 data
 cleanup.
 
@@ -1361,10 +1362,12 @@ plan's hard work is concentrated in the meeting-audience representation
    was removed, and display/runtime paths use `anchor_unit` plus meeting
    audience rows instead.
 8. **Legacy V1 `BibleStudySession`.** Retired from app-level runtime by
-   BS-V1-RETIRE.1A. V1 is still not migrated into the new audience model and
-   should not be coupled to `BibleStudyMeetingAudienceScope` or membership-core.
-   Remaining V1 rows are pilot/archive data pending an explicit guarded purge.
-   Future work is purge/data cleanup, not V1 visibility migration.
+   BS-V1-RETIRE.1A and removed from active models/tables by
+   BS-V1-SCHEMA-RETIRE.1A behind migration `studies/0012`'s target-DB guard. V1
+   is still not migrated into the new audience model and should not be coupled
+   to `BibleStudyMeetingAudienceScope` or membership-core. Target DBs with any
+   V1 rows must resolve that blocker before applying the schema migration;
+   future work is not V1 visibility migration.
 9. **Group-specific guide customization.** Already exists (`group_direction` /
    `group_questions`); confirm whether the real workflow needs anything beyond
    these two fields before treating prep as "done for migration."

@@ -10,7 +10,6 @@ from accounts.management.commands.audit_legacy_structure_schema_retirement_readi
     Command,
     STATUS_DIAGNOSTIC,
     STATUS_HISTORICAL,
-    STATUS_SCHEMA,
     STATUS_WRITE,
     run_audit,
 )
@@ -23,10 +22,7 @@ from accounts.models import (
 from events.models import ServiceEvent
 from prayers.models import PrayerRequest
 from studies.models import (
-    BibleStudyGuide,
     BibleStudySeries,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 
 
@@ -178,8 +174,8 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertIn("Profile.small_group (removed)", output)
         self.assertIn("ServiceEvent.scope_type (removed)", output)
         self.assertIn("BibleStudyMeeting.small_group (removed)", output)
-        self.assertIn("BibleStudyGuide (V1 child table)", output)
-        self.assertIn("BibleStudyWorshipSong (V1 child table)", output)
+        self.assertIn("BibleStudyGuide (V1 child table removed)", output)
+        self.assertIn("BibleStudyWorshipSong (V1 child table removed)", output)
         self.assertIn("ReflectionComment.small_group_at_post", output)
         self.assertIn("PrayerRequest.small_group_at_post", output)
         self.assertIn("SmallGroup model/table", output)
@@ -450,19 +446,14 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
                 "not in legacy removal sequence",
             )
 
-    def test_bible_study_v1_session_admin_surface_is_retired(self):
-        # BS-V1-ADMIN-RETIRE.1A unregistered the active V1 Django Admin surface
-        # (BibleStudySessionAdmin and the V1-only BibleStudyGuideAdmin /
-        # BibleStudyWorshipSongAdmin), so the V1 BibleStudySession candidate no
-        # longer carries an active display/admin reference and is no longer
-        # classified as blocked_by_display_or_admin. With zero V1 rows in the
-        # test DB and no remaining admin/template surface, the V1 model/table
-        # and its legacy scope FKs still require a separate schema slice before
-        # final table retirement. That is a schema blocker, not live runtime,
-        # app write, display/admin, or ordinary visibility.
+    def test_bible_study_v1_session_schema_is_historical_after_model_removal(self):
+        # BS-V1-SCHEMA-RETIRE.1A removes the V1 model/table and legacy scope FKs
+        # behind a migration guard that aborts if target DB V1 rows remain. The
+        # live audit no longer imports the removed ORM models or treats their FKs
+        # as active SmallGroup/District table-retirement blockers.
         audit = run_audit()
         candidate = _candidate(
-            audit, "BibleStudySession (V1 model/table and scope fields)"
+            audit, "BibleStudySession (V1 model/table and scope fields removed)"
         )
 
         self.assertEqual(candidate["admin_references"], ())
@@ -470,36 +461,26 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(candidate["live_runtime_references"], ())
         self.assertEqual(candidate["app_write_references"], ())
         self.assertEqual(candidate["app_read_references"], ())
+        self.assertEqual(candidate["diagnostic_cleanup_references"], ())
         self.assertEqual(candidate["data_blocker_count"], 0)
-        self.assertGreater(len(candidate["diagnostic_cleanup_references"]), 0)
-        self.assertEqual(candidate["schema_removal_status"], STATUS_SCHEMA)
+        self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+        self.assertFalse(candidate["schema_removal_status"].startswith("blocked_by_"))
+        self.assertNotIn("v1_sessions", audit["data_counts"])
 
-    def test_bible_study_v1_child_tables_are_purge_schema_blockers(self):
-        series = BibleStudySeries.objects.create(title="Legacy V1 Series")
-        session = BibleStudySession.objects.create(
-            series=series,
-            title="Legacy V1 Session",
-            study_datetime=self.now + timezone.timedelta(days=3),
-            scope_type=BibleStudySession.SCOPE_GLOBAL,
-            status=BibleStudySession.STATUS_PUBLISHED,
-        )
-        BibleStudyGuide.objects.create(session=session)
-        BibleStudyWorshipSong.objects.create(
-            session=session,
-            sort_order=1,
-            title="Legacy Song",
-        )
-
+    def test_bible_study_v1_child_tables_are_historical_after_model_removal(self):
         audit = run_audit()
-        guide = _candidate(audit, "BibleStudyGuide (V1 child table)")
-        song = _candidate(audit, "BibleStudyWorshipSong (V1 child table)")
-
-        self.assertEqual(guide["data_blocker_count"], 1)
-        self.assertEqual(song["data_blocker_count"], 1)
-        self.assertGreater(len(guide["diagnostic_cleanup_references"]), 0)
-        self.assertGreater(len(song["diagnostic_cleanup_references"]), 0)
-        self.assertEqual(guide["schema_removal_status"], "blocked_by_data")
-        self.assertEqual(song["schema_removal_status"], "blocked_by_data")
+        for name, data_key in (
+            ("BibleStudyGuide (V1 child table removed)", "v1_guides"),
+            ("BibleStudyWorshipSong (V1 child table removed)", "v1_worship_songs"),
+        ):
+            candidate = _candidate(audit, name)
+            self.assertEqual(candidate["diagnostic_cleanup_references"], ())
+            self.assertEqual(candidate["data_blocker_count"], 0)
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
+            self.assertFalse(
+                candidate["schema_removal_status"].startswith("blocked_by_")
+            )
+            self.assertNotIn(data_key, audit["data_counts"])
 
     def test_legacy_parent_fks_are_historical_after_field_removal(self):
         # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy SmallGroup.district

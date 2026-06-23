@@ -18,11 +18,8 @@ from accounts.models import (
 )
 from events.models import ServiceEvent
 from studies.models import (
-    BibleStudyGuide,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 
 
@@ -85,24 +82,12 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             status=ServiceEvent.STATUS_PUBLISHED,
         )
 
-    def make_v1_session(self):
-        series = BibleStudySeries.objects.create(title="Legacy Schedule")
-        return BibleStudySession.objects.create(
-            series=series,
-            title="Legacy Session",
-            study_datetime=self.now + timezone.timedelta(days=3),
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-            status=BibleStudySession.STATUS_PUBLISHED,
-        )
-
     def test_reports_representative_retirement_blockers(self):
         # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so the audit no
         # longer carries profile-vs-membership drift counters; belonging is
         # membership-core.
         SmallGroup.objects.create(name="Unmapped Group")
         self.make_service_event()
-        self.make_v1_session()
         # ROLE-FIELD-RETIRE.1A: scoped roles are structure-native (explicit
         # structure_unit only) and no longer carry a legacy small_group field, so
         # a valid scoped assignment is not a role retirement blocker.
@@ -119,15 +104,15 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertNotIn("profile_membership_unit_mismatch_group_mapping", stats)
         self.assertNotIn("profiles_with_small_group_no_active_primary_membership", stats)
         self.assertEqual(stats["small_groups_without_church_structure_unit"], 1)
-        self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
-        self.assertEqual(stats["bible_study_v1_pilot_records_present"], 1)
+        self.assertEqual(stats["bible_study_v1_sessions_checked"], 0)
+        self.assertEqual(stats["bible_study_v1_pilot_records_present"], 0)
         self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
-        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 1)
+        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 0)
         self.assertEqual(stats["bible_study_v1_guides_checked"], 0)
         self.assertEqual(stats["bible_study_v1_worship_songs_checked"], 0)
         self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 0)
         self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
-        self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
+        self.assertEqual(stats["bible_study_v1_purge_pending"], 0)
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
         self.assertEqual(
             stats["service_event_zero_row_visible_active_safety_blockers"], 1
@@ -138,7 +123,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(
             stats["role_scoped_assignments_structure_unit_retirement_blockers"], 0
         )
-        self.assertGreater(stats["bible_study_legacy_retirement_blockers"], 0)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
     def test_service_event_ministry_context_no_longer_counted_after_field_removal(self):
         # SERVICE-EVENT-CONTEXT.1C removed ServiceEvent.ministry_context, so the
@@ -233,15 +218,12 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
     def test_command_is_read_only(self):
         self.make_user("readonly")
         event = self.make_service_event()
-        session = self.make_v1_session()
 
         before_event = (event.title, event.status)
-        before_session = (session.scope_type, session.district_id, session.small_group_id)
         before_counts = {
             "small_groups": SmallGroup.objects.count(),
             "memberships": ChurchStructureMembership.objects.count(),
             "service_events": ServiceEvent.objects.count(),
-            "sessions": BibleStudySession.objects.count(),
         }
 
         out = StringIO()
@@ -255,28 +237,22 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
 
         event.refresh_from_db()
-        session.refresh_from_db()
 
         self.assertEqual((event.title, event.status), before_event)
-        self.assertEqual(
-            (session.scope_type, session.district_id, session.small_group_id),
-            before_session,
-        )
         self.assertEqual(SmallGroup.objects.count(), before_counts["small_groups"])
         self.assertEqual(
             ChurchStructureMembership.objects.count(),
             before_counts["memberships"],
         )
         self.assertEqual(ServiceEvent.objects.count(), before_counts["service_events"])
-        self.assertEqual(BibleStudySession.objects.count(), before_counts["sessions"])
         self.assertIn("data_mutated: false", out.getvalue())
         self.assertIn("apply_option_present: false", out.getvalue())
-        self.assertIn("bible_study_v1_pilot_records_present: 1", out.getvalue())
+        self.assertIn("bible_study_v1_pilot_records_present: 0", out.getvalue())
         self.assertIn("bible_study_v1_app_runtime_retired: 1", out.getvalue())
-        self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())
+        self.assertIn("bible_study_v1_purge_pending: 0", out.getvalue())
         self.assertIn("bible_study_v1_child_rows_purge_pending: 0", out.getvalue())
         self.assertIn("legacy_bible_study_v1_status", out.getvalue())
-        self.assertIn(
+        self.assertNotIn(
             "studies.management.commands.purge_legacy_bible_study_v1_sessions",
             out.getvalue(),
         )
@@ -359,7 +335,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
 
 
-class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
+class LegacyStructureRetirementReadinessV1RemovedStateTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
         self.root = ChurchStructureUnit.objects.create(
@@ -368,64 +344,24 @@ class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
             name="Whole Church",
         )
 
-    def make_v1_only_purge_pending_session(self):
-        series = BibleStudySeries.objects.create(
-            title="Legacy Schedule With Audience",
-            status=BibleStudySeries.STATUS_PUBLISHED,
-        )
-        BibleStudySeriesAudienceScope.objects.create(
-            series=series,
-            unit=self.root,
-        )
-        return BibleStudySession.objects.create(
-            series=series,
-            title="Legacy Global Session",
-            study_datetime=self.now + timezone.timedelta(days=3),
-            scope_type=BibleStudySession.SCOPE_GLOBAL,
-            status=BibleStudySession.STATUS_PUBLISHED,
-        )
-
-    def test_v1_purge_pending_counts_as_data_retirement_blocker_not_runtime_blocker(self):
-        self.make_v1_only_purge_pending_session()
-
+    def test_v1_removed_state_is_not_data_or_runtime_blocker(self):
         audit = run_audit(now=self.now)
         stats = audit["stats"]
 
         self.assertEqual(stats["bible_study_v1_app_runtime_retired"], 1)
         self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
-        self.assertEqual(stats["bible_study_v1_purge_pending"], 1)
+        self.assertEqual(stats["bible_study_v1_purge_pending"], 0)
+        self.assertEqual(stats["bible_study_v1_sessions_checked"], 0)
         self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
         self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 0)
         self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 0)
         self.assertEqual(stats["bible_study_active_series_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_v2_meetings_without_audience_rows"], 0)
         self.assertEqual(stats["bible_study_normal_meetings_missing_generation_key"], 0)
-        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 1)
+        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
-    def test_v1_child_rows_count_as_purge_pending_cleanup_blockers(self):
-        session = self.make_v1_only_purge_pending_session()
-        BibleStudyGuide.objects.create(session=session)
-        BibleStudyWorshipSong.objects.create(
-            session=session,
-            sort_order=1,
-            title="Legacy Song",
-        )
-
-        audit = run_audit(now=self.now)
-        stats = audit["stats"]
-
-        self.assertEqual(stats["bible_study_v1_sessions_checked"], 1)
-        self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
-        self.assertEqual(stats["bible_study_v1_sessions_with_small_group_id"], 0)
-        self.assertEqual(stats["bible_study_v1_guides_checked"], 1)
-        self.assertEqual(stats["bible_study_v1_worship_songs_checked"], 1)
-        self.assertEqual(stats["bible_study_v1_child_rows_purge_pending"], 2)
-        self.assertEqual(stats["bible_study_v1_purge_pending"], 3)
-        self.assertEqual(stats["bible_study_v1_app_runtime_legacy_blockers"], 0)
-        self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 3)
-
-    def test_fail_on_blockers_exits_nonzero_for_v1_purge_pending_data_blocker(self):
-        self.make_v1_only_purge_pending_session()
+    def test_fail_on_blockers_no_longer_reports_v1_purge_pending(self):
+        SmallGroup.objects.create(name="Remaining Row")
 
         out = StringIO()
         with self.assertRaises(CommandError) as context:
@@ -435,6 +371,6 @@ class LegacyStructureRetirementReadinessV1PurgePendingTests(TestCase):
                 stdout=out,
             )
 
-        self.assertIn("bible_study_legacy_retirement_blockers=1", str(context.exception))
-        self.assertIn("bible_study_v1_purge_pending: 1", out.getvalue())
+        self.assertNotIn("bible_study_legacy_retirement_blockers", str(context.exception))
+        self.assertIn("bible_study_v1_purge_pending: 0", out.getvalue())
         self.assertIn("bible_study_v1_app_runtime_legacy_blockers: 0", out.getvalue())

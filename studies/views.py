@@ -30,8 +30,6 @@ from .models import (
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 from .services import (
     GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
@@ -101,23 +99,8 @@ def can_manage_bible_studies(user):
     )
 
 
-def redirect_legacy_session_runtime_retired(request):
-    return redirect("study_session_list")
-
-
 def can_edit_bible_study_meeting_preparation(user, meeting):
     return can_manage_bible_studies(user)
-
-
-def get_visible_study_sessions(user):
-    sessions = BibleStudySession.objects.select_related(
-        "series",
-        "district",
-        "small_group",
-        "created_by",
-    ).order_by("-study_datetime")
-
-    return sessions.none()
 
 
 def get_v2_landing_context(user):
@@ -1163,144 +1146,12 @@ def delete_bible_study_meeting_worship_song(request, song_id):
 @login_required
 def study_session_list(request):
     can_manage = can_manage_bible_studies(request.user)
-    tab = (request.GET.get("tab") or "upcoming").strip()
-
-    if tab not in {"upcoming", "past", "drafts"}:
-        tab = "upcoming"
-    if tab == "drafts" and not can_manage:
-        tab = "upcoming"
-
-    now = timezone.now()
-    sessions = get_visible_study_sessions(request.user)
-
-    if tab == "past":
-        sessions = sessions.filter(study_datetime__lt=now).exclude(
-            status=BibleStudySession.STATUS_DRAFT,
-        )
-    elif tab == "drafts":
-        sessions = sessions.filter(status=BibleStudySession.STATUS_DRAFT)
-    else:
-        sessions = sessions.filter(study_datetime__gte=now).exclude(
-            status__in=[
-                BibleStudySession.STATUS_DRAFT,
-                BibleStudySession.STATUS_CANCELLED,
-            ]
-        )
 
     return render(
         request,
         "studies/study_session_list.html",
         {
-            "sessions": sessions,
-            "tab": tab,
             "can_manage": can_manage,
             "v2_landing": get_v2_landing_context(request.user),
         },
     )
-
-
-@login_required
-def study_session_detail(request, session_id):
-    session = get_object_or_404(
-        BibleStudySession.objects.select_related(
-            "series",
-            "district",
-            "small_group",
-            "created_by",
-        ),
-        id=session_id,
-    )
-
-    if not session.can_be_seen_by(request.user):
-        messages.error(
-            request,
-            study_ui_text(get_user_language(request), "legacy_app_runtime_retired"),
-        )
-        return redirect("study_session_list")
-
-    guide = getattr(session, "guide", None)
-    worship_songs = session.worship_songs.all()
-
-    return render(
-        request,
-        "studies/study_session_detail.html",
-        {
-            "session_obj": session,
-            "guide": guide,
-            "worship_songs": worship_songs,
-            "can_manage": can_manage_bible_studies(request.user),
-        },
-    )
-
-
-@login_required
-def create_study_session(request):
-    language = get_user_language(request)
-    messages.warning(request, study_ui_text(language, "legacy_create_retired"))
-    return redirect("study_session_list")
-
-
-@login_required
-def edit_study_session(request, session_id):
-    language = get_user_language(request)
-    session = get_object_or_404(BibleStudySession, id=session_id)
-
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-    else:
-        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_runtime_retired(request)
-
-
-@login_required
-def delete_study_session(request, session_id):
-    language = get_user_language(request)
-    session = get_object_or_404(BibleStudySession, id=session_id)
-
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-    else:
-        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_runtime_retired(request)
-
-
-@login_required
-def manage_worship_songs(request, session_id):
-    language = get_user_language(request)
-    session = get_object_or_404(
-        BibleStudySession.objects.select_related("series"),
-        id=session_id,
-    )
-
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-    else:
-        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_runtime_retired(request)
-
-
-@login_required
-def edit_worship_song(request, song_id):
-    language = get_user_language(request)
-    song = get_object_or_404(
-        BibleStudyWorshipSong.objects.select_related("session", "session__series"),
-        id=song_id,
-    )
-
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-    else:
-        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_runtime_retired(request)
-
-
-@login_required
-def delete_worship_song(request, song_id):
-    language = get_user_language(request)
-    song = get_object_or_404(BibleStudyWorshipSong, id=song_id)
-
-    if not can_manage_bible_studies(request.user):
-        messages.error(request, study_ui_text(language, "no_permission"))
-    else:
-        messages.warning(request, study_ui_text(language, "legacy_mutation_frozen"))
-    return redirect_legacy_session_runtime_retired(request)

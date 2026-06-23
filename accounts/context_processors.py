@@ -27,13 +27,6 @@ READING_NAV_URLS = {
 
 BIBLE_STUDY_NAV_URLS = {
     "study_session_list",
-    "study_session_detail",
-    "create_study_session",
-    "edit_study_session",
-    "delete_study_session",
-    "manage_worship_songs",
-    "edit_worship_song",
-    "delete_worship_song",
     "bible_study_meeting_detail",
     "edit_bible_study_meeting_preparation",
 }

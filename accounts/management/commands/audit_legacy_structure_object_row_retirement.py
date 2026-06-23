@@ -33,20 +33,6 @@ CONSUMER_INVENTORY = (
         "remaining rows block final legacy table retirement, not ordinary visibility",
     ),
     (
-        "V1 BibleStudySession.small_group FK",
-        "studies.models.BibleStudySession.small_group",
-        CATEGORY_FINAL_TABLE_RETIREMENT,
-        "schema FK blocks final SmallGroup table retirement until guarded V1 purge "
-        "and a later V1 schema migration remove it",
-    ),
-    (
-        "V1 BibleStudySession.district FK",
-        "studies.models.BibleStudySession.district",
-        CATEGORY_FINAL_TABLE_RETIREMENT,
-        "schema FK blocks final District table retirement until guarded V1 purge "
-        "and a later V1 schema migration remove it",
-    ),
-    (
         "SmallGroup.church_structure_unit",
         "accounts.models.SmallGroup.church_structure_unit",
         CATEGORY_SETUP_BRIDGE,
@@ -129,7 +115,7 @@ CONSUMER_INVENTORY = (
         "Historical migrations and focused fixtures",
         "*/migrations, *_test*.py",
         CATEGORY_TEST_FIXTURE,
-        "migration history and controlled tests retain model references",
+        "migration history and controlled tests retain historical references",
     ),
 )
 
@@ -461,10 +447,12 @@ class Command(BaseCommand):
             "until a later approved row/table retirement slice"
         )
         write(
-            "legacy_bible_study_v1_schema_status: BibleStudySession.small_group "
-            "blocks SmallGroup table retirement and BibleStudySession.district "
-            "blocks District table retirement until future approved V1 purge and "
-            "schema removal; there is no V1 MinistryContext FK."
+            "legacy_bible_study_v1_schema_status: V1 BibleStudySession, "
+            "BibleStudyGuide, and BibleStudyWorshipSong are removed by the "
+            "guarded BS-V1-SCHEMA-RETIRE.1A migration after target DB preflight; "
+            "V1 no longer actively blocks SmallGroup or District final table "
+            "retirement after that migration is applied. There was no V1 "
+            "MinistryContext FK."
         )
 
         blockers = _blocking_items(stats)

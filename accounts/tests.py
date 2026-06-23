@@ -49,7 +49,6 @@ from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudySeries,
-    BibleStudySession,
 )
 
 
@@ -2317,7 +2316,7 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "旧小组")
         self.assertContains(response, "Legacy bridge/archive model")
         self.assertContains(response, "not canonical ordinary-member")
-        self.assertContains(response, "V1 legacy BibleStudySession")
+        self.assertContains(response, "V1 Bible Study models/tables are removed")
         self.assertContains(response, "Bible Study generation")
         self.assertContains(response, "Migrated ordinary-member paths")
         self.assertContains(response, "Zero-row ServiceEvents fail closed")
@@ -2433,7 +2432,7 @@ class ChurchStructureAdminClarityTests(TestCase):
             response,
             "legacy Profile.small_group field was removed in",
         )
-        self.assertContains(response, "V1 legacy BibleStudySession")
+        self.assertContains(response, "V1 Bible Study models/tables are removed")
         self.assertContains(response, "Zero-row ServiceEvents fail closed")
         self.assertContains(
             response,
@@ -3219,27 +3218,15 @@ class StaffMembershipRequestListTests(TestCase):
         # zero-row event visible either.
         self.assertFalse(event.can_be_seen_by(self.normal_user))
 
-    def test_mapped_approval_does_not_write_profile_or_change_v1_session_visibility(self):
-        # CS-RETIRE.1A: approval no longer writes Profile.small_group, so it no
-        # longer flips a legacy V1 BibleStudySession's profile-based visibility.
-        # The V1 session stays invisible because the profile group is never written.
+    def test_mapped_approval_does_not_write_removed_profile_small_group(self):
+        # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group entirely; approval
+        # creates/activates membership without restoring a legacy profile mirror.
         MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        group = SmallGroup.objects.create(
+        SmallGroup.objects.create(
             name="Mapped Bible Study Group",
             church_structure_unit=self.unit,
         )
         membership = self.create_membership(user=self.normal_user)
-        series = BibleStudySeries.objects.create(title="Mapped CM Bible Study")
-        session = BibleStudySession.objects.create(
-            series=series,
-            title="Mapped Group Study",
-            study_datetime=timezone.now(),
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=group,
-            status=BibleStudySession.STATUS_PUBLISHED,
-        )
-
-        self.assertFalse(session.can_be_seen_by(self.normal_user))
 
         self.client.login(username="membership_staff", password="TestPass123!")
         self.client.post(
@@ -3247,9 +3234,7 @@ class StaffMembershipRequestListTests(TestCase):
         )
         self.normal_user.profile.refresh_from_db()
 
-        # Profile.small_group not written; V1 session still not visible (V1 reads
-        # the unchanged legacy profile group).
-        self.assertFalse(session.can_be_seen_by(self.normal_user))
+        self.assertFalse(hasattr(self.normal_user.profile, "small_group"))
 
 
 class StaffOverviewTests(TestCase):

@@ -3,7 +3,6 @@ from io import StringIO
 from unittest import mock
 
 from django.contrib import admin
-from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser, User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command, CommandError
@@ -33,7 +32,6 @@ from .forms import (
     BibleStudySeriesForm,
 )
 from .models import (
-    BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudyMeetingAudienceScope,
@@ -41,8 +39,6 @@ from .models import (
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 from .services import (
     cancel_bible_study_lesson_with_meetings,
@@ -184,20 +180,6 @@ class BibleStudyModuleTests(TestCase):
         session["language"] = language
         session.save()
 
-    def create_session(self, **overrides):
-        data = {
-            "series": self.series,
-            "title": "约翰十五章",
-            "title_en": "John 15",
-            "scripture_reference": "John 15:1-17",
-            "prestudy_datetime": self.prestudy_time,
-            "study_datetime": self.future_time,
-            "scope_type": BibleStudySession.SCOPE_GLOBAL,
-            "status": BibleStudySession.STATUS_PUBLISHED,
-        }
-        data.update(overrides)
-        return BibleStudySession.objects.create(**data)
-
     def create_lesson(self, **overrides):
         data = {
             "series": self.series,
@@ -250,61 +232,6 @@ class BibleStudyModuleTests(TestCase):
         }
         data.update(overrides)
         return ChurchStructureMembership.objects.create(**data)
-
-    def create_guide(self, session, **overrides):
-        data = {
-            "session": session,
-            "guide_body": "留意葡萄树与枝子的关系。",
-            "guide_body_en": "Notice the vine and branches.",
-            "discussion_questions": "我们如何常在主里面？",
-            "discussion_questions_en": "How do we abide in Christ?",
-            "prestudy_notes": "预查时先读上下文。",
-            "prestudy_notes_en": "Read the context before pre-study.",
-        }
-        data.update(overrides)
-        return BibleStudyGuide.objects.create(**data)
-
-    def session_post_data(self, **overrides):
-        data = {
-            "series": self.series.id,
-            "title": "新查经",
-            "title_en": "New Study",
-            "scripture_reference": "John 16",
-            "prestudy_datetime": self.prestudy_time.strftime("%Y-%m-%dT%H:%M"),
-            "study_datetime": self.future_time.strftime("%Y-%m-%dT%H:%M"),
-            "location": "Fellowship Hall",
-            "meeting_link": "https://example.com/study",
-            "scope_type": BibleStudySession.SCOPE_GLOBAL,
-            "status": BibleStudySession.STATUS_PUBLISHED,
-            "guide_body": "中文指引",
-            "guide_body_en": "English guide",
-            "discussion_questions": "中文问题",
-            "discussion_questions_en": "English questions",
-            "prestudy_notes": "中文备注",
-            "prestudy_notes_en": "English notes",
-        }
-        data.update(overrides)
-        return data
-
-    def worship_song_post_data(self, **overrides):
-        data = {
-            "sort_order": 1,
-            "title": "奇异恩典",
-            "title_en": "Amazing Grace",
-            "song_key": "G",
-            "youtube_url": "https://example.com/youtube",
-            "chord_url": "https://example.com/chords",
-            "lyrics_url": "https://example.com/lyrics",
-            "note": "司琴请用慢速。",
-            "note_en": "Pianist, please use a slower tempo.",
-        }
-        data.update(overrides)
-        return data
-
-    def create_worship_song(self, session, **overrides):
-        data = self.worship_song_post_data(**overrides)
-        data["session"] = session
-        return BibleStudyWorshipSong.objects.create(**data)
 
     def create_meeting_worship_song(self, meeting, **overrides):
         data = {
@@ -3903,7 +3830,6 @@ class BibleStudyModuleTests(TestCase):
             meeting=meeting,
             unit=self.group_unit,
         )
-        v1_session = self.create_session(title_en="Fallback V1 Session")
         # Pin the membership start well before the fixed meeting date so it is
         # still active once "now" is pinned just before that date below.
         self.create_membership(
@@ -3941,7 +3867,6 @@ class BibleStudyModuleTests(TestCase):
         self.assertNotContains(response, "Detailed pastor guide belongs on detail page")
         self.assertNotContains(response, "Other Bible Study Sessions")
         self.assertNotContains(response, "Legacy Bible Study Sessions")
-        self.assertNotContains(response, v1_session.title_en)
 
     def test_study_list_shows_v2_current_bible_study_for_membership_only_user(self):
         self.set_language("en")
@@ -4177,7 +4102,7 @@ class BibleStudyModuleTests(TestCase):
         content = response.content.decode()
         self.assertLess(content.index("Current Bible Study"), content.index("Staff Links"))
         self.assertNotContains(response, "Legacy Bible Study Sessions")
-        self.assertNotContains(response, reverse("create_study_session"))
+        self.assertNotContains(response, "/studies/new/")
 
     def test_chinese_study_list_uses_expected_v2_landing_wording(self):
         self.set_language("zh")
@@ -4196,7 +4121,6 @@ class BibleStudyModuleTests(TestCase):
 
     def test_studies_list_route_preserves_v2_landing_without_promoting_v1(self):
         self.set_language("en")
-        self.create_session(title_en="V1 Session")
         self.client.login(username="regular", password="testpass123")
 
         response = self.client.get(reverse("study_session_list"))
@@ -4376,586 +4300,6 @@ class BibleStudyModuleTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
-
-    def test_published_global_session_is_not_promoted_on_v2_landing(self):
-        self.set_language("en")
-        session = self.create_session()
-
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("study_session_list"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(BibleStudySession.objects.filter(id=session.id).exists())
-        self.assertContains(response, "Current Bible Study")
-        self.assertNotContains(response, session.title_en)
-        self.assertNotContains(response, "Legacy Bible Study Sessions")
-
-    def test_draft_session_hidden_from_regular_user(self):
-        self.set_language("en")
-        self.create_session(title="Draft Study", status=BibleStudySession.STATUS_DRAFT)
-
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("study_session_list"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Draft Study")
-
-    def test_draft_session_not_promoted_on_v2_landing_for_staff(self):
-        self.set_language("en")
-        self.create_session(
-            title="Draft Study",
-            title_en="Draft Study",
-            status=BibleStudySession.STATUS_DRAFT,
-        )
-
-        self.client.login(username="study_staff", password="testpass123")
-        response = self.client.get(reverse("study_session_list"), {"tab": "drafts"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Current Bible Study")
-        self.assertNotContains(response, "Draft Study")
-        self.assertNotContains(response, "Legacy Bible Study Sessions")
-
-    def test_district_scoped_session_hidden_from_matching_district_user(self):
-        self.set_language("en")
-        session = self.create_session(
-            title_en="North Study",
-            scope_type=BibleStudySession.SCOPE_DISTRICT,
-            district=self.north,
-        )
-
-        self.client.login(username="same_district", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. Please use the current "
-                "Bible Study schedule and meeting flow."
-            ],
-        )
-
-    def test_district_scoped_session_hidden_from_outside_district_user(self):
-        self.set_language("en")
-        session = self.create_session(
-            title_en="North Study",
-            scope_type=BibleStudySession.SCOPE_DISTRICT,
-            district=self.north,
-        )
-
-        self.client.login(username="other_group", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_small_group_scoped_session_hidden_from_same_group_user(self):
-        self.set_language("en")
-        session = self.create_session(
-            title_en="Group Study",
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-        )
-
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. Please use the current "
-                "Bible Study schedule and meeting flow."
-            ],
-        )
-
-    def test_small_group_scoped_session_hidden_from_user_without_group(self):
-        self.set_language("en")
-        user = User.objects.create_user(
-            username="no_legacy_group",
-            password="testpass123",
-        )
-        session = self.create_session(
-            title_en="Group Study",
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-        )
-
-        self.client.login(username=user.username, password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_manager_cannot_access_v1_app_detail(self):
-        self.set_language("en")
-        session = self.create_session(title_en="Retired V1 Study")
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertTrue(BibleStudySession.objects.filter(id=session.id).exists())
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. Please use the current "
-                "Bible Study schedule and meeting flow."
-            ],
-        )
-
-    def test_small_group_scoped_session_hidden_from_different_group_user(self):
-        self.set_language("en")
-        session = self.create_session(
-            title_en="Group Study",
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-        )
-
-        self.client.login(username="other_group", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_user_without_management_capability_cannot_access_create_page(self):
-        self.set_language("en")
-        self.client.login(username="regular", password="testpass123")
-
-        response = self.client.get(reverse("create_study_session"))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired. Please use the Bible "
-                "Study V2 schedule and meeting flow."
-            ],
-        )
-
-    def test_user_with_pastor_role_is_redirected_from_create_page(self):
-        self.set_language("en")
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.get(reverse("create_study_session"))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertNotIn("study_session_form", [template.name for template in response.templates])
-        self.assertEqual(BibleStudySession.objects.count(), 0)
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired. Please use the Bible "
-                "Study V2 schedule and meeting flow."
-            ],
-        )
-
-    def test_manager_post_to_create_route_does_not_create_session_or_guide(self):
-        self.set_language("en")
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_study_session"),
-            self.session_post_data(),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(BibleStudySession.objects.count(), 0)
-        self.assertEqual(BibleStudyGuide.objects.count(), 0)
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired. Please use the Bible "
-                "Study V2 schedule and meeting flow."
-            ],
-        )
-
-    def test_zh_create_route_retirement_message(self):
-        self.set_language("zh")
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.post(
-            reverse("create_study_session"),
-            self.session_post_data(status=BibleStudySession.STATUS_DRAFT),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(BibleStudySession.objects.count(), 0)
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            ["旧版查经安排已停止创建，请使用新版查经排期与聚会流程。"],
-        )
-
-    def test_manager_get_edit_route_redirects_and_does_not_render_form(self):
-        self.set_language("en")
-        session = self.create_session(status=BibleStudySession.STATUS_DRAFT)
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.get(reverse("edit_study_session", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertNotIn("study_session_form", [template.name for template in response.templates])
-        self.assertEqual(BibleStudyGuide.objects.filter(session=session).count(), 0)
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. App-level editing is "
-                "frozen. Please use the Bible Study V2 schedule and meeting flow."
-            ],
-        )
-
-    def test_frozen_edit_route_redirects_to_landing_when_session_not_visible(self):
-        self.set_language("en")
-        session = self.create_session(
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-        )
-        self.client.login(username="other_group", password="testpass123")
-
-        response = self.client.get(reverse("edit_study_session", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_manager_post_to_edit_route_does_not_update_session_or_guide(self):
-        self.set_language("en")
-        session = self.create_session(status=BibleStudySession.STATUS_DRAFT)
-        guide = self.create_guide(session, guide_body="Original guide")
-        original_published_at = session.published_at
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.post(
-            reverse("edit_study_session", args=[session.id]),
-            self.session_post_data(
-                title="编辑后的查经",
-                title_en="Edited Study",
-                guide_body="更新后的指引",
-                status=BibleStudySession.STATUS_PUBLISHED,
-            ),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        session.refresh_from_db()
-        guide.refresh_from_db()
-        self.assertNotEqual(session.title, "编辑后的查经")
-        self.assertNotEqual(session.title_en, "Edited Study")
-        self.assertEqual(session.status, BibleStudySession.STATUS_DRAFT)
-        self.assertEqual(session.published_at, original_published_at)
-        self.assertEqual(guide.guide_body, "Original guide")
-        self.assertEqual(BibleStudyGuide.objects.filter(session=session).count(), 1)
-
-    def test_manager_post_to_edit_route_does_not_create_guide(self):
-        self.set_language("en")
-        session = self.create_session()
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.post(
-            reverse("edit_study_session", args=[session.id]),
-            self.session_post_data(guide_body="Should not be created"),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertFalse(BibleStudyGuide.objects.filter(session=session).exists())
-
-    def test_manager_post_to_delete_route_does_not_cancel_session(self):
-        self.set_language("en")
-        session = self.create_session(title_en="Do Not Cancel")
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.post(reverse("delete_study_session", args=[session.id]))
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        session.refresh_from_db()
-        self.assertEqual(session.status, BibleStudySession.STATUS_PUBLISHED)
-
-        self.client.logout()
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_manager_get_delete_route_redirects_without_cancelling_session(self):
-        self.set_language("en")
-        session = self.create_session()
-        self.client.login(username="pastor_study", password="testpass123")
-
-        response = self.client.get(reverse("delete_study_session", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        session.refresh_from_db()
-        self.assertEqual(session.status, BibleStudySession.STATUS_PUBLISHED)
-
-    def test_scope_validation(self):
-        global_session = BibleStudySession(
-            series=self.series,
-            title="Invalid Global",
-            study_datetime=self.future_time,
-            scope_type=BibleStudySession.SCOPE_GLOBAL,
-            district=self.north,
-        )
-        district_session = BibleStudySession(
-            series=self.series,
-            title="Invalid District",
-            study_datetime=self.future_time,
-            scope_type=BibleStudySession.SCOPE_DISTRICT,
-        )
-        group_session = BibleStudySession(
-            series=self.series,
-            title="Invalid Group",
-            study_datetime=self.future_time,
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-        )
-
-        with self.assertRaises(ValidationError):
-            global_session.full_clean()
-        with self.assertRaises(ValidationError):
-            district_session.full_clean()
-        with self.assertRaises(ValidationError):
-            group_session.full_clean()
-
-    def test_chinese_list_page_shows_chinese_labels_and_v1_detail_redirects(self):
-        self.set_language("zh")
-        session = self.create_session()
-        self.create_guide(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        list_response = self.client.get(reverse("study_session_list"))
-        detail_response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertContains(list_response, "查经安排")
-        self.assertContains(list_response, "周四预查")
-        self.assertContains(list_response, "周五查经")
-        self.assertEqual(detail_response.status_code, 302)
-        self.assertEqual(detail_response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(detail_response.wsgi_request)],
-            ["旧版查经安排已在应用中退役，请使用当前的查经排期与聚会流程。"],
-        )
-
-    def test_english_list_page_shows_english_labels_and_v1_detail_redirects(self):
-        self.set_language("en")
-        session = self.create_session()
-        self.create_guide(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        list_response = self.client.get(reverse("study_session_list"))
-        detail_response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertContains(list_response, "Bible Studies")
-        self.assertContains(list_response, "Thursday pre-study and Friday Bible Study")
-        self.assertEqual(detail_response.status_code, 302)
-        self.assertEqual(detail_response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(detail_response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. Please use the current "
-                "Bible Study schedule and meeting flow."
-            ],
-        )
-
-    def test_home_page_no_longer_shows_legacy_study_sessions(self):
-        # TODAY-HOME.1B removed the legacy BibleStudySession block from Today.
-        # Legacy sessions never render on home; direct V1 app detail is now
-        # retired for all app users.
-        self.set_language("en")
-        session = self.create_session(title_en="Home Visible Study")
-
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("home"))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Home Visible Study")
-        self.assertNotContains(
-            response, reverse("study_session_detail", args=[session.id])
-        )
-
-    def test_manager_cannot_see_worship_songs_through_v1_app_detail(self):
-        self.set_language("en")
-        session = self.create_session()
-        self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertTrue(BibleStudyWorshipSong.objects.filter(session=session).exists())
-
-    def test_regular_user_cannot_access_manage_worship_songs(self):
-        self.set_language("en")
-        session = self.create_session()
-
-        self.client.login(username="regular", password="testpass123")
-        response = self.client.get(reverse("manage_worship_songs", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_manager_get_manage_worship_songs_redirects_without_form(self):
-        self.set_language("en")
-        session = self.create_session()
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("manage_worship_songs", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertNotIn("manage_worship_songs", [template.name for template in response.templates])
-        self.assertEqual(BibleStudyWorshipSong.objects.filter(session=session).count(), 0)
-
-    def test_manager_post_manage_worship_songs_does_not_create_song(self):
-        self.set_language("en")
-        session = self.create_session()
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.post(
-            reverse("manage_worship_songs", args=[session.id]),
-            self.worship_song_post_data(),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertFalse(BibleStudyWorshipSong.objects.filter(session=session).exists())
-
-    def test_manager_post_edit_worship_song_does_not_mutate_song(self):
-        self.set_language("en")
-        session = self.create_session()
-        song = self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.post(
-            reverse("edit_worship_song", args=[song.id]),
-            self.worship_song_post_data(
-                title="新的诗歌",
-                title_en="Updated Song",
-                song_key="D",
-            ),
-        )
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        song.refresh_from_db()
-        self.assertEqual(song.title, "奇异恩典")
-        self.assertEqual(song.title_en, "Amazing Grace")
-        self.assertEqual(song.song_key, "G")
-
-    def test_manager_get_edit_worship_song_redirects_without_form(self):
-        self.set_language("en")
-        session = self.create_session()
-        song = self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("edit_worship_song", args=[song.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertNotIn("worship_song_form", [template.name for template in response.templates])
-        self.assertEqual(BibleStudyWorshipSong.objects.filter(id=song.id).count(), 1)
-
-    def test_manager_post_delete_worship_song_does_not_delete_song(self):
-        self.set_language("en")
-        session = self.create_session()
-        song = self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.post(reverse("delete_worship_song", args=[song.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertTrue(BibleStudyWorshipSong.objects.filter(id=song.id).exists())
-
-    def test_v1_worship_songs_remain_stored_when_app_detail_retired(self):
-        self.set_language("en")
-        session = self.create_session()
-        second = self.create_worship_song(
-            session,
-            sort_order=2,
-            title="第二首",
-            title_en="Second Song",
-        )
-        first = self.create_worship_song(
-            session,
-            sort_order=1,
-            title="第一首",
-            title_en="First Song",
-        )
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        songs = list(session.worship_songs.all())
-        self.assertEqual(songs, [first, second])
-
-    def test_chinese_v1_detail_page_redirects_after_runtime_retirement(self):
-        self.set_language("zh")
-        session = self.create_session()
-        self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            ["旧版查经安排已在应用中退役，请使用当前的查经排期与聚会流程。"],
-        )
-
-    def test_english_v1_detail_page_redirects_after_runtime_retirement(self):
-        self.set_language("en")
-        session = self.create_session()
-        self.create_worship_song(session)
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-        self.assertEqual(
-            [str(message) for message in get_messages(response.wsgi_request)],
-            [
-                "Legacy Bible Study sessions are retired in the app. Please use the current "
-                "Bible Study schedule and meeting flow."
-            ],
-        )
-
-    def test_manager_gets_redirect_when_v1_detail_has_no_worship_songs(self):
-        self.set_language("zh")
-        session = self.create_session()
-
-        self.client.login(username="pastor_study", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
-
-    def test_worship_songs_hidden_when_session_not_visible(self):
-        self.set_language("en")
-        session = self.create_session(
-            scope_type=BibleStudySession.SCOPE_SMALL_GROUP,
-            small_group=self.group,
-        )
-        self.create_worship_song(session, title_en="Hidden Song")
-
-        self.client.login(username="other_group", password="testpass123")
-        response = self.client.get(reverse("study_session_detail", args=[session.id]))
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("study_session_list"))
 
     # ------------------------------------------------------------------
     # BS-AS.1: Bible Study Schedule audience scope using ChurchStructureUnit
@@ -6452,24 +5796,8 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.context["generation_preview"]["existing_count"], 2)
 
 
-class BibleStudyV1AdminRetirementTests(SimpleTestCase):
-    """BS-V1-ADMIN-RETIRE.1A: the active V1 Bible Study Django Admin surface is
-    retired (unregistered), while the active V2 admin surface is unaffected.
-
-    V1 app-level runtime was already retired (BS-V1-RETIRE.1A); this slice
-    removes the remaining staff admin maintenance/display surface so V1 has no
-    active display/admin blocker. The V1 models, tables, and rows are unchanged.
-    """
-
-    def test_v1_session_admin_is_unregistered(self):
-        self.assertNotIn(BibleStudySession, admin.site._registry)
-
-    def test_v1_only_child_admins_are_unregistered(self):
-        # BibleStudyGuide and BibleStudyWorshipSong are V1-only child models
-        # keyed on BibleStudySession; their admins were retired together with
-        # the session admin so staff cannot maintain V1 child data via admin.
-        self.assertNotIn(BibleStudyGuide, admin.site._registry)
-        self.assertNotIn(BibleStudyWorshipSong, admin.site._registry)
+class BibleStudyV2AdminSurfaceTests(SimpleTestCase):
+    """The active V2 admin surface remains registered after V1 schema removal."""
 
     def test_v2_meeting_admin_remains_registered(self):
         # The active V2 Bible Study path must remain administrable.

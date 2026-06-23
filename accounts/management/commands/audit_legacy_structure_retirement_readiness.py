@@ -26,13 +26,10 @@ from accounts.models import (
 from comments.models import ReflectionComment
 from events.models import ServiceEvent, ServiceEventAudienceScope
 from studies.models import (
-    BibleStudyGuide,
     BibleStudyMeeting,
     BibleStudyMeetingAudienceScope,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 
 
@@ -245,10 +242,9 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
         "studies.management.commands.audit_bible_study_generation_bridge_retirement",
         "standing diagnostic/audit guard for Bible Study generation bridge retirement",
     ),
-    (
-        "studies.management.commands.purge_legacy_bible_study_v1_sessions",
-        "guarded cleanup tooling for retired V1 pilot rows; dry-run by default",
-    ),
+    # BS-V1-SCHEMA-RETIRE.1A retires the V1 purge command together with the
+    # removed V1 models. Target DB safety now lives in the guarded schema
+    # migration preflight.
     (
         "reading.management.commands.audit_reading_structure_runtime_readiness",
         "standing diagnostic/audit guard",
@@ -325,14 +321,6 @@ def _is_service_event_visible_active_safety_state(event, now):
     return False
 
 
-def _bible_study_session_has_legacy_scope_fields(session):
-    return bool(
-        session.scope_type != BibleStudySession.SCOPE_GLOBAL
-        or session.district_id
-        or session.small_group_id
-    )
-
-
 def _append(details, key, line):
     details[key].append(line)
 
@@ -391,9 +379,9 @@ def _scan_small_groups(stats, details):
     # BS-MEETING-MIRROR.1A removed BibleStudyMeeting.small_group, so the V2
     # meeting is no longer an inbound SmallGroup reference.
     stats["bible_study_v2_meeting_small_group_references"] = 0
-    stats["bible_study_v1_session_small_group_references"] = (
-        BibleStudySession.objects.filter(small_group__isnull=False).count()
-    )
+    # BS-V1-SCHEMA-RETIRE.1A removes BibleStudySession.small_group, so V1 no
+    # longer contributes an active inbound SmallGroup FK blocker after migration.
+    stats["bible_study_v1_session_small_group_references"] = 0
     # REFLECTION-MIRROR.1H removed ReflectionComment.small_group_at_post, so the
     # SmallGroup table no longer has any reflection inbound reference to count.
     # SE-FIELD-RETIRE.1A removed ServiceEvent.small_group, so ServiceEvent is no
@@ -466,9 +454,9 @@ def _scan_districts(stats, details):
     stats["service_events_with_district"] = 0
     # BS-SERIES-FIELD-RETIRE.1A removed BibleStudySeries.district, so the series
     # is no longer an inbound District reference.
-    stats["bible_study_sessions_with_district"] = (
-        BibleStudySession.objects.filter(district__isnull=False).count()
-    )
+    # BS-V1-SCHEMA-RETIRE.1A removes BibleStudySession.district, so V1 no longer
+    # contributes an active inbound District FK blocker after migration.
+    stats["bible_study_sessions_with_district"] = 0
     stats["district_retirement_blocker_references"] = (
         stats["districts_total"]
         + stats["small_groups_with_district"]
@@ -632,47 +620,20 @@ def _scan_bible_study(stats, details):
                 ),
             )
 
-    sessions = BibleStudySession.objects.select_related(
-        "series",
-        "district",
-        "small_group",
-    ).order_by("id")
-    for session in sessions:
-        stats["bible_study_v1_sessions_checked"] += 1
-        if _bible_study_session_has_legacy_scope_fields(session):
-            stats["bible_study_v1_sessions_with_legacy_scope_fields_set"] += 1
-        if session.district_id:
-            stats["bible_study_v1_sessions_with_district_id"] += 1
-        if session.small_group_id:
-            stats["bible_study_v1_sessions_with_small_group_id"] += 1
-        _append(
-            details,
-            "bible_study_v1_session",
-            "session_id={session_id} title={title} scope_type={scope_type}".format(
-                session_id=session.id,
-                title=session.title,
-                scope_type=session.scope_type,
-            ),
-        )
-
-    stats["bible_study_v1_pilot_records_present"] = stats[
-        "bible_study_v1_sessions_checked"
-    ]
-    stats["bible_study_v1_guides_checked"] = BibleStudyGuide.objects.count()
-    stats["bible_study_v1_worship_songs_checked"] = (
-        BibleStudyWorshipSong.objects.count()
-    )
-    stats["bible_study_v1_child_rows_purge_pending"] = (
-        stats["bible_study_v1_guides_checked"]
-        + stats["bible_study_v1_worship_songs_checked"]
-    )
-    # BS-V1-RETIRE.1A: V1 app-level runtime is retired for ordinary users and
-    # managers. Remaining pilot rows are data-retirement/purge work, not app
-    # visibility blockers.
+    # BS-V1-SCHEMA-RETIRE.1A removes V1 BibleStudySession/BibleStudyGuide/
+    # BibleStudyWorshipSong models and their tables behind a target-DB migration
+    # guard. There are no live V1 ORM counters after the schema slice; any
+    # target DB that still has V1 rows must abort during migration preflight.
+    stats["bible_study_v1_sessions_checked"] = 0
+    stats["bible_study_v1_sessions_with_legacy_scope_fields_set"] = 0
+    stats["bible_study_v1_sessions_with_district_id"] = 0
+    stats["bible_study_v1_sessions_with_small_group_id"] = 0
+    stats["bible_study_v1_guides_checked"] = 0
+    stats["bible_study_v1_worship_songs_checked"] = 0
+    stats["bible_study_v1_child_rows_purge_pending"] = 0
+    stats["bible_study_v1_pilot_records_present"] = 0
     stats["bible_study_v1_app_runtime_retired"] = 1
-    stats["bible_study_v1_purge_pending"] = stats[
-        "bible_study_v1_sessions_checked"
-    ] + stats["bible_study_v1_child_rows_purge_pending"]
+    stats["bible_study_v1_purge_pending"] = 0
     stats["bible_study_v1_app_runtime_legacy_blockers"] = 0
     stats["bible_study_structure_native_readiness_blockers"] = (
         stats["bible_study_active_series_without_audience_rows"]
@@ -887,10 +848,10 @@ class Command(BaseCommand):
         )
         write(
             "legacy_bible_study_v1_status: app runtime/admin are retired; "
-            "remaining BibleStudySession rows, V1 child rows, and "
-            "BibleStudySession.district / small_group schema are explicit "
-            "purge/schema blockers until a future approved purge plus separate "
-            "schema migration."
+            "BibleStudySession, BibleStudyGuide, and BibleStudyWorshipSong are "
+            "removed by the guarded BS-V1-SCHEMA-RETIRE.1A migration after "
+            "target DB preflight. V1 no longer actively blocks SmallGroup or "
+            "District table retirement after that migration is applied."
         )
         write("")
         write("diagnostic/backfill commands (support tooling, not runtime blockers):")

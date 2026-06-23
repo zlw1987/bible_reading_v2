@@ -8,15 +8,12 @@ from accounts.models import ChurchStructureUnit
 from .templatetags.study_extras import compact_unit_label
 
 from .models import (
-    BibleStudyGuide,
     BibleStudyLesson,
     BibleStudyMeeting,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 from .services import (
     normal_generation_key_for_unit,
@@ -176,52 +173,6 @@ FORM_TEXT = {
 
 def form_text(language):
     return FORM_TEXT.get(language, FORM_TEXT["en"])
-
-
-WORSHIP_FORM_TEXT = {
-    "en": {
-        "sort_order": "Order",
-        "title": "Song Title",
-        "title_en": "English Title",
-        "song_key": "Key",
-        "youtube_url": "YouTube Link",
-        "chord_url": "Chord Link",
-        "lyrics_url": "Lyrics Link",
-        "note": "Notes",
-        "note_en": "English Notes",
-        "title_placeholder": "Song title",
-        "title_en_placeholder": "Optional English song title",
-        "key_placeholder": "C, D, E-flat...",
-        "youtube_placeholder": "https://youtube.com/...",
-        "chord_placeholder": "Chord sheet link",
-        "lyrics_placeholder": "Lyrics link",
-        "note_placeholder": "Notes for worship lead or pianist.",
-        "note_en_placeholder": "Optional English notes.",
-    },
-    "zh": {
-        "sort_order": "顺序",
-        "title": "诗歌名",
-        "title_en": "英文诗歌名",
-        "song_key": "调",
-        "youtube_url": "YouTube 链接",
-        "chord_url": "和弦链接",
-        "lyrics_url": "歌词链接",
-        "note": "备注",
-        "note_en": "英文备注",
-        "title_placeholder": "诗歌名",
-        "title_en_placeholder": "可选英文诗歌名",
-        "key_placeholder": "C、D、降E...",
-        "youtube_placeholder": "https://youtube.com/...",
-        "chord_placeholder": "和弦谱链接",
-        "lyrics_placeholder": "歌词链接",
-        "note_placeholder": "给主领或司琴的备注。",
-        "note_en_placeholder": "可选英文备注。",
-    },
-}
-
-
-def worship_form_text(language):
-    return WORSHIP_FORM_TEXT.get(language, WORSHIP_FORM_TEXT["en"])
 
 
 class BibleStudySeriesForm(forms.ModelForm):
@@ -451,62 +402,6 @@ class BibleStudySeriesForm(forms.ModelForm):
                 )
 
         return options
-
-
-class BibleStudySessionForm(forms.ModelForm):
-    class Meta:
-        model = BibleStudySession
-        fields = [
-            "series",
-            "title",
-            "title_en",
-            "scripture_reference",
-            "prestudy_datetime",
-            "study_datetime",
-            "location",
-            "meeting_link",
-            "scope_type",
-            "district",
-            "small_group",
-            "status",
-        ]
-        widgets = {
-            "prestudy_datetime": forms.DateTimeInput(
-                attrs={"type": "datetime-local"},
-                format="%Y-%m-%dT%H:%M",
-            ),
-            "study_datetime": forms.DateTimeInput(
-                attrs={"type": "datetime-local"},
-                format="%Y-%m-%dT%H:%M",
-            ),
-        }
-
-    def __init__(self, *args, language="en", **kwargs):
-        super().__init__(*args, **kwargs)
-        text = form_text(language)
-
-        for field_name in self.fields:
-            self.fields[field_name].label = text[field_name]
-
-        self.fields["scope_type"].choices = [
-            (BibleStudySession.SCOPE_GLOBAL, text["global"]),
-            (BibleStudySession.SCOPE_DISTRICT, text["scope_district"]),
-            (BibleStudySession.SCOPE_SMALL_GROUP, text["scope_small_group"]),
-        ]
-        self.fields["status"].choices = [
-            (BibleStudySession.STATUS_DRAFT, text["draft"]),
-            (BibleStudySession.STATUS_PUBLISHED, text["published"]),
-            (BibleStudySession.STATUS_COMPLETED, text["completed"]),
-            (BibleStudySession.STATUS_CANCELLED, text["cancelled"]),
-        ]
-        self.fields["title"].widget.attrs.update(
-            {"placeholder": text["title_placeholder"]}
-        )
-        self.fields["scripture_reference"].widget.attrs.update(
-            {"placeholder": text["scripture_placeholder"]}
-        )
-        self.fields["prestudy_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
-        self.fields["study_datetime"].input_formats = ["%Y-%m-%dT%H:%M"]
 
 
 LESSON_FORM_TEXT = {
@@ -1213,93 +1108,3 @@ class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
                     "This meeting already has a worship song with this order."
                 )
         return sort_order
-
-
-class BibleStudyGuideForm(forms.ModelForm):
-    class Meta:
-        model = BibleStudyGuide
-        fields = [
-            "guide_body",
-            "guide_body_en",
-            "discussion_questions",
-            "discussion_questions_en",
-            "prestudy_notes",
-            "prestudy_notes_en",
-        ]
-        widgets = {
-            "guide_body": forms.Textarea(attrs={"rows": 6}),
-            "guide_body_en": forms.Textarea(attrs={"rows": 6}),
-            "discussion_questions": forms.Textarea(attrs={"rows": 5}),
-            "discussion_questions_en": forms.Textarea(attrs={"rows": 5}),
-            "prestudy_notes": forms.Textarea(attrs={"rows": 4}),
-            "prestudy_notes_en": forms.Textarea(attrs={"rows": 4}),
-        }
-
-    def __init__(self, *args, language="en", **kwargs):
-        super().__init__(*args, **kwargs)
-        text = form_text(language)
-
-        for field_name in self.fields:
-            self.fields[field_name].label = text[field_name]
-
-        self.fields["guide_body"].widget.attrs.update(
-            {"placeholder": text["guide_placeholder"]}
-        )
-        self.fields["discussion_questions"].widget.attrs.update(
-            {"placeholder": text["questions_placeholder"]}
-        )
-        self.fields["prestudy_notes"].widget.attrs.update(
-            {"placeholder": text["notes_placeholder"]}
-        )
-
-
-class BibleStudyWorshipSongForm(forms.ModelForm):
-    class Meta:
-        model = BibleStudyWorshipSong
-        fields = [
-            "sort_order",
-            "title",
-            "title_en",
-            "song_key",
-            "youtube_url",
-            "chord_url",
-            "lyrics_url",
-            "note",
-            "note_en",
-        ]
-        widgets = {
-            "note": forms.Textarea(attrs={"rows": 3}),
-            "note_en": forms.Textarea(attrs={"rows": 3}),
-        }
-
-    def __init__(self, *args, language="en", **kwargs):
-        super().__init__(*args, **kwargs)
-        text = worship_form_text(language)
-
-        for field_name in self.fields:
-            self.fields[field_name].label = text[field_name]
-
-        self.fields["title"].widget.attrs.update(
-            {"placeholder": text["title_placeholder"]}
-        )
-        self.fields["title_en"].widget.attrs.update(
-            {"placeholder": text["title_en_placeholder"]}
-        )
-        self.fields["song_key"].widget.attrs.update(
-            {"placeholder": text["key_placeholder"]}
-        )
-        self.fields["youtube_url"].widget.attrs.update(
-            {"placeholder": text["youtube_placeholder"]}
-        )
-        self.fields["chord_url"].widget.attrs.update(
-            {"placeholder": text["chord_placeholder"]}
-        )
-        self.fields["lyrics_url"].widget.attrs.update(
-            {"placeholder": text["lyrics_placeholder"]}
-        )
-        self.fields["note"].widget.attrs.update(
-            {"placeholder": text["note_placeholder"]}
-        )
-        self.fields["note_en"].widget.attrs.update(
-            {"placeholder": text["note_en_placeholder"]}
-        )

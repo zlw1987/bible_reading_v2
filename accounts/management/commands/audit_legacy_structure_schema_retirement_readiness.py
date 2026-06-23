@@ -23,10 +23,7 @@ from accounts.models import (
 from comments.models import ReflectionComment
 from events.models import ServiceEvent
 from studies.models import (
-    BibleStudyGuide,
     BibleStudyMeeting,
-    BibleStudySession,
-    BibleStudyWorshipSong,
 )
 
 
@@ -567,74 +564,57 @@ CANDIDATE_DEFINITIONS = (
         "suggested_removal_phase": "not in legacy removal sequence",
     },
     {
-        "candidate_name": "BibleStudySession (V1 model/table and scope fields)",
+        "candidate_name": "BibleStudySession (V1 model/table and scope fields removed)",
         "model_table": "studies.BibleStudySession",
         "field_name": "scope_type, district, small_group",
-        "candidate_type": "model/table",
-        "diagnostic_cleanup_references": _refs(
-            "purge_legacy_bible_study_v1_sessions",
-            "audit_legacy_structure_retirement_readiness",
+        "candidate_type": "removed model/table",
+        "migration_history_references": _refs(
+            "studies migrations, including guarded BS-V1-SCHEMA-RETIRE.1A removal"
         ),
-        "test_fixture_references": _refs("V1 retirement/purge fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "v1_sessions",
-        "schema_fk_or_table_blocker": True,
         "recommended_next_action": (
-            "BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface "
-            "(BibleStudySessionAdmin and the V1-only BibleStudyGuideAdmin / "
-            "BibleStudyWorshipSongAdmin were unregistered), so V1 no longer has "
-            "an active display/admin blocker. V1 app-level runtime was already "
-            "retired (BS-V1-RETIRE.1A). Do not migrate V1 to membership-core. "
-            "The stored scope_type, district, and small_group fields remain "
-            "schema-retirement blockers for V1 and, where populated, for "
-            "District / SmallGroup table retirement. Purge any remaining "
-            "pilot/archive rows only through the guarded V1 purge command "
-            "(purge_legacy_bible_study_v1_sessions), then plan a later separate "
-            "schema slice to remove the V1 model/table and fields; until then "
-            "the remaining references are purge/audit tooling, test fixtures, "
-            "and immutable historical migrations."
+            "Completed. BS-V1-SCHEMA-RETIRE.1A removes the V1 model/table and "
+            "its scope_type, district, and small_group fields after local dry-run "
+            "preflight confirmed zero V1 session/child rows and zero unexpected "
+            "inbound dependencies. The migration starts with a RunPython guard "
+            "that aborts on target DBs where any V1 BibleStudySession, "
+            "BibleStudyGuide, or BibleStudyWorshipSong rows still exist. V1 is "
+            "not migrated to membership-core or V2, and these removed fields no "
+            "longer actively block final SmallGroup/District table retirement "
+            "after the migration is applied."
         ),
-        "suggested_removal_phase": "phase 5",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudyGuide (V1 child table)",
+        "candidate_name": "BibleStudyGuide (V1 child table removed)",
         "model_table": "studies.BibleStudyGuide",
         "field_name": "session",
-        "candidate_type": "model/table",
-        "diagnostic_cleanup_references": _refs(
-            "purge_legacy_bible_study_v1_sessions",
+        "candidate_type": "removed model/table",
+        "migration_history_references": _refs(
+            "studies migrations, including guarded BS-V1-SCHEMA-RETIRE.1A removal"
         ),
-        "test_fixture_references": _refs("V1 purge fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "v1_guides",
-        "schema_fk_or_table_blocker": True,
         "recommended_next_action": (
-            "V1 child data must be cleaned up only by the guarded V1 purge path "
-            "after explicit user approval. Do not keep or migrate this table as "
-            "membership-core; after purge, remove it only in a later schema "
-            "migration slice together with the V1 session table."
+            "Completed. BS-V1-SCHEMA-RETIRE.1A removes this V1-only child table "
+            "behind the same migration guard that aborts when any V1 child rows "
+            "remain on a target DB. Only immutable historical migrations should "
+            "continue to name it."
         ),
-        "suggested_removal_phase": "phase 5",
+        "suggested_removal_phase": "historical only",
     },
     {
-        "candidate_name": "BibleStudyWorshipSong (V1 child table)",
+        "candidate_name": "BibleStudyWorshipSong (V1 child table removed)",
         "model_table": "studies.BibleStudyWorshipSong",
         "field_name": "session",
-        "candidate_type": "model/table",
-        "diagnostic_cleanup_references": _refs(
-            "purge_legacy_bible_study_v1_sessions",
+        "candidate_type": "removed model/table",
+        "migration_history_references": _refs(
+            "studies migrations, including guarded BS-V1-SCHEMA-RETIRE.1A removal"
         ),
-        "test_fixture_references": _refs("V1 purge fixtures"),
-        "migration_history_references": _refs("studies migrations"),
-        "data_counter": "v1_worship_songs",
-        "schema_fk_or_table_blocker": True,
         "recommended_next_action": (
-            "V1 child data must be cleaned up only by the guarded V1 purge path "
-            "after explicit user approval. Do not keep or migrate this table as "
-            "membership-core; after purge, remove it only in a later schema "
-            "migration slice together with the V1 session table."
+            "Completed. BS-V1-SCHEMA-RETIRE.1A removes this V1-only child table "
+            "behind the same migration guard that aborts when any V1 child rows "
+            "remain on a target DB. Only immutable historical migrations should "
+            "continue to name it."
         ),
-        "suggested_removal_phase": "phase 5",
+        "suggested_removal_phase": "historical only",
     },
     {
         "candidate_name": "ReflectionComment.small_group_at_post (removed)",
@@ -783,9 +763,9 @@ def _data_counts():
         )
         .exclude(generation_key="")
         .count(),
-        "v1_sessions": BibleStudySession.objects.count(),
-        "v1_guides": BibleStudyGuide.objects.count(),
-        "v1_worship_songs": BibleStudyWorshipSong.objects.count(),
+        # BS-V1-SCHEMA-RETIRE.1A removed the V1 model/table definitions, so
+        # there are no live ORM data counters for them in this audit. The
+        # schema-removal migration itself guards target DBs before deletion.
         "reflection_structure_unit_at_post": ReflectionComment.objects.filter(
             structure_unit_at_post__isnull=False
         ).count(),

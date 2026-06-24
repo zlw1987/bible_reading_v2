@@ -15,6 +15,8 @@ Status update: CS-MAP.2 is now complete (see Section 7 for the completion note),
 
 **LEGACY-STRUCTURE-TABLE-RETIRE.1A current update:** the legacy object-row purge has completed with 0 `SmallGroup`, 0 `District`, and 0 `MinistryContext` rows remaining; the legacy `UNASSIGNED-GROUPS` / `District #13` row was deleted while the canonical `ChurchStructureUnit` custom unit remains. `/staff/structure/mappings/` review/edit is retired as an active staff maintenance surface, and `/staff/structure/` remains the canonical structure map/setup surface. `seed_church_structure_units` no longer seeds or updates legacy rows, and the purge command is retired after the successful guarded apply. The guarded schema migration now removes the legacy object models/tables after a zero-row guard; after apply, those tables and bridge mapping FKs are historical/removed.
 
+**LEGACY-STRUCTURE-TABLE-RETIRE.1B local/dev verification:** on 2026-06-24, the local/dev DB in `E:\bible-reading\bible_reading_v2` was verified with `accounts.0015_remove_legacy_structure_tables` applied. The current local `migrate` run reported no pending operations because the migration was already applied; post-verification kept audits clean and confirms the legacy object models/tables are gone from ORM/runtime and the local schema. Production/remote DBs still require the normal deployment migration step and target-DB guard review.
+
 ## 2. Current Foundation Summary
 
 Audited from the current working tree:

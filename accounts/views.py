@@ -6,7 +6,7 @@ from django.contrib.auth.views import PasswordChangeView
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, Q
-from django.http import Http404, HttpResponseForbidden
+from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -25,10 +25,7 @@ from .ui_text import UI_TEXT
 from .models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    MinistryContext,
     Profile,
-    SmallGroup,
 )
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 
@@ -235,7 +232,7 @@ def staff_structure_map(request):
     ChurchStructureMembership, and zero-row ServiceEvents fail closed for
     ordinary users (the zero-row legacy fallback was retired in SE-RETIRE.1B),
     while Bible Study member visibility/generation, reading/privacy/progress,
-    permissions, and My Serving remain legacy/consumer-specific as documented.
+    permissions, and My Serving remain consumer-specific as documented.
     The structure map is counts/setup context only and does not itself grant
     visibility.
     """
@@ -253,27 +250,6 @@ def staff_structure_map(request):
     for unit in units:
         children.setdefault(unit.parent_id, []).append(unit)
 
-    # Active legacy rows that reference a unit: display context per row, and
-    # the reference set for the "no linked current records" indicator.
-    legacy_rows = [
-        *MinistryContext.objects.filter(
-            is_active=True, church_structure_unit__isnull=False
-        ),
-        *District.objects.filter(
-            is_active=True, church_structure_unit__isnull=False
-        ),
-        *SmallGroup.objects.filter(
-            is_active=True, church_structure_unit__isnull=False
-        ),
-    ]
-    legacy_names_by_unit = {}
-    mapped_unit_ids = set()
-    for legacy_row in legacy_rows:
-        mapped_unit_ids.add(legacy_row.church_structure_unit_id)
-        legacy_names_by_unit.setdefault(
-            legacy_row.church_structure_unit_id, []
-        ).append(str(legacy_row))
-
     active_memberships = ChurchStructureMembership.objects.filter(
         status=ChurchStructureMembership.STATUS_ACTIVE,
         start_date__lte=today,
@@ -287,16 +263,13 @@ def staff_structure_map(request):
             membership.user_id
         )
 
-    holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
     structure_rows = []
     visited = set()
     counters = {
-        "under_holding": 0,
-        "without_linked_records": 0,
         "direct_parent_memberships": 0,
     }
 
-    def walk(unit, depth, under_holding, ancestor_ids):
+    def walk(unit, depth, ancestor_ids):
         visited.add(unit.id)
         direct_primary_user_ids = set(
             direct_primary_user_ids_by_unit.get(unit.id, set())
@@ -315,34 +288,21 @@ def staff_structure_map(request):
             "is_root": unit.unit_type == ChurchStructureUnit.UNIT_ROOT,
             "membership_count": 0,
             "direct_parent_membership_count": direct_parent_membership_count,
-            "legacy_names": legacy_names_by_unit.get(unit.id, []),
-            "under_holding": under_holding,
-            "without_linked_records": False,
         }
         structure_rows.append(row)
-        if under_holding:
-            counters["under_holding"] += 1
         if direct_parent_membership_count:
             counters["direct_parent_memberships"] += direct_parent_membership_count
-        subtree_mapped = unit.id in mapped_unit_ids
         covered_user_ids = set(direct_primary_user_ids)
-        child_under_holding = under_holding or unit.code in holding_codes
         for child in active_children:
             if child.id not in visited:
-                child_mapped, child_user_ids = walk(
+                child_user_ids = walk(
                     child,
                     depth + 1,
-                    child_under_holding,
                     ancestor_ids + [unit.id],
                 )
-                if child_mapped:
-                    subtree_mapped = True
                 covered_user_ids.update(child_user_ids)
-        if not subtree_mapped and unit.unit_type != ChurchStructureUnit.UNIT_ROOT:
-            row["without_linked_records"] = True
-            counters["without_linked_records"] += 1
         row["membership_count"] = len(covered_user_ids)
-        return subtree_mapped, covered_user_ids
+        return covered_user_ids
 
     roots = [unit for unit in units if unit.parent_id is None]
     roots.sort(
@@ -354,27 +314,13 @@ def staff_structure_map(request):
         )
     )
     for root in roots:
-        walk(root, 0, False, [])
+        walk(root, 0, [])
     # Active units whose parent is inactive or missing stay visible at the end.
     for unit in units:
         if unit.id not in visited:
-            walk(unit, 0, False, [])
+            walk(unit, 0, [])
 
     indicators = {
-        "unmapped_ministry_contexts": MinistryContext.objects.filter(
-            is_active=True,
-            church_structure_unit__isnull=True,
-        ).count(),
-        "unmapped_districts": District.objects.filter(
-            is_active=True,
-            church_structure_unit__isnull=True,
-        ).count(),
-        "unmapped_small_groups": SmallGroup.objects.filter(
-            is_active=True,
-            church_structure_unit__isnull=True,
-        ).count(),
-        "units_without_linked_records": counters["without_linked_records"],
-        "units_under_holding": counters["under_holding"],
         "direct_parent_memberships": counters["direct_parent_memberships"],
         "active_root_units": ChurchStructureUnit.objects.filter(
             is_active=True,
@@ -384,10 +330,7 @@ def staff_structure_map(request):
             is_active=False,
         )
         .filter(
-            Q(legacy_ministry_contexts__isnull=False)
-            | Q(legacy_districts__isnull=False)
-            | Q(legacy_small_groups__isnull=False)
-            | Q(bible_study_series_audience_scopes__isnull=False)
+            Q(bible_study_series_audience_scopes__isnull=False)
             | Q(service_event_audience_scope_links__isnull=False)
         )
         .distinct()
@@ -483,493 +426,6 @@ def staff_structure_unit_rename(request, unit_id):
         else "Display name updated.",
     )
     return redirect(edit_url)
-
-
-# CS-SETUP.1D.1: supported legacy -> structure mapping types. Each legacy model
-# maps to exactly one ChurchStructureUnit type and is gated by the matching
-# Django Admin change permission. The edit dropdown is filtered to active units
-# of the matching type for convenience, but the POST handler re-validates
-# required / exists / active / type-match / duplicate-active authoritatively.
-LEGACY_MAPPING_TYPES = {
-    "ministry-context": {
-        "model": MinistryContext,
-        "unit_type": ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
-        "perm": "accounts.change_ministrycontext",
-    },
-    "district": {
-        "model": District,
-        "unit_type": ChurchStructureUnit.UNIT_DISTRICT,
-        "perm": "accounts.change_district",
-    },
-    "small-group": {
-        "model": SmallGroup,
-        "unit_type": ChurchStructureUnit.UNIT_SMALL_GROUP,
-        "perm": "accounts.change_smallgroup",
-    },
-}
-
-# Status filter keys accepted by the mapping review page; reused when an edit
-# action round-trips the prior filter back to the review list.
-MAPPING_REVIEW_STATUSES = {
-    "all",
-    "needs_review",
-    "mapped_active",
-    "unmapped",
-    "mapped_inactive",
-    "mapped_holding",
-    # Display-only conflict/warning overlay filters (CS-SETUP.1D.3). They narrow
-    # the list by overlay flag rather than primary status_key and write nothing.
-    "conflicts",
-    "type_mismatch",
-    "duplicate_active",
-}
-
-
-@staff_member_required
-@require_GET
-def staff_structure_mapping_review(request):
-    """Legacy -> structure mapping review (CS-SETUP.1C.1 / .1C.2 / .1D.1 /
-    .1D.2 / .1D.3).
-
-    Staff-only final-retirement/setup diagnostic page that lists every legacy
-    MinistryContext / District / SmallGroup row beside the ChurchStructureUnit it is mapped to, with a
-    mapping-status label and (CS-SETUP.1D.2) display-only type-mismatch /
-    duplicate-active conflict badges. CS-SETUP.1C.2 adds summary counts and
-    primary ``?status=`` filter links so a long mapping list can be narrowed to
-    the rows that need review. CS-SETUP.1D.3 adds three more display-only
-    overlay filters (``?status=conflicts`` / ``type_mismatch`` /
-    ``duplicate_active``) that narrow the same list by conflict-badge flag
-    instead of primary status; like the primary filters they are GET-only
-    navigation, leave the badges and all counts as true totals, and write
-    nothing. This view itself is GET-only and writes nothing: the
-    ``status`` filter only hides/shows already-loaded rows. When the viewer
-    holds the matching Django Admin change permission, each permitted row offers
-    a one-row mapping edit link (CS-SETUP.1D.1) to the separate
-    ``staff_structure_mapping_edit`` view; Django Admin edit links appear under
-    the same permission. Those edits change the legacy -> structure mapping
-    only: they do not directly edit members, audience rows, serving schedules,
-    permissions, ordinary visibility, or normal Bible Study V2 generation. Like
-    /staff/structure/, this page never uses ChurchStructureMembership as a
-    runtime visibility source. Since CS-CORE.2B-A, ServiceEvent audience rows
-    match by active primary membership instead of these mapping fields; normal
-    Bible Study V2 generation is now structure-native, while final-retirement
-    setup/admin/diagnostic resolution can still read this mapping.
-    """
-    language = get_user_language(request)
-    holding_codes = {"UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"}
-
-    # Read-only status filter. "needs_review" is the union of the three
-    # attention statuses; an unknown value falls back to showing all rows.
-    # The overlay filters (CS-SETUP.1D.3) narrow by display-only conflict flag
-    # instead of the primary status_key, so they sit alongside the primary
-    # status filters without changing what status_key a row carries.
-    needs_review_keys = ("unmapped", "mapped_inactive", "mapped_holding")
-    overlay_statuses = ("conflicts", "type_mismatch", "duplicate_active")
-    valid_statuses = (
-        ("all", "needs_review", "mapped_active")
-        + needs_review_keys
-        + overlay_statuses
-    )
-    status = request.GET.get("status", "all")
-    if status not in valid_statuses:
-        status = "all"
-
-    def row_matches(row):
-        if status == "all":
-            return True
-        if status == "needs_review":
-            return row["status_key"] in needs_review_keys
-        # Overlay filters inspect the display-only conflict flags on the full
-        # row rather than the primary status_key, so a mapped_active row can
-        # still surface under a conflict filter.
-        if status == "conflicts":
-            return row["is_type_mismatch"] or row["is_duplicate_active"]
-        if status == "type_mismatch":
-            return row["is_type_mismatch"]
-        if status == "duplicate_active":
-            return row["is_duplicate_active"]
-        return row["status_key"] == status
-
-    # Counts are tallied across every loaded row, independent of the active
-    # filter, so the summary always shows true totals for the filter links.
-    # ``type_mismatch`` / ``duplicate_active`` are display-only conflict
-    # overlays (CS-SETUP.1D.2): they sit on top of the primary status_key
-    # rather than replacing it, so a row can be both ``mapped_active`` and a
-    # duplicate-conflict at once. ``conflicts`` counts rows carrying either
-    # overlay (a row with both is counted once).
-    counts = {
-        "all": 0,
-        "mapped_active": 0,
-        "unmapped": 0,
-        "mapped_inactive": 0,
-        "mapped_holding": 0,
-        "type_mismatch": 0,
-        "duplicate_active": 0,
-        "conflicts": 0,
-    }
-
-    can_change_unit = request.user.has_perm(
-        "accounts.change_churchstructureunit"
-    )
-
-    def build_rows(
-        queryset, legacy_admin_viewname, can_change_legacy, legacy_type_slug
-    ):
-        # The mapping config drives the two conflict overlays: ``unit_type``
-        # is the type a row of this legacy kind is expected to map to, and the
-        # duplicate set lists units that more than one *active* row of this
-        # same kind point at (the exact condition the edit POST handler
-        # blocks). Both are display-only here; nothing is written.
-        config = LEGACY_MAPPING_TYPES[legacy_type_slug]
-        expected_unit_type = config["unit_type"]
-        legacy_model = config["model"]
-        duplicate_unit_ids = set(
-            legacy_model.objects.filter(
-                is_active=True, church_structure_unit__isnull=False
-            )
-            .values("church_structure_unit")
-            .annotate(n=Count("church_structure_unit"))
-            .filter(n__gt=1)
-            .values_list("church_structure_unit", flat=True)
-        )
-
-        all_rows = []
-        for obj in queryset:
-            unit = obj.church_structure_unit
-            if unit is None:
-                status_key = "unmapped"
-                unit_path = ""
-                unit_is_active = None
-                is_type_mismatch = False
-                is_duplicate_active = False
-            else:
-                # Reuse a single ancestor walk for both the path label and the
-                # cheap holding-node check, rather than calling path_label()
-                # and re-walking parents separately.
-                chain = unit.get_ancestors() + [unit]
-                unit_path = " > ".join(
-                    node.display_name(language) for node in chain
-                )
-                unit_is_active = unit.is_active
-                if not unit.is_active:
-                    status_key = "mapped_inactive"
-                elif any(node.code in holding_codes for node in chain):
-                    status_key = "mapped_holding"
-                else:
-                    status_key = "mapped_active"
-                # Conflict overlays. Wrong-type mappings cannot be produced by
-                # the in-app edit (it re-validates type), but legacy data or a
-                # direct Admin edit can leave one, so it is surfaced. Duplicate
-                # only flags active rows, matching the active-only edit guard.
-                is_type_mismatch = unit.unit_type != expected_unit_type
-                is_duplicate_active = (
-                    obj.is_active and unit.pk in duplicate_unit_ids
-                )
-            counts["all"] += 1
-            counts[status_key] += 1
-            if is_type_mismatch:
-                counts["type_mismatch"] += 1
-            if is_duplicate_active:
-                counts["duplicate_active"] += 1
-            if is_type_mismatch or is_duplicate_active:
-                counts["conflicts"] += 1
-            all_rows.append(
-                {
-                    "label": str(obj),
-                    "is_active": obj.is_active,
-                    "unit": unit,
-                    "unit_path": unit_path,
-                    "unit_is_active": unit_is_active,
-                    "status_key": status_key,
-                    "is_type_mismatch": is_type_mismatch,
-                    "is_duplicate_active": is_duplicate_active,
-                    "legacy_admin_url": (
-                        reverse(legacy_admin_viewname, args=[obj.pk])
-                        if can_change_legacy
-                        else None
-                    ),
-                    "unit_admin_url": (
-                        reverse(
-                            "admin:accounts_churchstructureunit_change",
-                            args=[unit.pk],
-                        )
-                        if unit is not None and can_change_unit
-                        else None
-                    ),
-                    # In-app mapping edit (CS-SETUP.1D.1). Offered only to staff
-                    # holding the matching legacy change permission; read-only
-                    # staff see no edit action.
-                    "mapping_edit_url": (
-                        reverse(
-                            "staff_structure_mapping_edit",
-                            args=[legacy_type_slug, obj.pk],
-                        )
-                        if can_change_legacy
-                        else None
-                    ),
-                }
-            )
-        # Tally happens on every row above; only matching rows are rendered.
-        return [row for row in all_rows if row_matches(row)]
-
-    sections = [
-        {
-            "key": "ministry_contexts",
-            "rows": build_rows(
-                MinistryContext.objects.select_related(
-                    "church_structure_unit"
-                ).order_by("sort_order", "code", "name"),
-                "admin:accounts_ministrycontext_change",
-                request.user.has_perm("accounts.change_ministrycontext"),
-                "ministry-context",
-            ),
-        },
-        {
-            "key": "districts",
-            "rows": build_rows(
-                District.objects.select_related(
-                    "church_structure_unit"
-                ).order_by("name"),
-                "admin:accounts_district_change",
-                request.user.has_perm("accounts.change_district"),
-                "district",
-            ),
-        },
-        {
-            "key": "small_groups",
-            "rows": build_rows(
-                SmallGroup.objects.select_related(
-                    "church_structure_unit"
-                ).order_by("name"),
-                "admin:accounts_smallgroup_change",
-                request.user.has_perm("accounts.change_smallgroup"),
-                "small-group",
-            ),
-        },
-    ]
-
-    counts["needs_review"] = (
-        counts["unmapped"] + counts["mapped_inactive"] + counts["mapped_holding"]
-    )
-
-    return render(
-        request,
-        "accounts/staff/structure_mapping_review.html",
-        {
-            "active_nav": "staff",
-            "sections": sections,
-            "counts": counts,
-            "status": status,
-        },
-    )
-
-
-@staff_member_required
-def staff_structure_mapping_edit(request, legacy_type, legacy_id):
-    """Edit one legacy row's church_structure_unit mapping (CS-SETUP.1D.1).
-
-    Narrow staff workflow that sets or changes a single MinistryContext /
-    District / SmallGroup row's ``church_structure_unit`` to one existing
-    *active* ChurchStructureUnit of the matching unit type. GET renders a
-    review/edit form; the save is an explicit POST only (no inline autosave).
-    Backend validation is authoritative (required / exists / active /
-    type-match / duplicate-active); the filtered dropdown is convenience only.
-
-    It writes nothing else directly: no unit lifecycle, no membership, no
-    audience-scope rows (ServiceEventAudienceScope / BibleStudySeriesAudienceScope),
-    and no TeamAssignment. It does not edit members,
-    audience rows, serving schedules, or permissions. Since CS-CORE.2B-A,
-    ServiceEvent audience rows match by active primary ChurchStructureMembership
-    instead of this mapping bridge. Normal Bible Study V2 generation is now
-    structure-native, while final-retirement setup/admin/diagnostic resolution
-    can still read this mapping. To keep that effect explicit, the POST requires a
-    staff acknowledgement checkbox before it will save; without it the mapping
-    is left unchanged. Each successful update
-    is audited via a Django admin
-    ``LogEntry`` CHANGE record carrying the before/after mapped-unit context.
-    """
-    language = get_user_language(request)
-
-    config = LEGACY_MAPPING_TYPES.get(legacy_type)
-    if config is None:
-        raise Http404("Unknown legacy mapping type.")
-
-    # Write access is strictly the matching Django Admin change permission for
-    # the legacy model; read-only staff structure access is not write access.
-    if not request.user.has_perm(config["perm"]):
-        return HttpResponseForbidden("Not allowed to edit this mapping.")
-
-    model = config["model"]
-    unit_type = config["unit_type"]
-    obj = get_object_or_404(model, pk=legacy_id)
-
-    review_url = reverse("staff_structure_mapping_review")
-    # Preserve the prior status filter only when the review page accepts it.
-    status = request.POST.get("status") or request.GET.get("status") or ""
-    if status not in MAPPING_REVIEW_STATUSES:
-        status = ""
-    redirect_url = f"{review_url}?status={status}" if status else review_url
-
-    target_units = list(
-        ChurchStructureUnit.objects.filter(
-            is_active=True, unit_type=unit_type
-        ).order_by("sort_order", "code", "name")
-    )
-
-    current_unit = obj.church_structure_unit
-    # Default selection echoes the current mapping. If the current unit is
-    # inactive or the wrong type it is not among target_units, so the dropdown
-    # falls back to the placeholder until staff pick an active matching unit.
-    selected_unit_id = current_unit.pk if current_unit else None
-    error = None
-    acknowledged = False
-
-    if request.method == "POST":
-        # Required impact acknowledgement (CS-SETUP.1D.4). A mapping edit does
-        # not directly touch members/audience/schedule/permission rows, but it
-        # can still affect remaining Bible Study bridge/admin/diagnostic
-        # resolution, so staff must confirm they understand that before any save.
-        acknowledged = bool(request.POST.get("acknowledge_impact"))
-        raw = (request.POST.get("church_structure_unit") or "").strip()
-        selected_unit_id = None
-        if raw:
-            try:
-                selected_unit_id = int(raw)
-            except (TypeError, ValueError):
-                selected_unit_id = None
-
-        target = None
-        if not raw:
-            error = (
-                "请选择一个结构单元。" if language == "zh"
-                else "Please choose a structure unit."
-            )
-        else:
-            target = (
-                ChurchStructureUnit.objects.filter(pk=selected_unit_id).first()
-                if selected_unit_id is not None
-                else None
-            )
-            if target is None:
-                error = (
-                    "所选结构单元不存在。" if language == "zh"
-                    else "The selected structure unit does not exist."
-                )
-            elif not target.is_active:
-                error = (
-                    "所选结构单元已停用，无法对应。" if language == "zh"
-                    else "The selected structure unit is inactive."
-                )
-            elif target.unit_type != unit_type:
-                error = (
-                    "所选结构单元类型不匹配。" if language == "zh"
-                    else "The selected structure unit type does not match "
-                    "this record."
-                )
-            else:
-                # Duplicate guard: do not let two active legacy rows of the
-                # same type map to the same unit. Keeping the current row's
-                # existing mapping is always allowed (no change to enforce).
-                is_change = (
-                    current_unit is None or current_unit.pk != target.pk
-                )
-                if is_change and obj.is_active:
-                    conflict = (
-                        model.objects.filter(
-                            is_active=True, church_structure_unit=target
-                        )
-                        .exclude(pk=obj.pk)
-                        .exists()
-                    )
-                    if conflict:
-                        error = (
-                            "已有另一条启用记录对应到该结构单元。"
-                            if language == "zh"
-                            else "Another active record is already mapped to "
-                            "this structure unit."
-                        )
-
-        # Acknowledgement is enforced only once the target itself is valid, so
-        # existing target validation messages (required / exists / active /
-        # type / duplicate) keep surfacing unchanged for an invalid target.
-        if error is None and not acknowledged:
-            error = (
-                "保存前请确认你了解此对应关系更改仅用于最终退役准备、设置检查、管理或诊断解析。"
-                if language == "zh"
-                else "Please confirm that you understand this mapping change "
-                "is for final-retirement preparation, setup checks, admin, or "
-                "diagnostic resolution before saving."
-            )
-
-        if error is None:
-            old_unit = current_unit
-            obj.church_structure_unit = target
-            obj.save(update_fields=["church_structure_unit"])
-
-            old_repr = (
-                f"{old_unit} (id={old_unit.pk})" if old_unit else "None"
-            )
-            new_repr = f"{target} (id={target.pk})"
-            LogEntry.objects.log_action(
-                user_id=request.user.pk,
-                content_type_id=ContentType.objects.get_for_model(model).pk,
-                object_id=obj.pk,
-                object_repr=str(obj),
-                action_flag=CHANGE,
-                change_message=(
-                    "Updated legacy structure mapping via staff mapping "
-                    "maintenance (CS-SETUP.1D.1). "
-                    f"church_structure_unit: {old_repr} -> {new_repr}."
-                ),
-            )
-            messages.success(
-                request,
-                "已更新对应关系。" if language == "zh"
-                else "Mapping updated.",
-            )
-            return redirect(redirect_url)
-
-        messages.error(request, error)
-
-    type_labels = {
-        ChurchStructureUnit.UNIT_MINISTRY_CONTEXT: (
-            "事工范围" if language == "zh" else "Ministry Context"
-        ),
-        ChurchStructureUnit.UNIT_DISTRICT: (
-            "区" if language == "zh" else "District"
-        ),
-        ChurchStructureUnit.UNIT_SMALL_GROUP: (
-            "小组" if language == "zh" else "Small Group"
-        ),
-    }
-    unit_options = [
-        {"id": unit.pk, "label": unit.path_label(language)}
-        for unit in target_units
-    ]
-
-    return render(
-        request,
-        "accounts/staff/structure_mapping_edit.html",
-        {
-            "active_nav": "staff",
-            "legacy_label": str(obj),
-            "legacy_type_label": type_labels.get(unit_type, ""),
-            "legacy_is_active": obj.is_active,
-            "current_unit": current_unit,
-            "current_unit_path": (
-                current_unit.path_label(language) if current_unit else ""
-            ),
-            "current_unit_is_active": (
-                current_unit.is_active if current_unit else None
-            ),
-            "unit_options": unit_options,
-            "selected_unit_id": selected_unit_id,
-            "status": status,
-            "redirect_url": redirect_url,
-            "error": error,
-            "acknowledged": acknowledged,
-        },
-    )
 
 
 @staff_member_required

@@ -1,4 +1,5 @@
 import re
+import unittest
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
@@ -1368,6 +1369,10 @@ class ChurchStructureSelectorLayerTests(TestCase):
             set(expected_groups),
         )
 
+    @unittest.skip(
+        "Legacy resolve_units_to_small_groups helper retired in "
+        "LEGACY-STRUCTURE-SURFACE-RETIRE.1A."
+    )
     def test_resolve_units_to_small_groups_uses_structure_mapping_only(self):
         """Non-root selections resolve via SmallGroup.church_structure_unit only.
 
@@ -1410,6 +1415,10 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self.assertIn(self.group, root_groups)
         self.assertNotIn(inactive_group, root_groups)
 
+    @unittest.skip(
+        "Legacy resolve_units_to_small_groups helper retired in "
+        "LEGACY-STRUCTURE-SURFACE-RETIRE.1A."
+    )
     def test_resolve_units_ignores_legacy_district_without_mapping(self):
         """A group mapped only via legacy district is excluded for non-root units."""
         # unmapped_group has no church_structure_unit (its legacy district parent
@@ -1422,6 +1431,10 @@ class ChurchStructureSelectorLayerTests(TestCase):
             self.other_group,
         ])
 
+    @unittest.skip(
+        "Legacy resolve_units_to_small_groups helper retired in "
+        "LEGACY-STRUCTURE-SURFACE-RETIRE.1A."
+    )
     def test_resolve_units_uses_structure_mapping_for_group_under_north(self):
         """A group resolves purely by its church_structure_unit mapping.
 
@@ -1441,6 +1454,10 @@ class ChurchStructureSelectorLayerTests(TestCase):
         )
         self.assert_resolved_groups([self.south_unit], [self.other_group])
 
+    @unittest.skip(
+        "Legacy resolve_units_to_small_groups helper retired in "
+        "LEGACY-STRUCTURE-SURFACE-RETIRE.1A."
+    )
     def test_resolve_units_to_small_groups_does_not_duplicate_groups(self):
         from accounts.structure_selectors import resolve_units_to_small_groups
 
@@ -1649,7 +1666,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
         self,
     ):
         from accounts.structure_selectors import (
-            resolve_units_to_small_groups,
             user_matches_membership_structure_audience,
             user_matches_structure_audience,
         )
@@ -1661,7 +1677,6 @@ class ChurchStructureSelectorLayerTests(TestCase):
             user_matches_membership_structure_audience(member, [self.unmapped_unit])
         )
         self.assertTrue(user_matches_structure_audience(member, [self.unmapped_unit]))
-        self.assertEqual(list(resolve_units_to_small_groups([self.unmapped_unit])), [])
 
     def test_membership_audience_requested_membership_does_not_match(self):
         from accounts.structure_selectors import (
@@ -1821,42 +1836,19 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         call_command("seed_church_structure_units", *args, stdout=output)
         return output.getvalue()
 
-    def test_dry_run_creates_no_units_or_mappings(self):
-        # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy parent/context FKs,
-        # so the district and group start out unmapped and the dry run mirrors
-        # nothing.
-        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        district = District.objects.create(name="District 1")
-        group = SmallGroup.objects.create(name="Rainbow 4")
-
+    def test_dry_run_previews_root_without_reading_legacy_rows(self):
         output = self.run_seed_command("--dry-run")
 
         self.assertIn("Church structure unit seeding mode: DRY RUN", output)
+        self.assertIn("Would create root CHURCH", output)
+        self.assertIn("legacy row source: retired", output)
         self.assertEqual(ChurchStructureUnit.objects.count(), 0)
 
-        context.refresh_from_db()
-        district.refresh_from_db()
-        group.refresh_from_db()
-        self.assertIsNone(context.church_structure_unit)
-        self.assertIsNone(district.church_structure_unit)
-        self.assertIsNone(group.church_structure_unit)
-
-    def test_apply_seeds_ministry_contexts_under_root(self):
-        # MinistryContext units (whose parent is always the root) are still seeded
-        # normally; the legacy District/SmallGroup hierarchy is no longer rebuilt
-        # from removed parent links.
-        context = MinistryContext.objects.create(
-            code="cm",
-            name="中文事工",
-            name_en="Chinese Ministry",
-            description="中文事工说明",
-            description_en="Chinese ministry description",
-            sort_order=10,
-        )
-
+    def test_apply_seeds_only_canonical_root(self):
         output = self.run_seed_command("--apply")
 
         self.assertIn("Church structure unit seeding mode: APPLY", output)
+        self.assertIn("legacy row source: retired", output)
 
         root = ChurchStructureUnit.objects.get(
             parent__isnull=True,
@@ -1866,105 +1858,56 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertEqual(root.name, "全教会")
         self.assertEqual(root.name_en, "Whole Church")
 
-        context.refresh_from_db()
-        self.assertEqual(context.church_structure_unit.parent, root)
-        self.assertEqual(
-            context.church_structure_unit.unit_type,
-            ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
-        )
-        self.assertEqual(context.church_structure_unit.code, "CM")
-        self.assertEqual(context.church_structure_unit.name, "中文事工")
-        self.assertEqual(context.church_structure_unit.name_en, "Chinese Ministry")
-
-    def test_apply_reports_unmapped_district_and_group_without_reparenting(self):
-        # Without the legacy parent FKs an unmapped district/group can no longer be
-        # auto-placed. The command must report them explicitly and must NOT create
-        # unassigned holding units or silently reparent them.
+    def test_apply_does_not_link_or_update_legacy_rows(self):
+        context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         district = District.objects.create(name="District without mapping")
         group = SmallGroup.objects.create(name="Group without mapping")
 
         output = self.run_seed_command("--apply")
 
-        self.assertIn("has no church_structure_unit mapping", output)
-        self.assertIn("not reparented to an unassigned holding unit", output)
-        self.assertIn("unreconstructable", output)
+        self.assertIn("legacy row source: retired", output)
+        self.assertIn("legacy rows linked: 0", output)
 
-        self.assertFalse(
-            ChurchStructureUnit.objects.filter(
-                code__in=["UNASSIGNED-DISTRICTS", "UNASSIGNED-GROUPS"]
-            ).exists()
-        )
-
+        context.refresh_from_db()
         district.refresh_from_db()
         group.refresh_from_db()
+        self.assertIsNone(context.church_structure_unit)
         self.assertIsNone(district.church_structure_unit)
         self.assertIsNone(group.church_structure_unit)
 
-    def test_apply_maintains_already_mapped_rows_without_reparenting(self):
-        # Already-mapped districts/groups are maintained against their existing
-        # ChurchStructureUnit.parent (authoritative); the command refreshes the
-        # display name from the legacy row but never moves the unit to a new
-        # parent.
+    def test_apply_updates_existing_root_but_not_legacy_mapped_units(self):
         root = ChurchStructureUnit.objects.create(
-            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
             code="CHURCH",
-            name="全教会",
-            name_en="Whole Church",
+            name="Old Root",
+            name_en="Old Root",
+            is_active=False,
+            sort_order=99,
         )
-        cm_unit = ChurchStructureUnit.objects.create(
+        mapped_unit = ChurchStructureUnit.objects.create(
             parent=root,
-            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
-            code="CM",
-            name="Chinese Ministry",
-        )
-        district_unit = ChurchStructureUnit.objects.create(
-            parent=cm_unit,
-            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
-            code="NORTH",
-            name="Old North",
-        )
-        group_unit = ChurchStructureUnit.objects.create(
-            parent=district_unit,
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="R4",
             name="Old Rainbow",
         )
-        context = MinistryContext.objects.create(
-            code="CM",
-            name="Chinese Ministry",
-            church_structure_unit=cm_unit,
-        )
-        district = District.objects.create(
-            name="North",
-            church_structure_unit=district_unit,
-        )
-        group = SmallGroup.objects.create(
+        SmallGroup.objects.create(
             name="Rainbow 4",
-            church_structure_unit=group_unit,
+            church_structure_unit=mapped_unit,
         )
 
         self.run_seed_command("--apply")
 
-        district_unit.refresh_from_db()
-        group_unit.refresh_from_db()
+        root.refresh_from_db()
+        mapped_unit.refresh_from_db()
 
-        # Parents preserved (no reparenting).
-        self.assertEqual(district_unit.parent, cm_unit)
-        self.assertEqual(group_unit.parent, district_unit)
-        # Codes preserved; display names refreshed from the legacy rows.
-        self.assertEqual(district_unit.code, "NORTH")
-        self.assertEqual(group_unit.code, "R4")
-        self.assertEqual(district_unit.name, "North")
-        self.assertEqual(group_unit.name, "Rainbow 4")
-
-        district.refresh_from_db()
-        group.refresh_from_db()
-        self.assertEqual(district.church_structure_unit, district_unit)
-        self.assertEqual(group.church_structure_unit, group_unit)
+        self.assertEqual(root.unit_type, ChurchStructureUnit.UNIT_ROOT)
+        self.assertEqual(root.name, "全教会")
+        self.assertEqual(root.name_en, "Whole Church")
+        self.assertTrue(root.is_active)
+        self.assertEqual(root.sort_order, 0)
+        self.assertEqual(mapped_unit.name, "Old Rainbow")
 
     def test_apply_is_idempotent(self):
-        MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-
         self.run_seed_command("--apply")
         first_unit_count = ChurchStructureUnit.objects.count()
 
@@ -1974,12 +1917,9 @@ class ChurchStructureUnitSeedingCommandTests(TestCase):
         self.assertEqual(ChurchStructureUnit.objects.count(), first_unit_count)
         self.assertIn("created: 0", second_output)
         self.assertIn("would created: 0", dry_run_output)
-        self.assertIn("would linked: 0", dry_run_output)
+        self.assertIn("legacy rows linked: 0", dry_run_output)
 
     def test_apply_preserves_existing_runtime_behavior(self):
-        MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        group = SmallGroup.objects.create(name="Rainbow 4")
-        other_group = SmallGroup.objects.create(name="Rainbow 5")
         user = User.objects.create_user(
             username="seeded_member",
             password="TestPass123!",
@@ -2304,63 +2244,20 @@ class ChurchStructureAdminClarityTests(TestCase):
         )
         self.client.login(username="structure_admin", password="AdminPass123!")
 
-    def test_legacy_small_group_admin_explains_current_runtime_source(self):
+    def test_legacy_small_group_admin_is_retired(self):
         group = SmallGroup.objects.create(name="Rainbow 4")
 
-        response = self.client.get(
+        with self.assertRaises(Exception):
             reverse("admin:accounts_smallgroup_change", args=[group.pk])
-        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Legacy Small Groups")
-        self.assertContains(response, "旧小组")
-        self.assertContains(response, "Legacy bridge/archive model")
-        self.assertContains(response, "not canonical ordinary-member")
-        self.assertContains(response, "V1 Bible Study models/tables are removed")
-        self.assertContains(response, "Bible Study generation")
-        self.assertContains(response, "Migrated ordinary-member paths")
-        self.assertContains(response, "Zero-row ServiceEvents fail closed")
-        self.assertContains(response, "Profile.small_group")
-        self.assertContains(
-            response,
-            "SmallGroup.district / District.ministry_context were removed in",
-        )
-        self.assertContains(response, "ChurchStructureUnit.parent")
-        self.assertContains(
-            response,
-            "Bible Study v2 audience rows and role/worship pickers",
-        )
-        self.assertContains(response, "ServiceEvent audience rows")
-        self.assertContains(response, "active primary ChurchStructureMembership")
-        self.assertContains(response, "Bridge mapping status")
-
-    def test_legacy_district_and_ministry_context_admin_labels_are_clear(self):
+    def test_legacy_district_and_ministry_context_admins_are_retired(self):
         context = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
         district = District.objects.create(name="一区")
 
-        context_response = self.client.get(
+        with self.assertRaises(Exception):
             reverse("admin:accounts_ministrycontext_change", args=[context.pk])
-        )
-        district_response = self.client.get(
+        with self.assertRaises(Exception):
             reverse("admin:accounts_district_change", args=[district.pk])
-        )
-
-        self.assertEqual(context_response.status_code, 200)
-        self.assertContains(context_response, "Ministry Contexts")
-        self.assertContains(context_response, "事工范围")
-        self.assertContains(context_response, "Bible Study generation")
-        self.assertContains(context_response, "ServiceEvent audience rows")
-        self.assertContains(
-            context_response,
-            "ServiceEvent Host/Language display no longer uses a MinistryContext FK",
-        )
-        self.assertContains(context_response, "host_language_unit")
-
-        self.assertEqual(district_response.status_code, 200)
-        self.assertContains(district_response, "Legacy Districts")
-        self.assertContains(district_response, "旧区")
-        self.assertContains(district_response, "Bible Study")
-        self.assertContains(district_response, "Zero-row ServiceEvents fail closed")
 
     def test_church_structure_unit_admin_explains_structure_foundation_status(self):
         unit = ChurchStructureUnit.objects.create(
@@ -2380,14 +2277,12 @@ class ChurchStructureAdminClarityTests(TestCase):
         self.assertContains(response, "flexible structure foundation")
         self.assertContains(response, "ChurchStructureUnit.parent hierarchy is authoritative")
         self.assertContains(response, "ServiceEvent audience rows use selected units")
-        self.assertContains(
-            response,
-            "V2 Bible Study meeting visibility and normal generation are structure-native",
-        )
+        self.assertContains(response, "V2 Bible Study meeting visibility")
         self.assertContains(
             response,
             "Membership/belonging is separate from serving",
         )
+        self.assertContains(response, "object rows have been purged")
         self.assertContains(response, "Path label")
 
     def test_church_structure_membership_admin_explains_belonging_status(self):
@@ -2608,8 +2503,8 @@ class ChurchRolePermissionTests(TestCase):
 
         groups = list(get_accessible_progress_groups(self.user))
 
-        self.assertIn(self.group, groups)
-        self.assertNotIn(self.other_group, groups)
+        self.assertIn(self.group_unit, groups)
+        self.assertNotIn(self.other_group_unit, groups)
 
     def test_group_leader_gets_only_assigned_small_group(self):
         ChurchRoleAssignment.objects.create(
@@ -2621,16 +2516,16 @@ class ChurchRolePermissionTests(TestCase):
 
         groups = list(get_accessible_progress_groups(self.user))
 
-        self.assertEqual(groups, [self.group])
+        self.assertEqual(groups, [self.group_unit])
 
     def test_regular_user_gets_own_membership_group(self):
         # CS-CORE.2D-B: own-group progress access now comes from the active primary
-        # ChurchStructureMembership mapped to a small group, not Profile.small_group.
+        # ChurchStructureMembership small-group unit, not Profile.small_group.
         self.create_membership(self.user, self.group_unit)
 
         groups = list(get_accessible_progress_groups(self.user))
 
-        self.assertEqual(groups, [self.group])
+        self.assertEqual(groups, [self.group_unit])
 
     def test_profile_only_user_no_longer_gets_progress_access(self):
         # CS-CORE.2D-B: Profile.small_group alone no longer grants progress access.
@@ -4194,6 +4089,38 @@ class StaffStructureMapEditModeTests(TestCase):
 
 
 class StaffStructureMappingReviewTests(TestCase):
+    """LEGACY-STRUCTURE-SURFACE-RETIRE.1A retires mapping review URLs."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="mapping_retired_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+
+    def test_mapping_review_url_name_is_retired(self):
+        with self.assertRaises(Exception):
+            reverse("staff_structure_mapping_review")
+
+    def test_mapping_review_path_is_not_routable(self):
+        self.client.login(username="mapping_retired_staff", password="StaffPass123!")
+
+        response = self.client.get("/staff/structure/mappings/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_structure_map_no_longer_links_to_mapping_review(self):
+        self.client.login(username="mapping_retired_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_structure_map"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "/staff/structure/mappings/")
+        self.assertNotContains(response, "Review Data Mappings")
+
+
+@unittest.skip("Legacy mapping review surface retired in LEGACY-STRUCTURE-SURFACE-RETIRE.1A.")
+class RetiredStaffStructureMappingReviewLegacyTests(TestCase):
     """CS-SETUP.1C.1: read-only legacy -> structure mapping review page."""
 
     def setUp(self):
@@ -5018,6 +4945,32 @@ class StaffStructureMappingReviewTests(TestCase):
 
 
 class StaffStructureMappingEditTests(TestCase):
+    """LEGACY-STRUCTURE-SURFACE-RETIRE.1A retires mapping edit URLs."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="mapping_edit_retired_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+
+    def test_mapping_edit_url_name_is_retired(self):
+        with self.assertRaises(Exception):
+            reverse("staff_structure_mapping_edit", args=["small-group", 1])
+
+    def test_mapping_edit_path_is_not_routable(self):
+        self.client.login(
+            username="mapping_edit_retired_staff",
+            password="StaffPass123!",
+        )
+
+        response = self.client.get("/staff/structure/mappings/small-group/1/edit/")
+
+        self.assertEqual(response.status_code, 404)
+
+
+@unittest.skip("Legacy mapping edit surface retired in LEGACY-STRUCTURE-SURFACE-RETIRE.1A.")
+class RetiredStaffStructureMappingEditLegacyTests(TestCase):
     """CS-SETUP.1D.1: one-row-at-a-time legacy -> structure mapping edit."""
 
     def setUp(self):
@@ -6754,10 +6707,8 @@ class StructureRoleScopeFoundationTests(TestCase):
     def test_progress_permission_uses_structure_aware_role_scope(self):
         # ROLE-FIELD-RETIRE.1A: progress access requires an explicit
         # structure_unit. A scoped role with structure_unit set grants access to
-        # the mapped group; a scoped role with no structure_unit fails closed.
-        mapped_group = SmallGroup.objects.create(
-            name="Mapped Perm SG", church_structure_unit=self.group_unit
-        )
+        # the canonical small-group unit; a scoped role with no structure_unit
+        # fails closed.
 
         explicit_user = User.objects.create_user(username="explicit_perm_user")
         ChurchRoleAssignment.objects.create(
@@ -6767,7 +6718,7 @@ class StructureRoleScopeFoundationTests(TestCase):
             structure_unit=self.group_unit,
         )
         self.assertEqual(
-            list(get_accessible_progress_groups(explicit_user)), [mapped_group]
+            list(get_accessible_progress_groups(explicit_user)), [self.group_unit]
         )
 
         missing_unit_user = User.objects.create_user(username="missing_unit_perm_user")
@@ -6951,9 +6902,9 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
     scoped role access through ``ChurchRoleAssignment.structure_unit`` only (the
     legacy district/small_group runtime fallback was retired in ROLE-RETIRE.1B) plus
     its descendants, and the ordinary own-group rule comes from the single active
-    primary ``ChurchStructureMembership`` mapped to exactly one active legacy
-    ``SmallGroup``. ``Profile.small_group`` no longer grants any progress access, and
-    ordinary membership grants only its own mapped group (never a broad grant).
+    primary ``ChurchStructureMembership`` small-group unit. ``Profile.small_group``
+    no longer grants any progress access, and ordinary membership grants only its
+    own canonical small-group unit (never a broad grant).
     """
 
     def setUp(self):
@@ -7027,9 +6978,12 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.create_membership(user, self.group_unit)
 
         self.assertEqual(
-            get_user_membership_progress_own_group(user), self.group
+            get_user_membership_progress_own_group(user), self.group_unit
         )
-        self.assertEqual(self.accessible_ids(user), {self.group.id})
+        self.assertEqual(self.accessible_ids(user), {self.group_unit.id})
+        self.assertTrue(can_view_group_progress_for(user, self.group_unit))
+        # Compatibility input only: a legacy row with a mapped unit delegates to
+        # that canonical unit, but it is no longer the list source.
         self.assertTrue(can_view_group_progress_for(user, self.group))
 
     def test_profile_only_user_gets_no_own_group_access(self):
@@ -7065,11 +7019,14 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.assertEqual(self.accessible_ids(user), set())
 
     def test_unmapped_or_wrong_type_membership_unit_fails_closed(self):
-        # Unmapped small-group unit (maps to no active SmallGroup).
+        # A canonical small-group unit no longer needs a legacy SmallGroup row.
         unmapped_user = self.create_user("perm2db_unmapped")
-        self.create_membership(unmapped_user, self.create_unit("PERM2DB-UNMAPPED"))
-        self.assertIsNone(get_user_membership_progress_own_group(unmapped_user))
-        self.assertEqual(self.accessible_ids(unmapped_user), set())
+        unmapped_unit = self.create_unit("PERM2DB-UNMAPPED")
+        self.create_membership(unmapped_user, unmapped_unit)
+        self.assertEqual(
+            get_user_membership_progress_own_group(unmapped_user), unmapped_unit
+        )
+        self.assertEqual(self.accessible_ids(unmapped_user), {unmapped_unit.id})
 
         # Wrong-type unit (fellowship, not small_group).
         wrong_type_user = self.create_user("perm2db_wrong_type")
@@ -7084,7 +7041,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         self.assertIsNone(get_user_membership_progress_own_group(wrong_type_user))
         self.assertEqual(self.accessible_ids(wrong_type_user), set())
 
-    def test_membership_unit_mapping_to_two_active_groups_fails_closed(self):
+    def test_membership_unit_mapping_to_two_active_legacy_groups_does_not_matter(self):
         user = self.create_user("perm2db_ambiguous_map")
         shared_unit = self.create_unit("PERM2DB-SHARED", parent=self.district_unit)
         SmallGroup.objects.create(
@@ -7095,17 +7052,17 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         )
         self.create_membership(user, shared_unit)
 
-        self.assertIsNone(get_user_membership_progress_own_group(user))
-        self.assertEqual(self.accessible_ids(user), set())
+        self.assertEqual(get_user_membership_progress_own_group(user), shared_unit)
+        self.assertEqual(self.accessible_ids(user), {shared_unit.id})
 
     def test_ordinary_membership_grants_only_own_group_not_siblings(self):
         user = self.create_user("perm2db_own_only")
         self.create_membership(user, self.group_unit)
 
-        self.assertEqual(self.accessible_ids(user), {self.group.id})
-        self.assertTrue(can_view_group_progress_for(user, self.group))
-        self.assertFalse(can_view_group_progress_for(user, self.sibling_group))
-        self.assertFalse(can_view_group_progress_for(user, self.other_group))
+        self.assertEqual(self.accessible_ids(user), {self.group_unit.id})
+        self.assertTrue(can_view_group_progress_for(user, self.group_unit))
+        self.assertFalse(can_view_group_progress_for(user, self.sibling_unit))
+        self.assertFalse(can_view_group_progress_for(user, self.other_group_unit))
 
     # --- structure-aware role scopes --------------------------------------------
 
@@ -7118,8 +7075,8 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             structure_unit=self.group_unit,
         )
 
-        self.assertEqual(self.accessible_ids(leader), {self.group.id})
-        self.assertFalse(can_view_group_progress_for(leader, self.sibling_group))
+        self.assertEqual(self.accessible_ids(leader), {self.group_unit.id})
+        self.assertFalse(can_view_group_progress_for(leader, self.sibling_unit))
 
     def test_district_leader_scope_includes_descendant_groups_only(self):
         leader = self.create_user("perm2db_district_leader")
@@ -7134,11 +7091,11 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         # but not a group under another district.
         self.assertEqual(
             self.accessible_ids(leader),
-            {self.group.id, self.sibling_group.id},
+            {self.group_unit.id, self.sibling_unit.id},
         )
-        self.assertTrue(can_view_group_progress_for(leader, self.group))
-        self.assertTrue(can_view_group_progress_for(leader, self.sibling_group))
-        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
+        self.assertTrue(can_view_group_progress_for(leader, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(leader, self.sibling_unit))
+        self.assertFalse(can_view_group_progress_for(leader, self.other_group_unit))
 
     def test_scoped_group_role_missing_structure_unit_fails_closed(self):
         # ROLE-FIELD-RETIRE.1A: a scoped group-leader role with no structure_unit
@@ -7151,7 +7108,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         )
 
         self.assertEqual(self.accessible_ids(leader), set())
-        self.assertFalse(can_view_group_progress_for(leader, self.group))
+        self.assertFalse(can_view_group_progress_for(leader, self.group_unit))
 
     def test_scoped_district_role_missing_structure_unit_fails_closed(self):
         # ROLE-FIELD-RETIRE.1A: a scoped district-leader role with no
@@ -7164,8 +7121,8 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         )
 
         self.assertEqual(self.accessible_ids(leader), set())
-        self.assertFalse(can_view_group_progress_for(leader, self.group))
-        self.assertFalse(can_view_group_progress_for(leader, self.sibling_group))
+        self.assertFalse(can_view_group_progress_for(leader, self.group_unit))
+        self.assertFalse(can_view_group_progress_for(leader, self.sibling_unit))
 
     def test_permission_checks_do_not_mutate_role_assignments(self):
         # Read-only invariant: evaluating progress permissions never writes
@@ -7179,7 +7136,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
 
         with CaptureQueriesContext(connection) as queries:
             self.accessible_ids(leader)
-            can_view_group_progress_for(leader, self.group)
+            can_view_group_progress_for(leader, self.group_unit)
 
         write_sql = [
             query["sql"]
@@ -7206,10 +7163,14 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
             scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
         )
 
-        all_active = {self.group.id, self.sibling_group.id, self.other_group.id}
+        all_active = {
+            self.group_unit.id,
+            self.sibling_unit.id,
+            self.other_group_unit.id,
+        }
         for viewer in (staff, superuser, pastor):
             self.assertEqual(self.accessible_ids(viewer), all_active)
-            self.assertTrue(can_view_group_progress_for(viewer, self.other_group))
+            self.assertTrue(can_view_group_progress_for(viewer, self.other_group_unit))
 
     def test_can_view_agrees_with_accessible_list_for_allowed_and_denied(self):
         leader = self.create_user("perm2db_agree")
@@ -7221,7 +7182,7 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
         )
 
         accessible = self.accessible_ids(leader)
-        for candidate in (self.group, self.sibling_group, self.other_group):
+        for candidate in (self.group_unit, self.sibling_unit, self.other_group_unit):
             self.assertEqual(
                 can_view_group_progress_for(leader, candidate),
                 candidate.id in accessible,

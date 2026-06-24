@@ -1,4 +1,4 @@
-from .models import ChurchRoleAssignment, ChurchStructureUnit, SmallGroup
+from .models import ChurchRoleAssignment, ChurchStructureUnit
 from .structure_selectors import (
     _collect_unit_and_descendant_ids,
     get_user_primary_membership_unit,
@@ -166,59 +166,60 @@ def has_capability(user, capability):
 
 
 def get_user_membership_progress_own_group(user, target_date=None):
-    """Resolve a user's own-group progress group from membership-core (CS-CORE.2D-B).
+    """Resolve a user's own group-progress unit from membership-core.
 
-    Membership-core replacement for the legacy ``Profile.small_group`` own-group
-    progress rule. Resolves the user's single active primary
-    ``ChurchStructureMembership`` unit to exactly one active legacy ``SmallGroup``
-    mapped to that unit. ``Profile.small_group`` is never read.
+    Membership-core replacement for the legacy ``Profile.small_group`` and
+    legacy-row own-group progress rules. Resolves the user's single active
+    primary ``ChurchStructureMembership`` unit directly to an active canonical
+    small-group ``ChurchStructureUnit``. ``Profile.small_group`` and legacy
+    ``SmallGroup`` rows are never read.
 
     Fails closed (returns ``None``) on:
 
     - no active primary membership, or multiple active primary memberships
       (ambiguous, via :func:`get_user_primary_membership_unit`);
-    - a membership unit that is not a ``small_group``-type unit; or
-    - a unit that does not map to exactly one active legacy ``SmallGroup``.
+    - a membership unit that is inactive or not a ``small_group``-type unit.
 
-    This grants *own-group* progress access only (the single mapped group); it is
+    This grants *own-group* progress access only (the single unit); it is
     never a broad role/capability grant and never reaches sibling or descendant
     groups (privacy invariant 5 / concept separation).
     """
     unit = get_user_primary_membership_unit(user, target_date=target_date)
-    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+    if (
+        unit is None
+        or not unit.is_active
+        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
+    ):
         return None
-
-    groups = list(
-        SmallGroup.objects.filter(is_active=True, church_structure_unit=unit)[:2]
-    )
-    if len(groups) != 1:
-        return None
-    return groups[0]
+    return unit
 
 
 def get_accessible_progress_groups(user, target_date=None):
-    """Active legacy ``SmallGroup`` rows the user may view group progress for.
+    """Active small-group units the user may view group progress for.
 
-    CS-CORE.2D-B structure-aware switch. Staff / superuser / the global
-    ``CAP_VIEW_ALL_GROUP_PROGRESS`` capability still see every active group, and
-    global role behavior is unchanged. Scoped access is otherwise the union of:
+    LEGACY-STRUCTURE-SURFACE-RETIRE.1A removes the final legacy ``SmallGroup``
+    list/display dependency. Staff / superuser / the global
+    ``CAP_VIEW_ALL_GROUP_PROGRESS`` capability still see every active canonical
+    small-group unit, and global role behavior is unchanged. Scoped access is
+    otherwise the union of:
 
     - **Structure-aware role scopes:** for the two progress-relevant scoped roles
       (district leader on a district scope, group leader on a small-group scope),
       the scope unit is resolved by :func:`get_role_assignment_structure_unit`
-      (explicit ``structure_unit`` only). A scope covers active legacy
-      ``SmallGroup`` rows whose mapped ``church_structure_unit`` is that unit or a
-      descendant. ROLE-RETIRE.1B retired the legacy ``district`` / ``small_group``
-      runtime fallback, so a scoped role assignment with no ``structure_unit`` (or
-      one that does not resolve) fails closed.
+      (explicit ``structure_unit`` only). A scope covers active small-group units
+      at that unit or a descendant. ROLE-RETIRE.1B retired the legacy ``district``
+      / ``small_group`` runtime fallback, so a scoped role assignment with no
+      ``structure_unit`` (or one that does not resolve) fails closed.
     - **Own-group:** the membership-core own group from
-      :func:`get_user_membership_progress_own_group` (no longer
-      ``Profile.small_group``).
+      :func:`get_user_membership_progress_own_group`.
 
-    Ordinary ``ChurchStructureMembership`` grants only the single mapped own group,
+    Ordinary ``ChurchStructureMembership`` grants only the single own group unit,
     never a broader set.
     """
-    groups = SmallGroup.objects.filter(is_active=True).order_by("name")
+    groups = ChurchStructureUnit.objects.filter(
+        is_active=True,
+        unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+    ).order_by("sort_order", "code", "name", "id")
 
     if not getattr(user, "is_authenticated", False):
         return groups.none()
@@ -255,34 +256,39 @@ def get_accessible_progress_groups(user, target_date=None):
     if scope_unit_ids:
         accessible_ids.update(
             groups.filter(
-                church_structure_unit_id__in=scope_unit_ids
+                id__in=scope_unit_ids
             ).values_list("id", flat=True)
         )
 
     # Ordinary own-group access, migrated from Profile.small_group to membership-core.
     own_group = get_user_membership_progress_own_group(user, target_date=target_date)
-    if own_group is not None and own_group.is_active:
+    if own_group is not None:
         accessible_ids.add(own_group.id)
 
     if not accessible_ids:
         return groups.none()
 
-    return groups.filter(id__in=accessible_ids).order_by("name")
+    return groups.filter(id__in=accessible_ids).order_by("sort_order", "code", "name", "id")
 
 
-def can_view_group_progress_for(user, small_group, target_date=None):
-    """Whether ``user`` may view group progress for ``small_group``.
+def can_view_group_progress_for(user, group_unit, target_date=None):
+    """Whether ``user`` may view group progress for ``group_unit``.
 
     Agrees exactly with :func:`get_accessible_progress_groups`: it is true iff
-    ``small_group`` is in that accessible set. There is no separate staff
+    ``group_unit`` is in that accessible set. There is no separate staff
     short-circuit, so the single-group gate never diverges from the list (staff /
     global capability still match because the accessible set is every active group).
     """
-    if small_group is None:
+    if group_unit is None:
+        return False
+
+    target_unit = getattr(group_unit, "church_structure_unit", None) or group_unit
+    target_id = getattr(target_unit, "id", None)
+    if target_id is None:
         return False
 
     return (
         get_accessible_progress_groups(user, target_date=target_date)
-        .filter(id=small_group.id)
+        .filter(id=target_id)
         .exists()
     )

@@ -199,11 +199,7 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
             out.getvalue(),
         )
         self.assertIn(
-            "next_purge_gate_command: purge_legacy_structure_object_rows",
-            out.getvalue(),
-        )
-        self.assertIn(
-            "--confirm-legacy-structure-object-row-retirement",
+            "next_schema_gate: remove SmallGroup, District, and MinistryContext",
             out.getvalue(),
         )
 
@@ -219,6 +215,6 @@ class LegacyStructureObjectRowRetirementCommandTests(TestCase):
 
         output = out.getvalue()
         self.assertIn("consumer inventory:", output)
-        self.assertIn("purge_legacy_structure_object_rows", output)
+        self.assertNotIn("purge_legacy_structure_object_rows", output)
         self.assertIn("row examples:", output)
         self.assertNotIn("DO NOT PRINT PRIVATE", output)

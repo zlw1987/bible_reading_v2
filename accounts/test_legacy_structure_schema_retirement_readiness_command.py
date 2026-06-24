@@ -278,11 +278,11 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         self.assertEqual(candidate["schema_removal_status"], STATUS_DIAGNOSTIC)
         self.assertEqual(candidate["live_runtime_references"], ())
         self.assertIn(
-            "purge_legacy_structure_object_rows",
+            "audit_legacy_structure_object_row_retirement",
             candidate["diagnostic_cleanup_references"],
         )
 
-    def test_legacy_object_tables_recommend_guarded_purge_gate(self):
+    def test_legacy_object_tables_recommend_final_schema_gate(self):
         audit = run_audit()
         for name in (
             "SmallGroup model/table",
@@ -291,11 +291,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         ):
             candidate = _candidate(audit, name)
             self.assertIn(
-                "purge_legacy_structure_object_rows",
-                candidate["diagnostic_cleanup_references"],
-            )
-            self.assertIn(
-                "final table-retirement blockers",
+                "guarded schema slice",
                 candidate["recommended_next_action"],
             )
 

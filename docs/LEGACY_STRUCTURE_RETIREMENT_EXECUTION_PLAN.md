@@ -8,6 +8,8 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 
 > **Current-state supersession — LEGACY-OBJECT-ROW-PURGE-GATE.1A:** `purge_legacy_structure_object_rows` now exists as the guarded dry-run-first final preflight/apply path for the remaining legacy `SmallGroup` / `District` / `MinistryContext` object rows. Dry-run reports row counts, mapped/unmapped/wrong-type/inactive mapping counts, special `UNASSIGNED-GROUPS` decision rows, deletion-collector safety, protected runtime-row counters, and `data_mutated: false`. Future apply is destructive and requires both `--apply` and `--confirm-legacy-structure-object-row-retirement`; it deletes only the three legacy object row types, must not delete `ChurchStructureUnit` rows or runtime product rows, and must abort if unexpected inbound dependencies appear. Row purge remains separate from later model/table and `church_structure_unit` mapping-FK schema removal; do not run apply automatically.
 
+> **Current-state supersession — LEGACY-STRUCTURE-SURFACE-RETIRE.1A:** the guarded object-row purge apply has now completed on the target DB: `SmallGroup` rows = 0, `District` rows = 0, `MinistryContext` rows = 0, `unexpected_inbound_dependency_rows = 0`, `protected_church_structure_units_deleted = 0`, and protected runtime product rows deleted = 0. The legacy `District #13` / `UNASSIGNED-GROUPS` row was deleted, while the canonical `ChurchStructureUnit` custom unit remains. This slice retires the active legacy Django Admin surfaces, `/staff/structure/mappings/` review/edit UI, `resolve_units_to_small_groups()`, legacy-row seeding, the obsolete purge command, and group-progress legacy-row list/display usage. The read-only object/schema audits remain only to prove final model/table deletion readiness. Final `SmallGroup` / `District` / `MinistryContext` model/table removal remains a separate guarded migration slice.
+
 New audit command:
 
 ```powershell
@@ -44,23 +46,26 @@ bridge/admin/diagnostic role, not ordinary-member runtime visibility authority.
 ordinary-member paths. The legacy rows must not be used as ordinary-member
 visibility authority. Final table/field deletion is not approved yet.
 
-Guarded object-row purge/preflight command:
+Historical guarded object-row purge/preflight command (retired after approved apply):
 
 ```powershell
 .venv\Scripts\python.exe manage.py purge_legacy_structure_object_rows
 ```
 
-LEGACY-OBJECT-ROW-PURGE-GATE.1A adds this dry-run-first command for the same
-remaining object rows. It has `--apply`, but future apply requires the explicit
-`--confirm-legacy-structure-object-row-retirement` flag. Dry-run and apply use
-the same collected deletion plan; apply must abort if the deletion collector
+LEGACY-OBJECT-ROW-PURGE-GATE.1A added this dry-run-first command for the same
+remaining object rows. It had `--apply`, but apply required the explicit
+`--confirm-legacy-structure-object-row-retirement` flag. Dry-run and apply used
+the same collected deletion plan; apply had to abort if the deletion collector
 would touch anything outside `SmallGroup`, `District`, and `MinistryContext`
 rows or would require protected field updates/fast deletes. The command never
 deletes `ChurchStructureUnit` rows, users, memberships, roles, ServiceEvents,
 Bible Study V2 rows, prayers, reflections/comments, group-progress/runtime data,
 or TeamAssignment / My Serving data. `UNASSIGNED-GROUPS` is reported as a
 special final-retirement decision row rather than normalized as a real district.
-This command does not approve table/model removal or mapping-FK schema removal.
+This command did not approve table/model removal or mapping-FK schema removal.
+LEGACY-STRUCTURE-SURFACE-RETIRE.1A retires the command after the guarded apply
+completed and row counts reached zero; the remaining step is a separate guarded
+model/table schema-removal slice.
 
 Schema-retirement preparation inventory command:
 

@@ -23,7 +23,7 @@ So the readiness questions this audit answers are:
 - Do the now-live structure snapshots on group reflections actually resolve to
   active small-group units, or are some group-visible posts effectively invisible
   (legacy-only, missing/invalid snapshot)?
-- Do active legacy progress groups all map to an active small-group unit?
+- Do active small-group units exist for group-progress selection?
 - Do users carry an unambiguous single active primary membership (no ambiguous
   multiple active primary memberships)?
 
@@ -38,7 +38,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 from comments.models import ReflectionComment
 
 
@@ -203,15 +203,17 @@ def run_audit(target_date=None):
                 f"  comment_id={comment.id} | snapshot_reason={reason}"
             )
 
-    # --- Active legacy progress-group resolvability inventory --------------------
+    # --- Active canonical progress-group unit inventory --------------------------
     groups = (
-        SmallGroup.objects.filter(is_active=True)
-        .select_related("church_structure_unit")
-        .order_by("name", "id")
+        ChurchStructureUnit.objects.filter(
+            is_active=True,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+        )
+        .order_by("sort_order", "code", "name", "id")
     )
     for group in groups:
         stats["progress_groups_total"] += 1
-        reason = _unit_resolution_reason(group.church_structure_unit)
+        reason = _unit_resolution_reason(group)
         if reason == RESOLVABLE:
             stats["progress_groups_resolvable"] += 1
         elif reason == REASON_MISSING_MAPPING:
@@ -222,14 +224,12 @@ def run_audit(target_date=None):
         elif reason == REASON_INACTIVE_UNIT:
             stats["progress_groups_inactive_unit"] += 1
             details["progress_groups_inactive_unit"].append(
-                f"  small_group={_group_label(group)} | "
-                f"unit={_unit_label(group.church_structure_unit)}"
+                f"  small_group_unit={_unit_label(group)}"
             )
         else:  # REASON_WRONG_UNIT_TYPE
             stats["progress_groups_wrong_unit_type"] += 1
             details["progress_groups_wrong_unit_type"].append(
-                f"  small_group={_group_label(group)} | "
-                f"unit={_unit_label(group.church_structure_unit)}"
+                f"  small_group_unit={_unit_label(group)}"
             )
 
     # --- User membership inventory ----------------------------------------------

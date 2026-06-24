@@ -4,7 +4,6 @@ from django.utils import timezone
 from accounts.models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
-    SmallGroup,
 )
 
 
@@ -77,36 +76,6 @@ def _collect_unit_and_descendant_ids(units):
         )
 
     return unit_ids
-
-
-def resolve_units_to_small_groups(units):
-    """Resolve selected units to active legacy SmallGroups for diagnostics.
-
-    Retained diagnostic/setup bridge only, while the legacy object tables are
-    still being prepared for final retirement. Normal Bible Study V2 generation
-    and ordinary-member visibility do not call this resolver. It maps through
-    ``SmallGroup.church_structure_unit`` only: a non-root selection resolves to
-    the active groups whose mapped unit is one of the selected units or a
-    descendant of one (via ``ChurchStructureUnit.parent``). The legacy
-    parent/context fields ``SmallGroup.district`` and
-    ``District.ministry_context`` were removed in
-    LEGACY-PARENT-FK-FIELD-RETIRE.1A and are no longer read here; this resolver
-    never consults ChurchStructureMembership.
-    """
-    groups = SmallGroup.objects.filter(is_active=True)
-    units = list(units)
-    if not units:
-        return groups.none()
-
-    # Root / whole church selection covers every active small group.
-    if any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units):
-        return groups
-
-    target_unit_ids = _collect_unit_and_descendant_ids(units)
-    if not target_unit_ids:
-        return groups.none()
-
-    return groups.filter(church_structure_unit_id__in=target_unit_ids).distinct()
 
 
 def user_matches_membership_structure_audience(user, units, target_date=None):

@@ -15,10 +15,10 @@ Hard rules (binding, see
 ``docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md`` Section 4 and the
 no-go rules):
 
-- The group-progress permission gate and the accessible group list keep using legacy
+- The group-progress permission gate and the accessible group list use
   ``accounts.permissions.get_accessible_progress_groups()`` and
   ``accounts.permissions.can_view_group_progress_for()``. The 4F.2 default helper is
-  **permission-fenced**: it can only suggest a group already in the legacy-accessible
+  **permission-fenced**: it can only suggest a group already in the accessible
   set, never expand it.
 - The membership-core candidate is a *roster/default* source only. Ordinary
   ``ChurchStructureMembership`` must never be used to infer group-progress permission
@@ -36,7 +36,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 
-from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 
 
 # Reason codes describe which fail-closed condition held when the membership-core
@@ -73,32 +73,29 @@ def _active_primary_memberships(user, target_date):
 
 
 def _candidate_group_for_unit(unit):
-    """Map a membership unit to its single active legacy SmallGroup, or None.
+    """Return an active small-group unit candidate, or None.
 
-    Fails closed when the unit is not a small-group-type unit, or when it does not
-    map to exactly one active legacy ``SmallGroup``.
+    Fails closed when the unit is inactive or not a small-group-type unit.
     """
-    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+    if (
+        unit is None
+        or not unit.is_active
+        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
+    ):
         return None
-
-    groups = list(
-        SmallGroup.objects.filter(is_active=True, church_structure_unit=unit)[:2]
-    )
-    if len(groups) != 1:
-        return None
-    return groups[0]
+    return unit
 
 
 def _membership_core_candidate_default_group(user, target_date):
     """Return ``(candidate_group, reason_code)`` for the user's membership default.
 
-    The candidate is the single active legacy ``SmallGroup`` mapped from the user's
-    one active primary ``ChurchStructureMembership`` unit, as of ``target_date``.
+    The candidate is the user's one active primary ``ChurchStructureMembership``
+    unit, as of ``target_date``.
     ``reason_code`` is ``None`` on success, otherwise the fail-closed reason:
 
     - no active primary membership -> ``REASON_MEMBERSHIP_NO_ACTIVE_PRIMARY``
     - more than one active primary membership -> ``REASON_MEMBERSHIP_MULTIPLE_ACTIVE_PRIMARY``
-    - unit not a mapped single small-group unit -> ``REASON_MEMBERSHIP_UNIT_UNMAPPED``
+    - unit not an active small-group unit -> ``REASON_MEMBERSHIP_UNIT_UNMAPPED``
 
     This computes a *candidate only*: it never consults permissions and never grants
     access. :func:`get_membership_core_default_progress_group` adds the permission
@@ -119,8 +116,8 @@ def _candidate_in_accessible(candidate_group, accessible_groups):
     """Return ``True`` only if ``candidate_group`` is in ``accessible_groups``.
 
     ``accessible_groups`` is the legacy ``get_accessible_progress_groups()`` result
-    and may be a ``QuerySet``, a list/set of ``SmallGroup`` objects, or a list/set of
-    group ids. ``None`` (no fence supplied) yields ``False`` so the helper never
+    and may be a ``QuerySet``, a list/set of ``ChurchStructureUnit`` objects, or a
+    list/set of group-unit ids. ``None`` (no fence supplied) yields ``False`` so the helper never
     suggests a default without an explicit legacy-accessible set to fence against.
     """
     if candidate_group is None or accessible_groups is None:
@@ -144,17 +141,17 @@ def get_membership_core_default_progress_group(
 ):
     """Permission-fenced membership-core default group for group progress (CS-CORE.4F.2).
 
-    Returns the legacy ``SmallGroup`` that the group-progress page should *prefer* as
+    Returns the canonical small-group unit that the group-progress page should prefer as
     the default selected group when the viewer did not pass an explicit ``?group=``,
     or ``None`` when there is no safe membership-core candidate.
 
     The candidate is computed by :func:`_membership_core_candidate_default_group`
-    (exactly one active primary ``ChurchStructureMembership`` mapped to exactly one
-    active legacy ``SmallGroup``; it fails closed on no/multiple active primary
-    memberships and on an unmapped/ambiguous unit).
+    (exactly one active primary ``ChurchStructureMembership`` on an active
+    small-group unit; it fails closed on no/multiple active primary memberships
+    and on inactive/wrong-type units).
 
     It is then **permission-fenced**: the candidate is returned only when its id is
-    already present in ``accessible_groups`` (the legacy
+    already present in ``accessible_groups`` (the
     ``accounts.permissions.get_accessible_progress_groups()`` result). When
     ``accessible_groups`` is not supplied, or the candidate is not in it, this returns
     ``None``. This helper therefore never grants progress access on its own and never
@@ -190,12 +187,16 @@ def _membership_roster_user_ids(selected_group, target_date):
     """Membership-core candidate roster for ``selected_group``.
 
     A user is in the candidate roster when they have exactly one active primary
-    membership whose unit is the selected group's mapped ``ChurchStructureUnit`` or
-    a descendant of it. Users with multiple active primary memberships fail closed
-    (ambiguous) and are excluded. Returns ``(roster_user_ids, unmapped)``.
+    membership whose unit is the selected canonical small-group unit or a
+    descendant of it. Users with multiple active primary memberships fail closed
+    (ambiguous) and are excluded. Returns ``(roster_user_ids, invalid_unit)``.
     """
-    unit = getattr(selected_group, "church_structure_unit", None)
-    if unit is None or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+    unit = getattr(selected_group, "church_structure_unit", None) or selected_group
+    if (
+        unit is None
+        or not getattr(unit, "is_active", False)
+        or unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP
+    ):
         return set(), True  # unmapped
 
     target_unit_ids = _unit_and_descendant_ids(unit)
@@ -244,8 +245,8 @@ def get_membership_core_progress_roster_users(selected_group, *, target_date=Non
         return User.objects.none()
 
     target_date = target_date or timezone.localdate()
-    roster_user_ids, unmapped = _membership_roster_user_ids(selected_group, target_date)
-    if unmapped or not roster_user_ids:
+    roster_user_ids, invalid_unit = _membership_roster_user_ids(selected_group, target_date)
+    if invalid_unit or not roster_user_ids:
         return User.objects.none()
 
     return User.objects.filter(id__in=roster_user_ids).order_by("username", "id")

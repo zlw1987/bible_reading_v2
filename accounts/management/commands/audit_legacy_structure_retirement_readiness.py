@@ -196,20 +196,17 @@ DIAGNOSTIC_BACKFILL_COMMANDS = (
     (
         "accounts.management.commands.seed_church_structure_units",
         (
-            "setup/maintenance support for legacy-to-structure mappings; "
-            "MinistryContext units are still seeded, but after "
-            "LEGACY-PARENT-FK-FIELD-RETIRE.1A District/SmallGroup hierarchy is no "
-            "longer reconstructed from removed legacy parent links; unmapped "
-            "legacy rows require manual placement or a final row/table retirement "
-            "decision"
+            "canonical ChurchStructureUnit root seed support; after "
+            "LEGACY-STRUCTURE-SURFACE-RETIRE.1A it no longer reads or rebuilds "
+            "SmallGroup, District, or MinistryContext rows"
         ),
     ),
     (
-        "accounts.management.commands.purge_legacy_structure_object_rows",
+        "accounts.management.commands.audit_legacy_structure_object_row_retirement",
         (
-            "guarded dry-run-first final preflight/apply gate for deleting only "
-            "SmallGroup, District, and MinistryContext rows after explicit "
-            "confirmation; not runtime authority and not table/schema removal"
+            "read-only final proof that SmallGroup, District, and MinistryContext "
+            "rows remain purged before the separate model/table deletion slice; "
+            "not runtime authority and not a data mutation command"
         ),
     ),
     # LEGACY-PARENT-FK-FIELD-RETIRE.1A removed SmallGroup.district /
@@ -850,15 +847,16 @@ class Command(BaseCommand):
 
         write("")
         write(
-            "legacy_object_row_status: remaining SmallGroup, District, and "
-            "MinistryContext rows are final table-retirement blockers, not "
-            "ordinary-member runtime visibility blockers."
+            "legacy_object_row_status: SmallGroup, District, and MinistryContext "
+            "rows were purged by the guarded apply; any remaining rows are final "
+            "table-retirement blockers, not ordinary-member runtime visibility "
+            "blockers."
         )
         write(
-            "legacy_object_row_purge_gate: purge_legacy_structure_object_rows is "
-            "the dry-run-first preflight path; future apply requires --apply "
-            "--confirm-legacy-structure-object-row-retirement and must not "
-            "delete ChurchStructureUnit or runtime product rows."
+            "legacy_object_row_schema_gate: final SmallGroup, District, and "
+            "MinistryContext model/table deletion remains a separate guarded "
+            "migration slice; do not delete ChurchStructureUnit or runtime "
+            "product rows."
         )
         write(
             "legacy_bible_study_v1_status: app runtime/admin are retired; "

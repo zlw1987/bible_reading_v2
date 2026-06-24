@@ -52,7 +52,6 @@ from studies.models import (
     BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudySeries,
-    BibleStudySession,
 )
 from reading.structure_runtime_readiness import (
     run_audit as run_reading_structure_runtime_audit,
@@ -1790,10 +1789,9 @@ class GroupProgressPrivacyInvariantTests(TestCase):
     """CS-CORE.4C locks current group-progress roster and permission behavior."""
 
     def setUp(self):
-        self.district = District.objects.create(name="Invariant District")
-        self.other_district = District.objects.create(name="Invariant Other District")
-        # CS-CORE.2D-B: progress permission/access is structure-aware. Map the legacy
-        # district/group rows to a unit hierarchy (district unit -> small-group unit).
+        # CS-CORE.2D-B + LEGACY-STRUCTURE-SURFACE-RETIRE.1A: progress
+        # permission/access is structure-aware and the list/selection surface is
+        # canonical-unit based (district unit -> small-group unit).
         self.district_unit = self.create_unit(
             "INV-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
         )
@@ -1806,21 +1804,9 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.other_group_unit = self.create_unit(
             "INV-PROGRESS-OTHER", parent=self.other_district_unit
         )
-        self.district.church_structure_unit = self.district_unit
-        self.district.save()
-        self.other_district.church_structure_unit = self.other_district_unit
-        self.other_district.save()
-        self.group = SmallGroup.objects.create(
-            name="Invariant Progress Group",
-            church_structure_unit=self.group_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Invariant Progress Other Group",
-            church_structure_unit=self.other_group_unit,
-        )
 
-        self.viewer = self.create_user("progress_viewer", group=self.group)
-        # The viewer reaches the page via a group-leader role on self.group (not via
+        self.viewer = self.create_user("progress_viewer")
+        # The viewer reaches the page via a group-leader role on self.group_unit (not via
         # membership), so they can view it without appearing in the membership roster.
         # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
@@ -1829,12 +1815,9 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
             structure_unit=self.group_unit,
         )
-        self.same_group_member = self.create_user("progress_same", group=self.group)
-        self.profile_only_member = self.create_user("progress_profile_only", group=self.group)
-        self.other_group_member = self.create_user(
-            "progress_other",
-            group=self.other_group,
-        )
+        self.same_group_member = self.create_user("progress_same")
+        self.profile_only_member = self.create_user("progress_profile_only")
+        self.other_group_member = self.create_user("progress_other")
         self.no_group_user = self.create_user("progress_no_group")
         self.membership_only_user = self.create_user("progress_membership_only")
         self.staff = User.objects.create_user(
@@ -1892,11 +1875,11 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             start_date=timezone.localdate(),
         )
 
-    def progress_response_for(self, user, *, group=None):
+    def progress_response_for(self, user, *, unit=None):
         self.client.login(username=user.username, password="TestPass123!")
         params = {}
-        if group is not None:
-            params["group"] = group.id
+        if unit is not None:
+            params["group"] = unit.id
         response = self.client.get(reverse("my_group_progress"), params)
         self.assertEqual(response.status_code, 200)
         self.client.logout()
@@ -1908,7 +1891,7 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             for row in response.context["member_rows"]
         }
 
-    def accessible_group_ids(self, user):
+    def accessible_group_unit_ids(self, user):
         return set(get_accessible_progress_groups(user).values_list("id", flat=True))
 
     def test_roster_now_membership_core_driven_not_profile(self):
@@ -1916,9 +1899,10 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         # active primary ChurchStructureMembership, not legacy Profile.small_group.
         # Only progress_membership_only has an active primary membership under the
         # group unit; the profile-only members are excluded.
-        response = self.progress_response_for(self.viewer, group=self.group)
+        response = self.progress_response_for(self.viewer, unit=self.group_unit)
 
-        self.assertEqual(response.context["selected_group"], self.group)
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
         self.assertEqual(
             self.row_usernames(response),
             {"progress_membership_only"},
@@ -1940,11 +1924,12 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         )
 
         self.assertEqual(
-            self.accessible_group_ids(membership_only_viewer), {self.group.id}
+            self.accessible_group_unit_ids(membership_only_viewer), {self.group_unit.id}
         )
         response = self.progress_response_for(membership_only_viewer)
 
-        self.assertEqual(response.context["selected_group"], self.group)
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
         self.assertIn("progress_membership_viewer", self.row_usernames(response))
 
     def test_profile_only_viewer_gets_safe_empty_progress_state(self):
@@ -1952,13 +1937,13 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         # with only a legacy profile group (no membership, no role) gets the safe
         # empty state.
         profile_only_viewer = self.create_user(
-            "progress_profile_only_viewer", group=self.group
+            "progress_profile_only_viewer"
         )
         PlanEnrollment.objects.create(
             user=profile_only_viewer, active_plan=self.active_plan
         )
 
-        self.assertEqual(self.accessible_group_ids(profile_only_viewer), set())
+        self.assertEqual(self.accessible_group_unit_ids(profile_only_viewer), set())
         response = self.progress_response_for(profile_only_viewer)
 
         self.assertIsNone(response.context["selected_group"])
@@ -1966,23 +1951,19 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertContains(response, "You are not assigned to a small group yet.")
 
     def test_role_and_membership_grant_only_their_own_groups_not_siblings(self):
-        # CS-CORE.2D-B: the viewer's group-leader role grants self.group; an added
-        # ordinary membership grants only its own mapped group (other_group); neither
+        # CS-CORE.2D-B: the viewer's group-leader role grants self.group_unit; an added
+        # ordinary membership grants only its own mapped unit (other_group_unit); neither
         # grants a third sibling group under the same district.
         sibling_unit = self.create_unit("INV-SIBLING", parent=self.district_unit)
-        sibling_group = SmallGroup.objects.create(
-            name="Invariant Sibling Group",
-            church_structure_unit=sibling_unit,
-        )
         self.create_membership(self.viewer, self.other_group_unit)
 
         self.assertEqual(
-            self.accessible_group_ids(self.viewer),
-            {self.group.id, self.other_group.id},
+            self.accessible_group_unit_ids(self.viewer),
+            {self.group_unit.id, self.other_group_unit.id},
         )
-        self.assertTrue(can_view_group_progress_for(self.viewer, self.group))
-        self.assertTrue(can_view_group_progress_for(self.viewer, self.other_group))
-        self.assertFalse(can_view_group_progress_for(self.viewer, sibling_group))
+        self.assertTrue(can_view_group_progress_for(self.viewer, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(self.viewer, self.other_group_unit))
+        self.assertFalse(can_view_group_progress_for(self.viewer, sibling_unit))
 
     def test_group_leader_can_view_assigned_group_only(self):
         leader = self.create_user("progress_group_leader")
@@ -1994,17 +1975,15 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             structure_unit=self.other_group_unit,
         )
 
-        self.assertFalse(can_view_group_progress_for(leader, self.group))
-        self.assertTrue(can_view_group_progress_for(leader, self.other_group))
-        self.assertEqual(self.accessible_group_ids(leader), {self.other_group.id})
+        self.assertFalse(can_view_group_progress_for(leader, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(leader, self.other_group_unit))
+        self.assertEqual(
+            self.accessible_group_unit_ids(leader), {self.other_group_unit.id}
+        )
 
     def test_structure_district_leader_can_view_descendant_groups_only(self):
         district_group_b_unit = self.create_unit(
             "INV-DIST-GROUP-B", parent=self.district_unit
-        )
-        district_group_b = SmallGroup.objects.create(
-            name="Invariant District Group B",
-            church_structure_unit=district_group_b_unit,
         )
         leader = self.create_user("progress_district_leader")
         # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
@@ -2015,12 +1994,12 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             structure_unit=self.district_unit,
         )
 
-        self.assertTrue(can_view_group_progress_for(leader, self.group))
-        self.assertTrue(can_view_group_progress_for(leader, district_group_b))
-        self.assertFalse(can_view_group_progress_for(leader, self.other_group))
+        self.assertTrue(can_view_group_progress_for(leader, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(leader, district_group_b_unit))
+        self.assertFalse(can_view_group_progress_for(leader, self.other_group_unit))
         self.assertEqual(
-            self.accessible_group_ids(leader),
-            {self.group.id, district_group_b.id},
+            self.accessible_group_unit_ids(leader),
+            {self.group_unit.id, district_group_b_unit.id},
         )
 
     def test_staff_and_all_progress_role_can_view_all_active_groups(self):
@@ -2031,14 +2010,14 @@ class GroupProgressPrivacyInvariantTests(TestCase):
             scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
         )
 
-        self.assertTrue(can_view_group_progress_for(self.staff, self.group))
-        self.assertTrue(can_view_group_progress_for(self.staff, self.other_group))
-        self.assertTrue(can_view_group_progress_for(pastor, self.group))
-        self.assertTrue(can_view_group_progress_for(pastor, self.other_group))
+        self.assertTrue(can_view_group_progress_for(self.staff, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(self.staff, self.other_group_unit))
+        self.assertTrue(can_view_group_progress_for(pastor, self.group_unit))
+        self.assertTrue(can_view_group_progress_for(pastor, self.other_group_unit))
 
-        response = self.progress_response_for(self.staff, group=self.other_group)
+        response = self.progress_response_for(self.staff, unit=self.other_group_unit)
 
-        self.assertEqual(response.context["selected_group"], self.other_group)
+        self.assertEqual(response.context["selected_group"], self.other_group_unit)
 
 
 class GroupProgressRosterSourceSwitchTests(TestCase):
@@ -2048,8 +2027,8 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
     uses the membership-core candidate (single active primary
     ``ChurchStructureMembership`` matched to the selected group's mapped small-group
     unit or a descendant) instead of legacy ``Profile.small_group``. Permission and
-    the accessible group list remain legacy-driven, and ordinary membership still
-    grants no progress access (privacy invariant 5).
+    the accessible group list are canonical-unit based, and ordinary membership grants
+    own-group access only (privacy invariant 5).
 
     (The default *selected* group later switched to a permission-fenced
     membership-core candidate in CS-CORE.4F.2; see
@@ -2060,23 +2039,12 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
     """
 
     def setUp(self):
-        self.district = District.objects.create(name="Switch District")
-        self.other_district = District.objects.create(name="Switch Other District")
         self.group_unit = self.create_unit("SWITCH-GROUP")
         self.other_group_unit = self.create_unit("SWITCH-OTHER")
-        self.group = SmallGroup.objects.create(
-            name="Switch Group",
-            church_structure_unit=self.group_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Switch Other Group",
-            church_structure_unit=self.other_group_unit,
-        )
 
-        # Viewer has legacy permission to self.group (own legacy profile group) and
-        # an active primary membership under the group unit, so they can both view
-        # the page and appear in the membership-core roster.
-        self.viewer = self.create_user("switch_viewer", group=self.group)
+        # Viewer has own-group access via active primary membership under the group
+        # unit, so they can both view the page and appear in the membership-core roster.
+        self.viewer = self.create_user("switch_viewer")
         self.create_membership(self.viewer, self.group_unit)
 
         self.plan = ReadingPlan.objects.create(name="Switch Plan", is_active=True)
@@ -2114,11 +2082,11 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
             start_date=timezone.localdate(),
         )
 
-    def progress_response_for(self, user, *, group=None):
+    def progress_response_for(self, user, *, unit=None):
         self.client.login(username=user.username, password="TestPass123!")
         params = {}
-        if group is not None:
-            params["group"] = group.id
+        if unit is not None:
+            params["group"] = unit.id
         response = self.client.get(reverse("my_group_progress"), params)
         self.assertEqual(response.status_code, 200)
         self.client.logout()
@@ -2127,7 +2095,7 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
     def row_usernames(self, response):
         return {row["member"].username for row in response.context["member_rows"]}
 
-    def accessible_group_ids(self, user):
+    def accessible_group_unit_ids(self, user):
         return set(get_accessible_progress_groups(user).values_list("id", flat=True))
 
     def test_roster_includes_membership_core_user_without_legacy_profile_group(self):
@@ -2139,19 +2107,20 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
             user=membership_user, active_plan=self.active_plan
         )
 
-        response = self.progress_response_for(self.viewer, group=self.group)
+        response = self.progress_response_for(self.viewer, unit=self.group_unit)
 
         self.assertIn("switch_membership", self.row_usernames(response))
         membership_user.refresh_from_db()
 
     def test_legacy_profile_only_user_excluded_from_roster(self):
-        # User has Profile.small_group=group but no active primary membership; the
+        # User has no active primary membership; the
         # membership-core roster source must exclude them.
-        self.create_user("switch_profile_only", group=self.group)
+        self.create_user("switch_profile_only")
 
-        response = self.progress_response_for(self.viewer, group=self.group)
+        response = self.progress_response_for(self.viewer, unit=self.group_unit)
 
-        self.assertEqual(response.context["selected_group"], self.group)
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
         self.assertNotIn("switch_profile_only", self.row_usernames(response))
         # Sanity: the membership-core roster member is still present.
         self.assertIn("switch_viewer", self.row_usernames(response))
@@ -2162,13 +2131,16 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         ordinary = self.create_user("switch_ordinary")
         self.create_membership(ordinary, self.group_unit)
 
-        self.assertTrue(can_view_group_progress_for(ordinary, self.group))
-        self.assertFalse(can_view_group_progress_for(ordinary, self.other_group))
-        self.assertEqual(self.accessible_group_ids(ordinary), {self.group.id})
+        self.assertTrue(can_view_group_progress_for(ordinary, self.group_unit))
+        self.assertFalse(can_view_group_progress_for(ordinary, self.other_group_unit))
+        self.assertEqual(
+            self.accessible_group_unit_ids(ordinary), {self.group_unit.id}
+        )
 
         # Selecting an inaccessible other group falls back to the accessible own group.
-        response = self.progress_response_for(ordinary, group=self.other_group)
-        self.assertEqual(response.context["selected_group"], self.group)
+        response = self.progress_response_for(ordinary, unit=self.other_group_unit)
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
 
     def test_default_selected_group_is_membership_own_group(self):
         # CS-CORE.2D-B: with no ?group=, the default selected group is the viewer's
@@ -2179,25 +2151,27 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
 
         response = self.progress_response_for(dual)
 
-        self.assertEqual(response.context["selected_group"], self.group)
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
 
-    def test_unmapped_selected_group_yields_empty_roster_without_crash(self):
-        # A staff viewer can select an unmapped group (staff sees all active groups);
-        # the membership-core roster fails closed to empty without crashing.
+    def test_inaccessible_selected_unit_falls_back_without_crash(self):
+        # A staff viewer cannot select a non-small-group unit through the list; the
+        # invalid explicit ?group= unit id falls back to the first active small-group
+        # unit without crashing.
         staff = User.objects.create_user(
-            username="switch_unmapped_staff",
+            username="switch_invalid_unit_staff",
             password="TestPass123!",
             is_staff=True,
         )
-        unmapped_group = SmallGroup.objects.create(
-            name="Switch Unmapped",
-            church_structure_unit=None,
+        district_unit = self.create_unit(
+            "SWITCH-DISTRICT",
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
         )
 
-        response = self.progress_response_for(staff, group=unmapped_group)
+        response = self.progress_response_for(staff, unit=district_unit)
 
-        self.assertEqual(response.context["selected_group"], unmapped_group)
-        self.assertEqual(list(response.context["member_rows"]), [])
+        expected_unit = self.group_unit
+        self.assertEqual(response.context["selected_group"], expected_unit)
 
     def test_multiple_active_primary_membership_user_excluded_from_roster(self):
         # User with two active primary memberships is ambiguous and fails closed,
@@ -2224,7 +2198,7 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         )
         PlanEnrollment.objects.create(user=ambiguous, active_plan=self.active_plan)
 
-        response = self.progress_response_for(self.viewer, group=self.group)
+        response = self.progress_response_for(self.viewer, unit=self.group_unit)
 
         self.assertNotIn("switch_ambiguous", self.row_usernames(response))
         self.assertIn("switch_viewer", self.row_usernames(response))
@@ -2236,22 +2210,23 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         child_member = self.create_user("switch_child")
         self.create_membership(child_member, child_unit)
 
-        roster = get_membership_core_progress_roster_users(self.group)
+        selected_unit = self.group_unit
+        roster = get_membership_core_progress_roster_users(selected_unit)
         usernames = set(roster.values_list("username", flat=True))
 
         self.assertIn("switch_child", usernames)
         self.assertIn("switch_viewer", usernames)
 
-    def test_roster_helper_fails_closed_for_none_and_unmapped_group(self):
+    def test_roster_helper_fails_closed_for_none_and_wrong_type_unit(self):
         self.assertEqual(
             list(get_membership_core_progress_roster_users(None)), []
         )
-        unmapped_group = SmallGroup.objects.create(
-            name="Switch Helper Unmapped",
-            church_structure_unit=None,
+        district_unit = self.create_unit(
+            "SWITCH-HELPER-DISTRICT",
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
         )
         self.assertEqual(
-            list(get_membership_core_progress_roster_users(unmapped_group)), []
+            list(get_membership_core_progress_roster_users(district_unit)), []
         )
 
 
@@ -2260,24 +2235,22 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
     With no explicit ``?group=``, ``reading.views.my_group_progress`` uses the
     permission-fenced membership-core default candidate (single active primary
-    ``ChurchStructureMembership`` mapped to one active legacy ``SmallGroup``). The
+    ``ChurchStructureMembership`` on one active small-group unit). The
     candidate is **permission-fenced**: it is only used when it is already in the
-    legacy ``get_accessible_progress_groups()`` result, so ordinary membership never
-    grants progress access, never expands the accessible group list, and never
-    bypasses the legacy permission gate.
+    ``get_accessible_progress_groups()`` result, so ordinary membership grants only
+    the user's own small-group unit and never expands role-scoped access.
 
     READING-STRUCT.1D removed the former legacy ``Profile.small_group`` default
     fallback: when there is no membership candidate the default is simply the first
     accessible group (role/permission driven), and ordinary users with no
     resolvable membership fall through to the safe no-group state.
     ``Profile.small_group`` is no longer a group-progress runtime source. Explicit
-    ``?group=`` remains legacy-permission-gated, and the visible roster stays the
-    membership-core source switched in CS-CORE.4F.1.
+    ``?group=`` remains the URL-compatible parameter name, but its value is now a
+    canonical small-group unit id; the visible roster stays the membership-core
+    source switched in CS-CORE.4F.1.
     """
 
     def setUp(self):
-        self.district = District.objects.create(name="Default District")
-        self.other_district = District.objects.create(name="Default Other District")
         # CS-CORE.2D-B: district-leader scopes resolve through the mapped district
         # unit, so unit_a/unit_b sit under the district unit and unit_c under the
         # other district unit.
@@ -2287,26 +2260,10 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.other_district_unit = self.create_unit(
             "DEF-OTHER-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
         )
-        self.district.church_structure_unit = self.district_unit
-        self.district.save()
-        self.other_district.church_structure_unit = self.other_district_unit
-        self.other_district.save()
         self.unit_a = self.create_unit("DEF-A", parent=self.district_unit)
         self.unit_b = self.create_unit("DEF-B", parent=self.district_unit)
         self.unit_c = self.create_unit("DEF-C", parent=self.other_district_unit)
-        self.group_a = SmallGroup.objects.create(
-            name="Default Group A",
-            church_structure_unit=self.unit_a,
-        )
-        self.group_b = SmallGroup.objects.create(
-            name="Default Group B",
-            church_structure_unit=self.unit_b,
-        )
-        # group_c is in another district: out of a self.district leader's scope.
-        self.group_c = SmallGroup.objects.create(
-            name="Default Group C",
-            church_structure_unit=self.unit_c,
-        )
+        # unit_c is in another district: out of a self.district_unit leader's scope.
 
         self.plan = ReadingPlan.objects.create(name="Default Plan", is_active=True)
         self.day = ReadingPlanDay.objects.create(
@@ -2342,20 +2299,20 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
             start_date=timezone.localdate(),
         )
 
-    def make_district_leader(self, user, district):
+    def make_district_leader(self, user, district_unit):
         # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
         ChurchRoleAssignment.objects.create(
             user=user,
             role=ChurchRoleAssignment.ROLE_DISTRICT_LEADER,
             scope_type=ChurchRoleAssignment.SCOPE_DISTRICT,
-            structure_unit=district.church_structure_unit,
+            structure_unit=district_unit,
         )
 
-    def progress_response_for(self, user, *, group=None):
+    def progress_response_for(self, user, *, unit=None):
         self.client.login(username=user.username, password="TestPass123!")
         params = {}
-        if group is not None:
-            params["group"] = group.id
+        if unit is not None:
+            params["group"] = unit.id
         response = self.client.get(reverse("my_group_progress"), params)
         self.assertEqual(response.status_code, 200)
         self.client.logout()
@@ -2364,50 +2321,51 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
     def row_usernames(self, response):
         return {row["member"].username for row in response.context["member_rows"]}
 
-    def accessible_group_ids(self, user):
+    def accessible_group_unit_ids(self, user):
         return set(get_accessible_progress_groups(user).values_list("id", flat=True))
 
     def test_default_uses_membership_core_when_candidate_is_legacy_accessible(self):
-        # District leader over self.district can legacy-access group_a and group_b.
-        # Legacy profile default points to group_a; the single active primary
-        # membership points to group_b. With no ?group=, the permission-fenced
-        # membership-core candidate (group_b) is used instead of the legacy default.
-        leader = self.create_user("default_leader", group=self.group_a)
-        self.make_district_leader(leader, self.district)
+        # District leader over self.district_unit can access unit_a and unit_b.
+        # The single active primary membership points to unit_b. With no ?group=,
+        # the permission-fenced membership-core candidate (unit_b) is used.
+        leader = self.create_user("default_leader")
+        self.make_district_leader(leader, self.district_unit)
         self.create_membership(leader, self.unit_b)
 
         self.assertEqual(
-            self.accessible_group_ids(leader),
-            {self.group_a.id, self.group_b.id},
+            self.accessible_group_unit_ids(leader),
+            {self.unit_a.id, self.unit_b.id},
         )
 
         response = self.progress_response_for(leader)
 
-        self.assertEqual(response.context["selected_group"], self.group_b)
-        # Sanity: the legacy default (profile group_a) was not chosen.
-        self.assertNotEqual(response.context["selected_group"], self.group_a)
+        self.assertEqual(response.context["selected_group"], self.unit_b)
+        self.assertNotEqual(response.context["selected_group"], self.unit_a)
 
     def test_ordinary_membership_default_selects_own_group(self):
         # CS-CORE.2D-B: an ordinary user (no role) with an active primary membership in
-        # group_b's unit now has own-group access to group_b, and with no ?group= it is
+        # unit_b now has own-group access to unit_b, and with no ?group= it is
         # the default selected group.
         user = self.create_user("default_ordinary")
         self.create_membership(user, self.unit_b)
 
-        self.assertEqual(self.accessible_group_ids(user), {self.group_b.id})
+        self.assertEqual(self.accessible_group_unit_ids(user), {self.unit_b.id})
 
         response = self.progress_response_for(user)
 
-        self.assertEqual(response.context["selected_group"], self.group_b)
+        self.assertEqual(response.context["selected_group"], self.unit_b)
 
-    def test_membership_with_unmapped_unit_gets_empty_state(self):
-        # CS-CORE.2D-B: a membership whose unit maps to no active SmallGroup yields no
+    def test_membership_with_wrong_type_unit_gets_empty_state(self):
+        # CS-CORE.2D-B: a membership whose unit is not a small-group unit yields no
         # own-group access and (with no role) the safe empty state.
         user = self.create_user("default_membership_only")
-        unmapped_unit = self.create_unit("DEF-EMPTY-UNMAPPED")
-        self.create_membership(user, unmapped_unit)
+        wrong_type_unit = self.create_unit(
+            "DEF-EMPTY-WRONG-TYPE",
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+        )
+        self.create_membership(user, wrong_type_unit)
 
-        self.assertEqual(self.accessible_group_ids(user), set())
+        self.assertEqual(self.accessible_group_unit_ids(user), set())
 
         response = self.progress_response_for(user)
 
@@ -2416,37 +2374,37 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertContains(response, "You are not assigned to a small group yet.")
 
     def test_explicit_accessible_group_overrides_membership_default(self):
-        # District leader accesses group_a and group_b; membership default is group_b.
-        # An explicit accessible ?group=group_a stays authoritative.
-        leader = self.create_user("default_explicit", group=self.group_a)
-        self.make_district_leader(leader, self.district)
+        # District leader accesses unit_a and unit_b; membership default is unit_b.
+        # An explicit accessible ?group=unit_a stays authoritative.
+        leader = self.create_user("default_explicit")
+        self.make_district_leader(leader, self.district_unit)
         self.create_membership(leader, self.unit_b)
 
-        response = self.progress_response_for(leader, group=self.group_a)
+        response = self.progress_response_for(leader, unit=self.unit_a)
 
-        self.assertEqual(response.context["selected_group"], self.group_a)
+        self.assertEqual(response.context["selected_group"], self.unit_a)
 
     def test_explicit_inaccessible_group_falls_through_to_membership_default(self):
-        # District leader accesses group_a and group_b but not group_c (other
-        # district). An explicit inaccessible ?group=group_c falls through the default
-        # logic, which now selects the permission-fenced membership default group_b.
-        leader = self.create_user("default_explicit_bad", group=self.group_a)
-        self.make_district_leader(leader, self.district)
+        # District leader accesses unit_a and unit_b but not unit_c (other
+        # district). An explicit inaccessible ?group=unit_c falls through the default
+        # logic, which now selects the permission-fenced membership default unit_b.
+        leader = self.create_user("default_explicit_bad")
+        self.make_district_leader(leader, self.district_unit)
         self.create_membership(leader, self.unit_b)
 
-        self.assertNotIn(self.group_c.id, self.accessible_group_ids(leader))
+        self.assertNotIn(self.unit_c.id, self.accessible_group_unit_ids(leader))
 
-        response = self.progress_response_for(leader, group=self.group_c)
+        response = self.progress_response_for(leader, unit=self.unit_c)
 
-        self.assertEqual(response.context["selected_group"], self.group_b)
+        self.assertEqual(response.context["selected_group"], self.unit_b)
 
     def test_multiple_active_primary_memberships_fall_through_to_first_accessible(self):
         # READING-STRUCT.1D: two active primary memberships are ambiguous, so the
-        # membership candidate fails closed. The profile group (group_b) is NOT
+        # membership candidate fails closed. No legacy profile group is
         # consulted; the default falls through to the first accessible group
-        # (group_a, the leader's first role-scoped group by name).
-        leader = self.create_user("default_ambiguous", group=self.group_b)
-        self.make_district_leader(leader, self.district)
+        # (unit_a, the leader's first role-scoped unit by name).
+        leader = self.create_user("default_ambiguous")
+        self.make_district_leader(leader, self.district_unit)
         today = timezone.localdate()
         ChurchStructureMembership.objects.bulk_create(
             [
@@ -2469,32 +2427,35 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
         response = self.progress_response_for(leader)
 
-        # First accessible group (group_a), not the profile group (group_b).
-        self.assertEqual(response.context["selected_group"], self.group_a)
-        self.assertNotEqual(response.context["selected_group"], self.group_b)
+        # First accessible unit (unit_a), not the ambiguous membership unit_b.
+        self.assertEqual(response.context["selected_group"], self.unit_a)
+        self.assertNotEqual(response.context["selected_group"], self.unit_b)
 
-    def test_unmapped_membership_unit_falls_through_to_first_accessible(self):
+    def test_wrong_type_membership_unit_falls_through_to_first_accessible(self):
         # READING-STRUCT.1D: the active primary membership maps to no active
-        # SmallGroup, so the candidate fails closed. The profile group (group_b) is
-        # NOT consulted; the default falls through to the first accessible group.
-        leader = self.create_user("default_unmapped", group=self.group_b)
-        self.make_district_leader(leader, self.district)
-        unmapped_unit = self.create_unit("DEF-UNMAPPED")
-        self.create_membership(leader, unmapped_unit)
+        # small-group unit, so the candidate fails closed. The default falls through
+        # to the first accessible unit.
+        leader = self.create_user("default_wrong_type")
+        self.make_district_leader(leader, self.district_unit)
+        wrong_type_unit = self.create_unit(
+            "DEF-WRONG-TYPE",
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+        )
+        self.create_membership(leader, wrong_type_unit)
 
         response = self.progress_response_for(leader)
 
-        # First accessible group (group_a), not the profile group (group_b).
-        self.assertEqual(response.context["selected_group"], self.group_a)
-        self.assertNotEqual(response.context["selected_group"], self.group_b)
+        # First accessible unit (unit_a), not the wrong-type membership unit.
+        self.assertEqual(response.context["selected_group"], self.unit_a)
+        self.assertNotEqual(response.context["selected_group"], self.unit_b)
 
     def test_ordinary_profile_group_without_membership_gets_no_group_progress(self):
-        # READING-STRUCT.1D: an ordinary user whose Profile.small_group points at a
-        # group but who has no active primary membership gets NO group progress via
-        # profile fallback -- accessible is empty and the safe no-group state shows.
-        user = self.create_user("default_profile_only", group=self.group_a)
+        # READING-STRUCT.1D: an ordinary user with no active primary membership gets
+        # NO group progress via profile fallback -- accessible is empty and the safe
+        # no-group state shows.
+        user = self.create_user("default_profile_only")
 
-        self.assertEqual(self.accessible_group_ids(user), set())
+        self.assertEqual(self.accessible_group_unit_ids(user), set())
 
         response = self.progress_response_for(user)
 
@@ -2502,26 +2463,25 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertEqual(list(response.context["member_rows"]), [])
         self.assertContains(response, "You are not assigned to a small group yet.")
 
-    def test_ordinary_profile_and_membership_differ_uses_membership_group(self):
-        # READING-STRUCT.1D: when Profile.small_group (group_a) and the active primary
-        # membership (group_b's unit) disagree, the membership group wins and the
-        # profile group is never used as a runtime source.
-        user = self.create_user("default_mismatch", group=self.group_a)
+    def test_ordinary_membership_uses_membership_unit(self):
+        # READING-STRUCT.1D: the active primary membership unit is the runtime source
+        # and legacy profile-group fallback is never used.
+        user = self.create_user("default_membership_unit")
         self.create_membership(user, self.unit_b)
 
-        # Ordinary own-group access is membership-core: only group_b is accessible.
-        self.assertEqual(self.accessible_group_ids(user), {self.group_b.id})
+        # Ordinary own-group access is membership-core: only unit_b is accessible.
+        self.assertEqual(self.accessible_group_unit_ids(user), {self.unit_b.id})
 
         response = self.progress_response_for(user)
 
-        self.assertEqual(response.context["selected_group"], self.group_b)
-        self.assertNotEqual(response.context["selected_group"], self.group_a)
+        self.assertEqual(response.context["selected_group"], self.unit_b)
+        self.assertNotEqual(response.context["selected_group"], self.unit_a)
 
     def test_ordinary_ended_membership_fails_closed_to_no_group(self):
         # READING-STRUCT.1D: an ended (non-active) primary membership does not count,
         # and Profile.small_group is not a fallback, so the user gets no group
-        # progress rather than the legacy profile group.
-        user = self.create_user("default_ended", group=self.group_a)
+        # progress rather than a legacy fallback.
+        user = self.create_user("default_ended")
         ChurchStructureMembership.objects.create(
             user=user,
             unit=self.unit_b,
@@ -2531,7 +2491,7 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
             end_date=timezone.localdate() - timedelta(days=1),
         )
 
-        self.assertEqual(self.accessible_group_ids(user), set())
+        self.assertEqual(self.accessible_group_unit_ids(user), set())
 
         response = self.progress_response_for(user)
 
@@ -2539,15 +2499,15 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertContains(response, "You are not assigned to a small group yet.")
 
     def test_ordinary_membership_grants_only_own_group_not_others(self):
-        # CS-CORE.2D-B: an active primary membership in group_a's unit grants own-group
-        # access to group_a only, never to other groups (group_b/group_c).
+        # CS-CORE.2D-B: an active primary membership in unit_a grants own-group
+        # access to unit_a only, never to other units (unit_b/unit_c).
         user = self.create_user("default_no_expand")
         self.create_membership(user, self.unit_a)
 
-        self.assertEqual(self.accessible_group_ids(user), {self.group_a.id})
-        self.assertTrue(can_view_group_progress_for(user, self.group_a))
-        self.assertFalse(can_view_group_progress_for(user, self.group_b))
-        self.assertFalse(can_view_group_progress_for(user, self.group_c))
+        self.assertEqual(self.accessible_group_unit_ids(user), {self.unit_a.id})
+        self.assertTrue(can_view_group_progress_for(user, self.unit_a))
+        self.assertFalse(can_view_group_progress_for(user, self.unit_b))
+        self.assertFalse(can_view_group_progress_for(user, self.unit_c))
 
     def test_default_helper_is_permission_fenced(self):
         # Direct helper checks: a mapped candidate is only returned when it is in the
@@ -2557,13 +2517,13 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
 
         self.assertEqual(
             get_membership_core_default_progress_group(
-                user, accessible_groups=[self.group_a, self.group_b]
+                user, accessible_groups=[self.unit_a, self.unit_b]
             ),
-            self.group_b,
+            self.unit_b,
         )
         self.assertIsNone(
             get_membership_core_default_progress_group(
-                user, accessible_groups=[self.group_a]
+                user, accessible_groups=[self.unit_a]
             )
         )
         self.assertIsNone(
@@ -2572,9 +2532,9 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         # Id-based accessible sets are accepted too.
         self.assertEqual(
             get_membership_core_default_progress_group(
-                user, accessible_groups={self.group_b.id}
+                user, accessible_groups={self.unit_b.id}
             ),
-            self.group_b,
+            self.unit_b,
         )
 
 
@@ -3572,13 +3532,16 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "You are not assigned to a small group yet.")
 
     def test_group_progress_shows_same_group_members_only(self):
-        other_group = SmallGroup.objects.create(name="Other Group")
-        group_unit = self.map_group_to_unit(self.group, "FLOW-SAME-GROUP")
-        other_unit = self.map_group_to_unit(other_group, "FLOW-SAME-OTHER")
+        group_unit = self.group_unit
+        other_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-SAME-OTHER",
+            name="Other Group",
+        )
 
-        # Profile.small_group keeps legacy permission/default for the viewer; the
-        # visible roster is membership-core after CS-CORE.4F.1, so members also need
-        # an active primary membership under the group's mapped unit.
+        # Group-progress access/default and the visible roster are membership-core
+        # and canonical-unit based, so members need active primary membership under
+        # the selected unit.
         self.add_active_primary_membership(self.user, group_unit)
 
         self.add_active_primary_membership(self.other_user, group_unit)
@@ -3614,7 +3577,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotIn(">outside<", response.content.decode())
 
     def test_group_progress_shows_checked_and_missing_status(self):
-        group_unit = self.map_group_to_unit(self.group, "FLOW-STATUS-GROUP")
+        group_unit = self.group_unit
 
         self.add_active_primary_membership(self.user, group_unit)
 
@@ -3644,7 +3607,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Missing")
 
     def test_group_progress_shows_not_joined_member(self):
-        group_unit = self.map_group_to_unit(self.group, "FLOW-NOTJOINED-GROUP")
+        group_unit = self.group_unit
 
         self.add_active_primary_membership(self.user, group_unit)
 
@@ -3671,10 +3634,17 @@ class BibleReadingFlowTests(TestCase):
             email="leader@example.com",
             password="testpass123",
         )
-        assigned_group = SmallGroup.objects.create(name="Assigned Group")
-        other_group = SmallGroup.objects.create(name="Outside Group")
         # ROLE-RETIRE.1B: scoped role access requires an explicit structure_unit.
-        assigned_unit = self.map_group_to_unit(assigned_group, "FLOW-LEADER-ASSIGNED")
+        assigned_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-LEADER-ASSIGNED",
+            name="Assigned Group",
+        )
+        ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-LEADER-OUTSIDE",
+            name="Outside Group",
+        )
         ChurchRoleAssignment.objects.create(
             user=leader,
             role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
@@ -3692,9 +3662,6 @@ class BibleReadingFlowTests(TestCase):
 
     def test_district_leader_can_select_group_in_assigned_district(self):
         self.set_language("en")
-        district = District.objects.create(name="North District")
-        group_a = SmallGroup.objects.create(name="North Group A")
-        group_b = SmallGroup.objects.create(name="North Group B")
         # CS-CORE.2D-B: a district-leader scope resolves through the mapped district
         # unit and covers its descendant small-group units.
         district_unit = ChurchStructureUnit.objects.create(
@@ -3702,22 +3669,18 @@ class BibleReadingFlowTests(TestCase):
             code="FLOW-DIST-N",
             name="North District Unit",
         )
-        district.church_structure_unit = district_unit
-        district.save()
-        group_a.church_structure_unit = ChurchStructureUnit.objects.create(
+        group_a_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="FLOW-DIST-N-A",
-            name="North Group A Unit",
+            name="North Group A",
             parent=district_unit,
         )
-        group_a.save()
-        group_b.church_structure_unit = ChurchStructureUnit.objects.create(
+        group_b_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="FLOW-DIST-N-B",
-            name="North Group B Unit",
+            name="North Group B",
             parent=district_unit,
         )
-        group_b.save()
         leader = User.objects.create_user(
             username="district_leader",
             email="district@example.com",
@@ -3735,22 +3698,16 @@ class BibleReadingFlowTests(TestCase):
 
         response = self.client.get(
             reverse("my_group_progress"),
-            {"group": group_b.id},
+            {"group": group_b_unit.id},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "North Group A")
         self.assertContains(response, "North Group B")
-        self.assertContains(response, f'value="{group_b.id}" selected')
+        self.assertContains(response, f'value="{group_b_unit.id}" selected')
 
     def test_district_leader_cannot_access_group_outside_district(self):
         self.set_language("en")
-        district = District.objects.create(name="East District")
-        outside_district = District.objects.create(name="West District")
-        inside_group = SmallGroup.objects.create(name="East Group")
-        outside_group = SmallGroup.objects.create(
-            name="West Group",
-        )
         # CS-CORE.2D-B: map both districts/groups so the structure-aware district
         # scope covers the in-district group but never the out-of-district one.
         district_unit = ChurchStructureUnit.objects.create(
@@ -3758,29 +3715,23 @@ class BibleReadingFlowTests(TestCase):
             code="FLOW-DIST-E",
             name="East District Unit",
         )
-        district.church_structure_unit = district_unit
-        district.save()
-        inside_group.church_structure_unit = ChurchStructureUnit.objects.create(
+        inside_group_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="FLOW-DIST-E-IN",
-            name="East Group Unit",
+            name="East Group",
             parent=district_unit,
         )
-        inside_group.save()
         outside_district_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_DISTRICT,
             code="FLOW-DIST-W",
             name="West District Unit",
         )
-        outside_district.church_structure_unit = outside_district_unit
-        outside_district.save()
-        outside_group.church_structure_unit = ChurchStructureUnit.objects.create(
+        outside_group_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="FLOW-DIST-W-OUT",
-            name="West Group Unit",
+            name="West Group",
             parent=outside_district_unit,
         )
-        outside_group.save()
         leader = User.objects.create_user(
             username="limited_leader",
             email="limited@example.com",
@@ -3798,28 +3749,32 @@ class BibleReadingFlowTests(TestCase):
 
         response = self.client.get(
             reverse("my_group_progress"),
-            {"group": outside_group.id},
+            {"group": outside_group_unit.id},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "East Group")
         self.assertNotContains(response, "West Group")
-        self.assertEqual(response.context["selected_group"], inside_group)
+        self.assertEqual(response.context["selected_group"], inside_group_unit)
 
     def test_staff_can_select_any_group_progress(self):
         self.set_language("en")
-        other_group = SmallGroup.objects.create(name="Staff Visible Group")
+        other_group_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-STAFF-VISIBLE",
+            name="Staff Visible Group",
+        )
 
         self.client.login(username="admin", password="testpass123")
 
         response = self.client.get(
             reverse("my_group_progress"),
-            {"group": other_group.id},
+            {"group": other_group_unit.id},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Staff Visible Group")
-        self.assertEqual(response.context["selected_group"], other_group)
+        self.assertEqual(response.context["selected_group"], other_group_unit)
 
     def test_home_shows_rest_day_when_today_has_no_plan_day(self):
         PlanEnrollment.objects.create(
@@ -6049,26 +6004,6 @@ class TodayActionCenterTests(TestCase):
             "Your confirmed group membership is not ready yet, so no current Bible Study is available.",
         )
         self.assertNotContains(response, "Profile Only Today Hidden")
-
-    def test_legacy_session_block_not_shown(self):
-        series = BibleStudySeries.objects.create(
-            title="旧查经系列",
-            title_en="Legacy Series",
-            status=BibleStudySeries.STATUS_PUBLISHED,
-            is_active=True,
-        )
-        BibleStudySession.objects.create(
-            series=series,
-            title="旧查经场次",
-            title_en="Legacy Session Title",
-            study_datetime=timezone.now() + timedelta(days=1),
-            scope_type=BibleStudySession.SCOPE_GLOBAL,
-            status=BibleStudySession.STATUS_PUBLISHED,
-        )
-
-        response = self.get_home()
-
-        self.assertNotContains(response, "Legacy Session Title")
 
     def test_no_inline_confirm_form_on_today(self):
         event = self.make_event(title_en="Sunday Service Delta")

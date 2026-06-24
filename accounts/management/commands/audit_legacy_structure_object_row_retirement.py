@@ -3,11 +3,10 @@
 ROW-RETIRE.1A focuses on the remaining ``SmallGroup``, ``District``, and
 ``MinistryContext`` rows after runtime consumers have moved away from legacy
 ordinary-member authority. The command inventories those rows and the live code
-surfaces that still justify keeping the old models as a bridge.
+surfaces that still justify keeping the old models before final schema removal.
 
 It is deliberately read-only. It has no ``--apply`` option, writes no rows,
-changes no runtime behavior, and points destructive row-retirement work to the
-separate dry-run-first ``purge_legacy_structure_object_rows`` gate.
+changes no runtime behavior, and has no destructive mode.
 """
 
 from collections import Counter, OrderedDict
@@ -33,71 +32,14 @@ CONSUMER_INVENTORY = (
         CATEGORY_FINAL_TABLE_RETIREMENT,
         "remaining rows block final legacy table retirement, not ordinary visibility",
     ),
-    (
-        "SmallGroup.church_structure_unit",
-        "accounts.models.SmallGroup.church_structure_unit",
-        CATEGORY_SETUP_BRIDGE,
-        "maps old small-group rows to canonical structure units",
-    ),
-    (
-        "District.church_structure_unit",
-        "accounts.models.District.church_structure_unit",
-        CATEGORY_SETUP_BRIDGE,
-        "maps old district rows to canonical structure units",
-    ),
-    (
-        "MinistryContext.church_structure_unit",
-        "accounts.models.MinistryContext.church_structure_unit",
-        CATEGORY_SETUP_BRIDGE,
-        "maps old ministry-context rows to canonical structure units",
-    ),
-    (
-        "resolve_units_to_small_groups",
-        "accounts.structure_selectors.resolve_units_to_small_groups",
-        CATEGORY_SETUP_BRIDGE,
-        "diagnostic/setup-only resolver retained while bridge rows still exist",
-    ),
     # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group together with the
     # legacy-profile selector helpers (get_user_legacy_small_group,
     # get_user_legacy_structure_unit), so they are no longer listed here.
     (
         "seed_church_structure_units",
         "accounts.management.commands.seed_church_structure_units",
-        CATEGORY_SETUP_BRIDGE,
-        "seed/setup bridge for initial legacy-to-structure mapping",
-    ),
-    (
-        "Django admin legacy structure surfaces",
-        "accounts.admin",
-        CATEGORY_ADMIN_MAINTENANCE,
-        "maintenance surface while legacy fields and models still exist",
-    ),
-    (
-        "Staff structure mapping templates",
-        "templates/accounts/staff/structure_mapping_*",
-        CATEGORY_ADMIN_MAINTENANCE,
-        "staff review/edit maintenance surface for bridge mappings",
-    ),
-    (
-        "Staff/user legacy display snippets",
-        "templates/accounts/staff/*, templates/reading/*, templates/studies/*",
-        CATEGORY_DISPLAY_ONLY,
-        "legacy names may still display as context or fallback labels",
-    ),
-    (
-        "ServiceEvent Host / Language display fallback",
-        "events.ministry_context_display",
-        CATEGORY_DISPLAY_ONLY,
-        "structure-native display via ServiceEvent.host_language_unit plus an "
-        "audience-derived ChurchStructureUnit fallback; the legacy "
-        "ServiceEvent.ministry_context FK was removed in "
-        "SERVICE-EVENT-CONTEXT.1C",
-    ),
-    (
-        "Group progress compatibility group list",
-        "accounts.permissions, reading.group_progress_shadow",
-        CATEGORY_DISPLAY_ONLY,
-        "progress UI still names legacy SmallGroup rows after membership-core gating",
+        CATEGORY_DIAGNOSTIC_SUPPORT,
+        "canonical ChurchStructureUnit root/unit seed only; no legacy row source",
     ),
     (
         "Bible Study V2 structure-native generation diagnostics",
@@ -111,14 +53,6 @@ CONSUMER_INVENTORY = (
         "accounts/events/reading/studies management commands",
         CATEGORY_DIAGNOSTIC_SUPPORT,
         "read-only audits and dry-run-first cleanup/backfill support",
-    ),
-    (
-        "purge_legacy_structure_object_rows",
-        "accounts.management.commands.purge_legacy_structure_object_rows",
-        CATEGORY_DIAGNOSTIC_SUPPORT,
-        "guarded dry-run-first final preflight/apply path for deleting only "
-        "SmallGroup, District, and MinistryContext object rows after explicit "
-        "confirmation",
     ),
     (
         "Historical migrations and focused fixtures",
@@ -452,17 +386,12 @@ class Command(BaseCommand):
             "canonical_belonging: ChurchStructureMembership"
         )
         write(
-            "legacy_rows_status: compatibility/mapping/admin/diagnostic bridge "
-            "until a later approved row/table retirement slice"
+            "legacy_rows_status: purged; zero rows means no data/table-retirement "
+            "row blocker remains"
         )
         write(
-            "next_purge_gate_command: purge_legacy_structure_object_rows "
-            "--verbose --limit 50"
-        )
-        write(
-            "next_purge_gate_safety: dry-run by default; future apply requires "
-            "--apply --confirm-legacy-structure-object-row-retirement and must "
-            "not delete ChurchStructureUnit or runtime product rows"
+            "next_schema_gate: remove SmallGroup, District, and MinistryContext "
+            "models/tables in a separate guarded migration slice"
         )
         write(
             "legacy_bible_study_v1_schema_status: V1 BibleStudySession, "

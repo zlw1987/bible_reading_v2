@@ -95,28 +95,14 @@ CANDIDATE_DEFINITIONS = (
         "model_table": "accounts.SmallGroup",
         "field_name": "",
         "candidate_type": "model/table",
-        "app_read_references": _refs(
-            "accounts.structure_selectors.resolve_units_to_small_groups "
-            "(diagnostic/setup-only)",
-            "reading group-progress compatibility group lists",
-        ),
-        "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
-        "template_display_references": _refs(
-            "reading/group_progress selected group display",
-        ),
-        "diagnostic_cleanup_references": _refs(
-            "audit_legacy_structure_object_row_retirement",
-            "purge_legacy_structure_object_rows",
-        ),
         "test_fixture_references": _refs("many focused visibility/cleanup fixtures"),
         "migration_history_references": _refs("accounts/studies/events/comments migrations"),
         "data_counter": "small_group_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Remaining rows are final table-retirement "
-            "blockers, not ordinary runtime authority. Run the guarded "
-            "purge_legacy_structure_object_rows dry-run as the explicit "
-            "preflight/apply path, then keep the table until later schema "
-            "removal is separately approved. "
+            "Ready for the next guarded schema slice when target DB audits confirm "
+            "zero rows. The guarded object-row purge has already completed, and "
+            "LEGACY-STRUCTURE-SURFACE-RETIRE.1A removed active admin, staff mapping, "
+            "resolver, seed, purge, and group-progress display dependencies. "
             "PROFILE-SG-FIELD-RETIRE.1A removed the Profile.small_group inbound FK "
             "and LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the SmallGroup.district "
             "parent FK; normal Bible Study V2 generation is not a SmallGroup "
@@ -134,10 +120,9 @@ CANDIDATE_DEFINITIONS = (
             "Completed. LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the legacy "
             "SmallGroup.district parent FK (migration accounts/0013) after "
             "LEGACY-OBJECT-ADMIN-FK.1A retired its admin display and "
-            "LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the resolver fallback read "
-            "(resolve_units_to_small_groups maps only "
-            "through SmallGroup.church_structure_unit). Parent/context links were "
-            "already clear (0 present). The guarded "
+            "LEGACY-BRIDGE-RESOLVER-NARROW.1A retired the parent-link resolver "
+            "fallback read. Parent/context links were already clear (0 present). "
+            "The guarded "
             "cleanup_legacy_structure_parent_links command was retired with the "
             "field, and seed_church_structure_units no longer reconstructs the "
             "SmallGroup hierarchy from this link. Only immutable historical "
@@ -151,49 +136,29 @@ CANDIDATE_DEFINITIONS = (
         "candidate_name": "SmallGroup.church_structure_unit",
         "model_table": "accounts.SmallGroup",
         "field_name": "church_structure_unit",
-        "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "structure-to-legacy mapping bridge for diagnostics/setup",
-            "non-V2 bridge/admin/diagnostic compatibility",
-            "reflection cleanup safety checks",
-        ),
-        "admin_references": _refs("accounts.admin.SmallGroupAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "seed_church_structure_units",
-            "audit_bible_study_generation_bridge_retirement",
-        ),
+        "candidate_type": "field",
         "test_fixture_references": _refs("mapping bridge fixtures"),
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "small_group_mapping",
         "recommended_next_action": (
-            "Keep until a replacement compatibility/mapping bridge exists or all "
-            "legacy object rows and FKs are retired."
+            "Ready to be removed with the SmallGroup table in the final guarded "
+            "schema slice once target DB row counts remain zero."
         ),
-        "suggested_removal_phase": "phase 4 then phase 5",
+        "suggested_removal_phase": "phase 5",
     },
     {
         "candidate_name": "District model/table",
         "model_table": "accounts.District",
         "field_name": "",
         "candidate_type": "model/table",
-        "app_read_references": _refs(
-            "legacy object-row/table-retirement context",
-            "setup/admin/diagnostic mapping bridge",
-        ),
-        "admin_references": _refs("accounts.admin.DistrictAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "audit_legacy_structure_object_row_retirement",
-            "purge_legacy_structure_object_rows",
-        ),
         "test_fixture_references": _refs("legacy district fixtures"),
         "migration_history_references": _refs("accounts/events/studies migrations"),
         "data_counter": "district_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Remaining rows are final table-retirement "
-            "blockers, not ordinary runtime authority. Resolve object rows, "
-            "inbound FKs, and the UNASSIGNED-GROUPS placeholder decision through "
-            "the guarded purge_legacy_structure_object_rows dry-run/apply gate "
-            "before any later schema-removal slice. "
+            "Ready for the next guarded schema slice when target DB audits confirm "
+            "zero rows. The guarded object-row purge removed the legacy District "
+            "rows including the UNASSIGNED-GROUPS legacy row, while preserving the "
+            "canonical ChurchStructureUnit custom unit. "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
             "SmallGroup.district and District.ministry_context parent FKs."
         ),
@@ -225,22 +190,15 @@ CANDIDATE_DEFINITIONS = (
         "candidate_name": "District.church_structure_unit",
         "model_table": "accounts.District",
         "field_name": "church_structure_unit",
-        "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "legacy district to structure mapping bridge for diagnostics/setup"
-        ),
-        "admin_references": _refs("accounts.admin.DistrictAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "seed_church_structure_units",
-        ),
+        "candidate_type": "field",
         "test_fixture_references": _refs("district mapping fixtures"),
         "migration_history_references": _refs("accounts migrations"),
         "data_counter": "district_mapping",
         "recommended_next_action": (
-            "Keep until a replacement bridge or final District table retirement "
-            "slice is approved."
+            "Ready to be removed with the District table in the final guarded "
+            "schema slice once target DB row counts remain zero."
         ),
-        "suggested_removal_phase": "phase 4 then phase 5",
+        "suggested_removal_phase": "phase 5",
     },
     {
         "candidate_name": "MinistryContext model/table",
@@ -251,22 +209,14 @@ CANDIDATE_DEFINITIONS = (
         # MinistryContext field after LEGACY-BRIDGE-RESOLVER-NARROW.1A narrowed it
         # to SmallGroup.church_structure_unit; the remaining live read is the
         # structure mapping bridge surfaced for setup diagnostics.
-        "app_read_references": _refs(
-            "legacy ministry-context to structure mapping bridge (setup diagnostics)",
-        ),
-        "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "audit_legacy_structure_object_row_retirement",
-            "purge_legacy_structure_object_rows",
-        ),
         "test_fixture_references": _refs("ministry-context display/cleanup fixtures"),
         "migration_history_references": _refs("accounts/events/studies migrations"),
         "data_counter": "ministry_context_rows",
         "recommended_next_action": (
-            "Do not remove table yet. Remaining rows are final table-retirement "
-            "blockers, not ordinary runtime authority. Run the guarded "
-            "purge_legacy_structure_object_rows dry-run/apply gate before any "
-            "later MinistryContext model/table removal. "
+            "Ready for the next guarded schema slice when target DB audits confirm "
+            "zero rows. The guarded object-row purge has already completed, and "
+            "LEGACY-STRUCTURE-SURFACE-RETIRE.1A removed active admin, staff mapping, "
+            "seed, and purge dependencies. "
             "ServiceEvent.ministry_context display cleanup is "
             "complete (SERVICE-EVENT-CONTEXT.1C removed the FK), and "
             "LEGACY-PARENT-FK-FIELD-RETIRE.1A removed the inbound "
@@ -278,21 +228,15 @@ CANDIDATE_DEFINITIONS = (
         "candidate_name": "MinistryContext.church_structure_unit",
         "model_table": "accounts.MinistryContext",
         "field_name": "church_structure_unit",
-        "candidate_type": "bridge-field",
-        "app_read_references": _refs(
-            "legacy ministry context to structure mapping bridge for diagnostics/setup",
-        ),
-        "admin_references": _refs("accounts.admin.MinistryContextAdmin"),
-        "diagnostic_cleanup_references": _refs(
-            "seed_church_structure_units",
-        ),
+        "candidate_type": "field",
         "test_fixture_references": _refs("ministry-context mapping fixtures"),
         "migration_history_references": _refs("accounts/events migrations"),
         "data_counter": "ministry_context_mapping",
         "recommended_next_action": (
-            "Keep until final MinistryContext row/table retirement is approved."
+            "Ready to be removed with the MinistryContext table in the final "
+            "guarded schema slice once target DB row counts remain zero."
         ),
-        "suggested_removal_phase": "phase 4 then phase 5",
+        "suggested_removal_phase": "phase 5",
     },
     {
         "candidate_name": "ChurchRoleAssignment.district (removed)",
@@ -708,7 +652,6 @@ CANDIDATE_DEFINITIONS = (
         "diagnostic_cleanup_references": _refs(
             "audit_legacy_structure_retirement_readiness",
             "audit_legacy_structure_object_row_retirement",
-            "purge_legacy_structure_object_rows",
             "audit_bible_study_generation_bridge_retirement",
             "cleanup_* guarded dry-run-first commands",
         ),
@@ -986,10 +929,9 @@ class Command(BaseCommand):
             "church_structure_unit bridge FKs and resolver dependencies."
         )
         write(
-            "  5. Run purge_legacy_structure_object_rows dry-run, review "
-            "UNASSIGNED-GROUPS and collector safety, then remove legacy object "
-            "rows only under explicit confirmation; table/model/mapping-FK "
-            "schema removal remains a later slice."
+            "  5. After target DB audits confirm zero legacy object rows, remove "
+            "SmallGroup, District, and MinistryContext models/tables in a "
+            "separate guarded schema migration."
         )
 
         if not verbose:

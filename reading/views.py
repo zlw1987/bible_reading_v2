@@ -11,7 +11,6 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
-from accounts.models import SmallGroup
 from accounts.permissions import (
     CAP_PUBLISH_READING_GUIDES,
     get_accessible_progress_groups,
@@ -1182,13 +1181,14 @@ def my_group_progress(request):
     if group_id:
         selected_group = groups.filter(id=group_id).first()
 
-    # CS-CORE.4F.2 + READING-STRUCT.1D: when there is no usable explicit ?group=,
+    # CS-CORE.4F.2 + READING-STRUCT.1D + LEGACY-STRUCTURE-SURFACE-RETIRE.1A:
+    # when there is no usable explicit ?group=,
     # the default selected group is the permission-fenced membership-core candidate
-    # (single active primary ChurchStructureMembership mapped to one active legacy
-    # SmallGroup, already in the legacy-accessible `groups`). It fails closed on
-    # no / multiple / unmapped membership. READING-STRUCT.1D removed the former
-    # legacy Profile.small_group default fallback, so Profile.small_group is no
-    # longer a group-progress runtime source. When there is no membership
+    # (single active primary ChurchStructureMembership on an active canonical
+    # small-group unit, already in the accessible `groups`). It fails closed on
+    # no / multiple / inactive / wrong-type membership. READING-STRUCT.1D removed
+    # the former legacy Profile.small_group default fallback, and this slice removed
+    # the legacy SmallGroup row list/display dependency. When there is no membership
     # candidate the default is simply the first accessible group (role/permission
     # driven), and ordinary users with no resolvable membership fall through to the
     # safe no-group state below.
@@ -1218,12 +1218,10 @@ def my_group_progress(request):
             },
         )
 
-    # CS-CORE.4F.1: the visible roster source is now the membership-core candidate
-    # (active primary ChurchStructureMembership) instead of legacy
-    # Profile.small_group. This switches only who appears in member_rows; the
-    # accessible group list, the selected/default group resolution above, and the
-    # legacy progress permission gate are all unchanged. Ordinary membership grants
-    # no progress access — the viewer already passed the legacy permission check.
+    # CS-CORE.4F.1 + LEGACY-STRUCTURE-SURFACE-RETIRE.1A: the visible roster source
+    # is active primary ChurchStructureMembership under the selected canonical unit.
+    # Ordinary membership grants only own-group access; role-scoped access remains
+    # explicit structure_unit permission, not serving or broad staff authority.
     group_members = get_membership_core_progress_roster_users(selected_group)
 
     active_plans = (

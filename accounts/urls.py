@@ -28,16 +28,6 @@ urlpatterns = [
         name="staff_structure_map",
     ),
     path(
-        "staff/structure/mappings/",
-        views.staff_structure_mapping_review,
-        name="staff_structure_mapping_review",
-    ),
-    path(
-        "staff/structure/mappings/<slug:legacy_type>/<int:legacy_id>/edit/",
-        views.staff_structure_mapping_edit,
-        name="staff_structure_mapping_edit",
-    ),
-    path(
         "staff/structure/<int:unit_id>/rename/",
         views.staff_structure_unit_rename,
         name="staff_structure_unit_rename",

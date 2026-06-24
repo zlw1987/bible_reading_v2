@@ -14,6 +14,83 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 >
 > **Local/dev verification — LEGACY-STRUCTURE-TABLE-RETIRE.1B:** on 2026-06-24, the local/dev database in `E:\bible-reading\bible_reading_v2` was verified with `accounts.0015_remove_legacy_structure_tables` applied. `manage.py migrate` reported no pending operations because the migration was already applied locally; post-checks confirmed the legacy object rows remain zero, the umbrella audit remains `CLEAN`, and `SmallGroup`, `District`, and `MinistryContext` are removed from ORM/runtime and from the local schema after `accounts.0015`. This does not claim production/remote DBs have applied the migration; they still require the normal deployment migration step and target-DB guard result review.
 
+## LEGACY-STRUCTURE-TABLE-RETIRE.1C — Production/Remote Deployment Guard Runbook
+
+This is a deployment checklist for applying `accounts.0015_remove_legacy_structure_tables`
+on a target production/remote DB. It is not an instruction to run production
+commands from a local agent session.
+
+Current state:
+
+- Local/dev in `E:\bible-reading\bible_reading_v2` has verified
+  `accounts.0015` applied.
+- Production/remote DBs are not yet claimed as having applied `accounts.0015`.
+  Only after target-DB post-verification passes should docs or status reports
+  claim production/remote has applied the migration.
+
+Pre-deployment requirements:
+
+- Take and verify a fresh backup of the intended target DB first.
+- Confirm the deployed code includes
+  `accounts/migrations/0015_remove_legacy_structure_tables.py`.
+- Confirm the local/deploy-packaging worktree is clean before packaging or
+  deploying.
+- Confirm the command environment points at the intended production/remote DB.
+
+Target-DB preflight commands, run in the target deployment environment:
+
+```powershell
+.venv\Scripts\python.exe manage.py check
+.venv\Scripts\python.exe manage.py showmigrations accounts
+.venv\Scripts\python.exe manage.py migrate --plan
+.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 50
+.venv\Scripts\python.exe manage.py audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
+.venv\Scripts\python.exe manage.py audit_legacy_structure_retirement_readiness --verbose --limit 50
+```
+
+Stop before migration if any of these are true:
+
+- Any `SmallGroup`, `District`, or `MinistryContext` row count is nonzero.
+- `audit_legacy_structure_retirement_readiness` does not report
+  `retirement_readiness: CLEAN`.
+- `migrate --plan` shows surprising unrelated migrations or an unexpected order.
+- The target DB is not clearly the intended production/remote DB.
+- There is no fresh backup.
+
+Migration command, after preflight is clean:
+
+```powershell
+.venv\Scripts\python.exe manage.py migrate
+```
+
+`accounts.0015` starts with a row-count guard. If any historical `SmallGroup`,
+`District`, or `MinistryContext` rows remain, the guard should abort before the
+legacy tables are deleted.
+
+Post-deployment verification on the same target DB:
+
+```powershell
+.venv\Scripts\python.exe manage.py check
+.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
+.venv\Scripts\python.exe manage.py showmigrations accounts
+.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 50
+.venv\Scripts\python.exe manage.py audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
+.venv\Scripts\python.exe manage.py audit_legacy_structure_retirement_readiness --verbose --limit 50
+```
+
+Run only targeted smoke checks unless a reviewer explicitly asks for a broader
+suite. Good candidates are one member login/home or Today page smoke and one
+staff structure/admin page smoke; do not run the full suite as part of the
+normal deployment guard.
+
+Rollback/recovery notes:
+
+- If the guard aborts before migration, table deletion has not happened.
+  Investigate the row counts and do not force the migration.
+- If the migration applies successfully, rollback requires the normal DB
+  backup/restore path or a deliberate reverse-migration plan. Do not invent
+  manual table recreation during incident response.
+
 New audit command:
 
 ```powershell

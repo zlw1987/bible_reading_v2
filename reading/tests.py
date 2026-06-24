@@ -5861,6 +5861,33 @@ class TodayActionCenterTests(TestCase):
         self.assertEqual(content.count("Confirm in My Serving"), 1)
         self.assertContains(response, "You are serving — pending confirmation")
 
+    def test_today_serving_summary_includes_started_today_assignment(self):
+        event = self.make_visible_event(
+            title_en="Started Today Pending Service",
+            start_datetime=self.local_datetime(0, hour=0),
+        )
+        self.make_assignment(event, confirmed=False)
+
+        response = self.get_home()
+
+        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Started Today Pending Service")
+        self.assertContains(response, "Confirm in My Serving")
+        self.assertContains(response, "You are serving — pending confirmation")
+
+    def test_today_gathering_keeps_confirmed_serving_note_after_start(self):
+        event = self.make_visible_event(
+            title_en="Started Today Confirmed Service",
+            start_datetime=self.local_datetime(0, hour=0),
+        )
+        self.make_assignment(event, confirmed=True)
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Church Gatherings")
+        self.assertContains(response, "Started Today Confirmed Service")
+        self.assertContains(response, "You are serving — confirmed")
+
     def test_church_gatherings_shows_visible_upcoming(self):
         self.make_visible_event(title_en="Midweek Prayer Gathering")
 

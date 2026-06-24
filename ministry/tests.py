@@ -497,6 +497,17 @@ class TeamAssignmentV1Tests(TestCase):
             rotation_anchor_team=anchor,
         )
 
+    def local_datetime(self, days_from_today=0, *, hour=9, minute=0):
+        local_date = timezone.localdate() + timezone.timedelta(days=days_from_today)
+        naive_datetime = datetime.combine(local_date, datetime.min.time()).replace(
+            hour=hour,
+            minute=minute,
+        )
+        return timezone.make_aware(
+            naive_datetime,
+            timezone.get_current_timezone(),
+        )
+
     def test_copy_forward_anchor_suggestion_finds_same_anchor_prior_assignment(self):
         anchor_team = MinistryTeam.objects.create(name="敬拜 C1", name_en="Worship C1")
         source_event = self.create_schedule_event(
@@ -1465,6 +1476,128 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(past_response, "Past Service")
         self.assertContains(all_response, "Past Service")
 
+    def test_my_serving_upcoming_includes_today_assignment_after_start(self):
+        self.set_language("en")
+        current_event = ServiceEvent.objects.create(
+            title="Current Today Service",
+            title_en="Current Today Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(0, hour=0),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=current_event)
+        member = assignment.assignment_members.get(membership=self.membership)
+        member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertEqual(upcoming_response.status_code, 200)
+        self.assertContains(upcoming_response, "Today Serving")
+        self.assertContains(upcoming_response, "Current Today Service")
+        self.assertNotContains(upcoming_response, "Past / History")
+        self.assertNotContains(past_response, "Current Today Service")
+
+    def test_my_serving_past_includes_assignment_effectively_ended_yesterday(self):
+        self.set_language("en")
+        ended_event = ServiceEvent.objects.create(
+            title="Ended Yesterday Service",
+            title_en="Ended Yesterday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(-1, hour=9),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=ended_event)
+        member = assignment.assignment_members.get(membership=self.membership)
+        member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Past / History")
+        self.assertContains(response, "Ended Yesterday Service")
+
+    def test_my_serving_upcoming_uses_explicit_event_end_datetime(self):
+        self.set_language("en")
+        multi_day_event = ServiceEvent.objects.create(
+            title="Multi-day Current Service",
+            title_en="Multi-day Current Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(-1, hour=9),
+            end_datetime=timezone.now() + timezone.timedelta(hours=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=multi_day_event)
+        member = assignment.assignment_members.get(membership=self.membership)
+        member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertContains(upcoming_response, "Today Serving")
+        self.assertContains(upcoming_response, "Multi-day Current Service")
+        self.assertNotContains(past_response, "Multi-day Current Service")
+
+    def test_my_serving_sections_bucket_tomorrow_and_later_assignments(self):
+        self.set_language("en")
+        tomorrow_event = ServiceEvent.objects.create(
+            title="Tomorrow Serving",
+            title_en="Tomorrow Serving",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(1, hour=9),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        later_event = ServiceEvent.objects.create(
+            title="Later Serving Window",
+            title_en="Later Serving Window",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(9, hour=9),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        for event in [tomorrow_event, later_event]:
+            assignment = self.create_assignment(service_event=event)
+            member = assignment.assignment_members.get(membership=self.membership)
+            member.confirm()
+            assignment.status = TeamAssignment.STATUS_CONFIRMED
+            assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This Week Serving")
+        self.assertContains(response, "Tomorrow Serving")
+        self.assertContains(response, "Later")
+        self.assertContains(response, "Later Serving Window")
+
+    def test_pending_current_assignment_stays_in_needs_attention(self):
+        self.set_language("en")
+        current_event = ServiceEvent.objects.create(
+            title="Pending Current Service",
+            title_en="Pending Current Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(0, hour=0),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.create_assignment(service_event=current_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Needs Attention")
+        self.assertContains(response, "Pending Current Service")
+        self.assertContains(response, "Confirm Assignment")
+
     def test_user_can_confirm_own_assignment_from_my_serving(self):
         self.set_language("en")
         assignment = self.create_assignment()
@@ -1496,6 +1629,13 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Confirmed")
         self.assertContains(response, "Confirmed At")
+        self.assertIsNotNone(assignment_member.confirmed_at)
+        confirmed_at_display = member_datetime(assignment_member.confirmed_at, "en")
+        event_start_display = member_datetime(assignment.service_event.start_datetime, "en")
+        content = response.content.decode()
+        confirmed_at_chunk = content[content.index("Confirmed At") : content.index("Confirmed At") + 250]
+        self.assertIn(confirmed_at_display, confirmed_at_chunk)
+        self.assertNotIn(event_start_display, confirmed_at_chunk)
         self.assertNotContains(response, "Not Confirmed")
 
     def test_completed_assignment_does_not_show_confirmation_form_on_my_serving_all(self):
@@ -1514,14 +1654,21 @@ class TeamAssignmentV1Tests(TestCase):
         assignment = self.create_assignment()
         self.client.login(username="regular_assign", password="testpass123")
 
-        for note in ["First confirmation.", "Second confirmation."]:
-            self.client.post(
-                reverse("confirm_team_assignment", args=[assignment.id]),
-                {"confirmation_note": note, "next": reverse("my_serving")},
-            )
+        self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {"confirmation_note": "First confirmation.", "next": reverse("my_serving")},
+        )
+        assignment_member = assignment.assignment_members.get(membership=self.membership)
+        first_confirmed_at = assignment_member.confirmed_at
+
+        self.client.post(
+            reverse("confirm_team_assignment", args=[assignment.id]),
+            {"confirmation_note": "Second confirmation.", "next": reverse("my_serving")},
+        )
 
         assignment_member = assignment.assignment_members.get(membership=self.membership)
         self.assertIsNotNone(assignment_member.confirmed_at)
+        self.assertEqual(assignment_member.confirmed_at, first_confirmed_at)
         self.assertEqual(assignment.assignment_members.filter(membership=self.membership).count(), 1)
 
     def test_home_shows_pending_serving_summary_when_user_has_assignment(self):

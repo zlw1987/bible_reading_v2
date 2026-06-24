@@ -602,12 +602,14 @@ def get_today_week_windows():
 
 def _user_serving_members(user):
     """Personal, non-cancelled upcoming serving rows (My Serving semantics)."""
-    return my_serving_assignments(user, tab="upcoming").exclude(
-        assignment__status__in=[
+    return [
+        member
+        for member in my_serving_assignments(user, tab="upcoming")
+        if member.assignment.status not in {
             TeamAssignment.STATUS_CANCELLED,
             TeamAssignment.STATUS_COMPLETED,
-        ],
-    )
+        }
+    ]
 
 
 def get_today_serving_summary(user):
@@ -625,13 +627,13 @@ def get_today_serving_summary(user):
     now = timezone.now()
     upcoming = _user_serving_members(user)
 
-    pending = list(upcoming.filter(confirmed_at__isnull=True)[:NEEDS_ATTENTION_CAP])
-    pending_count = upcoming.filter(confirmed_at__isnull=True).count()
+    pending = [member for member in upcoming if not member.confirmed_at]
+    pending_count = len(pending)
     if pending_count:
         week_cutoff = now + timedelta(days=THIS_WEEK_DAYS)
         near_term = [
             member
-            for member in pending
+            for member in pending[:NEEDS_ATTENTION_CAP]
             if member.assignment.service_event.start_datetime <= week_cutoff
         ]
         return {
@@ -640,13 +642,15 @@ def get_today_serving_summary(user):
             "items": near_term or pending[:1],
         }
 
-    confirmed_upcoming = (
-        upcoming.filter(confirmed_at__isnull=False)
-        .filter(
-            assignment__service_event__start_datetime__lte=now
-            + timedelta(days=NEAR_TERM_CONFIRMED_DAYS),
-        )
-        .first()
+    confirmed_upcoming = next(
+        (
+            member
+            for member in upcoming
+            if member.confirmed_at
+            and member.assignment.service_event.start_datetime
+            <= now + timedelta(days=NEAR_TERM_CONFIRMED_DAYS)
+        ),
+        None,
     )
     if confirmed_upcoming:
         return {

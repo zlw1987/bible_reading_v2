@@ -150,7 +150,7 @@ def visible_assignments_for_user(user):
 
 def my_serving_assignments(user, tab="upcoming"):
     now = timezone.now()
-    assignments = (
+    assignment_members = list(
         TeamAssignmentMember.objects.select_related(
             "assignment",
             "assignment__service_event",
@@ -172,19 +172,32 @@ def my_serving_assignments(user, tab="upcoming"):
                 ServiceEvent.STATUS_CANCELLED,
             ]
         )
+        .order_by(
+            "assignment__service_event__start_datetime",
+            "assignment__ministry_team__name",
+        )
     )
 
     if tab == "past":
-        assignments = assignments.filter(assignment__service_event__start_datetime__lt=now)
+        return [
+            item
+            for item in assignment_members
+            if assignment_is_serving_history(item, now=now)
+        ]
     elif tab == "all":
-        pass
-    else:
-        assignments = assignments.filter(assignment__service_event__start_datetime__gte=now)
+        return assignment_members
 
-    return assignments.order_by(
-        "assignment__service_event__start_datetime",
-        "assignment__ministry_team__name",
-    )
+    return [
+        item
+        for item in assignment_members
+        if not assignment_is_serving_history(item, now=now)
+    ]
+
+
+def _ensure_aware_datetime(value):
+    if timezone.is_naive(value):
+        return timezone.make_aware(value, timezone.get_current_timezone())
+    return value
 
 
 def _local_midnight(date_value):
@@ -193,6 +206,32 @@ def _local_midnight(date_value):
     if timezone.is_naive(midnight):
         return timezone.make_aware(midnight, local_timezone)
     return midnight
+
+
+def get_assignment_effective_end_datetime(item_or_assignment):
+    assignment = getattr(item_or_assignment, "assignment", item_or_assignment)
+    event = assignment.service_event
+    if event.end_datetime:
+        return _ensure_aware_datetime(event.end_datetime)
+
+    starts_at = _ensure_aware_datetime(event.start_datetime)
+    local_start_date = timezone.localtime(
+        starts_at,
+        timezone.get_current_timezone(),
+    ).date()
+    return _local_midnight(local_start_date + timedelta(days=1))
+
+
+def assignment_is_serving_history(item_or_assignment, now=None):
+    assignment = getattr(item_or_assignment, "assignment", item_or_assignment)
+    event = assignment.service_event
+    if assignment.status == TeamAssignment.STATUS_COMPLETED:
+        return True
+    if event.status == ServiceEvent.STATUS_COMPLETED:
+        return True
+
+    now = now or timezone.now()
+    return get_assignment_effective_end_datetime(assignment) < now
 
 
 def get_my_serving_windows():
@@ -205,6 +244,8 @@ def get_my_serving_windows():
 
 def build_my_serving_sections(serving_items):
     today_start, tomorrow_start, week_end = get_my_serving_windows()
+    today = timezone.localdate()
+    now = timezone.now()
     sections = {
         "needs_attention": [],
         "today": [],
@@ -214,18 +255,25 @@ def build_my_serving_sections(serving_items):
     }
 
     for item in serving_items:
-        starts_at = item.assignment.service_event.start_datetime
+        event = item.assignment.service_event
+        starts_at = _ensure_aware_datetime(event.start_datetime)
+        local_start_date = timezone.localtime(
+            starts_at,
+            timezone.get_current_timezone(),
+        ).date()
+        effective_end = get_assignment_effective_end_datetime(item)
+        is_history = assignment_is_serving_history(item, now=now)
         if (
-            starts_at >= today_start
+            not is_history
             and not item.confirmed_at
             and item.assignment.is_confirmable()
         ):
             sections["needs_attention"].append(item)
-        elif starts_at < today_start:
+        elif is_history:
             sections["past"].append(item)
-        elif starts_at < tomorrow_start:
+        elif local_start_date <= today and effective_end >= today_start:
             sections["today"].append(item)
-        elif starts_at < week_end:
+        elif tomorrow_start <= starts_at < week_end:
             sections["this_week"].append(item)
         else:
             sections["later"].append(item)

@@ -59,13 +59,22 @@ static collection or Passenger restart:
   `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py ... --settings=config.settings_godaddy`:
   `check`, `showmigrations accounts`, `migrate --plan`,
   `audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers`,
-  `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers`,
+  `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50`,
   and `audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers`.
 - Run `migrate --noinput` only after backup, integrity checks, and all preflight
-  commands pass.
+  hard blockers pass.
 - Run post-verification with `check`, `makemigrations --check --dry-run`,
-  `showmigrations accounts`, and the same three legacy-structure audits with
-  `--fail-on-blockers`.
+  `showmigrations accounts`, the object-row and umbrella legacy-retirement audits
+  with `--fail-on-blockers`, and the schema-retirement audit as verbose
+  informational output.
+- The schema-retirement audit is intentionally logged without broad
+  `--fail-on-blockers` during deploy. It inventories later schema-retirement
+  decisions and may report retained structure-native fields such as
+  `ServiceEvent.host_language_unit`, `BibleStudyMeeting.anchor_unit`,
+  `BibleStudyMeeting.generation_key`, and
+  `ReflectionComment.structure_unit_at_post` as blocked by design. Those fields
+  are canonical current-product fields and should not block final
+  `SmallGroup` / `District` / `MinistryContext` table retirement.
 - Continue to `collectstatic` and Passenger restart only after post-verification
   succeeds.
 
@@ -74,7 +83,8 @@ Stop before migration if any of these are true:
 - Any `SmallGroup`, `District`, or `MinistryContext` row count is nonzero.
 - `audit_legacy_structure_retirement_readiness` does not report
   `retirement_readiness: CLEAN`.
-- Any legacy structure audit exits nonzero with `--fail-on-blockers`.
+- `audit_legacy_structure_object_row_retirement --fail-on-blockers` exits
+  nonzero.
 - `migrate --plan` shows surprising unrelated migrations or an unexpected order.
 - The target DB is not clearly the intended production/remote DB.
 - There is no fresh DB backup, the backup is empty, or the backup copy fails.

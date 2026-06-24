@@ -42,7 +42,7 @@ run_legacy_structure_preflight() {
   run_manage showmigrations accounts
   run_manage migrate --plan
   run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
-  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
   run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
 }
 
@@ -52,7 +52,7 @@ run_legacy_structure_post_checks() {
   run_manage makemigrations --check --dry-run
   run_manage showmigrations accounts
   run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
-  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
   run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
 }
 

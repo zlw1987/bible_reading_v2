@@ -16,11 +16,12 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 >
 > **Current-state supersession — PROD-LEGACY-STRUCTURE-DEPLOY-CLOSE.1A:** on 2026-06-24, the guarded GoDaddy production deployment was reported completed successfully using the hardened `deploy_godaddy.sh` flow. The reported flow included a fresh DB backup, SQLite `quick_check` for the source DB and backup, legacy structure preflight audits, normal `manage.py migrate --noinput`, post-verification audits, `collectstatic`, and a Passenger restart. Subject to the deployment log and smoke checks already reported by the human, the GoDaddy production target may now be treated as having applied the final legacy `SmallGroup` / `District` / `MinistryContext` table-retirement migration (`accounts.0015_remove_legacy_structure_tables`). This claim is only for the GoDaddy production target; any other future target DB must still run the same guarded deployment flow and pass target-DB guard review before being claimed migrated.
 
-## LEGACY-STRUCTURE-TABLE-RETIRE.1C — Production/Remote Deployment Guard Runbook
+## LEGACY-STRUCTURE-TABLE-RETIRE.1C — Production/Remote Deployment Runbook
 
-This is the GoDaddy deployment checklist for applying
-`accounts.0015_remove_legacy_structure_tables` on the production/remote DB. It
-is not an instruction to run production commands from a local agent session.
+This section records the GoDaddy deployment path for the final legacy structure
+table-retirement migration and the normal deployment flow after that guarded
+production closure. It is not an instruction to run production commands from a
+local agent session.
 
 Current state:
 
@@ -30,15 +31,20 @@ Current state:
   status: on 2026-06-24, the hardened `deploy_godaddy.sh` deployment was
   reported completed successfully, with deployment-log review and smoke checks
   reported OK by the human.
+- The temporary legacy-structure final migration guard was used for the
+  2026-06-24 GoDaddy production deployment. After that deployment was reported
+  successful, `deploy_godaddy.sh` was generalized back to the normal GoDaddy
+  deployment flow.
+- Future cPanel Git Version Control deploys still run the committed
+  `deploy_godaddy.sh` through `.cpanel.yml`.
 - This GoDaddy production claim does not cover any other future target DB.
-  Other targets still need the same guarded deployment flow, target-DB guard
-  review, and post-verification before docs or status reports claim them
-  migrated.
+  Other targets still need the historical guarded deployment checklist,
+  target-DB guard review, and post-verification before docs or status reports
+  claim them migrated.
 
-Remote sequence after the guarded deployment code is committed and pushed:
+cPanel Git Version Control deploys run the committed script, equivalent to:
 
 ```bash
-ssh <godaddy-user>@<godaddy-host>
 cd /home/rsnwvvl103hc/repositories/app_read
 git status --short
 git fetch origin
@@ -48,69 +54,62 @@ bash deploy_godaddy.sh
 tail -n 200 /home/rsnwvvl103hc/app_read/deploy.log
 ```
 
-If the live deploy is triggered through cPanel rather than a direct SSH script
-run, use the same committed `deploy_godaddy.sh` flow and inspect
-`/home/rsnwvvl103hc/app_read/deploy.log` afterward.
-
-`deploy_godaddy.sh` now enforces the final legacy-structure guard before normal
-static collection or Passenger restart:
+`deploy_godaddy.sh` now uses the normal GoDaddy deployment flow:
 
 - Sync code from `/home/rsnwvvl103hc/repositories/app_read` to
-  `/home/rsnwvvl103hc/app_read` without deleting `/home/rsnwvvl103hc/app_read/backups/`.
+  `/home/rsnwvvl103hc/app_read` without deleting the SQLite DB, media,
+  backups, logs, or `.env`.
+- Fix file permissions and print Python/static settings diagnostics.
+- Confirm `/home/rsnwvvl103hc/app_read/db.sqlite3` exists and is non-empty.
 - Create a fresh timestamped backup of the GoDaddy SQLite DB
   `/home/rsnwvvl103hc/app_read/db.sqlite3` at
-  `/home/rsnwvvl103hc/app_read/backups/db.pre_legacy_structure_migration.<timestamp>.sqlite3`.
+  `/home/rsnwvvl103hc/app_read/backups/db.pre_deploy.<timestamp>.sqlite3`.
 - Abort if the DB is missing, empty, or cannot be copied to a non-empty backup.
 - Run SQLite `PRAGMA quick_check` against both the source DB and the backup.
-- Run the target-DB preflight commands with
+- Run the normal pre-migration checks with
   `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py ... --settings=config.settings_godaddy`:
-  `check`, `showmigrations accounts`, `migrate --plan`,
-  `audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers`,
-  `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50`,
-  and `audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers`.
-- Run `migrate --noinput` only after backup, integrity checks, and all preflight
-  hard blockers pass.
-- Run post-verification with `check`, `makemigrations --check --dry-run`,
-  `showmigrations accounts`, the object-row and umbrella legacy-retirement audits
-  with `--fail-on-blockers`, and the schema-retirement audit as verbose
-  informational output.
-- The schema-retirement audit is intentionally logged without broad
-  `--fail-on-blockers` during deploy. It inventories later schema-retirement
-  decisions and may report retained structure-native fields such as
-  `ServiceEvent.host_language_unit`, `BibleStudyMeeting.anchor_unit`,
-  `BibleStudyMeeting.generation_key`, and
-  `ReflectionComment.structure_unit_at_post` as blocked by design. Those fields
-  are canonical current-product fields and should not block final
-  `SmallGroup` / `District` / `MinistryContext` table retirement.
-- Continue to `collectstatic` and Passenger restart only after post-verification
-  succeeds.
+  `check`, `migrate --plan`, and then `migrate --noinput`.
+- Run post-migration `check` and `makemigrations --check --dry-run`.
+- Run `collectstatic --noinput --clear --verbosity 2`, check the generated
+  public static file, and restart Passenger.
+
+The legacy-specific retirement audits are no longer run on every cPanel deploy:
+`audit_legacy_structure_object_row_retirement`,
+`audit_legacy_structure_schema_retirement_readiness`, and
+`audit_legacy_structure_retirement_readiness` were part of the temporary final
+migration guard, and the GoDaddy production target has completed the final
+legacy table retirement.
+
+Historical/future-target caution: any new or future target DB that has not yet
+completed the final legacy table-retirement deployment must use the historical
+guarded deployment checklist before being claimed migrated. That checklist
+includes target-DB guard review, legacy object-row/schema/umbrella retirement
+audits, backup verification, SQLite `quick_check`, migration-plan review,
+normal migrate, post-verification, and smoke checks.
 
 Stop before migration if any of these are true:
 
-- Any `SmallGroup`, `District`, or `MinistryContext` row count is nonzero.
-- `audit_legacy_structure_retirement_readiness` does not report
-  `retirement_readiness: CLEAN`.
-- `audit_legacy_structure_object_row_retirement --fail-on-blockers` exits
-  nonzero.
 - `migrate --plan` shows surprising unrelated migrations or an unexpected order.
 - The target DB is not clearly the intended production/remote DB.
 - There is no fresh DB backup, the backup is empty, or the backup copy fails.
 - SQLite `quick_check` fails for either the source DB or the backup.
 
-`accounts.0015` starts with a row-count guard. If any historical `SmallGroup`,
-`District`, or `MinistryContext` rows remain, the guard should abort before the
-legacy tables are deleted.
+Historical/future-target note: `accounts.0015` starts with a row-count guard.
+If any historical `SmallGroup`, `District`, or `MinistryContext` rows remain on
+an unmigrated target, the guard should abort before the legacy tables are
+deleted.
 
 Run only targeted smoke checks unless a reviewer explicitly asks for a broader
 suite. Good candidates are one member login/home or Today page smoke and one
 staff structure/admin page smoke; do not run the full suite as part of the
-normal deployment guard.
+normal deployment flow.
 
 Rollback/recovery notes:
 
-- If the guard aborts before migration, table deletion has not happened.
+- If a historical/future-target guard aborts before migration, table deletion
+  has not happened.
   Investigate the row counts and do not force the migration.
-- If preflight fails, `manage.py migrate` did not run.
+- If the generic pre-migration guard fails, `manage.py migrate` did not run.
 - If migration succeeds and a later deploy step fails, recovery is the normal DB
   backup/restore path or a deliberate migration rollback plan. Do not manually
   recreate legacy tables during incident response.

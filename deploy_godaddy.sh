@@ -36,26 +36,6 @@ if status != "ok":
 PY
 }
 
-run_legacy_structure_preflight() {
-  echo "Running legacy structure preflight guard before migrate..." | tee -a "$LOGFILE"
-  run_manage check
-  run_manage showmigrations accounts
-  run_manage migrate --plan
-  run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
-  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
-  run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
-}
-
-run_legacy_structure_post_checks() {
-  echo "Running legacy structure post-migration verification..." | tee -a "$LOGFILE"
-  run_manage check
-  run_manage makemigrations --check --dry-run
-  run_manage showmigrations accounts
-  run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
-  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
-  run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
-}
-
 mkdir -p "$DEPLOYPATH"
 
 echo "===== DEPLOY START $(date) =====" | tee "$LOGFILE"
@@ -131,7 +111,7 @@ print("STATICFILES_DIRS =", settings.STATICFILES_DIRS)
 print("FOUND css/app.css =", find("css/app.css"))
 PY
 
-echo "Preparing legacy structure final migration guard..." | tee -a "$LOGFILE"
+echo "Preparing general pre-migration deployment guard..." | tee -a "$LOGFILE"
 if [ ! -f "$DB_PATH" ]; then
   echo "ERROR: Expected GoDaddy SQLite DB is missing: $DB_PATH" | tee -a "$LOGFILE"
   exit 1
@@ -144,7 +124,7 @@ fi
 
 mkdir -p "$BACKUP_DIR"
 BACKUP_TIMESTAMP="$(date +%Y%m%d%H%M%S)"
-BACKUP_PATH="$BACKUP_DIR/db.pre_legacy_structure_migration.$BACKUP_TIMESTAMP.sqlite3"
+BACKUP_PATH="$BACKUP_DIR/db.pre_deploy.$BACKUP_TIMESTAMP.sqlite3"
 
 echo "Creating pre-migration DB backup: $BACKUP_PATH" | tee -a "$LOGFILE"
 cp "$DB_PATH" "$BACKUP_PATH"
@@ -157,12 +137,18 @@ fi
 sqlite_quick_check "source DB" "$DB_PATH"
 sqlite_quick_check "pre-migration backup" "$BACKUP_PATH"
 
-run_legacy_structure_preflight
+echo "Running Django system check before migrations..." | tee -a "$LOGFILE"
+run_manage check
 
-echo "Running migrations after backup, integrity check, and preflight pass..." | tee -a "$LOGFILE"
+echo "Logging migration plan before migrate..." | tee -a "$LOGFILE"
+run_manage migrate --plan
+
+echo "Running migrations after backup, integrity check, and Django check..." | tee -a "$LOGFILE"
 run_manage migrate --noinput
 
-run_legacy_structure_post_checks
+echo "Running post-migration Django verification..." | tee -a "$LOGFILE"
+run_manage check
+run_manage makemigrations --check --dry-run
 
 echo "Collecting static files..." | tee -a "$LOGFILE"
 run_manage collectstatic --noinput --clear --verbosity 2

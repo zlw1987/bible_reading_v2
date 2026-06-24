@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from io import StringIO
 from urllib.parse import urlencode
 
@@ -54,6 +55,9 @@ from .services.lighting_pilot_import import (
     import_lighting_pilot,
     read_csv_file,
 )
+
+
+MY_SERVING_WEEK_DAYS = 7
 
 
 def ministry_ui_text(language, key):
@@ -181,6 +185,73 @@ def my_serving_assignments(user, tab="upcoming"):
         "assignment__service_event__start_datetime",
         "assignment__ministry_team__name",
     )
+
+
+def _local_midnight(date_value):
+    local_timezone = timezone.get_current_timezone()
+    midnight = datetime.combine(date_value, datetime.min.time())
+    if timezone.is_naive(midnight):
+        return timezone.make_aware(midnight, local_timezone)
+    return midnight
+
+
+def get_my_serving_windows():
+    today = timezone.localdate()
+    today_start = _local_midnight(today)
+    tomorrow_start = _local_midnight(today + timedelta(days=1))
+    week_end = _local_midnight(today + timedelta(days=1 + MY_SERVING_WEEK_DAYS))
+    return today_start, tomorrow_start, week_end
+
+
+def build_my_serving_sections(serving_items):
+    today_start, tomorrow_start, week_end = get_my_serving_windows()
+    sections = {
+        "needs_attention": [],
+        "today": [],
+        "this_week": [],
+        "later": [],
+        "past": [],
+    }
+
+    for item in serving_items:
+        starts_at = item.assignment.service_event.start_datetime
+        if (
+            starts_at >= today_start
+            and not item.confirmed_at
+            and item.assignment.is_confirmable()
+        ):
+            sections["needs_attention"].append(item)
+        elif starts_at < today_start:
+            sections["past"].append(item)
+        elif starts_at < tomorrow_start:
+            sections["today"].append(item)
+        elif starts_at < week_end:
+            sections["this_week"].append(item)
+        else:
+            sections["later"].append(item)
+
+    return [
+        {
+            "key": "needs_attention",
+            "items": sections["needs_attention"],
+        },
+        {
+            "key": "today",
+            "items": sections["today"],
+        },
+        {
+            "key": "this_week",
+            "items": sections["this_week"],
+        },
+        {
+            "key": "later",
+            "items": sections["later"],
+        },
+        {
+            "key": "past",
+            "items": sections["past"],
+        },
+    ]
 
 
 def sync_assignment_members(assignment, memberships):
@@ -778,6 +849,7 @@ def my_serving(request):
         for item in serving_items
         if item.confirmed_at or not item.assignment.is_confirmable()
     ]
+    serving_sections = build_my_serving_sections(serving_items)
 
     return render(
         request,
@@ -786,6 +858,7 @@ def my_serving(request):
             "serving_items": serving_items,
             "pending_items": pending_items,
             "scheduled_items": scheduled_items,
+            "serving_sections": serving_sections,
             "manageable_teams": manageable_assignment_teams(request.user),
             "tab": tab,
             "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),

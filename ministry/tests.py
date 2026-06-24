@@ -1654,7 +1654,7 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "我的服事")
         self.assertContains(response, "查看你的服事安排和确认状态。")
-        self.assertContains(response, "需要你确认")
+        self.assertContains(response, "需要你留意")
         self.assertContains(response, "确认服事")
 
     def test_english_my_serving_page_shows_english_labels(self):
@@ -1670,7 +1670,7 @@ class TeamAssignmentV1Tests(TestCase):
             response,
             "Your upcoming serving assignments and confirmation status.",
         )
-        self.assertContains(response, "Needs your confirmation")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Confirm Assignment")
 
     def test_pending_assignment_shows_needs_confirmation_section_and_action(self):
@@ -1681,7 +1681,7 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Needs your confirmation")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Needs confirmation")
         self.assertContains(response, "Confirm Assignment")
         self.assertContains(response, "View details")
@@ -1698,10 +1698,55 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Upcoming serving")
+        self.assertContains(response, "This Week Serving")
         self.assertContains(response, "Confirmed")
-        self.assertNotContains(response, "Needs your confirmation")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm Assignment")
+
+    def test_my_serving_orders_agenda_sections(self):
+        self.set_language("en")
+        today_event = self.create_schedule_event(
+            title_en="Today Serving",
+            days_from_now=0,
+        )
+        week_event = self.create_schedule_event(
+            title_en="This Week Serving",
+            days_from_now=2,
+        )
+        later_event = self.create_schedule_event(
+            title_en="Later Serving",
+            days_from_now=9,
+        )
+        past_event = ServiceEvent.objects.create(
+            title="Past Serving",
+            title_en="Past Serving",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() - timezone.timedelta(days=2),
+            status=ServiceEvent.STATUS_COMPLETED,
+        )
+        for event in [today_event, week_event, later_event, past_event]:
+            assignment = self.create_assignment(service_event=event)
+            member = assignment.assignment_members.get(membership=self.membership)
+            member.confirm()
+            assignment.status = TeamAssignment.STATUS_CONFIRMED
+            assignment.save()
+
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(f"{reverse('my_serving')}?tab=all")
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        for heading in [
+            "Today Serving",
+            "This Week Serving",
+            "Later",
+            "Past / History",
+        ]:
+            self.assertContains(response, heading)
+        self.assertLess(content.index("Today Serving"), content.index("This Week Serving"))
+        self.assertLess(content.index("This Week Serving"), content.index("Later"))
+        self.assertLess(content.index("Later"), content.index("Past / History"))
 
     def test_empty_my_serving_shows_friendly_empty_state_en(self):
         self.set_language("en")

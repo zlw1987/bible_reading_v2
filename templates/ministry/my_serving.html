@@ -32,37 +32,30 @@
 </div>
 
 {% if serving_items %}
-    {% if pending_items %}
-    <section class="serving-section serving-section--pending">
+    {% for section in serving_sections %}
+    {% if section.items %}
+    <section class="serving-section{% if section.key == 'needs_attention' %} serving-section--pending{% endif %}">
         <h2 class="serving-section-title">
-            {% if language == "zh" %}需要你确认{% else %}Needs your confirmation{% endif %}
-        </h2>
-        <div class="grid grid-2">
-            {% for serving_item in pending_items %}
-            {% include "ministry/_serving_card.html" %}
-            {% endfor %}
-        </div>
-    </section>
-    {% endif %}
-
-    {% if scheduled_items %}
-    <section class="serving-section">
-        <h2 class="serving-section-title">
-            {% if tab == "past" %}
-                {% if language == "zh" %}过去的服事{% else %}Past serving{% endif %}
-            {% elif tab == "all" %}
-                {% if language == "zh" %}全部服事{% else %}All serving{% endif %}
+            {% if section.key == "needs_attention" %}
+                {% if language == "zh" %}需要你留意{% else %}Needs Attention{% endif %}
+            {% elif section.key == "today" %}
+                {% if language == "zh" %}今日服事{% else %}Today Serving{% endif %}
+            {% elif section.key == "this_week" %}
+                {% if language == "zh" %}本周服事{% else %}This Week Serving{% endif %}
+            {% elif section.key == "later" %}
+                {% if language == "zh" %}稍后服事{% else %}Later{% endif %}
             {% else %}
-                {% if language == "zh" %}即将到来的服事{% else %}Upcoming serving{% endif %}
+                {% if language == "zh" %}过去 / 历史{% else %}Past / History{% endif %}
             {% endif %}
         </h2>
         <div class="grid grid-2">
-            {% for serving_item in scheduled_items %}
+            {% for serving_item in section.items %}
             {% include "ministry/_serving_card.html" %}
             {% endfor %}
         </div>
     </section>
     {% endif %}
+    {% endfor %}
 {% else %}
 <div class="card serving-empty">
     <p class="muted">

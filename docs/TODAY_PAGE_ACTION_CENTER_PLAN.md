@@ -30,7 +30,7 @@ Scope guardrails inherited from AGENTS.md and the task prompt:
 
 - **One serving item only.** Resolved by the three-zone IA: pending ministry confirmations appear in Needs your attention, and confirmed/pending serving context can appear as compact notes on matching Church Gathering rows.
 - **Bible Study section uses the legacy session model.** Resolved by replacing the legacy `BibleStudySession` block with the user's relevant v2 `BibleStudyMeeting`.
-- **No personal Friday role surfacing.** `BibleStudyMeetingRole` rows linked to the user are not shown anywhere on Today (only inside the meeting detail page).
+- **No personal Friday role surfacing.** Resolved by TODAY-HOME.1D: linked-user `BibleStudyMeetingRole` rows now show as compact, read-only role text on the already-visible Today/This Week Bible Study meeting row.
 - **No Church Gathering awareness.** Resolved by adding visible Church Gatherings in This Week, excluding draft/cancelled rows and keeping existing visibility rules.
 - **No time framing.** Resolved by the Needs your attention / Today / This Week structure.
 - **Multi-plan users get a tall page.** Each enrolled plan renders a full hero card before anything else appears.

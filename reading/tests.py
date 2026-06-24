@@ -6119,6 +6119,58 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "My role:")
         self.assertContains(response, "Discussion Leader")
 
+    def test_today_meeting_with_linked_role_shows_role_note(self):
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Today Role Lesson",
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Bible study")
+        self.assertContains(response, "Today Role Lesson")
+        self.assertContains(response, "My role:")
+        self.assertContains(response, "Discussion Leader")
+
+    def test_today_visible_meeting_without_linked_role_has_no_role_note(self):
+        self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Today No Role Lesson",
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Bible study")
+        self.assertContains(response, "Today No Role Lesson")
+        self.assertNotContains(response, "My role:")
+        self.assertNotContains(response, "My roles:")
+
+    def test_tomorrow_meeting_with_linked_role_shows_this_week_role_note(self):
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Tomorrow Role Lesson",
+            meeting_datetime=self.local_datetime(1, hour=19),
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Small group Bible study")
+        self.assertContains(response, "Tomorrow Role Lesson")
+        self.assertContains(response, "My role:")
+        self.assertContains(response, "Worship Lead")
+
     def test_multiple_linked_roles_shown(self):
         meeting = self.make_meeting(unit=self.group)
         self.add_role(
@@ -6142,7 +6194,10 @@ class TodayActionCenterTests(TestCase):
         self.user.first_name = "Grace"
         self.user.last_name = "Lee"
         self.user.save()
-        meeting = self.make_meeting(unit=self.group)
+        meeting = self.make_meeting(
+            unit=self.group,
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6200,13 +6255,17 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Discussion Leader")
 
     def test_role_line_hidden_when_no_linked_role(self):
-        self.make_meeting(unit=self.group)
+        self.make_meeting(
+            unit=self.group,
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
 
         response = self.get_home()
 
-        self.assertContains(response, "Small group Bible study")
+        self.assertContains(response, "Today's Bible study")
         self.assertNotContains(response, "My role:")
         self.assertNotContains(response, "My roles:")
+        self.assertNotContains(response, "You are serving")
 
     def test_cancelled_meeting_role_not_shown(self):
         meeting = self.make_meeting(unit=self.group)

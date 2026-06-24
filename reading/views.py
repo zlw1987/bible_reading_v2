@@ -1,6 +1,6 @@
 from collections import defaultdict
 import calendar as py_calendar
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -25,7 +25,13 @@ from events.models import ServiceEvent
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
 from ministry.views import my_serving_assignments
-from studies.models import BibleStudyMeetingRole
+from studies.models import (
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudyMeetingRole,
+    BibleStudySeries,
+)
+from studies.visibility import get_membership_audience_candidate_unit_ids
 from studies.views import get_v2_landing_context
 
 from .forms import ReadingGuidePostForm
@@ -578,6 +584,22 @@ NEEDS_ATTENTION_CAP = 5
 NEAR_TERM_CONFIRMED_DAYS = 30
 
 
+def _local_midnight(local_date):
+    return timezone.make_aware(
+        datetime.combine(local_date, datetime.min.time()),
+        timezone.get_current_timezone(),
+    )
+
+
+def get_today_week_windows():
+    """Return local-date datetime windows for Today and This Week."""
+    today_date = timezone.localdate()
+    today_start = _local_midnight(today_date)
+    tomorrow_start = _local_midnight(today_date + timedelta(days=1))
+    week_end = _local_midnight(today_date + timedelta(days=1 + THIS_WEEK_DAYS))
+    return today_start, tomorrow_start, week_end
+
+
 def _user_serving_members(user):
     """Personal, non-cancelled upcoming serving rows (My Serving semantics)."""
     return my_serving_assignments(user, tab="upcoming").exclude(
@@ -651,17 +673,9 @@ def get_week_serving_notes(user):
     return notes
 
 
-def get_this_week_gatherings(user):
-    """Visible upcoming Church Gatherings in the next 7 days, with serving notes.
-
-    Draft and cancelled events are excluded for everyone, including staff, so
-    Today never becomes a staff manage queue. Ordinary users see all of their
-    visible gatherings this week; event managers are capped and offered a link
-    to the full Church Gatherings list.
-    """
-    now = timezone.now()
-    week_end = now + timedelta(days=THIS_WEEK_DAYS)
-    events = list(
+def get_gatherings_for_window(user, start_datetime, end_datetime):
+    """Visible Church Gatherings in a half-open datetime window."""
+    return list(
         get_visible_service_events(user)
         .exclude(
             status__in=[
@@ -670,23 +684,83 @@ def get_this_week_gatherings(user):
             ],
         )
         .filter(
-            start_datetime__gte=now,
-            start_datetime__lte=week_end,
+            start_datetime__gte=start_datetime,
+            start_datetime__lt=end_datetime,
         )
         .order_by("start_datetime")
     )
+
+
+def attach_serving_notes(events, user):
+    serving_notes = get_week_serving_notes(user)
+    return [
+        {"event": event, "serving_note": serving_notes.get(event.id)}
+        for event in events
+    ]
+
+
+def get_gathering_rows_for_window(user, start_datetime, end_datetime):
+    """Visible Church Gatherings in a local-date bucket, with serving notes.
+
+    Draft and cancelled events are excluded for everyone, including staff, so
+    Today never becomes a staff manage queue. Ordinary users see all visible
+    gatherings in the requested local-date window; event managers are capped
+    and offered a link to the full Church Gatherings list.
+    """
+    events = get_gatherings_for_window(user, start_datetime, end_datetime)
 
     show_all_events_link = False
     if can_manage_service_events(user) and len(events) > THIS_WEEK_STAFF_EVENT_CAP:
         events = events[:THIS_WEEK_STAFF_EVENT_CAP]
         show_all_events_link = True
 
-    serving_notes = get_week_serving_notes(user)
-    gatherings = [
-        {"event": event, "serving_note": serving_notes.get(event.id)}
-        for event in events
+    return attach_serving_notes(events, user), show_all_events_link
+
+
+def get_visible_study_meetings_for_window(user, start_datetime, end_datetime, limit=3):
+    """Visible V2 Bible Study meetings in a local-date bucket.
+
+    This mirrors ``get_v2_landing_context``: audience-row candidates from the
+    user's active primary membership are only a pre-filter, and each meeting's
+    ``can_be_seen_by`` remains the final authority.
+    """
+    audience_candidate_unit_ids = get_membership_audience_candidate_unit_ids(user)
+    if not audience_candidate_unit_ids:
+        return []
+
+    visible_statuses = [
+        BibleStudyMeeting.STATUS_PUBLISHED,
+        BibleStudyMeeting.STATUS_COMPLETED,
     ]
-    return gatherings, show_all_events_link
+    base_meetings = BibleStudyMeeting.objects.select_related(
+        "lesson",
+        "lesson__series",
+        "anchor_unit",
+    ).prefetch_related(
+        "audience_scope_links__unit",
+    ).filter(
+        meeting_datetime__gte=start_datetime,
+        meeting_datetime__lt=end_datetime,
+        status__in=visible_statuses,
+        lesson__status__in=[
+            BibleStudyLesson.STATUS_PUBLISHED,
+            BibleStudyLesson.STATUS_COMPLETED,
+        ],
+        lesson__series__is_active=True,
+        lesson__series__status__in=[
+            BibleStudySeries.STATUS_PUBLISHED,
+            BibleStudySeries.STATUS_COMPLETED,
+        ],
+        audience_scope_links__unit_id__in=audience_candidate_unit_ids,
+    ).distinct().order_by("meeting_datetime")
+
+    meetings = []
+    for meeting in base_meetings:
+        if meeting.can_be_seen_by(user):
+            meetings.append(meeting)
+        if len(meetings) >= limit:
+            break
+    return meetings
 
 
 def get_my_study_meeting_roles(user, meeting):
@@ -705,6 +779,20 @@ def get_my_study_meeting_roles(user, meeting):
         .select_related("user")
         .order_by("role", "id")
     )
+
+
+def get_study_meeting_rows_for_window(user, start_datetime, end_datetime):
+    return [
+        {
+            "meeting": meeting,
+            "roles": get_my_study_meeting_roles(user, meeting),
+        }
+        for meeting in get_visible_study_meetings_for_window(
+            user,
+            start_datetime,
+            end_datetime,
+        )
+    ]
 
 
 @login_required
@@ -797,12 +885,28 @@ def home(request):
             }
         )
 
-    week_gatherings, show_all_gatherings_link = get_this_week_gatherings(request.user)
+    today_start, tomorrow_start, week_end = get_today_week_windows()
+    today_gatherings, show_all_today_gatherings_link = get_gathering_rows_for_window(
+        request.user,
+        today_start,
+        tomorrow_start,
+    )
+    week_gatherings, show_all_gatherings_link = get_gathering_rows_for_window(
+        request.user,
+        tomorrow_start,
+        week_end,
+    )
 
     study_meeting_context = get_v2_landing_context(request.user)
-    my_study_roles = get_my_study_meeting_roles(
+    today_study_meetings = get_study_meeting_rows_for_window(
         request.user,
-        study_meeting_context.get("primary_meeting"),
+        today_start,
+        tomorrow_start,
+    )
+    week_study_meetings = get_study_meeting_rows_for_window(
+        request.user,
+        tomorrow_start,
+        week_end,
     )
 
     return render(
@@ -812,10 +916,13 @@ def home(request):
             "today_items": today_items,
             "ended_plan_count": ended_plan_count,
             "serving_summary": get_today_serving_summary(request.user),
+            "today_gatherings": today_gatherings,
+            "show_all_today_gatherings_link": show_all_today_gatherings_link,
+            "today_study_meetings": today_study_meetings,
             "week_gatherings": week_gatherings,
             "show_all_gatherings_link": show_all_gatherings_link,
+            "week_study_meetings": week_study_meetings,
             "study_meeting_context": study_meeting_context,
-            "my_study_roles": my_study_roles,
         },
     )
 

@@ -4576,6 +4576,8 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "What to read today, and where to go next.")
         self.assertContains(response, "Today&#x27;s reading")
         self.assertContains(response, "Start Today")
+        self.assertContains(response, 'class="card dashboard-hero"')
+        self.assertNotContains(response, "dashboard-reading-completed")
         self.assertContains(
             response,
             reverse("passage_reader", args=[self.active_plan.id, self.day1.id, 0]),
@@ -4615,6 +4617,26 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Plan day 1")
         self.assertContains(response, "1 of 3 reading days completed")
         self.assertContains(response, "Checked in today")
+
+    def test_home_completed_reading_renders_compact_check_in_card(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        CheckIn.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="card dashboard-reading-completed"')
+        self.assertContains(response, "Today's reading is complete.")
+        self.assertContains(response, "Read Again")
+        self.assertNotContains(response, 'class="card dashboard-hero"')
+        self.assertNotContains(response, "Start Today")
+        self.assertNotContains(response, "Today’s passages")
 
     def test_chinese_home_reading_progress_wording(self):
         self.set_language("zh")
@@ -5731,6 +5753,17 @@ class TodayActionCenterTests(TestCase):
         self.add_event_audience(event, self.root_unit)
         return event
 
+    def local_datetime(self, days_from_today=0, *, hour=9, minute=0):
+        local_date = timezone.localdate() + timedelta(days=days_from_today)
+        naive_datetime = datetime.combine(local_date, datetime.min.time()).replace(
+            hour=hour,
+            minute=minute,
+        )
+        return timezone.make_aware(
+            naive_datetime,
+            timezone.get_current_timezone(),
+        )
+
     def make_assignment(self, event, *, confirmed=False):
         assignment = TeamAssignment.objects.create(
             service_event=event,
@@ -5836,6 +5869,46 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "Church Gatherings this week")
         self.assertContains(response, "Midweek Prayer Gathering")
 
+    def test_church_gathering_today_appears_in_today_not_this_week(self):
+        self.make_visible_event(
+            title_en="Today Prayer Gathering",
+            start_datetime=self.local_datetime(0, hour=9),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Church Gatherings")
+        self.assertContains(response, "Today Prayer Gathering")
+        self.assertNotContains(response, "Church Gatherings this week")
+
+    def test_church_gathering_tomorrow_appears_in_this_week_not_today(self):
+        self.make_visible_event(
+            title_en="Tomorrow Prayer Gathering",
+            start_datetime=self.local_datetime(1, hour=9),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Church Gatherings this week")
+        self.assertContains(response, "Tomorrow Prayer Gathering")
+        self.assertNotContains(response, "Today's Church Gatherings")
+
+    def test_church_gathering_week_window_is_half_open(self):
+        self.make_visible_event(
+            title_en="Final Included Gathering",
+            start_datetime=self.local_datetime(7, hour=23),
+        )
+        self.make_visible_event(
+            title_en="Boundary Excluded Gathering",
+            start_datetime=self.local_datetime(8, hour=9),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Church Gatherings this week")
+        self.assertContains(response, "Final Included Gathering")
+        self.assertNotContains(response, "Boundary Excluded Gathering")
+
     def test_church_gathering_datetime_is_member_formatted(self):
         # Relative future datetime so the gathering always falls inside the Today
         # page's upcoming/this-week window, regardless of the current date.
@@ -5903,6 +5976,32 @@ class TodayActionCenterTests(TestCase):
 
         self.assertContains(response, "Small group Bible study")
         self.assertContains(response, "My Group Lesson")
+
+    def test_v2_meeting_today_appears_in_today_not_this_week(self):
+        self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Today Group Lesson",
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Bible study")
+        self.assertContains(response, "Today Group Lesson")
+        self.assertNotContains(response, "Small group Bible study")
+
+    def test_v2_meeting_tomorrow_appears_in_this_week_not_today(self):
+        self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Tomorrow Group Lesson",
+            meeting_datetime=self.local_datetime(1, hour=19),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Small group Bible study")
+        self.assertContains(response, "Tomorrow Group Lesson")
+        self.assertNotContains(response, "Today's Bible study")
 
     def test_v2_meeting_datetime_is_member_formatted(self):
         # Relative future datetime so the meeting always falls inside the Today

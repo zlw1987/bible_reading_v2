@@ -76,7 +76,7 @@
 </h2>
 {% if today_items %}
 {% for item in today_items %}
-<div class="card dashboard-hero">
+<div class="card {% if item.is_checked %}dashboard-reading-completed{% elif item.is_rest_day %}dashboard-reading-state{% else %}dashboard-hero{% endif %}">
     <div class="dashboard-hero-head">
         <div>
             <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
@@ -114,7 +114,28 @@
         <div class="progress-bar-fill" style="width: {{ item.progress_percent }}%;"></div>
     </div>
 
-    {% if item.is_rest_day %}
+    {% if item.is_checked %}
+    <hr class="divider">
+    <p>
+        {% if language == "zh" %}
+            今日读经已经完成。你可以再次阅读，或查看读经计划。
+        {% else %}
+            Today's reading is complete. You can read again or review the plan.
+        {% endif %}
+    </p>
+    <div class="actions">
+        {% if item.passages %}
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' item.active_plan.id item.plan_day.id 0 %}?lang={{ language }}">
+            {% if language == "zh" %}再次阅读{% else %}Read Again{% endif %}
+        </a>
+        {% endif %}
+        <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
+            {{ ui.view_plan }}
+        </a>
+    </div>
+
+    {% elif item.is_rest_day %}
     <hr class="divider">
     <h3>{{ ui.rest_day }}</h3>
     <p>
@@ -213,6 +234,7 @@
     {% endif %}
     {% endif %}
 
+    {% if not item.is_checked %}
     <hr class="divider">
     <div class="actions">
         <a class="button button-secondary" href="{% url 'active_plan_detail' item.active_plan.id %}">
@@ -233,6 +255,7 @@
             {{ ui.browse_reading_plans }}
         </a>
     </div>
+    {% endif %}
 </div>
 {% endfor %}
 {% else %}
@@ -263,6 +286,64 @@
         Completed reading plans are available on the Reading page.
     {% endif %}
 </p>
+{% endif %}
+
+{% if today_gatherings %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}今日教会聚会{% else %}Today's Church Gatherings{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for row in today_gatherings %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'service_event_detail' row.event.id %}">
+                    {{ row.event|event_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ row.event.start_datetime|member_datetime:language }}</p>
+            {% if row.serving_note == "pending" %}
+            <p><span class="status status-warning">{% if language == "zh" %}你有服事 · 等待确认{% else %}You are serving — pending confirmation{% endif %}</span></p>
+            {% elif row.serving_note == "confirmed" %}
+            <p><span class="status status-good">{% if language == "zh" %}你有服事 · 已确认{% else %}You are serving — confirmed{% endif %}</span></p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% if show_all_today_gatherings_link %}
+    <a class="button button-secondary" href="{% url 'service_event_list' %}">
+        {% if language == "zh" %}查看全部教会聚会{% else %}View all Church Gatherings{% endif %}
+    </a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if today_study_meetings %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}今日小组查经{% else %}Today's Bible study{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for row in today_study_meetings %}
+        {% with meeting=row.meeting %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                    {{ meeting.lesson|study_lesson_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ meeting.lesson.series|study_series_title:language }}</p>
+            <p class="muted">{{ meeting.meeting_datetime|member_datetime:language }}</p>
+            {% if row.roles %}
+            <p class="study-role-line">
+                <span class="study-role-label">{% if row.roles|length > 1 %}{% if language == "zh" %}我的角色：{% else %}My roles:{% endif %}{% else %}{% if language == "zh" %}我的角色：{% else %}My role:{% endif %}{% endif %}</span>
+                {% for role in row.roles %}{% if not forloop.first %} · {% endif %}{{ role|meeting_role_label:language }}{% endfor %}
+            </p>
+            {% endif %}
+            <a class="button button-secondary" href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+            </a>
+        </div>
+        {% endwith %}
+        {% endfor %}
+    </div>
+</div>
 {% endif %}
 
 {# --- Zone 3: This Week ------------------------------------------------ #}
@@ -309,31 +390,37 @@
         {% endif %}
     </p>
 </div>
-{% elif study_meeting_context.primary_meeting %}
-{% with meeting=study_meeting_context.primary_meeting %}
+{% elif week_study_meetings %}
 <div class="card">
     <h3 class="card-title">{% if language == "zh" %}小组查经{% else %}Small group Bible study{% endif %}</h3>
-    <p>
-        <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
-            {{ meeting.lesson|study_lesson_title:language }}
-        </a>
-    </p>
-    <p class="muted">{{ meeting.lesson.series|study_series_title:language }}</p>
-    <p class="muted">{{ meeting.meeting_datetime|member_datetime:language }}</p>
-    {% if my_study_roles %}
-    <p class="study-role-line">
-        <span class="study-role-label">{% if my_study_roles|length > 1 %}{% if language == "zh" %}我的角色：{% else %}My roles:{% endif %}{% else %}{% if language == "zh" %}我的角色：{% else %}My role:{% endif %}{% endif %}</span>
-        {% for role in my_study_roles %}{% if not forloop.first %} · {% endif %}{{ role|meeting_role_label:language }}{% endfor %}
-    </p>
-    {% endif %}
-    <a class="button button-secondary" href="{% url 'bible_study_meeting_detail' meeting.id %}">
-        {% if language == "zh" %}查看详情{% else %}View details{% endif %}
-    </a>
+    <div class="dashboard-week-list">
+        {% for row in week_study_meetings %}
+        {% with meeting=row.meeting %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                    {{ meeting.lesson|study_lesson_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ meeting.lesson.series|study_series_title:language }}</p>
+            <p class="muted">{{ meeting.meeting_datetime|member_datetime:language }}</p>
+            {% if row.roles %}
+            <p class="study-role-line">
+                <span class="study-role-label">{% if row.roles|length > 1 %}{% if language == "zh" %}我的角色：{% else %}My roles:{% endif %}{% else %}{% if language == "zh" %}我的角色：{% else %}My role:{% endif %}{% endif %}</span>
+                {% for role in row.roles %}{% if not forloop.first %} · {% endif %}{{ role|meeting_role_label:language }}{% endfor %}
+            </p>
+            {% endif %}
+            <a class="button button-secondary" href="{% url 'bible_study_meeting_detail' meeting.id %}">
+                {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+            </a>
+        </div>
+        {% endwith %}
+        {% endfor %}
+    </div>
 </div>
-{% endwith %}
 {% endif %}
 
-{% if not week_gatherings and not study_meeting_context.primary_meeting and not study_meeting_context.show_no_small_group %}
+{% if not week_gatherings and not week_study_meetings and not study_meeting_context.show_no_small_group %}
 <div class="card">
     <p class="muted">
         {% if language == "zh" %}

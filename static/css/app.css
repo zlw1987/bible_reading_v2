@@ -924,6 +924,11 @@ th {
     border-left: 4px solid var(--primary);
 }
 
+.dashboard-reading-completed,
+.dashboard-reading-state {
+    border-left: 4px solid var(--border);
+}
+
 .dashboard-hero-head {
     align-items: flex-start;
     display: flex;

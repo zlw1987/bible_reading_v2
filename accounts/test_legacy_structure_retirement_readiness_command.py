@@ -13,8 +13,6 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    SmallGroup,
 )
 from events.models import ServiceEvent
 from studies.models import (
@@ -53,15 +51,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
             code="D1",
             name="District 1",
         )
-        self.district = District.objects.create(
-            name="District 1",
-            church_structure_unit=self.district_unit,
-        )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
-
     def make_user(self, username, *, membership_unit=None):
         user = User.objects.create_user(username=username, password="pw123456")
         if membership_unit is not None:
@@ -86,7 +75,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         # PROFILE-SG-FIELD-RETIRE.1A removed Profile.small_group, so the audit no
         # longer carries profile-vs-membership drift counters; belonging is
         # membership-core.
-        SmallGroup.objects.create(name="Unmapped Group")
         self.make_service_event()
         # ROLE-FIELD-RETIRE.1A: scoped roles are structure-native (explicit
         # structure_unit only) and no longer carry a legacy small_group field, so
@@ -103,7 +91,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
         self.assertNotIn("profile_membership_unit_mismatch_group_mapping", stats)
         self.assertNotIn("profiles_with_small_group_no_active_primary_membership", stats)
-        self.assertEqual(stats["small_groups_without_church_structure_unit"], 1)
+        self.assertEqual(stats["small_groups_without_church_structure_unit"], 0)
         self.assertEqual(stats["bible_study_v1_sessions_checked"], 0)
         self.assertEqual(stats["bible_study_v1_pilot_records_present"], 0)
         self.assertEqual(stats["bible_study_v1_sessions_with_district_id"], 0)
@@ -186,9 +174,8 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
     def test_fail_on_blockers_exits_nonzero(self):
-        # setUp already created a SmallGroup row, so the SmallGroup table
-        # retirement-blocker reference count is nonzero and --fail-on-blockers
-        # exits nonzero.
+        self.make_service_event()
+
         out = StringIO()
         with self.assertRaises(CommandError):
             call_command(
@@ -199,7 +186,12 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
     def test_verbose_limit_caps_example_rows(self):
         for index in range(3):
-            SmallGroup.objects.create(name=f"Unmapped Verbose Group {index}")
+            ServiceEvent.objects.create(
+                title=f"Verbose Zero Row Gathering {index}",
+                event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+                start_datetime=self.now + timezone.timedelta(days=7 + index),
+                status=ServiceEvent.STATUS_PUBLISHED,
+            )
 
         out = StringIO()
         call_command(
@@ -211,7 +203,7 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         )
 
         output = out.getvalue()
-        self.assertIn("small_group_unmapped (3):", output)
+        self.assertIn("service_event_zero_row_safety_state (3):", output)
         self.assertIn("stopped at --limit 1", output)
         self.assertIn("diagnostic/backfill commands", output)
 
@@ -221,7 +213,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
 
         before_event = (event.title, event.status)
         before_counts = {
-            "small_groups": SmallGroup.objects.count(),
             "memberships": ChurchStructureMembership.objects.count(),
             "service_events": ServiceEvent.objects.count(),
         }
@@ -239,7 +230,6 @@ class LegacyStructureRetirementReadinessCommandTests(TestCase):
         event.refresh_from_db()
 
         self.assertEqual((event.title, event.status), before_event)
-        self.assertEqual(SmallGroup.objects.count(), before_counts["small_groups"])
         self.assertEqual(
             ChurchStructureMembership.objects.count(),
             before_counts["memberships"],
@@ -349,6 +339,14 @@ class LegacyStructureRetirementReadinessV1RemovedStateTests(TestCase):
             name="Whole Church",
         )
 
+    def make_service_event(self):
+        return ServiceEvent.objects.create(
+            title="Zero Row Gathering",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.now + timezone.timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
     def test_v1_removed_state_is_not_data_or_runtime_blocker(self):
         audit = run_audit(now=self.now)
         stats = audit["stats"]
@@ -366,7 +364,7 @@ class LegacyStructureRetirementReadinessV1RemovedStateTests(TestCase):
         self.assertEqual(stats["bible_study_legacy_retirement_blockers"], 0)
 
     def test_fail_on_blockers_no_longer_reports_v1_purge_pending(self):
-        SmallGroup.objects.create(name="Remaining Row")
+        self.make_service_event()
 
         out = StringIO()
         with self.assertRaises(CommandError) as context:

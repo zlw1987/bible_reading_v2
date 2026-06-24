@@ -7,7 +7,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureUnit
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -28,13 +28,6 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
         )
         self.group_unit = self.make_unit("RAINBOW4")
         self.other_group_unit = self.make_unit("RAINBOW5")
-        # SmallGroup mapping remains a diagnostic-resolver dependency on the
-        # SmallGroup table; BS-MEETING-MIRROR.1A removed the meeting mirror, so
-        # it is no longer attached to meetings.
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
         self.series = BibleStudySeries.objects.create(
             title="John Study",
             status=BibleStudySeries.STATUS_PUBLISHED,
@@ -199,9 +192,9 @@ class BibleStudyGenerationBridgeRetirementCommandTests(TestCase):
 
         self.assertIn("ordinary_visibility_paths_using_small_group: 0", output)
 
-    def test_diagnostic_paths_counter_reports_small_group_table_dependencies(self):
+    def test_diagnostic_paths_counter_reports_no_small_group_table_dependencies(self):
         self.make_structure_native_meeting()
 
         output = self.run_command()
 
-        self.assertIn("diagnostic_paths_using_small_group_table: 2", output)
+        self.assertIn("diagnostic_paths_using_small_group_table: 0", output)

@@ -13,7 +13,8 @@ from collections import Counter, OrderedDict
 
 from django.core.management.base import BaseCommand, CommandError
 
-from accounts.models import ChurchStructureUnit, District, MinistryContext, SmallGroup
+from accounts.legacy_structure_tables import iter_legacy_structure_rows
+from accounts.models import ChurchStructureUnit
 
 
 CATEGORY_RUNTIME_AUTHORITY = "runtime authority"
@@ -111,12 +112,13 @@ def _unit_label(unit):
 
 def _object_label(object_type, obj):
     if object_type == "SmallGroup":
-        return f"object_type=SmallGroup object_id={obj.id} object_name={obj.name}"
+        return f"object_type=SmallGroup object_id={obj['id']} object_name={obj['name']}"
     if object_type == "District":
-        return f"object_type=District object_id={obj.id} object_name={obj.name}"
+        return f"object_type=District object_id={obj['id']} object_name={obj['name']}"
     return (
         "object_type=MinistryContext "
-        f"object_id={obj.id} object_code={obj.code} object_name={obj.name}"
+        f"object_id={obj['id']} object_code={obj.get('code', '')} "
+        f"object_name={obj['name']}"
     )
 
 
@@ -133,7 +135,7 @@ def _mapping_state(object_type, unit):
 def _is_special_unassigned_mapping(object_type, obj, unit):
     if object_type != "District" or unit is None:
         return False
-    name = (obj.name or "").lower()
+    name = (obj.get("name") or "").lower()
     code = (unit.code or "").upper()
     return (
         code == "UNASSIGNED-GROUPS"
@@ -227,42 +229,19 @@ def _scan_row(stats, details, object_type, obj, unit):
 
 
 def _scan_rows(stats, details):
-    small_groups = (
-        SmallGroup.objects.select_related("church_structure_unit")
-        .all()
-        .order_by("id")
-    )
-    for group in small_groups:
-        stats["small_groups_checked"] += 1
-        _scan_row(stats, details, "SmallGroup", group, group.church_structure_unit)
+    pending = []
+    unit_ids = set()
+    for table, row in iter_legacy_structure_rows():
+        unit_id = row.get("church_structure_unit_id")
+        if unit_id is not None:
+            unit_ids.add(unit_id)
+        pending.append((table, row))
 
-    districts = (
-        District.objects.select_related("church_structure_unit").all().order_by("id")
-    )
-    for district in districts:
-        stats["districts_checked"] += 1
-        _scan_row(
-            stats,
-            details,
-            "District",
-            district,
-            district.church_structure_unit,
-        )
-
-    contexts = (
-        MinistryContext.objects.select_related("church_structure_unit")
-        .all()
-        .order_by("id")
-    )
-    for context in contexts:
-        stats["ministry_contexts_checked"] += 1
-        _scan_row(
-            stats,
-            details,
-            "MinistryContext",
-            context,
-            context.church_structure_unit,
-        )
+    units_by_id = ChurchStructureUnit.objects.in_bulk(unit_ids)
+    for table, row in pending:
+        stats[table.checked_key] += 1
+        unit = units_by_id.get(row.get("church_structure_unit_id"))
+        _scan_row(stats, details, table.object_type, row, unit)
 
 
 def _scan_consumers(stats):

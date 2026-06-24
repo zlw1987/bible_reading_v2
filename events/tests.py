@@ -14,9 +14,6 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    MinistryContext,
-    SmallGroup,
 )
 from ministry.models import (
     MinistryTeam,
@@ -32,8 +29,6 @@ from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequire
 
 class ServiceEventFoundationTests(TestCase):
     def setUp(self):
-        self.north = District.objects.create(name="North")
-        self.south = District.objects.create(name="South")
         # Structure units used by the normal ServiceEvent audience picker.
         self.root_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
@@ -53,11 +48,6 @@ class ServiceEventFoundationTests(TestCase):
             code="SOUTH",
             name="South District",
         )
-        self.north.church_structure_unit = self.north_unit
-        self.north.save(update_fields=["church_structure_unit"])
-        self.south.church_structure_unit = self.south_unit
-        self.south.save(update_fields=["church_structure_unit"])
-
         self.group_unit = ChurchStructureUnit.objects.create(
             parent=self.north_unit,
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
@@ -75,18 +65,6 @@ class ServiceEventFoundationTests(TestCase):
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="R5",
             name="Rainbow 5",
-        )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
-        self.same_district_group = SmallGroup.objects.create(
-            name="Rainbow 4B",
-            church_structure_unit=self.group_b_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Rainbow 5",
-            church_structure_unit=self.other_group_unit,
         )
         self.required_team = MinistryTeam.objects.create(
             name="灯光团队",
@@ -897,8 +875,6 @@ class ServiceEventFoundationTests(TestCase):
     def test_manager_create_with_audience_units_saves_rows_and_controls_visibility(self):
         self.set_language("en")
         unit = self.create_structure_unit("R4", "Rainbow 4")
-        self.group.church_structure_unit = unit
-        self.group.save(update_fields=["church_structure_unit"])
         # CS-CORE.2B-A: audience-row matching is membership-core.
         ChurchStructureMembership.objects.create(
             user=self.user,
@@ -2399,49 +2375,10 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
             name="New Ministry Unit",
         )
 
-        self.cm = MinistryContext.objects.create(
-            code="CM",
-            name="Chinese Ministry",
-            church_structure_unit=self.cm_unit,
-        )
-        self.em = MinistryContext.objects.create(
-            code="EM",
-            name="English Ministry",
-            church_structure_unit=self.em_unit,
-        )
-        self.north = District.objects.create(
-            name="North",
-            church_structure_unit=self.north_unit,
-        )
-        self.south = District.objects.create(
-            name="South",
-            church_structure_unit=self.south_unit,
-        )
-        # EM district stays unmapped on purpose; its group maps directly.
-        self.em_district = District.objects.create(
-            name="EM Adults",
-        )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
-        self.group_b = SmallGroup.objects.create(
-            name="Rainbow 4B",
-            church_structure_unit=self.group_b_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Rainbow 5",
-            church_structure_unit=self.other_group_unit,
-        )
-        self.em_group = SmallGroup.objects.create(
-            name="English Adult 1",
-            church_structure_unit=self.em_group_unit,
-        )
-
-        self.group_user = self.create_member("audience_r4", self.group)
-        self.group_b_user = self.create_member("audience_r4b", self.group_b)
-        self.other_user = self.create_member("audience_r5", self.other_group)
-        self.em_user = self.create_member("audience_em", self.em_group)
+        self.group_user = self.create_member("audience_r4", self.group_unit)
+        self.group_b_user = self.create_member("audience_r4b", self.group_b_unit)
+        self.other_user = self.create_member("audience_r5", self.other_group_unit)
+        self.em_user = self.create_member("audience_em", self.em_group_unit)
         self.no_group_user = self.create_member("audience_nogroup", None)
         self.staff = User.objects.create_user(
             username="audience_staff",
@@ -2451,11 +2388,11 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
 
         self.future_time = timezone.now() + timezone.timedelta(days=3)
 
-    def create_member(self, username, small_group):
-        """Create an in-sync member: legacy group plus matching membership."""
+    def create_member(self, username, unit):
+        """Create a member with an optional active primary structure membership."""
         user = User.objects.create_user(username=username, password="testpass123")
-        if small_group is not None:
-            self.create_membership(user, small_group.church_structure_unit)
+        if unit is not None:
+            self.create_membership(user, unit)
         return user
 
     def create_membership(self, user, unit, **overrides):

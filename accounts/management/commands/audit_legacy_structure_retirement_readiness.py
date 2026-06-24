@@ -16,12 +16,10 @@ from collections import OrderedDict
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
+from accounts.legacy_structure_tables import iter_legacy_structure_rows
 from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureUnit,
-    District,
-    MinistryContext,
-    SmallGroup,
 )
 from comments.models import ReflectionComment
 from events.models import ServiceEvent, ServiceEventAudienceScope
@@ -290,22 +288,13 @@ def _unit_label(unit):
     return label
 
 
-def _group_label(group):
-    if group is None:
-        return "(none)"
-    return f"#{group.id} {group.name}"
-
-
-def _district_label(district):
-    if district is None:
-        return "(none)"
-    return f"#{district.id} {district.name}"
-
-
-def _context_label(context):
-    if context is None:
-        return "(none)"
-    return f"#{context.id} {context.code}"
+def _legacy_row_label(row, *, code=False):
+    label = f"#{row['id']}"
+    if code and row.get("code"):
+        label = f"{label} {row['code']}"
+    if row.get("name"):
+        label = f"{label} {row['name']}"
+    return label
 
 
 def _expected_unit_state(unit, expected_unit_type):
@@ -331,20 +320,29 @@ def _append(details, key, line):
 
 
 def _scan_small_groups(stats, details):
-    groups = (
-        SmallGroup.objects.select_related("church_structure_unit")
-        .all()
-        .order_by("name", "id")
-    )
-    for group in groups:
+    pending = []
+    unit_ids = set()
+    for table, row in iter_legacy_structure_rows():
+        if table.object_type != "SmallGroup":
+            pending.append((table, row))
+            continue
+        unit_id = row.get("church_structure_unit_id")
+        if unit_id is not None:
+            unit_ids.add(unit_id)
+        pending.append((table, row))
+
+    units_by_id = ChurchStructureUnit.objects.in_bulk(unit_ids)
+    for table, row in pending:
+        if table.object_type != "SmallGroup":
+            continue
         stats["small_groups_total"] += 1
-        if group.is_active:
+        if row.get("is_active", True):
             stats["active_small_groups"] += 1
         else:
             stats["inactive_small_groups"] += 1
 
         state = _expected_unit_state(
-            group.church_structure_unit,
+            units_by_id.get(row.get("church_structure_unit_id")),
             ChurchStructureUnit.UNIT_SMALL_GROUP,
         )
         if state == "missing":
@@ -352,18 +350,19 @@ def _scan_small_groups(stats, details):
             _append(
                 details,
                 "small_group_unmapped",
-                f"small_group={_group_label(group)}",
+                f"small_group={_legacy_row_label(row)}",
             )
         else:
             stats["small_groups_with_church_structure_unit"] += 1
+            unit = units_by_id.get(row.get("church_structure_unit_id"))
             if state == "inactive":
                 stats["small_groups_with_inactive_unit"] += 1
                 _append(
                     details,
                     "small_group_inactive_unit",
                     "small_group={group} mapped_unit={unit}".format(
-                        group=_group_label(group),
-                        unit=_unit_label(group.church_structure_unit),
+                        group=_legacy_row_label(row),
+                        unit=_unit_label(unit),
                     ),
                 )
             elif state == "wrong_type":
@@ -372,9 +371,9 @@ def _scan_small_groups(stats, details):
                     details,
                     "small_group_wrong_unit_type",
                     "small_group={group} mapped_unit={unit} unit_type={unit_type}".format(
-                        group=_group_label(group),
-                        unit=_unit_label(group.church_structure_unit),
-                        unit_type=group.church_structure_unit.unit_type,
+                        group=_legacy_row_label(row),
+                        unit=_unit_label(unit),
+                        unit_type=unit.unit_type,
                     ),
                 )
 
@@ -404,20 +403,29 @@ def _scan_small_groups(stats, details):
 
 
 def _scan_districts(stats, details):
-    districts = (
-        District.objects.select_related("church_structure_unit")
-        .all()
-        .order_by("name", "id")
-    )
-    for district in districts:
+    pending = []
+    unit_ids = set()
+    for table, row in iter_legacy_structure_rows():
+        if table.object_type != "District":
+            pending.append((table, row))
+            continue
+        unit_id = row.get("church_structure_unit_id")
+        if unit_id is not None:
+            unit_ids.add(unit_id)
+        pending.append((table, row))
+
+    units_by_id = ChurchStructureUnit.objects.in_bulk(unit_ids)
+    for table, row in pending:
+        if table.object_type != "District":
+            continue
         stats["districts_total"] += 1
-        if district.is_active:
+        if row.get("is_active", True):
             stats["active_districts"] += 1
         else:
             stats["inactive_districts"] += 1
 
         state = _expected_unit_state(
-            district.church_structure_unit,
+            units_by_id.get(row.get("church_structure_unit_id")),
             ChurchStructureUnit.UNIT_DISTRICT,
         )
         if state == "missing":
@@ -425,18 +433,19 @@ def _scan_districts(stats, details):
             _append(
                 details,
                 "district_unmapped",
-                f"district={_district_label(district)}",
+                f"district={_legacy_row_label(row)}",
             )
         else:
             stats["districts_with_church_structure_unit"] += 1
+            unit = units_by_id.get(row.get("church_structure_unit_id"))
             if state == "inactive":
                 stats["districts_with_inactive_unit"] += 1
                 _append(
                     details,
                     "district_inactive_unit",
                     "district={district} mapped_unit={unit}".format(
-                        district=_district_label(district),
-                        unit=_unit_label(district.church_structure_unit),
+                        district=_legacy_row_label(row),
+                        unit=_unit_label(unit),
                     ),
                 )
             elif state == "wrong_type":
@@ -445,9 +454,9 @@ def _scan_districts(stats, details):
                     details,
                     "district_wrong_unit_type",
                     "district={district} mapped_unit={unit} unit_type={unit_type}".format(
-                        district=_district_label(district),
-                        unit=_unit_label(district.church_structure_unit),
-                        unit_type=district.church_structure_unit.unit_type,
+                        district=_legacy_row_label(row),
+                        unit=_unit_label(unit),
+                        unit_type=unit.unit_type,
                     ),
                 )
 
@@ -471,20 +480,29 @@ def _scan_districts(stats, details):
 
 
 def _scan_ministry_contexts(stats, details):
-    contexts = (
-        MinistryContext.objects.select_related("church_structure_unit")
-        .all()
-        .order_by("code", "id")
-    )
-    for context in contexts:
+    pending = []
+    unit_ids = set()
+    for table, row in iter_legacy_structure_rows():
+        if table.object_type != "MinistryContext":
+            pending.append((table, row))
+            continue
+        unit_id = row.get("church_structure_unit_id")
+        if unit_id is not None:
+            unit_ids.add(unit_id)
+        pending.append((table, row))
+
+    units_by_id = ChurchStructureUnit.objects.in_bulk(unit_ids)
+    for table, row in pending:
+        if table.object_type != "MinistryContext":
+            continue
         stats["ministry_contexts_total"] += 1
-        if context.is_active:
+        if row.get("is_active", True):
             stats["active_ministry_contexts"] += 1
         else:
             stats["inactive_ministry_contexts"] += 1
 
         state = _expected_unit_state(
-            context.church_structure_unit,
+            units_by_id.get(row.get("church_structure_unit_id")),
             ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
         )
         if state == "missing":
@@ -492,18 +510,19 @@ def _scan_ministry_contexts(stats, details):
             _append(
                 details,
                 "ministry_context_unmapped",
-                f"ministry_context={_context_label(context)}",
+                f"ministry_context={_legacy_row_label(row, code=True)}",
             )
         else:
             stats["ministry_contexts_with_church_structure_unit"] += 1
+            unit = units_by_id.get(row.get("church_structure_unit_id"))
             if state == "inactive":
                 stats["ministry_contexts_with_inactive_unit"] += 1
                 _append(
                     details,
                     "ministry_context_inactive_unit",
                     "ministry_context={context} mapped_unit={unit}".format(
-                        context=_context_label(context),
-                        unit=_unit_label(context.church_structure_unit),
+                        context=_legacy_row_label(row, code=True),
+                        unit=_unit_label(unit),
                     ),
                 )
             elif state == "wrong_type":
@@ -512,9 +531,9 @@ def _scan_ministry_contexts(stats, details):
                     details,
                     "ministry_context_wrong_unit_type",
                     "ministry_context={context} mapped_unit={unit} unit_type={unit_type}".format(
-                        context=_context_label(context),
-                        unit=_unit_label(context.church_structure_unit),
-                        unit_type=context.church_structure_unit.unit_type,
+                        context=_legacy_row_label(row, code=True),
+                        unit=_unit_label(unit),
+                        unit_type=unit.unit_type,
                     ),
                 )
 
@@ -854,8 +873,8 @@ class Command(BaseCommand):
         )
         write(
             "legacy_object_row_schema_gate: final SmallGroup, District, and "
-            "MinistryContext model/table deletion remains a separate guarded "
-            "migration slice; do not delete ChurchStructureUnit or runtime "
+            "MinistryContext model/table deletion is handled by the guarded "
+            "LEGACY-STRUCTURE-TABLE-RETIRE.1A migration; do not delete ChurchStructureUnit or runtime "
             "product rows."
         )
         write(
@@ -873,7 +892,7 @@ class Command(BaseCommand):
         write("")
         write(
             "Audit only: no ChurchStructureMembership, "
-            "ChurchStructureUnit, SmallGroup, District, MinistryContext, "
+            "ChurchStructureUnit, legacy structure tables, "
             "ServiceEvent, Bible Study, ReflectionComment, ChurchRoleAssignment, "
             "audience, role, or permission rows were changed. ServiceEvent "
             "zero-row events are currently fail-closed safety states for ordinary "

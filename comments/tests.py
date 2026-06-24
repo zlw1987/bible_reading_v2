@@ -4,7 +4,6 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import SmallGroup
 from comments.models import ReflectionComment, ReflectionReport
 from reading.models import ActivePlan, PlanEnrollment, ReadingPlan, ReadingPlanDay
 
@@ -42,8 +41,6 @@ class ReflectionCommentAdminLegacyMirrorTests(TestCase):
 
 class ReflectionReportModerationTests(TestCase):
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-
         self.user = User.objects.create_user(
             username="levin",
             password="UserPass123!",

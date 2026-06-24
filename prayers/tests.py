@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchStructureMembership, ChurchStructureUnit, SmallGroup
+from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 from prayers.admin import PrayerRequestAdmin
 from prayers.forms import localized_visibility_choices
 from prayers.models import PrayerMark, PrayerReport, PrayerRequest
@@ -34,14 +34,8 @@ def create_primary_membership(user, unit):
 
 class PrayerRequestFlowTests(TestCase):
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
         self.group_unit = create_structure_unit("RAINBOW4", "Rainbow 4")
         self.other_group_unit = create_structure_unit("RAINBOW5", "Rainbow 5")
-        self.group.church_structure_unit = self.group_unit
-        self.group.save(update_fields=["church_structure_unit"])
-        self.other_group.church_structure_unit = self.other_group_unit
-        self.other_group.save(update_fields=["church_structure_unit"])
 
         self.user = User.objects.create_user(
             username="levin",
@@ -1189,14 +1183,8 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
     """
 
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Mirror Group")
-        self.other_group = SmallGroup.objects.create(name="Mirror Other Group")
         self.group_unit = create_structure_unit("MIRRORG", "Mirror Group")
         self.other_group_unit = create_structure_unit("MIRROROG", "Mirror Other Group")
-        self.group.church_structure_unit = self.group_unit
-        self.group.save(update_fields=["church_structure_unit"])
-        self.other_group.church_structure_unit = self.other_group_unit
-        self.other_group.save(update_fields=["church_structure_unit"])
 
         self.user = User.objects.create_user(
             username="mirror_user",
@@ -1432,17 +1420,11 @@ class PrayerListTabAudienceTests(TestCase):
     """
 
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
         self.group_unit = create_structure_unit("TABRAINBOW4", "Tab Rainbow 4")
         self.other_group_unit = create_structure_unit(
             "TABRAINBOW5",
             "Tab Rainbow 5",
         )
-        self.group.church_structure_unit = self.group_unit
-        self.group.save(update_fields=["church_structure_unit"])
-        self.other_group.church_structure_unit = self.other_group_unit
-        self.other_group.save(update_fields=["church_structure_unit"])
 
         self.user = User.objects.create_user(
             username="levin",
@@ -1639,10 +1621,7 @@ class PrayerListLabelRenderingTests(TestCase):
     """UI-H.1B: rendered prayer list uses the consistent labels."""
 
     def setUp(self):
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
         self.group_unit = create_structure_unit("LABELRAINBOW4", "Label Rainbow 4")
-        self.group.church_structure_unit = self.group_unit
-        self.group.save(update_fields=["church_structure_unit"])
         self.user = User.objects.create_user(
             username="levin",
             password="TestPass123!",

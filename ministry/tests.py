@@ -15,8 +15,6 @@ from django.utils import timezone
 from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureUnit,
-    District,
-    SmallGroup,
 )
 from events.models import ServiceEvent
 from reading.templatetags.datetime_extras import member_datetime

@@ -17,9 +17,6 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    MinistryContext,
-    SmallGroup,
 )
 from events.models import ServiceEvent
 from ministry.models import TeamAssignment
@@ -48,15 +45,7 @@ from .services import (
 
 class BibleStudyModuleTests(TestCase):
     def setUp(self):
-        self.cm = MinistryContext.objects.create(code="CM", name="Chinese Ministry")
-        self.em = MinistryContext.objects.create(code="EM", name="English Ministry")
-        self.north = District.objects.create(name="North")
-        self.south = District.objects.create(name="South")
-        self.group = SmallGroup.objects.create(name="Rainbow 4")
-        self.same_group = SmallGroup.objects.create(name="Rainbow 4B")
-        self.other_group = SmallGroup.objects.create(name="Rainbow 5")
-
-        # ChurchStructureUnit tree mirroring the legacy structure (BS-AS.1).
+        # ChurchStructureUnit tree used by the structure-native schedule/audience paths.
         self.root_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
             code="CHURCH",
@@ -112,23 +101,6 @@ class BibleStudyModuleTests(TestCase):
             name="Rainbow 5",
             name_en="Rainbow 5",
         )
-
-        # Legacy -> ChurchStructureUnit bridge mappings.
-        self.cm.church_structure_unit = self.cm_unit
-        self.cm.save()
-        self.em.church_structure_unit = self.em_unit
-        self.em.save()
-        self.north.church_structure_unit = self.north_unit
-        self.north.save()
-        self.south.church_structure_unit = self.south_unit
-        self.south.save()
-        self.group.church_structure_unit = self.group_unit
-        self.group.save()
-        self.same_group.church_structure_unit = self.same_group_unit
-        self.same_group.save()
-        self.other_group.church_structure_unit = self.other_group_unit
-        self.other_group.save()
-
         self.user = User.objects.create_user(
             username="regular",
             email="regular@example.com",
@@ -3640,18 +3612,13 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse("study_session_list"))
 
-    def test_unmapped_and_wrong_type_small_group_mapping_cannot_view_v2_meeting_detail(self):
+    def test_meeting_without_audience_rows_cannot_view_v2_meeting_detail(self):
         self.set_language("en")
         member = User.objects.create_user(
-            username="detail_mapping_drift",
+            username="detail_no_audience",
             password="testpass123",
         )
         self.create_membership(member, self.group_unit)
-        unmapped_group = SmallGroup.objects.create(name="Detail Unmapped")
-        wrong_type_group = SmallGroup.objects.create(
-            name="Detail Wrong Type",
-            church_structure_unit=self.root_unit,
-        )
         unmapped_meeting = self.create_meeting(
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )

@@ -1,14 +1,13 @@
 """Read-only Bible Study generation bridge retirement inventory.
 
 This command reports post-retirement Bible Study V2 generation/idempotency
-readiness and any remaining non-V2 diagnostics tied to legacy ``SmallGroup``
-*table* rows. BS-MEETING-MIRROR.1A removed the legacy
+readiness after the legacy ``SmallGroup`` table bridge was retired.
+BS-MEETING-MIRROR.1A removed the legacy
 ``BibleStudyMeeting.small_group`` mirror field and
 BS-SMALLGROUP-GENERATION-BRIDGE-RETIRE.1A retired the normal-generation bridge,
 so normal V2 generation is structure-native. Remaining Bible Study blockers are
 series audience-row coverage and structure-native generation-key / anchor
-readiness, plus non-V2 bridge/admin/diagnostic consumers that still read the
-``SmallGroup`` table.
+readiness, not legacy object-table access.
 
 It is strictly read-only: no ``--apply``, no row writes, no runtime changes, and
 no schema changes.
@@ -73,28 +72,16 @@ class ConsumerPath:
     reason: str
 
 
-# Remaining Bible Study dependencies on the legacy ``SmallGroup`` *table* after
-# BS-MEETING-MIRROR.1A removed the ``BibleStudyMeeting.small_group`` mirror.
+# Historical references after BS-MEETING-MIRROR.1A removed the
+# ``BibleStudyMeeting.small_group`` mirror and LEGACY-STRUCTURE-TABLE-RETIRE.1A
+# removes the legacy object table.
 _CONSUMER_PATHS = (
-    ConsumerPath(
-        category="diagnostic/audit/backfill/cleanup support",
-        path="studies.management.commands.backfill_bible_study_v2_generation_keys",
-        reason=(
-            "dry-run-first identity backfill derives generation_key / anchor_unit "
-            "from a single small-group audience row; it does not read a meeting mirror"
-        ),
-    ),
-    ConsumerPath(
-        category="diagnostic/audit/backfill/cleanup support",
-        path="studies.management.commands.audit_bible_study_structure_retirement_readiness",
-        reason="read-only readiness audit reports audience/anchor/generation-key drift.",
-    ),
     ConsumerPath(
         category="test fixture / migration history",
         path="studies tests and historical migrations",
         reason=(
-            "fixtures and immutable migrations still name the removed "
-            "BibleStudyMeeting.small_group field"
+            "immutable migrations still name the removed BibleStudyMeeting.small_group "
+            "field and legacy object table"
         ),
     ),
 )
@@ -453,9 +440,8 @@ class Command(BaseCommand):
             "legacy BibleStudyMeeting.small_group mirror. Remaining Bible Study "
             "readiness work is series audience-row coverage and structure-native "
             "generation-key / anchor readiness; this is not a SmallGroup table "
-            "retirement blocker. Remaining SmallGroup dependencies are non-V2 "
-            "bridge/admin/diagnostic consumers of the SmallGroup table. "
-            "No deletion/removal is approved here."
+            "retirement blocker. LEGACY-STRUCTURE-TABLE-RETIRE.1A removes the "
+            "legacy object table behind its own migration guard."
         )
         write(
             "Audit only: no series, meeting, audience row, SmallGroup, unit, "

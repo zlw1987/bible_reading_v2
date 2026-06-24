@@ -16,8 +16,6 @@ from accounts.management.commands.audit_legacy_structure_schema_retirement_readi
 from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureUnit,
-    District,
-    SmallGroup,
 )
 from events.models import ServiceEvent
 from prayers.models import PrayerRequest
@@ -56,14 +54,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             unit_type=ChurchStructureUnit.UNIT_DISTRICT,
             code="D1",
             name="District 1",
-        )
-        self.district = District.objects.create(
-            name="District 1",
-            church_structure_unit=self.district_unit,
-        )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
         )
 
     def make_user(self, username):
@@ -113,8 +103,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             structure_unit=self.group_unit,
         )
         before_counts = {
-            "small_groups": SmallGroup.objects.count(),
-            "districts": District.objects.count(),
             "service_events": ServiceEvent.objects.count(),
             "series": BibleStudySeries.objects.count(),
             "role_assignments": ChurchRoleAssignment.objects.count(),
@@ -142,8 +130,6 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         series.refresh_from_db()
         assignment.refresh_from_db()
 
-        self.assertEqual(SmallGroup.objects.count(), before_counts["small_groups"])
-        self.assertEqual(District.objects.count(), before_counts["districts"])
         self.assertEqual(ServiceEvent.objects.count(), before_counts["service_events"])
         self.assertEqual(BibleStudySeries.objects.count(), before_counts["series"])
         self.assertEqual(
@@ -282,7 +268,7 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
             candidate["diagnostic_cleanup_references"],
         )
 
-    def test_legacy_object_tables_recommend_final_schema_gate(self):
+    def test_legacy_object_tables_are_historical_after_guarded_schema_migration(self):
         audit = run_audit()
         for name in (
             "SmallGroup model/table",
@@ -291,9 +277,10 @@ class LegacyStructureSchemaRetirementReadinessCommandTests(TestCase):
         ):
             candidate = _candidate(audit, name)
             self.assertIn(
-                "guarded schema slice",
+                "guarded schema",
                 candidate["recommended_next_action"],
             )
+            self.assertEqual(candidate["schema_removal_status"], STATUS_HISTORICAL)
 
     def test_migration_history_is_distinguished_from_live_code_blockers(self):
         audit = run_audit()

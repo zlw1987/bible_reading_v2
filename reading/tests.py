@@ -19,8 +19,6 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
-    District,
-    SmallGroup,
 )
 from accounts.permissions import (
     can_view_group_progress_for,
@@ -342,14 +340,8 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
             code="RAINBOW5",
             name="Rainbow 5 Unit",
         )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Rainbow 5",
-            church_structure_unit=self.other_group_unit,
-        )
+        self.group = self.group_unit
+        self.other_group = self.other_group_unit
 
         self.author = self.create_member("author", self.group, self.group_unit)
         self.same_group_user = self.create_member(
@@ -424,7 +416,7 @@ class ReflectionWallVisibilityRegressionTests(TestCase):
 
         # CS-CORE.4G.2: stamp the structure snapshot that now drives group
         # visibility, mirroring the live create path.
-        structure_unit = small_group.church_structure_unit if small_group else None
+        structure_unit = getattr(small_group, "church_structure_unit", small_group)
 
         return ReflectionComment.objects.create(
             user=user,
@@ -672,9 +664,8 @@ class ReflectionPrivacyInvariantTests(TestCase):
     """
 
     def setUp(self):
-        self.old_group = SmallGroup.objects.create(name="Invariant Old Group")
-        self.new_group = SmallGroup.objects.create(name="Invariant New Group")
-        self.other_group = SmallGroup.objects.create(name="Invariant Other Group")
+        self.old_group_name = "Invariant Old Group"
+        self.other_group_name = "Invariant Other Group"
         self.old_unit = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code="INV_OLD",
@@ -698,12 +689,9 @@ class ReflectionPrivacyInvariantTests(TestCase):
             name="Invariant Old Child Unit",
             parent=self.old_unit,
         )
-        self.old_group.church_structure_unit = self.old_unit
-        self.old_group.save()
-        self.new_group.church_structure_unit = self.new_unit
-        self.new_group.save()
-        self.other_group.church_structure_unit = self.other_unit
-        self.other_group.save()
+        self.old_group = self.old_unit
+        self.new_group = self.new_unit
+        self.other_group = self.other_unit
 
         self.author = self.create_user("invariant_author", group=self.old_group)
         self.same_group_user = self.create_user(
@@ -767,7 +755,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         """
         user = User.objects.create_user(username=username, password="TestPass123!")
         if membership_unit == "__from_group__":
-            membership_unit = group.church_structure_unit if group else None
+            membership_unit = getattr(group, "church_structure_unit", group)
         if membership_unit is not None:
             self.create_membership(user, membership_unit)
         return user
@@ -798,9 +786,7 @@ class ReflectionPrivacyInvariantTests(TestCase):
         # same way the live create path does. Tests pass an explicit unit (or
         # None) to exercise mismatch / missing-snapshot fail-closed cases.
         if structure_unit == "__from_group__":
-            structure_unit = (
-                small_group.church_structure_unit if small_group else None
-            )
+            structure_unit = getattr(small_group, "church_structure_unit", small_group)
         return ReflectionComment.objects.create(
             user=user or self.author,
             active_plan=self.active_plan,
@@ -1781,8 +1767,8 @@ class ReflectionPrivacyInvariantTests(TestCase):
         self.assertContains(response, self.old_unit.name)
         self.assertContains(response, self.new_unit.name)
         # A legacy SmallGroup name is never rendered as a group label.
-        self.assertNotContains(response, self.old_group.name)
-        self.assertNotContains(response, self.other_group.name)
+        self.assertNotContains(response, self.old_group_name)
+        self.assertNotContains(response, self.other_group_name)
 
 
 class GroupProgressPrivacyInvariantTests(TestCase):
@@ -2704,10 +2690,7 @@ class BibleReadingFlowTests(TestCase):
             code="RAINBOW4_FLOW",
             name="Rainbow 4 Flow Unit",
         )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
+        self.group = self.group_unit
 
         self.user = User.objects.create_user(
             username="levin",
@@ -2766,21 +2749,13 @@ class BibleReadingFlowTests(TestCase):
         session["language"] = language
         session.save()
 
-    def map_group_to_unit(self, group, code):
-        """Map a legacy SmallGroup to a small-group ChurchStructureUnit.
-
-        After CS-CORE.4F.1 the visible group-progress roster is membership-core, so
-        a legacy group needs a mapped small-group unit before any membership can
-        place a user in its roster.
-        """
-        unit = ChurchStructureUnit.objects.create(
+    def create_group_unit(self, code):
+        """Create a canonical small-group ChurchStructureUnit for tests."""
+        return ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
             code=code,
             name=code,
         )
-        group.church_structure_unit = unit
-        group.save()
-        return unit
 
     def add_active_primary_membership(self, user, unit):
         return ChurchStructureMembership.objects.create(
@@ -5060,8 +5035,6 @@ class BibleReadingFlowTests(TestCase):
 
 
     def test_group_reflection_is_not_visible_to_different_group_member(self):
-        other_group = SmallGroup.objects.create(name="Other Group")
-
         self.day1.reading_text = "John 1"
         self.day1.save()
 
@@ -5701,14 +5674,8 @@ class TodayActionCenterTests(TestCase):
             code="TODAY-R5",
             name="Today Rainbow 5",
         )
-        self.group = SmallGroup.objects.create(
-            name="Rainbow 4",
-            church_structure_unit=self.group_unit,
-        )
-        self.other_group = SmallGroup.objects.create(
-            name="Rainbow 5",
-            church_structure_unit=self.other_group_unit,
-        )
+        self.group = self.group_unit
+        self.other_group = self.other_group_unit
 
         self.user = User.objects.create_user(
             username="member",
@@ -5791,7 +5758,7 @@ class TodayActionCenterTests(TestCase):
         data.update(overrides)
         return ChurchStructureMembership.objects.create(**data)
 
-    def make_meeting(self, *, small_group, days_from_now=2,
+    def make_meeting(self, *, unit, days_from_now=2,
                      lesson_title_en="Lesson One", meeting_datetime=None):
         series = BibleStudySeries.objects.create(
             title="查经系列",
@@ -5807,10 +5774,9 @@ class TodayActionCenterTests(TestCase):
             status=BibleStudyLesson.STATUS_PUBLISHED,
         )
         # BS-MEETING-MIRROR.1A removed the legacy BibleStudyMeeting.small_group FK.
-        # V2 belonging is structure-native: anchor on the group's mapped unit and
-        # carry an audience-scope row (ordinary-member visibility reads these rows
-        # plus active primary membership; zero-row meetings fail closed).
-        unit = small_group.church_structure_unit if small_group else None
+        # V2 belonging is structure-native: anchor on the canonical unit and carry
+        # an audience-scope row (ordinary-member visibility reads these rows plus
+        # active primary membership; zero-row meetings fail closed).
         meeting = BibleStudyMeeting.objects.create(
             lesson=lesson,
             anchor_unit=unit,
@@ -5931,7 +5897,7 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "View all Church Gatherings")
 
     def test_v2_meeting_appears_for_user_group(self):
-        self.make_meeting(small_group=self.group, lesson_title_en="My Group Lesson")
+        self.make_meeting(unit=self.group, lesson_title_en="My Group Lesson")
 
         response = self.get_home()
 
@@ -5945,7 +5911,7 @@ class TodayActionCenterTests(TestCase):
             hour=19, minute=30, second=0, microsecond=0
         )
         self.make_meeting(
-            small_group=self.group,
+            unit=self.group,
             lesson_title_en="Formatted Group Lesson",
             meeting_datetime=formatted_dt,
         )
@@ -5961,7 +5927,7 @@ class TodayActionCenterTests(TestCase):
 
     def test_other_group_meeting_not_shown(self):
         self.make_meeting(
-            small_group=self.other_group,
+            unit=self.other_group,
             lesson_title_en="Other Group Lesson",
         )
 
@@ -5981,7 +5947,7 @@ class TodayActionCenterTests(TestCase):
 
     def test_membership_only_user_sees_v2_meeting(self):
         self.make_meeting(
-            small_group=self.group,
+            unit=self.group,
             lesson_title_en="Membership Only Today Lesson",
         )
 
@@ -5993,7 +5959,7 @@ class TodayActionCenterTests(TestCase):
     def test_profile_only_user_does_not_see_v2_meeting(self):
         self.user.church_structure_memberships.all().delete()
         self.make_meeting(
-            small_group=self.group,
+            unit=self.group,
             lesson_title_en="Profile Only Today Hidden",
         )
 
@@ -6042,7 +6008,7 @@ class TodayActionCenterTests(TestCase):
         )
 
     def test_my_linked_role_shown_on_visible_meeting(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6055,7 +6021,7 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "Discussion Leader")
 
     def test_multiple_linked_roles_shown(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6077,7 +6043,7 @@ class TodayActionCenterTests(TestCase):
         self.user.first_name = "Grace"
         self.user.last_name = "Lee"
         self.user.save()
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6091,7 +6057,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Discussion Leader")
 
     def test_other_users_linked_role_not_shown(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6108,7 +6074,7 @@ class TodayActionCenterTests(TestCase):
             username="other_member",
             password="TestPass123!",
         )
-        other_meeting = self.make_meeting(small_group=self.other_group)
+        other_meeting = self.make_meeting(unit=self.other_group)
         self.add_role(
             other_meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6122,7 +6088,7 @@ class TodayActionCenterTests(TestCase):
 
     def test_profile_only_linked_role_not_shown_when_meeting_not_visible(self):
         self.user.church_structure_memberships.all().delete()
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6135,7 +6101,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Discussion Leader")
 
     def test_role_line_hidden_when_no_linked_role(self):
-        self.make_meeting(small_group=self.group)
+        self.make_meeting(unit=self.group)
 
         response = self.get_home()
 
@@ -6144,7 +6110,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "My roles:")
 
     def test_cancelled_meeting_role_not_shown(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         meeting.status = BibleStudyMeeting.STATUS_CANCELLED
         meeting.save()
         self.add_role(
@@ -6159,7 +6125,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotContains(response, "Discussion Leader")
 
     def test_chinese_role_label_renders(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6172,7 +6138,7 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "查经带领")
 
     def test_no_role_management_control_on_today(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6189,7 +6155,7 @@ class TodayActionCenterTests(TestCase):
         self.assertNotIn(manage_url, content)
 
     def test_no_role_confirmation_form_on_today(self):
-        meeting = self.make_meeting(small_group=self.group)
+        meeting = self.make_meeting(unit=self.group)
         self.add_role(
             meeting,
             BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
@@ -6235,9 +6201,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
             is_active=is_active,
         )
 
-    def create_group(self, name, *, unit=None):
-        return SmallGroup.objects.create(name=name, church_structure_unit=unit)
-
     def create_group_reflection(self, *, structure_unit, body):
         type(self).plan_counter += 1
         plan = ReadingPlan.objects.create(
@@ -6273,7 +6236,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
     def test_clean_mapped_data_has_no_blockers(self):
         unit = self.create_unit("CLEAN-SG")
-        group = self.create_group("Clean Group", unit=unit)
         self.create_group_reflection(structure_unit=unit, body="clean body")
         member = User.objects.create_user(username="clean_member")
         self.add_active_primary_membership(member, unit)
@@ -6293,7 +6255,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         self.run_audit_command("--fail-on-blockers")
 
     def test_missing_snapshot_group_post_is_blocker(self):
-        self.create_group("Missing Snapshot Group", unit=self.create_unit("MISS-SG"))
         # Group-visible post with no structure snapshot: invisible under 4G.2.
         self.create_group_reflection(structure_unit=None, body="SECRET_MISSING")
 
@@ -6316,7 +6277,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
     def test_inactive_snapshot_unit_is_unresolved(self):
         inactive_unit = self.create_unit("INACT-SG", is_active=False)
-        self.create_group("Inactive Unit Group", unit=inactive_unit)
         self.create_group_reflection(
             structure_unit=inactive_unit, body="inactive body"
         )
@@ -6326,15 +6286,14 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
         self.assertEqual(stats["reflections_snapshot_inactive_unit"], 1)
         self.assertEqual(stats["reflections_snapshot_resolvable"], 0)
-        self.assertEqual(stats["progress_groups_inactive_unit"], 1)
+        self.assertEqual(stats["progress_groups_inactive_unit"], 0)
         self.assertEqual(stats["reflections_group_visible_no_valid_snapshot"], 1)
-        self.assertIn("progress_groups_inactive_unit", audit["blockers"])
+        self.assertIn("reflections_group_visible_no_valid_snapshot", audit["blockers"])
 
     def test_wrong_unit_type_snapshot_is_unresolved(self):
         district_unit = self.create_unit(
             "WRONG-DIST", unit_type=ChurchStructureUnit.UNIT_DISTRICT
         )
-        self.create_group("Wrong Type Group", unit=district_unit)
         self.create_group_reflection(
             structure_unit=district_unit, body="wrong type body"
         )
@@ -6343,21 +6302,18 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
         stats = audit["stats"]
 
         self.assertEqual(stats["reflections_snapshot_wrong_unit_type"], 1)
-        self.assertEqual(stats["progress_groups_wrong_unit_type"], 1)
+        self.assertEqual(stats["progress_groups_wrong_unit_type"], 0)
         self.assertEqual(stats["reflections_snapshot_resolvable"], 0)
-        self.assertIn("progress_groups_wrong_unit_type", audit["blockers"])
+        self.assertIn("reflections_group_visible_no_valid_snapshot", audit["blockers"])
 
-    def test_progress_group_missing_mapping_is_blocker(self):
-        # Active legacy group with no church_structure_unit mapping at all.
-        self.create_group("Unmapped Group", unit=None)
-
+    def test_legacy_progress_group_mapping_blocker_is_retired(self):
         audit = run_reading_structure_runtime_audit()
         stats = audit["stats"]
 
-        self.assertEqual(stats["progress_groups_total"], 1)
-        self.assertEqual(stats["progress_groups_missing_mapping"], 1)
+        self.assertEqual(stats["progress_groups_total"], 0)
+        self.assertEqual(stats["progress_groups_missing_mapping"], 0)
         self.assertEqual(stats["progress_groups_resolvable"], 0)
-        self.assertIn("progress_groups_missing_mapping", audit["blockers"])
+        self.assertNotIn("progress_groups_missing_mapping", audit["blockers"])
 
     def test_multiple_active_primary_membership_is_blocker(self):
         unit_a = self.create_unit("MULTI-A")
@@ -6390,14 +6346,12 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
 
     def test_command_is_read_only(self):
         unit = self.create_unit("RO-SG")
-        group = self.create_group("Read Only Group", unit=unit)
         self.create_group_reflection(structure_unit=unit, body="read only body")
         member = User.objects.create_user(username="ro_member")
         self.add_active_primary_membership(member, unit)
 
         before = {
             "comments": ReflectionComment.objects.count(),
-            "groups": SmallGroup.objects.count(),
             "units": ChurchStructureUnit.objects.count(),
             "memberships": ChurchStructureMembership.objects.count(),
             "users": User.objects.count(),
@@ -6416,7 +6370,6 @@ class ReadingStructureRuntimeReadinessAuditTests(TestCase):
             before,
             {
                 "comments": ReflectionComment.objects.count(),
-                "groups": SmallGroup.objects.count(),
                 "units": ChurchStructureUnit.objects.count(),
                 "memberships": ChurchStructureMembership.objects.count(),
                 "users": User.objects.count(),

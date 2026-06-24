@@ -9,6 +9,8 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 > **Current-state supersession — LEGACY-OBJECT-ROW-PURGE-GATE.1A:** `purge_legacy_structure_object_rows` now exists as the guarded dry-run-first final preflight/apply path for the remaining legacy `SmallGroup` / `District` / `MinistryContext` object rows. Dry-run reports row counts, mapped/unmapped/wrong-type/inactive mapping counts, special `UNASSIGNED-GROUPS` decision rows, deletion-collector safety, protected runtime-row counters, and `data_mutated: false`. Future apply is destructive and requires both `--apply` and `--confirm-legacy-structure-object-row-retirement`; it deletes only the three legacy object row types, must not delete `ChurchStructureUnit` rows or runtime product rows, and must abort if unexpected inbound dependencies appear. Row purge remains separate from later model/table and `church_structure_unit` mapping-FK schema removal; do not run apply automatically.
 
 > **Current-state supersession — LEGACY-STRUCTURE-SURFACE-RETIRE.1A:** the guarded object-row purge apply has now completed on the target DB: `SmallGroup` rows = 0, `District` rows = 0, `MinistryContext` rows = 0, `unexpected_inbound_dependency_rows = 0`, `protected_church_structure_units_deleted = 0`, and protected runtime product rows deleted = 0. The legacy `District #13` / `UNASSIGNED-GROUPS` row was deleted, while the canonical `ChurchStructureUnit` custom unit remains. This slice retires the active legacy Django Admin surfaces, `/staff/structure/mappings/` review/edit UI, `resolve_units_to_small_groups()`, legacy-row seeding, the obsolete purge command, and group-progress legacy-row list/display usage. The read-only object/schema audits remain only to prove final model/table deletion readiness. Final `SmallGroup` / `District` / `MinistryContext` model/table removal remains a separate guarded migration slice.
+>
+> **Current-state supersession — LEGACY-STRUCTURE-TABLE-RETIRE.1A:** the final guarded schema slice now removes the `SmallGroup`, `District`, and `MinistryContext` models/tables after a first-operation migration guard aborts on any remaining legacy rows. The migration does not delete or alter `ChurchStructureUnit`, `ChurchStructureMembership`, `ChurchRoleAssignment.structure_unit`, ServiceEvent audience rows, Bible Study V2 audience rows, Prayer/Reflection structure snapshots, or TeamAssignment/My Serving data. After this migration is applied on a target DB that passes the guard, those legacy object tables are historical/removed; canonical structure remains `ChurchStructureUnit`, ordinary belonging for migrated runtime paths remains active primary `ChurchStructureMembership`, and scoped roles continue to use `ChurchRoleAssignment.structure_unit`.
 
 New audit command:
 
@@ -38,13 +40,13 @@ capped non-sensitive examples with a final-retirement recommendation. It has
 `--verbose`, `--limit N`, and `--fail-on-blockers`; it has no `--apply`, writes
 no data, changes no schema, and changes no runtime behavior.
 
-Current local/dev row-retirement state after ServiceEvent Host / Language
-cleanup: remaining blockers are the legacy object rows themselves and their
-bridge/admin/diagnostic role, not ordinary-member runtime visibility authority.
-`ChurchStructureUnit` is the canonical structure tree, and
-`ChurchStructureMembership` is the canonical belonging source for migrated
+Current local/dev row-retirement state after the guarded object-row purge:
+the legacy object row counts are zero and the guarded table-removal migration is
+the final schema gate. `ChurchStructureUnit` is the canonical structure tree,
+and `ChurchStructureMembership` is the canonical belonging source for migrated
 ordinary-member paths. The legacy rows must not be used as ordinary-member
-visibility authority. Final table/field deletion is not approved yet.
+visibility authority; after the guarded migration is applied, the object tables
+are historical/removed.
 
 Historical guarded object-row purge/preflight command (retired after approved apply):
 

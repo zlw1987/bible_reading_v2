@@ -1501,6 +1501,28 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertNotContains(upcoming_response, "Past / History")
         self.assertNotContains(past_response, "Current Today Service")
 
+    def test_my_serving_past_excludes_same_day_event_one_minute_in_future(self):
+        self.set_language("en")
+        soon_event = ServiceEvent.objects.create(
+            title="Soon Today Service",
+            title_en="Soon Today Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(minutes=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = self.create_assignment(service_event=soon_event)
+        member = assignment.assignment_members.get(membership=self.membership)
+        member.confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertContains(upcoming_response, "Soon Today Service")
+        self.assertNotContains(past_response, "Soon Today Service")
+
     def test_my_serving_past_includes_assignment_effectively_ended_yesterday(self):
         self.set_language("en")
         ended_event = ServiceEvent.objects.create(
@@ -1546,6 +1568,28 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(upcoming_response, "Today Serving")
         self.assertContains(upcoming_response, "Multi-day Current Service")
         self.assertNotContains(past_response, "Multi-day Current Service")
+
+    def test_my_serving_completed_current_assignment_is_not_past_before_effective_end(self):
+        self.set_language("en")
+        completed_event = ServiceEvent.objects.create(
+            title="Completed Current Service",
+            title_en="Completed Current Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(0, hour=0),
+            status=ServiceEvent.STATUS_COMPLETED,
+        )
+        self.create_assignment(
+            service_event=completed_event,
+            status=TeamAssignment.STATUS_COMPLETED,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertContains(upcoming_response, "Today Serving")
+        self.assertContains(upcoming_response, "Completed Current Service")
+        self.assertNotContains(past_response, "Completed Current Service")
 
     def test_my_serving_sections_bucket_tomorrow_and_later_assignments(self):
         self.set_language("en")
@@ -1621,7 +1665,16 @@ class TeamAssignmentV1Tests(TestCase):
         self.set_language("en")
         assignment = self.create_assignment()
         assignment_member = assignment.assignment_members.get(membership=self.membership)
-        assignment_member.confirm("Ready.")
+        assignment_member.confirmed_at = datetime(
+            2026,
+            6,
+            12,
+            23,
+            0,
+            tzinfo=datetime_timezone.utc,
+        )
+        assignment_member.confirmation_note = "Ready."
+        assignment_member.save()
         self.client.login(username="regular_assign", password="testpass123")
 
         response = self.client.get(reverse("my_serving"))
@@ -1635,6 +1688,8 @@ class TeamAssignmentV1Tests(TestCase):
         content = response.content.decode()
         confirmed_at_chunk = content[content.index("Confirmed At") : content.index("Confirmed At") + 250]
         self.assertIn(confirmed_at_display, confirmed_at_chunk)
+        self.assertIn("Fri, Jun 12, 4:00 PM", confirmed_at_chunk)
+        self.assertNotIn("11:00 PM", confirmed_at_chunk)
         self.assertNotIn(event_start_display, confirmed_at_chunk)
         self.assertNotContains(response, "Not Confirmed")
 

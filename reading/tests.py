@@ -67,12 +67,12 @@ class MemberDatetimeFilterTests(TestCase):
     def test_member_datetime_formats_aware_datetime_in_english(self):
         value = datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
 
-        self.assertEqual(member_datetime(value, "en"), "Fri, Jun 12, 7:30 PM")
+        self.assertEqual(member_datetime(value, "en"), "Fri, Jun 12, 12:30 PM")
 
     def test_member_datetime_formats_aware_datetime_in_chinese(self):
         value = datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc)
 
-        self.assertEqual(member_datetime(value, "zh"), "6月12日（周五）晚上7:30")
+        self.assertEqual(member_datetime(value, "zh"), "6月12日（周五）下午12:30")
 
     def test_member_datetime_handles_none_safely(self):
         self.assertEqual(member_datetime(None, "en"), "")
@@ -5887,6 +5887,21 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "Today's Church Gatherings")
         self.assertContains(response, "Started Today Confirmed Service")
         self.assertContains(response, "You are serving — confirmed")
+
+    def test_today_gathering_window_uses_bay_area_local_date(self):
+        late_today_utc = self.local_datetime(0, hour=23, minute=30).astimezone(
+            datetime_timezone.utc
+        )
+        self.make_visible_event(
+            title_en="Late Bay Area Gathering",
+            start_datetime=late_today_utc,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Church Gatherings")
+        self.assertContains(response, "Late Bay Area Gathering")
+        self.assertNotContains(response, "Church Gatherings this week")
 
     def test_church_gatherings_shows_visible_upcoming(self):
         self.make_visible_event(title_en="Midweek Prayer Gathering")

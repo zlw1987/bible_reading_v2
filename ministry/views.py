@@ -224,12 +224,6 @@ def get_assignment_effective_end_datetime(item_or_assignment):
 
 def assignment_is_serving_history(item_or_assignment, now=None):
     assignment = getattr(item_or_assignment, "assignment", item_or_assignment)
-    event = assignment.service_event
-    if assignment.status == TeamAssignment.STATUS_COMPLETED:
-        return True
-    if event.status == ServiceEvent.STATUS_COMPLETED:
-        return True
-
     now = now or timezone.now()
     return get_assignment_effective_end_datetime(assignment) < now
 

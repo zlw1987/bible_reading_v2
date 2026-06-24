@@ -5,6 +5,9 @@ from django.core.exceptions import ImproperlyConfigured
 
 DEBUG = False
 
+TIME_ZONE = "America/Los_Angeles"
+USE_TZ = True
+
 # Comma-separated list of hostnames, sourced from the environment so the real
 # production domain can be set at deploy time without a code change. Falls back
 # to the temporary domain only when the env var is unset.

@@ -5,6 +5,56 @@ REPOPATH="/home/rsnwvvl103hc/repositories/app_read"
 DEPLOYPATH="/home/rsnwvvl103hc/app_read"
 PYTHON="/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python"
 LOGFILE="$DEPLOYPATH/deploy.log"
+SETTINGS="config.settings_godaddy"
+DB_PATH="$DEPLOYPATH/db.sqlite3"
+BACKUP_DIR="$DEPLOYPATH/backups"
+
+run_manage() {
+  echo ">>> $PYTHON manage.py $* --settings=$SETTINGS" | tee -a "$LOGFILE"
+  $PYTHON manage.py "$@" --settings="$SETTINGS" 2>&1 | tee -a "$LOGFILE"
+}
+
+sqlite_quick_check() {
+  local label="$1"
+  local db_file="$2"
+
+  echo "Running SQLite quick_check for $label: $db_file" | tee -a "$LOGFILE"
+  $PYTHON - "$db_file" "$label" <<'PY' 2>&1 | tee -a "$LOGFILE"
+import sqlite3
+import sys
+
+db_file = sys.argv[1]
+label = sys.argv[2]
+
+with sqlite3.connect(db_file) as connection:
+    result = connection.execute("PRAGMA quick_check").fetchone()
+
+status = result[0] if result else None
+print(f"{label} quick_check: {status}")
+if status != "ok":
+    raise SystemExit(1)
+PY
+}
+
+run_legacy_structure_preflight() {
+  echo "Running legacy structure preflight guard before migrate..." | tee -a "$LOGFILE"
+  run_manage check
+  run_manage showmigrations accounts
+  run_manage migrate --plan
+  run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
+}
+
+run_legacy_structure_post_checks() {
+  echo "Running legacy structure post-migration verification..." | tee -a "$LOGFILE"
+  run_manage check
+  run_manage makemigrations --check --dry-run
+  run_manage showmigrations accounts
+  run_manage audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers
+  run_manage audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers
+}
 
 mkdir -p "$DEPLOYPATH"
 
@@ -41,6 +91,7 @@ echo "Syncing files from repo to app directory..." | tee -a "$LOGFILE"
   --exclude='db.sqlite3' \
   --exclude='media/' \
   --exclude='tmp/' \
+  --exclude='backups/' \
   --exclude='deploy.log' \
   --exclude='passenger.log' \
   --exclude='__pycache__/' \
@@ -80,14 +131,41 @@ print("STATICFILES_DIRS =", settings.STATICFILES_DIRS)
 print("FOUND css/app.css =", find("css/app.css"))
 PY
 
-echo "Running Django check..." | tee -a "$LOGFILE"
-$PYTHON manage.py check --settings=config.settings_godaddy 2>&1 | tee -a "$LOGFILE"
+echo "Preparing legacy structure final migration guard..." | tee -a "$LOGFILE"
+if [ ! -f "$DB_PATH" ]; then
+  echo "ERROR: Expected GoDaddy SQLite DB is missing: $DB_PATH" | tee -a "$LOGFILE"
+  exit 1
+fi
 
-echo "Running migrations..." | tee -a "$LOGFILE"
-$PYTHON manage.py migrate --settings=config.settings_godaddy --noinput 2>&1 | tee -a "$LOGFILE"
+if [ ! -s "$DB_PATH" ]; then
+  echo "ERROR: Expected GoDaddy SQLite DB is empty: $DB_PATH" | tee -a "$LOGFILE"
+  exit 1
+fi
+
+mkdir -p "$BACKUP_DIR"
+BACKUP_TIMESTAMP="$(date +%Y%m%d%H%M%S)"
+BACKUP_PATH="$BACKUP_DIR/db.pre_legacy_structure_migration.$BACKUP_TIMESTAMP.sqlite3"
+
+echo "Creating pre-migration DB backup: $BACKUP_PATH" | tee -a "$LOGFILE"
+cp "$DB_PATH" "$BACKUP_PATH"
+
+if [ ! -s "$BACKUP_PATH" ]; then
+  echo "ERROR: Pre-migration DB backup is missing or empty: $BACKUP_PATH" | tee -a "$LOGFILE"
+  exit 1
+fi
+
+sqlite_quick_check "source DB" "$DB_PATH"
+sqlite_quick_check "pre-migration backup" "$BACKUP_PATH"
+
+run_legacy_structure_preflight
+
+echo "Running migrations after backup, integrity check, and preflight pass..." | tee -a "$LOGFILE"
+run_manage migrate --noinput
+
+run_legacy_structure_post_checks
 
 echo "Collecting static files..." | tee -a "$LOGFILE"
-$PYTHON manage.py collectstatic --settings=config.settings_godaddy --noinput --clear --verbosity 2 2>&1 | tee -a "$LOGFILE"
+run_manage collectstatic --noinput --clear --verbosity 2
 
 echo "Checking generated public static file..." | tee -a "$LOGFILE"
 if [ -f "/home/rsnwvvl103hc/public_html/app_read/static/css/app.css" ]; then

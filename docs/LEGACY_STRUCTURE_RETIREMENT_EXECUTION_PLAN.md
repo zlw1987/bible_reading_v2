@@ -16,9 +16,9 @@ LEGACY-RETIRE.1A adds a read-only readiness foundation for retiring the legacy C
 
 ## LEGACY-STRUCTURE-TABLE-RETIRE.1C — Production/Remote Deployment Guard Runbook
 
-This is a deployment checklist for applying `accounts.0015_remove_legacy_structure_tables`
-on a target production/remote DB. It is not an instruction to run production
-commands from a local agent session.
+This is the GoDaddy deployment checklist for applying
+`accounts.0015_remove_legacy_structure_tables` on the production/remote DB. It
+is not an instruction to run production commands from a local agent session.
 
 Current state:
 
@@ -28,55 +28,61 @@ Current state:
   Only after target-DB post-verification passes should docs or status reports
   claim production/remote has applied the migration.
 
-Pre-deployment requirements:
+Remote sequence after the guarded deployment code is committed and pushed:
 
-- Take and verify a fresh backup of the intended target DB first.
-- Confirm the deployed code includes
-  `accounts/migrations/0015_remove_legacy_structure_tables.py`.
-- Confirm the local/deploy-packaging worktree is clean before packaging or
-  deploying.
-- Confirm the command environment points at the intended production/remote DB.
-
-Target-DB preflight commands, run in the target deployment environment:
-
-```powershell
-.venv\Scripts\python.exe manage.py check
-.venv\Scripts\python.exe manage.py showmigrations accounts
-.venv\Scripts\python.exe manage.py migrate --plan
-.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 50
-.venv\Scripts\python.exe manage.py audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
-.venv\Scripts\python.exe manage.py audit_legacy_structure_retirement_readiness --verbose --limit 50
+```bash
+ssh <godaddy-user>@<godaddy-host>
+cd /home/rsnwvvl103hc/repositories/app_read
+git status --short
+git fetch origin
+git merge --ff-only origin/master
+git status --short
+bash deploy_godaddy.sh
+tail -n 200 /home/rsnwvvl103hc/app_read/deploy.log
 ```
+
+If the live deploy is triggered through cPanel rather than a direct SSH script
+run, use the same committed `deploy_godaddy.sh` flow and inspect
+`/home/rsnwvvl103hc/app_read/deploy.log` afterward.
+
+`deploy_godaddy.sh` now enforces the final legacy-structure guard before normal
+static collection or Passenger restart:
+
+- Sync code from `/home/rsnwvvl103hc/repositories/app_read` to
+  `/home/rsnwvvl103hc/app_read` without deleting `/home/rsnwvvl103hc/app_read/backups/`.
+- Create a fresh timestamped backup of the GoDaddy SQLite DB
+  `/home/rsnwvvl103hc/app_read/db.sqlite3` at
+  `/home/rsnwvvl103hc/app_read/backups/db.pre_legacy_structure_migration.<timestamp>.sqlite3`.
+- Abort if the DB is missing, empty, or cannot be copied to a non-empty backup.
+- Run SQLite `PRAGMA quick_check` against both the source DB and the backup.
+- Run the target-DB preflight commands with
+  `/home/rsnwvvl103hc/virtualenv/app_read/3.11/bin/python manage.py ... --settings=config.settings_godaddy`:
+  `check`, `showmigrations accounts`, `migrate --plan`,
+  `audit_legacy_structure_object_row_retirement --verbose --limit 50 --fail-on-blockers`,
+  `audit_legacy_structure_schema_retirement_readiness --verbose --limit 50 --fail-on-blockers`,
+  and `audit_legacy_structure_retirement_readiness --verbose --limit 50 --fail-on-blockers`.
+- Run `migrate --noinput` only after backup, integrity checks, and all preflight
+  commands pass.
+- Run post-verification with `check`, `makemigrations --check --dry-run`,
+  `showmigrations accounts`, and the same three legacy-structure audits with
+  `--fail-on-blockers`.
+- Continue to `collectstatic` and Passenger restart only after post-verification
+  succeeds.
 
 Stop before migration if any of these are true:
 
 - Any `SmallGroup`, `District`, or `MinistryContext` row count is nonzero.
 - `audit_legacy_structure_retirement_readiness` does not report
   `retirement_readiness: CLEAN`.
+- Any legacy structure audit exits nonzero with `--fail-on-blockers`.
 - `migrate --plan` shows surprising unrelated migrations or an unexpected order.
 - The target DB is not clearly the intended production/remote DB.
-- There is no fresh backup.
-
-Migration command, after preflight is clean:
-
-```powershell
-.venv\Scripts\python.exe manage.py migrate
-```
+- There is no fresh DB backup, the backup is empty, or the backup copy fails.
+- SQLite `quick_check` fails for either the source DB or the backup.
 
 `accounts.0015` starts with a row-count guard. If any historical `SmallGroup`,
 `District`, or `MinistryContext` rows remain, the guard should abort before the
 legacy tables are deleted.
-
-Post-deployment verification on the same target DB:
-
-```powershell
-.venv\Scripts\python.exe manage.py check
-.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
-.venv\Scripts\python.exe manage.py showmigrations accounts
-.venv\Scripts\python.exe manage.py audit_legacy_structure_object_row_retirement --verbose --limit 50
-.venv\Scripts\python.exe manage.py audit_legacy_structure_schema_retirement_readiness --verbose --limit 50
-.venv\Scripts\python.exe manage.py audit_legacy_structure_retirement_readiness --verbose --limit 50
-```
 
 Run only targeted smoke checks unless a reviewer explicitly asks for a broader
 suite. Good candidates are one member login/home or Today page smoke and one
@@ -87,9 +93,10 @@ Rollback/recovery notes:
 
 - If the guard aborts before migration, table deletion has not happened.
   Investigate the row counts and do not force the migration.
-- If the migration applies successfully, rollback requires the normal DB
-  backup/restore path or a deliberate reverse-migration plan. Do not invent
-  manual table recreation during incident response.
+- If preflight fails, `manage.py migrate` did not run.
+- If migration succeeds and a later deploy step fails, recovery is the normal DB
+  backup/restore path or a deliberate migration rollback plan. Do not manually
+  recreate legacy tables during incident response.
 
 New audit command:
 

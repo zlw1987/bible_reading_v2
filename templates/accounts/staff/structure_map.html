@@ -50,6 +50,9 @@
     </p>
     <ul class="staff-count-list">
         <li>{% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: <strong>{{ indicators.direct_parent_memberships }}</strong></li>
+        <li>{% if language == "zh" %}没有直接主要归属的启用单元{% else %}Active units without direct primary membership{% endif %}: <strong>{{ indicators.active_units_without_primary }}</strong></li>
+        <li>{% if language == "zh" %}拥有多个启用主要归属的用户{% else %}Users with multiple active primary memberships{% endif %}: <strong>{{ indicators.users_with_multiple_primary }}</strong></li>
+        <li>{% if language == "zh" %}有启用归属但没有主要归属的用户{% else %}Users with active memberships but no primary{% endif %}: <strong>{{ indicators.users_with_active_memberships_without_primary }}</strong></li>
         <li>
             {% if language == "zh" %}启用的全教会根单元（应为 1）{% else %}Active whole-church root units (expected: 1){% endif %}: <strong>{{ indicators.active_root_units }}</strong>
             {% if indicators.active_root_units != 1 %}
@@ -57,6 +60,7 @@
             {% endif %}
         </li>
         <li>{% if language == "zh" %}仍被引用的已停用单元{% else %}Inactive units still referenced{% endif %}: <strong>{{ indicators.inactive_units_still_referenced }}</strong></li>
+        <li>{% if language == "zh" %}停用单元上的启用归属{% else %}Inactive units with active memberships{% endif %}: <strong>{{ indicators.inactive_units_with_active_memberships }}</strong></li>
     </ul>
     <div class="actions">
         <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
@@ -175,10 +179,14 @@
                             </form>
                         </details>
                         {% endif %}
-                        {% if can_admin_units %}
                         <a class="button-secondary button structure-row-details-link"
-                           href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
+                           href="{% url 'church_structure_unit_detail' row.unit.id %}">
                             {% if language == "zh" %}详细资料{% else %}Details{% endif %}
+                        </a>
+                        {% if can_admin_units %}
+                        <a class="button-secondary button"
+                           href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
+                            {% if language == "zh" %}后台{% else %}Admin{% endif %}
                         </a>
                         {% endif %}
                     </div>

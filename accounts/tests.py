@@ -2940,7 +2940,8 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, reverse("ministry_team_list"))
         self.assertContains(response, reverse("team_assignment_list"))
         self.assertContains(response, reverse("staff_user_list"))
-        self.assertContains(response, reverse("church_structure_setup"))
+        self.assertContains(response, reverse("staff_structure_map"))
+        self.assertNotContains(response, "/structure/setup/")
         self.assertContains(response, "Ministry ops health flags")
         self.assertContains(response, "Teams missing playbook links")
         self.assertContains(response, "Display-name-only members")
@@ -3429,7 +3430,7 @@ class StaffStructureMapTests(TestCase):
         self.assertContains(response, "Structure & Setup Check")
 
 
-class ChurchStructureSetupDashboardTests(TestCase):
+class ChurchStructureSetupDetailTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
             username="setup_staff",
@@ -3498,7 +3499,8 @@ class ChurchStructureSetupDashboardTests(TestCase):
             name_en="Inactive Unit",
             is_active=False,
         )
-        self.setup_url = reverse("church_structure_setup")
+        self.setup_url = reverse("staff_structure_map")
+        self.old_setup_path = "/structure/setup/"
         self.detail_url = reverse("church_structure_unit_detail", args=[self.group.id])
 
     def set_language(self, language="en"):
@@ -3568,7 +3570,7 @@ class ChurchStructureSetupDashboardTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_ordinary_user_cannot_access_setup(self):
+    def test_ordinary_user_cannot_access_structure_map(self):
         self.client.login(username="setup_ordinary", password="UserPass123!")
 
         response = self.client.get(self.setup_url)
@@ -3576,51 +3578,52 @@ class ChurchStructureSetupDashboardTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_membership_only_user_cannot_access_setup(self):
+    def test_membership_only_user_cannot_access_unit_detail(self):
         self.create_membership(self.member_only, is_primary=True)
         self.client.login(username="setup_member_only", password="UserPass123!")
 
-        response = self.client.get(self.setup_url)
+        response = self.client.get(self.detail_url)
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_team_assignment_only_user_cannot_access_setup(self):
+    def test_team_assignment_only_user_cannot_access_unit_detail(self):
         self.create_team_assignment_for(self.team_only)
         self.client.login(username="setup_team_only", password="UserPass123!")
 
-        response = self.client.get(self.setup_url)
+        response = self.client.get(self.detail_url)
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_bible_study_role_only_user_cannot_access_setup(self):
+    def test_bible_study_role_only_user_cannot_access_unit_detail(self):
         self.create_bible_study_role_for(self.bible_study_role_only)
         self.client.login(
             username="setup_bible_study_role_only",
             password="UserPass123!",
         )
 
-        response = self.client.get(self.setup_url)
+        response = self.client.get(self.detail_url)
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("/login/", response.url)
 
-    def test_staff_and_global_pastor_can_access_setup(self):
+    def test_staff_can_access_map_and_pastor_can_access_unit_detail(self):
         self.set_language("en")
-        for username, password in (
-            ("setup_staff", "StaffPass123!"),
-            ("setup_pastor", "PastorPass123!"),
-        ):
-            self.client.logout()
-            self.client.login(username=username, password=password)
 
-            response = self.client.get(self.setup_url)
+        self.login_staff()
+        map_response = self.client.get(self.setup_url)
+        self.assertEqual(map_response.status_code, 200)
+        self.assertContains(map_response, "Church Structure & Setup Check")
+        self.assertNotContains(map_response, self.old_setup_path)
 
-            self.assertEqual(response.status_code, 200)
-            self.assertContains(response, self.setup_url)
+        self.client.logout()
+        self.client.login(username="setup_pastor", password="PastorPass123!")
+        detail_response = self.client.get(self.detail_url)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Rainbow 4")
 
-    def test_dashboard_lists_units_labels_counts_and_inactive_status(self):
+    def test_structure_map_lists_units_counts_and_detail_links(self):
         self.create_membership(self.target_user, is_primary=True)
         self.set_language("en")
         self.login_staff()
@@ -3629,15 +3632,10 @@ class ChurchStructureSetupDashboardTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Rainbow 4")
-        self.assertContains(response, "Whole Church &gt; Rainbow 4")
-        self.assertContains(response, "SETUP-R4")
-        self.assertContains(response, "Small Group")
-        self.assertContains(response, "Active members: 1")
-        self.assertContains(response, "Primary members: 1")
-        self.assertContains(response, "Inactive Unit")
-        self.assertContains(response, "Inactive")
+        self.assertContains(response, "Covered members: 1")
+        self.assertNotContains(response, self.old_setup_path)
 
-    def test_dashboard_shows_setup_warning_counts(self):
+    def test_structure_map_shows_setup_warning_counts(self):
         no_primary_user = User.objects.create_user(username="setup_no_primary")
         multiple_primary_user = User.objects.create_user(username="setup_multi_primary")
         self.create_membership(self.target_user, is_primary=True)
@@ -3671,20 +3669,24 @@ class ChurchStructureSetupDashboardTests(TestCase):
         self.login_staff()
 
         response = self.client.get(self.setup_url)
-        warnings = response.context["warnings"]
+        indicators = response.context["indicators"]
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(warnings["users_with_multiple_primary"]["count"], 1)
-        self.assertEqual(warnings["users_without_primary"]["count"], 2)
+        self.assertEqual(indicators["users_with_multiple_primary"], 1)
         self.assertEqual(
-            warnings["inactive_units_with_active_memberships"]["count"],
+            indicators["users_with_active_memberships_without_primary"],
+            2,
+        )
+        self.assertEqual(
+            indicators["inactive_units_with_active_memberships"],
             1,
         )
-        self.assertGreaterEqual(warnings["units_without_primary"]["count"], 1)
+        self.assertGreaterEqual(indicators["active_units_without_primary"], 1)
         self.assertContains(response, "Users with multiple active primary memberships")
-        self.assertContains(response, "setup_multi_primary")
-        self.assertContains(response, "setup_no_primary")
-        self.assertContains(response, "Inactive Unit")
+        self.assertContains(response, "Users with active memberships but no primary")
+        self.assertContains(response, "Inactive units with active memberships")
+        self.assertNotContains(response, "setup_multi_primary")
+        self.assertNotContains(response, "setup_no_primary")
 
     def test_unit_detail_shows_metadata_children_and_active_memberships(self):
         membership = self.create_membership(self.target_user, is_primary=True)
@@ -3913,14 +3915,19 @@ class ChurchStructureSetupDashboardTests(TestCase):
         profile_response = self.client.get(reverse("profile"))
 
         self.assertContains(overview_response, self.setup_url)
-        self.assertContains(overview_response, "Church Structure Setup")
+        self.assertContains(overview_response, "Structure & Setup Check")
+        self.assertNotContains(overview_response, self.old_setup_path)
+        self.assertNotContains(overview_response, "Church Structure Setup")
         self.assertContains(profile_response, self.setup_url)
+        self.assertNotContains(profile_response, self.old_setup_path)
+        self.assertNotContains(profile_response, "Church Structure Setup")
 
         self.client.logout()
         self.client.login(username="setup_ordinary", password="UserPass123!")
         normal_profile = self.client.get(reverse("profile"))
 
         self.assertNotContains(normal_profile, self.setup_url)
+        self.assertNotContains(normal_profile, self.old_setup_path)
         self.assertNotContains(normal_profile, "Church Structure Setup")
 
 
@@ -4035,19 +4042,22 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotContains(forced, "Edit mode:")
         self.assertNotContains(forced, "structure-row-actions")
 
-    def test_details_link_visible_only_for_admin(self):
+    def test_edit_mode_action_menu_links_to_detail_and_admin(self):
         self.set_language("en")
+        detail_url = reverse("church_structure_unit_detail", args=[self.child.id])
         admin_change_url = reverse(
             "admin:accounts_churchstructureunit_change", args=[self.child.id]
         )
 
         self.login_admin()
         admin_resp = self.client.get(self.url, {"edit": "1"})
+        self.assertContains(admin_resp, detail_url)
         self.assertContains(admin_resp, admin_change_url)
 
         self.client.logout()
         self.login_viewer()
         viewer_resp = self.client.get(self.url, {"edit": "1"})
+        self.assertNotContains(viewer_resp, detail_url)
         self.assertNotContains(viewer_resp, admin_change_url)
 
     # --- rename POST --------------------------------------------------------

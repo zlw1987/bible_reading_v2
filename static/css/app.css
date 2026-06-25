@@ -912,32 +912,6 @@ th {
     margin-bottom: 6px;
 }
 
-.structure-setup-warning-grid {
-    display: grid;
-    gap: 18px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.structure-setup-warning-card {
-    margin-bottom: 0;
-}
-
-.structure-setup-warning-card .card-title {
-    font-size: 18px;
-}
-
-.structure-setup-section-head {
-    align-items: flex-start;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: space-between;
-}
-
-.structure-setup-tree .button {
-    padding: 4px 10px;
-}
-
 .structure-membership-form {
     max-width: 560px;
 }
@@ -1274,10 +1248,6 @@ th {
     }
 
     .dashboard-actions-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .structure-setup-warning-grid {
         grid-template-columns: 1fr;
     }
 

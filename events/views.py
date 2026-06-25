@@ -15,7 +15,7 @@ from ministry.services.assignment_coverage import (
 )
 
 from .forms import RecurringServiceEventForm, ServiceEventForm
-from .models import ServiceEvent
+from .models import ServiceEvent, service_event_is_history
 
 
 def cancel_non_final_assignments_for_event(event):
@@ -67,7 +67,7 @@ def get_visible_service_events(user):
         # SE-AS.4: can_be_seen_by reads audience scope rows per event; the
         # prefetch keeps the per-user visibility pass to a fixed query count.
         "audience_scope_links__unit",
-    ).order_by("-start_datetime")
+    ).order_by("start_datetime", "id")
 
     if can_manage_service_events(user):
         return events
@@ -90,14 +90,37 @@ def service_event_list(request):
     events = get_visible_service_events(request.user)
 
     if tab == "past":
-        events = events.filter(start_datetime__lt=now).exclude(
-            status=ServiceEvent.STATUS_DRAFT,
+        events = sorted(
+            [
+                event
+                for event in events.exclude(
+                    status__in=[
+                        ServiceEvent.STATUS_DRAFT,
+                        ServiceEvent.STATUS_CANCELLED,
+                    ],
+                )
+                if service_event_is_history(event, now=now)
+            ],
+            key=lambda event: (-event.start_datetime.timestamp(), event.id),
         )
     elif tab == "drafts":
-        events = events.filter(status=ServiceEvent.STATUS_DRAFT)
+        events = events.filter(status=ServiceEvent.STATUS_DRAFT).order_by(
+            "start_datetime",
+            "id",
+        )
     else:
-        events = events.filter(start_datetime__gte=now).exclude(
-            status__in=[ServiceEvent.STATUS_DRAFT, ServiceEvent.STATUS_CANCELLED]
+        events = sorted(
+            [
+                event
+                for event in events.exclude(
+                    status__in=[
+                        ServiceEvent.STATUS_DRAFT,
+                        ServiceEvent.STATUS_CANCELLED,
+                    ],
+                )
+                if not service_event_is_history(event, now=now)
+            ],
+            key=lambda event: (event.start_datetime, event.id),
         )
 
     return render(

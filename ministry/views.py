@@ -13,7 +13,11 @@ from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
-from events.models import ServiceEvent
+from events.models import (
+    ServiceEvent,
+    get_service_event_effective_end,
+    service_event_is_history,
+)
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -149,7 +153,7 @@ def visible_assignments_for_user(user):
             "assignment_members__membership",
             "assignment_members__membership__user",
         )
-        .order_by("service_event__start_datetime", "ministry_team__name")
+        .order_by("service_event__start_datetime", "id")
     )
 
     if can_manage_team_assignments(user):
@@ -191,7 +195,7 @@ def my_serving_assignments(user, tab="upcoming"):
         )
         .order_by(
             "assignment__service_event__start_datetime",
-            "assignment__ministry_team__name",
+            "assignment_id",
         )
     )
 
@@ -239,7 +243,7 @@ def my_bible_study_role_serving_items(user, tab="upcoming"):
                 BibleStudySeries.STATUS_COMPLETED,
             ],
         )
-        .order_by("meeting__meeting_datetime", "role", "id")
+        .order_by("meeting__meeting_datetime", "meeting_id", "id")
     )
 
     items_by_meeting = {}
@@ -306,16 +310,7 @@ def _local_midnight(date_value):
 
 def get_assignment_effective_end_datetime(item_or_assignment):
     assignment = getattr(item_or_assignment, "assignment", item_or_assignment)
-    event = assignment.service_event
-    if event.end_datetime:
-        return _ensure_aware_datetime(event.end_datetime)
-
-    starts_at = _ensure_aware_datetime(event.start_datetime)
-    local_start_date = timezone.localtime(
-        starts_at,
-        timezone.get_current_timezone(),
-    ).date()
-    return _local_midnight(local_start_date + timedelta(days=1))
+    return get_service_event_effective_end(assignment.service_event)
 
 
 def assignment_is_serving_history(item_or_assignment, now=None):
@@ -341,6 +336,12 @@ def get_serving_item_starts_at(item):
     if serving_item_kind(item) == "bible_study_role":
         return _ensure_aware_datetime(item.meeting.meeting_datetime)
     return _ensure_aware_datetime(item.assignment.service_event.start_datetime)
+
+
+def get_serving_item_sort_key(item):
+    if serving_item_kind(item) == "bible_study_role":
+        return (get_serving_item_starts_at(item), item.meeting.id)
+    return (get_serving_item_starts_at(item), item.assignment.id)
 
 
 def get_serving_item_effective_end_datetime(item):
@@ -447,7 +448,6 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
     event_queryset = (
         events_with_coverage_queryset()
         .filter(
-            start_datetime__gte=start_at,
             start_datetime__lt=end_at,
             required_team_links__isnull=False,
         )
@@ -458,14 +458,18 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
             ],
         )
         .distinct()
-        .order_by("start_datetime", "title")
+        .order_by("start_datetime", "id")
     )
     if not is_global_manager:
         event_queryset = event_queryset.filter(
             required_team_links__ministry_team_id__in=manageable_team_ids
         ).distinct()
 
-    events = list(event_queryset)
+    events = [
+        event
+        for event in event_queryset
+        if not service_event_is_history(event, now=start_at)
+    ]
     if not events:
         return []
 
@@ -775,7 +779,7 @@ def team_schedule(request, team_id):
         )
         .filter(Q(required_team_links__ministry_team=team) | Q(id__in=assigned_event_ids))
         .distinct()
-        .order_by("start_datetime", "title")
+        .order_by("start_datetime", "id")
     )
     events = list(event_queryset)
     displayed_event_ids = {event.id for event in events}
@@ -1134,7 +1138,7 @@ def my_serving(request):
     )
     serving_items = sorted(
         [*team_serving_items, *bible_study_role_items],
-        key=get_serving_item_starts_at,
+        key=get_serving_item_sort_key,
     )
     pending_items = [
         item
@@ -1266,11 +1270,13 @@ def team_assignment_list(request):
     )
 
     if tab == "past":
-        assignments = assignments.filter(
-            Q(service_event__start_datetime__lt=now)
-            | Q(status=TeamAssignment.STATUS_COMPLETED)
-        ).exclude(
+        assignments = assignments.exclude(
             status=TeamAssignment.STATUS_CANCELLED,
+        ).exclude(
+            service_event__status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ],
         )
     elif tab == "needs_confirmation":
         assignments = assignments.exclude(
@@ -1290,9 +1296,7 @@ def team_assignment_list(request):
     elif tab == "cancelled":
         assignments = assignments.filter(status=TeamAssignment.STATUS_CANCELLED)
     else:
-        assignments = assignments.filter(
-            service_event__start_datetime__gte=now,
-        ).exclude(
+        assignments = assignments.exclude(
             service_event__status__in=[
                 ServiceEvent.STATUS_DRAFT,
                 ServiceEvent.STATUS_CANCELLED,
@@ -1325,6 +1329,31 @@ def team_assignment_list(request):
             team_filter_id = None
 
     visible_assignment_list = list(assignments)
+    if tab == "past":
+        visible_assignment_list = [
+            assignment
+            for assignment in visible_assignment_list
+            if assignment.status == TeamAssignment.STATUS_COMPLETED
+            or assignment_is_serving_history(assignment, now=now)
+        ]
+        visible_assignment_list.sort(
+            key=lambda assignment: (
+                -assignment.service_event.start_datetime.timestamp(),
+                assignment.id,
+            )
+        )
+    elif tab == "upcoming":
+        visible_assignment_list = [
+            assignment
+            for assignment in visible_assignment_list
+            if not assignment_is_serving_history(assignment, now=now)
+        ]
+        visible_assignment_list.sort(
+            key=lambda assignment: (
+                assignment.service_event.start_datetime,
+                assignment.id,
+            )
+        )
     visible_assignment_ids = [assignment.id for assignment in visible_assignment_list]
     coverage_team_ids = None
     if not can_manage_team_assignments(request.user):
@@ -1345,12 +1374,10 @@ def team_assignment_list(request):
     if tab == "upcoming" and not status_filter and (
         can_manage_team_assignments(request.user) or manageable_team_ids
     ):
-        required_event_queryset = events_with_coverage_queryset().filter(
-            start_datetime__gte=now,
-        ).exclude(
+        required_event_queryset = events_with_coverage_queryset().exclude(
             status__in=[
-                "draft",
-                "cancelled",
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
             ],
         )
         if coverage_team_ids is None:
@@ -1361,12 +1388,16 @@ def team_assignment_list(request):
             required_event_queryset = required_event_queryset.filter(
                 required_team_links__ministry_team_id__in=coverage_team_ids,
             )
-        event_ids.update(required_event_queryset.values_list("id", flat=True))
+        event_ids.update(
+            event.id
+            for event in required_event_queryset
+            if not service_event_is_history(event, now=now)
+        )
 
     events = list(
         events_with_coverage_queryset()
         .filter(id__in=event_ids)
-        .order_by("start_datetime", "title")
+        .order_by("start_datetime", "id")
     )
     coverage_by_event = build_assignment_coverage(
         events,

@@ -3861,6 +3861,69 @@ class BibleStudyModuleTests(TestCase):
             reverse("bible_study_meeting_detail", args=[meeting.id]),
         )
 
+    def test_study_list_keeps_same_day_started_v2_meeting_current(self):
+        self.set_language("en")
+        today_start = timezone.make_aware(
+            datetime.combine(timezone.localdate(), datetime.min.time()),
+            timezone.get_current_timezone(),
+        )
+        lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Started Today Guide",
+        )
+        meeting = self.create_meeting(
+            lesson=lesson,
+            meeting_datetime=today_start,
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Started Today Guide")
+        self.assertIn(meeting, response.context["v2_landing"]["upcoming_meetings"])
+
+    def test_study_list_orders_visible_v2_meetings_by_meeting_datetime(self):
+        self.set_language("en")
+        later_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Later Visible Guide",
+        )
+        earlier_lesson = self.create_lesson(
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            title_en="Earlier Visible Guide",
+        )
+        later = self.create_meeting(
+            lesson=later_lesson,
+            meeting_datetime=timezone.now() + timezone.timedelta(days=3),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        earlier = self.create_meeting(
+            lesson=earlier_lesson,
+            meeting_datetime=timezone.now() + timezone.timedelta(days=1),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        for meeting in (later, earlier):
+            BibleStudyMeetingAudienceScope.objects.create(
+                meeting=meeting,
+                unit=self.group_unit,
+            )
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(reverse("study_session_list"))
+
+        meeting_ids = [
+            meeting.id for meeting in response.context["v2_landing"]["upcoming_meetings"]
+        ]
+        self.assertLess(meeting_ids.index(earlier.id), meeting_ids.index(later.id))
+
     def test_study_list_shows_meeting_for_descendant_membership(self):
         self.set_language("en")
         child_unit = ChurchStructureUnit.objects.create(

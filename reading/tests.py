@@ -6099,6 +6099,41 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(response, "Started Today Confirmed Service")
         self.assertContains(response, "You are serving — confirmed")
 
+    def test_today_gathering_includes_multiday_event_that_overlaps_today(self):
+        event = ServiceEvent.objects.create(
+            title="Overnight Retreat",
+            title_en="Overnight Retreat",
+            event_type=ServiceEvent.EVENT_SPECIAL_MEETING,
+            start_datetime=self.local_datetime(-1, hour=20),
+            end_datetime=self.local_datetime(0, hour=22),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.add_event_audience(event, self.root_unit)
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Church Gatherings")
+        self.assertContains(response, "Overnight Retreat")
+
+    def test_today_gathering_rows_order_by_start_time(self):
+        self.make_visible_event(
+            title_en="Later Today Gathering",
+            start_datetime=self.local_datetime(0, hour=19),
+        )
+        self.make_visible_event(
+            title_en="Earlier Today Gathering",
+            start_datetime=self.local_datetime(0, hour=9),
+        )
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        self.assertContains(response, "Today's Church Gatherings")
+        self.assertLess(
+            content.index("Earlier Today Gathering"),
+            content.index("Later Today Gathering"),
+        )
+
     def test_today_gathering_window_uses_bay_area_local_date(self):
         late_today_utc = self.local_datetime(0, hour=23, minute=30).astimezone(
             datetime_timezone.utc

@@ -1551,6 +1551,35 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertNotContains(upcoming_response, "Past / History")
         self.assertNotContains(past_response, "Current Today Service")
 
+    def test_my_serving_orders_personal_rows_by_event_start_datetime(self):
+        self.set_language("en")
+        later_event = ServiceEvent.objects.create(
+            title="Later Personal Service",
+            title_en="Later Personal Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=4),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        earlier_event = ServiceEvent.objects.create(
+            title="Earlier Personal Service",
+            title_en="Earlier Personal Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.create_assignment(service_event=later_event)
+        self.create_assignment(service_event=earlier_event)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(
+            content.index("Earlier Personal Service"),
+            content.index("Later Personal Service"),
+        )
+
     def test_my_serving_past_excludes_same_day_event_one_minute_in_future(self):
         self.set_language("en")
         soon_event = ServiceEvent.objects.create(
@@ -2648,6 +2677,24 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
+
+    def test_ongoing_assignment_appears_in_upcoming_not_past_assignment_tab(self):
+        self.set_language("en")
+        current_event = ServiceEvent.objects.create(
+            title="Ongoing Assignment Service",
+            title_en="Ongoing Assignment Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=self.local_datetime(0, hour=0),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.create_assignment(service_event=current_event)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        upcoming = self.client.get(reverse("team_assignment_list"), {"tab": "upcoming"})
+        past = self.client.get(reverse("team_assignment_list"), {"tab": "past"})
+
+        self.assertContains(upcoming, "Ongoing Assignment Service")
+        self.assertNotContains(past, "Ongoing Assignment Service")
 
     def test_assignment_list_groups_assignments_by_service_event(self):
         self.set_language("en")

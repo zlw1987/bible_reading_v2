@@ -21,7 +21,7 @@ from comments.models import ReflectionComment
 from comments.reflection_visibility import (
     get_visible_group_reflection_snapshot_unit_ids,
 )
-from events.models import ServiceEvent
+from events.models import ServiceEvent, get_service_event_effective_end
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
 from ministry.views import my_serving_assignments
@@ -679,7 +679,7 @@ def get_week_serving_notes(user):
 
 def get_gatherings_for_window(user, start_datetime, end_datetime):
     """Visible Church Gatherings in a half-open datetime window."""
-    return list(
+    events = (
         get_visible_service_events(user)
         .exclude(
             status__in=[
@@ -688,11 +688,15 @@ def get_gatherings_for_window(user, start_datetime, end_datetime):
             ],
         )
         .filter(
-            start_datetime__gte=start_datetime,
             start_datetime__lt=end_datetime,
         )
-        .order_by("start_datetime")
+        .order_by("start_datetime", "id")
     )
+    return [
+        event
+        for event in events
+        if get_service_event_effective_end(event) >= start_datetime
+    ]
 
 
 def attach_serving_notes(events, user):

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -6,6 +8,36 @@ from django.utils import timezone
 from accounts.models import ChurchStructureUnit
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 from accounts.structure_selectors import user_matches_structure_audience
+
+
+def _ensure_aware_datetime(value):
+    if timezone.is_naive(value):
+        return timezone.make_aware(value, timezone.get_current_timezone())
+    return value
+
+
+def _local_midnight(date_value):
+    local_timezone = timezone.get_current_timezone()
+    midnight = datetime.combine(date_value, datetime.min.time())
+    if timezone.is_naive(midnight):
+        return timezone.make_aware(midnight, local_timezone)
+    return midnight
+
+
+def get_service_event_effective_end(event):
+    if event.end_datetime:
+        return _ensure_aware_datetime(event.end_datetime)
+
+    starts_at = _ensure_aware_datetime(event.start_datetime)
+    local_start_date = timezone.localtime(starts_at, timezone.get_current_timezone()).date()
+    # Matches the existing My Serving fallback: same-day church events without
+    # an explicit end remain current until the next local midnight.
+    return _local_midnight(local_start_date + timedelta(days=1))
+
+
+def service_event_is_history(event, now=None):
+    now = now or timezone.now()
+    return get_service_event_effective_end(event) < now
 
 
 class ServiceEvent(models.Model):

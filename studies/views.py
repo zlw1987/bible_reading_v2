@@ -103,6 +103,13 @@ def can_edit_bible_study_meeting_preparation(user, meeting):
     return can_manage_bible_studies(user)
 
 
+def _local_midnight(local_date):
+    return timezone.make_aware(
+        datetime.combine(local_date, datetime.min.time()),
+        timezone.get_current_timezone(),
+    )
+
+
 def get_v2_landing_context(user):
     show_staff_links = can_manage_bible_studies(user)
 
@@ -127,6 +134,9 @@ def get_v2_landing_context(user):
         BibleStudyMeeting.STATUS_PUBLISHED,
         BibleStudyMeeting.STATUS_COMPLETED,
     ]
+    # V2 meetings do not store an end time. Match the existing serving
+    # convention: a same-day meeting remains current until next local midnight.
+    today_start = _local_midnight(timezone.localdate())
     base_meetings = BibleStudyMeeting.objects.select_related(
         "lesson",
         "lesson__series",
@@ -134,7 +144,7 @@ def get_v2_landing_context(user):
     ).prefetch_related(
         "audience_scope_links__unit",
     ).filter(
-        meeting_datetime__gte=timezone.now(),
+        meeting_datetime__gte=today_start,
         status__in=visible_statuses,
         lesson__status__in=[
             BibleStudyLesson.STATUS_PUBLISHED,
@@ -408,7 +418,7 @@ def bible_study_lesson_detail(request, lesson_id):
                 "discussion_leader_user",
             ).prefetch_related(
                 "audience_scope_links__unit",
-            ),
+            ).order_by("meeting_datetime", "id"),
             # Generation preview deliberately keeps counting cancelled meetings
             # as existing so they are skipped, not regenerated.
             "generation_preview": get_bible_study_meeting_generation_preview(lesson),
@@ -620,7 +630,7 @@ def bible_study_meeting_manage_list(request):
         "created_by",
     ).prefetch_related(
         "audience_scope_links__unit",
-    )
+    ).order_by("meeting_datetime", "id")
 
     if status:
         meetings = meetings.filter(status=status)

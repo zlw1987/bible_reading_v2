@@ -2730,6 +2730,76 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.assertEqual(hidden_detail.status_code, 302)
         self.assertEqual(hidden_detail.url, reverse("service_event_list"))
 
+    def test_event_list_uses_effective_end_for_upcoming_and_past_buckets(self):
+        self.set_language("en")
+        today_start = timezone.make_aware(
+            datetime.combine(timezone.localdate(), datetime.min.time()),
+            timezone.get_current_timezone(),
+        )
+        current = self.create_event(
+            title_en="Current Same-day Gathering",
+            start_datetime=today_start,
+        )
+        future = self.create_event(
+            title_en="Future Gathering",
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+        )
+        ended = self.create_event(
+            title_en="Ended Gathering",
+            start_datetime=timezone.now() - timezone.timedelta(days=2),
+        )
+        cancelled = self.create_event(
+            title_en="Cancelled Old Gathering",
+            start_datetime=timezone.now() - timezone.timedelta(days=2),
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        for event in (current, future, ended, cancelled):
+            self.add_audience(event, self.root_unit)
+
+        self.client.login(username="audience_r4", password="testpass123")
+        upcoming = self.client.get(reverse("service_event_list"))
+        past = self.client.get(reverse("service_event_list"), {"tab": "past"})
+
+        upcoming_ids = [event.id for event in upcoming.context["events"]]
+        past_ids = [event.id for event in past.context["events"]]
+        self.assertIn(current.id, upcoming_ids)
+        self.assertIn(future.id, upcoming_ids)
+        self.assertNotIn(ended.id, upcoming_ids)
+        self.assertNotIn(cancelled.id, upcoming_ids)
+        self.assertIn(ended.id, past_ids)
+        self.assertNotIn(current.id, past_ids)
+        self.assertNotIn(cancelled.id, past_ids)
+
+    def test_event_list_orders_upcoming_ascending_and_past_newest_first(self):
+        self.set_language("en")
+        later = self.create_event(
+            title_en="Later Upcoming Gathering",
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+        )
+        earlier = self.create_event(
+            title_en="Earlier Upcoming Gathering",
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+        )
+        older_past = self.create_event(
+            title_en="Older Past Gathering",
+            start_datetime=timezone.now() - timezone.timedelta(days=5),
+        )
+        newer_past = self.create_event(
+            title_en="Newer Past Gathering",
+            start_datetime=timezone.now() - timezone.timedelta(days=2),
+        )
+        for event in (later, earlier, older_past, newer_past):
+            self.add_audience(event, self.root_unit)
+
+        self.client.login(username="audience_r4", password="testpass123")
+        upcoming = self.client.get(reverse("service_event_list"))
+        past = self.client.get(reverse("service_event_list"), {"tab": "past"})
+
+        upcoming_ids = [event.id for event in upcoming.context["events"]]
+        past_ids = [event.id for event in past.context["events"]]
+        self.assertLess(upcoming_ids.index(earlier.id), upcoming_ids.index(later.id))
+        self.assertLess(past_ids.index(newer_past.id), past_ids.index(older_past.id))
+
     def test_audience_selector_ui_is_available_after_runtime_migration(self):
         form = ServiceEventForm(language="en")
         self.assertIn("audience_units", form.fields)

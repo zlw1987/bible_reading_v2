@@ -3524,7 +3524,13 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("my_group_progress"))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Group Reading Progress")
+        self.assertContains(
+            response,
+            "Group belonging comes from active primary Church Structure membership.",
+        )
         self.assertContains(response, "You are not assigned to a small group yet.")
+        self.assertNotContains(response, f'href="{reverse("my_group_progress")}"')
 
     def test_group_progress_shows_same_group_members_only(self):
         group_unit = self.group_unit
@@ -3640,6 +3646,15 @@ class BibleReadingFlowTests(TestCase):
             user=self.user,
             active_plan=self.active_plan,
         )
+        second_active_plan = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate() - timezone.timedelta(days=1),
+            title="Second Group Plan",
+        )
+        PlanEnrollment.objects.create(
+            user=self.other_user,
+            active_plan=second_active_plan,
+        )
         self.client.login(username="admin", password="testpass123")
 
         response = self.client.get(
@@ -3649,18 +3664,27 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My Group Reading Progress")
+        self.assertContains(
+            response,
+            "View your group's reading completion and today's check-in status for the selected reading plan.",
+        )
+        self.assertContains(
+            response,
+            "Group belonging comes from active primary Church Structure membership. Serving assignments and role permissions are separate.",
+        )
         self.assertContains(response, "Rainbow 4 English")
-        self.assertContains(response, "Reading Plan")
-        self.assertContains(response, "Starts on")
-        self.assertContains(response, "Group")
+        self.assertContains(response, "Current Group")
+        self.assertContains(response, "Current Reading Plan")
+        self.assertContains(response, "Start Date")
         self.assertContains(response, "Switch group")
         self.assertContains(response, "Switch plan")
-        self.assertContains(response, "Members")
+        self.assertContains(response, "Second Group Plan")
+        self.assertContains(response, "Member Progress")
         self.assertContains(response, "Member")
-        self.assertContains(response, "Enrollment")
         self.assertContains(response, "Today")
         self.assertContains(response, "Progress")
-        self.assertContains(response, "Joined")
+        self.assertContains(response, "Completed")
+        self.assertContains(response, "reading days")
         self.assertContains(response, "Not joined")
         self.assertContains(response, "Missing")
 
@@ -3687,17 +3711,17 @@ class BibleReadingFlowTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "我的小组读经进度")
-        self.assertContains(response, "读经计划")
+        self.assertContains(response, "查看本小组成员在当前读经计划中的完成情况与今日打卡状态。")
+        self.assertContains(response, "小组归属来自已生效的主要教会结构归属")
+        self.assertContains(response, "当前小组")
+        self.assertContains(response, "当前读经计划")
         self.assertContains(response, "开始日期")
-        self.assertContains(response, "小组")
         self.assertContains(response, "切换小组")
         self.assertContains(response, "切换计划")
-        self.assertContains(response, "成员")
-        self.assertContains(response, "加入状态")
-        self.assertContains(response, "今日")
-        self.assertContains(response, "进度")
-        self.assertContains(response, "已加入")
-        self.assertContains(response, "未加入")
+        self.assertContains(response, "成员进度")
+        self.assertContains(response, "今日状态")
+        self.assertContains(response, "完成进度")
+        self.assertContains(response, "已完成")
         self.assertContains(response, "未加入计划")
         self.assertContains(response, "未打卡")
         self.assertNotContains(response, "Members")

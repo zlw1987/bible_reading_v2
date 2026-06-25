@@ -379,6 +379,89 @@ textarea {
     background: var(--primary);
 }
 
+.group-progress-boundary {
+    margin-bottom: 18px;
+}
+
+.group-progress-summary {
+    display: grid;
+    gap: 16px;
+}
+
+.summary-label {
+    color: var(--muted);
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.group-progress-summary-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.group-progress-filters {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.group-progress-filter-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.group-progress-filter-form select {
+    max-width: 100%;
+}
+
+.group-progress-members .card-title {
+    margin-bottom: 14px;
+}
+
+.group-progress-table {
+    margin-bottom: 0;
+    min-width: 640px;
+}
+
+.group-progress-table th,
+.group-progress-table td {
+    vertical-align: middle;
+}
+
+.group-progress-table td:first-child {
+    min-width: 180px;
+}
+
+.group-progress-table td:first-child .status {
+    margin-left: 8px;
+}
+
+.group-progress-meter {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    display: inline-block;
+    height: 10px;
+    margin-right: 8px;
+    overflow: hidden;
+    vertical-align: middle;
+    width: min(140px, 40vw);
+}
+
+.group-progress-meter-fill {
+    background: var(--primary);
+    height: 100%;
+}
+
+.group-progress-empty p {
+    margin-bottom: 0;
+}
+
 .table-wrap {
     overflow-x: auto;
 }
@@ -2250,6 +2333,62 @@ th {
 }
 
 @media (max-width: 640px) {
+    .group-progress-summary-grid,
+    .group-progress-filters {
+        grid-template-columns: 1fr;
+    }
+
+    .group-progress-table {
+        min-width: 0;
+    }
+
+    .group-progress-table thead {
+        display: none;
+    }
+
+    .group-progress-table,
+    .group-progress-table tbody,
+    .group-progress-table tr,
+    .group-progress-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .group-progress-table tr {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 12px;
+        padding: 10px;
+    }
+
+    .group-progress-table td {
+        border: 0;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        padding: 7px 0;
+    }
+
+    .group-progress-table td::before {
+        color: var(--muted);
+        content: attr(data-label);
+        flex: 0 0 38%;
+        font-weight: 600;
+    }
+
+    .group-progress-table td:first-child {
+        min-width: 0;
+    }
+
+    .group-progress-table td:first-child .status {
+        margin-left: 0;
+        margin-top: 6px;
+    }
+
+    .group-progress-meter {
+        width: 96px;
+    }
+
     .mapping-edit-form {
         max-width: 100%;
     }

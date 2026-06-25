@@ -5,130 +5,154 @@
     <a href="{% url 'home' %}">← {% if language == "zh" %}返回今日{% else %}Back to Today{% endif %}</a>
 </p>
 
-<h1>{% if language == "zh" %}我的小组读经进度{% else %}My Group Reading Progress{% endif %}</h1>
-<p class="muted">
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}我的小组读经进度{% else %}My Group Reading Progress{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        查看本小组成员在当前读经计划中的完成情况与今日打卡状态。
+        {% else %}
+        View your group's reading completion and today's check-in status for the selected reading plan.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel group-progress-boundary">
     {% if language == "zh" %}
-        查看小组成员的读经完成情况与打卡记录。
+    小组归属来自已生效的主要教会结构归属；服事安排和职分权限是另外的概念。
     {% else %}
-        View reading completion and check-in records for your group.
+    Group belonging comes from active primary Church Structure membership. Serving assignments and role permissions are separate.
     {% endif %}
-</p>
-<p class="muted">
-    {% if language == "zh" %}
-        归属来自已生效的主要教会结构归属；服事安排和职分权限是不同概念。
-    {% else %}
-        Belonging comes from active primary Church Structure membership; serving assignments and role permissions are separate.
-    {% endif %}
-</p>
+</section>
 
 {% if message %}
-<div class="card">
+<div class="card group-progress-empty">
     <p>{{ message }}</p>
 </div>
 {% endif %}
 
 {% if selected_group %}
-<div class="card">
-    <h2>
-        {% if language == "en" and selected_group.name_en %}
-            {{ selected_group.name_en }}
-        {% else %}
-            {{ selected_group.name }}
-        {% endif %}
-    </h2>
-
-    {% if selected_active_plan %}
-    <p class="muted">
-        {% if language == "zh" %}读经计划{% else %}Reading Plan{% endif %}:
-        <strong>{{ selected_active_plan }}</strong>
-    </p>
-    <p class="muted">
-        {% if language == "zh" %}开始日期{% else %}Starts on{% endif %}
-        {{ selected_active_plan.start_date }}
-    </p>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if groups|length > 1 %}
-<form method="get" class="card">
-    <label for="group">{% if language == "zh" %}小组{% else %}Group{% endif %}</label>
-    <select name="group" id="group">
-        {% for group in groups %}
-        <option value="{{ group.id }}" {% if group.id == selected_group_id %}selected{% endif %}>
-            {% if language == "en" and group.name_en %}
-                {{ group.name_en }}
+<section class="card group-progress-summary">
+    <div>
+        <span class="summary-label">{% if language == "zh" %}当前小组{% else %}Current Group{% endif %}</span>
+        <h2 class="card-title">
+            {% if language == "en" and selected_group.name_en %}
+                {{ selected_group.name_en }}
             {% else %}
-                {{ group.name }}
+                {{ selected_group.name }}
             {% endif %}
-        </option>
-        {% endfor %}
-    </select>
+        </h2>
+    </div>
 
-    {% if selected_active_plan %}
-    <input type="hidden" name="active_plan" value="{{ selected_active_plan.id }}">
-    {% endif %}
-
-    <button type="submit">{% if language == "zh" %}切换小组{% else %}Switch group{% endif %}</button>
-</form>
+    <div class="group-progress-summary-grid">
+        <div>
+            <span class="summary-label">{% if language == "zh" %}当前读经计划{% else %}Current Reading Plan{% endif %}</span>
+            <strong>
+                {% if selected_active_plan %}
+                {{ selected_active_plan }}
+                {% else %}
+                {% if language == "zh" %}未加入计划{% else %}Not joined{% endif %}
+                {% endif %}
+            </strong>
+        </div>
+        {% if selected_active_plan %}
+        <div>
+            <span class="summary-label">{% if language == "zh" %}开始日期{% else %}Start Date{% endif %}</span>
+            <strong>{{ selected_active_plan.start_date }}</strong>
+        </div>
+        {% endif %}
+    </div>
+</section>
 {% endif %}
 
-{% if active_plans %}
-<form method="get" class="card">
-    {% if selected_group %}
-    <input type="hidden" name="group" value="{{ selected_group.id }}">
+{% if groups|length > 1 or active_plans %}
+<section class="card group-progress-filters">
+    {% if groups|length > 1 %}
+    <form method="get" class="group-progress-filter-form">
+        <label for="group">{% if language == "zh" %}当前小组{% else %}Current Group{% endif %}</label>
+        <select name="group" id="group">
+            {% for group in groups %}
+            <option value="{{ group.id }}" {% if group.id == selected_group_id %}selected{% endif %}>
+                {% if language == "en" and group.name_en %}
+                    {{ group.name_en }}
+                {% else %}
+                    {{ group.name }}
+                {% endif %}
+            </option>
+            {% endfor %}
+        </select>
+
+        {% if selected_active_plan %}
+        <input type="hidden" name="active_plan" value="{{ selected_active_plan.id }}">
+        {% endif %}
+
+        <button type="submit" class="button-secondary">{% if language == "zh" %}切换小组{% else %}Switch group{% endif %}</button>
+    </form>
     {% endif %}
 
-    <label for="active_plan">{% if language == "zh" %}读经计划{% else %}Reading Plan{% endif %}</label>
-    <select name="active_plan" id="active_plan">
-        {% for active_plan in active_plans %}
-        <option value="{{ active_plan.id }}" {% if active_plan.id == selected_active_plan_id %}selected{% endif %}>
-            {{ active_plan }}
-        </option>
-        {% endfor %}
-    </select>
+    {% if active_plans %}
+    <form method="get" class="group-progress-filter-form">
+        {% if selected_group %}
+        <input type="hidden" name="group" value="{{ selected_group.id }}">
+        {% endif %}
 
-    <button type="submit">{% if language == "zh" %}切换计划{% else %}Switch plan{% endif %}</button>
-</form>
+        <label for="active_plan">{% if language == "zh" %}当前读经计划{% else %}Current Reading Plan{% endif %}</label>
+        <select name="active_plan" id="active_plan">
+            {% for active_plan in active_plans %}
+            <option value="{{ active_plan.id }}" {% if active_plan.id == selected_active_plan_id %}selected{% endif %}>
+                {{ active_plan }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <button type="submit" class="button-secondary">{% if language == "zh" %}切换计划{% else %}Switch plan{% endif %}</button>
+    </form>
+    {% endif %}
+</section>
 {% endif %}
 
 {% if member_rows %}
-<div class="card">
-    <h2>{% if language == "zh" %}成员{% else %}Members{% endif %}</h2>
+<section class="card group-progress-members">
+    <h2 class="card-title">{% if language == "zh" %}成员进度{% else %}Member Progress{% endif %}</h2>
 
-    <table style="width: 100%; border-collapse: collapse;">
-        <thead>
-            <tr>
-                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">{% if language == "zh" %}成员{% else %}Member{% endif %}</th>
-                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">{% if language == "zh" %}加入状态{% else %}Enrollment{% endif %}</th>
-                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">{% if language == "zh" %}今日{% else %}Today{% endif %}</th>
-                <th style="text-align: left; border-bottom: 1px solid #ddd; padding: 8px;">{% if language == "zh" %}进度{% else %}Progress{% endif %}</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in member_rows %}
-            <tr>
-                <td style="border-bottom: 1px solid #eee; padding: 8px;">
-                    {{ row.member.username }}
-                </td>
-                <td style="border-bottom: 1px solid #eee; padding: 8px;">
-                    {% if row.is_enrolled %}
-                    {% if language == "zh" %}已加入{% else %}Joined{% endif %}
-                    {% else %}
-                    {% if language == "zh" %}未加入{% else %}Not joined{% endif %}
-                    {% endif %}
-                </td>
-                <td style="border-bottom: 1px solid #eee; padding: 8px;">
-                    {{ row.today_status }}
-                </td>
-                <td style="border-bottom: 1px solid #eee; padding: 8px;">
-                    {{ row.checked_days }} / {{ row.total_days }}
-                    — {{ row.progress_percent }}%
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+    <div class="table-wrap group-progress-table-wrap">
+        <table class="group-progress-table">
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}成员{% else %}Member{% endif %}</th>
+                    <th>{% if language == "zh" %}今日状态{% else %}Today{% endif %}</th>
+                    <th>{% if language == "zh" %}完成进度{% else %}Progress{% endif %}</th>
+                    <th>{% if language == "zh" %}已完成{% else %}Completed{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in member_rows %}
+                <tr>
+                    <td data-label="{% if language == 'zh' %}成员{% else %}Member{% endif %}">
+                        <strong>{{ row.member.username }}</strong>
+                        {% if not row.is_enrolled %}
+                        <span class="status status-warning">{% if language == "zh" %}未加入计划{% else %}Not joined{% endif %}</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="{% if language == 'zh' %}今日状态{% else %}Today{% endif %}">
+                        <span class="status {% if row.today_status_key == 'checked' %}status-good{% elif row.today_status_key == 'missing' or row.today_status_key == 'not_joined' %}status-warning{% endif %}">
+                            {{ row.today_status }}
+                        </span>
+                    </td>
+                    <td data-label="{% if language == 'zh' %}完成进度{% else %}Progress{% endif %}">
+                        <div class="group-progress-meter" aria-hidden="true">
+                            <div class="group-progress-meter-fill" style="width: {{ row.progress_percent }}%;"></div>
+                        </div>
+                        <strong>{{ row.progress_percent }}%</strong>
+                    </td>
+                    <td data-label="{% if language == 'zh' %}已完成{% else %}Completed{% endif %}">
+                        {{ row.checked_days }} / {{ row.total_days }}
+                        {% if language == "zh" %}读经日{% else %}reading days{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 {% endif %}
 {% endblock %}

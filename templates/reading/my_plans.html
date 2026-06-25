@@ -11,16 +11,16 @@
     <h2>{% if language == "zh" %}我的小组读经进度{% else %}My Group Reading Progress{% endif %}</h2>
     <p>
         {% if language == "zh" %}
-            查看小组成员的读经完成情况与打卡记录。
+            查看本小组成员在当前读经计划中的完成情况与今日打卡状态。
         {% else %}
-            View reading completion and check-in records for your group.
+            View your group's reading completion and today's check-in status for the selected reading plan.
         {% endif %}
     </p>
     <p class="muted">
         {% if language == "zh" %}
-            归属来自已生效的主要教会结构归属；服事安排和职分权限是不同概念。
+            小组归属来自已生效的主要教会结构归属；服事安排和职分权限是另外的概念。
         {% else %}
-            Belonging comes from active primary Church Structure membership; serving assignments and role permissions are separate.
+            Group belonging comes from active primary Church Structure membership. Serving assignments and role permissions are separate.
         {% endif %}
     </p>
     {% if has_group_progress_access %}

@@ -669,7 +669,7 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Team Assignments")
         self.assertContains(response, "Lighting Pilot Import")
         self.assertContains(response, "Church Structure")
-        self.assertContains(response, "Structure & Setup Check")
+        self.assertContains(response, "Church Structure Setup & Review")
         self.assertContains(response, reverse("staff_structure_map"))
         self.assertContains(response, "Users and Review")
         self.assertContains(response, "User Admin")
@@ -830,7 +830,7 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "服事排班")
         self.assertContains(response, "灯光试点导入")
         self.assertContains(response, "教会结构")
-        self.assertContains(response, "教会结构与设置检查")
+        self.assertContains(response, "教会结构设置与检查")
         self.assertContains(response, reverse("staff_structure_map"))
         self.assertContains(response, "用户与审核")
         self.assertContains(response, "用户管理")
@@ -3122,8 +3122,20 @@ class StaffStructureMapTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Church Structure & Setup Check")
-        self.assertContains(response, "How visibility works today")
+        self.assertContains(response, "Church Structure Setup & Review")
+        self.assertContains(
+            response,
+            "Manage the church structure tree, review belonging records",
+        )
+        self.assertContains(response, "Belonging, Roles, and Serving")
+        self.assertContains(
+            response,
+            "Church Structure Units are the canonical structure tree",
+        )
+        self.assertContains(
+            response,
+            "Role scopes, serving assignments, and team membership are separate concepts.",
+        )
         self.assertNotContains(response, "Current Runtime Boundary")
         root_index = content.index("Whole Church")
         cm_index = content.index("Chinese Ministry")
@@ -3181,8 +3193,11 @@ class StaffStructureMapTests(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "教会结构与设置检查")
-        self.assertContains(response, "目前的运作方式")
+        self.assertContains(response, "教会结构设置与检查")
+        self.assertContains(response, "管理教会结构树、检查归属资料")
+        self.assertContains(response, "归属、职分与服事")
+        self.assertContains(response, "教会结构单元是正式的结构树")
+        self.assertContains(response, "职分范围、服事排班和团队成员关系是另外的概念")
         self.assertNotContains(response, "当前运行边界")
         self.assertContains(response, "设置就绪指标")
         self.assertContains(response, "教会结构树")
@@ -3429,7 +3444,7 @@ class StaffStructureMapTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.url)
-        self.assertContains(response, "Structure & Setup Check")
+        self.assertContains(response, "Church Structure Setup & Review")
 
 
 class ChurchStructureSetupDetailTests(TestCase):
@@ -3616,7 +3631,7 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.login_staff()
         map_response = self.client.get(self.setup_url)
         self.assertEqual(map_response.status_code, 200)
-        self.assertContains(map_response, "Church Structure & Setup Check")
+        self.assertContains(map_response, "Church Structure Setup & Review")
         self.assertNotContains(map_response, self.old_setup_path)
 
         self.client.logout()
@@ -4034,12 +4049,11 @@ class ChurchStructureSetupDetailTests(TestCase):
         profile_response = self.client.get(reverse("profile"))
 
         self.assertContains(overview_response, self.setup_url)
-        self.assertContains(overview_response, "Structure & Setup Check")
+        self.assertContains(overview_response, "Church Structure Setup & Review")
         self.assertNotContains(overview_response, self.old_setup_path)
-        self.assertNotContains(overview_response, "Church Structure Setup")
         self.assertContains(profile_response, self.setup_url)
         self.assertNotContains(profile_response, self.old_setup_path)
-        self.assertNotContains(profile_response, "Church Structure Setup")
+        self.assertContains(profile_response, "Church Structure Setup & Review")
 
         self.client.logout()
         self.client.login(username="setup_ordinary", password="UserPass123!")
@@ -4047,7 +4061,7 @@ class ChurchStructureSetupDetailTests(TestCase):
 
         self.assertNotContains(normal_profile, self.setup_url)
         self.assertNotContains(normal_profile, self.old_setup_path)
-        self.assertNotContains(normal_profile, "Church Structure Setup")
+        self.assertNotContains(normal_profile, "Church Structure Setup & Review")
 
 
 class StaffStructureMapEditModeTests(TestCase):
@@ -4166,7 +4180,7 @@ class StaffStructureMapEditModeTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["edit_mode"])
-        self.assertContains(response, "Edit mode supports")
+        self.assertContains(response, "Edit mode lets authorized users")
         self.assertContains(response, "structure-row-icon-actions")
         self.assertContains(response, 'aria-label="Rename unit"')
         self.assertContains(response, 'aria-label="Add child unit"')
@@ -4175,11 +4189,19 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotIn("structure-row-actions-summary", content)
         self.assertNotIn(">Actions<", content)
         self.assertContains(response, "Exit edit mode")
-        self.assertContains(response, "renaming display labels")
-        self.assertContains(response, "adding child units")
-        self.assertContains(response, "safe soft-disable")
+        self.assertContains(response, "rename display labels")
+        self.assertContains(response, "add child units")
+        self.assertContains(response, "safely disable eligible units")
         self.assertContains(response, "detail/admin links")
         self.assertContains(response, "does not hard-delete units")
+        self.assertContains(response, "move/reparent units")
+        self.assertContains(response, "cascade-disable children")
+        self.assertContains(response, "automatically end memberships")
+        self.assertContains(response, "rewrite audience or role scopes")
+        self.assertContains(
+            response,
+            "change serving assignments or visibility rules",
+        )
         self.assertNotContains(response, "only change display names")
 
     def test_edit_mode_shows_inactive_unit_review_section(self):
@@ -4217,11 +4239,16 @@ class StaffStructureMapEditModeTests(TestCase):
 
         response = self.client.get(self.url, {"edit": "1"})
 
-        self.assertContains(response, "可重命名显示名称")
+        self.assertContains(response, "可以重命名显示名称")
         self.assertContains(response, "新增下级单元")
-        self.assertContains(response, "安全停用")
-        self.assertContains(response, "查看详细资料或后台链接")
+        self.assertContains(response, "安全停用可停用的单元")
+        self.assertContains(response, "进入详细资料或后台管理")
         self.assertContains(response, "不会硬删除")
+        self.assertContains(response, "移动或改上级")
+        self.assertContains(response, "递归停用下级")
+        self.assertContains(response, "自动结束归属")
+        self.assertContains(response, "改写适用范围或职分范围")
+        self.assertContains(response, "不会改变服事安排或可见性规则")
         self.assertNotContains(response, "这里只能修改显示名称")
 
     def test_edit_mode_root_has_no_rename_but_child_does(self):

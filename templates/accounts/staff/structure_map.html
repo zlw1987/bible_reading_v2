@@ -1,38 +1,30 @@
 {% extends "base.html" %}
 
 {% block title %}
-{% if language == "zh" %}教会结构与设置检查{% else %}Church Structure & Setup Check{% endif %}
+{% if language == "zh" %}教会结构设置与检查{% else %}Church Structure Setup & Review{% endif %}
 {% endblock %}
 
 {% block content %}
 <section class="page-header">
-    <h1 class="page-title">{% if language == "zh" %}教会结构与设置检查{% else %}Church Structure & Setup Check{% endif %}</h1>
+    <h1 class="page-title">{% if language == "zh" %}教会结构设置与检查{% else %}Church Structure Setup & Review{% endif %}</h1>
     <p class="page-subtitle">
-        {% if edit_mode %}
         {% if language == "zh" %}
-        编辑模式：可重命名显示名称、新增下级单元、对符合条件的单元做安全停用、查看已停用单元并安全恢复启用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用或恢复下级、自动结束或新增归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
+        管理教会结构树、检查归属资料，并确认结构相关设置是否安全。
         {% else %}
-        Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, inactive-unit review/re-enable, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable or re-enable children, automatically end or create memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
-        {% endif %}
-        {% else %}
-        {% if language == "zh" %}
-        只读页面。这里显示教会结构与设置检查提醒；不显示成员名单。
-        {% else %}
-        Read-only page. This shows the church structure and setup check reminders; member names are not shown.
-        {% endif %}
+        Manage the church structure tree, review belonging records, and check whether structure-related setup is safe.
         {% endif %}
     </p>
 </section>
 
 <section class="notice-panel">
     <strong>
-        {% if language == "zh" %}目前的运作方式{% else %}How visibility works today{% endif %}
+        {% if language == "zh" %}归属、职分与服事{% else %}Belonging, Roles, and Serving{% endif %}
     </strong>
     <p>
         {% if language == "zh" %}
-        普通成员的归属按已生效的主要教会结构归属判断。已批准使用结构适用范围的模块在各自范围内参考本页的结构树；成员归属不会授予服事安排或职分权限。本页主要供查看与设置检查。
+        教会结构单元是正式的结构树。教会结构归属表示一个人平时牧养和关怀上的归属；职分范围、服事排班和团队成员关系是另外的概念。
         {% else %}
-        Ordinary-member belonging uses active primary Church Structure membership. Modules that explicitly use structure audience scope depend on this unit tree within their approved scope; membership does not grant serving assignments or role permissions. This page is mainly for review and setup checks.
+        Church Structure Units are the canonical structure tree. Church Structure membership represents ordinary pastoral/care belonging. Role scopes, serving assignments, and team membership are separate concepts.
         {% endif %}
     </p>
 </section>
@@ -107,9 +99,16 @@
         <strong>{% if language == "zh" %}编辑模式{% else %}Edit mode{% endif %}</strong>
         <p>
             {% if language == "zh" %}
-            编辑模式可重命名显示名称、新增下级单元、对符合条件的单元做安全停用、查看已停用单元并安全恢复启用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用或恢复下级、自动结束或新增归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
+            编辑模式可以重命名显示名称、新增下级单元、安全停用可停用的单元，并进入详细资料或后台管理。
             {% else %}
-            Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, inactive-unit review/re-enable, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable or re-enable children, automatically end or create memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
+            Edit mode lets authorized users rename display labels, add child units, safely disable eligible units, and open detail/admin links.
+            {% endif %}
+        </p>
+        <p>
+            {% if language == "zh" %}
+            这里不会硬删除单元、移动或改上级、递归停用下级、自动结束归属、改写适用范围或职分范围，也不会改变服事安排或可见性规则。
+            {% else %}
+            This page does not hard-delete units, move/reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, or change serving assignments or visibility rules.
             {% endif %}
         </p>
     </div>

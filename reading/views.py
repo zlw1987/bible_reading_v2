@@ -1284,7 +1284,34 @@ def check_in(request, active_plan_id, plan_day_id):
 
 @login_required
 def my_group_progress(request):
+    language = get_user_language(request)
     groups = get_accessible_progress_groups(request.user)
+    today_status_labels = {
+        "not_joined": {
+            "en": "Not joined",
+            "zh": "未加入计划",
+        },
+        "no_reading_today": {
+            "en": "No reading today",
+            "zh": "今天没有指定读经",
+        },
+        "checked": {
+            "en": "Checked",
+            "zh": "已打卡",
+        },
+        "not_started": {
+            "en": "Not started",
+            "zh": "尚未开始",
+        },
+        "plan_ended": {
+            "en": "Plan ended",
+            "zh": "计划已结束",
+        },
+        "missing": {
+            "en": "Missing",
+            "zh": "未打卡",
+        },
+    }
 
     selected_group = None
     group_id = request.GET.get("group")
@@ -1325,7 +1352,11 @@ def my_group_progress(request):
                 "selected_active_plan": None,
                 "selected_active_plan_id": None,
                 "member_rows": [],
-                "message": "You are not assigned to a small group yet.",
+                "message": (
+                    "你目前还没有可查看的小组读经进度。"
+                    if language == "zh"
+                    else "You are not assigned to a small group yet."
+                ),
             },
         )
 
@@ -1366,7 +1397,11 @@ def my_group_progress(request):
                 "selected_active_plan": None,
                 "selected_active_plan_id": None,
                 "member_rows": [],
-                "message": "No active reading plan has been joined by this group yet.",
+                "message": (
+                    "这个小组目前还没有成员加入正在进行的读经计划。"
+                    if language == "zh"
+                    else "No active reading plan has been joined by this group yet."
+                ),
             },
         )
 
@@ -1413,23 +1448,26 @@ def my_group_progress(request):
         progress_percent = round((checked_days / total_days) * 100) if total_days else 0
 
         if not is_enrolled:
-            today_status = "Not joined"
+            today_status_key = "not_joined"
         elif today_plan_day is None:
-            today_status = "No reading today"
+            today_status_key = "no_reading_today"
         elif today_plan_day.id in checked_day_ids:
-            today_status = "Checked"
+            today_status_key = "checked"
         elif current_day_number < 1:
-            today_status = "Not started"
+            today_status_key = "not_started"
         elif current_day_number > total_days:
-            today_status = "Plan ended"
+            today_status_key = "plan_ended"
         else:
-            today_status = "Missing"
+            today_status_key = "missing"
 
         member_rows.append(
             {
                 "member": member,
                 "is_enrolled": is_enrolled,
-                "today_status": today_status,
+                "today_status_key": today_status_key,
+                "today_status": today_status_labels[today_status_key][
+                    "zh" if language == "zh" else "en"
+                ],
                 "checked_days": checked_days,
                 "total_days": total_days,
                 "progress_percent": progress_percent,
@@ -1617,6 +1655,9 @@ def my_plans(request):
         {
             "plan_rows": plan_rows,
             "available_plans": available_plans,
+            "has_group_progress_access": get_accessible_progress_groups(
+                request.user
+            ).exists(),
         },
     )
 

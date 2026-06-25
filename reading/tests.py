@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.utils import timezone
 
 from accounts.models import (
@@ -1871,6 +1871,11 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.client.logout()
         return response
 
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
     def row_usernames(self, response):
         return {
             row["member"].username
@@ -1919,6 +1924,7 @@ class GroupProgressPrivacyInvariantTests(TestCase):
         self.assertIn("progress_membership_viewer", self.row_usernames(response))
 
     def test_profile_only_viewer_gets_safe_empty_progress_state(self):
+        self.set_language("en")
         # CS-CORE.2D-B: Profile.small_group no longer grants progress access. A viewer
         # with only a legacy profile group (no membership, no role) gets the safe
         # empty state.
@@ -2077,6 +2083,11 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.client.logout()
         return response
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
 
     def row_usernames(self, response):
         return {row["member"].username for row in response.context["member_rows"]}
@@ -2304,6 +2315,11 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.client.logout()
         return response
 
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
     def row_usernames(self, response):
         return {row["member"].username for row in response.context["member_rows"]}
 
@@ -2342,6 +2358,7 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertEqual(response.context["selected_group"], self.unit_b)
 
     def test_membership_with_wrong_type_unit_gets_empty_state(self):
+        self.set_language("en")
         # CS-CORE.2D-B: a membership whose unit is not a small-group unit yields no
         # own-group access and (with no role) the safe empty state.
         user = self.create_user("default_membership_only")
@@ -2436,6 +2453,7 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertNotEqual(response.context["selected_group"], self.unit_b)
 
     def test_ordinary_profile_group_without_membership_gets_no_group_progress(self):
+        self.set_language("en")
         # READING-STRUCT.1D: an ordinary user with no active primary membership gets
         # NO group progress via profile fallback -- accessible is empty and the safe
         # no-group state shows.
@@ -2464,6 +2482,7 @@ class GroupProgressDefaultSourceSwitchTests(TestCase):
         self.assertNotEqual(response.context["selected_group"], self.unit_a)
 
     def test_ordinary_ended_membership_fails_closed_to_no_group(self):
+        self.set_language("en")
         # READING-STRUCT.1D: an ended (non-active) primary membership does not count,
         # and Profile.small_group is not a fallback, so the user gets no group
         # progress rather than a legacy fallback.
@@ -3498,6 +3517,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertIn("/login/", response.url)
 
     def test_user_without_group_sees_clear_message(self):
+        self.set_language("en")
 
         self.client.login(username="levin", password="testpass123")
 
@@ -3552,6 +3572,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotIn(">outside<", response.content.decode())
 
     def test_group_progress_shows_checked_and_missing_status(self):
+        self.set_language("en")
         group_unit = self.group_unit
 
         self.add_active_primary_membership(self.user, group_unit)
@@ -3582,6 +3603,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Missing")
 
     def test_group_progress_shows_not_joined_member(self):
+        self.set_language("en")
         group_unit = self.group_unit
 
         self.add_active_primary_membership(self.user, group_unit)
@@ -3601,6 +3623,115 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "levin")
         self.assertContains(response, "other")
         self.assertContains(response, "Not joined")
+
+    def test_english_group_progress_keeps_english_labels_and_statuses(self):
+        self.set_language("en")
+        self.group_unit.name_en = "Rainbow 4 English"
+        self.group_unit.save(update_fields=["name_en"])
+        ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-EN-SWITCH",
+            name="Switch Group",
+            name_en="Switch Group EN",
+        )
+        self.add_active_primary_membership(self.user, self.group_unit)
+        self.add_active_primary_membership(self.other_user, self.group_unit)
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("my_group_progress"),
+            {"group": self.group_unit.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Group Reading Progress")
+        self.assertContains(response, "Rainbow 4 English")
+        self.assertContains(response, "Reading Plan")
+        self.assertContains(response, "Starts on")
+        self.assertContains(response, "Group")
+        self.assertContains(response, "Switch group")
+        self.assertContains(response, "Switch plan")
+        self.assertContains(response, "Members")
+        self.assertContains(response, "Member")
+        self.assertContains(response, "Enrollment")
+        self.assertContains(response, "Today")
+        self.assertContains(response, "Progress")
+        self.assertContains(response, "Joined")
+        self.assertContains(response, "Not joined")
+        self.assertContains(response, "Missing")
+
+    def test_chinese_group_progress_localizes_labels_and_statuses(self):
+        self.set_language("zh")
+        ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="FLOW-ZH-SWITCH",
+            name="可切换小组",
+            name_en="Switchable Group",
+        )
+        self.add_active_primary_membership(self.user, self.group_unit)
+        self.add_active_primary_membership(self.other_user, self.group_unit)
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+        )
+        self.client.login(username="admin", password="testpass123")
+
+        response = self.client.get(
+            reverse("my_group_progress"),
+            {"group": self.group_unit.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的小组读经进度")
+        self.assertContains(response, "读经计划")
+        self.assertContains(response, "开始日期")
+        self.assertContains(response, "小组")
+        self.assertContains(response, "切换小组")
+        self.assertContains(response, "切换计划")
+        self.assertContains(response, "成员")
+        self.assertContains(response, "加入状态")
+        self.assertContains(response, "今日")
+        self.assertContains(response, "进度")
+        self.assertContains(response, "已加入")
+        self.assertContains(response, "未加入")
+        self.assertContains(response, "未加入计划")
+        self.assertContains(response, "未打卡")
+        self.assertNotContains(response, "Members")
+        self.assertNotContains(response, "Enrollment")
+        self.assertNotContains(response, "Switch group")
+        self.assertNotContains(response, "Not joined")
+        self.assertNotContains(response, "Missing")
+
+    def test_chinese_group_progress_no_group_state_is_localized(self):
+        self.set_language("zh")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_group_progress"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "你目前还没有可查看的小组读经进度。")
+        self.assertNotContains(response, "You are not assigned to a small group yet.")
+
+    def test_chinese_group_progress_no_active_plan_state_is_localized(self):
+        self.set_language("zh")
+        self.add_active_primary_membership(self.user, self.group_unit)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_group_progress"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "这个小组目前还没有成员加入正在进行的读经计划。",
+        )
+        self.assertNotContains(
+            response,
+            "No active reading plan has been joined by this group yet.",
+        )
 
     def test_group_leader_can_view_assigned_group_progress(self):
         self.set_language("en")
@@ -3874,6 +4005,86 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "May Test Plan")
         self.assertContains(response, "Progress")
+
+    def test_group_progress_route_resolves_to_existing_view(self):
+        match = resolve("/groups/my/progress/")
+
+        self.assertEqual(match.url_name, "my_group_progress")
+
+    def test_my_plans_links_to_group_progress_for_active_primary_membership(self):
+        self.set_language("en")
+        self.add_active_primary_membership(self.user, self.group_unit)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Group Reading Progress")
+        self.assertContains(response, reverse("my_group_progress"))
+        self.assertContains(response, "Open group reading progress")
+
+    def test_my_plans_does_not_link_group_progress_without_accessible_group(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Join a group to view group reading progress.")
+        self.assertNotContains(response, reverse("my_group_progress"))
+
+    def test_my_plans_does_not_link_group_progress_for_requested_membership(self):
+        self.set_language("en")
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+        progress_response = self.client.get(reverse("my_group_progress"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Join a group to view group reading progress.")
+        self.assertNotContains(response, reverse("my_group_progress"))
+        self.assertContains(
+            progress_response, "You are not assigned to a small group yet."
+        )
+
+    def test_my_plans_links_to_group_progress_for_scoped_group_leader(self):
+        self.set_language("en")
+        leader = User.objects.create_user(
+            username="plans_group_leader",
+            email="plans_leader@example.com",
+            password="testpass123",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=leader,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            structure_unit=self.group_unit,
+        )
+        self.client.login(username="plans_group_leader", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Group Reading Progress")
+        self.assertContains(response, reverse("my_group_progress"))
+
+    def test_chinese_my_plans_links_to_group_progress_for_active_membership(self):
+        self.set_language("zh")
+        self.add_active_primary_membership(self.user, self.group_unit)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "我的小组读经进度")
+        self.assertContains(response, reverse("my_group_progress"))
 
     def test_chinese_my_plans_uses_chinese_labels(self):
         self.set_language("zh")

@@ -7,6 +7,39 @@
 
 <h1>{{ ui.my_reading_plans }}</h1>
 
+<div class="card">
+    <h2>{% if language == "zh" %}我的小组读经进度{% else %}My Group Reading Progress{% endif %}</h2>
+    <p>
+        {% if language == "zh" %}
+            查看小组成员的读经完成情况与打卡记录。
+        {% else %}
+            View reading completion and check-in records for your group.
+        {% endif %}
+    </p>
+    <p class="muted">
+        {% if language == "zh" %}
+            归属来自已生效的主要教会结构归属；服事安排和职分权限是不同概念。
+        {% else %}
+            Belonging comes from active primary Church Structure membership; serving assignments and role permissions are separate.
+        {% endif %}
+    </p>
+    {% if has_group_progress_access %}
+    <p>
+        <a class="button button-secondary" href="{% url 'my_group_progress' %}">
+            {% if language == "zh" %}查看小组读经进度{% else %}Open group reading progress{% endif %}
+        </a>
+    </p>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+            加入小组后可查看小组读经进度。
+        {% else %}
+            Join a group to view group reading progress.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+
 {% if plan_rows %}
     {% for row in plan_rows %}
 <div class="card">

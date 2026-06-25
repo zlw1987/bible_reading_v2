@@ -2036,6 +2036,27 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(form.fields["service_event"].label, "关联聚会事件（可选）")
         self.assertIn("一般小组查经可以留空", form.fields["service_event"].help_text)
 
+    def test_meeting_audience_unit_selector_orders_by_visible_name(self):
+        zeta = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="AAA-STUDY",
+            name="Zeta Study Group",
+            name_en="Zeta Study Group",
+        )
+        alpha = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="ZZZ-STUDY",
+            name="Alpha Study Group",
+            name_en="Alpha Study Group",
+        )
+
+        form = BibleStudyMeetingForm(language="en")
+
+        unit_ids = [unit.id for unit in form.fields["audience_unit"].queryset]
+        self.assertLess(unit_ids.index(alpha.id), unit_ids.index(zeta.id))
+
     def test_staff_can_edit_bible_study_meeting(self):
         self.set_language("en")
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_DRAFT)
@@ -2520,6 +2541,32 @@ class BibleStudyModuleTests(TestCase):
             list(form.fields),
             ["role", "user", "display_name", "notes", "notes_en"],
         )
+
+    def test_meeting_role_form_orders_users_by_visible_identity(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        zed = User.objects.create_user(
+            username="aaa_role",
+            password="testpass123",
+            first_name="Zed",
+            last_name="Role",
+        )
+        amy = User.objects.create_user(
+            username="zzz_role",
+            password="testpass123",
+            first_name="Amy",
+            last_name="Role",
+        )
+        self.create_membership(zed, self.group_unit)
+        self.create_membership(amy, self.group_unit)
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        user_ids = [user.id for user in form.fields["user"].queryset]
+        self.assertLess(user_ids.index(amy.id), user_ids.index(zed.id))
 
     def test_meeting_role_form_keeps_selected_user_available_on_edit(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
@@ -3120,6 +3167,32 @@ class BibleStudyModuleTests(TestCase):
         self.assertNotIn(profile_only_user, users)
         self.assertNotIn(self.user, users)
         self.assertNotIn("meeting", form.fields)
+
+    def test_meeting_worship_song_form_orders_users_by_visible_identity(self):
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        zed = User.objects.create_user(
+            username="aaa_worship",
+            password="testpass123",
+            first_name="Zed",
+            last_name="Worship",
+        )
+        amy = User.objects.create_user(
+            username="zzz_worship",
+            password="testpass123",
+            first_name="Amy",
+            last_name="Worship",
+        )
+        self.create_membership(zed, self.group_unit)
+        self.create_membership(amy, self.group_unit)
+
+        form = BibleStudyMeetingWorshipSongForm(meeting=meeting)
+
+        user_ids = [user.id for user in form.fields["worship_lead_user"].queryset]
+        self.assertLess(user_ids.index(amy.id), user_ids.index(zed.id))
 
     def test_meeting_worship_song_form_keeps_selected_lead_available_on_edit(self):
         meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)

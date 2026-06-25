@@ -1,4 +1,5 @@
 from .models import ChurchRoleAssignment, ChurchStructureUnit
+from .ordering import order_units_by_display_label
 from .structure_selectors import (
     _collect_unit_and_descendant_ids,
     get_user_primary_membership_unit,
@@ -216,10 +217,12 @@ def get_accessible_progress_groups(user, target_date=None):
     Ordinary ``ChurchStructureMembership`` grants only the single own group unit,
     never a broader set.
     """
-    groups = ChurchStructureUnit.objects.filter(
-        is_active=True,
-        unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-    ).order_by("sort_order", "code", "name", "id")
+    groups = order_units_by_display_label(
+        ChurchStructureUnit.objects.filter(
+            is_active=True,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+        )
+    )
 
     if not getattr(user, "is_authenticated", False):
         return groups.none()
@@ -268,7 +271,7 @@ def get_accessible_progress_groups(user, target_date=None):
     if not accessible_ids:
         return groups.none()
 
-    return groups.filter(id__in=accessible_ids).order_by("sort_order", "code", "name", "id")
+    return order_units_by_display_label(groups.filter(id__in=accessible_ids))
 
 
 def can_view_group_progress_for(user, group_unit, target_date=None):

@@ -32,6 +32,12 @@ from .models import (
     ChurchStructureUnit,
     Profile,
 )
+from .ordering import (
+    order_by_related_user_visible_identity,
+    order_units_by_sibling_key,
+    order_users_by_visible_identity,
+    structure_unit_sibling_sort_key,
+)
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 
 
@@ -246,10 +252,9 @@ def staff_structure_map(request):
     today = timezone.localdate()
 
     units = list(
-        ChurchStructureUnit.objects.filter(is_active=True).order_by(
-            "sort_order",
-            "code",
-            "name",
+        order_units_by_sibling_key(
+            ChurchStructureUnit.objects.filter(is_active=True),
+            language,
         )
     )
     children = {}
@@ -314,9 +319,7 @@ def staff_structure_map(request):
     roots.sort(
         key=lambda u: (
             u.unit_type != ChurchStructureUnit.UNIT_ROOT,
-            u.sort_order,
-            u.code,
-            u.name,
+            *structure_unit_sibling_sort_key(u, language),
         )
     )
     for root in roots:
@@ -655,7 +658,10 @@ def _structure_unit_enable_blocker_labels(blockers, language):
 def _inactive_structure_unit_rows(language):
     active_filter = _active_membership_filter("memberships")
     inactive_units = (
-        ChurchStructureUnit.objects.filter(is_active=False)
+        order_units_by_sibling_key(
+            ChurchStructureUnit.objects.filter(is_active=False),
+            language,
+        )
         .select_related("parent")
         .annotate(
             active_membership_count=Count(
@@ -664,7 +670,6 @@ def _inactive_structure_unit_rows(language):
                 distinct=True,
             )
         )
-        .order_by("parent_id", "sort_order", "code", "name", "id")
     )
     rows = []
     reference_blocker_keys = {
@@ -706,6 +711,15 @@ def _inactive_structure_unit_rows(language):
                 ),
             }
         )
+    rows.sort(
+        key=lambda row: (
+            (row["path"] or "").casefold(),
+            row["unit"].sort_order,
+            (row["name"] or "").casefold(),
+            row["unit"].code or "",
+            row["unit"].id or 0,
+        )
+    )
     return rows
 
 
@@ -1184,19 +1198,19 @@ def church_structure_unit_detail(request, unit_id):
         id=unit_id,
     )
     add_form = StructureMembershipAddForm(unit=unit)
-    active_memberships = (
+    active_memberships = order_by_related_user_visible_identity(
         _active_membership_queryset()
         .filter(unit=unit)
         .select_related("user", "unit")
-        .order_by("-is_primary", "user__username", "id")
     )
     inactive_memberships = (
-        ChurchStructureMembership.objects.filter(unit=unit)
-        .exclude(id__in=active_memberships.values("id"))
-        .select_related("user")
-        .order_by("-updated_at", "user__username", "id")[:20]
+        order_by_related_user_visible_identity(
+            ChurchStructureMembership.objects.filter(unit=unit)
+            .exclude(id__in=active_memberships.values("id"))
+            .select_related("user")
+        )[:20]
     )
-    children = unit.children.order_by("sort_order", "code", "name", "id")
+    children = order_units_by_sibling_key(unit.children.all(), language)
     can_enable_unit = False
     enable_blocker_labels = []
     if request.user.has_perm("accounts.change_churchstructureunit"):
@@ -1419,10 +1433,8 @@ def staff_user_list(request):
 
     query = (request.GET.get("q") or "").strip()
 
-    users = (
-        User.objects
-        .select_related("profile")
-        .order_by("username")
+    users = order_users_by_visible_identity(
+        User.objects.select_related("profile")
     )
 
     if query:
@@ -1486,7 +1498,7 @@ def staff_user_password_reset(request, user_id):
 
 @user_passes_test(can_manage_church_memberships)
 def staff_membership_request_list(request):
-    memberships = (
+    memberships = order_by_related_user_visible_identity(
         ChurchStructureMembership.objects
         .filter(status=ChurchStructureMembership.STATUS_REQUESTED)
         .select_related(
@@ -1496,7 +1508,6 @@ def staff_membership_request_list(request):
             "unit__parent",
             "requested_by",
         )
-        .order_by("-created_at", "user__username", "id")
     )
     language = get_user_language(request)
     membership_rows = [

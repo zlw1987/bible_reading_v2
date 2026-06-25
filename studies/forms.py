@@ -4,6 +4,12 @@ from django.db import transaction
 from django.db.models import Q
 
 from accounts.models import ChurchStructureUnit
+from accounts.ordering import (
+    order_units_by_display_label,
+    order_units_by_sibling_key,
+    order_users_by_visible_identity,
+    structure_unit_sibling_sort_key,
+)
 
 from .templatetags.study_extras import compact_unit_label
 
@@ -224,11 +230,9 @@ class BibleStudySeriesForm(forms.ModelForm):
 
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
             language=language,
-            queryset=ChurchStructureUnit.objects.filter(is_active=True).order_by(
-                "parent_id",
-                "sort_order",
-                "code",
-                "name",
+            queryset=order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                language,
             ),
             required=False,
             label=text["audience_scope"],
@@ -355,10 +359,9 @@ class BibleStudySeriesForm(forms.ModelForm):
         """
         selected = self.audience_selected_ids()
         units = list(
-            ChurchStructureUnit.objects.filter(is_active=True).order_by(
-                "sort_order",
-                "code",
-                "name",
+            order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                self.language,
             )
         )
 
@@ -366,7 +369,7 @@ class BibleStudySeriesForm(forms.ModelForm):
         for unit in units:
             children.setdefault(unit.parent_id, []).append(unit)
         for group in children.values():
-            group.sort(key=lambda u: (u.sort_order, u.code, u.name))
+            group.sort(key=lambda u: structure_unit_sibling_sort_key(u, self.language))
 
         options = []
         visited = set()
@@ -389,7 +392,10 @@ class BibleStudySeriesForm(forms.ModelForm):
 
         roots = [unit for unit in units if unit.parent_id is None]
         roots.sort(
-            key=lambda u: (u.unit_type != ChurchStructureUnit.UNIT_ROOT, u.sort_order, u.code, u.name)
+            key=lambda u: (
+                u.unit_type != ChurchStructureUnit.UNIT_ROOT,
+                *structure_unit_sibling_sort_key(u, self.language),
+            )
         )
         for root in roots:
             walk(root, 0, [])
@@ -658,10 +664,13 @@ class BibleStudyMeetingForm(forms.ModelForm):
         # checks are unnecessary here.
         self.fields["audience_unit"] = ChurchStructureUnitChoiceField(
             language=language,
-            queryset=ChurchStructureUnit.objects.filter(
-                is_active=True,
-                unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
-            ).order_by("sort_order", "code", "name"),
+            queryset=order_units_by_display_label(
+                ChurchStructureUnit.objects.filter(
+                    is_active=True,
+                    unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+                ),
+                language,
+            ),
             required=True,
             label=text["audience_unit"],
             help_text=text["audience_unit_help"],
@@ -935,7 +944,9 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
             )
             if self.instance.user_id:
                 users = users | user_model.objects.filter(id=self.instance.user_id)
-        self.fields["user"].queryset = users.distinct().order_by("username")
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            users.distinct()
+        )
         self.fields["user"].help_text = text["user_help"]
         self.fields["display_name"].help_text = text["display_name_help"]
 
@@ -1062,8 +1073,8 @@ class BibleStudyMeetingWorshipSongForm(forms.ModelForm):
                 users = users | user_model.objects.filter(
                     id=self.instance.worship_lead_user_id,
                 )
-        self.fields["worship_lead_user"].queryset = users.distinct().order_by(
-            "username"
+        self.fields["worship_lead_user"].queryset = order_users_by_visible_identity(
+            users.distinct()
         )
 
         self.fields["title"].widget.attrs.update(

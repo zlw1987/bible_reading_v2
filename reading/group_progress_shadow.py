@@ -37,6 +37,7 @@ from django.db.models import Q, QuerySet
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit
+from accounts.ordering import order_users_by_visible_identity
 
 
 # Reason codes describe which fail-closed condition held when the membership-core
@@ -238,7 +239,7 @@ def get_membership_core_progress_roster_users(selected_group, *, target_date=Non
     ``None``, unmapped, or not a small-group-type unit, and excludes users with
     multiple active primary memberships (ambiguous).
 
-    Ordered by username then id for a deterministic roster.
+    Ordered by visible full-name-or-username label for a deterministic roster.
     """
     User = get_user_model()
     if selected_group is None:
@@ -249,4 +250,4 @@ def get_membership_core_progress_roster_users(selected_group, *, target_date=Non
     if invalid_unit or not roster_user_ids:
         return User.objects.none()
 
-    return User.objects.filter(id__in=roster_user_ids).order_by("username", "id")
+    return order_users_by_visible_identity(User.objects.filter(id__in=roster_user_ids))

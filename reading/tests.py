@@ -2151,6 +2151,60 @@ class GroupProgressRosterSourceSwitchTests(TestCase):
         expected_unit = self.group_unit
         self.assertEqual(response.context["selected_group"], expected_unit)
 
+    def test_accessible_group_selector_orders_by_visible_group_name(self):
+        zeta = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="AAA-CODE",
+            name="Zeta Group",
+            name_en="Zeta Group",
+        )
+        alpha = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="ZZZ-CODE",
+            name="Alpha Group",
+            name_en="Alpha Group",
+        )
+        staff = User.objects.create_user(
+            username="switch_staff",
+            password="TestPass123!",
+            is_staff=True,
+        )
+        self.set_language("en")
+
+        response = self.progress_response_for(staff)
+
+        group_ids = [group.id for group in response.context["groups"]]
+        self.assertLess(group_ids.index(alpha.id), group_ids.index(zeta.id))
+
+    def test_group_progress_member_rows_order_by_visible_identity(self):
+        zed = User.objects.create_user(
+            username="aaa_member",
+            password="TestPass123!",
+            first_name="Zed",
+            last_name="Member",
+        )
+        amy = User.objects.create_user(
+            username="zzz_member",
+            password="TestPass123!",
+            first_name="Amy",
+            last_name="Member",
+        )
+        self.create_membership(zed, self.group_unit)
+        self.create_membership(amy, self.group_unit)
+        PlanEnrollment.objects.create(user=zed, active_plan=self.active_plan)
+        PlanEnrollment.objects.create(user=amy, active_plan=self.active_plan)
+
+        response = self.progress_response_for(self.viewer, unit=self.group_unit)
+
+        member_names = [
+            row["member"].get_full_name()
+            for row in response.context["member_rows"]
+        ]
+        self.assertLess(
+            member_names.index("Amy Member"),
+            member_names.index("Zed Member"),
+        )
+
     def test_inaccessible_selected_unit_falls_back_without_crash(self):
         # A staff viewer cannot select a non-small-group unit through the list; the
         # invalid explicit ?group= unit id falls back to the first active small-group

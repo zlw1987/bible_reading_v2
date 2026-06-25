@@ -1,6 +1,10 @@
 from django import forms
 from django.utils import timezone
 
+from accounts.ordering import (
+    order_team_memberships_by_visible_identity,
+    order_users_by_visible_identity,
+)
 from events.models import ServiceEvent
 
 from .models import (
@@ -231,6 +235,9 @@ class TeamMembershipForm(forms.ModelForm):
             {"placeholder": text["notes_placeholder"]}
         )
         self.fields["notes"].help_text = text["notes_help"]
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            self.fields["user"].queryset
+        )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -349,11 +356,8 @@ class TeamAssignmentForm(forms.ModelForm):
             member_queryset = member_queryset.filter(team=team)
         elif manageable_teams is not None:
             member_queryset = member_queryset.none()
-        self.fields["assigned_members"].queryset = member_queryset.order_by(
-            "role",
-            "display_name",
-            "user__first_name",
-            "user__username",
+        self.fields["assigned_members"].queryset = (
+            order_team_memberships_by_visible_identity(member_queryset)
         )
 
         self.fields["status"].choices = [
@@ -452,13 +456,9 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
 
         self.fields["assigned_members"].language = language
         self.fields["assigned_members"].queryset = (
-            TeamMembership.objects.filter(team=team, is_active=True)
-            .select_related("team", "user")
-            .order_by(
-                "role",
-                "display_name",
-                "user__first_name",
-                "user__username",
+            order_team_memberships_by_visible_identity(
+                TeamMembership.objects.filter(team=team, is_active=True)
+                .select_related("team", "user")
             )
         )
         if self.instance and self.instance.pk:

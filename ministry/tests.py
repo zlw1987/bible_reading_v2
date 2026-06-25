@@ -204,6 +204,30 @@ class MinistryTeamFoundationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Lighting Team")
 
+    def test_team_detail_orders_members_by_visible_display_name(self):
+        zed_user = User.objects.create_user(
+            username="aaa_team_member",
+            email="aaa-team-member@example.com",
+            password="testpass123",
+            first_name="Zed",
+            last_name="Member",
+        )
+        amy_user = User.objects.create_user(
+            username="zzz_team_member",
+            email="zzz-team-member@example.com",
+            password="testpass123",
+            first_name="Amy",
+            last_name="Member",
+        )
+        zed = self.create_membership(user=zed_user)
+        amy = self.create_membership(user=amy_user)
+        self.client.login(username="pastor_ministry", password="testpass123")
+
+        response = self.client.get(reverse("ministry_team_detail", args=[self.team.id]))
+
+        member_ids = [membership.id for membership in response.context["memberships"]]
+        self.assertLess(member_ids.index(amy.id), member_ids.index(zed.id))
+
     def test_unrelated_regular_user_cannot_view_team_detail(self):
         self.set_language("en")
         self.client.login(username="other", password="testpass123")
@@ -1045,6 +1069,35 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "regular_assign")
         self.assertNotContains(response, "Other Helper")
+
+    def test_assignment_member_selector_orders_by_visible_display_name(self):
+        zed_user = User.objects.create_user(
+            username="aaa_assignment_member",
+            email="aaa-assignment-member@example.com",
+            password="testpass123",
+            first_name="Zed",
+            last_name="Assignment",
+        )
+        amy_user = User.objects.create_user(
+            username="zzz_assignment_member",
+            email="zzz-assignment-member@example.com",
+            password="testpass123",
+            first_name="Amy",
+            last_name="Assignment",
+        )
+        zed = TeamMembership.objects.create(team=self.team, user=zed_user)
+        amy = TeamMembership.objects.create(team=self.team, user=amy_user)
+
+        form = TeamAssignmentForm(
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+            selected_team_id=self.team.id,
+        )
+
+        member_ids = [
+            membership.id for membership in form.fields["assigned_members"].queryset
+        ]
+        self.assertLess(member_ids.index(amy.id), member_ids.index(zed.id))
 
     def test_assignment_edit_form_preserves_service_event_when_team_filter_changes(self):
         self.set_language("en")

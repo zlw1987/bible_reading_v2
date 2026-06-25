@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.language import get_user_language
 from accounts.models import ChurchStructureUnit
+from accounts.ordering import order_units_by_display_label
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -661,11 +662,14 @@ def bible_study_meeting_manage_list(request):
                 "-lesson_date",
                 "title",
             ),
-            "unit_options": ChurchStructureUnit.objects.filter(
-                is_active=True,
-            ).exclude(
-                unit_type=ChurchStructureUnit.UNIT_ROOT,
-            ).order_by("sort_order", "code", "name"),
+            "unit_options": order_units_by_display_label(
+                ChurchStructureUnit.objects.filter(
+                    is_active=True,
+                ).exclude(
+                    unit_type=ChurchStructureUnit.UNIT_ROOT,
+                ),
+                language,
+            ),
             "status": status,
             "lesson_id": lesson_id,
             "unit_id": unit_id,

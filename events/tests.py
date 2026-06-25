@@ -665,6 +665,29 @@ class ServiceEventFoundationTests(TestCase):
         self.assertNotIn("district", chinese_form.fields)
         self.assertNotIn("small_group", chinese_form.fields)
 
+    def test_service_event_audience_options_order_siblings_by_sort_name_code(self):
+        zeta = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="AAA-EVENT",
+            name="Zeta Event District",
+            name_en="Zeta Event District",
+            sort_order=5,
+        )
+        alpha = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="ZZZ-EVENT",
+            name="Alpha Event District",
+            name_en="Alpha Event District",
+            sort_order=5,
+        )
+
+        form = ServiceEventForm(language="en")
+
+        option_ids = [option["id"] for option in form.audience_unit_options()]
+        self.assertLess(option_ids.index(alpha.id), option_ids.index(zeta.id))
+
     def test_service_event_create_form_keeps_audience_picker_section_visible(self):
         root = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,

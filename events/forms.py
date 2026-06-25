@@ -5,6 +5,10 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
+from accounts.ordering import (
+    order_units_by_sibling_key,
+    structure_unit_sibling_sort_key,
+)
 from ministry.models import MinistryTeam
 
 from .models import ServiceEvent, ServiceEventAudienceScope
@@ -171,11 +175,9 @@ class AudienceUnitOptionsMixin:
     def add_audience_units_field(self, text):
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
             language=self.language,
-            queryset=ChurchStructureUnit.objects.filter(is_active=True).order_by(
-                "parent_id",
-                "sort_order",
-                "code",
-                "name",
+            queryset=order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                self.language,
             ),
             required=True,
             label=text["audience_units"],
@@ -249,10 +251,9 @@ class AudienceUnitOptionsMixin:
     def audience_unit_options(self):
         selected = self.audience_selected_ids()
         units = list(
-            ChurchStructureUnit.objects.filter(is_active=True).order_by(
-                "sort_order",
-                "code",
-                "name",
+            order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                self.language,
             )
         )
 
@@ -260,7 +261,7 @@ class AudienceUnitOptionsMixin:
         for unit in units:
             children.setdefault(unit.parent_id, []).append(unit)
         for group in children.values():
-            group.sort(key=lambda u: (u.sort_order, u.code, u.name))
+            group.sort(key=lambda u: structure_unit_sibling_sort_key(u, self.language))
 
         options = []
         visited = set()
@@ -285,9 +286,7 @@ class AudienceUnitOptionsMixin:
         roots.sort(
             key=lambda u: (
                 u.unit_type != ChurchStructureUnit.UNIT_ROOT,
-                u.sort_order,
-                u.code,
-                u.name,
+                *structure_unit_sibling_sort_key(u, self.language),
             )
         )
         for root in roots:

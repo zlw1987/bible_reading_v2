@@ -18,17 +18,24 @@ from .models import (
     ChurchStructureUnit,
     Profile,
 )
+from .ordering import (
+    order_units_by_display_label,
+    order_users_by_visible_identity,
+)
 from .ui_text import UI_TEXT
 
 
-def requestable_signup_units():
-    return ChurchStructureUnit.objects.filter(
-        is_active=True,
-        unit_type__in=[
-            ChurchStructureUnit.UNIT_SMALL_GROUP,
-            ChurchStructureUnit.UNIT_FELLOWSHIP,
-        ],
-    ).order_by("parent_id", "sort_order", "code", "name")
+def requestable_signup_units(language="zh"):
+    return order_units_by_display_label(
+        ChurchStructureUnit.objects.filter(
+            is_active=True,
+            unit_type__in=[
+                ChurchStructureUnit.UNIT_SMALL_GROUP,
+                ChurchStructureUnit.UNIT_FELLOWSHIP,
+            ],
+        ),
+        language,
+    )
 
 
 class RequestableUnitChoiceField(forms.ModelChoiceField):
@@ -76,9 +83,9 @@ class StructureMembershipAddForm(forms.Form):
             raise ValueError("StructureMembershipAddForm requires a unit.")
         self.unit = unit
         UserModel = get_user_model()
-        self.fields["user"].queryset = UserModel.objects.filter(
-            is_active=True,
-        ).order_by("username")
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            UserModel.objects.filter(is_active=True)
+        )
 
     def clean(self):
         cleaned_data = super().clean()
@@ -307,7 +314,7 @@ class SignUpForm(LocalizedPasswordValidationMixin, UserCreationForm):
 
         self.fields["username"].label = ui["username"]
         self.fields["email"].label = ui["email_optional"]
-        self.fields["requested_unit"].queryset = requestable_signup_units()
+        self.fields["requested_unit"].queryset = requestable_signup_units(language)
         self.fields["requested_unit"].language = language
         self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]
@@ -395,7 +402,7 @@ class ProfileForm(forms.Form):
         ui = UI_TEXT[language]
 
         self.fields["email"].label = ui["email_optional"]
-        self.fields["requested_unit"].queryset = requestable_signup_units()
+        self.fields["requested_unit"].queryset = requestable_signup_units(language)
         self.fields["requested_unit"].language = language
         self.fields["requested_unit"].label = ui["requested_small_group"]
         self.fields["requested_unit"].empty_label = ui["no_small_group"]

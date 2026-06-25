@@ -3151,6 +3151,59 @@ class StaffStructureMapTests(TestCase):
         )
         self.assertContains(response, reverse("staff_membership_request_list"))
 
+    def test_structure_map_siblings_sort_by_sort_order_name_code_and_preserve_tree(self):
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        beta = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="BETA",
+            name="Beta Sibling",
+            sort_order=1,
+        )
+        zulu = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="ZULU",
+            name="Zulu Parent",
+            sort_order=2,
+        )
+        alpha_child = ChurchStructureUnit.objects.create(
+            parent=zulu,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="ALPHA-CHILD",
+            name="Alpha Child",
+            sort_order=0,
+        )
+        alpha_name = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="Z-CODE",
+            name="Alpha Same Sort",
+            sort_order=3,
+        )
+        beta_name = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="A-CODE",
+            name="Beta Same Sort",
+            sort_order=3,
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+
+        units = [row["unit"] for row in response.context["structure_rows"]]
+        self.assertLess(units.index(beta), units.index(zulu))
+        self.assertLess(units.index(zulu), units.index(alpha_child))
+        self.assertLess(units.index(alpha_child), units.index(alpha_name))
+        self.assertLess(units.index(alpha_name), units.index(beta_name))
+
     def test_structure_map_renders_collapsible_tree_controls(self):
         self.build_tree()
         self.set_language("en")
@@ -3724,6 +3777,84 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertContains(response, reverse("end_structure_membership", args=[membership.id]))
         self.assertContains(response, reverse("admin:accounts_churchstructureunit_change", args=[self.group.id]))
 
+    def test_unit_detail_children_order_by_sibling_key(self):
+        beta = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+            code="BETA-CODE",
+            name="Beta Child",
+            sort_order=1,
+        )
+        alpha = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+            code="ALPHA-CODE",
+            name="Alpha Child",
+            sort_order=1,
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        child_ids = [child.id for child in response.context["children"]]
+        self.assertLess(child_ids.index(alpha.id), child_ids.index(beta.id))
+
+    def test_unit_detail_memberships_order_by_visible_user_identity(self):
+        zed = User.objects.create_user(
+            username="aaa_username",
+            password="UserPass123!",
+            first_name="Zed",
+            last_name="Member",
+        )
+        amy = User.objects.create_user(
+            username="zzz_username",
+            password="UserPass123!",
+            first_name="Amy",
+            last_name="Member",
+        )
+        ended_ben = User.objects.create_user(
+            username="ended_z",
+            password="UserPass123!",
+            first_name="Ben",
+            last_name="Ended",
+        )
+        ended_ada = User.objects.create_user(
+            username="ended_a",
+            password="UserPass123!",
+            first_name="Ada",
+            last_name="Ended",
+        )
+        self.create_membership(zed, is_primary=True)
+        self.create_membership(amy)
+        self.create_membership(
+            ended_ben,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=timezone.localdate() - timedelta(days=10),
+            end_date=timezone.localdate() - timedelta(days=1),
+        )
+        self.create_membership(
+            ended_ada,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=timezone.localdate() - timedelta(days=10),
+            end_date=timezone.localdate() - timedelta(days=1),
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        active_names = [
+            membership.user.get_full_name()
+            for membership in response.context["active_memberships"]
+        ]
+        inactive_names = [
+            membership.user.get_full_name()
+            for membership in response.context["inactive_memberships"]
+        ]
+        self.assertEqual(active_names[:2], ["Amy Member", "Zed Member"])
+        self.assertEqual(inactive_names[:2], ["Ada Ended", "Ben Ended"])
+
     def test_unit_detail_shows_read_only_move_impact_preview_counts(self):
         direct_member = self.create_membership(self.target_user, is_primary=True)
         descendant_member = self.create_membership(
@@ -4219,6 +4350,39 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertContains(response, "Active memberships")
         self.assertContains(response, "Reference warnings")
         self.assertContains(response, "Re-enable this unit")
+
+    def test_edit_mode_inactive_unit_rows_order_by_path_then_sibling_key(self):
+        alpha_parent = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="ALPHA-PARENT",
+            name="Alpha Parent",
+            sort_order=2,
+        )
+        alpha_child = ChurchStructureUnit.objects.create(
+            parent=alpha_parent,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="ALPHA-INACTIVE",
+            name="Alpha Inactive",
+            is_active=False,
+            sort_order=5,
+        )
+        root_inactive = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="ROOT-INACTIVE",
+            name="Root Inactive",
+            is_active=False,
+            sort_order=1,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        row_ids = [row["unit"].id for row in response.context["inactive_unit_rows"]]
+        self.assertLess(row_ids.index(alpha_child.id), row_ids.index(self.inactive_child.id))
+        self.assertLess(row_ids.index(self.inactive_child.id), row_ids.index(root_inactive.id))
 
     def test_inactive_units_are_labeled_and_excluded_from_active_tree(self):
         self.set_language("en")

@@ -13,6 +13,7 @@ from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
+from accounts.ordering import order_team_memberships_by_visible_identity
 from events.models import (
     ServiceEvent,
     get_service_event_effective_end,
@@ -708,10 +709,9 @@ def ministry_team_detail(request, team_id):
         messages.error(request, ministry_ui_text(language, "not_available"))
         return redirect("ministry_team_list")
 
-    memberships = (
+    memberships = order_team_memberships_by_visible_identity(
         team.memberships.filter(is_active=True)
         .select_related("user")
-        .order_by("role", "display_name")
     )
 
     return render(
@@ -1049,10 +1049,8 @@ def manage_team_members(request, team_id):
     else:
         form = TeamMembershipForm(language=language, team=team)
 
-    memberships = team.memberships.select_related("user").order_by(
-        "-is_active",
-        "role",
-        "display_name",
+    memberships = order_team_memberships_by_visible_identity(
+        team.memberships.select_related("user")
     )
 
     return render(

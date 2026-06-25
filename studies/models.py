@@ -713,6 +713,8 @@ class BibleStudyMeetingRole(models.Model):
     display_name = models.CharField(max_length=160, blank=True, default="")
     notes = models.TextField(blank=True, default="")
     notes_en = models.TextField(blank=True, default="")
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmation_note = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -730,6 +732,17 @@ class BibleStudyMeetingRole(models.Model):
         if language == "en":
             return self.notes_en or self.notes
         return self.notes
+
+    def confirm(self, note=""):
+        update_fields = []
+        if not self.confirmed_at:
+            self.confirmed_at = timezone.now()
+            update_fields.append("confirmed_at")
+        if note:
+            self.confirmation_note = note
+            update_fields.append("confirmation_note")
+        if update_fields:
+            self.save(update_fields=[*update_fields, "updated_at"])
 
     def get_display_name(self):
         if self.display_name:

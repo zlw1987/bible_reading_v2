@@ -4251,6 +4251,33 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(role.get_display_name(), self.manager.get_username())
         self.assertEqual(role.get_notes("en"), "Role notes")
 
+    def test_bible_study_meeting_role_confirm_sets_timestamp_and_preserves_first_timestamp(self):
+        meeting = self.create_meeting()
+        role = BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.manager,
+        )
+
+        role.confirm("Ready.")
+        role.refresh_from_db()
+        first_confirmed_at = role.confirmed_at
+
+        self.assertIsNotNone(first_confirmed_at)
+        self.assertEqual(role.confirmation_note, "Ready.")
+
+        role.confirm("Updated note.")
+        role.refresh_from_db()
+
+        self.assertEqual(role.confirmed_at, first_confirmed_at)
+        self.assertEqual(role.confirmation_note, "Updated note.")
+
+        role.confirm("")
+        role.refresh_from_db()
+
+        self.assertEqual(role.confirmed_at, first_confirmed_at)
+        self.assertEqual(role.confirmation_note, "Updated note.")
+
     def test_bible_study_meeting_role_rejects_invalid_role_choice(self):
         meeting = self.create_meeting()
         role = BibleStudyMeetingRole(

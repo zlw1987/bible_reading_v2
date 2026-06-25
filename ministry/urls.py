@@ -5,6 +5,11 @@ from . import views
 urlpatterns = [
     path("my-serving/", views.my_serving, name="my_serving"),
     path(
+        "my-serving/bible-study-meetings/<int:meeting_id>/confirm/",
+        views.confirm_bible_study_role_serving,
+        name="confirm_bible_study_role_serving",
+    ),
+    path(
         "teams/import/lighting-pilot/",
         views.lighting_pilot_import,
         name="lighting_pilot_import",

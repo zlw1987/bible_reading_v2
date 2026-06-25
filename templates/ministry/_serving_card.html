@@ -7,9 +7,19 @@
                 {{ serving_item.meeting.lesson|study_lesson_title:language }}
             </a>
         </h3>
+        {% if serving_item.confirmed_at %}
+        <span class="status status-good">
+            {% if language == "zh" %}已确认{% else %}Confirmed{% endif %}
+        </span>
+        {% elif serving_item.has_unconfirmed_roles %}
+        <span class="status status-warning">
+            {% if language == "zh" %}需要确认{% else %}Needs confirmation{% endif %}
+        </span>
+        {% else %}
         <span class="status">
             {% if language == "zh" %}查经服事{% else %}Bible Study Serving{% endif %}
         </span>
+        {% endif %}
     </div>
 
     <dl class="serving-card-meta">
@@ -29,6 +39,12 @@
                 {% endfor %}
             </dd>
         </div>
+        {% if serving_item.confirmed_at %}
+        <div class="serving-card-meta-item">
+            <dt>{% if language == "zh" %}确认时间{% else %}Confirmed At{% endif %}</dt>
+            <dd>{{ serving_item.confirmed_at|member_datetime:language }}</dd>
+        </div>
+        {% endif %}
     </dl>
 
     <p class="serving-card-notes muted">
@@ -45,6 +61,25 @@
             {% if language == "zh" %}查看查经{% else %}View Bible Study{% endif %}
         </a>
     </div>
+
+    {% if serving_item.can_confirm %}
+    <form class="serving-card-confirm" method="post"
+          action="{% url 'confirm_bible_study_role_serving' serving_item.meeting.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        {% for field in confirm_form %}
+        <div class="form-row">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">
+            {% if language == "zh" %}确认查经服事{% else %}Confirm Bible Study Serving{% endif %}
+        </button>
+    </form>
+    {% endif %}
     {% else %}
     <div class="serving-card-head">
         <h3 class="card-title serving-card-title">

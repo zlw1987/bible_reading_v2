@@ -31,7 +31,9 @@ The preferred section order is:
 5. Later
 6. Past / History, collapsed by default in a future UI slice
 
-MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. BS-SERVING-MYSERVING.1A adds explicit user-linked Bible Study V2 meeting roles to the same My Serving agenda, but only from `BibleStudyMeetingRole.user == request.user`; it does not add a Bible Study confirmation workflow and does not infer serving from membership, audience visibility, or display names.
+MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. BS-SERVING-MYSERVING.1A adds explicit user-linked Bible Study V2 meeting roles to the same My Serving agenda, but only from `BibleStudyMeetingRole.user == request.user`; it does not infer serving from membership, audience visibility, or display names.
+
+BS-SERVING-CONFIRM.1A adds minimal confirmation state to explicit user-linked Bible Study V2 meeting roles in My Serving. It adds confirmed-versus-unconfirmed workflow only; it does not add decline or unavailable workflow, does not infer role ownership from visibility, membership, audience scope, or display names, and does not convert Bible Study roles into `TeamAssignment` rows.
 
 MYSERVING-LEADER.1A adds a leader-only, near-term, read-only Unassigned Ministry Work summary to My Serving. It uses explicit `ServiceEvent.required_teams`, `TeamAssignment`, and `TeamAssignmentMember` coverage data; it is gated by existing team-assignment management permission or teams returned by `manageable_assignment_teams(user)`. It does not create assignments automatically, does not infer serving or management from Church Structure membership, does not add models or migrations, and links back to the existing Team Schedule / Assignment workflows for full scheduling.
 
@@ -50,7 +52,7 @@ Only explicit user assignment rows can show as "my serving."
 
 For Bible Study V2 roles, Today may show a compact role note only from `BibleStudyMeetingRole.user == request.user`. Display-name-only rows remain meeting-detail fallback and must not be matched to users by text. Do not infer role ownership from `display_name`, username/full-name matching, membership, small-group belonging, audience visibility, old discussion-leader fields, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
 
-Bible Study roles are not `TeamAssignment` rows. Do not add Bible Study role confirmation status unless a separate product slice approves a real workflow and model state for it.
+Bible Study roles are not `TeamAssignment` rows. Their minimal confirmation status is owned by the approved BS-SERVING-CONFIRM.1A workflow and remains separate from `TeamAssignmentMember` confirmation.
 
 ## Leader-Only Unassigned Work
 

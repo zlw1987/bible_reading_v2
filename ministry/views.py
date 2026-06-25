@@ -84,8 +84,10 @@ def ministry_ui_text(language, key):
             "assignment_saved": "Team assignment saved.",
             "assignment_cancelled": "Team assignment cancelled.",
             "assignment_confirmed": "Team assignment confirmed.",
+            "bible_study_role_confirmed": "Bible Study serving confirmed.",
             "no_assignment_permission": "You do not have permission to manage team assignments.",
             "assignment_not_available": "This team assignment is not available.",
+            "bible_study_role_not_available": "This Bible Study serving role is not available.",
             "event_not_available": "This service event is not available for this team schedule.",
             "duplicate_schedule_conflict": (
                 "This event already has duplicate assignments for this team. "
@@ -101,8 +103,10 @@ def ministry_ui_text(language, key):
             "assignment_saved": "服事排班已保存。",
             "assignment_cancelled": "服事排班已取消。",
             "assignment_confirmed": "服事安排已确认。",
+            "bible_study_role_confirmed": "查经服事已确认。",
             "no_assignment_permission": "你没有管理服事排班的权限。",
             "assignment_not_available": "这个服事排班目前不可用。",
+            "bible_study_role_not_available": "这个查经服事角色目前不可用。",
             "event_not_available": "这个聚会事件不适用于这个团队排班。",
             "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
         },
@@ -254,6 +258,23 @@ def my_bible_study_role_serving_items(user, tab="upcoming"):
             ordered_items.append(item)
         items_by_meeting[meeting.id].roles.append(role)
 
+    for item in ordered_items:
+        confirmed_times = [
+            role.confirmed_at
+            for role in item.roles
+            if role.confirmed_at
+        ]
+        item.has_unconfirmed_roles = any(
+            not role.confirmed_at for role in item.roles
+        )
+        item.confirmed_at = (
+            max(confirmed_times)
+            if confirmed_times and not item.has_unconfirmed_roles
+            else None
+        )
+        item.is_history = serving_item_is_history(item, now=now)
+        item.can_confirm = item.has_unconfirmed_roles and not item.is_history
+
     if tab == "past":
         return [
             item
@@ -334,6 +355,11 @@ def serving_item_is_history(item, now=None):
 
 
 def serving_item_needs_attention(item):
+    if serving_item_kind(item) == "bible_study_role":
+        return (
+            getattr(item, "has_unconfirmed_roles", False)
+            and not serving_item_is_history(item)
+        )
     return (
         serving_item_kind(item) == "team_assignment"
         and not item.confirmed_at
@@ -1142,6 +1168,80 @@ def my_serving(request):
             "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),
         },
     )
+
+
+@login_required
+def confirm_bible_study_role_serving(request, meeting_id):
+    language = get_user_language(request)
+    meeting = get_object_or_404(
+        BibleStudyMeeting.objects.select_related(
+            "lesson",
+            "lesson__series",
+            "anchor_unit",
+        ).prefetch_related("audience_scope_links__unit"),
+        id=meeting_id,
+    )
+
+    if request.method != "POST":
+        return redirect("my_serving")
+
+    roles = list(
+        BibleStudyMeetingRole.objects.filter(
+            meeting=meeting,
+            user=request.user,
+        ).order_by("role", "id")
+    )
+    item = SimpleNamespace(
+        kind="bible_study_role",
+        meeting=meeting,
+        roles=roles,
+    )
+    meeting_status_allowed = meeting.status in {
+        BibleStudyMeeting.STATUS_PUBLISHED,
+        BibleStudyMeeting.STATUS_COMPLETED,
+    }
+    lesson_status_allowed = meeting.lesson.status in {
+        BibleStudyLesson.STATUS_PUBLISHED,
+        BibleStudyLesson.STATUS_COMPLETED,
+    }
+    series = meeting.lesson.series
+    series_status_allowed = (
+        series.is_active
+        and series.status in {
+            BibleStudySeries.STATUS_PUBLISHED,
+            BibleStudySeries.STATUS_COMPLETED,
+        }
+    )
+
+    if (
+        not roles
+        or not meeting_status_allowed
+        or not lesson_status_allowed
+        or not series_status_allowed
+        or serving_item_is_history(item)
+        or not meeting.can_be_seen_by(request.user)
+    ):
+        messages.error(request, ministry_ui_text(language, "bible_study_role_not_available"))
+        return redirect("my_serving")
+
+    form = TeamAssignmentConfirmForm(request.POST, language=language)
+    if not form.is_valid():
+        return redirect("my_serving")
+
+    confirmation_note = form.cleaned_data.get("confirmation_note", "")
+    for role in roles:
+        role.confirm(confirmation_note)
+
+    messages.success(request, ministry_ui_text(language, "bible_study_role_confirmed"))
+    next_url = request.POST.get("next")
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+
+    return redirect("my_serving")
 
 
 @login_required

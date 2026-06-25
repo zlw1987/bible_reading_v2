@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load event_extras ministry_extras %}
+{% load datetime_extras event_extras ministry_extras %}
 
 {% block title %}
     {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
@@ -30,6 +30,47 @@
         </a>
     </div>
 </div>
+
+{% if leader_needs_attention %}
+<section class="serving-section serving-section--pending">
+    <h2 class="serving-section-title">
+        {% if language == "zh" %}组长待处理{% else %}Leader Needs Attention{% endif %}
+    </h2>
+    <div class="grid grid-2">
+        {% for row in leader_needs_attention %}
+        <article class="card serving-card">
+            <div class="serving-card-head">
+                <h3 class="card-title serving-card-title">
+                    {{ row.event|event_title:language }}
+                </h3>
+                <span class="status">{{ row.issue_label }}</span>
+            </div>
+            <dl class="serving-card-meta">
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}时间{% else %}When{% endif %}</dt>
+                    <dd>{{ row.event.start_datetime|member_datetime:language }}</dd>
+                </div>
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}团队{% else %}Team{% endif %}</dt>
+                    <dd>{{ row.team|ministry_team_name:language }}</dd>
+                </div>
+                {% if row.member_summary %}
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>
+                    <dd>{{ row.member_summary }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+            <div class="actions">
+                <a class="button button-secondary" href="{{ row.action_url }}">
+                    {% if language == "zh" %}查看排班{% else %}Review coverage{% endif %}
+                </a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 {% if serving_items %}
     {% for section in serving_sections %}

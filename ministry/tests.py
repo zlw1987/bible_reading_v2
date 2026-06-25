@@ -2284,6 +2284,187 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertNotContains(response, "Teams I manage")
         self.assertNotContains(response, reverse("team_schedule", args=[self.team.id]))
 
+    def test_ordinary_member_does_not_see_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_personal_serving_without_management_does_not_show_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.other_team)
+        self.create_assignment()
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Needs confirmation")
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Sound Team")
+
+    def test_team_lead_sees_only_own_team_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Unassigned")
+        self.assertNotContains(response, "Sound Team")
+
+    def test_team_coordinator_sees_only_own_team_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        self.client.login(username="assignment_coordinator", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Unassigned")
+        self.assertNotContains(response, "Sound Team")
+
+    def test_global_assignment_manager_sees_all_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team, self.other_team)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Sound Team")
+        self.assertContains(response, "Unassigned", count=2)
+
+    def test_required_team_without_assignment_appears_in_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Unassigned")
+
+    def test_empty_assignment_appears_in_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Assignment exists, no people assigned")
+
+    def test_unconfirmed_assignment_member_appears_in_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.create_assignment()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Awaiting confirmation")
+        self.assertContains(response, "1 awaiting confirmation")
+
+    def test_fully_confirmed_coverage_does_not_appear_in_leader_needs_attention(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        assignment = self.create_assignment()
+        assignment.assignment_members.get(membership=self.membership).confirm()
+        assignment.status = TeamAssignment.STATUS_CONFIRMED
+        assignment.save()
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_draft_and_cancelled_events_do_not_appear_in_leader_needs_attention(self):
+        self.set_language("en")
+        draft_event = self.create_schedule_event(
+            title_en="Draft Required Service",
+            days_from_now=2,
+            status=ServiceEvent.STATUS_DRAFT,
+        )
+        draft_event.required_teams.add(self.team)
+        cancelled_event = self.create_schedule_event(
+            title_en="Cancelled Required Service",
+            days_from_now=3,
+            status=ServiceEvent.STATUS_CANCELLED,
+        )
+        cancelled_event.required_teams.add(self.team)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Draft Required Service")
+        self.assertNotContains(response, "Cancelled Required Service")
+
+    def test_events_outside_near_term_window_do_not_appear_in_leader_needs_attention(self):
+        self.set_language("en")
+        future_event = self.create_schedule_event(
+            title_en="Future Required Service",
+            days_from_now=9,
+        )
+        future_event.required_teams.add(self.team)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Future Required Service")
+
+    def test_leader_needs_attention_hidden_on_past_tab(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_pastor", password="testpass123")
+
+        response = self.client.get(f"{reverse('my_serving')}?tab=past")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_leader_needs_attention_action_links_to_team_schedule(self):
+        self.set_language("en")
+        self.event.required_teams.add(self.team)
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("team_schedule", args=[self.team.id]))
+        self.assertContains(response, f"event={self.event.id}")
+
     def test_no_lighting_team_model_exists(self):
         with self.assertRaises(LookupError):
             apps.get_model("ministry", "LightingTeam")

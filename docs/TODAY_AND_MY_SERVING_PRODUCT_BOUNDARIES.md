@@ -1,6 +1,6 @@
 # Today and My Serving Product Boundaries
 
-Status: TODAY-SERVING.1B / MYSERVING-AGENDA.1A planning note.
+Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A product-boundaries note.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 
@@ -31,7 +31,9 @@ The preferred section order is:
 5. Later
 6. Past / History, collapsed by default in a future UI slice
 
-MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. BS-SERVING-MYSERVING.1A adds explicit user-linked Bible Study V2 meeting roles to the same My Serving agenda, but only from `BibleStudyMeetingRole.user == request.user`; it does not add a Bible Study confirmation workflow and does not infer serving from membership, audience visibility, or display names. Leader-only unassigned work should be added only after a tighter design confirms the data source, permission gate, and desired relationship to the existing Team Assignment coverage workspace.
+MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. BS-SERVING-MYSERVING.1A adds explicit user-linked Bible Study V2 meeting roles to the same My Serving agenda, but only from `BibleStudyMeetingRole.user == request.user`; it does not add a Bible Study confirmation workflow and does not infer serving from membership, audience visibility, or display names.
+
+MYSERVING-LEADER.1A adds a leader-only, near-term, read-only Unassigned Ministry Work summary to My Serving. It uses explicit `ServiceEvent.required_teams`, `TeamAssignment`, and `TeamAssignmentMember` coverage data; it is gated by existing team-assignment management permission or teams returned by `manageable_assignment_teams(user)`. It does not create assignments automatically, does not infer serving or management from Church Structure membership, does not add models or migrations, and links back to the existing Team Schedule / Assignment workflows for full scheduling.
 
 ## Assignment Boundaries
 
@@ -54,7 +56,7 @@ Bible Study roles are not `TeamAssignment` rows. Do not add Bible Study role con
 
 Unassigned ministry work must not appear to ordinary members or ordinary coworkers without the correct management permission.
 
-Before surfacing this on My Serving, a future slice should decide whether to reuse the existing ServiceEvent required-team coverage concepts or introduce a more explicit needed-role concept. Any implementation must use existing permission helpers such as team assignment or ministry-team management checks, and must avoid creating assignments automatically.
+MYSERVING-LEADER.1A reuses the existing ServiceEvent required-team coverage concepts. It shows compact near-term issues for required teams with no assignment, assignments with no assigned people, and assignments with assigned members still awaiting confirmation. Full scheduling remains owned by Team Schedule / Assignment workflows; My Serving only links leaders to those workflows.
 
 ## Future People-Status Axes
 

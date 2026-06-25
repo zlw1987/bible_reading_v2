@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -47,7 +48,11 @@ from .permissions import (
     user_team_memberships,
 )
 from .services.assignment_coverage import (
+    COVERAGE_ASSIGNED,
+    COVERAGE_EMPTY_ASSIGNMENT,
+    COVERAGE_UNASSIGNED,
     assignment_member_prefetch,
+    assignment_coverage_queryset,
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
@@ -65,6 +70,7 @@ from .services.lighting_pilot_import import (
 
 
 MY_SERVING_WEEK_DAYS = 7
+LEADER_NEEDS_ATTENTION_DAYS = 7
 
 
 def ministry_ui_text(language, key):
@@ -399,6 +405,117 @@ def build_my_serving_sections(serving_items):
             "items": sections["past"],
         },
     ]
+
+
+def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, language="en"):
+    manageable_teams = manageable_assignment_teams(user)
+    manageable_team_ids = list(manageable_teams.values_list("id", flat=True))
+    is_global_manager = can_manage_team_assignments(user)
+    if not is_global_manager and not manageable_team_ids:
+        return []
+
+    today = timezone.localdate()
+    start_at = _local_midnight(today)
+    end_date = today + timedelta(days=days)
+    end_at = _local_midnight(end_date + timedelta(days=1))
+    event_queryset = (
+        events_with_coverage_queryset()
+        .filter(
+            start_datetime__gte=start_at,
+            start_datetime__lt=end_at,
+            required_team_links__isnull=False,
+        )
+        .exclude(
+            status__in=[
+                ServiceEvent.STATUS_DRAFT,
+                ServiceEvent.STATUS_CANCELLED,
+            ],
+        )
+        .distinct()
+        .order_by("start_datetime", "title")
+    )
+    if not is_global_manager:
+        event_queryset = event_queryset.filter(
+            required_team_links__ministry_team_id__in=manageable_team_ids
+        ).distinct()
+
+    events = list(event_queryset)
+    if not events:
+        return []
+
+    event_ids = [event.id for event in events]
+    assignment_queryset = (
+        assignment_coverage_queryset()
+        .filter(service_event_id__in=event_ids)
+        .exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ],
+        )
+    )
+    if not is_global_manager:
+        assignment_queryset = assignment_queryset.filter(
+            ministry_team_id__in=manageable_team_ids
+        )
+    assignments = list(assignment_queryset)
+    coverage_by_event = build_assignment_coverage(
+        events,
+        assignments,
+        language=language,
+        allowed_team_ids=None if is_global_manager else manageable_team_ids,
+        allowed_assignment_ids=[assignment.id for assignment in assignments],
+    )
+
+    issue_rows = []
+    for event in events:
+        for coverage_row in coverage_by_event[event.id]["rows"]:
+            unconfirmed_members = [
+                member
+                for member in coverage_row["members"]
+                if not member["confirmed"]
+            ]
+            if coverage_row["kind"] in {
+                COVERAGE_UNASSIGNED,
+                COVERAGE_EMPTY_ASSIGNMENT,
+            }:
+                issue_label = coverage_row["summary_label"]
+            elif coverage_row["kind"] == COVERAGE_ASSIGNED and unconfirmed_members:
+                issue_label = (
+                    "待确认"
+                    if language == "zh"
+                    else "Awaiting confirmation"
+                )
+            else:
+                continue
+
+            team = coverage_row["team"]
+            schedule_params = schedule_query_string(
+                {
+                    "start_date": today,
+                    "end_date": end_date,
+                    "event_type": "",
+                },
+                event=event.id,
+            )
+            issue_rows.append(
+                {
+                    "event": event,
+                    "team": team,
+                    "issue_label": issue_label,
+                    "member_summary": (
+                        f"{len(unconfirmed_members)} "
+                        f"{'人待确认' if language == 'zh' else 'awaiting confirmation'}"
+                        if unconfirmed_members
+                        else ""
+                    ),
+                    "action_url": (
+                        f"{reverse('team_schedule', args=[team.id])}?{schedule_params}"
+                    ),
+                }
+            )
+
+    return issue_rows
 
 
 def sync_assignment_members(assignment, memberships):
@@ -1004,6 +1121,12 @@ def my_serving(request):
         if not serving_item_needs_attention(item)
     ]
     serving_sections = build_my_serving_sections(serving_items)
+    leader_needs_attention = []
+    if tab in {"upcoming", "all"}:
+        leader_needs_attention = leader_needs_attention_rows(
+            request.user,
+            language=get_user_language(request),
+        )
 
     return render(
         request,
@@ -1013,6 +1136,7 @@ def my_serving(request):
             "pending_items": pending_items,
             "scheduled_items": scheduled_items,
             "serving_sections": serving_sections,
+            "leader_needs_attention": leader_needs_attention,
             "manageable_teams": manageable_assignment_teams(request.user),
             "tab": tab,
             "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),

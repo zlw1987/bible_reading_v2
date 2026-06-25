@@ -33,6 +33,16 @@ urlpatterns = [
         name="staff_structure_unit_rename",
     ),
     path(
+        "staff/structure/units/<int:parent_id>/children/add/",
+        views.staff_structure_unit_add_child,
+        name="staff_structure_unit_add_child",
+    ),
+    path(
+        "staff/structure/units/<int:unit_id>/disable/",
+        views.staff_structure_unit_disable,
+        name="staff_structure_unit_disable",
+    ),
+    path(
         "staff/structure/units/<int:unit_id>/",
         views.church_structure_unit_detail,
         name="church_structure_unit_detail",

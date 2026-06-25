@@ -10,9 +10,9 @@
     <p class="page-subtitle">
         {% if edit_mode %}
         {% if language == "zh" %}
-        编辑模式：这里只能修改显示名称，不会改变成员、对应关系、活动适用范围、服事安排、权限或可见范围。仍然显示教会结构与设置检查提醒；不显示成员名单。
+        编辑模式：可重命名显示名称、新增下级单元、对符合条件的单元做安全停用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用下级、自动结束归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
         {% else %}
-        Edit mode: this page can only change display names; it does not change membership, mappings, event audience, serving assignments, permissions, or visibility. It still shows the church structure and setup check reminders; member names are not shown.
+        Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
         {% endif %}
         {% else %}
         {% if language == "zh" %}
@@ -106,9 +106,9 @@
         <strong>{% if language == "zh" %}编辑模式{% else %}Edit mode{% endif %}</strong>
         <p>
             {% if language == "zh" %}
-            编辑模式：这里只能修改显示名称。不会改变成员、对应关系、活动适用范围、服事安排或权限。
+            编辑模式可重命名显示名称、新增下级单元、对符合条件的单元做安全停用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用下级、自动结束归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
             {% else %}
-            Edit mode: this page can only change display names. It does not change membership, mappings, event audience, serving assignments, or permissions.
+            Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
             {% endif %}
         </p>
     </div>
@@ -144,16 +144,16 @@
                 </span>
                 {% endif %}
                 {% if edit_mode %}
-                <details class="structure-row-actions">
-                    <summary class="button-secondary button structure-row-actions-summary">
-                        {% if language == "zh" %}操作{% else %}Actions{% endif %}
-                    </summary>
-                    <div class="structure-row-actions-menu">
-                        {% if not row.is_root %}
-                        <details class="structure-rename">
-                            <summary class="structure-rename-summary">
-                                {% if language == "zh" %}重命名{% else %}Rename{% endif %}
-                            </summary>
+                <div class="structure-row-icon-actions"
+                     aria-label="{% if language == 'zh' %}结构单元行内工具{% else %}Structure unit row tools{% endif %}">
+                    {% if not row.is_root %}
+                    <details class="structure-inline-action">
+                        <summary class="structure-icon-button"
+                                 aria-label="{% if language == 'zh' %}重命名单元{% else %}Rename unit{% endif %}"
+                                 title="{% if language == 'zh' %}重命名单元{% else %}Rename unit{% endif %}">
+                            <span aria-hidden="true">✎</span>
+                        </summary>
+                        <div class="structure-inline-action-panel">
                             <form method="post"
                                   action="{% url 'staff_structure_unit_rename' row.unit.id %}"
                                   class="structure-rename-form">
@@ -177,20 +177,101 @@
                                     {% if language == "zh" %}保存{% else %}Save{% endif %}
                                 </button>
                             </form>
-                        </details>
-                        {% endif %}
-                        <a class="button-secondary button structure-row-details-link"
-                           href="{% url 'church_structure_unit_detail' row.unit.id %}">
-                            {% if language == "zh" %}详细资料{% else %}Details{% endif %}
-                        </a>
-                        {% if can_admin_units %}
-                        <a class="button-secondary button"
-                           href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
-                            {% if language == "zh" %}后台{% else %}Admin{% endif %}
-                        </a>
-                        {% endif %}
-                    </div>
-                </details>
+                        </div>
+                    </details>
+                    {% endif %}
+                    <details class="structure-inline-action">
+                        <summary class="structure-icon-button"
+                                 aria-label="{% if language == 'zh' %}新增下级单元{% else %}Add child unit{% endif %}"
+                                 title="{% if language == 'zh' %}新增下级单元{% else %}Add child unit{% endif %}">
+                            <span aria-hidden="true">+</span>
+                        </summary>
+                        <div class="structure-inline-action-panel">
+                            <form method="post"
+                                  action="{% url 'staff_structure_unit_add_child' row.unit.id %}"
+                                  class="structure-child-form">
+                                {% csrf_token %}
+                                <p class="muted structure-rename-warning">
+                                    {% if language == "zh" %}
+                                    新增启用的下级单元；不会新增归属、适用范围、服事安排或职分。
+                                    {% else %}
+                                    Adds an active child unit only; no memberships, audience scopes, serving assignments, or roles are created.
+                                    {% endif %}
+                                </p>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}名称{% else %}Name{% endif %}
+                                    <input type="text" name="name" maxlength="120" required>
+                                </label>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}英文名称{% else %}English name{% endif %}
+                                    <input type="text" name="name_en" maxlength="120">
+                                </label>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}代码{% else %}Code{% endif %}
+                                    <input type="text" name="code" maxlength="32" required>
+                                </label>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}类型{% else %}Type{% endif %}
+                                    <select name="unit_type" required>
+                                        {% for value, label in child_unit_type_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </label>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}排序{% else %}Sort order{% endif %}
+                                    <input type="number" name="sort_order" value="0" min="0">
+                                </label>
+                                <button type="submit" class="button">
+                                    {% if language == "zh" %}新增下级单元{% else %}Add child unit{% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                    {% if not row.is_root %}
+                    <details class="structure-inline-action">
+                        <summary class="structure-icon-button structure-icon-button-danger"
+                                 aria-label="{% if language == 'zh' %}停用单元{% else %}Disable unit{% endif %}"
+                                 title="{% if language == 'zh' %}停用单元{% else %}Disable unit{% endif %}">
+                            <span aria-hidden="true">−</span>
+                        </summary>
+                        <div class="structure-inline-action-panel">
+                            <form method="post"
+                                  action="{% url 'staff_structure_unit_disable' row.unit.id %}"
+                                  class="structure-disable-form">
+                                {% csrf_token %}
+                                <strong>{% if language == "zh" %}停用此单元{% else %}Disable this unit{% endif %}</strong>
+                                <p class="muted structure-rename-warning">
+                                    {% if language == "zh" %}
+                                    这里只会把单元标记为停用，不会删除历史记录、归属、适用范围、服事安排或职分。
+                                    {% else %}
+                                    This only marks the unit inactive. It does not delete history, memberships, audience scopes, serving assignments, or role assignments.
+                                    {% endif %}
+                                </p>
+                                <label class="structure-confirm-field">
+                                    <input type="checkbox" name="confirm_disable" value="on" required>
+                                    {% if language == "zh" %}我确认要停用此单元{% else %}I confirm disabling this unit{% endif %}
+                                </label>
+                                <button type="submit" class="button-danger">
+                                    {% if language == "zh" %}停用此单元{% else %}Disable this unit{% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                    {% endif %}
+                    <a class="structure-icon-button structure-row-details-link"
+                       href="{% url 'church_structure_unit_detail' row.unit.id %}"
+                       aria-label="{% if language == 'zh' %}查看详细资料{% else %}View details{% endif %}"
+                       title="{% if language == 'zh' %}查看详细资料{% else %}View details{% endif %}">
+                        <span aria-hidden="true">👁</span>
+                    </a>
+                    {% if can_admin_units %}
+                    <a class="button-secondary button structure-admin-link"
+                       href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
+                        {% if language == "zh" %}后台{% else %}Admin{% endif %}
+                    </a>
+                    {% endif %}
+                </div>
                 {% endif %}
             </div>
         </div>

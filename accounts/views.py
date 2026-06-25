@@ -3,7 +3,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
-from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Count, Q
@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 
 from .forms import (
+    ChurchStructureUnitChildForm,
     LocalizedPasswordChangeForm,
     ProfileForm,
     SignUpForm,
@@ -226,17 +227,17 @@ def staff_overview(request):
 def staff_structure_map(request):
     """Church Structure Map with setup-readiness indicators (CS-MAP.2).
 
-    The default map view is review-first: counts only, no member rosters. On
-    top of that, CS-SETUP.1B adds an opt-in display-name-only edit mode for
-    admin-capable staff (per-row rename + Details link); no other structure
-    edits happen here. Ordinary-user matching remains consumer-specific during
-    the transition: ServiceEvent audience rows now match through active primary
-    ChurchStructureMembership, and zero-row ServiceEvents fail closed for
-    ordinary users (the zero-row legacy fallback was retired in SE-RETIRE.1B),
-    while Bible Study member visibility/generation, reading/privacy/progress,
-    permissions, and My Serving remain consumer-specific as documented.
-    The structure map is counts/setup context only and does not itself grant
-    visibility.
+    The default map view is review-first: counts only, no member rosters.
+    Edit mode is gated to users who can change ChurchStructureUnit and exposes
+    rename, add-child, safe soft-disable, and detail/admin links. Membership
+    maintenance lives on the unit detail page.
+
+    Edit mode does not hard-delete units, move/reparent units,
+    cascade-disable children, automatically end memberships, rewrite audience
+    or role scopes, change serving assignments, change visibility semantics,
+    or infer leadership/serving from membership. Ordinary-user matching
+    remains consumer-specific as documented; the structure map is counts/setup
+    context only and does not itself grant visibility.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -340,11 +341,13 @@ def staff_structure_map(request):
     }
     indicators.update(_structure_setup_warning_counts())
 
-    # Edit mode is a lightweight read/write affordance layer (CS-SETUP.1B).
-    # The default view stays clean and read-only; entering edit mode only
-    # exposes display-name rename and a Details link, gated to staff who can
-    # change ChurchStructureUnit in Django Admin. It does not change mappings,
-    # membership, audience rows, tree shape, active status, or visibility.
+    # Edit mode is a lightweight read/write affordance layer. The default view
+    # stays review-first and read-only; entering edit mode exposes rename,
+    # add-child, safe soft-disable, and detail/admin links to users who can
+    # change ChurchStructureUnit. It does not hard-delete, move/reparent,
+    # cascade-disable, auto-end memberships, rewrite audience/role scopes,
+    # change serving or visibility semantics, or infer leadership/serving from
+    # membership.
     can_admin_units = request.user.has_perm(
         "accounts.change_churchstructureunit"
     )
@@ -358,6 +361,11 @@ def staff_structure_map(request):
             "structure_rows": structure_rows,
             "indicators": indicators,
             "can_admin_units": can_admin_units,
+            "child_unit_type_choices": [
+                choice
+                for choice in ChurchStructureUnit.UNIT_TYPE_CHOICES
+                if choice[0] != ChurchStructureUnit.UNIT_ROOT
+            ],
             "edit_mode": edit_mode,
         },
     )
@@ -429,6 +437,242 @@ def staff_structure_unit_rename(request, unit_id):
         else "Display name updated.",
     )
     return redirect(edit_url)
+
+
+def can_change_church_structure_units(user):
+    return (
+        getattr(user, "is_authenticated", False)
+        and user.has_perm("accounts.change_churchstructureunit")
+    )
+
+
+def _staff_structure_edit_url():
+    return f"{reverse('staff_structure_map')}?edit=1"
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def staff_structure_unit_add_child(request, parent_id):
+    language = get_user_language(request)
+    parent = get_object_or_404(ChurchStructureUnit, id=parent_id)
+    form = ChurchStructureUnitChildForm(request.POST, parent=parent)
+
+    if form.is_valid():
+        unit = form.save()
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=unit.pk,
+            object_repr=str(unit),
+            action_flag=ADDITION,
+            change_message=(
+                "Created child structure unit via staff structure map "
+                "(STRUCTURE-SETUP-ACTIONS.1A). "
+                f"parent_id={parent.pk!r}; code={unit.code!r}."
+            ),
+        )
+        messages.success(
+            request,
+            "已新增下级单元。" if language == "zh"
+            else "Child unit added.",
+        )
+    else:
+        messages.error(
+            request,
+            "无法新增下级单元，请检查表单。" if language == "zh"
+            else "Child unit was not added. Please review the form.",
+        )
+
+    return redirect(_staff_structure_edit_url())
+
+
+def _structure_unit_disable_blockers(unit):
+    from comments.models import ReflectionComment
+    from events.models import ServiceEvent
+    from prayers.models import PrayerRequest
+    from studies.models import (
+        BibleStudyMeeting,
+        BibleStudySeries,
+    )
+
+    blockers = []
+
+    if unit.unit_type == ChurchStructureUnit.UNIT_ROOT:
+        blockers.append("root_unit")
+
+    if unit.children.filter(is_active=True).exists():
+        blockers.append("active_child_units")
+
+    if _active_membership_queryset().filter(unit=unit).exists():
+        blockers.append("active_memberships")
+
+    if unit.role_assignments.filter(is_active=True).exists():
+        blockers.append("active_role_scopes")
+
+    if unit.service_event_audience_scope_links.exclude(
+        service_event__status=ServiceEvent.STATUS_CANCELLED,
+    ).exists():
+        blockers.append("service_event_audience_scopes")
+
+    if unit.host_language_service_events.exclude(
+        status=ServiceEvent.STATUS_CANCELLED,
+    ).exists():
+        blockers.append("service_event_host_language_refs")
+
+    if unit.bible_study_series_audience_scopes.exclude(
+        series__status=BibleStudySeries.STATUS_CANCELLED,
+    ).exists():
+        blockers.append("bible_study_schedule_audience_scopes")
+
+    if unit.bible_study_meeting_audience_scopes.exclude(
+        meeting__status=BibleStudyMeeting.STATUS_CANCELLED,
+    ).exists():
+        blockers.append("bible_study_meeting_audience_scopes")
+
+    if unit.anchored_bible_study_meetings.exclude(
+        status=BibleStudyMeeting.STATUS_CANCELLED,
+    ).exists():
+        blockers.append("bible_study_meeting_anchors")
+
+    if PrayerRequest.objects.filter(
+        structure_unit_at_post=unit,
+        is_deleted=False,
+    ).exists():
+        blockers.append("prayer_snapshots")
+
+    if ReflectionComment.objects.filter(
+        structure_unit_at_post=unit,
+        is_deleted=False,
+    ).exists():
+        blockers.append("reflection_snapshots")
+
+    return blockers
+
+
+def _structure_unit_disable_blocker_labels(blockers, language):
+    labels = {
+        "root_unit": {
+            "en": "root unit",
+            "zh": "全教会根单元",
+        },
+        "active_child_units": {
+            "en": "active child units",
+            "zh": "启用中的下级单元",
+        },
+        "active_memberships": {
+            "en": "active memberships",
+            "zh": "启用中的归属记录",
+        },
+        "active_role_scopes": {
+            "en": "active role scopes",
+            "zh": "启用中的职分范围",
+        },
+        "service_event_audience_scopes": {
+            "en": "ServiceEvent audience scopes",
+            "zh": "教会聚会适用范围",
+        },
+        "service_event_host_language_refs": {
+            "en": "ServiceEvent host/language display refs",
+            "zh": "教会聚会主办/语言显示引用",
+        },
+        "bible_study_schedule_audience_scopes": {
+            "en": "Bible Study schedule audience scopes",
+            "zh": "查经安排适用范围",
+        },
+        "bible_study_meeting_audience_scopes": {
+            "en": "Bible Study meeting audience scopes",
+            "zh": "查经聚会适用范围",
+        },
+        "bible_study_meeting_anchors": {
+            "en": "Bible Study meeting anchors",
+            "zh": "查经聚会归属单元",
+        },
+        "prayer_snapshots": {
+            "en": "prayer snapshots",
+            "zh": "代祷归属快照",
+        },
+        "reflection_snapshots": {
+            "en": "reflection snapshots",
+            "zh": "默想归属快照",
+        },
+    }
+    key = "zh" if language == "zh" else "en"
+    return [labels.get(blocker, {}).get(key, blocker) for blocker in blockers]
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def staff_structure_unit_disable(request, unit_id):
+    language = get_user_language(request)
+
+    if request.POST.get("confirm_disable") != "on":
+        messages.error(
+            request,
+            "请先确认停用。" if language == "zh"
+            else "Please confirm before disabling the unit.",
+        )
+        return redirect(_staff_structure_edit_url())
+
+    with transaction.atomic():
+        unit = get_object_or_404(
+            ChurchStructureUnit.objects.select_for_update(),
+            id=unit_id,
+        )
+        if not unit.is_active:
+            messages.warning(
+                request,
+                "此单元已经停用。" if language == "zh"
+                else "This unit is already inactive.",
+            )
+            return redirect(_staff_structure_edit_url())
+
+        blockers = _structure_unit_disable_blockers(unit)
+        if blockers:
+            blocker_labels = _structure_unit_disable_blocker_labels(
+                blockers,
+                language,
+            )
+            messages.error(
+                request,
+                (
+                    "无法停用此单元；请先处理："
+                    + "、".join(blocker_labels)
+                )
+                if language == "zh"
+                else (
+                    "This unit was not disabled. Resolve first: "
+                    + ", ".join(blocker_labels)
+                    + "."
+                ),
+            )
+            return redirect(_staff_structure_edit_url())
+
+        unit.is_active = False
+        unit.save(update_fields=["is_active", "updated_at"])
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=unit.pk,
+            object_repr=str(unit),
+            action_flag=CHANGE,
+            change_message=(
+                "Soft-disabled structure unit via staff structure map "
+                "(STRUCTURE-SETUP-ACTIONS.1A). No related memberships, "
+                "audience rows, role assignments, serving assignments, or "
+                "history rows were changed."
+            ),
+        )
+
+    messages.success(
+        request,
+        "已停用单元。" if language == "zh"
+        else "Unit disabled.",
+    )
+    return redirect(_staff_structure_edit_url())
 
 
 @staff_member_required

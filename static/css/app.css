@@ -2139,39 +2139,63 @@ th {
     margin-bottom: 12px;
 }
 
-.structure-row-actions {
-    flex-basis: 100%;
-    margin-top: 2px;
-}
-
-.structure-row-actions-summary {
-    display: inline-block;
-    cursor: pointer;
-    padding: 2px 10px;
-    font-size: 13px;
-    list-style: none;
-}
-
-.structure-row-actions-summary::-webkit-details-marker {
-    display: none;
-}
-
-.structure-row-actions-menu {
+.structure-row-icon-actions {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
-    gap: 8px;
+    gap: 6px;
+    flex-basis: 100%;
     margin-top: 6px;
-    padding: 8px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: var(--surface-soft);
 }
 
-.structure-rename-summary {
+.structure-inline-action {
+    position: relative;
+}
+
+.structure-inline-action > summary {
+    list-style: none;
+}
+
+.structure-inline-action > summary::-webkit-details-marker {
+    display: none;
+}
+
+.structure-icon-button {
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
     cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
+    display: inline-flex;
+    font-size: 16px;
+    font-weight: 700;
+    height: 32px;
+    justify-content: center;
+    line-height: 1;
+    min-width: 32px;
+    padding: 0 8px;
+    text-decoration: none;
+}
+
+.structure-icon-button:hover,
+.structure-icon-button:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.structure-icon-button-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.structure-inline-action-panel {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 6px;
+    padding: 10px;
+    width: min(320px, calc(100vw - 48px));
 }
 
 .structure-rename-form {
@@ -2182,10 +2206,24 @@ th {
     max-width: 320px;
 }
 
+.structure-child-form,
+.structure-disable-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 .structure-rename-field {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    font-size: 13px;
+}
+
+.structure-confirm-field {
+    align-items: flex-start;
+    display: flex;
+    gap: 8px;
     font-size: 13px;
 }
 
@@ -2222,6 +2260,14 @@ th {
 
     .structure-rename-form {
         max-width: 100%;
+    }
+
+    .structure-row-icon-actions {
+        gap: 8px;
+    }
+
+    .structure-inline-action {
+        position: static;
     }
 }
 

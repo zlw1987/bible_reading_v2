@@ -3974,6 +3974,15 @@ class StaffStructureMapEditModeTests(TestCase):
         self.rename_child_url = reverse(
             "staff_structure_unit_rename", args=[self.child.id]
         )
+        self.add_child_url = reverse(
+            "staff_structure_unit_add_child", args=[self.child.id]
+        )
+        self.disable_root_url = reverse(
+            "staff_structure_unit_disable", args=[self.root.id]
+        )
+        self.disable_child_url = reverse(
+            "staff_structure_unit_disable", args=[self.child.id]
+        )
 
     def set_language(self, language="en"):
         session = self.client.session
@@ -3988,6 +3997,17 @@ class StaffStructureMapEditModeTests(TestCase):
             username="structure_viewer", password="ViewerPass123!"
         )
 
+    def child_payload(self, **overrides):
+        payload = {
+            "name": "青年小组",
+            "name_en": "Youth Group",
+            "code": "youth",
+            "unit_type": ChurchStructureUnit.UNIT_SMALL_GROUP,
+            "sort_order": "7",
+        }
+        payload.update(overrides)
+        return payload
+
     # --- view / edit mode ---------------------------------------------------
 
     def test_default_view_has_no_action_menus(self):
@@ -3998,22 +4018,48 @@ class StaffStructureMapEditModeTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["edit_mode"])
-        self.assertNotContains(response, "structure-row-actions")
+        self.assertNotContains(response, "structure-row-icon-actions")
         self.assertNotContains(response, "Edit mode:")
         # The entry point into edit mode is offered to admin users.
         self.assertContains(response, "Edit structure")
 
-    def test_edit_mode_shows_banner_and_action_menus(self):
+    def test_edit_mode_shows_banner_and_inline_icon_actions(self):
         self.set_language("en")
         self.login_admin()
 
         response = self.client.get(self.url, {"edit": "1"})
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["edit_mode"])
-        self.assertContains(response, "Edit mode:")
-        self.assertContains(response, "structure-row-actions")
+        self.assertContains(response, "Edit mode supports")
+        self.assertContains(response, "structure-row-icon-actions")
+        self.assertContains(response, 'aria-label="Rename unit"')
+        self.assertContains(response, 'aria-label="Add child unit"')
+        self.assertContains(response, 'aria-label="Disable unit"')
+        self.assertContains(response, 'aria-label="View details"')
+        self.assertNotIn("structure-row-actions-summary", content)
+        self.assertNotIn(">Actions<", content)
         self.assertContains(response, "Exit edit mode")
+        self.assertContains(response, "renaming display labels")
+        self.assertContains(response, "adding child units")
+        self.assertContains(response, "safe soft-disable")
+        self.assertContains(response, "detail/admin links")
+        self.assertContains(response, "does not hard-delete units")
+        self.assertNotContains(response, "only change display names")
+
+    def test_edit_mode_chinese_copy_describes_current_actions(self):
+        self.set_language("zh")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertContains(response, "可重命名显示名称")
+        self.assertContains(response, "新增下级单元")
+        self.assertContains(response, "安全停用")
+        self.assertContains(response, "查看详细资料或后台链接")
+        self.assertContains(response, "不会硬删除")
+        self.assertNotContains(response, "这里只能修改显示名称")
 
     def test_edit_mode_root_has_no_rename_but_child_does(self):
         self.set_language("en")
@@ -4040,7 +4086,7 @@ class StaffStructureMapEditModeTests(TestCase):
         forced = self.client.get(self.url, {"edit": "1"})
         self.assertFalse(forced.context["edit_mode"])
         self.assertNotContains(forced, "Edit mode:")
-        self.assertNotContains(forced, "structure-row-actions")
+        self.assertNotContains(forced, "structure-row-icon-actions")
 
     def test_edit_mode_action_menu_links_to_detail_and_admin(self):
         self.set_language("en")
@@ -4059,6 +4105,203 @@ class StaffStructureMapEditModeTests(TestCase):
         viewer_resp = self.client.get(self.url, {"edit": "1"})
         self.assertNotContains(viewer_resp, detail_url)
         self.assertNotContains(viewer_resp, admin_change_url)
+
+    def test_icon_panels_expose_rename_add_child_and_disable_forms(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertContains(response, self.rename_child_url)
+        self.assertContains(response, self.add_child_url)
+        self.assertContains(response, self.disable_child_url)
+        self.assertContains(response, 'name="confirm_disable"')
+        self.assertContains(response, "Disable this unit")
+        self.assertContains(response, "This only marks the unit inactive")
+
+    # --- add child POST -----------------------------------------------------
+
+    def test_admin_can_create_child_unit_under_active_parent(self):
+        self.login_admin()
+
+        response = self.client.post(self.add_child_url, self.child_payload())
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        created = ChurchStructureUnit.objects.get(code="YOUTH")
+        self.assertEqual(created.parent, self.child)
+        self.assertEqual(created.name, "青年小组")
+        self.assertEqual(created.name_en, "Youth Group")
+        self.assertEqual(created.unit_type, ChurchStructureUnit.UNIT_SMALL_GROUP)
+        self.assertEqual(created.sort_order, 7)
+        self.assertTrue(created.is_active)
+
+    def test_normal_user_cannot_create_child_unit(self):
+        self.client.login(username="structure_plain", password="PlainPass123!")
+
+        response = self.client.post(self.add_child_url, self.child_payload())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ChurchStructureUnit.objects.filter(code="YOUTH").exists())
+
+    def test_invalid_child_unit_data_is_rejected(self):
+        self.set_language("en")
+        self.login_admin()
+        before_units = ChurchStructureUnit.objects.count()
+
+        response = self.client.post(
+            self.add_child_url,
+            self.child_payload(name="", unit_type=ChurchStructureUnit.UNIT_ROOT),
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ChurchStructureUnit.objects.count(), before_units)
+        self.assertContains(response, "Child unit was not added")
+
+    def test_add_child_does_not_create_membership_audience_role_or_serving_rows(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import BibleStudySeriesAudienceScope
+
+        self.login_admin()
+        before = (
+            ChurchStructureMembership.objects.count(),
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+        )
+
+        self.client.post(self.add_child_url, self.child_payload(code="NOSIDE"))
+
+        after = (
+            ChurchStructureMembership.objects.count(),
+            ServiceEventAudienceScope.objects.count(),
+            BibleStudySeriesAudienceScope.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+        )
+        self.assertEqual(before, after)
+
+    # --- disable POST -------------------------------------------------------
+
+    def test_admin_can_soft_disable_safe_non_root_unit(self):
+        self.login_admin()
+
+        response = self.client.post(
+            self.disable_child_url,
+            {"confirm_disable": "on"},
+        )
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        self.child.refresh_from_db()
+        self.assertFalse(self.child.is_active)
+        self.assertTrue(ChurchStructureUnit.objects.filter(id=self.child.id).exists())
+
+    def test_disable_root_unit_is_blocked(self):
+        self.login_admin()
+
+        self.client.post(self.disable_root_url, {"confirm_disable": "on"})
+
+        self.root.refresh_from_db()
+        self.assertTrue(self.root.is_active)
+
+    def test_disable_unit_with_active_child_units_is_blocked(self):
+        ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            name_en="District 2A",
+        )
+        self.login_admin()
+
+        self.client.post(self.disable_child_url, {"confirm_disable": "on"})
+
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+
+    def test_disable_unit_with_active_memberships_is_blocked(self):
+        ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.child,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.login_admin()
+
+        self.client.post(self.disable_child_url, {"confirm_disable": "on"})
+
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+
+    def test_disable_blocker_message_is_localized_in_chinese(self):
+        ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.child,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.set_language("zh")
+        self.login_admin()
+
+        response = self.client.post(
+            self.disable_child_url,
+            {"confirm_disable": "on"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "无法停用此单元")
+        self.assertContains(response, "启用中的归属记录")
+        self.assertNotContains(response, "active memberships")
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+
+    def test_normal_user_cannot_disable_unit(self):
+        self.client.login(username="structure_plain", password="PlainPass123!")
+
+        response = self.client.post(
+            self.disable_child_url,
+            {"confirm_disable": "on"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+
+    def test_disable_does_not_delete_or_rewrite_related_rows(self):
+        ended_membership = ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.child,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=False,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate(),
+        )
+        before = (
+            ChurchStructureMembership.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+        )
+        self.login_admin()
+
+        self.client.post(self.disable_child_url, {"confirm_disable": "on"})
+
+        after = (
+            ChurchStructureMembership.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+        )
+        self.assertEqual(before, after)
+        ended_membership.refresh_from_db()
+        self.assertEqual(ended_membership.status, ChurchStructureMembership.STATUS_ENDED)
+        self.assertFalse(ended_membership.is_primary)
 
     # --- rename POST --------------------------------------------------------
 

@@ -128,6 +128,35 @@ class StructureMembershipAddForm(forms.Form):
         )
 
 
+class ChurchStructureUnitChildForm(forms.ModelForm):
+    class Meta:
+        model = ChurchStructureUnit
+        fields = ["name", "name_en", "code", "unit_type", "sort_order"]
+
+    def __init__(self, *args, parent=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if parent is None:
+            raise ValueError("ChurchStructureUnitChildForm requires a parent.")
+        self.parent = parent
+        self.instance.parent = parent
+        self.instance.is_active = True
+        self.fields["unit_type"].choices = [
+            choice
+            for choice in ChurchStructureUnit.UNIT_TYPE_CHOICES
+            if choice[0] != ChurchStructureUnit.UNIT_ROOT
+        ]
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not self.parent.is_active:
+            raise forms.ValidationError(
+                "Child units can only be added under active structure units."
+            )
+        if cleaned_data.get("unit_type") == ChurchStructureUnit.UNIT_ROOT:
+            raise forms.ValidationError("Root units cannot be created as children.")
+        return cleaned_data
+
+
 def create_or_update_signup_membership_request(user, requested_unit):
     membership = (
         ChurchStructureMembership.objects

@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponseForbidden
@@ -229,15 +230,16 @@ def staff_structure_map(request):
 
     The default map view is review-first: counts only, no member rosters.
     Edit mode is gated to users who can change ChurchStructureUnit and exposes
-    rename, add-child, safe soft-disable, and detail/admin links. Membership
-    maintenance lives on the unit detail page.
+    rename, add-child, safe soft-disable, inactive-unit review/re-enable, and
+    detail/admin links. Membership maintenance lives on the unit detail page.
 
     Edit mode does not hard-delete units, move/reparent units,
-    cascade-disable children, automatically end memberships, rewrite audience
-    or role scopes, change serving assignments, change visibility semantics,
-    or infer leadership/serving from membership. Ordinary-user matching
-    remains consumer-specific as documented; the structure map is counts/setup
-    context only and does not itself grant visibility.
+    cascade-disable/re-enable children, automatically end/create memberships,
+    rewrite audience or role scopes, change serving assignments, change
+    visibility semantics, or infer leadership/serving from membership.
+    Ordinary-user matching remains consumer-specific as documented; the
+    structure map is counts/setup context only and does not itself grant
+    visibility.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -352,6 +354,12 @@ def staff_structure_map(request):
         "accounts.change_churchstructureunit"
     )
     edit_mode = can_admin_units and request.GET.get("edit") == "1"
+    inactive_unit_count = ChurchStructureUnit.objects.filter(
+        is_active=False,
+    ).count()
+    inactive_unit_rows = (
+        _inactive_structure_unit_rows(language) if edit_mode else []
+    )
 
     return render(
         request,
@@ -360,6 +368,8 @@ def staff_structure_map(request):
             "active_nav": "staff",
             "structure_rows": structure_rows,
             "indicators": indicators,
+            "inactive_unit_rows": inactive_unit_rows,
+            "inactive_unit_count": inactive_unit_count,
             "can_admin_units": can_admin_units,
             "child_unit_type_choices": [
                 choice
@@ -602,6 +612,102 @@ def _structure_unit_disable_blocker_labels(blockers, language):
     return [labels.get(blocker, {}).get(key, blocker) for blocker in blockers]
 
 
+def _structure_unit_enable_blockers(unit):
+    blockers = []
+
+    if unit.parent_id and unit.parent and not unit.parent.is_active:
+        blockers.append("inactive_parent")
+
+    if (
+        unit.unit_type == ChurchStructureUnit.UNIT_ROOT
+        and ChurchStructureUnit.objects.filter(
+            is_active=True,
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+        )
+        .exclude(id=unit.id)
+        .exists()
+    ):
+        blockers.append("multiple_active_roots")
+
+    return blockers
+
+
+def _structure_unit_enable_blocker_labels(blockers, language):
+    labels = {
+        "inactive_parent": {
+            "en": "parent unit is inactive",
+            "zh": "上级单元已停用",
+        },
+        "multiple_active_roots": {
+            "en": "another active root unit already exists",
+            "zh": "已经有另一个启用的全教会根单元",
+        },
+        "validation_error": {
+            "en": "model validation did not pass",
+            "zh": "模型验证未通过",
+        },
+    }
+    key = "zh" if language == "zh" else "en"
+    return [labels.get(blocker, {}).get(key, blocker) for blocker in blockers]
+
+
+def _inactive_structure_unit_rows(language):
+    active_filter = _active_membership_filter("memberships")
+    inactive_units = (
+        ChurchStructureUnit.objects.filter(is_active=False)
+        .select_related("parent")
+        .annotate(
+            active_membership_count=Count(
+                "memberships",
+                filter=active_filter,
+                distinct=True,
+            )
+        )
+        .order_by("parent_id", "sort_order", "code", "name", "id")
+    )
+    rows = []
+    reference_blocker_keys = {
+        "active_role_scopes",
+        "service_event_audience_scopes",
+        "service_event_host_language_refs",
+        "bible_study_schedule_audience_scopes",
+        "bible_study_meeting_audience_scopes",
+        "bible_study_meeting_anchors",
+        "prayer_snapshots",
+        "reflection_snapshots",
+    }
+
+    for unit in inactive_units:
+        disable_blockers = _structure_unit_disable_blockers(unit)
+        reference_blockers = [
+            blocker
+            for blocker in disable_blockers
+            if blocker in reference_blocker_keys
+        ]
+        enable_blockers = _structure_unit_enable_blockers(unit)
+        rows.append(
+            {
+                "unit": unit,
+                "name": unit.display_name(language),
+                "path": unit.path_label(language),
+                "parent_name": unit.parent.display_name(language)
+                if unit.parent else "",
+                "active_membership_count": unit.active_membership_count,
+                "reference_warning_count": len(reference_blockers),
+                "reference_warning_labels": _structure_unit_disable_blocker_labels(
+                    reference_blockers,
+                    language,
+                ),
+                "can_enable": not enable_blockers,
+                "enable_blocker_labels": _structure_unit_enable_blocker_labels(
+                    enable_blockers,
+                    language,
+                ),
+            }
+        )
+    return rows
+
+
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def staff_structure_unit_disable(request, unit_id):
@@ -671,6 +777,83 @@ def staff_structure_unit_disable(request, unit_id):
         request,
         "已停用单元。" if language == "zh"
         else "Unit disabled.",
+    )
+    return redirect(_staff_structure_edit_url())
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def staff_structure_unit_enable(request, unit_id):
+    language = get_user_language(request)
+
+    with transaction.atomic():
+        unit = get_object_or_404(
+            ChurchStructureUnit.objects.select_for_update().select_related("parent"),
+            id=unit_id,
+        )
+
+        if unit.is_active:
+            messages.warning(
+                request,
+                "此单元已经启用。" if language == "zh"
+                else "This unit is already active.",
+            )
+            return redirect(_staff_structure_edit_url())
+
+        blockers = _structure_unit_enable_blockers(unit)
+        if blockers:
+            blocker_labels = _structure_unit_enable_blocker_labels(
+                blockers,
+                language,
+            )
+            messages.error(
+                request,
+                (
+                    "无法恢复启用此单元；请先处理："
+                    + "、".join(blocker_labels)
+                )
+                if language == "zh"
+                else (
+                    "This unit was not re-enabled. Resolve first: "
+                    + ", ".join(blocker_labels)
+                    + "."
+                ),
+            )
+            return redirect(_staff_structure_edit_url())
+
+        unit.is_active = True
+        try:
+            unit.full_clean()
+        except ValidationError:
+            messages.error(
+                request,
+                "无法恢复启用此单元；模型验证未通过。"
+                if language == "zh"
+                else "This unit was not re-enabled. Model validation did not pass.",
+            )
+            return redirect(_staff_structure_edit_url())
+
+        unit.save(update_fields=["is_active", "updated_at"])
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=unit.pk,
+            object_repr=str(unit),
+            action_flag=CHANGE,
+            change_message=(
+                "Re-enabled structure unit via staff structure map "
+                "(STRUCTURE-SETUP-INACTIVE.1B). No child units, memberships, "
+                "audience rows, role assignments, serving assignments, or "
+                "Bible Study role rows were changed."
+            ),
+        )
+
+    messages.success(
+        request,
+        "已恢复启用单元。" if language == "zh"
+        else "Unit re-enabled.",
     )
     return redirect(_staff_structure_edit_url())
 
@@ -862,6 +1045,15 @@ def church_structure_unit_detail(request, unit_id):
         .order_by("-updated_at", "user__username", "id")[:20]
     )
     children = unit.children.order_by("sort_order", "code", "name", "id")
+    can_enable_unit = False
+    enable_blocker_labels = []
+    if request.user.has_perm("accounts.change_churchstructureunit"):
+        enable_blockers = _structure_unit_enable_blockers(unit)
+        can_enable_unit = not unit.is_active and not enable_blockers
+        enable_blocker_labels = _structure_unit_enable_blocker_labels(
+            enable_blockers,
+            language,
+        )
 
     return render(
         request,
@@ -874,6 +1066,8 @@ def church_structure_unit_detail(request, unit_id):
             "active_memberships": active_memberships,
             "inactive_memberships": inactive_memberships,
             "add_form": add_form,
+            "can_enable_unit": can_enable_unit,
+            "enable_blocker_labels": enable_blocker_labels,
         },
     )
 

@@ -10,9 +10,9 @@
     <p class="page-subtitle">
         {% if edit_mode %}
         {% if language == "zh" %}
-        编辑模式：可重命名显示名称、新增下级单元、对符合条件的单元做安全停用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用下级、自动结束归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
+        编辑模式：可重命名显示名称、新增下级单元、对符合条件的单元做安全停用、查看已停用单元并安全恢复启用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用或恢复下级、自动结束或新增归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
         {% else %}
-        Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
+        Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, inactive-unit review/re-enable, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable or re-enable children, automatically end or create memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
         {% endif %}
         {% else %}
         {% if language == "zh" %}
@@ -59,6 +59,7 @@
             <span class="status status-warning">{% if language == "zh" %}需要检查{% else %}Needs review{% endif %}</span>
             {% endif %}
         </li>
+        <li>{% if language == "zh" %}已停用单元{% else %}Inactive units{% endif %}: <strong>{{ inactive_unit_count }}</strong></li>
         <li>{% if language == "zh" %}仍被引用的已停用单元{% else %}Inactive units still referenced{% endif %}: <strong>{{ indicators.inactive_units_still_referenced }}</strong></li>
         <li>{% if language == "zh" %}停用单元上的启用归属{% else %}Inactive units with active memberships{% endif %}: <strong>{{ indicators.inactive_units_with_active_memberships }}</strong></li>
     </ul>
@@ -106,9 +107,9 @@
         <strong>{% if language == "zh" %}编辑模式{% else %}Edit mode{% endif %}</strong>
         <p>
             {% if language == "zh" %}
-            编辑模式可重命名显示名称、新增下级单元、对符合条件的单元做安全停用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用下级、自动结束归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
+            编辑模式可重命名显示名称、新增下级单元、对符合条件的单元做安全停用、查看已停用单元并安全恢复启用，并查看详细资料或后台链接；不会硬删除、移动/改上级、连带停用或恢复下级、自动结束或新增归属、改写适用范围或职分范围、改变服事安排、可见性语义，或让归属授予服事/领导权限。
             {% else %}
-            Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
+            Edit mode supports renaming display labels, adding child units, safe soft-disable for eligible units, inactive-unit review/re-enable, and detail/admin links. It does not hard-delete units, move or reparent units, cascade-disable or re-enable children, automatically end or create memberships, rewrite audience or role scopes, change serving assignments, change visibility semantics, or grant leadership/serving from membership.
             {% endif %}
         </p>
     </div>
@@ -282,6 +283,100 @@
         {% endfor %}
     </div>
 </section>
+
+{% if edit_mode %}
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}已停用单元{% else %}Inactive units{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        已停用单元不会合并到上方启用结构树。这里可查看并在安全时恢复启用；不会恢复下级单元、新增归属、改写适用范围、职分范围或服事安排。
+        {% else %}
+        Inactive units are not merged into the active tree above. Review and safely re-enable them here when allowed; this does not re-enable children, create memberships, rewrite audience scopes, role scopes, or serving assignments.
+        {% endif %}
+    </p>
+    <details class="structure-inactive-review" {% if inactive_unit_rows %}open{% endif %}>
+        <summary>
+            {% if language == "zh" %}查看已停用单元{% else %}Review inactive units{% endif %}
+            ({{ inactive_unit_count }})
+        </summary>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{% if language == "zh" %}单元{% else %}Unit{% endif %}</th>
+                        <th>{% if language == "zh" %}代码{% else %}Code{% endif %}</th>
+                        <th>{% if language == "zh" %}类型{% else %}Type{% endif %}</th>
+                        <th>{% if language == "zh" %}上级{% else %}Parent{% endif %}</th>
+                        <th>{% if language == "zh" %}启用归属{% else %}Active memberships{% endif %}</th>
+                        <th>{% if language == "zh" %}引用提醒{% else %}Reference warnings{% endif %}</th>
+                        <th>{% if language == "zh" %}工具{% else %}Tools{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in inactive_unit_rows %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.name }}</strong>
+                            <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+                            <div class="muted">{{ row.path }}</div>
+                        </td>
+                        <td>{{ row.unit.code }}</td>
+                        <td>{{ row.unit.get_unit_type_display }}</td>
+                        <td>{{ row.parent_name|default:"-" }}</td>
+                        <td>{{ row.active_membership_count }}</td>
+                        <td>
+                            {{ row.reference_warning_count }}
+                            {% if row.reference_warning_labels %}
+                            <div class="muted">{{ row.reference_warning_labels|join:", " }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="structure-membership-actions">
+                                <a class="button-secondary button"
+                                   href="{% url 'church_structure_unit_detail' row.unit.id %}">
+                                    {% if language == "zh" %}详情{% else %}Detail{% endif %}
+                                </a>
+                                {% if can_admin_units %}
+                                <a class="button-secondary button"
+                                   href="{% url 'admin:accounts_churchstructureunit_change' row.unit.id %}">
+                                    {% if language == "zh" %}后台{% else %}Admin{% endif %}
+                                </a>
+                                {% endif %}
+                                {% if row.can_enable %}
+                                <form method="post"
+                                      action="{% url 'staff_structure_unit_enable' row.unit.id %}"
+                                      class="inline-action-form">
+                                    {% csrf_token %}
+                                    <button type="submit" class="button">
+                                        {% if language == "zh" %}恢复启用此单元{% else %}Re-enable this unit{% endif %}
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="status status-warning">
+                                    {% if language == "zh" %}暂不能恢复{% else %}Cannot re-enable yet{% endif %}
+                                </span>
+                                {% if row.enable_blocker_labels %}
+                                <div class="muted">{{ row.enable_blocker_labels|join:", " }}</div>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="muted">
+                            {% if language == "zh" %}没有已停用单元。{% else %}No inactive units.{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+</section>
+{% endif %}
 <script>
 (function () {
     function initStructureTree(root) {

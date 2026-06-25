@@ -3707,6 +3707,25 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertContains(response, reverse("end_structure_membership", args=[membership.id]))
         self.assertContains(response, reverse("admin:accounts_churchstructureunit_change", args=[self.group.id]))
 
+    def test_inactive_unit_detail_shows_banner_and_hides_add_membership_form(self):
+        self.set_language("en")
+        self.client.login(username="setup_pastor", password="PastorPass123!")
+        inactive_detail_url = reverse(
+            "church_structure_unit_detail",
+            args=[self.inactive_unit.id],
+        )
+
+        response = self.client.get(inactive_detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This unit is inactive")
+        self.assertContains(response, "Active memberships cannot be added to inactive units.")
+        self.assertContains(response, "Active memberships cannot be added to inactive units")
+        self.assertNotContains(
+            response,
+            reverse("add_structure_membership", args=[self.inactive_unit.id]),
+        )
+
     def test_ordinary_user_cannot_access_unit_detail(self):
         self.client.login(username="setup_ordinary", password="UserPass123!")
 
@@ -3968,6 +3987,15 @@ class StaffStructureMapEditModeTests(TestCase):
             name_en="District 2",
             sort_order=3,
         )
+        self.inactive_child = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="OLD1",
+            name="停用一组",
+            name_en="Inactive Group 1",
+            is_active=False,
+            sort_order=9,
+        )
         self.rename_root_url = reverse(
             "staff_structure_unit_rename", args=[self.root.id]
         )
@@ -3982,6 +4010,9 @@ class StaffStructureMapEditModeTests(TestCase):
         )
         self.disable_child_url = reverse(
             "staff_structure_unit_disable", args=[self.child.id]
+        )
+        self.enable_child_url = reverse(
+            "staff_structure_unit_enable", args=[self.inactive_child.id]
         )
 
     def set_language(self, language="en"):
@@ -4018,7 +4049,10 @@ class StaffStructureMapEditModeTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["edit_mode"])
+        self.assertEqual(response.context["inactive_unit_count"], 1)
+        self.assertContains(response, "Inactive units")
         self.assertNotContains(response, "structure-row-icon-actions")
+        self.assertNotContains(response, "Review inactive units")
         self.assertNotContains(response, "Edit mode:")
         # The entry point into edit mode is offered to admin users.
         self.assertContains(response, "Edit structure")
@@ -4047,6 +4081,35 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertContains(response, "detail/admin links")
         self.assertContains(response, "does not hard-delete units")
         self.assertNotContains(response, "only change display names")
+
+    def test_edit_mode_shows_inactive_unit_review_section(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Review inactive units")
+        self.assertContains(response, "Inactive Group 1")
+        self.assertContains(response, "OLD1")
+        self.assertContains(response, "Small Group")
+        self.assertContains(response, "Whole Church")
+        self.assertContains(response, "Active memberships")
+        self.assertContains(response, "Reference warnings")
+        self.assertContains(response, "Re-enable this unit")
+
+    def test_inactive_units_are_labeled_and_excluded_from_active_tree(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+        active_tree_unit_ids = {
+            row["unit"].id for row in response.context["structure_rows"]
+        }
+
+        self.assertNotIn(self.inactive_child.id, active_tree_unit_ids)
+        self.assertContains(response, "Inactive Group 1")
+        self.assertContains(response, "Inactive")
 
     def test_edit_mode_chinese_copy_describes_current_actions(self):
         self.set_language("zh")
@@ -4115,6 +4178,7 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertContains(response, self.rename_child_url)
         self.assertContains(response, self.add_child_url)
         self.assertContains(response, self.disable_child_url)
+        self.assertContains(response, self.enable_child_url)
         self.assertContains(response, 'name="confirm_disable"')
         self.assertContains(response, "Disable this unit")
         self.assertContains(response, "This only marks the unit inactive")
@@ -4302,6 +4366,250 @@ class StaffStructureMapEditModeTests(TestCase):
         ended_membership.refresh_from_db()
         self.assertEqual(ended_membership.status, ChurchStructureMembership.STATUS_ENDED)
         self.assertFalse(ended_membership.is_primary)
+
+    # --- enable POST --------------------------------------------------------
+
+    def test_admin_can_re_enable_safe_inactive_unit(self):
+        self.login_admin()
+
+        response = self.client.post(self.enable_child_url)
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        self.inactive_child.refresh_from_db()
+        self.assertTrue(self.inactive_child.is_active)
+
+    def test_re_enable_preserves_unrelated_structure_and_runtime_rows(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import (
+            BibleStudyMeetingAudienceScope,
+            BibleStudySeriesAudienceScope,
+        )
+
+        ended_membership = ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.inactive_child,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=False,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate(),
+        )
+        active_scope_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="LIVE1",
+            name="启用一组",
+            name_en="Active Group 1",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.normal_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            structure_unit=active_scope_unit,
+        )
+        event = ServiceEvent.objects.create(
+            title="Enable Safety Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=active_scope_unit,
+        )
+        team = MinistryTeam.objects.create(name="Enable Safety Team")
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        team_membership = TeamMembership.objects.create(
+            team=team,
+            user=self.normal_user,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=team_membership,
+        )
+        series = BibleStudySeries.objects.create(
+            title="Enable Safety Series",
+            start_date=timezone.localdate(),
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=active_scope_unit,
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="Enable Safety Lesson",
+            lesson_date=timezone.localdate(),
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=active_scope_unit,
+            meeting_datetime=timezone.now() + timedelta(days=1),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=active_scope_unit,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.normal_user,
+        )
+        before = {
+            "parent_id": self.inactive_child.parent_id,
+            "code": self.inactive_child.code,
+            "unit_type": self.inactive_child.unit_type,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "meeting_scopes": BibleStudyMeetingAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+            "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+        }
+        self.login_admin()
+
+        self.client.post(self.enable_child_url)
+
+        self.inactive_child.refresh_from_db()
+        after = {
+            "parent_id": self.inactive_child.parent_id,
+            "code": self.inactive_child.code,
+            "unit_type": self.inactive_child.unit_type,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "meeting_scopes": BibleStudyMeetingAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+            "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+        }
+        self.assertEqual(before, after)
+        self.assertTrue(self.inactive_child.is_active)
+        ended_membership.refresh_from_db()
+        self.assertEqual(ended_membership.status, ChurchStructureMembership.STATUS_ENDED)
+        self.assertFalse(ended_membership.is_primary)
+
+    def test_re_enable_does_not_cascade_to_inactive_children(self):
+        inactive_grandchild = ChurchStructureUnit.objects.create(
+            parent=self.inactive_child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="OLD1A",
+            name="停用一组 A",
+            name_en="Inactive Group 1A",
+            is_active=False,
+        )
+        self.login_admin()
+
+        self.client.post(self.enable_child_url)
+
+        self.inactive_child.refresh_from_db()
+        inactive_grandchild.refresh_from_db()
+        self.assertTrue(self.inactive_child.is_active)
+        self.assertFalse(inactive_grandchild.is_active)
+
+    def test_re_enable_is_blocked_when_parent_is_inactive(self):
+        inactive_parent = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="OLDP",
+            name="停用父级",
+            name_en="Inactive Parent",
+            is_active=False,
+        )
+        inactive_child = ChurchStructureUnit.objects.create(
+            parent=inactive_parent,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="OLDP1",
+            name="停用子级",
+            name_en="Inactive Child",
+            is_active=False,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.post(
+            reverse("staff_structure_unit_enable", args=[inactive_child.id]),
+            follow=True,
+        )
+
+        inactive_child.refresh_from_db()
+        self.assertFalse(inactive_child.is_active)
+        self.assertContains(response, "parent unit is inactive")
+
+    def test_re_enable_already_active_unit_warns_without_related_changes(self):
+        before = (
+            ChurchStructureMembership.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.post(
+            reverse("staff_structure_unit_enable", args=[self.child.id]),
+            follow=True,
+        )
+
+        after = (
+            ChurchStructureMembership.objects.count(),
+            ChurchRoleAssignment.objects.count(),
+            TeamAssignment.objects.count(),
+            BibleStudyMeetingRole.objects.count(),
+        )
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+        self.assertEqual(before, after)
+        self.assertContains(response, "This unit is already active.")
+
+    def test_normal_user_cannot_re_enable_unit(self):
+        self.client.login(username="structure_plain", password="PlainPass123!")
+
+        response = self.client.post(self.enable_child_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.inactive_child.refresh_from_db()
+        self.assertFalse(self.inactive_child.is_active)
+
+    def test_re_enable_writes_logentry_audit(self):
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        self.login_admin()
+
+        self.client.post(self.enable_child_url)
+
+        ct = ContentType.objects.get_for_model(ChurchStructureUnit)
+        entry = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.inactive_child.id),
+            user=self.admin,
+        ).first()
+        self.assertIsNotNone(entry)
+        self.assertIn("Re-enabled structure unit", entry.change_message)
+        self.assertIn("No child units, memberships", entry.change_message)
+
+    def test_inactive_unit_detail_shows_re_enable_action_for_structure_admin(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(
+            reverse("church_structure_unit_detail", args=[self.inactive_child.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This unit is inactive")
+        self.assertContains(response, "Re-enable this unit")
+        self.assertContains(
+            response,
+            "It does not re-enable children, create memberships, rewrite audience scopes, role scopes, or serving assignments.",
+        )
 
     # --- rename POST --------------------------------------------------------
 

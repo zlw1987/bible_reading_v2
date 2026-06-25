@@ -18,6 +18,41 @@
     </p>
 </div>
 
+{% if not unit.is_active %}
+<section class="notice-panel">
+    <strong>{% if language == "zh" %}此单元已停用{% else %}This unit is inactive{% endif %}</strong>
+    <p>
+        {% if language == "zh" %}
+        此单元不会显示在启用结构树中，也不能新增启用归属。
+        {% else %}
+        This unit is hidden from the active structure tree, and active memberships cannot be added to it.
+        {% endif %}
+    </p>
+    {% if can_enable_unit %}
+    <form method="post"
+          action="{% url 'staff_structure_unit_enable' unit.id %}"
+          class="inline-action-form">
+        {% csrf_token %}
+        <p class="muted">
+            {% if language == "zh" %}
+            这里只会把单元标记为启用，不会恢复下级单元、不会新增归属、不会改写适用范围、职分或服事安排。
+            {% else %}
+            This only marks the unit active again. It does not re-enable children, create memberships, rewrite audience scopes, role scopes, or serving assignments.
+            {% endif %}
+        </p>
+        <button type="submit" class="button">
+            {% if language == "zh" %}恢复启用此单元{% else %}Re-enable this unit{% endif %}
+        </button>
+    </form>
+    {% elif enable_blocker_labels %}
+    <p class="muted">
+        {% if language == "zh" %}暂不能恢复启用：{% else %}Cannot re-enable yet: {% endif %}
+        {{ enable_blocker_labels|join:", " }}
+    </p>
+    {% endif %}
+</section>
+{% endif %}
+
 <section class="card">
     <h2 class="card-title">{% if language == "zh" %}单元资料{% else %}Unit metadata{% endif %}</h2>
     <dl class="detail-list">

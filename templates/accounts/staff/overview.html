@@ -22,9 +22,9 @@
     </strong>
     <p>
         {% if language == "zh" %}
-        查经、读经进度、聚会事件和我的服事目前仍按现有小组资料运行；小组申请审核属于未来教会架构基础，尚未替代这些运行来源。
+        普通关怀/归属使用教会结构归属；查经、读经进度、聚会事件等已批准模块在各自范围内使用此基础。归属不会授予服事安排、团队成员或职分责任。
         {% else %}
-        Bible Study, reading progress, Service Events, and My Serving still run on the current small-group profile data; membership requests are part of the future church-structure foundation and do not replace those runtime sources yet.
+        Ordinary care and belonging use Church Structure membership; approved Bible Study, reading-progress, and Service Event paths use that foundation within their own scopes. Membership does not grant serving assignments, team membership, or role responsibility.
         {% endif %}
     </p>
 </section>
@@ -36,7 +36,7 @@
                 {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
             </h2>
             <p class="muted">
-                {% if language == "zh" %}等待同工审核；确认时仍按旧小组唯一映射规则同步当前运行小组。{% else %}Waiting for staff review; approval still syncs the current runtime small group only by the existing one-mapped-group rule.{% endif %}
+                {% if language == "zh" %}等待同工审核；教会结构归属是普通关怀/归属记录，不代表服事或职分。{% else %}Waiting for staff review; Church Structure membership is ordinary care/belonging, not serving or leadership.{% endif %}
             </p>
         </div>
         <div class="staff-count">{{ pending_membership_requests }}</div>
@@ -155,6 +155,9 @@
             </a>
             <a class="button-secondary button" href="{% url 'staff_structure_map' %}">
                 {% if language == "zh" %}教会结构与设置检查{% else %}Structure & Setup Check{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'church_structure_setup' %}">
+                {% if language == "zh" %}教会结构设置{% else %}Church Structure Setup{% endif %}
             </a>
             <a class="button-secondary button" href="{% url 'admin:index' %}">
                 {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}教会结构设置{% else %}Church Structure Setup{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}教会结构设置{% else %}Church Structure Setup{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        管理普通关怀/归属结构。这里不代表服事安排、团队成员或职分责任。
+        {% else %}
+        Manage ordinary care and belonging structure. This is not serving assignment, team membership, or leadership responsibility.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel">
+    <strong>{% if language == "zh" %}安全边界{% else %}Safety boundary{% endif %}</strong>
+    <p>
+        {% if language == "zh" %}
+        本页只查看结构单元并维护普通归属记录；不编辑结构树，不创建职分/领导关系，也不会从归属推断服事。
+        {% else %}
+        This page only reviews structure units and maintains ordinary belonging records; it does not edit the tree, create leadership assignments, or infer serving from membership.
+        {% endif %}
+    </p>
+</section>
+
+<section class="structure-setup-warning-grid">
+    <article class="card structure-setup-warning-card">
+        <h2 class="card-title">{% if language == "zh" %}没有主要成员的单元{% else %}Units with zero active primary members{% endif %}</h2>
+        <div class="staff-count">{{ warnings.units_without_primary.count }}</div>
+        <ul class="staff-count-list">
+            {% for sample in warnings.units_without_primary.samples %}
+            <li>{{ sample.path_label }}</li>
+            {% empty %}
+            <li class="muted">{% if language == "zh" %}没有提醒。{% else %}No warnings.{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card structure-setup-warning-card">
+        <h2 class="card-title">{% if language == "zh" %}多个主要归属的用户{% else %}Users with multiple active primary memberships{% endif %}</h2>
+        <div class="staff-count">{{ warnings.users_with_multiple_primary.count }}</div>
+        <ul class="staff-count-list">
+            {% for user_obj in warnings.users_with_multiple_primary.samples %}
+            <li>{{ user_obj.username }}</li>
+            {% empty %}
+            <li class="muted">{% if language == "zh" %}没有提醒。{% else %}No warnings.{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card structure-setup-warning-card">
+        <h2 class="card-title">{% if language == "zh" %}有归属但没有主要归属的用户{% else %}Users with active memberships but no primary{% endif %}</h2>
+        <div class="staff-count">{{ warnings.users_without_primary.count }}</div>
+        <ul class="staff-count-list">
+            {% for user_obj in warnings.users_without_primary.samples %}
+            <li>{{ user_obj.username }}</li>
+            {% empty %}
+            <li class="muted">{% if language == "zh" %}没有提醒。{% else %}No warnings.{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </article>
+    <article class="card structure-setup-warning-card">
+        <h2 class="card-title">{% if language == "zh" %}已停用单元仍有启用归属{% else %}Inactive units with active memberships{% endif %}</h2>
+        <div class="staff-count">{{ warnings.inactive_units_with_active_memberships.count }}</div>
+        <ul class="staff-count-list">
+            {% for sample in warnings.inactive_units_with_active_memberships.samples %}
+            <li>{{ sample.path_label }} ({{ sample.count }})</li>
+            {% empty %}
+            <li class="muted">{% if language == "zh" %}没有提醒。{% else %}No warnings.{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </article>
+</section>
+
+<section class="card">
+    <div class="structure-setup-section-head">
+        <div>
+            <h2 class="card-title">{% if language == "zh" %}教会结构树{% else %}Structure tree{% endif %}</h2>
+            <p class="muted">
+                {% if language == "zh" %}
+                显示启用和停用单元；成员数字只统计当前启用的直接归属。
+                {% else %}
+                Shows active and inactive units; member counts include only currently active direct memberships.
+                {% endif %}
+            </p>
+        </div>
+        <div class="actions">
+            <a class="button-secondary button" href="{% url 'staff_structure_map' %}">
+                {% if language == "zh" %}查看设置检查{% else %}Setup check{% endif %}
+            </a>
+            <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
+                {% if language == "zh" %}结构单元（后台）{% else %}Structure Units (Admin){% endif %}
+            </a>
+        </div>
+    </div>
+
+    <div class="structure-map-tree structure-setup-tree">
+        {% for row in structure_rows %}
+        <div class="structure-map-row"
+             style="--structure-depth: {{ row.depth }};">
+            <span class="tree-toggle-spacer" aria-hidden="true"></span>
+            <div class="structure-map-row-content">
+                <a class="structure-map-unit-name" href="{% url 'church_structure_unit_detail' row.unit.id %}">
+                    {{ row.path_label }}
+                </a>
+                {% if row.unit.name_en %}
+                <span class="structure-map-meta">{{ row.unit.name_en }}</span>
+                {% endif %}
+                <span class="structure-map-meta">{{ row.unit.code }}</span>
+                <span class="structure-map-meta">{{ row.unit.get_unit_type_display }}</span>
+                {% if row.unit.parent %}
+                <span class="structure-map-meta">
+                    {% if language == "zh" %}上级{% else %}Parent{% endif %}: {{ row.unit.parent.display_name }}
+                </span>
+                {% endif %}
+                {% if row.unit.is_active %}
+                <span class="status status-good">{% if language == "zh" %}启用{% else %}Active{% endif %}</span>
+                {% else %}
+                <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+                {% endif %}
+                <span class="structure-map-meta">
+                    {% if language == "zh" %}启用归属{% else %}Active members{% endif %}: {{ row.active_member_count }}
+                </span>
+                <span class="structure-map-meta">
+                    {% if language == "zh" %}主要归属{% else %}Primary members{% endif %}: {{ row.primary_member_count }}
+                </span>
+                <a class="button-secondary button structure-row-details-link" href="{% url 'church_structure_unit_detail' row.unit.id %}">
+                    {% if language == "zh" %}详情{% else %}Detail{% endif %}
+                </a>
+            </div>
+        </div>
+        {% empty %}
+        <p class="muted">{% if language == "zh" %}还没有结构单元。{% else %}No structure units yet.{% endif %}</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

@@ -33,6 +33,31 @@ urlpatterns = [
         name="staff_structure_unit_rename",
     ),
     path(
+        "structure/setup/",
+        views.church_structure_setup,
+        name="church_structure_setup",
+    ),
+    path(
+        "structure/setup/units/<int:unit_id>/",
+        views.church_structure_unit_detail,
+        name="church_structure_unit_detail",
+    ),
+    path(
+        "structure/setup/units/<int:unit_id>/members/add/",
+        views.add_structure_membership,
+        name="add_structure_membership",
+    ),
+    path(
+        "structure/setup/memberships/<int:membership_id>/end/",
+        views.end_structure_membership,
+        name="end_structure_membership",
+    ),
+    path(
+        "structure/setup/memberships/<int:membership_id>/set-primary/",
+        views.set_primary_structure_membership,
+        name="set_primary_structure_membership",
+    ),
+    path(
         "staff/moderation/",
         views.staff_moderation_queue,
         name="staff_moderation_queue",

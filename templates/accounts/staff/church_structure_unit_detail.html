@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}结构单元详情{% else %}Structure Unit Detail{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}结构单元详情{% else %}Structure Unit Detail{% endif %}</h1>
+    <p class="page-subtitle">{{ unit_path }}</p>
+</section>
+
+<div class="card">
+    <p>
+        <a href="{% url 'church_structure_setup' %}">
+            {% if language == "zh" %}返回教会结构设置{% else %}Back to Church Structure Setup{% endif %}
+        </a>
+    </p>
+</div>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}单元资料{% else %}Unit metadata{% endif %}</h2>
+    <dl class="detail-list">
+        <dt>{% if language == "zh" %}名称{% else %}Name{% endif %}</dt>
+        <dd>{{ unit.name }}</dd>
+        <dt>{% if language == "zh" %}英文名称{% else %}English name{% endif %}</dt>
+        <dd>{{ unit.name_en|default:"-" }}</dd>
+        <dt>{% if language == "zh" %}代码{% else %}Code{% endif %}</dt>
+        <dd>{{ unit.code }}</dd>
+        <dt>{% if language == "zh" %}类型{% else %}Type{% endif %}</dt>
+        <dd>{{ unit.get_unit_type_display }}</dd>
+        <dt>{% if language == "zh" %}上级{% else %}Parent{% endif %}</dt>
+        <dd>{% if unit.parent %}{{ unit.parent.display_name }}{% else %}-{% endif %}</dd>
+        <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>
+        <dd>
+            {% if unit.is_active %}
+            <span class="status status-good">{% if language == "zh" %}启用{% else %}Active{% endif %}</span>
+            {% else %}
+            <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+            {% endif %}
+        </dd>
+        <dt>{% if language == "zh" %}路径{% else %}Path{% endif %}</dt>
+        <dd>{{ unit_path }}</dd>
+    </dl>
+    <div class="actions">
+        <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_change' unit.id %}">
+            {% if language == "zh" %}结构单元（后台）{% else %}Structure Unit (Admin){% endif %}
+        </a>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}下级单元{% else %}Children units{% endif %}</h2>
+    <ul class="staff-count-list">
+        {% for child in children %}
+        <li>
+            <a href="{% url 'church_structure_unit_detail' child.id %}">{{ child.display_name }}</a>
+            {% if child.name_en %}
+            <span class="muted">{{ child.name_en }}</span>
+            {% endif %}
+            <span class="muted">{{ child.code }} / {{ child.get_unit_type_display }}</span>
+            {% if not child.is_active %}
+            <span class="status status-warning">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+            {% endif %}
+        </li>
+        {% empty %}
+        <li class="muted">{% if language == "zh" %}没有下级单元。{% else %}No children units.{% endif %}</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}新增普通归属{% else %}Add ordinary membership{% endif %}</h2>
+    {% if unit.is_active %}
+    <form method="post" action="{% url 'add_structure_membership' unit.id %}" class="structure-membership-form">
+        {% csrf_token %}
+        {% for field in add_form %}
+        <div class="form-field">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+            <span class="form-help">{{ field.help_text }}</span>
+            {% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">{% if language == "zh" %}新增归属{% else %}Add membership{% endif %}</button>
+    </form>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        停用单元不能新增启用归属。
+        {% else %}
+        Active memberships cannot be added to inactive units.
+        {% endif %}
+    </p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}启用归属{% else %}Active memberships{% endif %}</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}用户{% else %}User{% endif %}</th>
+                    <th>{% if language == "zh" %}邮箱{% else %}Email{% endif %}</th>
+                    <th>{% if language == "zh" %}状态{% else %}Status{% endif %}</th>
+                    <th>{% if language == "zh" %}主要{% else %}Primary{% endif %}</th>
+                    <th>{% if language == "zh" %}开始日期{% else %}Start date{% endif %}</th>
+                    <th>{% if language == "zh" %}结束日期{% else %}End date{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for membership in active_memberships %}
+                <tr>
+                    <td>{{ membership.user.get_full_name|default:membership.user.username }} ({{ membership.user.username }})</td>
+                    <td>{{ membership.user.email|default:"-" }}</td>
+                    <td><span class="status status-good">{{ membership.get_status_display }}</span></td>
+                    <td>
+                        {% if membership.is_primary %}
+                        <span class="status status-good">{% if language == "zh" %}主要{% else %}Primary{% endif %}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>{{ membership.start_date|date:"Y-m-d" }}</td>
+                    <td>{{ membership.end_date|date:"Y-m-d"|default:"-" }}</td>
+                    <td>
+                        <div class="structure-membership-actions">
+                            {% if not membership.is_primary %}
+                            <form method="post" action="{% url 'set_primary_structure_membership' membership.id %}" class="inline-action-form">
+                                {% csrf_token %}
+                                <button type="submit" class="button-secondary">
+                                    {% if language == "zh" %}设为主要{% else %}Set primary{% endif %}
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'end_structure_membership' membership.id %}" class="inline-action-form">
+                                {% csrf_token %}
+                                <button type="submit" class="button-danger">
+                                    {% if language == "zh" %}结束归属{% else %}End{% endif %}
+                                </button>
+                            </form>
+                            <a class="button-secondary button" href="{% url 'admin:accounts_churchstructuremembership_change' membership.id %}">
+                                {% if language == "zh" %}后台{% else %}Admin{% endif %}
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="muted">{% if language == "zh" %}没有启用归属。{% else %}No active memberships.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}非启用/历史归属{% else %}Inactive or past memberships{% endif %}</h2>
+    <ul class="staff-count-list">
+        {% for membership in inactive_memberships %}
+        <li>
+            {{ membership.user.username }} -
+            {{ membership.get_status_display }}
+            {% if membership.end_date %}({{ membership.end_date|date:"Y-m-d" }}){% endif %}
+        </li>
+        {% empty %}
+        <li class="muted">{% if language == "zh" %}没有历史归属。{% else %}No inactive or past memberships.{% endif %}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

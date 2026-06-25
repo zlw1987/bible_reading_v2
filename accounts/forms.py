@@ -1,8 +1,10 @@
 from django import forms
 from django.contrib.auth import password_validation
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import transaction
+from django.utils import timezone
 from django.contrib.auth.forms import (
     AuthenticationForm,
     PasswordChangeForm,
@@ -36,6 +38,94 @@ class RequestableUnitChoiceField(forms.ModelChoiceField):
 
     def label_from_instance(self, obj):
         return obj.display_name(self.language)
+
+
+class StructureSetupUserChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        label = obj.get_full_name() or obj.username
+        if obj.email:
+            return f"{label} ({obj.username}, {obj.email})"
+        if label != obj.username:
+            return f"{label} ({obj.username})"
+        return obj.username
+
+
+class StructureMembershipAddForm(forms.Form):
+    user = StructureSetupUserChoiceField(queryset=User.objects.none())
+    membership_type = forms.ChoiceField(
+        choices=ChurchStructureMembership.MEMBERSHIP_TYPE_CHOICES,
+        initial=ChurchStructureMembership.TYPE_MEMBER,
+    )
+    start_date = forms.DateField(
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    is_primary = forms.BooleanField(required=False)
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=(
+            "Operational/non-sensitive notes only. Do not store counseling, "
+            "pastoral, medical, financial, or private information."
+        ),
+    )
+
+    def __init__(self, *args, unit=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if unit is None:
+            raise ValueError("StructureMembershipAddForm requires a unit.")
+        self.unit = unit
+        UserModel = get_user_model()
+        self.fields["user"].queryset = UserModel.objects.filter(
+            is_active=True,
+        ).order_by("username")
+
+    def clean(self):
+        cleaned_data = super().clean()
+        user = cleaned_data.get("user")
+        start_date = cleaned_data.get("start_date")
+
+        if self.unit and not self.unit.is_active:
+            raise forms.ValidationError(
+                "Active memberships can only be added to active structure units."
+            )
+
+        if user and start_date:
+            duplicate = ChurchStructureMembership.active_for_user(
+                user,
+                target_date=start_date,
+            ).filter(unit=self.unit)
+            if duplicate.exists():
+                raise forms.ValidationError(
+                    "This user already has an active membership for this unit."
+                )
+
+        return cleaned_data
+
+    @transaction.atomic
+    def save(self, *, approved_by):
+        user = self.cleaned_data["user"]
+        is_primary = self.cleaned_data.get("is_primary", False)
+
+        if is_primary:
+            ChurchStructureMembership.objects.filter(
+                user=user,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+            ).update(is_primary=False)
+
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.unit,
+            membership_type=self.cleaned_data["membership_type"],
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=is_primary,
+            start_date=self.cleaned_data["start_date"],
+            requested_by=approved_by,
+            approved_by=approved_by,
+            approved_at=timezone.now(),
+            notes=self.cleaned_data.get("notes", ""),
+        )
 
 
 def create_or_update_signup_membership_request(user, requested_unit):

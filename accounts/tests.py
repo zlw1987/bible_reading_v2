@@ -45,6 +45,7 @@ from reading.models import ReadingPlan, ReadingPlanDay
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingRole,
     BibleStudySeries,
 )
 
@@ -2926,7 +2927,8 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "Read-only summary")
         self.assertContains(response, "How visibility works today")
         self.assertNotContains(response, "Current Runtime Boundary")
-        self.assertContains(response, "existing one-mapped-group rule")
+        self.assertContains(response, "ordinary care/belonging")
+        self.assertContains(response, "not serving or leadership")
         self.assertContains(response, reverse("staff_membership_request_list"))
         self.assertContains(response, reverse("bible_study_schedule_manage_list"))
         self.assertContains(response, reverse("bible_study_lesson_manage_list"))
@@ -2938,6 +2940,7 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, reverse("ministry_team_list"))
         self.assertContains(response, reverse("team_assignment_list"))
         self.assertContains(response, reverse("staff_user_list"))
+        self.assertContains(response, reverse("church_structure_setup"))
         self.assertContains(response, "Ministry ops health flags")
         self.assertContains(response, "Teams missing playbook links")
         self.assertContains(response, "Display-name-only members")
@@ -3424,6 +3427,501 @@ class StaffStructureMapTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.url)
         self.assertContains(response, "Structure & Setup Check")
+
+
+class ChurchStructureSetupDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="setup_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.pastor = User.objects.create_user(
+            username="setup_pastor",
+            password="PastorPass123!",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.pastor,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        self.ordinary = User.objects.create_user(
+            username="setup_ordinary",
+            password="UserPass123!",
+        )
+        self.member_only = User.objects.create_user(
+            username="setup_member_only",
+            password="UserPass123!",
+        )
+        self.team_only = User.objects.create_user(
+            username="setup_team_only",
+            password="UserPass123!",
+        )
+        self.bible_study_role_only = User.objects.create_user(
+            username="setup_bible_study_role_only",
+            password="UserPass123!",
+        )
+        self.target_user = User.objects.create_user(
+            username="setup_target",
+            password="UserPass123!",
+            email="target@example.com",
+        )
+        self.other_user = User.objects.create_user(
+            username="setup_other_target",
+            password="UserPass123!",
+        )
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SETUP-R4",
+            name="彩虹四组",
+            name_en="Rainbow 4",
+        )
+        self.child = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_FELLOWSHIP,
+            code="SETUP-FEL",
+            name="团契小组",
+            name_en="Fellowship Unit",
+        )
+        self.inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SETUP-OLD",
+            name="停用小组",
+            name_en="Inactive Unit",
+            is_active=False,
+        )
+        self.setup_url = reverse("church_structure_setup")
+        self.detail_url = reverse("church_structure_unit_detail", args=[self.group.id])
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def login_staff(self):
+        self.client.login(username="setup_staff", password="StaffPass123!")
+
+    def create_membership(self, user, unit=None, **overrides):
+        defaults = {
+            "user": user,
+            "unit": unit or self.group,
+            "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "start_date": timezone.localdate(),
+            "is_primary": False,
+        }
+        defaults.update(overrides)
+        return ChurchStructureMembership.objects.create(**defaults)
+
+    def create_team_assignment_for(self, user):
+        event = ServiceEvent.objects.create(
+            title="Setup Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        team = MinistryTeam.objects.create(name="Setup Team")
+        team_membership = TeamMembership.objects.create(team=team, user=user)
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=team_membership,
+        )
+
+    def create_bible_study_role_for(self, user):
+        series = BibleStudySeries.objects.create(
+            title="Setup Series",
+            start_date=timezone.localdate(),
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="Setup Lesson",
+            lesson_date=timezone.localdate(),
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=self.group,
+            meeting_datetime=timezone.now() + timedelta(days=1),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=user,
+        )
+
+    def test_anonymous_user_is_redirected_to_login(self):
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_ordinary_user_cannot_access_setup(self):
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_membership_only_user_cannot_access_setup(self):
+        self.create_membership(self.member_only, is_primary=True)
+        self.client.login(username="setup_member_only", password="UserPass123!")
+
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_team_assignment_only_user_cannot_access_setup(self):
+        self.create_team_assignment_for(self.team_only)
+        self.client.login(username="setup_team_only", password="UserPass123!")
+
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_bible_study_role_only_user_cannot_access_setup(self):
+        self.create_bible_study_role_for(self.bible_study_role_only)
+        self.client.login(
+            username="setup_bible_study_role_only",
+            password="UserPass123!",
+        )
+
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_and_global_pastor_can_access_setup(self):
+        self.set_language("en")
+        for username, password in (
+            ("setup_staff", "StaffPass123!"),
+            ("setup_pastor", "PastorPass123!"),
+        ):
+            self.client.logout()
+            self.client.login(username=username, password=password)
+
+            response = self.client.get(self.setup_url)
+
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, self.setup_url)
+
+    def test_dashboard_lists_units_labels_counts_and_inactive_status(self):
+        self.create_membership(self.target_user, is_primary=True)
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.setup_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "Whole Church &gt; Rainbow 4")
+        self.assertContains(response, "SETUP-R4")
+        self.assertContains(response, "Small Group")
+        self.assertContains(response, "Active members: 1")
+        self.assertContains(response, "Primary members: 1")
+        self.assertContains(response, "Inactive Unit")
+        self.assertContains(response, "Inactive")
+
+    def test_dashboard_shows_setup_warning_counts(self):
+        no_primary_user = User.objects.create_user(username="setup_no_primary")
+        multiple_primary_user = User.objects.create_user(username="setup_multi_primary")
+        self.create_membership(self.target_user, is_primary=True)
+        self.create_membership(no_primary_user, is_primary=False)
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=multiple_primary_user,
+                    unit=self.group,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    start_date=timezone.localdate(),
+                    is_primary=True,
+                ),
+                ChurchStructureMembership(
+                    user=multiple_primary_user,
+                    unit=self.child,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    start_date=timezone.localdate(),
+                    is_primary=True,
+                ),
+                ChurchStructureMembership(
+                    user=self.other_user,
+                    unit=self.inactive_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    start_date=timezone.localdate(),
+                    is_primary=False,
+                ),
+            ]
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.setup_url)
+        warnings = response.context["warnings"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(warnings["users_with_multiple_primary"]["count"], 1)
+        self.assertEqual(warnings["users_without_primary"]["count"], 2)
+        self.assertEqual(
+            warnings["inactive_units_with_active_memberships"]["count"],
+            1,
+        )
+        self.assertGreaterEqual(warnings["units_without_primary"]["count"], 1)
+        self.assertContains(response, "Users with multiple active primary memberships")
+        self.assertContains(response, "setup_multi_primary")
+        self.assertContains(response, "setup_no_primary")
+        self.assertContains(response, "Inactive Unit")
+
+    def test_unit_detail_shows_metadata_children_and_active_memberships(self):
+        membership = self.create_membership(self.target_user, is_primary=True)
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Structure Unit Detail")
+        self.assertContains(response, "Rainbow 4")
+        self.assertContains(response, "SETUP-R4")
+        self.assertContains(response, "Small Group")
+        self.assertContains(response, "Whole Church &gt; Rainbow 4")
+        self.assertContains(response, "Fellowship Unit")
+        self.assertContains(response, "setup_target")
+        self.assertContains(response, "target@example.com")
+        self.assertContains(response, reverse("end_structure_membership", args=[membership.id]))
+        self.assertContains(response, reverse("admin:accounts_churchstructureunit_change", args=[self.group.id]))
+
+    def test_ordinary_user_cannot_access_unit_detail(self):
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_can_add_active_membership_to_unit(self):
+        self.login_staff()
+
+        response = self.client.post(
+            reverse("add_structure_membership", args=[self.group.id]),
+            {
+                "user": self.target_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+                "is_primary": "",
+                "notes": "Operational note.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        membership = ChurchStructureMembership.objects.get(user=self.target_user)
+        self.assertEqual(membership.unit, self.group)
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.start_date, timezone.localdate())
+        self.assertEqual(membership.approved_by, self.staff)
+
+    def test_adding_primary_membership_unsets_other_active_primary(self):
+        existing = self.create_membership(
+            self.target_user,
+            unit=self.child,
+            is_primary=True,
+        )
+        self.login_staff()
+
+        self.client.post(
+            reverse("add_structure_membership", args=[self.group.id]),
+            {
+                "user": self.target_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+                "is_primary": "on",
+            },
+        )
+
+        existing.refresh_from_db()
+        new_membership = ChurchStructureMembership.objects.get(
+            user=self.target_user,
+            unit=self.group,
+        )
+        self.assertFalse(existing.is_primary)
+        self.assertTrue(new_membership.is_primary)
+
+    def test_adding_non_primary_membership_preserves_existing_primary(self):
+        existing = self.create_membership(
+            self.target_user,
+            unit=self.child,
+            is_primary=True,
+        )
+        self.login_staff()
+
+        self.client.post(
+            reverse("add_structure_membership", args=[self.group.id]),
+            {
+                "user": self.target_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+            },
+        )
+
+        existing.refresh_from_db()
+        new_membership = ChurchStructureMembership.objects.get(
+            user=self.target_user,
+            unit=self.group,
+        )
+        self.assertTrue(existing.is_primary)
+        self.assertFalse(new_membership.is_primary)
+
+    def test_duplicate_active_membership_is_blocked(self):
+        self.create_membership(self.target_user, is_primary=False)
+        self.login_staff()
+
+        response = self.client.post(
+            reverse("add_structure_membership", args=[self.group.id]),
+            {
+                "user": self.target_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(
+                user=self.target_user,
+                unit=self.group,
+            ).count(),
+            1,
+        )
+        self.assertContains(response, "Membership was not added")
+
+    def test_end_membership_does_not_delete_and_removes_from_active_list(self):
+        membership = self.create_membership(self.target_user, is_primary=True)
+        self.login_staff()
+
+        response = self.client.post(
+            reverse("end_structure_membership", args=[membership.id]),
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ENDED)
+        self.assertFalse(membership.is_primary)
+        self.assertEqual(membership.end_date, timezone.localdate())
+        self.assertTrue(
+            ChurchStructureMembership.objects.filter(id=membership.id).exists()
+        )
+        detail = self.client.get(self.detail_url)
+        self.assertNotIn(membership, list(detail.context["active_memberships"]))
+
+    def test_set_primary_action_unsets_other_active_primaries(self):
+        existing = self.create_membership(
+            self.target_user,
+            unit=self.child,
+            is_primary=True,
+        )
+        target = self.create_membership(self.target_user, is_primary=False)
+        self.login_staff()
+
+        response = self.client.post(
+            reverse("set_primary_structure_membership", args=[target.id]),
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        existing.refresh_from_db()
+        target.refresh_from_db()
+        self.assertFalse(existing.is_primary)
+        self.assertTrue(target.is_primary)
+
+    def test_set_primary_rejects_inactive_membership(self):
+        membership = self.create_membership(
+            self.target_user,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            end_date=timezone.localdate(),
+            is_primary=False,
+        )
+        self.login_staff()
+
+        self.client.post(reverse("set_primary_structure_membership", args=[membership.id]))
+
+        membership.refresh_from_db()
+        self.assertFalse(membership.is_primary)
+
+    def test_post_actions_reject_ordinary_users(self):
+        membership = self.create_membership(self.target_user, is_primary=False)
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+
+        add_response = self.client.post(
+            reverse("add_structure_membership", args=[self.child.id]),
+            {
+                "user": self.other_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+            },
+        )
+        primary_response = self.client.post(
+            reverse("set_primary_structure_membership", args=[membership.id]),
+        )
+        end_response = self.client.post(
+            reverse("end_structure_membership", args=[membership.id]),
+        )
+
+        self.assertEqual(add_response.status_code, 302)
+        self.assertEqual(primary_response.status_code, 302)
+        self.assertEqual(end_response.status_code, 302)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 1)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertFalse(membership.is_primary)
+
+    def test_membership_actions_do_not_create_serving_or_bible_study_roles(self):
+        self.login_staff()
+
+        self.client.post(
+            reverse("add_structure_membership", args=[self.group.id]),
+            {
+                "user": self.target_user.id,
+                "membership_type": ChurchStructureMembership.TYPE_MEMBER,
+                "start_date": timezone.localdate().isoformat(),
+                "is_primary": "on",
+            },
+        )
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_staff_overview_and_staff_menu_link_to_setup_only_for_staff_nav(self):
+        self.set_language("en")
+        self.login_staff()
+
+        overview_response = self.client.get(reverse("staff_overview"))
+        profile_response = self.client.get(reverse("profile"))
+
+        self.assertContains(overview_response, self.setup_url)
+        self.assertContains(overview_response, "Church Structure Setup")
+        self.assertContains(profile_response, self.setup_url)
+
+        self.client.logout()
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+        normal_profile = self.client.get(reverse("profile"))
+
+        self.assertNotContains(normal_profile, self.setup_url)
+        self.assertNotContains(normal_profile, "Church Structure Setup")
 
 
 class StaffStructureMapEditModeTests(TestCase):

@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model, login
 from django.contrib.auth.views import PasswordChangeView
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -19,6 +20,7 @@ from .forms import (
     ProfileForm,
     SignUpForm,
     StaffPasswordResetForm,
+    StructureMembershipAddForm,
 )
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
@@ -504,6 +506,299 @@ def staff_moderation_queue(request):
 
 def can_manage_church_memberships(user):
     return has_capability(user, CAP_MANAGE_CHURCH_MEMBERSHIPS)
+
+
+def _active_membership_filter(prefix=""):
+    field = f"{prefix}__" if prefix else ""
+    today = timezone.localdate()
+    return (
+        Q(**{f"{field}status": ChurchStructureMembership.STATUS_ACTIVE})
+        & Q(**{f"{field}start_date__lte": today})
+        & (
+            Q(**{f"{field}end_date__isnull": True})
+            | Q(**{f"{field}end_date__gte": today})
+        )
+    )
+
+
+def _active_membership_queryset():
+    return ChurchStructureMembership.objects.filter(_active_membership_filter())
+
+
+def _structure_unit_rows(language):
+    units = list(
+        ChurchStructureUnit.objects.select_related("parent").order_by(
+            "parent_id",
+            "sort_order",
+            "code",
+            "name",
+            "id",
+        )
+    )
+    children = {}
+    for unit in units:
+        children.setdefault(unit.parent_id, []).append(unit)
+
+    active_memberships = _active_membership_queryset()
+    active_counts = {
+        item["unit"]: item["count"]
+        for item in active_memberships.values("unit").annotate(count=Count("id"))
+    }
+    primary_counts = {
+        item["unit"]: item["count"]
+        for item in active_memberships.filter(is_primary=True)
+        .values("unit")
+        .annotate(count=Count("id"))
+    }
+
+    rows = []
+    visited = set()
+
+    def walk(unit, depth, ancestor_ids):
+        visited.add(unit.id)
+        rows.append(
+            {
+                "unit": unit,
+                "depth": depth,
+                "ancestor_ids": ancestor_ids,
+                "parent_id": unit.parent_id,
+                "has_children": bool(children.get(unit.id)),
+                "path_label": unit.path_label(language),
+                "active_member_count": active_counts.get(unit.id, 0),
+                "primary_member_count": primary_counts.get(unit.id, 0),
+            }
+        )
+        for child in children.get(unit.id, []):
+            if child.id not in visited:
+                walk(child, depth + 1, ancestor_ids + [unit.id])
+
+    roots = [unit for unit in units if unit.parent_id is None]
+    roots.sort(
+        key=lambda unit: (
+            unit.unit_type != ChurchStructureUnit.UNIT_ROOT,
+            unit.sort_order,
+            unit.code,
+            unit.name,
+            unit.id,
+        )
+    )
+    for root in roots:
+        walk(root, 0, [])
+
+    for unit in units:
+        if unit.id not in visited:
+            walk(unit, 0, [])
+
+    return rows
+
+
+def _structure_setup_warnings(language):
+    active_filter = _active_membership_filter("memberships")
+    active_units_without_primary = (
+        ChurchStructureUnit.objects.filter(is_active=True)
+        .annotate(
+            active_primary_count=Count(
+                "memberships",
+                filter=active_filter & Q(memberships__is_primary=True),
+                distinct=True,
+            )
+        )
+        .filter(active_primary_count=0)
+        .order_by("sort_order", "code", "name", "id")
+    )
+
+    User = get_user_model()
+    user_active_filter = _active_membership_filter("church_structure_memberships")
+    users_with_multiple_primary = (
+        User.objects.annotate(
+            active_primary_count=Count(
+                "church_structure_memberships",
+                filter=(
+                    user_active_filter
+                    & Q(church_structure_memberships__is_primary=True)
+                ),
+                distinct=True,
+            )
+        )
+        .filter(active_primary_count__gt=1)
+        .order_by("username")
+    )
+    users_without_primary = (
+        User.objects.annotate(
+            active_membership_count=Count(
+                "church_structure_memberships",
+                filter=user_active_filter,
+                distinct=True,
+            ),
+            active_primary_count=Count(
+                "church_structure_memberships",
+                filter=(
+                    user_active_filter
+                    & Q(church_structure_memberships__is_primary=True)
+                ),
+                distinct=True,
+            ),
+        )
+        .filter(active_membership_count__gt=0, active_primary_count=0)
+        .order_by("username")
+    )
+    inactive_units_with_active_memberships = (
+        ChurchStructureUnit.objects.filter(is_active=False)
+        .annotate(
+            active_member_count=Count(
+                "memberships",
+                filter=active_filter,
+                distinct=True,
+            )
+        )
+        .filter(active_member_count__gt=0)
+        .order_by("sort_order", "code", "name", "id")
+    )
+
+    def unit_sample(queryset):
+        return [
+            {
+                "unit": unit,
+                "path_label": unit.path_label(language),
+                "count": getattr(unit, "active_member_count", None),
+            }
+            for unit in queryset[:5]
+        ]
+
+    return {
+        "units_without_primary": {
+            "count": active_units_without_primary.count(),
+            "samples": unit_sample(active_units_without_primary),
+        },
+        "users_with_multiple_primary": {
+            "count": users_with_multiple_primary.count(),
+            "samples": users_with_multiple_primary[:5],
+        },
+        "users_without_primary": {
+            "count": users_without_primary.count(),
+            "samples": users_without_primary[:5],
+        },
+        "inactive_units_with_active_memberships": {
+            "count": inactive_units_with_active_memberships.count(),
+            "samples": unit_sample(inactive_units_with_active_memberships),
+        },
+    }
+
+
+@user_passes_test(can_manage_church_memberships)
+def church_structure_setup(request):
+    language = get_user_language(request)
+    structure_rows = _structure_unit_rows(language)
+
+    return render(
+        request,
+        "accounts/staff/church_structure_setup.html",
+        {
+            "active_nav": "staff",
+            "structure_rows": structure_rows,
+            "warnings": _structure_setup_warnings(language),
+        },
+    )
+
+
+@user_passes_test(can_manage_church_memberships)
+def church_structure_unit_detail(request, unit_id):
+    language = get_user_language(request)
+    unit = get_object_or_404(
+        ChurchStructureUnit.objects.select_related("parent"),
+        id=unit_id,
+    )
+    add_form = StructureMembershipAddForm(unit=unit)
+    active_memberships = (
+        _active_membership_queryset()
+        .filter(unit=unit)
+        .select_related("user", "unit")
+        .order_by("-is_primary", "user__username", "id")
+    )
+    inactive_memberships = (
+        ChurchStructureMembership.objects.filter(unit=unit)
+        .exclude(id__in=active_memberships.values("id"))
+        .select_related("user")
+        .order_by("-updated_at", "user__username", "id")[:20]
+    )
+    children = unit.children.order_by("sort_order", "code", "name", "id")
+
+    return render(
+        request,
+        "accounts/staff/church_structure_unit_detail.html",
+        {
+            "active_nav": "staff",
+            "unit": unit,
+            "unit_path": unit.path_label(language),
+            "children": children,
+            "active_memberships": active_memberships,
+            "inactive_memberships": inactive_memberships,
+            "add_form": add_form,
+        },
+    )
+
+
+@user_passes_test(can_manage_church_memberships)
+@require_POST
+def add_structure_membership(request, unit_id):
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    form = StructureMembershipAddForm(request.POST, unit=unit)
+    if form.is_valid():
+        membership = form.save(approved_by=request.user)
+        messages.success(
+            request,
+            f"Added active membership for {membership.user.username}.",
+        )
+    else:
+        messages.error(request, "Membership was not added. Please review the form.")
+    return redirect("church_structure_unit_detail", unit_id=unit.id)
+
+
+@user_passes_test(can_manage_church_memberships)
+@require_POST
+def end_structure_membership(request, membership_id):
+    membership = get_object_or_404(
+        ChurchStructureMembership.objects.select_related("unit", "user"),
+        id=membership_id,
+    )
+    today = timezone.localdate()
+    membership.status = ChurchStructureMembership.STATUS_ENDED
+    membership.is_primary = False
+    if not membership.end_date:
+        membership.end_date = today
+    membership.save()
+    messages.success(
+        request,
+        f"Ended membership for {membership.user.username}.",
+    )
+    return redirect("church_structure_unit_detail", unit_id=membership.unit_id)
+
+
+@user_passes_test(can_manage_church_memberships)
+@require_POST
+def set_primary_structure_membership(request, membership_id):
+    membership = get_object_or_404(
+        ChurchStructureMembership.objects.select_related("unit", "user"),
+        id=membership_id,
+    )
+    if not membership.is_active_membership or not membership.unit.is_active:
+        messages.error(request, "Only active memberships on active units can be primary.")
+        return redirect("church_structure_unit_detail", unit_id=membership.unit_id)
+
+    with transaction.atomic():
+        ChurchStructureMembership.objects.filter(
+            user=membership.user,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+        ).exclude(id=membership.id).update(is_primary=False)
+        membership.is_primary = True
+        membership.save(update_fields=["is_primary", "updated_at"])
+
+    messages.success(
+        request,
+        f"Set primary membership for {membership.user.username}.",
+    )
+    return redirect("church_structure_unit_detail", unit_id=membership.unit_id)
 
 def signup(request):
     language = get_user_language(request)

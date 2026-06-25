@@ -85,6 +85,25 @@
 </section>
 
 <section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}移动 / 改上级影响预览{% else %}Move / Reparent Impact Preview{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        现在还没有实现移动或改上级。这些只读计数说明为什么移动 / 改上级需要单独的受保护操作。归属不代表服事或带领资格。这个预览不会改变可见性、服事安排、归属、适用范围行或职分范围。
+        {% else %}
+        Moving a unit is not implemented yet. These read-only counts show why move/reparent needs a separate guarded action. Membership does not grant serving or leadership. This preview does not change visibility, assignments, memberships, audience rows, or role scopes.
+        {% endif %}
+    </p>
+    <dl class="detail-list">
+        {% for row in move_impact_preview.rows %}
+        <dt>{{ row.label }}</dt>
+        <dd>{{ row.count }}</dd>
+        {% endfor %}
+    </dl>
+</section>
+
+<section class="card">
     <h2 class="card-title">{% if language == "zh" %}下级单元{% else %}Children units{% endif %}</h2>
     <ul class="staff-count-list">
         {% for child in children %}

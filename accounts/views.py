@@ -27,6 +27,7 @@ from .forms import (
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
 from .models import (
+    ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
     Profile,
@@ -953,6 +954,157 @@ def _active_membership_queryset():
     return ChurchStructureMembership.objects.filter(_active_membership_filter())
 
 
+def _structure_unit_descendant_ids(unit):
+    descendant_ids = []
+    seen_ids = {unit.id}
+    parent_ids = [unit.id]
+
+    while parent_ids:
+        child_ids = list(
+            ChurchStructureUnit.objects.filter(parent_id__in=parent_ids)
+            .exclude(id__in=seen_ids)
+            .values_list("id", flat=True)
+        )
+        if not child_ids:
+            break
+        descendant_ids.extend(child_ids)
+        seen_ids.update(child_ids)
+        parent_ids = child_ids
+
+    return descendant_ids
+
+
+def _structure_unit_move_impact_preview(unit, language):
+    from comments.models import ReflectionComment
+    from events.models import ServiceEvent, ServiceEventAudienceScope
+    from prayers.models import PrayerRequest
+    from studies.models import (
+        BibleStudyMeeting,
+        BibleStudyMeetingAudienceScope,
+        BibleStudySeriesAudienceScope,
+    )
+
+    descendant_ids = _structure_unit_descendant_ids(unit)
+    scoped_unit_ids = [unit.id] + descendant_ids
+    descendant_units = ChurchStructureUnit.objects.filter(id__in=descendant_ids)
+    active_memberships = _active_membership_queryset()
+
+    counts = {
+        "active_descendant_units": descendant_units.filter(is_active=True).count(),
+        "inactive_descendant_units": descendant_units.filter(is_active=False).count(),
+        "active_memberships_direct": active_memberships.filter(unit=unit).count(),
+        "active_memberships_descendants": active_memberships.filter(
+            unit_id__in=descendant_ids,
+        ).count(),
+        "active_role_scopes": ChurchRoleAssignment.objects.filter(
+            is_active=True,
+            structure_unit_id__in=scoped_unit_ids,
+        ).count(),
+        "service_event_audience_scopes": ServiceEventAudienceScope.objects.filter(
+            unit_id__in=scoped_unit_ids,
+        ).count(),
+        "service_event_host_language_refs": ServiceEvent.objects.filter(
+            host_language_unit_id__in=scoped_unit_ids,
+        ).count(),
+        "bible_study_schedule_audience_scopes": (
+            BibleStudySeriesAudienceScope.objects.filter(
+                unit_id__in=scoped_unit_ids,
+            ).count()
+        ),
+        "bible_study_meeting_audience_scopes": (
+            BibleStudyMeetingAudienceScope.objects.filter(
+                unit_id__in=scoped_unit_ids,
+            ).count()
+        ),
+        "bible_study_meeting_anchors": BibleStudyMeeting.objects.filter(
+            anchor_unit_id__in=scoped_unit_ids,
+        ).count(),
+        "prayer_snapshots": PrayerRequest.objects.filter(
+            structure_unit_at_post_id__in=scoped_unit_ids,
+        ).count(),
+        "reflection_snapshots": ReflectionComment.objects.filter(
+            structure_unit_at_post_id__in=scoped_unit_ids,
+        ).count(),
+    }
+
+    labels = {
+        "active_descendant_units": {
+            "en": "Active descendant units",
+            "zh": "启用中的下级后代单元",
+        },
+        "inactive_descendant_units": {
+            "en": "Inactive descendant units",
+            "zh": "停用的下级后代单元",
+        },
+        "active_memberships_direct": {
+            "en": "Active memberships directly on this unit",
+            "zh": "直接在此单元上的启用归属",
+        },
+        "active_memberships_descendants": {
+            "en": "Active memberships in descendants",
+            "zh": "下级后代中的启用归属",
+        },
+        "active_role_scopes": {
+            "en": "Active role scopes on this unit or descendants",
+            "zh": "此单元或下级后代上的启用职分范围",
+        },
+        "service_event_audience_scopes": {
+            "en": "ServiceEvent audience scope rows on this unit or descendants",
+            "zh": "此单元或下级后代上的教会聚会适用范围行",
+        },
+        "service_event_host_language_refs": {
+            "en": "ServiceEvent host/language references on this unit or descendants",
+            "zh": "此单元或下级后代上的教会聚会主办/语言引用",
+        },
+        "bible_study_schedule_audience_scopes": {
+            "en": "Bible Study schedule audience rows on this unit or descendants",
+            "zh": "此单元或下级后代上的查经安排适用范围行",
+        },
+        "bible_study_meeting_audience_scopes": {
+            "en": "Bible Study meeting audience rows on this unit or descendants",
+            "zh": "此单元或下级后代上的查经聚会适用范围行",
+        },
+        "bible_study_meeting_anchors": {
+            "en": "Bible Study meeting anchors on this unit or descendants",
+            "zh": "此单元或下级后代上的查经聚会归属单元",
+        },
+        "prayer_snapshots": {
+            "en": "Prayer snapshots on this unit or descendants",
+            "zh": "此单元或下级后代上的代祷快照",
+        },
+        "reflection_snapshots": {
+            "en": "Reflection snapshots on this unit or descendants",
+            "zh": "此单元或下级后代上的默想快照",
+        },
+    }
+    label_key = "zh" if language == "zh" else "en"
+    rows = [
+        {
+            "key": key,
+            "label": labels[key][label_key],
+            "count": counts[key],
+        }
+        for key in (
+            "active_descendant_units",
+            "inactive_descendant_units",
+            "active_memberships_direct",
+            "active_memberships_descendants",
+            "active_role_scopes",
+            "service_event_audience_scopes",
+            "service_event_host_language_refs",
+            "bible_study_schedule_audience_scopes",
+            "bible_study_meeting_audience_scopes",
+            "bible_study_meeting_anchors",
+            "prayer_snapshots",
+            "reflection_snapshots",
+        )
+    ]
+    return {
+        "counts": counts,
+        "rows": rows,
+    }
+
+
 def _structure_setup_warning_counts():
     active_filter = _active_membership_filter("memberships")
     active_units_without_primary_count = (
@@ -1068,6 +1220,10 @@ def church_structure_unit_detail(request, unit_id):
             "add_form": add_form,
             "can_enable_unit": can_enable_unit,
             "enable_blocker_labels": enable_blocker_labels,
+            "move_impact_preview": _structure_unit_move_impact_preview(
+                unit,
+                language,
+            ),
         },
     )
 

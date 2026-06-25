@@ -33,7 +33,7 @@ from accounts.permissions import (
     has_capability,
 )
 from comments.models import ReflectionComment, ReflectionReport
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceEventAudienceScope
 from ministry.models import (
     MinistryTeam,
     TeamAssignment,
@@ -45,8 +45,10 @@ from reading.models import ReadingPlan, ReadingPlanDay
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudySeries,
+    BibleStudySeriesAudienceScope,
 )
 
 
@@ -3706,6 +3708,104 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertContains(response, "target@example.com")
         self.assertContains(response, reverse("end_structure_membership", args=[membership.id]))
         self.assertContains(response, reverse("admin:accounts_churchstructureunit_change", args=[self.group.id]))
+
+    def test_unit_detail_shows_read_only_move_impact_preview_counts(self):
+        direct_member = self.create_membership(self.target_user, is_primary=True)
+        descendant_member = self.create_membership(
+            self.other_user,
+            unit=self.child,
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.target_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            structure_unit=self.group,
+        )
+        service_event = ServiceEvent.objects.create(
+            title="Preview Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+            host_language_unit=self.group,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=service_event,
+            unit=self.child,
+        )
+        series = BibleStudySeries.objects.create(
+            title="Preview Schedule",
+            start_date=timezone.localdate(),
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        BibleStudySeriesAudienceScope.objects.create(series=series, unit=self.child)
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="Preview Lesson",
+            lesson_date=timezone.localdate(),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=self.child,
+            meeting_datetime=timezone.now() + timedelta(days=2),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(meeting=meeting, unit=self.group)
+        PrayerRequest.objects.create(
+            user=self.target_user,
+            title="Preview prayer",
+            body="Please pray.",
+            structure_unit_at_post=self.child,
+        )
+        plan = ReadingPlan.objects.create(name="Preview Plan")
+        day = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+        )
+        ReflectionComment.objects.create(
+            plan_day=day,
+            user=self.other_user,
+            body="Preview reflection",
+            structure_unit_at_post=self.group,
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+        preview = response.context["move_impact_preview"]["counts"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Move / Reparent Impact Preview")
+        self.assertContains(response, "Moving a unit is not implemented yet")
+        self.assertContains(response, "Membership does not grant serving or leadership")
+        self.assertContains(response, "Active descendant units")
+        self.assertEqual(preview["active_descendant_units"], 1)
+        self.assertEqual(preview["inactive_descendant_units"], 0)
+        self.assertEqual(preview["active_memberships_direct"], 1)
+        self.assertEqual(preview["active_memberships_descendants"], 1)
+        self.assertEqual(preview["active_role_scopes"], 1)
+        self.assertEqual(preview["service_event_audience_scopes"], 1)
+        self.assertEqual(preview["service_event_host_language_refs"], 1)
+        self.assertEqual(preview["bible_study_schedule_audience_scopes"], 1)
+        self.assertEqual(preview["bible_study_meeting_audience_scopes"], 1)
+        self.assertEqual(preview["bible_study_meeting_anchors"], 1)
+        self.assertEqual(preview["prayer_snapshots"], 1)
+        self.assertEqual(preview["reflection_snapshots"], 1)
+        self.assertEqual(direct_member.unit, self.group)
+        self.assertEqual(descendant_member.unit, self.child)
+
+    def test_unit_detail_exposes_no_move_form_or_route(self):
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "/move/")
+        self.assertNotContains(response, 'name="new_parent"')
+        self.assertNotContains(response, "Move this unit")
+        self.assertNotContains(response, "Reparent this unit")
 
     def test_inactive_unit_detail_shows_banner_and_hides_add_membership_form(self):
         self.set_language("en")

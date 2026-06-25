@@ -31,7 +31,7 @@ The preferred section order is:
 5. Later
 6. Past / History, collapsed by default in a future UI slice
 
-MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. Leader-only unassigned work should be added only after a tighter design confirms the data source, permission gate, and desired relationship to the existing Team Assignment coverage workspace.
+MYSERVING-AGENDA.1A only approves reorganizing existing personal `TeamAssignmentMember` rows into clearer time sections. BS-SERVING-MYSERVING.1A adds explicit user-linked Bible Study V2 meeting roles to the same My Serving agenda, but only from `BibleStudyMeetingRole.user == request.user`; it does not add a Bible Study confirmation workflow and does not infer serving from membership, audience visibility, or display names. Leader-only unassigned work should be added only after a tighter design confirms the data source, permission gate, and desired relationship to the existing Team Assignment coverage workspace.
 
 ## Assignment Boundaries
 

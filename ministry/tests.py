@@ -14,11 +14,18 @@ from django.utils import timezone
 
 from accounts.models import (
     ChurchRoleAssignment,
+    ChurchStructureMembership,
     ChurchStructureUnit,
 )
 from events.models import ServiceEvent
 from reading.templatetags.datetime_extras import member_datetime
-from studies.models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
+from studies.models import (
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
+    BibleStudyMeetingRole,
+    BibleStudySeries,
+)
 
 from .models import (
     MinistryTeam,
@@ -506,6 +513,49 @@ class TeamAssignmentV1Tests(TestCase):
         return timezone.make_aware(
             naive_datetime,
             timezone.get_current_timezone(),
+        )
+
+    def ensure_structure_membership(self, user=None, unit=None):
+        return ChurchStructureMembership.objects.get_or_create(
+            user=user or self.user,
+            unit=unit or self.cm_unit,
+            defaults={
+                "status": ChurchStructureMembership.STATUS_ACTIVE,
+                "is_primary": True,
+                "start_date": timezone.localdate() - timezone.timedelta(days=1),
+            },
+        )[0]
+
+    def create_bible_study_meeting(self, *, title_en, days_from_today=0, hour=19, unit=None):
+        unit = unit or self.cm_unit
+        series = BibleStudySeries.objects.create(
+            title=title_en,
+            title_en=title_en,
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=True,
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title=title_en,
+            title_en=title_en,
+            lesson_date=timezone.localdate() + timezone.timedelta(days=days_from_today),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=unit,
+            meeting_datetime=self.local_datetime(days_from_today, hour=hour),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(meeting=meeting, unit=unit)
+        return meeting
+
+    def create_bible_study_role(self, meeting, role, *, user=None, display_name=""):
+        return BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=role,
+            user=user,
+            display_name=display_name,
         )
 
     def test_copy_forward_anchor_suggestion_finds_same_anchor_prior_assignment(self):
@@ -1103,7 +1153,7 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Team Assignment")
-        self.assertContains(response, "Fri, Jun 12, 7:30 PM")
+        self.assertContains(response, "Fri, Jun 12, 12:30 PM")
         self.assertNotContains(response, "June 12, 2026")
 
     def test_assignment_detail_shows_back_to_my_serving_for_member(self):
@@ -1641,6 +1691,202 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Pending Current Service")
         self.assertContains(response, "Confirm Assignment")
+
+    def test_my_serving_shows_visible_bible_study_role_for_viewer(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        meeting = self.create_bible_study_meeting(title_en="Viewer Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Serving")
+        self.assertContains(response, "Viewer Role Lesson")
+        self.assertContains(response, "Your role")
+        self.assertContains(response, "Discussion Leader")
+        self.assertContains(response, "View Bible Study")
+        self.assertNotContains(response, "Confirm Assignment")
+
+    def test_chinese_my_serving_bible_study_role_labels_render(self):
+        self.set_language("zh")
+        self.ensure_structure_membership()
+        meeting = self.create_bible_study_meeting(title_en="Chinese Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "查经服事")
+        self.assertContains(response, "你的角色")
+        self.assertContains(response, "查经带领")
+
+    def test_my_serving_visible_bible_study_without_role_is_not_serving(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        self.create_bible_study_meeting(title_en="Visible No Role Lesson")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Visible No Role Lesson")
+
+    def test_my_serving_display_name_only_bible_study_role_is_not_serving(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        self.user.first_name = "Grace"
+        self.user.last_name = "Lee"
+        self.user.save()
+        meeting = self.create_bible_study_meeting(title_en="Display Name Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            display_name="Grace Lee",
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Display Name Role Lesson")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_my_serving_other_users_bible_study_role_is_not_serving(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        meeting = self.create_bible_study_meeting(title_en="Other User Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.other_user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Other User Role Lesson")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_my_serving_bible_study_role_requires_visible_meeting(self):
+        self.set_language("en")
+        meeting = self.create_bible_study_meeting(title_en="Hidden Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Hidden Role Lesson")
+        self.assertNotContains(response, "Discussion Leader")
+
+    def test_my_serving_multiple_bible_study_roles_render_compactly(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        meeting = self.create_bible_study_meeting(title_en="Multi Role Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bible Study Serving", count=1)
+        self.assertContains(response, "Multi Role Lesson")
+        self.assertContains(response, "Discussion Leader")
+        self.assertContains(response, "Worship Lead")
+
+    def test_my_serving_bible_study_roles_bucket_today_this_week_and_later(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        today = self.create_bible_study_meeting(title_en="Today Study Serving", days_from_today=0)
+        tomorrow = self.create_bible_study_meeting(title_en="Tomorrow Study Serving", days_from_today=1)
+        later = self.create_bible_study_meeting(title_en="Later Study Serving", days_from_today=9)
+        for meeting in [today, tomorrow, later]:
+            self.create_bible_study_role(
+                meeting,
+                BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+                user=self.user,
+            )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Today Serving")
+        self.assertContains(response, "Today Study Serving")
+        self.assertContains(response, "This Week Serving")
+        self.assertContains(response, "Tomorrow Study Serving")
+        self.assertContains(response, "Later")
+        self.assertContains(response, "Later Study Serving")
+        self.assertLess(content.index("Today Serving"), content.index("Today Study Serving"))
+        self.assertLess(content.index("This Week Serving"), content.index("Tomorrow Study Serving"))
+        self.assertLess(content.index("Later"), content.index("Later Study Serving"))
+
+    def test_my_serving_bible_study_role_past_tab_uses_effective_end(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        ended = self.create_bible_study_meeting(
+            title_en="Ended Study Serving",
+            days_from_today=-1,
+        )
+        upcoming = self.create_bible_study_meeting(
+            title_en="Upcoming Study Serving",
+            days_from_today=1,
+        )
+        for meeting in [ended, upcoming]:
+            self.create_bible_study_role(
+                meeting,
+                BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+                user=self.user,
+            )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        upcoming_response = self.client.get(reverse("my_serving"))
+        past_response = self.client.get(f"{reverse('my_serving')}?tab=past")
+        all_response = self.client.get(f"{reverse('my_serving')}?tab=all")
+
+        self.assertNotContains(upcoming_response, "Ended Study Serving")
+        self.assertContains(upcoming_response, "Upcoming Study Serving")
+        self.assertContains(past_response, "Ended Study Serving")
+        self.assertNotContains(past_response, "Upcoming Study Serving")
+        self.assertContains(all_response, "Ended Study Serving")
+        self.assertContains(all_response, "Upcoming Study Serving")
+
+    def test_my_serving_bible_study_audience_visibility_alone_is_not_serving(self):
+        self.set_language("en")
+        self.ensure_structure_membership()
+        self.create_bible_study_meeting(title_en="Audience Only Study")
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Audience Only Study")
 
     def test_user_can_confirm_own_assignment_from_my_serving(self):
         self.set_language("en")

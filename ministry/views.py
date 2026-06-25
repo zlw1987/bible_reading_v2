@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from io import StringIO
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -12,6 +13,12 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 from events.models import ServiceEvent
+from studies.models import (
+    BibleStudyLesson,
+    BibleStudyMeeting,
+    BibleStudyMeetingRole,
+    BibleStudySeries,
+)
 
 from .forms import (
     MinistryTeamForm,
@@ -194,6 +201,68 @@ def my_serving_assignments(user, tab="upcoming"):
     ]
 
 
+def my_bible_study_role_serving_items(user, tab="upcoming"):
+    now = timezone.now()
+    visible_statuses = [
+        BibleStudyMeeting.STATUS_PUBLISHED,
+        BibleStudyMeeting.STATUS_COMPLETED,
+    ]
+    roles = (
+        BibleStudyMeetingRole.objects.select_related(
+            "user",
+            "meeting",
+            "meeting__lesson",
+            "meeting__lesson__series",
+            "meeting__anchor_unit",
+        )
+        .prefetch_related("meeting__audience_scope_links__unit")
+        .filter(
+            user=user,
+            meeting__status__in=visible_statuses,
+            meeting__lesson__status__in=[
+                BibleStudyLesson.STATUS_PUBLISHED,
+                BibleStudyLesson.STATUS_COMPLETED,
+            ],
+            meeting__lesson__series__is_active=True,
+            meeting__lesson__series__status__in=[
+                BibleStudySeries.STATUS_PUBLISHED,
+                BibleStudySeries.STATUS_COMPLETED,
+            ],
+        )
+        .order_by("meeting__meeting_datetime", "role", "id")
+    )
+
+    items_by_meeting = {}
+    ordered_items = []
+    for role in roles:
+        meeting = role.meeting
+        if meeting.id not in items_by_meeting:
+            if not meeting.can_be_seen_by(user):
+                continue
+            item = SimpleNamespace(
+                kind="bible_study_role",
+                meeting=meeting,
+                roles=[],
+            )
+            items_by_meeting[meeting.id] = item
+            ordered_items.append(item)
+        items_by_meeting[meeting.id].roles.append(role)
+
+    if tab == "past":
+        return [
+            item
+            for item in ordered_items
+            if serving_item_is_history(item, now=now)
+        ]
+    if tab == "all":
+        return ordered_items
+    return [
+        item
+        for item in ordered_items
+        if not serving_item_is_history(item, now=now)
+    ]
+
+
 def _ensure_aware_datetime(value):
     if timezone.is_naive(value):
         return timezone.make_aware(value, timezone.get_current_timezone())
@@ -228,6 +297,44 @@ def assignment_is_serving_history(item_or_assignment, now=None):
     return get_assignment_effective_end_datetime(assignment) < now
 
 
+def get_bible_study_role_effective_end_datetime(item):
+    starts_at = _ensure_aware_datetime(item.meeting.meeting_datetime)
+    local_start_date = timezone.localtime(
+        starts_at,
+        timezone.get_current_timezone(),
+    ).date()
+    return _local_midnight(local_start_date + timedelta(days=1))
+
+
+def serving_item_kind(item):
+    return getattr(item, "kind", "team_assignment")
+
+
+def get_serving_item_starts_at(item):
+    if serving_item_kind(item) == "bible_study_role":
+        return _ensure_aware_datetime(item.meeting.meeting_datetime)
+    return _ensure_aware_datetime(item.assignment.service_event.start_datetime)
+
+
+def get_serving_item_effective_end_datetime(item):
+    if serving_item_kind(item) == "bible_study_role":
+        return get_bible_study_role_effective_end_datetime(item)
+    return get_assignment_effective_end_datetime(item)
+
+
+def serving_item_is_history(item, now=None):
+    now = now or timezone.now()
+    return get_serving_item_effective_end_datetime(item) < now
+
+
+def serving_item_needs_attention(item):
+    return (
+        serving_item_kind(item) == "team_assignment"
+        and not item.confirmed_at
+        and item.assignment.is_confirmable()
+    )
+
+
 def get_my_serving_windows():
     today = timezone.localdate()
     today_start = _local_midnight(today)
@@ -249,18 +356,16 @@ def build_my_serving_sections(serving_items):
     }
 
     for item in serving_items:
-        event = item.assignment.service_event
-        starts_at = _ensure_aware_datetime(event.start_datetime)
+        starts_at = get_serving_item_starts_at(item)
         local_start_date = timezone.localtime(
             starts_at,
             timezone.get_current_timezone(),
         ).date()
-        effective_end = get_assignment_effective_end_datetime(item)
-        is_history = assignment_is_serving_history(item, now=now)
+        effective_end = get_serving_item_effective_end_datetime(item)
+        is_history = serving_item_is_history(item, now=now)
         if (
             not is_history
-            and not item.confirmed_at
-            and item.assignment.is_confirmable()
+            and serving_item_needs_attention(item)
         ):
             sections["needs_attention"].append(item)
         elif is_history:
@@ -880,16 +985,23 @@ def my_serving(request):
     if tab not in {"upcoming", "past", "all"}:
         tab = "upcoming"
 
-    serving_items = list(my_serving_assignments(request.user, tab=tab))
+    team_serving_items = list(my_serving_assignments(request.user, tab=tab))
+    bible_study_role_items = list(
+        my_bible_study_role_serving_items(request.user, tab=tab)
+    )
+    serving_items = sorted(
+        [*team_serving_items, *bible_study_role_items],
+        key=get_serving_item_starts_at,
+    )
     pending_items = [
         item
         for item in serving_items
-        if not item.confirmed_at and item.assignment.is_confirmable()
+        if serving_item_needs_attention(item)
     ]
     scheduled_items = [
         item
         for item in serving_items
-        if item.confirmed_at or not item.assignment.is_confirmable()
+        if not serving_item_needs_attention(item)
     ]
     serving_sections = build_my_serving_sections(serving_items)
 

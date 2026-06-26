@@ -25,6 +25,7 @@ from accounts.models import (
 )
 from accounts.permissions import (
     CAP_MANAGE_CHURCH_MEMBERSHIPS,
+    CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_READING_GUIDES,
     CAP_VIEW_ALL_GROUP_PROGRESS,
     CAP_VIEW_DISTRICT_PROGRESS,
@@ -3897,6 +3898,12 @@ class ChurchStructureSetupDetailTests(TestCase):
             password="StaffPass123!",
             is_staff=True,
         )
+        self.structure_admin = User.objects.create_user(
+            username="setup_structure_admin",
+            password="AdminPass123!",
+            is_staff=True,
+            is_superuser=True,
+        )
         self.pastor = User.objects.create_user(
             username="setup_pastor",
             password="PastorPass123!",
@@ -3971,6 +3978,12 @@ class ChurchStructureSetupDetailTests(TestCase):
     def login_staff(self):
         self.client.login(username="setup_staff", password="StaffPass123!")
 
+    def login_structure_admin(self):
+        self.client.login(
+            username="setup_structure_admin",
+            password="AdminPass123!",
+        )
+
     def create_membership(self, user, unit=None, **overrides):
         defaults = {
             "user": user,
@@ -3982,6 +3995,30 @@ class ChurchStructureSetupDetailTests(TestCase):
         }
         defaults.update(overrides)
         return ChurchStructureMembership.objects.create(**defaults)
+
+    def create_role_profile(self, *, code="small_group_unit", name="Small Group Unit"):
+        return ChurchStructureUnitRoleProfile.objects.create(
+            code=code,
+            name=name,
+            name_en=name,
+        )
+
+    def create_role_type(self, *, code="lead", name="Lead"):
+        return ChurchStructureUnitRoleType.objects.create(
+            code=code,
+            name=name,
+            name_en=name,
+        )
+
+    def create_role_requirement(self, profile, role_type, **overrides):
+        defaults = {
+            "profile": profile,
+            "role_type": role_type,
+            "is_required": True,
+            "is_active": True,
+        }
+        defaults.update(overrides)
+        return ChurchStructureUnitRoleRequirement.objects.create(**defaults)
 
     def create_team_assignment_for(self, user):
         event = ServiceEvent.objects.create(
@@ -4149,6 +4186,32 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertNotContains(response, "setup_multi_primary")
         self.assertNotContains(response, "setup_no_primary")
 
+    def test_structure_map_shows_coworker_role_readiness_counts_only(self):
+        profile = self.create_role_profile()
+        lead = self.create_role_type()
+        self.create_role_requirement(profile, lead)
+        self.group.role_profile = profile
+        self.group.save(update_fields=["role_profile"])
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.setup_url)
+        indicators = response.context["indicators"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(indicators["active_units_without_role_profile"], 2)
+        self.assertEqual(
+            indicators["active_units_with_missing_required_coworker_roles"],
+            1,
+        )
+        self.assertContains(response, "Active units without a coworker role profile")
+        self.assertContains(
+            response,
+            "Active units with selected profiles and missing required coworkers",
+        )
+        self.assertContains(response, "childless units are not treated")
+        self.assertNotContains(response, "setup_target")
+
     def test_unit_detail_shows_metadata_children_and_active_memberships(self):
         membership = self.create_membership(self.target_user, is_primary=True)
         self.set_language("en")
@@ -4167,6 +4230,315 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertContains(response, "target@example.com")
         self.assertContains(response, reverse("end_structure_membership", args=[membership.id]))
         self.assertContains(response, reverse("admin:accounts_churchstructureunit_change", args=[self.group.id]))
+
+    def test_unit_detail_shows_role_profile_missing_roles_and_coworkers(self):
+        profile = self.create_role_profile()
+        lead = self.create_role_type()
+        assistant = self.create_role_type(
+            code="assistant_lead",
+            name="Assistant Lead",
+        )
+        self.create_role_requirement(profile, lead)
+        self.create_role_requirement(profile, assistant)
+        self.group.role_profile = profile
+        self.group.save(update_fields=["role_profile"])
+        active_assignment = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=lead,
+            user=self.target_user,
+            start_date=timezone.localdate(),
+            notes="Current operational note.",
+        )
+        historical_assignment = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=assistant,
+            user=self.other_user,
+            is_active=False,
+            start_date=timezone.localdate() - timedelta(days=30),
+            end_date=timezone.localdate() - timedelta(days=1),
+        )
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Coworker Roles")
+        self.assertContains(response, "Role Profile")
+        self.assertContains(response, "Small Group Unit")
+        self.assertContains(response, "Missing Required Roles")
+        self.assertContains(response, "Assistant Lead")
+        self.assertContains(response, "Active Coworkers")
+        self.assertContains(response, "setup_target")
+        self.assertContains(response, "Current operational note.")
+        self.assertContains(response, "Historical Coworkers")
+        self.assertContains(response, "setup_other_target")
+        self.assertContains(
+            response,
+            "do not grant membership, permissions, or weekly serving assignments",
+        )
+        self.assertIn(
+            assistant,
+            response.context["missing_required_coworker_roles"],
+        )
+        self.assertIn(
+            active_assignment,
+            list(response.context["active_coworker_assignments"]),
+        )
+        self.assertIn(
+            historical_assignment,
+            list(response.context["historical_coworker_assignments"]),
+        )
+
+    def test_unit_detail_shows_seed_note_when_coworker_defaults_missing(self):
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Coworker role defaults are not seeded yet")
+        self.assertContains(
+            response,
+            "python manage.py seed_structure_unit_coworker_roles --apply",
+        )
+
+    def test_role_profile_update_is_post_only_and_requires_structure_permission(self):
+        profile = self.create_role_profile()
+        url = reverse("update_structure_unit_role_profile", args=[self.group.id])
+
+        self.login_structure_admin()
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 405)
+
+        self.client.logout()
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+        ordinary_response = self.client.post(url, {"role_profile": profile.id})
+        self.assertEqual(ordinary_response.status_code, 302)
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.role_profile)
+
+    def test_structure_admin_can_update_and_clear_unit_role_profile(self):
+        profile = self.create_role_profile()
+        url = reverse("update_structure_unit_role_profile", args=[self.group.id])
+        self.login_structure_admin()
+
+        response = self.client.post(url, {"role_profile": profile.id})
+
+        self.assertRedirects(response, self.detail_url)
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.role_profile, profile)
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.filter(unit=self.group).count(),
+            0,
+        )
+
+        clear_response = self.client.post(url, {"role_profile": ""})
+        self.assertRedirects(clear_response, self.detail_url)
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.role_profile)
+
+    def test_role_profile_update_rejects_inactive_profile(self):
+        inactive_profile = self.create_role_profile(name="Inactive Profile")
+        inactive_profile.is_active = False
+        inactive_profile.save(update_fields=["is_active"])
+        self.set_language("en")
+        self.login_structure_admin()
+
+        response = self.client.post(
+            reverse("update_structure_unit_role_profile", args=[self.group.id]),
+            {"role_profile": inactive_profile.id},
+            follow=True,
+        )
+
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.role_profile)
+        self.assertContains(response, "Coworker role profile was not updated")
+
+    def test_structure_admin_can_add_coworker_assignment_without_side_effects(self):
+        role_type = self.create_role_type()
+        baseline_memberships = ChurchStructureMembership.objects.count()
+        baseline_role_assignments = ChurchRoleAssignment.objects.count()
+        baseline_team_assignments = TeamAssignment.objects.count()
+        baseline_team_assignment_members = TeamAssignmentMember.objects.count()
+        baseline_bible_study_roles = BibleStudyMeetingRole.objects.count()
+        self.login_structure_admin()
+
+        response = self.client.post(
+            reverse("add_structure_unit_coworker_assignment", args=[self.group.id]),
+            {
+                "role_type": role_type.id,
+                "user": self.target_user.id,
+                "start_date": timezone.localdate().isoformat(),
+                "notes": "Operational coworker note.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        assignment = ChurchStructureUnitRoleAssignment.objects.get(
+            unit=self.group,
+            role_type=role_type,
+            user=self.target_user,
+        )
+        self.assertTrue(assignment.is_active)
+        self.assertEqual(assignment.start_date, timezone.localdate())
+        self.assertEqual(assignment.notes, "Operational coworker note.")
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(),
+            baseline_memberships,
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(),
+            baseline_role_assignments,
+        )
+        self.assertEqual(TeamAssignment.objects.count(), baseline_team_assignments)
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            baseline_team_assignment_members,
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(),
+            baseline_bible_study_roles,
+        )
+        self.assertFalse(
+            has_capability(self.target_user, CAP_MANAGE_BIBLE_STUDIES)
+        )
+
+    def test_add_coworker_assignment_is_post_only_and_rejects_ordinary_user(self):
+        role_type = self.create_role_type()
+        url = reverse("add_structure_unit_coworker_assignment", args=[self.group.id])
+
+        self.login_structure_admin()
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 405)
+
+        self.client.logout()
+        self.client.login(username="setup_ordinary", password="UserPass123!")
+        ordinary_response = self.client.post(
+            url,
+            {
+                "role_type": role_type.id,
+                "user": self.target_user.id,
+                "start_date": timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertEqual(ordinary_response.status_code, 302)
+        self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
+
+    def test_add_coworker_assignment_rejects_inactive_unit_and_duplicates(self):
+        role_type = self.create_role_type()
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=role_type,
+            user=self.target_user,
+            start_date=timezone.localdate(),
+        )
+        self.set_language("en")
+        self.login_structure_admin()
+
+        duplicate_response = self.client.post(
+            reverse("add_structure_unit_coworker_assignment", args=[self.group.id]),
+            {
+                "role_type": role_type.id,
+                "user": self.target_user.id,
+                "start_date": timezone.localdate().isoformat(),
+            },
+            follow=True,
+        )
+        inactive_response = self.client.post(
+            reverse(
+                "add_structure_unit_coworker_assignment",
+                args=[self.inactive_unit.id],
+            ),
+            {
+                "role_type": role_type.id,
+                "user": self.other_user.id,
+                "start_date": timezone.localdate().isoformat(),
+            },
+            follow=True,
+        )
+
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.group,
+                role_type=role_type,
+                user=self.target_user,
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.inactive_unit,
+            ).exists()
+        )
+        self.assertContains(duplicate_response, "Coworker role was not added")
+        self.assertContains(inactive_response, "Coworker role was not added")
+
+    def test_structure_admin_can_end_coworker_assignment_without_deleting_row(self):
+        role_type = self.create_role_type()
+        assignment = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=role_type,
+            user=self.target_user,
+            start_date=timezone.localdate() - timedelta(days=5),
+        )
+        self.login_structure_admin()
+
+        response = self.client.post(
+            reverse("end_structure_unit_coworker_assignment", args=[assignment.id]),
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        assignment.refresh_from_db()
+        self.assertFalse(assignment.is_active)
+        self.assertEqual(assignment.end_date, timezone.localdate())
+        self.assertTrue(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                id=assignment.id,
+            ).exists()
+        )
+
+    def test_end_coworker_assignment_is_post_only(self):
+        role_type = self.create_role_type()
+        assignment = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=role_type,
+            user=self.target_user,
+            start_date=timezone.localdate(),
+        )
+        self.login_structure_admin()
+
+        response = self.client.get(
+            reverse("end_structure_unit_coworker_assignment", args=[assignment.id]),
+        )
+
+        self.assertEqual(response.status_code, 405)
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.is_active)
+
+    def test_role_profile_is_explicit_not_leaf_inferred(self):
+        profile = self.create_role_profile()
+        lead = self.create_role_type()
+        self.create_role_requirement(profile, lead)
+        self.set_language("en")
+        self.login_structure_admin()
+
+        self.client.post(
+            reverse("update_structure_unit_role_profile", args=[self.group.id]),
+            {"role_profile": profile.id},
+        )
+        self.group.refresh_from_db()
+        self.assertEqual(self.group.role_profile, profile)
+
+        child_detail = self.client.get(
+            reverse("church_structure_unit_detail", args=[self.child.id]),
+        )
+
+        self.assertEqual(child_detail.status_code, 200)
+        self.assertIsNone(child_detail.context["unit"].role_profile)
+        self.assertEqual(child_detail.context["missing_required_coworker_roles"], [])
+        self.assertContains(child_detail, "Not set")
 
     def test_unit_detail_children_order_by_sibling_key(self):
         beta = ChurchStructureUnit.objects.create(

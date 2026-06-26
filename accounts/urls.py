@@ -63,6 +63,21 @@ urlpatterns = [
         name="church_structure_unit_detail",
     ),
     path(
+        "staff/structure/units/<int:unit_id>/coworker-role-profile/",
+        views.update_structure_unit_role_profile,
+        name="update_structure_unit_role_profile",
+    ),
+    path(
+        "staff/structure/units/<int:unit_id>/coworker-roles/add/",
+        views.add_structure_unit_coworker_assignment,
+        name="add_structure_unit_coworker_assignment",
+    ),
+    path(
+        "staff/structure/coworker-roles/<int:assignment_id>/end/",
+        views.end_structure_unit_coworker_assignment,
+        name="end_structure_unit_coworker_assignment",
+    ),
+    path(
         "staff/structure/units/<int:unit_id>/members/add/",
         views.add_structure_membership,
         name="add_structure_membership",

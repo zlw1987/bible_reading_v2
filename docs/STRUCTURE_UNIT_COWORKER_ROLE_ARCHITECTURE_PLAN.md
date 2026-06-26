@@ -3,9 +3,14 @@
 Status: UNIT-COWORKER.1A docs-only design complete. UNIT-COWORKER.1B adds the
 narrow model/admin foundation, nullable explicit unit role profile selection,
 globally scoped role types with globally unique codes, and a dry-run/apply
-preset seed command. Bible Study picker filtering, Today, My Serving long-term
-role display, role confirmation, runtime visibility, and permission changes
-remain unimplemented and require separate approval.
+preset seed command. UNIT-COWORKER.1C adds the narrow staff-facing setup UI on
+the existing Church Structure setup/detail surface: explicit unit role-profile
+update, missing-required-role display, active/historical coworker assignment
+review, add-active-assignment, end/deactivate-assignment, count-only map
+readiness, and a seed-command discoverability note when defaults are missing.
+Bible Study picker filtering, Today, My Serving long-term role display, role
+confirmation, runtime visibility, and permission inference remain unimplemented
+and require separate approval.
 
 ## 1. Purpose and Product Problem
 

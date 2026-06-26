@@ -87,6 +87,190 @@
 </section>
 
 <section class="card">
+    <h2 class="card-title">{% if language == "zh" %}同工角色{% else %}Coworker Roles{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        同工角色是这个结构单元的长期服事背景；不会授予成员归属、权限，也不会建立每周服事安排。
+        {% else %}
+        Coworker roles are long-term context for this structure unit; they do not grant membership, permissions, or weekly serving assignments.
+        {% endif %}
+    </p>
+
+    {% if coworker_defaults_missing %}
+    <div class="notice-panel">
+        <strong>{% if language == "zh" %}默认同工角色尚未建立{% else %}Coworker role defaults are not seeded yet{% endif %}</strong>
+        <p>
+            {% if language == "zh" %}
+            请先由同工确认后运行设置命令；页面不会自动建立默认资料。
+            {% else %}
+            Run the setup command after staff review; this page does not auto-seed defaults.
+            {% endif %}
+        </p>
+        <code>python manage.py seed_structure_unit_coworker_roles --apply</code>
+    </div>
+    {% endif %}
+
+    <dl class="detail-list">
+        <dt>{% if language == "zh" %}同工角色模板{% else %}Role Profile{% endif %}</dt>
+        <dd>
+            {% if unit.role_profile %}
+                {% if language == "zh" %}
+                {{ unit.role_profile.name }}
+                {% elif unit.role_profile.name_en %}
+                {{ unit.role_profile.name_en }}
+                {% else %}
+                {{ unit.role_profile.name }}
+                {% endif %}
+            {% else %}
+                <span class="status status-warning">{% if language == "zh" %}未设置{% else %}Not set{% endif %}</span>
+            {% endif %}
+        </dd>
+        <dt>{% if language == "zh" %}缺少必要同工{% else %}Missing Required Roles{% endif %}</dt>
+        <dd>
+            {% if missing_required_coworker_roles %}
+            <ul class="staff-count-list">
+                {% for role_type in missing_required_coworker_roles %}
+                <li>
+                    <span class="status status-warning">
+                        {% if language == "zh" %}
+                        {{ role_type.name }}
+                        {% elif role_type.name_en %}
+                        {{ role_type.name_en }}
+                        {% else %}
+                        {{ role_type.name }}
+                        {% endif %}
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% elif unit.role_profile %}
+            <span class="status status-good">{% if language == "zh" %}没有缺少必要同工{% else %}No missing required roles{% endif %}</span>
+            {% else %}
+            <span class="muted">{% if language == "zh" %}请先选择同工角色模板。{% else %}Select a role profile first.{% endif %}</span>
+            {% endif %}
+        </dd>
+    </dl>
+
+    {% if can_admin_coworker_roles %}
+    <form method="post"
+          action="{% url 'update_structure_unit_role_profile' unit.id %}"
+          class="structure-membership-form">
+        {% csrf_token %}
+        {% for field in role_profile_form %}
+        <div class="form-field">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+            <span class="form-help">{{ field.help_text }}</span>
+            {% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">{% if language == "zh" %}保存同工角色模板{% else %}Save role profile{% endif %}</button>
+    </form>
+    {% endif %}
+
+    <h3>{% if language == "zh" %}当前同工{% else %}Active Coworkers{% endif %}</h3>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>{% if language == "zh" %}角色{% else %}Role{% endif %}</th>
+                    <th>{% if language == "zh" %}用户{% else %}User{% endif %}</th>
+                    <th>{% if language == "zh" %}开始日期{% else %}Start date{% endif %}</th>
+                    <th>{% if language == "zh" %}结束日期{% else %}End date{% endif %}</th>
+                    <th>{% if language == "zh" %}备注{% else %}Notes{% endif %}</th>
+                    <th>{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for assignment in active_coworker_assignments %}
+                <tr>
+                    <td>
+                        {% if language == "zh" %}
+                        {{ assignment.role_type.name }}
+                        {% elif assignment.role_type.name_en %}
+                        {{ assignment.role_type.name_en }}
+                        {% else %}
+                        {{ assignment.role_type.name }}
+                        {% endif %}
+                    </td>
+                    <td>{{ assignment.user.get_full_name|default:assignment.user.username }} ({{ assignment.user.username }})</td>
+                    <td>{{ assignment.start_date|date:"Y-m-d" }}</td>
+                    <td>{{ assignment.end_date|date:"Y-m-d"|default:"-" }}</td>
+                    <td>{{ assignment.notes|default:"-" }}</td>
+                    <td>
+                        {% if can_admin_coworker_roles %}
+                        <form method="post"
+                              action="{% url 'end_structure_unit_coworker_assignment' assignment.id %}"
+                              class="inline-action-form">
+                            {% csrf_token %}
+                            <button type="submit" class="button-danger">
+                                {% if language == "zh" %}结束角色{% else %}End Role{% endif %}
+                            </button>
+                        </form>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="muted">{% if language == "zh" %}没有当前同工。{% else %}No active coworkers.{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if can_admin_coworker_roles %}
+    <h3>{% if language == "zh" %}添加同工角色{% else %}Add Coworker Role{% endif %}</h3>
+    {% if unit.is_active %}
+    <form method="post"
+          action="{% url 'add_structure_unit_coworker_assignment' unit.id %}"
+          class="structure-membership-form">
+        {% csrf_token %}
+        {% for field in coworker_assignment_form %}
+        <div class="form-field">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+            <span class="form-help">{{ field.help_text }}</span>
+            {% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">{% if language == "zh" %}添加同工角色{% else %}Add Coworker Role{% endif %}</button>
+    </form>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}停用单元不能新增当前同工角色。{% else %}Active coworker roles cannot be added to inactive units.{% endif %}
+    </p>
+    {% endif %}
+    {% endif %}
+
+    <h3>{% if language == "zh" %}历史同工{% else %}Historical Coworkers{% endif %}</h3>
+    <ul class="staff-count-list">
+        {% for assignment in historical_coworker_assignments %}
+        <li>
+            {% if language == "zh" %}
+            {{ assignment.role_type.name }}
+            {% elif assignment.role_type.name_en %}
+            {{ assignment.role_type.name_en }}
+            {% else %}
+            {{ assignment.role_type.name }}
+            {% endif %}
+            -
+            {{ assignment.user.username }}
+            {% if assignment.end_date %}({{ assignment.end_date|date:"Y-m-d" }}){% endif %}
+        </li>
+        {% empty %}
+        <li class="muted">{% if language == "zh" %}没有历史同工。{% else %}No historical coworkers.{% endif %}</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<section class="card">
     <h2 class="card-title">
         {% if language == "zh" %}移动 / 改上级影响预览{% else %}Move / Reparent Impact Preview{% endif %}
     </h2>

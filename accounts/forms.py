@@ -16,6 +16,9 @@ from .language import get_user_language
 from .models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleProfile,
+    ChurchStructureUnitRoleType,
     Profile,
 )
 from .ordering import (
@@ -55,6 +58,24 @@ class StructureSetupUserChoiceField(forms.ModelChoiceField):
         if label != obj.username:
             return f"{label} ({obj.username})"
         return obj.username
+
+
+class StructureRoleProfileChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="zh", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        return obj.display_name(self.language)
+
+
+class StructureRoleTypeChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="zh", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, obj):
+        return obj.display_name(self.language)
 
 
 class StructureMembershipAddForm(forms.Form):
@@ -131,6 +152,121 @@ class StructureMembershipAddForm(forms.Form):
             requested_by=approved_by,
             approved_by=approved_by,
             approved_at=timezone.now(),
+            notes=self.cleaned_data.get("notes", ""),
+        )
+
+
+class StructureUnitRoleProfileForm(forms.Form):
+    role_profile = StructureRoleProfileChoiceField(
+        queryset=ChurchStructureUnitRoleProfile.objects.none(),
+        required=False,
+        empty_label="Not set",
+    )
+
+    def __init__(self, *args, unit=None, language="zh", **kwargs):
+        super().__init__(*args, **kwargs)
+        if unit is None:
+            raise ValueError("StructureUnitRoleProfileForm requires a unit.")
+        self.unit = unit
+        self.fields["role_profile"].queryset = (
+            ChurchStructureUnitRoleProfile.objects.filter(is_active=True)
+            .order_by("sort_order", "code")
+        )
+        self.fields["role_profile"].language = language
+        self.fields["role_profile"].empty_label = (
+            "未设置" if language == "zh" else "Not set"
+        )
+        self.fields["role_profile"].label = (
+            "同工角色模板" if language == "zh" else "Role Profile"
+        )
+
+    def save(self):
+        self.unit.role_profile = self.cleaned_data.get("role_profile")
+        self.unit.save(update_fields=["role_profile", "updated_at"])
+        return self.unit
+
+
+class StructureUnitCoworkerAssignmentForm(forms.Form):
+    role_type = StructureRoleTypeChoiceField(
+        queryset=ChurchStructureUnitRoleType.objects.none(),
+    )
+    user = StructureSetupUserChoiceField(queryset=User.objects.none())
+    start_date = forms.DateField(
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    end_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text=(
+            "Operational/non-sensitive notes only. Do not store counseling, "
+            "pastoral, medical, financial, or private information."
+        ),
+    )
+
+    def __init__(self, *args, unit=None, language="zh", **kwargs):
+        super().__init__(*args, **kwargs)
+        if unit is None:
+            raise ValueError("StructureUnitCoworkerAssignmentForm requires a unit.")
+        self.unit = unit
+        self.fields["role_type"].queryset = (
+            ChurchStructureUnitRoleType.objects.filter(is_active=True)
+            .order_by("sort_order", "code")
+        )
+        self.fields["role_type"].language = language
+        self.fields["role_type"].label = (
+            "同工角色" if language == "zh" else "Role type"
+        )
+        UserModel = get_user_model()
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            UserModel.objects.filter(is_active=True)
+        )
+        self.fields["user"].label = "用户" if language == "zh" else "User"
+        self.fields["start_date"].label = (
+            "开始日期" if language == "zh" else "Start date"
+        )
+        self.fields["end_date"].label = (
+            "结束日期" if language == "zh" else "End date"
+        )
+        self.fields["notes"].label = "备注" if language == "zh" else "Notes"
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        assignment = ChurchStructureUnitRoleAssignment(
+            unit=self.unit,
+            role_type=cleaned_data.get("role_type"),
+            user=cleaned_data.get("user"),
+            is_active=True,
+            start_date=cleaned_data.get("start_date"),
+            end_date=cleaned_data.get("end_date"),
+            notes=cleaned_data.get("notes", ""),
+        )
+        try:
+            assignment.full_clean()
+        except forms.ValidationError as error:
+            if hasattr(error, "message_dict"):
+                for field_name, messages in error.message_dict.items():
+                    target = field_name if field_name in self.fields else None
+                    for message in messages:
+                        self.add_error(target, message)
+            else:
+                self.add_error(None, error)
+
+        return cleaned_data
+
+    def save(self):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.unit,
+            role_type=self.cleaned_data["role_type"],
+            user=self.cleaned_data["user"],
+            is_active=True,
+            start_date=self.cleaned_data["start_date"],
+            end_date=self.cleaned_data.get("end_date"),
             notes=self.cleaned_data.get("notes", ""),
         )
 

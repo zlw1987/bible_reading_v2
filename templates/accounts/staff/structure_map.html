@@ -339,6 +339,20 @@
         {% endif %}
     </p>
 
+    {% if indicators.coworker_role_profiles_count == 0 or indicators.coworker_role_types_count == 0 %}
+    <div class="notice-panel">
+        <strong>{% if language == "zh" %}默认同工角色尚未建立{% else %}Coworker role defaults are not seeded yet{% endif %}</strong>
+        <p>
+            {% if language == "zh" %}
+            页面不会自动建立默认资料；确认后可运行设置命令。
+            {% else %}
+            This page does not auto-seed defaults; run the setup command after review.
+            {% endif %}
+        </p>
+        <code>python manage.py seed_structure_unit_coworker_roles --apply</code>
+    </div>
+    {% endif %}
+
     <div class="structure-check-groups">
         <div class="structure-check-group">
             <h3 class="structure-check-heading">
@@ -395,6 +409,26 @@
                         这些成员仍挂在停用单位下，通常需要转移或结束相关成员关系。
                         {% else %}
                         These members are still assigned under inactive units and may need to be moved or ended.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}未选择同工角色模板的启用单位{% else %}Active units without a coworker role profile{% endif %}: {{ indicators.active_units_without_role_profile }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        模板需要明确选择；不会按是否有下级单元自动推断小组类模板。
+                        {% else %}
+                        Profiles must be selected explicitly; childless units are not treated as small-group-like automatically.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}已选模板但缺少必要同工的启用单位{% else %}Active units with selected profiles and missing required coworkers{% endif %}: {{ indicators.active_units_with_missing_required_coworker_roles }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        这里只显示单位数量，不显示同工名单；请进入单位详情处理。
+                        {% else %}
+                        This shows unit counts only, not coworker names; review the unit detail page to resolve.
                         {% endif %}
                     </div>
                 </li>

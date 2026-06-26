@@ -23,6 +23,8 @@ from .forms import (
     SignUpForm,
     StaffPasswordResetForm,
     StructureMembershipAddForm,
+    StructureUnitCoworkerAssignmentForm,
+    StructureUnitRoleProfileForm,
 )
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
@@ -30,6 +32,9 @@ from .models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleProfile,
+    ChurchStructureUnitRoleType,
     Profile,
 )
 from .ordering import (
@@ -401,6 +406,29 @@ def staff_structure_map(request):
         .count(),
     }
     indicators.update(_structure_setup_warning_counts())
+    active_units = ChurchStructureUnit.objects.filter(is_active=True)
+    active_units_without_role_profile = active_units.filter(
+        role_profile__isnull=True,
+    ).count()
+    active_units_with_missing_required_coworker_roles = sum(
+        1
+        for unit in active_units.filter(role_profile__isnull=False).select_related(
+            "role_profile",
+        )
+        if unit.missing_required_role_types(today)
+    )
+    indicators.update(
+        {
+            "active_units_without_role_profile": active_units_without_role_profile,
+            "active_units_with_missing_required_coworker_roles": (
+                active_units_with_missing_required_coworker_roles
+            ),
+            "coworker_role_profiles_count": (
+                ChurchStructureUnitRoleProfile.objects.count()
+            ),
+            "coworker_role_types_count": ChurchStructureUnitRoleType.objects.count(),
+        }
+    )
 
     # Edit mode is a lightweight read/write affordance layer. The default view
     # stays review-first and read-only; entering edit mode exposes rename,
@@ -1406,14 +1434,34 @@ def _structure_setup_warning_counts():
     }
 
 
+def _first_form_error(form):
+    for errors in form.errors.values():
+        if errors:
+            return errors[0]
+    return ""
+
+
 @user_passes_test(can_manage_church_memberships)
 def church_structure_unit_detail(request, unit_id):
     language = get_user_language(request)
     unit = get_object_or_404(
-        ChurchStructureUnit.objects.select_related("parent"),
+        ChurchStructureUnit.objects.select_related("parent", "role_profile"),
         id=unit_id,
     )
     add_form = StructureMembershipAddForm(unit=unit)
+    can_admin_coworker_roles = request.user.has_perm(
+        "accounts.change_churchstructureunit"
+    )
+    role_profile_form = (
+        StructureUnitRoleProfileForm(unit=unit, language=language)
+        if can_admin_coworker_roles
+        else None
+    )
+    coworker_assignment_form = (
+        StructureUnitCoworkerAssignmentForm(unit=unit, language=language)
+        if can_admin_coworker_roles
+        else None
+    )
     active_memberships = order_by_related_user_visible_identity(
         _active_membership_queryset()
         .filter(unit=unit)
@@ -1427,6 +1475,22 @@ def church_structure_unit_detail(request, unit_id):
         )[:20]
     )
     children = order_units_by_sibling_key(unit.children.all(), language)
+    active_coworker_assignments = (
+        ChurchStructureUnitRoleAssignment.objects.filter(unit=unit, is_active=True)
+        .select_related("role_type", "user")
+        .order_by("role_type__sort_order", "role_type__code", "user__username", "id")
+    )
+    historical_coworker_assignments = (
+        ChurchStructureUnitRoleAssignment.objects.filter(unit=unit)
+        .exclude(id__in=active_coworker_assignments.values("id"))
+        .select_related("role_type", "user")
+        .order_by("-updated_at", "role_type__sort_order", "user__username", "id")[:20]
+    )
+    missing_required_coworker_roles = unit.missing_required_role_types()
+    coworker_defaults_missing = (
+        not ChurchStructureUnitRoleProfile.objects.exists()
+        or not ChurchStructureUnitRoleType.objects.exists()
+    )
     can_enable_unit = False
     enable_blocker_labels = []
     if request.user.has_perm("accounts.change_churchstructureunit"):
@@ -1448,6 +1512,13 @@ def church_structure_unit_detail(request, unit_id):
             "active_memberships": active_memberships,
             "inactive_memberships": inactive_memberships,
             "add_form": add_form,
+            "role_profile_form": role_profile_form,
+            "coworker_assignment_form": coworker_assignment_form,
+            "can_admin_coworker_roles": can_admin_coworker_roles,
+            "active_coworker_assignments": active_coworker_assignments,
+            "historical_coworker_assignments": historical_coworker_assignments,
+            "missing_required_coworker_roles": missing_required_coworker_roles,
+            "coworker_defaults_missing": coworker_defaults_missing,
             "can_enable_unit": can_enable_unit,
             "enable_blocker_labels": enable_blocker_labels,
             "move_impact_preview": _structure_unit_move_impact_preview(
@@ -1455,6 +1526,155 @@ def church_structure_unit_detail(request, unit_id):
                 language,
             ),
         },
+    )
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def update_structure_unit_role_profile(request, unit_id):
+    language = get_user_language(request)
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    form = StructureUnitRoleProfileForm(
+        request.POST,
+        unit=unit,
+        language=language,
+    )
+
+    if form.is_valid():
+        form.save()
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=unit.pk,
+            object_repr=str(unit),
+            action_flag=CHANGE,
+            change_message=(
+                "Updated explicit structure unit coworker role profile "
+                "(UNIT-COWORKER.1C). No memberships, permissions, serving "
+                "assignments, or Bible Study roles were changed."
+            ),
+        )
+        messages.success(
+            request,
+            "已更新同工角色模板。" if language == "zh"
+            else "Coworker role profile updated.",
+        )
+    else:
+        detail = _first_form_error(form)
+        messages.error(
+            request,
+            (
+                "同工角色模板未更新。"
+                if language == "zh"
+                else "Coworker role profile was not updated."
+            )
+            + (f" {detail}" if detail else ""),
+        )
+
+    return redirect("church_structure_unit_detail", unit_id=unit.id)
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def add_structure_unit_coworker_assignment(request, unit_id):
+    language = get_user_language(request)
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    form = StructureUnitCoworkerAssignmentForm(
+        request.POST,
+        unit=unit,
+        language=language,
+    )
+
+    if form.is_valid():
+        assignment = form.save()
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnitRoleAssignment
+            ).pk,
+            object_id=assignment.pk,
+            object_repr=str(assignment),
+            action_flag=ADDITION,
+            change_message=(
+                "Added structure unit coworker role assignment "
+                "(UNIT-COWORKER.1C). No memberships, permissions, TeamAssignment "
+                "rows, TeamAssignmentMember rows, or BibleStudyMeetingRole rows "
+                "were created."
+            ),
+        )
+        messages.success(
+            request,
+            (
+                f"已添加 {assignment.user.username} 的同工角色。"
+                if language == "zh"
+                else f"Added coworker role for {assignment.user.username}."
+            ),
+        )
+    else:
+        detail = _first_form_error(form)
+        messages.error(
+            request,
+            (
+                "同工角色未添加。"
+                if language == "zh"
+                else "Coworker role was not added."
+            )
+            + (f" {detail}" if detail else ""),
+        )
+
+    return redirect("church_structure_unit_detail", unit_id=unit.id)
+
+
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def end_structure_unit_coworker_assignment(request, assignment_id):
+    language = get_user_language(request)
+    assignment = get_object_or_404(
+        ChurchStructureUnitRoleAssignment.objects.select_related(
+            "unit",
+            "user",
+            "role_type",
+        ),
+        id=assignment_id,
+    )
+    today = timezone.localdate()
+
+    assignment.is_active = False
+    if not assignment.end_date or assignment.end_date > today:
+        assignment.end_date = (
+            assignment.start_date
+            if assignment.start_date and assignment.start_date > today
+            else today
+        )
+    assignment.save(update_fields=["is_active", "end_date", "updated_at"])
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureUnitRoleAssignment
+        ).pk,
+        object_id=assignment.pk,
+        object_repr=str(assignment),
+        action_flag=CHANGE,
+        change_message=(
+            "Ended/deactivated structure unit coworker role assignment "
+            "(UNIT-COWORKER.1C). Row was retained; no memberships, permissions, "
+            "TeamAssignment rows, TeamAssignmentMember rows, or "
+            "BibleStudyMeetingRole rows were changed."
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"已结束 {assignment.user.username} 的同工角色。"
+            if language == "zh"
+            else f"Ended coworker role for {assignment.user.username}."
+        ),
+    )
+    return redirect(
+        "church_structure_unit_detail",
+        unit_id=assignment.unit_id,
     )
 
 

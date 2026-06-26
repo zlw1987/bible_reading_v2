@@ -8,9 +8,12 @@ the existing Church Structure setup/detail surface: explicit unit role-profile
 update, missing-required-role display, active/historical coworker assignment
 review, add-active-assignment, end/deactivate-assignment, count-only map
 readiness, and a seed-command discoverability note when defaults are missing.
-Bible Study picker filtering, Today, My Serving long-term role display, role
-confirmation, runtime visibility, and permission inference remain unimplemented
-and require separate approval.
+UNIT-COWORKER.1D narrows the add-coworker user picker to active users whose
+active primary `ChurchStructureMembership` is directly on the current unit or
+its immediate parent, with a staff-controlled `coworker_user_scope=all`
+fallback for special cross-unit cases. Bible Study picker filtering, Today, My
+Serving long-term role display, role confirmation, runtime visibility, and
+permission inference remain unimplemented and require separate approval.
 
 ## 1. Purpose and Product Problem
 

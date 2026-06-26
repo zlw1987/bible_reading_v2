@@ -12,7 +12,11 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.forms import create_or_update_signup_membership_request
+from accounts.forms import (
+    StructureUnitCoworkerAssignmentForm,
+    coworker_assignment_local_user_queryset,
+    create_or_update_signup_membership_request,
+)
 from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
@@ -4303,6 +4307,175 @@ class ChurchStructureSetupDetailTests(TestCase):
             "python manage.py seed_structure_unit_coworker_roles --apply",
         )
 
+    def test_default_coworker_candidates_are_direct_unit_and_parent_primary_members(self):
+        unit_member = User.objects.create_user(username="candidate_unit")
+        parent_member = User.objects.create_user(username="candidate_parent")
+        sibling_member = User.objects.create_user(username="candidate_sibling")
+        child_member = User.objects.create_user(username="candidate_child")
+        non_primary_user = User.objects.create_user(username="candidate_non_primary")
+        inactive_user = User.objects.create_user(
+            username="candidate_inactive",
+            is_active=False,
+        )
+        requested_user = User.objects.create_user(username="candidate_requested")
+        ended_user = User.objects.create_user(username="candidate_ended")
+        rejected_user = User.objects.create_user(username="candidate_rejected")
+        cancelled_user = User.objects.create_user(username="candidate_cancelled")
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SETUP-SIB",
+            name="Sibling Group",
+        )
+        self.create_membership(unit_member, is_primary=True)
+        self.create_membership(parent_member, unit=self.root, is_primary=True)
+        self.create_membership(sibling_member, unit=sibling, is_primary=True)
+        self.create_membership(child_member, unit=self.child, is_primary=True)
+        self.create_membership(non_primary_user, is_primary=False)
+        self.create_membership(inactive_user, is_primary=True)
+        self.create_membership(
+            requested_user,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            start_date=None,
+            is_primary=False,
+        )
+        self.create_membership(
+            ended_user,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            start_date=timezone.localdate() - timedelta(days=10),
+            end_date=timezone.localdate() - timedelta(days=1),
+            is_primary=False,
+        )
+        self.create_membership(
+            rejected_user,
+            status=ChurchStructureMembership.STATUS_REJECTED,
+            start_date=None,
+            is_primary=False,
+        )
+        self.create_membership(
+            cancelled_user,
+            status=ChurchStructureMembership.STATUS_CANCELLED,
+            start_date=None,
+            is_primary=False,
+        )
+
+        candidate_ids = set(
+            coworker_assignment_local_user_queryset(self.group).values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        self.assertIn(unit_member.id, candidate_ids)
+        self.assertIn(parent_member.id, candidate_ids)
+        self.assertNotIn(sibling_member.id, candidate_ids)
+        self.assertNotIn(child_member.id, candidate_ids)
+        self.assertNotIn(non_primary_user.id, candidate_ids)
+        self.assertNotIn(inactive_user.id, candidate_ids)
+        self.assertNotIn(requested_user.id, candidate_ids)
+        self.assertNotIn(ended_user.id, candidate_ids)
+        self.assertNotIn(rejected_user.id, candidate_ids)
+        self.assertNotIn(cancelled_user.id, candidate_ids)
+
+        form = StructureUnitCoworkerAssignmentForm(unit=self.group, language="en")
+        form_candidate_ids = set(form.fields["user"].queryset.values_list("id", flat=True))
+        self.assertEqual(form_candidate_ids, candidate_ids)
+
+    def test_coworker_candidates_for_root_use_direct_root_members_only(self):
+        root_member = User.objects.create_user(username="candidate_root")
+        child_member = User.objects.create_user(username="candidate_root_child")
+        self.create_membership(root_member, unit=self.root, is_primary=True)
+        self.create_membership(child_member, unit=self.group, is_primary=True)
+
+        candidate_ids = set(
+            coworker_assignment_local_user_queryset(self.root).values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        self.assertIn(root_member.id, candidate_ids)
+        self.assertNotIn(child_member.id, candidate_ids)
+
+    def test_default_coworker_candidates_do_not_use_leaf_node_status(self):
+        self.assertFalse(self.child.children.exists())
+
+        candidate_ids = set(
+            coworker_assignment_local_user_queryset(self.child).values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        self.assertNotIn(self.target_user.id, candidate_ids)
+        self.assertNotIn(self.other_user.id, candidate_ids)
+
+    def test_unit_detail_displays_local_candidate_note_and_all_user_link(self):
+        self.create_membership(self.target_user, is_primary=True)
+        self.set_language("en")
+        self.login_structure_admin()
+
+        response = self.client.get(self.detail_url)
+        form = response.context["coworker_assignment_form"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["coworker_user_scope"],
+            StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL,
+        )
+        self.assertIn(self.target_user, list(form.fields["user"].queryset))
+        self.assertContains(
+            response,
+            "Showing members directly assigned to this unit or its parent.",
+        )
+        self.assertContains(response, "Show all active users")
+        self.assertContains(response, "?coworker_user_scope=all")
+
+    def test_unit_detail_all_user_mode_displays_warning_and_all_active_users(self):
+        inactive_user = User.objects.create_user(
+            username="all_scope_inactive",
+            is_active=False,
+        )
+        self.set_language("en")
+        self.login_structure_admin()
+
+        response = self.client.get(
+            self.detail_url,
+            {"coworker_user_scope": "all"},
+        )
+        form = response.context["coworker_assignment_form"]
+        user_ids = set(form.fields["user"].queryset.values_list("id", flat=True))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["coworker_user_scope"],
+            StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL,
+        )
+        self.assertIn(self.target_user.id, user_ids)
+        self.assertIn(self.other_user.id, user_ids)
+        self.assertNotIn(inactive_user.id, user_ids)
+        self.assertContains(
+            response,
+            "Showing all active users. Use this only for special cross-unit cases.",
+        )
+        self.assertContains(response, "Back to local candidates")
+        self.assertContains(
+            response,
+            'action="/staff/structure/units/'
+            f'{self.group.id}/coworker-roles/add/?coworker_user_scope=all"',
+        )
+
+    def test_unit_detail_empty_local_candidates_shows_help_and_fallback(self):
+        self.set_language("en")
+        self.login_structure_admin()
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["coworker_assignment_local_user_count"], 0)
+        self.assertContains(response, "No local candidates are available")
+        self.assertContains(response, "Show all active users")
+
     def test_role_profile_update_is_post_only_and_requires_structure_permission(self):
         profile = self.create_role_profile()
         url = reverse("update_structure_unit_role_profile", args=[self.group.id])
@@ -4365,7 +4538,8 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.login_structure_admin()
 
         response = self.client.post(
-            reverse("add_structure_unit_coworker_assignment", args=[self.group.id]),
+            reverse("add_structure_unit_coworker_assignment", args=[self.group.id])
+            + "?coworker_user_scope=all",
             {
                 "role_type": role_type.id,
                 "user": self.target_user.id,
@@ -4428,6 +4602,8 @@ class ChurchStructureSetupDetailTests(TestCase):
 
     def test_add_coworker_assignment_rejects_inactive_unit_and_duplicates(self):
         role_type = self.create_role_type()
+        self.create_membership(self.target_user, is_primary=True)
+        self.create_membership(self.other_user, unit=self.root, is_primary=True)
         ChurchStructureUnitRoleAssignment.objects.create(
             unit=self.group,
             role_type=role_type,

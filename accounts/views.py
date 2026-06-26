@@ -25,6 +25,7 @@ from .forms import (
     StructureMembershipAddForm,
     StructureUnitCoworkerAssignmentForm,
     StructureUnitRoleProfileForm,
+    coworker_assignment_local_user_queryset,
 )
 from .language import get_user_language, set_user_language
 from .ui_text import UI_TEXT
@@ -1457,8 +1458,29 @@ def church_structure_unit_detail(request, unit_id):
         if can_admin_coworker_roles
         else None
     )
+    coworker_user_scope = (
+        StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+        if request.GET.get("coworker_user_scope")
+        == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+        else StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL
+    )
+    coworker_assignment_local_user_count = (
+        coworker_assignment_local_user_queryset(unit).count()
+        if can_admin_coworker_roles
+        else 0
+    )
+    coworker_assignment_form_action_url = reverse(
+        "add_structure_unit_coworker_assignment",
+        args=[unit.id],
+    )
+    if coworker_user_scope == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL:
+        coworker_assignment_form_action_url += "?coworker_user_scope=all"
     coworker_assignment_form = (
-        StructureUnitCoworkerAssignmentForm(unit=unit, language=language)
+        StructureUnitCoworkerAssignmentForm(
+            unit=unit,
+            language=language,
+            user_scope=coworker_user_scope,
+        )
         if can_admin_coworker_roles
         else None
     )
@@ -1515,6 +1537,13 @@ def church_structure_unit_detail(request, unit_id):
             "role_profile_form": role_profile_form,
             "coworker_assignment_form": coworker_assignment_form,
             "can_admin_coworker_roles": can_admin_coworker_roles,
+            "coworker_user_scope": coworker_user_scope,
+            "coworker_assignment_form_action_url": (
+                coworker_assignment_form_action_url
+            ),
+            "coworker_assignment_local_user_count": (
+                coworker_assignment_local_user_count
+            ),
             "active_coworker_assignments": active_coworker_assignments,
             "historical_coworker_assignments": historical_coworker_assignments,
             "missing_required_coworker_roles": missing_required_coworker_roles,
@@ -1581,10 +1610,17 @@ def update_structure_unit_role_profile(request, unit_id):
 def add_structure_unit_coworker_assignment(request, unit_id):
     language = get_user_language(request)
     unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    coworker_user_scope = (
+        StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+        if request.GET.get("coworker_user_scope")
+        == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+        else StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL
+    )
     form = StructureUnitCoworkerAssignmentForm(
         request.POST,
         unit=unit,
         language=language,
+        user_scope=coworker_user_scope,
     )
 
     if form.is_valid():

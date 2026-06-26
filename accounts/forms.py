@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.contrib.auth.forms import (
     AuthenticationForm,
@@ -186,6 +187,38 @@ class StructureUnitRoleProfileForm(forms.Form):
         return self.unit
 
 
+def coworker_assignment_local_user_queryset(unit):
+    """Recommended coworker candidates for a structure unit detail form.
+
+    This is display/form scoping only. It uses direct active primary
+    memberships on the unit or its immediate parent, and does not infer
+    coworker roles from membership, unit type, descendants, permissions, teams,
+    or Bible Study visibility.
+    """
+    UserModel = get_user_model()
+    target_unit_ids = [unit.id]
+    if unit.parent_id:
+        target_unit_ids.append(unit.parent_id)
+
+    today = timezone.localdate()
+    return order_users_by_visible_identity(
+        UserModel.objects.filter(
+            is_active=True,
+            church_structure_memberships__unit_id__in=target_unit_ids,
+            church_structure_memberships__status=(
+                ChurchStructureMembership.STATUS_ACTIVE
+            ),
+            church_structure_memberships__is_primary=True,
+            church_structure_memberships__start_date__lte=today,
+        )
+        .filter(
+            Q(church_structure_memberships__end_date__isnull=True)
+            | Q(church_structure_memberships__end_date__gte=today)
+        )
+        .distinct()
+    )
+
+
 class StructureUnitCoworkerAssignmentForm(forms.Form):
     role_type = StructureRoleTypeChoiceField(
         queryset=ChurchStructureUnitRoleType.objects.none(),
@@ -208,11 +241,26 @@ class StructureUnitCoworkerAssignmentForm(forms.Form):
         ),
     )
 
-    def __init__(self, *args, unit=None, language="zh", **kwargs):
+    USER_SCOPE_LOCAL = "local"
+    USER_SCOPE_ALL = "all"
+
+    def __init__(
+        self,
+        *args,
+        unit=None,
+        language="zh",
+        user_scope=USER_SCOPE_LOCAL,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         if unit is None:
             raise ValueError("StructureUnitCoworkerAssignmentForm requires a unit.")
         self.unit = unit
+        self.user_scope = (
+            self.USER_SCOPE_ALL
+            if user_scope == self.USER_SCOPE_ALL
+            else self.USER_SCOPE_LOCAL
+        )
         self.fields["role_type"].queryset = (
             ChurchStructureUnitRoleType.objects.filter(is_active=True)
             .order_by("sort_order", "code")
@@ -222,9 +270,13 @@ class StructureUnitCoworkerAssignmentForm(forms.Form):
             "同工角色" if language == "zh" else "Role type"
         )
         UserModel = get_user_model()
-        self.fields["user"].queryset = order_users_by_visible_identity(
-            UserModel.objects.filter(is_active=True)
-        )
+        if self.user_scope == self.USER_SCOPE_ALL:
+            user_queryset = order_users_by_visible_identity(
+                UserModel.objects.filter(is_active=True)
+            )
+        else:
+            user_queryset = coworker_assignment_local_user_queryset(unit)
+        self.fields["user"].queryset = user_queryset
         self.fields["user"].label = "用户" if language == "zh" else "User"
         self.fields["start_date"].label = (
             "开始日期" if language == "zh" else "Start date"

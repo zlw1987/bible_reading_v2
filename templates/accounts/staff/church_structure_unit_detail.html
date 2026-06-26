@@ -226,8 +226,42 @@
     {% if can_admin_coworker_roles %}
     <h3>{% if language == "zh" %}添加同工角色{% else %}Add Coworker Role{% endif %}</h3>
     {% if unit.is_active %}
+    <div class="notice-panel">
+        {% if coworker_user_scope == "all" %}
+        <p>
+            {% if language == "zh" %}
+            正在显示所有启用用户；仅用于特殊跨单元情况。
+            {% else %}
+            Showing all active users. Use this only for special cross-unit cases.
+            {% endif %}
+        </p>
+        <a class="button-secondary button" href="{% url 'church_structure_unit_detail' unit.id %}">
+            {% if language == "zh" %}回到本单元候选人{% else %}Back to local candidates{% endif %}
+        </a>
+        {% else %}
+        <p>
+            {% if language == "zh" %}
+            默认显示直接归属于本单元或上级单元的成员。
+            {% else %}
+            Showing members directly assigned to this unit or its parent.
+            {% endif %}
+        </p>
+        {% if coworker_assignment_local_user_count == 0 %}
+        <p class="muted">
+            {% if language == "zh" %}
+            目前没有本单元或上级单元的本地候选人；如确实需要，请切换到所有启用用户。
+            {% else %}
+            No local candidates are available for this unit or its parent; switch to all active users if needed.
+            {% endif %}
+        </p>
+        {% endif %}
+        <a class="button-secondary button" href="{% url 'church_structure_unit_detail' unit.id %}?coworker_user_scope=all">
+            {% if language == "zh" %}显示所有启用用户{% else %}Show all active users{% endif %}
+        </a>
+        {% endif %}
+    </div>
     <form method="post"
-          action="{% url 'add_structure_unit_coworker_assignment' unit.id %}"
+          action="{{ coworker_assignment_form_action_url }}"
           class="structure-membership-form">
         {% csrf_token %}
         {% for field in coworker_assignment_form %}

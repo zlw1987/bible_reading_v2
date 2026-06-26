@@ -2223,6 +2223,24 @@ th {
     margin-bottom: 12px;
 }
 
+.structure-check-groups {
+    display: grid;
+    gap: 16px;
+}
+
+.structure-check-heading {
+    font-size: 16px;
+    margin: 0 0 8px;
+}
+
+.structure-check-list {
+    margin-bottom: 0;
+}
+
+.structure-check-list li {
+    margin-bottom: 12px;
+}
+
 .structure-row-order-controls {
     display: inline-flex;
     gap: 4px;

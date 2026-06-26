@@ -9,9 +9,9 @@
     <h1 class="page-title">{% if language == "zh" %}教会结构设置与检查{% else %}Church Structure Setup & Review{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        管理教会结构树、检查归属资料，并确认结构相关设置是否安全。
+        查看和管理教会的组织结构、成员所属，以及结构资料中的提醒事项。
         {% else %}
-        Manage the church structure tree, review belonging records, and check whether structure-related setup is safe.
+        View and manage the church structure, member belonging, and structure data reminders.
         {% endif %}
     </p>
 </section>
@@ -22,50 +22,11 @@
     </strong>
     <p>
         {% if language == "zh" %}
-        教会结构单元是正式的结构树。教会结构归属表示一个人平时牧养和关怀上的归属；职分范围、服事排班和团队成员关系是另外的概念。
+        成员所属表示一个人平时在哪个小组、区或单位中被关怀和管理；职分范围、服事排班和团队成员关系是另外的概念。
         {% else %}
-        Church Structure Units are the canonical structure tree. Church Structure membership represents ordinary pastoral/care belonging. Role scopes, serving assignments, and team membership are separate concepts.
+        Member belonging shows where a person is ordinarily cared for and managed. Role scopes, serving schedules, and team membership are separate concepts.
         {% endif %}
     </p>
-</section>
-
-<section class="card">
-    <h2 class="card-title">
-        {% if language == "zh" %}设置就绪指标{% else %}Setup Readiness Indicators{% endif %}
-    </h2>
-    <p class="muted">
-        {% if language == "zh" %}
-        各指标分别统计；同一条记录可能出现在多个指标中。
-        {% else %}
-        Each indicator is counted separately; the same record may appear in more than one indicator.
-        {% endif %}
-    </p>
-    <ul class="staff-count-list">
-        <li>{% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: <strong>{{ indicators.direct_parent_memberships }}</strong></li>
-        <li>{% if language == "zh" %}没有直接主要归属的启用单元{% else %}Active units without direct primary membership{% endif %}: <strong>{{ indicators.active_units_without_primary }}</strong></li>
-        <li>{% if language == "zh" %}拥有多个启用主要归属的用户{% else %}Users with multiple active primary memberships{% endif %}: <strong>{{ indicators.users_with_multiple_primary }}</strong></li>
-        <li>{% if language == "zh" %}有启用归属但没有主要归属的用户{% else %}Users with active memberships but no primary{% endif %}: <strong>{{ indicators.users_with_active_memberships_without_primary }}</strong></li>
-        <li>
-            {% if language == "zh" %}启用的全教会根单元（应为 1）{% else %}Active whole-church root units (expected: 1){% endif %}: <strong>{{ indicators.active_root_units }}</strong>
-            {% if indicators.active_root_units != 1 %}
-            <span class="status status-warning">{% if language == "zh" %}需要检查{% else %}Needs review{% endif %}</span>
-            {% endif %}
-        </li>
-        <li>{% if language == "zh" %}已停用单元{% else %}Inactive units{% endif %}: <strong>{{ inactive_unit_count }}</strong></li>
-        <li>{% if language == "zh" %}仍被引用的已停用单元{% else %}Inactive units still referenced{% endif %}: <strong>{{ indicators.inactive_units_still_referenced }}</strong></li>
-        <li>{% if language == "zh" %}停用单元上的启用归属{% else %}Inactive units with active memberships{% endif %}: <strong>{{ indicators.inactive_units_with_active_memberships }}</strong></li>
-    </ul>
-    <div class="actions">
-        <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
-            {% if language == "zh" %}结构单元（后台）{% else %}Structure Units (Admin){% endif %}
-        </a>
-        <a class="button-secondary button" href="{% url 'staff_membership_request_list' %}">
-            {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
-        </a>
-        <a class="button-secondary button" href="{% url 'admin:index' %}">
-            {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
-        </a>
-    </div>
 </section>
 
 <section class="card">
@@ -74,9 +35,9 @@
     </h2>
     <p class="muted">
         {% if language == "zh" %}
-        仅显示启用的单元；数字为本级及下级覆盖成员数，不显示成员名单。
+        仅显示启用的单元；数字包含本单元及所有下级单元的成员数，不显示成员名单。
         {% else %}
-        Active units only; numbers are descendant-inclusive covered member counts, with no member name lists.
+        Active units only; counts include members in this unit and all child units, without showing member names.
         {% endif %}
     </p>
 
@@ -191,11 +152,11 @@
             <div class="structure-map-row-content">
                 <span class="structure-map-unit-name">{{ row.name }}</span>
                 <span class="structure-map-meta">
-                    {% if language == "zh" %}覆盖成员{% else %}Covered members{% endif %}: {{ row.membership_count }}
+                    {% if language == "zh" %}成员数{% else %}Members{% endif %}: {{ row.membership_count }}
                 </span>
                 {% if row.direct_parent_membership_count %}
                 <span class="status status-warning">
-                    {% if language == "zh" %}非末级单元直接成员记录{% else %}Direct member records on parent units{% endif %}: {{ row.direct_parent_membership_count }}
+                    {% if language == "zh" %}成员直接挂在上级单位{% else %}Members directly assigned to parent units{% endif %}: {{ row.direct_parent_membership_count }}
                 </span>
                 {% endif %}
                 {% if edit_mode %}
@@ -363,6 +324,132 @@
             {% if language == "zh" %}还没有启用的结构单元。{% else %}No active structure units yet.{% endif %}
         </p>
         {% endfor %}
+    </div>
+</section>
+
+<section class="card">
+    <h2 class="card-title">
+        {% if language == "zh" %}结构资料检查{% else %}Structure Data Check{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        这些数字帮助同工发现可能需要整理的资料；有些只是参考，不一定代表错误。
+        {% else %}
+        These numbers help staff spot data that may need review. Some are informational and do not always mean something is wrong.
+        {% endif %}
+    </p>
+
+    <div class="structure-check-groups">
+        <div class="structure-check-group">
+            <h3 class="structure-check-heading">
+                {% if language == "zh" %}需要处理{% else %}Needs attention{% endif %}
+            </h3>
+            <ul class="staff-count-list structure-check-list">
+                <li>
+                    <strong>{% if language == "zh" %}同时有多个主要所属的用户{% else %}Users with more than one primary belonging{% endif %}: {{ indicators.users_with_multiple_primary }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        通常每位成员只能有一个主要所属；请检查是否需要结束或调整其中一条记录。
+                        {% else %}
+                        Usually each member should have only one primary belonging. Review whether one record should be ended or changed.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}有成员关系但没有主要所属的用户{% else %}Users with memberships but no primary belonging{% endif %}: {{ indicators.users_with_active_memberships_without_primary }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        这些用户有有效成员关系，但没有指定哪一个是主要所属。
+                        {% else %}
+                        These users have active membership records, but none is marked as primary.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}全教会根节点数量（应为 1）{% else %}Whole-church root nodes (expected: 1){% endif %}: {{ indicators.active_root_units }}</strong>
+                    {% if indicators.active_root_units != 1 %}
+                    <span class="status status-warning">{% if language == "zh" %}需要检查{% else %}Needs review{% endif %}</span>
+                    {% endif %}
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        结构树通常应该只有一个全教会根节点。
+                        {% else %}
+                        The structure tree should normally have exactly one whole-church root node.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}已停用但仍被使用的单位{% else %}Inactive units still in use{% endif %}: {{ indicators.inactive_units_still_referenced }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        这些单位已经停用，但仍被聚会、查经、职分范围或历史记录引用。
+                        {% else %}
+                        These inactive units are still referenced by gatherings, Bible Study, role scopes, or history records.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}停用单位里仍有有效成员{% else %}Inactive units with active members{% endif %}: {{ indicators.inactive_units_with_active_memberships }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        这些成员仍挂在停用单位下，通常需要转移或结束相关成员关系。
+                        {% else %}
+                        These members are still assigned under inactive units and may need to be moved or ended.
+                        {% endif %}
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <div class="structure-check-group">
+            <h3 class="structure-check-heading">
+                {% if language == "zh" %}仅供参考{% else %}Informational{% endif %}
+            </h3>
+            <ul class="staff-count-list structure-check-list">
+                <li>
+                    <strong>{% if language == "zh" %}成员直接挂在上级单位{% else %}Members directly assigned to parent units{% endif %}: {{ indicators.direct_parent_memberships }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        一般成员通常挂在具体小组；如果有人直接挂在区、部门或全教会，请确认这是有意设置。
+                        {% else %}
+                        Members are usually assigned to specific small groups. If someone is assigned directly to a district, ministry, or whole church unit, confirm that this is intentional.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}没有直接成员的启用单位{% else %}Active units with no direct members{% endif %}: {{ indicators.active_units_without_primary }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        这不一定是问题。部门、区或分类节点可能只是用来组织下级单位。
+                        {% else %}
+                        This is not always a problem. Ministry, district, or category units may only organize child units.
+                        {% endif %}
+                    </div>
+                </li>
+                <li>
+                    <strong>{% if language == "zh" %}已停用单位{% else %}Inactive units{% endif %}: {{ inactive_unit_count }}</strong>
+                    <div class="muted">
+                        {% if language == "zh" %}
+                        已停用单位不会显示在启用结构树中。
+                        {% else %}
+                        Inactive units are hidden from the active structure tree.
+                        {% endif %}
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="actions">
+        <a class="button-secondary button" href="{% url 'admin:accounts_churchstructureunit_changelist' %}">
+            {% if language == "zh" %}结构单元（后台）{% else %}Structure Units (Admin){% endif %}
+        </a>
+        <a class="button-secondary button" href="{% url 'staff_membership_request_list' %}">
+            {% if language == "zh" %}小组申请{% else %}Membership Requests{% endif %}
+        </a>
+        <a class="button-secondary button" href="{% url 'admin:index' %}">
+            {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
+        </a>
     </div>
 </section>
 

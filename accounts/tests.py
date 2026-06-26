@@ -3125,16 +3125,16 @@ class StaffStructureMapTests(TestCase):
         self.assertContains(response, "Church Structure Setup & Review")
         self.assertContains(
             response,
-            "Manage the church structure tree, review belonging records",
+            "View and manage the church structure, member belonging, and structure data reminders.",
         )
         self.assertContains(response, "Belonging, Roles, and Serving")
         self.assertContains(
             response,
-            "Church Structure Units are the canonical structure tree",
+            "Member belonging shows where a person is ordinarily cared for and managed",
         )
         self.assertContains(
             response,
-            "Role scopes, serving assignments, and team membership are separate concepts.",
+            "Role scopes, serving schedules, and team membership are separate concepts.",
         )
         self.assertNotContains(response, "Current Runtime Boundary")
         root_index = content.index("Whole Church")
@@ -3247,18 +3247,54 @@ class StaffStructureMapTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "教会结构设置与检查")
-        self.assertContains(response, "管理教会结构树、检查归属资料")
+        self.assertContains(response, "查看和管理教会的组织结构、成员所属")
         self.assertContains(response, "归属、职分与服事")
-        self.assertContains(response, "教会结构单元是正式的结构树")
+        self.assertContains(response, "成员所属表示一个人平时在哪个小组、区或单位中被关怀和管理")
         self.assertContains(response, "职分范围、服事排班和团队成员关系是另外的概念")
         self.assertNotContains(response, "当前运行边界")
-        self.assertContains(response, "设置就绪指标")
         self.assertContains(response, "教会结构树")
-        self.assertContains(response, "覆盖成员")
+        self.assertContains(response, "成员数")
+        self.assertContains(response, "结构资料检查")
+        self.assertContains(response, "需要处理")
+        self.assertContains(response, "仅供参考")
+        self.assertNotContains(response, "覆盖成员")
+        self.assertNotContains(response, "设置就绪指标")
         self.assertNotContains(response, "当前资料对应")
         self.assertNotContains(response, "现有记录")
         self.assertContains(response, "全教会")
         self.assertContains(response, "中文部")
+
+    def test_structure_map_renders_english_layout_and_new_indicator_copy(self):
+        self.build_tree()
+        self.set_language("en")
+        self.login_staff()
+
+        response = self.client.get(self.url)
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Structure Setup & Review")
+        self.assertContains(
+            response,
+            "View and manage the church structure, member belonging, and structure data reminders.",
+        )
+        self.assertContains(
+            response,
+            "Member belonging shows where a person is ordinarily cared for and managed",
+        )
+        self.assertContains(response, "Members")
+        self.assertContains(response, "Structure Data Check")
+        self.assertContains(response, "Needs attention")
+        self.assertContains(response, "Informational")
+        self.assertNotContains(response, "Covered members")
+        self.assertNotContains(response, "Setup Readiness Indicators")
+        self.assertLess(
+            content.index("Church Structure Tree"),
+            content.index("Structure Data Check"),
+        )
+        self.assertContains(response, "Active units with no direct members")
+        self.assertContains(response, "Users with more than one primary belonging")
+        self.assertContains(response, "Inactive units still in use")
 
     def test_legacy_row_indicators_are_retired(self):
         self.build_tree()
@@ -3404,7 +3440,7 @@ class StaffStructureMapTests(TestCase):
         self.assertEqual(rows_by_code["R4"]["membership_count"], 2)
         self.assertEqual(rows_by_code["D2"]["membership_count"], 2)
         self.assertEqual(rows_by_code["CM"]["membership_count"], 2)
-        self.assertContains(response, "Covered members: 2")
+        self.assertContains(response, "Members: 2")
 
     def test_structure_map_omits_retired_current_data_mapping_label(self):
         self.build_tree()
@@ -3438,7 +3474,7 @@ class StaffStructureMapTests(TestCase):
         )
         self.assertEqual(cm_row["membership_count"], 1)
         self.assertEqual(cm_row["direct_parent_membership_count"], 1)
-        self.assertContains(response, "Direct member records on parent units")
+        self.assertContains(response, "Members directly assigned to parent units")
         self.assertNotContains(response, "parent_level_member")
 
     def test_active_root_unit_count_flags_zero_and_multiple_roots(self):
@@ -3702,7 +3738,7 @@ class ChurchStructureSetupDetailTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Rainbow 4")
-        self.assertContains(response, "Covered members: 1")
+        self.assertContains(response, "Members: 1")
         self.assertNotContains(response, self.old_setup_path)
 
     def test_structure_map_shows_setup_warning_counts(self):
@@ -3752,9 +3788,10 @@ class ChurchStructureSetupDetailTests(TestCase):
             1,
         )
         self.assertGreaterEqual(indicators["active_units_without_primary"], 1)
-        self.assertContains(response, "Users with multiple active primary memberships")
-        self.assertContains(response, "Users with active memberships but no primary")
-        self.assertContains(response, "Inactive units with active memberships")
+        self.assertContains(response, "Users with more than one primary belonging")
+        self.assertContains(response, "Users with memberships but no primary belonging")
+        self.assertContains(response, "Inactive units with active members")
+        self.assertContains(response, "Active units with no direct members")
         self.assertNotContains(response, "setup_multi_primary")
         self.assertNotContains(response, "setup_no_primary")
 

@@ -99,9 +99,9 @@
         <strong>{% if language == "zh" %}编辑模式{% else %}Edit mode{% endif %}</strong>
         <p>
             {% if language == "zh" %}
-            编辑模式可以重命名显示名称、新增下级单元、安全停用可停用的单元，并进入详细资料或后台管理。
+            编辑模式可以重命名显示名称、调整同层排序、新增下级单元、安全停用可停用的单元，并进入详细资料或后台管理。
             {% else %}
-            Edit mode lets authorized users rename display labels, add child units, safely disable eligible units, and open detail/admin links.
+            Edit mode lets authorized users rename display labels, adjust same-level order, add child units, safely disable eligible units, and open detail/admin links.
             {% endif %}
         </p>
         <p>
@@ -180,6 +180,34 @@
                         </div>
                     </details>
                     {% endif %}
+                    <details class="structure-inline-action">
+                        <summary class="structure-icon-button"
+                                 aria-label="{% if language == 'zh' %}排序{% else %}Order{% endif %}"
+                                 title="{% if language == 'zh' %}排序{% else %}Order{% endif %}">
+                            <span aria-hidden="true">#</span>
+                        </summary>
+                        <div class="structure-inline-action-panel">
+                            <form method="post"
+                                  action="{% url 'staff_structure_unit_update_sort_order' row.unit.id %}"
+                                  class="structure-order-form">
+                                {% csrf_token %}
+                                <p class="muted structure-rename-warning">
+                                    {% if language == "zh" %}
+                                    只修改同层显示顺序；不会移动单元、改上级、改归属或改权限。
+                                    {% else %}
+                                    Only same-level display order changes; this does not move/reparent the unit or change memberships or permissions.
+                                    {% endif %}
+                                </p>
+                                <label class="structure-rename-field">
+                                    {% if language == "zh" %}排序{% else %}Sort order{% endif %}
+                                    <input type="number" name="sort_order" value="{{ row.unit.sort_order }}" min="0" step="1" required>
+                                </label>
+                                <button type="submit" class="button">
+                                    {% if language == "zh" %}保存排序{% else %}Save order{% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </details>
                     <details class="structure-inline-action">
                         <summary class="structure-icon-button"
                                  aria-label="{% if language == 'zh' %}新增下级单元{% else %}Add child unit{% endif %}"

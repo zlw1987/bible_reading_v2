@@ -2290,6 +2290,7 @@ th {
 }
 
 .structure-child-form,
+.structure-order-form,
 .structure-disable-form {
     display: flex;
     flex-direction: column;

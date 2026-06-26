@@ -4250,6 +4250,12 @@ class StaffStructureMapEditModeTests(TestCase):
         self.add_child_url = reverse(
             "staff_structure_unit_add_child", args=[self.child.id]
         )
+        self.sort_order_root_url = reverse(
+            "staff_structure_unit_update_sort_order", args=[self.root.id]
+        )
+        self.sort_order_child_url = reverse(
+            "staff_structure_unit_update_sort_order", args=[self.child.id]
+        )
         self.disable_root_url = reverse(
             "staff_structure_unit_disable", args=[self.root.id]
         )
@@ -4314,6 +4320,7 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertContains(response, "Edit mode lets authorized users")
         self.assertContains(response, "structure-row-icon-actions")
         self.assertContains(response, 'aria-label="Rename unit"')
+        self.assertContains(response, 'aria-label="Order"')
         self.assertContains(response, 'aria-label="Add child unit"')
         self.assertContains(response, 'aria-label="Disable unit"')
         self.assertContains(response, 'aria-label="View details"')
@@ -4321,6 +4328,7 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotIn(">Actions<", content)
         self.assertContains(response, "Exit edit mode")
         self.assertContains(response, "rename display labels")
+        self.assertContains(response, "adjust same-level order")
         self.assertContains(response, "add child units")
         self.assertContains(response, "safely disable eligible units")
         self.assertContains(response, "detail/admin links")
@@ -4404,6 +4412,7 @@ class StaffStructureMapEditModeTests(TestCase):
         response = self.client.get(self.url, {"edit": "1"})
 
         self.assertContains(response, "可以重命名显示名称")
+        self.assertContains(response, "调整同层排序")
         self.assertContains(response, "新增下级单元")
         self.assertContains(response, "安全停用可停用的单元")
         self.assertContains(response, "进入详细资料或后台管理")
@@ -4442,6 +4451,34 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotContains(forced, "Edit mode:")
         self.assertNotContains(forced, "structure-row-icon-actions")
 
+    def test_edit_mode_renders_sort_order_controls_for_active_units(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+        content = response.content.decode()
+
+        self.assertContains(response, self.sort_order_root_url)
+        self.assertContains(response, self.sort_order_child_url)
+        self.assertContains(response, 'name="sort_order"')
+        self.assertContains(response, "Save order")
+        self.assertContains(
+            response,
+            "Only same-level display order changes; this does not move/reparent the unit or change memberships or permissions.",
+        )
+        self.assertIn(f'action="{self.sort_order_root_url}"', content)
+        self.assertIn(f'action="{self.sort_order_child_url}"', content)
+
+    def test_non_edit_mode_does_not_render_sort_order_control(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url)
+
+        self.assertNotContains(response, self.sort_order_child_url)
+        self.assertNotContains(response, "Save order")
+        self.assertNotContains(response, 'aria-label="Order"')
+
     def test_edit_mode_action_menu_links_to_detail_and_admin(self):
         self.set_language("en")
         detail_url = reverse("church_structure_unit_detail", args=[self.child.id])
@@ -4468,11 +4505,217 @@ class StaffStructureMapEditModeTests(TestCase):
 
         self.assertContains(response, self.rename_child_url)
         self.assertContains(response, self.add_child_url)
+        self.assertContains(response, self.sort_order_child_url)
         self.assertContains(response, self.disable_child_url)
         self.assertContains(response, self.enable_child_url)
         self.assertContains(response, 'name="confirm_disable"')
         self.assertContains(response, "Disable this unit")
         self.assertContains(response, "This only marks the unit inactive")
+
+    # --- sort_order POST ----------------------------------------------------
+
+    def test_admin_can_update_sort_order_for_one_unit_only(self):
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        self.login_admin()
+
+        response = self.client.post(
+            self.sort_order_child_url,
+            {"sort_order": "20"},
+        )
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        self.child.refresh_from_db()
+        sibling.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 20)
+        self.assertEqual(sibling.sort_order, 1)
+
+    def test_sort_order_update_preserves_structure_and_related_rows(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import BibleStudySeriesAudienceScope
+
+        grandchild = ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            name_en="District 2A",
+            sort_order=4,
+        )
+        membership = ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.child,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.normal_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            structure_unit=grandchild,
+        )
+        event = ServiceEvent.objects.create(
+            title="Sort Order Safety Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.child,
+        )
+        team = MinistryTeam.objects.create(name="Sort Order Safety Team")
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        team_membership = TeamMembership.objects.create(
+            team=team,
+            user=self.normal_user,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=team_membership,
+        )
+        series = BibleStudySeries.objects.create(
+            title="Sort Order Safety Series",
+            start_date=timezone.localdate(),
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.child,
+        )
+        before = {
+            "parent_id": self.child.parent_id,
+            "name": self.child.name,
+            "name_en": self.child.name_en,
+            "code": self.child.code,
+            "unit_type": self.child.unit_type,
+            "is_active": self.child.is_active,
+            "grandchild_parent_id": grandchild.parent_id,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+        }
+        self.login_admin()
+
+        self.client.post(self.sort_order_child_url, {"sort_order": "30"})
+
+        self.child.refresh_from_db()
+        grandchild.refresh_from_db()
+        membership.refresh_from_db()
+        after = {
+            "parent_id": self.child.parent_id,
+            "name": self.child.name,
+            "name_en": self.child.name_en,
+            "code": self.child.code,
+            "unit_type": self.child.unit_type,
+            "is_active": self.child.is_active,
+            "grandchild_parent_id": grandchild.parent_id,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+        }
+        self.assertEqual(before, after)
+        self.assertEqual(self.child.sort_order, 30)
+        self.assertEqual(membership.unit_id, self.child.id)
+
+    def test_sort_order_update_rejects_invalid_value(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.post(
+            self.sort_order_child_url,
+            {"sort_order": "second"},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sort order must be an integer.")
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+
+    def test_unauthorized_users_cannot_update_sort_order(self):
+        self.login_viewer()
+
+        viewer_response = self.client.post(
+            self.sort_order_child_url,
+            {"sort_order": "40"},
+        )
+
+        self.assertEqual(viewer_response.status_code, 302)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+
+        self.client.logout()
+        self.client.login(username="structure_plain", password="PlainPass123!")
+        normal_response = self.client.post(
+            self.sort_order_child_url,
+            {"sort_order": "40"},
+        )
+
+        self.assertEqual(normal_response.status_code, 302)
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+
+    def test_sort_order_update_changes_sibling_display_order_and_preserves_hierarchy(self):
+        first = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=10,
+        )
+        grandchild = ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            name_en="District 2A",
+            sort_order=1,
+        )
+        self.login_admin()
+
+        self.client.post(self.sort_order_child_url, {"sort_order": "5"})
+        response = self.client.get(self.url)
+
+        units = [row["unit"] for row in response.context["structure_rows"]]
+        self.assertLess(units.index(self.child), units.index(first))
+        self.assertLess(units.index(self.child), units.index(grandchild))
+        self.assertEqual(grandchild.parent_id, self.child.id)
+
+    def test_sort_order_update_writes_logentry_audit(self):
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        self.login_admin()
+
+        self.client.post(self.sort_order_child_url, {"sort_order": "44"})
+
+        ct = ContentType.objects.get_for_model(ChurchStructureUnit)
+        entry = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.child.id),
+            user=self.admin,
+        ).first()
+        self.assertIsNotNone(entry)
+        self.assertIn("Updated structure unit sort_order", entry.change_message)
+        self.assertIn("sort_order: 3 -> 44", entry.change_message)
 
     # --- add child POST -----------------------------------------------------
 
@@ -4901,6 +5144,18 @@ class StaffStructureMapEditModeTests(TestCase):
             response,
             "It does not re-enable children, create memberships, rewrite audience scopes, role scopes, or serving assignments.",
         )
+
+    def test_unit_detail_displays_sort_order_metadata(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(
+            reverse("church_structure_unit_detail", args=[self.child.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sort order")
+        self.assertContains(response, "<dd>3</dd>", html=True)
 
     # --- rename POST --------------------------------------------------------
 

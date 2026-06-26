@@ -237,8 +237,9 @@ def staff_structure_map(request):
 
     The default map view is review-first: counts only, no member rosters.
     Edit mode is gated to users who can change ChurchStructureUnit and exposes
-    rename, add-child, safe soft-disable, inactive-unit review/re-enable, and
-    detail/admin links. Membership maintenance lives on the unit detail page.
+    rename, sibling sort-order edits, add-child, safe soft-disable,
+    inactive-unit review/re-enable, and detail/admin links. Membership
+    maintenance lives on the unit detail page.
 
     Edit mode does not hard-delete units, move/reparent units,
     cascade-disable/re-enable children, automatically end/create memberships,
@@ -349,11 +350,11 @@ def staff_structure_map(request):
 
     # Edit mode is a lightweight read/write affordance layer. The default view
     # stays review-first and read-only; entering edit mode exposes rename,
-    # add-child, safe soft-disable, and detail/admin links to users who can
-    # change ChurchStructureUnit. It does not hard-delete, move/reparent,
-    # cascade-disable, auto-end memberships, rewrite audience/role scopes,
-    # change serving or visibility semantics, or infer leadership/serving from
-    # membership.
+    # sibling sort-order edits, add-child, safe soft-disable, and detail/admin
+    # links to users who can change ChurchStructureUnit. It does not hard-delete,
+    # move/reparent, cascade-disable, auto-end memberships, rewrite
+    # audience/role scopes, change serving or visibility semantics, or infer
+    # leadership/serving from membership.
     can_admin_units = request.user.has_perm(
         "accounts.change_churchstructureunit"
     )
@@ -462,6 +463,64 @@ def can_change_church_structure_units(user):
 
 def _staff_structure_edit_url():
     return f"{reverse('staff_structure_map')}?edit=1"
+
+
+@staff_member_required
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def staff_structure_unit_update_sort_order(request, unit_id):
+    language = get_user_language(request)
+    raw_sort_order = (request.POST.get("sort_order") or "").strip()
+
+    try:
+        sort_order = int(raw_sort_order)
+    except (TypeError, ValueError):
+        messages.error(
+            request,
+            "排序必须是整数。" if language == "zh"
+            else "Sort order must be an integer.",
+        )
+        return redirect(_staff_structure_edit_url())
+
+    if sort_order < 0:
+        messages.error(
+            request,
+            "排序必须是整数。" if language == "zh"
+            else "Sort order must be an integer.",
+        )
+        return redirect(_staff_structure_edit_url())
+
+    with transaction.atomic():
+        unit = get_object_or_404(
+            ChurchStructureUnit.objects.select_for_update(),
+            id=unit_id,
+        )
+        old_sort_order = unit.sort_order
+        unit.sort_order = sort_order
+        unit.save(update_fields=["sort_order", "updated_at"])
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=unit.pk,
+            object_repr=str(unit),
+            action_flag=CHANGE,
+            change_message=(
+                "Updated structure unit sort_order via staff structure map "
+                "(STRUCTURE-TREE-ORDER-UI.1D). "
+                f"sort_order: {old_sort_order!r} -> {sort_order!r}. "
+                "No parent, child, membership, audience scope, role scope, "
+                "serving assignment, or visibility data was changed."
+            ),
+        )
+
+    messages.success(
+        request,
+        "结构单元排序已更新。" if language == "zh"
+        else "Structure unit order updated.",
+    )
+    return redirect(_staff_structure_edit_url())
 
 
 @user_passes_test(can_change_church_structure_units)

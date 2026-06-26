@@ -38,6 +38,11 @@ urlpatterns = [
         name="staff_structure_unit_add_child",
     ),
     path(
+        "staff/structure/units/<int:unit_id>/sort-order/",
+        views.staff_structure_unit_update_sort_order,
+        name="staff_structure_unit_update_sort_order",
+    ),
+    path(
         "staff/structure/units/<int:unit_id>/disable/",
         views.staff_structure_unit_disable,
         name="staff_structure_unit_disable",

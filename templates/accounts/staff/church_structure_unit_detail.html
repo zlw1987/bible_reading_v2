@@ -64,6 +64,8 @@
         <dd>{{ unit.code }}</dd>
         <dt>{% if language == "zh" %}类型{% else %}Type{% endif %}</dt>
         <dd>{{ unit.get_unit_type_display }}</dd>
+        <dt>{% if language == "zh" %}排序{% else %}Sort order{% endif %}</dt>
+        <dd>{{ unit.sort_order }}</dd>
         <dt>{% if language == "zh" %}上级{% else %}Parent{% endif %}</dt>
         <dd>{% if unit.parent %}{{ unit.parent.display_name }}{% else %}-{% endif %}</dd>
         <dt>{% if language == "zh" %}状态{% else %}Status{% endif %}</dt>

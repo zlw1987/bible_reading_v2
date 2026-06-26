@@ -1,7 +1,7 @@
 # Today Page as Personal Action Center — Planning Doc (TODAY-HOME.1A)
 
-Status: TODAY-HOME.1A / 1A.1 docs-only product planning complete; TODAY-HOME.1B read-only IA restructure complete; TODAY-HOME.1D linked Bible Study role chips complete.
-Revised by TODAY-HOME.1A.1 after user product decisions and updated after TODAY-HOME.1D: (1) the week strip shows **Church Gatherings / 教会聚会** — visible upcoming `ServiceEvent` rows from the Church Gatherings module — with no hardcoded "special `event_type`" guessing; (2) Bible-study role chips are read-only and linked-user-only, and Bible-study role confirmation is not planned unless a real need appears.
+Status: TODAY-HOME.1A / 1A.1 docs-only product planning complete; TODAY-HOME.1B read-only IA restructure complete; TODAY-HOME.1D linked Bible Study role chips complete. Later Bible Study role confirmation was implemented in My Serving, not on Today.
+Revised by TODAY-HOME.1A.1 after user product decisions and updated after TODAY-HOME.1D and later My Serving Bible Study role confirmation work: (1) the week strip shows **Church Gatherings / 教会聚会** — visible upcoming `ServiceEvent` rows from the Church Gatherings module — with no hardcoded "special `event_type`" guessing; (2) Bible-study role chips on Today are read-only and linked-user-only; (3) Bible-study role confirmation state now exists on `BibleStudyMeetingRole`, but My Serving is the confirmation workspace.
 
 Scope guardrails inherited from AGENTS.md and the task prompt:
 
@@ -51,13 +51,13 @@ Pilot-era docs (`LIGHTING_PILOT_PREFLIGHT_REQUIREMENTS.md`, `LIGHTING_TEAM_PILOT
 - a notifications/announcements feed;
 - an attendance, care, or checklist workflow;
 - a duplicate of My Serving, `/events/`, or `/studies/` detail surfaces;
-- a surface that fakes data the models do not have (e.g., Bible-study role confirmation, invitations).
+- a surface that fakes data the models do not have (e.g., invitations) or duplicates serving confirmation workflows owned by My Serving.
 
 ## 3. Recommended Information Architecture
 
 ### Recommended: three time/intent zones, fixed order
 
-1. **Needs your attention / 需要你留意** — only items with a real pending action *backed by a real model state*. Today that is exactly one type: ministry-team assignment confirmations (`TeamAssignmentMember.confirmed_at IS NULL` on upcoming non-cancelled assignments). Hidden entirely when empty (no empty state — absence of the section is the "all clear").
+1. **Needs your attention / 需要你留意** — only items with a real pending action *backed by a real model state*. In the completed Today implementation this remains ministry-team assignment confirmations (`TeamAssignmentMember.confirmed_at IS NULL` on upcoming non-cancelled assignments). Bible Study role confirmation now has real model state too, but it belongs in My Serving rather than becoming an inline Today workflow without a separate product decision. Hidden entirely when empty (no empty state — absence of the section is the "all clear").
 2. **Today / 今日** — today's reading hero, essentially as it exists now (check-in is itself the daily action, so the reading hero already *is* an action item; it does not need to move into zone 1).
 3. **This week / 本周** — a short, read-only, chronological list of the user's personal week:
    - **Church Gatherings this week / 本周教会聚会**: upcoming visible `ServiceEvent` rows from the Church Gatherings module in the next 7 days, excluding draft and cancelled. No `event_type` guessing — whatever staff/responsible coworkers publish as a gathering and the user can already see is what appears. Where the user has a serving assignment attached to a gathering, the gathering row carries a compact serving note (see deduplication rule below);
@@ -80,7 +80,7 @@ Keep "Where to go next" cards at the bottom (possibly trimmed), so the page stil
 **A. User's hypothesis: flat personal task list** (today's reading, Sunday assignments, Friday roles, Friday meeting, special meetings, unconfirmed ministry assignments, unconfirmed Bible-study assignments, later invitations).
 
 - Pros: one mental model ("my list"), everything in one place.
-- Cons: (1) it mixes *to-confirm* with *already-scheduled*, so most days the "task list" is actually a calendar and the framing is wrong; (2) two of the eight item types do not exist in data today — Bible-study role confirmation has no model field, and invitations have no module — so a literal implementation either fakes states or ships a list with permanent gaps; (3) reading loses its hero position; (4) Sunday assignments and unconfirmed assignments are the *same rows* in two list entries (an assignment is one `TeamAssignmentMember` that is either confirmed or pending), which would double-show items.
+- Cons: (1) it mixes *to-confirm* with *already-scheduled*, so most days the "task list" is actually a calendar and the framing is wrong; (2) invitations still have no module, and Bible Study role confirmation now exists but is owned by My Serving rather than Today; (3) reading loses its hero position; (4) Sunday assignments and unconfirmed assignments are the *same rows* in two list entries (an assignment is one `TeamAssignmentMember` that is either confirmed or pending), which would double-show items.
 - The recommended IA keeps every *real* item from the hypothesis but reorganizes them by intent (act / read / know) instead of by source module.
 
 **B. Status quo plus (minimal):** keep today's layout, only swap the legacy Bible Study card for the v2 meeting and raise the pending count visibility.
@@ -97,11 +97,11 @@ Keep "Where to go next" cards at the bottom (possibly trimmed), so the page stil
 | Today's Bible reading + check-in | **Available now** | `PlanEnrollment`, `ActivePlan`, `ReadingPlanDay`, `CheckIn`; existing `home()` logic | Already on Today. |
 | Pending ministry-assignment confirmations | **Available now** | `TeamAssignmentMember.confirmed_at IS NULL` via `ministry.views.my_serving_assignments(user, tab="upcoming")`; `today_serving_summary` already computes the count | Confirm action exists (`confirm_team_assignment`, supports safe `next` redirect). |
 | This week's serving assignments (e.g., Sunday) | **Available now** | Same selector, filtered to `service_event.start_datetime` within next 7 days | Per-member rows are user-scoped by construction. Rendered as compact serving notes on the matching Church Gathering row (Section 3 deduplication rule), not as separate full rows. |
-| This week's small-group Bible study meeting | **Available now** | `BibleStudyMeeting` filtered like `studies.views.get_v2_landing_context` (published meeting/lesson/series, audience-row candidate units matched to active primary membership, final `can_be_seen_by`) | Since BS-STRUCT.2A, ordinary visibility uses `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; zero-row V2 meetings fail closed; `Profile.small_group` and `BibleStudyMeeting.small_group` do not grant ordinary v2 visibility. Legacy `BibleStudySession` block should be retired or kept only as fallback — product decision, Section 8. |
+| This week's small-group Bible study meeting | **Available now** | `BibleStudyMeeting` filtered like `studies.views.get_v2_landing_context` (published meeting/lesson/series, audience-row candidate units matched to active primary membership, final `can_be_seen_by`) | Since BS-STRUCT.2A, ordinary visibility uses `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; zero-row V2 meetings fail closed; `Profile.small_group` and the removed `BibleStudyMeeting.small_group` mirror do not grant ordinary v2 visibility. The legacy `BibleStudySession` block was removed from Today. |
 | My Friday serving role(s) (worship lead, study lead, pianist, support, host) | **Available for linked-user roles** | `BibleStudyMeetingRole` (`role`, `user` FK nullable, `display_name`) on the already-visible primary meeting | TODAY-HOME.1D shows read-only role chips/line only for `role.user == request.user`. Display-name-only roles remain visible on meeting detail but are not personalized on Today. Today does not infer identity from display names, username/full-name matching, old discussion-leader names, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`. |
 | Unconfirmed ministry-team assignments | **Available now** | Same as pending confirmations above | Same rows; in the recommended IA this *is* the "Needs your attention" section, not a separate list entry. |
-| Unconfirmed small-group Bible-study serving assignments | **Not planned** | None — `BibleStudyMeetingRole` has no confirmation field | Do not fake, and do not assume a confirmation workflow is coming: the user is leaning toward *not* adding Bible-study role confirmation unless a real need appears. Revisit only if real usage shows the need. |
-| Church Gatherings this week / 本周教会聚会 | **Available now** | `ServiceEvent` via `events.views.get_visible_service_events` / `can_be_seen_by` (SE-AS.4 + legacy fallback), filtered to next 7 days, excluding draft/cancelled | All visible upcoming gatherings created in the Church Gatherings module — no hardcoded `event_type` subset. Remaining product question (Section 8) is list size: show all this week's gatherings or cap with a link to `/events/`. |
+| Unconfirmed small-group Bible-study serving assignments | **Available in My Serving, not Today** | `BibleStudyMeetingRole.confirmed_at IS NULL` for linked-user roles on visible published/completed V2 meetings | Do not infer these from small-group membership or audience visibility. Confirmation belongs to My Serving; Today may show read-only role context only. |
+| Church Gatherings this week / 本周教会聚会 | **Available now** | `ServiceEvent` via `events.views.get_visible_service_events` / `can_be_seen_by` (audience rows plus active primary membership; zero-row events fail closed for ordinary users), filtered to next 7 days, excluding draft/cancelled | All visible upcoming gatherings created in the Church Gatherings module — no hardcoded `event_type` subset. Remaining product question (Section 8) is list size: show all this week's gatherings or cap with a link to `/events/`. |
 | Community-event invitations in my audience scope | **Future module needed** | Community Activities is plan-only (`COMMUNITY_ACTIVITIES_V1_PLAN.md`); no invitation model exists | Explicitly out of scope. The IA reserves no visible placeholder; zone 3 can absorb invitations later as another row type. |
 
 ## 5. Visibility and Permission Contract
@@ -129,12 +129,12 @@ Status: complete. TODAY-HOME.1B shipped the read-only three-zone IA using existi
 1. Replace the single `today_serving_summary` card with the **"Needs your attention / 需要你留意"** section: list pending-confirmation items for the next 7–30 days (small cap, e.g., 5) with event title/date/team and a single "Confirm in My Serving" link per item (or one link when more). Reuses `my_serving_assignments`; no new model, no new endpoint, no inline POST. Renders nothing when empty.
 2. Keep the existing **"Today / 今日"** reading hero unchanged.
 3. Add the **"This week / 本周"** section: (a) upcoming visible Church Gatherings in the next 7 days via `get_visible_service_events` semantics, excluding draft/cancelled, with the user's serving status attached as a compact note on the gathering row where the user has an assignment (per the Section 3 deduplication rule — no duplicate full assignment rows); (b) my group's next relevant v2 `BibleStudyMeeting` (reusing/extracting the `get_v2_landing_context` filtering); each row linking to event detail / My Serving / meeting detail.
-4. Replace the legacy `BibleStudySession` block with the v2 meeting row (or keep legacy sessions temporarily below — decide via Section 8 Q4 before implementing).
+4. Replace the legacy `BibleStudySession` block with the v2 meeting row. Completed; do not re-add the retired V1 block.
 5. Bilingual copy per Section 7; empty states for "This week"; "Needs your attention" renders nothing when empty.
 
 Explicitly **not** in 1B:
 
-- Bible Study role confirmation/status workflow (not planned at all unless a real need appears);
+- Bible Study role confirmation/status workflow on Today; later confirmation was implemented in My Serving instead;
 - any inline confirm action on Today;
 - Community Activities / invitations;
 - new models or fields;
@@ -184,9 +184,9 @@ Wording rules: pastoral user-intent language only; no internal terms (no "assign
 ## 8. Risks, Unknowns, and Questions for the User
 
 1. **Friday Bible-study roles data quality.** TODAY-HOME.1D now surfaces only user-linked rows. `BibleStudyMeetingRole.user` remains nullable and staff may enter free-text names, so display-name-only roles stay on meeting detail and never appear as "my role" on Today.
-2. **Bible-study role confirmation.** Decision direction recorded: **not planned** — no confirmation workflow for Bible-study roles unless real usage shows a need. Today must not fake or anticipate it. Revisit only on concrete demand from group leaders.
+2. **Bible-study role confirmation.** Superseded: confirmation state now exists on `BibleStudyMeetingRole` and My Serving handles the confirm action. Today remains a general dashboard and should not become the Bible Study serving confirmation workspace without a separate product decision.
 3. **Church Gatherings list size.** Q: should Today show *all* visible upcoming Church Gatherings this week, or cap the list (e.g., 3–5 rows) and link to `/events/` for the rest? A busy week (or a staff user, who sees church-wide gatherings) could otherwise make "This week" tall.
-4. **Legacy `BibleStudySession` block on Today.** Q: retire it from Today once the v2 meeting row exists, or keep both during transition? (Recommend: replace; `/studies/` already leads with v2. Keeping both risks showing the same Friday twice.)
+4. **Legacy `BibleStudySession` block on Today.** Resolved: the V1 block was retired from Today and must not be reintroduced.
 5. **Inline confirm on Today.** Q: keep confirmation strictly in My Serving (recommended for 1B), or later allow a one-tap confirm on Today posting to the existing endpoint with `next`? The latter changes the "Today is read-only summary" boundary and should be a separate yes/no (milestone 1E).
 6. **Staff view of "This week".** Q: is it acceptable that staff users see all church-wide published gatherings in their Today strip (mirroring `/events/`), or should Today apply ordinary-audience semantics for staff too? The latter would require a new helper and is *not* recommended now (it edges toward a visibility behavior change). Draft/cancelled gatherings stay excluded for everyone regardless.
 7. **Multi-plan reading users.** Q: with multiple active plans, should Today show one hero plus compact rows for the rest? Cosmetic, but affects how dominant zone 2 is.
@@ -196,11 +196,12 @@ Wording rules: pastoral user-intent language only; no internal terms (no "assign
 
 - **TODAY-HOME.1A** — this planning doc (refined by TODAY-HOME.1A.1). Done when reviewed.
 - **TODAY-HOME.1B — Read-only Today IA restructure.** Completed. Full three-zone IA: "Needs your attention" (pending ministry confirmations); "Today" reading hero unchanged; "This week" with visible Church Gatherings (draft/cancelled excluded, serving status attached as compact notes per the deduplication rule) + next relevant v2 Bible study meeting; legacy `BibleStudySession` block removed from Today; bilingual copy; targeted `reading` tests. No role chips, inline confirm, Community Activities, new models, endpoints, or visibility changes.
-- **BS-ROLE.1B / former TODAY-HOME.1C — Bible Study role assignment / user-linking polish.** Completed in the Bible Study module. `BibleStudyMeetingRole` management now requires a linked user or display name, encourages linked users for Today "my role" surfacing, and preserves display-name-only roles as meeting-detail fallback. No Today change, confirmation workflow, schema/migration, or runtime visibility change.
-- **TODAY-HOME.1D — Bible-study role chips on Today.** Completed. Adds read-only Bible Study role chips/line under the small-group Bible Study card only for `BibleStudyMeetingRole.user == request.user` on the already-visible primary meeting. Display-name-only roles remain meeting-detail fallback only. No identity inference from names, old discussion-leader fields, worship-song leads, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`; no confirmation/status workflow, schema/migration, URL, or runtime visibility change from Today itself.
+- **BS-ROLE.1B / former TODAY-HOME.1C — Bible Study role assignment / user-linking polish.** Completed in the Bible Study module. `BibleStudyMeetingRole` management now requires a linked user or display name, encourages linked users for Today "my role" surfacing, and preserves display-name-only roles as meeting-detail fallback. No Today change or runtime visibility change.
+- **TODAY-HOME.1D — Bible-study role chips on Today.** Completed. Adds read-only Bible Study role chips/line under the small-group Bible Study card only for `BibleStudyMeetingRole.user == request.user` on the already-visible primary meeting. Display-name-only roles remain meeting-detail fallback only. No identity inference from names, old discussion-leader fields, worship-song leads, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`; no confirmation form, URL, or runtime visibility change from Today itself.
+- **My Serving Bible Study role confirmation.** Completed after TODAY-HOME.1D. `BibleStudyMeetingRole` now has confirmation state/notes and My Serving is the serving workspace for confirming linked-user Bible Study roles.
 - **TODAY-HOME.1E (optional) — One-tap confirm from Today.** Only if Q5 is separately approved; uses the existing confirm endpoint + `next`; no model change.
 - **TODAY-HOME.3x (deferred) — Invitations on Today.** Blocked on Community Activities V1; not planned here.
 
-Bible-study role *confirmation* has no milestone: it is not planned unless real usage demonstrates the need (Section 8 Q2).
+Bible-study role *confirmation* is no longer deferred: it exists in My Serving. Today remains read-only for Bible Study role context unless a separate Today-specific workflow is approved.
 
 Each remaining Today slice is independently approvable and independently revertible; none changes runtime visibility or schemas unless separately approved.

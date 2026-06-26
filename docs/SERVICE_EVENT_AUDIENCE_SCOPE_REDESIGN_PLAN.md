@@ -96,7 +96,11 @@ Add a future model such as `ServiceEventAudienceScope` or `ServiceEventAudienceS
 - `church_structure_unit`
 - optional metadata such as `created_at`
 
-Keep current `scope_type`, `district`, and `small_group` fields intact during coexistence.
+Historical/superseded: keep the then-current `scope_type`, `district`, and
+`small_group` fields intact during coexistence. Current ServiceEvent runtime no
+longer has those fields; SE-FIELD-RETIRE.1A removed them after audience rows,
+membership-core matching, write guards, and zero-row fail-closed behavior were in
+place.
 
 Pros:
 
@@ -114,7 +118,8 @@ Cons:
 
 ### Option B: Replace or Extend Current Scope Fields Directly
 
-Change current `scope_type`, `district`, and `small_group` behavior to use `ChurchStructureUnit` directly.
+Historical/superseded: change the then-current `scope_type`, `district`, and
+`small_group` behavior to use `ChurchStructureUnit` directly.
 
 Pros:
 
@@ -128,9 +133,14 @@ Cons:
 - More likely to bundle schema change, UI change, and visibility migration together.
 - Harder to roll back if normal-user visibility changes unexpectedly.
 
-Recommendation:
+Historical SE-AS.1 recommendation:
 
-Use Option A. Add a separate future audience-scope foundation first, keep legacy fields intact, and do not migrate visibility until a later explicitly approved phase.
+Use Option A. Add a separate future audience-scope foundation first, keep legacy
+fields intact, and do not migrate visibility until a later explicitly approved
+phase. Current state has moved beyond this coexistence recommendation:
+`ServiceEventAudienceScope` rows plus active primary membership are the runtime
+visibility source, zero-row events fail closed for ordinary users, and the legacy
+scope fields were removed.
 
 ## 5. Phased Implementation Proposal
 
@@ -147,7 +157,10 @@ Scope:
 
 ### SE-AS.2 Model-Only Audience Scope Foundation
 
-Status: complete as a data/model foundation only.
+Status: complete as a data/model foundation only at SE-AS.2 time. Current
+ServiceEvent runtime has since moved beyond model-only foundation to audience-row
+visibility, membership-core matching, write guards, zero-row fail-closed behavior,
+and legacy scope field removal.
 
 Completed scope:
 
@@ -165,7 +178,9 @@ Explicitly not included (still future):
 - No staff UI selector, forms, templates, routes, admin surface, or read-only display.
 - No audience filtering, visibility migration, or consumer migration.
 - No `ServiceEvent.can_be_seen_by` change; requested `ChurchStructureMembership` still does not grant event visibility.
-- Legacy `scope_type`, `district`, and `small_group` fields are not deprecated.
+- Historical/superseded for SE-AS.2 only: legacy `scope_type`, `district`, and
+  `small_group` fields were not deprecated in that slice. They were later removed
+  in SE-FIELD-RETIRE.1A.
 - The staff UI selector and the visibility/filtering consumer migration remain future and require separate approval (SE-AS.5 and SE-AS.4 under the renumbering in `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`).
 
 ### SE-AS.3 Staff Create/Edit UI

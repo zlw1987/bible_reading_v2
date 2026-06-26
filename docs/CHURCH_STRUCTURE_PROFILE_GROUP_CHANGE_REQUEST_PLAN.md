@@ -12,35 +12,37 @@
 
 CS-H.6C planned a future implementation slice for logged-in users to request a group/unit change from Profile without directly editing `Profile.small_group`. CS-H.6D implements the normal-user Profile request capture portion of that plan.
 
-CS-H.6C was planning/docs only. CS-H.6D changes only normal-user Profile request capture, focused tests, and narrow profile copy. It does not change models, migrations, signup behavior, staff approval ownership, or any runtime consumer.
+CS-H.6C was planning/docs only. CS-H.6D changed only normal-user Profile request capture, focused tests, and narrow profile copy. At that transition point, it did not change models, migrations, signup behavior, staff approval ownership, or any runtime consumer.
 
-Runtime remains legacy `Profile.small_group` based until a separate consumer migration is designed and implemented. Staff approval remains owned by the existing CS-H.7 membership approval pages. Approval sync behavior remains owned by CS-H.7E.
+Historical/superseded: runtime remained legacy `Profile.small_group` based until later consumer and field-retirement slices were designed and implemented. Staff approval remains owned by the membership approval pages; CS-H.7E approval sync behavior was transition-only and later retired with `Profile.small_group`.
 
-## 2. Current Profile Risk
+## 2. Historical Profile Risk
 
-Current `ProfileForm` exposes legacy `small_group` to logged-in users and saves it directly to `Profile.small_group`.
+Historical/superseded: `ProfileForm` exposed legacy `small_group` to logged-in users and saved it directly to `Profile.small_group`.
 
 Risk:
 - a normal user can self-edit their legacy group assignment
-- current `/studies/`, reading progress, `ServiceEvent`, and related behavior still trust `Profile.small_group`
+- then-current `/studies/`, reading progress, `ServiceEvent`, and related behavior still trusted `Profile.small_group`
 - a mistaken or self-serving profile edit can immediately change runtime visibility
 - this bypasses the `ChurchStructureMembership(status=requested)` review path implemented for signup in CS-H.6B
 - this bypasses the existing CS-H.7 staff approval context, conflict handling, and CS-H.7E transition sync rule
 
 CS-H.6C should close this normal-user self-assignment gap without removing the legacy field from staff/admin support paths prematurely.
 
-## 3. Normal User Profile Behavior
+## 3. Historical CS-H.6D Normal User Profile Behavior
 
-After CS-H.6D, normal logged-in users can:
+After CS-H.6D, normal logged-in users could:
 - show username read-only as today
 - keep email editable as today
 - keep preferred language editable as today
-- show current `Profile.small_group` as read-only context
+- historical/superseded: show then-current `Profile.small_group` as read-only context
 - expose an optional requested unit selector for group/unit change requests
 - create or update a pending `ChurchStructureMembership(status=requested)` when a requested unit is submitted
-- not update `Profile.small_group` at request time
+- not update `Profile.small_group` at request time while that field still existed
 - not approve automatically
 - hand off review to the existing CS-H.7 staff membership request list/detail/approve/reject flow
+
+Current profile group context should come from active primary `ChurchStructureMembership`, not a legacy profile group field.
 
 CS-H.6D does not implement request note capture. Notes remain empty for profile-created requests until a later safe note field is explicitly implemented.
 
@@ -84,7 +86,7 @@ If the user has multiple pending rows because of older data or manual admin edit
 - do not silently delete or merge the others
 - staff should resolve duplicate history through the approval/admin process
 
-## 6. Active Primary and Legacy Conflict Handling
+## 6. Active Primary and Historical Legacy Conflict Handling
 
 If the user already has a current active primary `ChurchStructureMembership`:
 - normal Profile request capture may still create/update a pending request
@@ -92,27 +94,27 @@ If the user already has a current active primary `ChurchStructureMembership`:
 - it must not create a new active primary membership
 - CS-H.7 approval should continue to block or require staff resolution for active-primary conflicts
 
-If the user already has `Profile.small_group`:
-- Profile should show it as current group context
+Historical/superseded: if the user already had `Profile.small_group` during the bridge period:
+- Profile should show it as then-current group context
 - requested unit submission must not change it
-- staff detail should continue to show current `Profile.small_group`
+- staff detail should continue to show then-current `Profile.small_group`
 - CS-H.7E alone decides whether approval syncs `Profile.small_group` after staff approval
 
-If the requested unit maps to no active legacy `SmallGroup`, multiple active legacy groups, or an inactive legacy group:
+Historical/superseded: if the requested unit mapped to no active legacy `SmallGroup`, multiple active legacy groups, or an inactive legacy group:
 - request capture should still be allowed if the unit is requestable
 - approval may activate membership but CS-H.7E no-sync rules continue to apply
 
 ## 7. Staff and Superuser Behavior
 
-Do not break current staff support flow without an explicit staff-admin plan.
+Do not break staff support flow without an explicit staff-admin plan.
 
-Recommended CS-H.6C boundary:
+Historical/superseded CS-H.6C boundary:
 - normal user Profile should stop directly editing `Profile.small_group`
-- staff/superuser support surfaces may continue to edit `Profile.small_group` where they already can, including Django Admin or staff user-support flows
-- any staff direct edit should remain understood as legacy runtime support, not membership approval
+- staff/superuser support surfaces could continue to edit `Profile.small_group` where they already could, including Django Admin or staff user-support flows
+- any staff direct edit was understood as legacy runtime support, not membership approval
 - CS-H.7 pages remain the official membership request approval path
 
-If a future staff profile-edit UI shares the same `ProfileForm`, implementation should split normal-user and staff-capable profile forms rather than giving normal users the staff edit surface.
+If a future staff profile-edit UI shares the same profile form concepts, implementation should keep normal-user request capture separate from staff-capable membership support surfaces.
 
 ## 8. User-Facing Messaging
 
@@ -125,10 +127,10 @@ Profile copy should make clear:
 
 Avoid promising approval, access, transfer timing, or visibility changes.
 
-## 9. Tests Required For Future Implementation
+## 9. Transition-Era Tests
 
-Future tests should cover:
-- normal profile page shows current `Profile.small_group` read-only
+CS-H.6D transition-era tests covered or planned:
+- normal profile page shows then-current `Profile.small_group` read-only
 - normal profile form no longer accepts direct `small_group` self-edit
 - email/language profile updates still work
 - submitting no requested unit creates no membership request
@@ -153,8 +155,8 @@ CS-H.6C does not include:
 - automatic approval
 - `Profile.small_group` update at request time
 - CS-H.7 approval rewrite
-- CS-H.7E sync behavior changes
-- consumer migration from `Profile.small_group` to `ChurchStructureMembership`
+- historical/superseded: CS-H.7E sync behavior changes
+- historical/superseded: consumer migration from `Profile.small_group` to `ChurchStructureMembership`
 - audience selection or filtering
 - Community Activities
 - `/studies/`, reading progress, `ServiceEvent`, or My Serving changes
@@ -166,9 +168,8 @@ Recommended next sequence:
 - CS-H.6C: profile group-change request capture planning. Completed by this document.
 - CS-H.6D: implement normal-user Profile request capture only, with focused tests. Completed.
 - CS-H.6D.1: rendered-page/manual QA and docs closure for normal-user Profile request capture. Completed.
-- Later: decide whether staff support surfaces need a dedicated legacy `Profile.small_group` edit form.
-- CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
-- Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.
+- CS-H.7 approval flow owns staff review and approve/reject behavior.
+- historical/superseded: staff legacy `Profile.small_group` edit-form decisions, CS-H.7E transition sync, and consumer migration from `Profile.small_group` were bridge-period concerns later retired by field and consumer migration slices.
 
 Do not bundle profile request capture with approval rewrites, consumer migration, audience filtering, or Community Activities.
 
@@ -177,7 +178,7 @@ Do not bundle profile request capture with approval rewrites, consumer migration
 CS-H.6D.1 verified the rendered Profile request flow with local QA data.
 
 Verified:
-- normal Profile shows current `Profile.small_group` as read-only context
+- historical/superseded: normal Profile showed then-current `Profile.small_group` as read-only context
 - normal Profile no longer renders an editable `small_group` field
 - email and preferred language still save
 - tampered `small_group` POST data does not update `Profile.small_group`

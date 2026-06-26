@@ -1,5 +1,14 @@
 # Church Structure Signup Request Flow Design
 
+> **Current-state update:** this is the CS-H.6 design record from before the
+> completed Church Structure migration. Signup/Profile requested-unit capture and
+> staff approval slices were later implemented, and approved migrated runtime
+> paths now use active primary `ChurchStructureMembership` or app-specific
+> audience/snapshot rows. `Profile.small_group`, `SmallGroup`, `District`, and
+> `MinistryContext` are removed from current models. Statements below that say
+> runtime still uses those legacy objects are historical bridge-period context
+> only.
+
 ## 1. Purpose
 
 CS-H.6 designs a future signup/onboarding flow where a user can request a church structure unit or small group, but staff/admin approval is required before that request becomes official active membership.
@@ -8,17 +17,17 @@ This flow is needed because new users often know the group they attend, but sign
 
 This is design-only. It does not change signup behavior, models, migrations, views, forms, templates, URLs, admin UI, `Profile.small_group`, or any runtime consumer. CS-H.6A later records the implementation plan in `docs/CHURCH_STRUCTURE_SIGNUP_REQUEST_CAPTURE_IMPLEMENTATION_PLAN.md`.
 
-## 2. Current Signup State
+## 2. Historical Signup State
 
-Current runtime behavior still uses:
+Historical/superseded runtime behavior at this design point still used:
 - `MinistryContext`
 - `District`
 - `SmallGroup`
 - `Profile.small_group`
 
-`Profile.small_group` remains the current runtime belonging field. `/studies/`, reading progress, `ServiceEvent`, signup behavior, and My Serving must not switch to `ChurchStructureMembership` as part of this design.
+Historical/superseded: `Profile.small_group` remained the runtime belonging field at this design point. `/studies/`, reading progress, `ServiceEvent`, signup behavior, and My Serving were not to switch to `ChurchStructureMembership` as part of this CS-H.6 design.
 
-`ChurchStructureUnit` has been seeded/mapped from current structure data, but it is not the runtime source of truth. `ChurchStructureMembership` exists and has been backfilled, but no runtime consumer uses it yet. Signup/onboarding does not create requested memberships today.
+Historical/superseded: `ChurchStructureUnit` had been seeded/mapped from then-current structure data, but it was not yet the runtime source of truth. `ChurchStructureMembership` existed and had been backfilled, but no runtime consumer used it yet. Signup/onboarding did not create requested memberships at that time.
 
 ## 3. Future Signup Fields
 
@@ -81,7 +90,7 @@ Future staff/admin workflow should include:
 - assign "Not sure / New visitor" users to an appropriate state or unit
 - add non-sensitive operational notes
 
-During the transition, approval of a primary small-group/fellowship membership may sync `Profile.small_group` when the approved `ChurchStructureUnit` maps to a legacy `SmallGroup`. That sync should be explicit, tested, and reversible enough for the transition period.
+Historical/superseded transition note: approval of a primary small-group/fellowship membership could sync `Profile.small_group` when the approved `ChurchStructureUnit` mapped to a legacy `SmallGroup`. That compatibility sync was retired with `Profile.small_group` and the legacy structure tables.
 
 This document does not add custom staff admin UI. CS-H.7 separately documents the future approval workflow in `docs/CHURCH_STRUCTURE_MEMBERSHIP_APPROVAL_WORKFLOW_DESIGN.md`.
 
@@ -93,16 +102,16 @@ Only approved active membership may be used by future consumers, and each consum
 
 Permission sources remain separate, such as `ChurchRoleAssignment`, capability helpers, and existing staff/superuser checks. Serving assignment sources remain separate, such as `TeamAssignment`, `TeamMembership`, and `TeamAssignmentMember`.
 
-## 9. Transition With Profile.small_group
+## 9. Historical Transition With Profile.small_group
 
-For now, `Profile.small_group` remains the runtime source for current belonging behavior. Do not remove it and do not switch existing consumers in CS-H.6.
+Historical/superseded: at CS-H.6 time, `Profile.small_group` remained the runtime source for current belonging behavior. It has since been removed and must not be reintroduced.
 
-Future approval may sync `Profile.small_group` when:
+At that time, future approval could sync `Profile.small_group` when:
 - the approved active membership is primary,
 - the approved unit maps to a legacy `SmallGroup`, and
 - the transition implementation explicitly chooses to keep `Profile.small_group` aligned.
 
-This sync should be treated as compatibility behavior during coexistence, not as permission or serving assignment logic.
+This sync was compatibility behavior during coexistence, not permission or serving assignment logic; it is no longer current behavior after field/table retirement.
 
 ## 10. UX Notes
 

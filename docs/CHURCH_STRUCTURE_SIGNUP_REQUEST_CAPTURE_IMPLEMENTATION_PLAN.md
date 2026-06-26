@@ -1,26 +1,37 @@
 # Church Structure Signup Request Capture Implementation Plan
 
+> **Status note (superseded):** this CS-H.6A/6B transition plan predates
+> `Profile.small_group` field retirement and later legacy structure retirement.
+> Signup requested-unit capture remains useful as membership request workflow
+> history/current behavior, but statements below that describe
+> `Profile.small_group`, legacy fields, or legacy consumers as current runtime
+> are historical implementation context only. Current approved migrated runtime
+> paths use active primary `ChurchStructureMembership` or app-specific
+> audience/snapshot rows, and membership still does not imply serving.
+
 ## 1. Purpose
 
 CS-H.6A planned a future implementation slice for capturing a user's requested `ChurchStructureMembership` unit during normal signup/profile onboarding. CS-H.6B implements the signup-only portion of that plan.
 
-CS-H.6A was planning/docs only. CS-H.6B changes only normal signup request capture and focused tests. It does not change models, migrations, profile behavior, `Profile.small_group`, approval ownership, or any runtime consumer.
+CS-H.6A was planning/docs only. CS-H.6B changed only normal signup request capture and focused tests. At that transition point, it did not change models, migrations, profile behavior, `Profile.small_group`, approval ownership, or any runtime consumer.
 
-Runtime remains legacy `Profile.small_group` based until a separate consumer migration is designed and implemented. Requested membership grants no visibility.
+Historical/superseded: runtime remained legacy `Profile.small_group` based until later consumer and field-retirement slices were designed and implemented. Requested membership granted no visibility then, and a requested membership still grants no visibility now.
 
-## 2. Current Runtime Baseline
+## 2. Historical CS-H.6B Runtime Baseline
 
-Current signup/profile behavior after CS-H.6B:
+Signup/profile behavior immediately after CS-H.6B:
 - `SignUpForm` exposes optional `requested_unit` choices backed by active small-group/fellowship `ChurchStructureUnit` rows.
 - Signup creates a pending `ChurchStructureMembership` when a requested unit is selected.
 - Signup does not write `Profile.small_group` at request time.
-- `ProfileForm` also exposes and updates legacy `Profile.small_group`.
-- `/studies/`, reading progress, `ServiceEvent`, My Serving, and other existing consumers continue to use legacy fields.
+- historical/superseded: `ProfileForm` also exposed and updated legacy `Profile.small_group`.
+- historical/superseded: then-current `/studies/`, reading progress, `ServiceEvent`, and other existing consumers still used legacy fields.
+- My Serving remained explicit-assignment driven and was not inferred from membership.
 
-Current membership workflow state:
+Membership workflow state after later follow-up slices:
 - `ChurchStructureMembership` exists and supports `status=requested`.
 - CS-H.7B through CS-H.7F implemented and verified the staff approval flow for pending requested memberships.
-- Staff approval can activate a requested membership and, during transition, sync `Profile.small_group` only for the exactly-one active mapped legacy `SmallGroup` case.
+- Staff approval can activate a requested membership.
+- historical/superseded: during the bridge period, approval synced `Profile.small_group` only for the exactly-one active mapped legacy `SmallGroup` case; that sync was later retired with `Profile.small_group`.
 - Signup creates requested memberships only through CS-H.6B request capture.
 
 ## 3. Implementation Slice Recommendation
@@ -43,7 +54,8 @@ CS-H.6B.1 closure status:
 - Signup request creation did not update `Profile.small_group`.
 - Inactive and non-requestable units were not available through normal rendered form choices and were rejected by form validation if submitted.
 - Created requests appeared in the existing staff membership request list and detail pages.
-- Existing `/studies/`, `ServiceEvent`, Reading, and My Serving behavior remains legacy `Profile.small_group` based.
+- historical/superseded: existing `/studies/`, `ServiceEvent`, and Reading behavior remained legacy `Profile.small_group` based at CS-H.6B closure; later migrated runtime paths no longer use that field.
+- My Serving remained outside membership inference.
 - No profile request capture, consumer migration, audience filtering, Community Activities, model change, migration, or runtime source-of-truth switch was added.
 
 ## 4. Requested Unit Capture Surface
@@ -114,7 +126,7 @@ Active primary conflict rule:
 
 Legacy `Profile.small_group` conflict rule:
 - request submission must not update `Profile.small_group`
-- if the requested unit maps to a different legacy `SmallGroup` than the user's current `Profile.small_group`, staff will see the current legacy group and sync warning in the existing CS-H.7 approval detail flow
+- historical/superseded: if the requested unit mapped to a different legacy `SmallGroup` than the user's then-current `Profile.small_group`, staff saw the legacy group and sync warning in the CS-H.7 approval detail flow
 
 Invalid request rule:
 - inactive or non-requestable submitted units should fail form validation
@@ -125,11 +137,11 @@ Invalid request rule:
 
 After request capture, staff should see the request in the existing CS-H.7 pages:
 - pending request list shows `status=requested`
-- detail page shows user, requested unit, requested_by, submitted date, current `Profile.small_group`, request note, and active-primary context
+- historical/superseded detail page showed user, requested unit, requested_by, submitted date, then-current `Profile.small_group`, request note, and active-primary context
 - CS-H.6B-created requests have an empty request note until note capture is implemented later
 - approve activates the requested membership
-- reject changes it to rejected and does not sync `Profile.small_group`
-- approval syncs `Profile.small_group` only under the CS-H.7E exactly-one active mapped legacy `SmallGroup` rule
+- reject changes it to rejected
+- historical/superseded: reject did not sync `Profile.small_group`, and approval synced `Profile.small_group` only under the CS-H.7E exactly-one active mapped legacy `SmallGroup` rule
 
 CS-H.6A should not add a separate staff queue, new approval route, or alternate approval behavior.
 
@@ -144,9 +156,9 @@ Signup/profile copy should make these points:
 
 Avoid promising access, approval, visibility, automatic assignment, or immediate group transfer.
 
-## 10. Tests Required For Future Implementation
+## 10. Transition-Era Tests
 
-Future implementation tests should cover:
+CS-H.6B/6D transition-era tests covered or planned:
 - signup with no requested unit keeps current behavior boundary and creates no requested membership
 - signup with requested unit creates one `status=requested` membership
 - requested membership has `requested_by=user`, no approval metadata, no start date, and `is_primary=False`
@@ -167,8 +179,8 @@ CS-H.6A does not include:
 - views, forms, templates, URLs, tests, or runtime behavior changes
 - automatic approval
 - direct user self-assignment to active membership
-- `Profile.small_group` updates at request time
-- consumer migration from `Profile.small_group` to `ChurchStructureMembership`
+- historical/superseded: `Profile.small_group` updates at request time
+- historical/superseded: consumer migration from `Profile.small_group` to `ChurchStructureMembership`
 - audience selection or filtering
 - Community Activities
 - `/studies/`, reading progress, `ServiceEvent`, or My Serving changes
@@ -183,7 +195,7 @@ Recommended next sequence:
 - CS-H.6B.1: browser/manual QA and docs closure for signup membership request capture. Completed.
 - CS-H.6C: profile group-change request capture planning. Completed.
 - CS-H.6D: optionally implement profile-based request/change capture, with focused tests.
-- CS-H.7 approval flow continues to own staff review, approve/reject, and transition `Profile.small_group` sync.
-- Later: migrate selected consumers from `Profile.small_group` to approved active membership, one consumer at a time.
+- CS-H.7 approval flow owns staff review and approve/reject behavior.
+- historical/superseded: CS-H.7E owned transition `Profile.small_group` sync, and later slices migrated approved consumers away from `Profile.small_group`.
 
 Do not bundle signup request capture with staff approval rewrites, consumer migration, audience filtering, or Community Activities.

@@ -6,7 +6,7 @@ CS-H.7A plans future implementation for staff/admin approval of requested `Churc
 
 This is docs-only. It does not change code, models, migrations, views, forms, templates, URLs, capabilities, signup behavior, `Profile.small_group`, or any runtime consumer.
 
-Historical/superseded for this CS-H.7 planning slice: runtime still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`, and no runtime consumer used `ChurchStructureMembership`. Current approved migrated consumers use active primary `ChurchStructureMembership`, `Profile.small_group` was removed, and remaining legacy object rows/mappings are bridge/admin/diagnostic/setup/table-retirement context.
+Historical/superseded for this CS-H.7 planning slice: runtime still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`, and no runtime consumer used `ChurchStructureMembership`. Current approved migrated consumers use active primary `ChurchStructureMembership`, `Profile.small_group` was removed, and the legacy structure object rows/tables and mappings were retired/removed by later row/table-retirement slices.
 
 ## 2. Implementation Slices
 
@@ -17,7 +17,7 @@ Recommended small phases:
 - CS-H.7E: `Profile.small_group` sync behavior for approved mapped small-group memberships. Completed.
 - CS-H.7F: browser QA and docs closure. Completed.
 
-Each slice should preserve current runtime behavior. Do not switch `/studies/`, reading progress, `ServiceEvent`, My Serving, or any other consumer to membership in these slices.
+Historical/superseded planning boundary: each CS-H.7 slice preserved then-current runtime behavior and did not switch `/studies/`, reading progress, `ServiceEvent`, My Serving, or any other consumer to membership in those slices. Later approved consumer migrations happened separately.
 
 ## 3. Recommended First Implementation Slice
 
@@ -84,18 +84,18 @@ Future approval behavior:
 
 Approval should not create permissions, serving assignments, team membership, or audience scope access. Active membership may become a future source for consumers only after separate migration work.
 
-## 5. Profile.small_group Sync
+## 5. Historical Profile.small_group Sync
 
 CS-H.7E is implemented and documented in `docs/CHURCH_STRUCTURE_PROFILE_SMALL_GROUP_SYNC_PLAN.md`.
 
-Implemented transition sync rule:
-- if the approved membership is active and primary, and the unit maps to exactly one active legacy `SmallGroup`, sync `Profile.small_group`
-- if the approved unit has no legacy mapping, multiple mappings, or an inactive legacy `SmallGroup`, do not sync
-- if the user already has a different `Profile.small_group`, staff sees a warning before approval
-- do not remove `Profile.small_group`
-- do not migrate consumers to membership
+Historical/superseded transition sync rule:
+- if the approved membership was active and primary, and the unit mapped to exactly one active legacy `SmallGroup`, sync `Profile.small_group`
+- if the approved unit had no legacy mapping, multiple mappings, or an inactive legacy `SmallGroup`, do not sync
+- if the user already had a different `Profile.small_group`, staff saw a warning before approval
+- CS-H.7E did not remove `Profile.small_group`
+- CS-H.7E did not migrate consumers to membership
 
-CS-H.7E should own this behavior. It should not be bundled into signup capture, consumer migration, or unrelated approval refinements.
+CS-H.7E owned this bridge behavior during the transition. That sync was later retired with `Profile.small_group`; current approved migrated runtime paths use active primary `ChurchStructureMembership` or app-specific audience/snapshot rows.
 
 ## 6. Conflict Handling
 
@@ -129,7 +129,7 @@ Pending list fields:
 - requested unit
 - status
 - submitted date
-- current `Profile.small_group`
+- then-current `Profile.small_group` at the CS-H.7 planning point
 - existing active primary membership, if any
 
 Detail page fields:
@@ -138,7 +138,7 @@ Detail page fields:
 - request note
 - current status
 - submitted date
-- current `Profile.small_group`
+- then-current `Profile.small_group` at the CS-H.7 planning point
 - existing active primary membership
 - non-sensitive notes warning
 
@@ -154,23 +154,23 @@ Bilingual labels should be supported. Mobile should be reasonable, but staff des
 
 ## 9. Tests Required Later
 
-Future tests should cover:
+Future or historical tests should cover:
 - permission checks for list, detail, and actions
 - users without capability cannot view or approve requests
 - requested memberships do not grant visibility
 - approval updates status without switching consumers
 - approval preserves `requested_by`
 - approval sets `approved_by` and `approved_at`
-- approval syncs `Profile.small_group` only when mapped and sync is enabled
-- unmapped approved unit does not force `Profile.small_group`
-- inactive legacy `SmallGroup` mapping does not sync
-- reject and blocked approval do not sync `Profile.small_group`
+- historical/superseded: approval synced `Profile.small_group` only when mapped and sync was enabled
+- historical/superseded: unmapped approved unit did not force `Profile.small_group`
+- historical/superseded: inactive legacy `SmallGroup` mapping did not sync
+- historical/superseded: reject and blocked approval did not sync `Profile.small_group`
 - requested membership still grants no visibility before approval
 - duplicate active primary membership is blocked or explicitly resolved
-- `/studies/` behavior changes only when `Profile.small_group` changes
-- reading progress behavior changes only when `Profile.small_group` changes
-- `ServiceEvent` behavior changes only when `Profile.small_group` changes
-- My Serving behavior does not change unless it already depends on `Profile.small_group`
+- historical/superseded: `/studies/` behavior changed only when `Profile.small_group` changed
+- historical/superseded: reading progress behavior changed only when `Profile.small_group` changed
+- historical/superseded: `ServiceEvent` behavior changed only when `Profile.small_group` changed
+- My Serving remains explicit-assignment driven and must not be inferred from membership
 
 Do not run tests as part of CS-H.7A because this task is documentation only.
 
@@ -200,4 +200,4 @@ Recommended next sequence:
 - CS-H.7E: explicit `Profile.small_group` sync behavior. Completed.
 - CS-H.7F: browser QA and docs closure. Completed.
 - CS-H.6A: signup request capture implementation planning can proceed before or after CS-H.7B/7C depending on product priority.
-- Later: consumer migration from `Profile.small_group` to membership, one consumer at a time.
+- historical/superseded: later consumer migration from `Profile.small_group` to membership happened in separate approved slices.

@@ -6,6 +6,13 @@ SE-AS.5A is the docs-only interaction plan for the SE-AS.5 staff audience select
 
 Status: SE-AS.5A planning is complete, SE-AS.5 implementation is complete, SE-AS.5B post-commit UI/wording cleanup is complete, and SE-AS.5C corrects the picker interaction model. ServiceEvent single create/edit and recurring create now expose the optional `ChurchStructureUnit` audience picker as a visible section; the tree nodes inside the picker expand/collapse by hierarchy level. Staff detail shows effective audience source and readable labels. SE-AS.7A later superseded the SE-AS.5 empty-selection write behavior: normal writes now convert valid legacy fallback fields into structure audience rows or fail validation. SE-RETIRE.1B later retired the runtime zero-row fallback, so zero-row events fail closed for ordinary users. No schema/model field deletion, migration, Community Activities, CS-MAP.3, CS-SETUP.1, or ministry scheduling behavior change was added by the selector work.
 
+Current-state supersession: SE-FIELD-RETIRE.1A later removed the legacy
+`scope_type` / `district` / `small_group` fields, and
+SERVICE-EVENT-CONTEXT.1C removed `ServiceEvent.ministry_context`. Body text below
+that places the picker beside editable legacy fallback controls is historical
+selector-era context; current ServiceEvent visibility is audience rows plus active
+primary membership, and zero-row events fail closed for ordinary users.
+
 Current local baseline:
 
 - SE-AS.4 is complete: if a `ServiceEvent` has one or more `ServiceEventAudienceScope` rows, those rows govern ordinary-user visibility.

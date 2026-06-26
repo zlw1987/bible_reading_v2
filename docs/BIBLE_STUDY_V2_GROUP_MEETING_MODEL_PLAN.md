@@ -4,7 +4,21 @@
 
 This document records the recommended Bible Study V2 architecture before implementation.
 
-Do not implement these changes as part of this planning document. This is a reference plan for future development.
+Current-state update: this is now a **historical/superseded planning artifact** for the
+early Bible Study V2 design. The current Bible Study path is `BibleStudySeries` +
+`BibleStudyLesson` + `BibleStudyMeeting`; normal generation is structure-unit-native
+through `BibleStudySeriesAudienceScope`, `BibleStudyMeetingAudienceScope`,
+`anchor_unit`, and `generation_key`; V2 visibility / `/studies/` / Today /
+role-worship pickers use meeting audience rows plus active primary
+`ChurchStructureMembership`; zero-row V2 meetings fail closed for ordinary users.
+Legacy V1 schema and the V2 `BibleStudyMeeting.small_group` mirror were removed.
+Historical recommendations below that mention `SmallGroup`, `small_group`, or a
+legacy V1/V2 bridge explain the problem this architecture solved and must not be
+read as current schema or runtime guidance.
+
+Do not implement these changes as part of this planning document. This is a
+historical reference plan for the V2 architecture that has since been implemented
+and superseded by the structure-native migration docs.
 
 See also `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` for broader church structure boundaries:
 - fellowship `SmallGroup` is not `MinistryTeam`
@@ -14,9 +28,9 @@ See also `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md` for broader church structure bou
 
 See also `docs/BIBLE_STUDY_V2_SCHEDULE_SCOPE_REPLAN.md` for the post-BS-V2.5B correction: the staff/product hierarchy should be Bible Study Schedule / 查经安排 -> Weekly Bible Study Guide / 每周查经指引 -> Small Group Bible Study Meeting / 小组查经聚会. This plan now treats `BibleStudySeries` as the likely internal schedule container until a later task proves a separate `BibleStudySchedule` model is necessary.
 
-## 2. Current Problem
+## 2. Historical Problem
 
-The current Bible Study V1 model appears too simple for the real church workflow. It risks mixing:
+Historical/superseded: the Bible Study V1 model appeared too simple for the real church workflow. It risked mixing:
 - church-wide study material
 - small-group Friday Bible Study meetings
 - pre-study guide
@@ -30,7 +44,14 @@ The real workflow is two-layer:
 - Each small group has its own Friday Bible Study meeting.
 - Each group may have its own discussion direction, questions, worship arrangement, and leaders/support roles.
 
-## 3. Recommended Model Direction
+## 3. Historical Recommended Model Direction
+
+Historical/superseded: this recommendation was written before the later
+structure-native Bible Study slices. Current V2 meetings use `anchor_unit`,
+`generation_key`, and `BibleStudyMeetingAudienceScope` rows; the
+`BibleStudyMeeting.small_group` FK is removed. Treat `small_group` and
+`unique(lesson, small_group)` below as historical model-direction context only,
+not current/future implementation guidance.
 
 Keep or adapt:
 - BibleStudySeries, used user-facing as Bible Study Schedule / 查经安排 for now
@@ -74,7 +95,7 @@ Represents a small-group-level Bible Study gathering for a specific lesson.
 
 Suggested fields:
 - lesson
-- small_group
+- historical/superseded: small_group
 - meeting_datetime
 - location
 - meeting_link
@@ -94,8 +115,12 @@ Preferred workflow:
 - Meeting setup should focus on guide, small group, meeting time, location/link, group direction/questions, status, and optional ServiceEvent if needed.
 - Do not plan a migration for these compatibility fields yet.
 
-Recommended constraint:
+Historical recommended constraint:
 - unique(lesson, small_group), unless the church truly needs multiple meetings per group for the same lesson.
+
+Current constraint direction:
+- use structure-native identity through `generation_key`, `anchor_unit`, and
+  meeting audience rows rather than a legacy `small_group` FK.
 
 ### BibleStudyMeetingWorshipSong
 
@@ -149,7 +174,7 @@ Not:
 
 Long-term small-group coworker roles such as C/E/O/W/F should be planned separately as small-group coworker assignments, not as `MinistryTeam`.
 
-## 4. Fellowship Small Group Boundary
+## 4. Historical Fellowship Small Group Boundary
 
 Friday Bible Study happens at the fellowship small group level.
 
@@ -157,7 +182,10 @@ Examples:
 - Rainbow 1
 - Rainbow 4
 
-`BibleStudyMeeting` should remain anchored to `SmallGroup`.
+Historical/superseded: this plan originally said `BibleStudyMeeting` should remain
+anchored to `SmallGroup`. Current V2 meetings use `anchor_unit`, `generation_key`,
+and `BibleStudyMeetingAudienceScope` rows; the `BibleStudyMeeting.small_group` FK
+was removed in BS-MEETING-MIRROR.1A.
 
 Do not model a fellowship small group as `MinistryTeam`.
 Do not use `TeamAssignment` for Friday Bible Study discussion/worship/pianist/host rotation.

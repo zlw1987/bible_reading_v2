@@ -1,25 +1,39 @@
 # Church Structure Membership Design
 
-> **Historical note (CS-CORE.2C-B):** this CS-H-era membership design predates the Bible Study v2 visibility source switch. As of CS-CORE.2C-B, Bible Study v2 `BibleStudyMeeting` ordinary-member visibility and the `/studies/` / Today meeting pre-filter use active primary `ChurchStructureMembership`; `Profile.small_group` alone no longer grants v2 meeting visibility. Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, roles, and legacy fields/tables remain unchanged unless separately migrated.
+> **Current-state update:** this CS-H-era membership design predates the completed
+> Church Structure migration. `ChurchStructureUnit` is now the canonical local
+> structure model, and active primary `ChurchStructureMembership` is the ordinary
+> belonging source for approved migrated consumers. ServiceEvent audience rows,
+> Bible Study V2 meeting audience rows / `/studies/` / Today / role-worship
+> pickers, Prayer, group progress, and Reflection migrated consumer-by-consumer.
+> `Profile.small_group`, legacy structure tables, ServiceEvent legacy scope fields,
+> Bible Study Series legacy scope fields, the V2 meeting `small_group` mirror, and
+> V1 Bible Study schema were removed. Statements below that describe membership as
+> future-only or legacy models/fields as current runtime are historical bridge
+> context only. My Serving and serving assignments remain explicit-assignment
+> driven; membership never implies serving.
 
 ## 1. Purpose
 
-`ChurchStructureUnit` now represents the flexible church structure tree. It has been seeded and mapped from current `MinistryContext`, `District`, and `SmallGroup` data, but it is still mirror/mapped structure only.
+`ChurchStructureUnit` represents the flexible church structure tree.
+Historical/superseded: during CS-H.4 it had been seeded and mapped from
+then-current `MinistryContext`, `District`, and `SmallGroup` data, but was still
+mirror/mapped structure only.
 
 Membership needs a separate design because user belonging affects Bible Study visibility, reading group progress, future audience eligibility, and signup/onboarding. A structure tree answers "what units exist"; membership answers "which user belongs where, when, and with what approval status."
 
-The goal of CS-H.4 is to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens helper/query behavior and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E improves Django Admin clarity for legacy current-runtime structure models versus future structure/membership foundation models. CS-H.6 records the signup requested-unit flow design, CS-H.6A/CS-H.6B add signup request capture planning and implementation, and CS-H.6D adds Profile request capture. CS-H.7 records the admin approval workflow design, and CS-H.7A through CS-H.7E add approval planning, staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync. CS-H.8 records the integration checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint. These steps do not authorize audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
+The goal of CS-H.4 was to design membership without breaking the validated pilot baseline. CS-H.5A later added the model-only `ChurchStructureMembership` foundation. CS-H.5B hardened helper/query behavior and validation. CS-H.5C added an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification without exact command-output counts. CS-H.5E was admin clarity for the then-current legacy runtime models versus future structure/membership foundation models; that framing is historical/superseded now that the legacy fields/tables are retired and `ChurchStructureUnit` / `ChurchStructureMembership` are current models for approved migrated consumers. CS-H.6 records the signup requested-unit flow design, CS-H.6A/CS-H.6B add signup request capture planning and implementation, and CS-H.6D adds Profile request capture. CS-H.7 records the admin approval workflow design, and CS-H.7A through CS-H.7E add approval planning, staff request review, approve/reject actions, and historical narrow `Profile.small_group` approval sync. CS-H.8 records the integration checkpoint, CS-H.9 records membership request UX hardening, and CS-H.10 records the CMS hardening checkpoint. These historical steps did not by themselves authorize audience selection, filtering, consumer migration, or a runtime source-of-truth switch.
 
-## 2. Current State
+## 2. Historical Current State
 
-Current runtime belonging:
+Historical/superseded runtime belonging at the CS-H.4 design point:
 - `Profile.small_group` stores a user's current primary small group.
-- `/studies/` v2 meeting visibility uses active primary `ChurchStructureMembership` after CS-CORE.2C-B; legacy `BibleStudySession` visibility remains unchanged.
+- `/studies/` v2 meeting visibility uses active primary `ChurchStructureMembership` after CS-CORE.2C-B; historical `BibleStudySession` visibility was unchanged at that point.
 - Reading group progress uses `Profile.small_group` and `SmallGroup`.
 - `BibleStudySeries` schedule audience resolution and meeting generation still resolve to legacy `SmallGroup` rows.
 - `ServiceEvent` structure-audience rows use membership-core matching when present; zero-row events still use legacy `scope_type`, `district`, and `small_group` fallback.
 
-Current structure state:
+Historical/superseded structure state at the CS-H.4 design point:
 - `ChurchStructureUnit` exists.
 - Current `MinistryContext`, `District`, and `SmallGroup` data has been seeded/mapped into `ChurchStructureUnit`.
 - `ChurchStructureUnit` is not the runtime source of truth.
@@ -33,18 +47,21 @@ Current structure state:
 - CS-H.8 integration checkpoint is complete.
 - CS-H.9 membership request UX hardening is complete.
 - CS-H.10 CMS hardening checkpoint is complete, including deferred/accepted mobile nav polish and the root `AGENTS.md` verification policy.
-- Runtime membership use is now consumer-specific: ServiceEvent structure-audience rows switched in CS-CORE.2B-A, and Bible Study v2 `BibleStudyMeeting` visibility switched in CS-CORE.2C-B.
-- Reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers still primarily use legacy models and `Profile.small_group`.
+- Runtime membership use is consumer-specific: ServiceEvent structure-audience rows, Bible Study v2 visibility/pickers, Prayer, group progress, and reflection use their approved membership/audience/snapshot paths.
+- Historical/superseded: reading progress, legacy `BibleStudySession`, ServiceEvent zero-row fallback, and other consumers still used legacy models and `Profile.small_group` at this planning point. Current ServiceEvent and Bible Study zero-row cases fail closed, V1 schema is removed, and `Profile.small_group` is removed.
 
 ## 3. Long-Term Target
 
 Long-term source of truth:
-- `ChurchStructureUnit` becomes the canonical church structure source.
-- `ChurchStructureMembership` becomes the canonical user belonging / membership source.
+- `ChurchStructureUnit` is now the canonical local church structure source.
+- `ChurchStructureMembership` is the canonical user belonging / membership source for approved migrated consumers.
 
-Transition target:
-- `Profile.small_group` becomes a transitional compatibility field, cache, or eventually deprecated field.
-- The transition must be staged and tested before any consumer switches away from `Profile.small_group`.
+Historical transition target:
+- `Profile.small_group` would become a transitional compatibility field, cache, or eventually deprecated field.
+- The transition had to be staged and tested before any consumer switched away from `Profile.small_group`.
+
+Current resolution: `Profile.small_group` was removed after the approved staged
+migration/retirement work.
 
 Boundary rules:
 - Membership is about belonging, not permissions.
@@ -105,7 +122,7 @@ CS-H.5B hardening note:
 - Helpers count only `status=active` records within their start/end date window.
 - Requested, rejected, cancelled, and ended memberships do not count as active.
 - Duplicate active primary membership remains application-validated, not DB-enforced.
-- No runtime consumer uses these helpers yet.
+- Historical/superseded: no runtime consumer used these helpers yet at CS-H.5B time. Current approved migrated consumers use membership helpers/active primary membership where explicitly switched.
 
 CS-H.5C backfill command note:
 - `python manage.py backfill_church_structure_memberships` defaults to dry-run.
@@ -117,12 +134,13 @@ CS-H.5D verification note:
 - GoDaddy production/staging dry-run/apply/second dry-run was completed by user confirmation.
 - Exact numeric command-output counts were not provided or recorded.
 - No unresolved warnings, errors, or data QA item was reported.
-- Historical note: this was true before the consumer switches. As of CS-CORE.2C-B, membership is the source for Bible Study v2 `BibleStudyMeeting` ordinary-member visibility; reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers still use legacy sources.
+- Historical note: this was true before the consumer switches. Later slices moved the approved consumers to membership/audience/snapshot paths, retired the ServiceEvent and Bible Study zero-row fallbacks, removed V1 schema, and removed `Profile.small_group`.
 
-CS-H.5E admin clarity note:
-- Legacy `SmallGroup`, `District`, and `MinistryContext` remain editable because they still drive current runtime behavior.
-- Django Admin now labels them as current-runtime legacy/bridge models and shows mapping status to `ChurchStructureUnit`.
-- `ChurchStructureUnit` and `ChurchStructureMembership` admin pages are labeled as future foundation/mirror data.
+CS-H.5E admin clarity note (historical/superseded):
+- Legacy `SmallGroup`, `District`, and `MinistryContext` remained editable at that bridge point because they still drove then-current runtime behavior.
+- Django Admin labeled them as current-runtime legacy/bridge models and showed mapping status to `ChurchStructureUnit`.
+- `ChurchStructureUnit` and `ChurchStructureMembership` admin pages were labeled as future foundation/mirror data at that time.
+- Current state supersedes this: legacy structure models/tables are removed, `ChurchStructureUnit` is canonical local structure, and `ChurchStructureMembership` is current belonging for approved migrated consumers.
 - Custom staff admin UI remains future work.
 
 ## 5. Requested Assignment Model Options
@@ -198,7 +216,7 @@ Rules:
 - A user should have at most one active primary membership at a time.
 - V1 should support one active primary small-group/fellowship membership.
 - Future versions may allow multiple active non-primary memberships.
-- Primary membership is what eventually replaces `Profile.small_group` for visibility.
+- Historical/superseded: primary membership was intended to eventually replace `Profile.small_group` for visibility; the approved migrated consumers now use membership, and `Profile.small_group` is removed.
 - Do not switch visibility in the model-only phase.
 
 Enforcement considerations:
@@ -223,7 +241,7 @@ Transfers:
 - end the old active primary membership
 - create a new active primary membership
 - keep both records for history
-- optionally sync `Profile.small_group` during the transition if the new unit maps to a `SmallGroup`
+- historical/superseded: optionally sync `Profile.small_group` during the transition if the new unit maps to a `SmallGroup`
 
 Notes:
 - Must be operational only.
@@ -238,7 +256,7 @@ Future compromise flow:
 - Staff/admin reviews the request.
 - Staff can approve, modify the requested unit before approval, reject, cancel, or mark needs clarification.
 - Approval creates or activates membership.
-- During transition, approval may update `Profile.small_group` when the approved unit maps to a `SmallGroup`.
+- Historical/superseded: during transition, approval could update `Profile.small_group` when the approved unit mapped to a `SmallGroup`; this sync was later retired and the field removed.
 - Normal users cannot self-assign final membership.
 
 Visibility rule:
@@ -269,14 +287,14 @@ Recommended phases:
 - Phase M.2: add `ChurchStructureMembership` model only, no behavior change.
 - Phase M.3: backfill active primary membership from `Profile.small_group`.
 - Phase M.4: signup/Profile requested-unit flow stores requested membership/request, not active membership. Completed.
-- Phase M.5: admin approval updates membership and syncs `Profile.small_group` only for the narrow exactly-one active mapped legacy `SmallGroup` case. Completed.
+- Phase M.5: historical admin approval sync to `Profile.small_group` for the narrow exactly-one active mapped legacy `SmallGroup` case. Completed at the time, later retired.
 - Phase M.6: selected consumers may read membership with carefully tested fallback or fail-closed behavior. Partially complete: ServiceEvent structure-audience rows switched in CS-CORE.2B-A, and Bible Study v2 meeting visibility switched in CS-CORE.2C-B.
-- Phase M.7: `Profile.small_group` becomes cache/compatibility or is deprecated after safe migration.
+- Phase M.7: `Profile.small_group` becomes cache/compatibility or is deprecated after safe migration. Superseded by later removal.
 
 Important:
-- Historical note: `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; do not switch additional consumers without separate approval.
-- Do not remove `Profile.small_group` early.
-- Do not make membership the runtime source of truth until tests and rollback planning exist.
+- Historical note: `/studies/` v2 meeting visibility switched in CS-CORE.2C-B; later approved consumers switched in separate slices.
+- Historical rule: do not remove `Profile.small_group` early. It was later removed after approved retirement work.
+- Historical rule: do not make membership the runtime source of truth until tests and rollback planning exist. Current migrated consumers have that explicit approval/history.
 
 ## 11. Backfill Strategy
 
@@ -401,24 +419,23 @@ Recommended sequence:
 - CS-H.7A: membership approval workflow implementation plan. Completed.
 - CS-H.7B/C: membership approval capability plus pending request list. Completed.
 - CS-H.7D: membership request detail plus approve/reject actions. Completed.
-- CS-H.7E: narrow `Profile.small_group` approval sync. Completed.
+- CS-H.7E: historical narrow `Profile.small_group` approval sync. Completed at that time, later retired.
 - CS-H.8: integrated membership request flow checkpoint. Completed.
 - CS-H.9: membership request UX hardening. Completed.
 - CS-H.10: CMS hardening checkpoint. Completed.
-- Later: consumer migration from `Profile.small_group` to membership.
+- Historical/superseded later step: consumer migration from `Profile.small_group` to membership. Approved migrated consumers have since moved, and `Profile.small_group` was removed.
 
-Do not implement audience filtering or additional consumer migration without a separate plan. `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; do not migrate reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, or other consumers from `Profile.small_group` until explicitly authorized.
+Do not implement new audience filtering or additional consumer migration without a separate plan. Historical/superseded: this section previously warned not to migrate reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, or other consumers from `Profile.small_group` until explicitly authorized. Later approved slices migrated/retired those applicable consumers; My Serving remains assignment-based and is not inferred from membership.
 
-## 18. Open Decisions
+## 18. Historical / Resolved Decisions
 
-Open decisions:
-- exact `membership_type` choices
-- whether to enforce one active primary membership at the database level
-- whether approved membership immediately syncs `Profile.small_group`
-- exact capability and staff/superuser override rules for approving membership
-- how to handle transfers
-- whether implementation should support broader district/ministry-context request routing, beyond the CS-H.6 recommendation to prefer active leaf small-group/fellowship units plus "Not sure / New visitor"
-- how to display membership history
-- first consumer to migrate from `Profile.small_group`
-- whether normal users can view their own membership history
-- how much approval audit detail is needed in V1
+Historical/resolved decisions:
+- `membership_type` choices were implemented for the membership model.
+- Active-primary enforcement and helper behavior were implemented in the approved membership slices.
+- Approved membership no longer syncs `Profile.small_group`; the sync was retired and the field removed.
+- Approval capability and staff/superuser override rules were implemented in the membership request workflow.
+- Transfer handling remains a product/workflow topic, not a reason to treat `Profile.small_group` as current.
+- Request routing uses the approved requested-unit flow unless a future product slice expands it.
+- Membership history display remains a product UX topic.
+- The first consumer migrations from `Profile.small_group` have already happened; current docs should follow the per-consumer current-state sections.
+- Normal-user membership-history visibility and approval audit detail remain UX/audit follow-ups, not blockers for the current migration truth.

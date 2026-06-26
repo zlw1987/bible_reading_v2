@@ -1,8 +1,8 @@
 # Bible Study Meeting Role Assignment Plan
 
-Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete.
+Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete; Bible Study role confirmation in My Serving complete.
 
-Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for Today-page surfacing and clearer Friday Bible Study preparation UX. BS-ROLE.1B and TODAY-HOME.1D are now complete; this plan still does not approve any further code, schema, migration, permission, notification, or confirmation-workflow changes.
+Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for Today-page surfacing, My Serving confirmation, and clearer Friday Bible Study preparation UX. BS-ROLE.1B, TODAY-HOME.1D, and My Serving Bible Study role confirmation are now complete; this plan still does not approve any further code, schema, migration, permission, notification, or workflow expansion.
 
 ## 1. Current-State Audit
 
@@ -10,18 +10,18 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 
 `BibleStudyMeeting`
 
-- Anchors one small-group Friday meeting to a `BibleStudyLesson` and legacy `SmallGroup`.
-- Key fields: `lesson`, `small_group`, `meeting_datetime`, `location`, `location_en`, `meeting_link`, `group_direction`, `group_direction_en`, `group_questions`, `group_questions_en`, `status`, optional `service_event`, and audit fields.
+- Anchors one small-group Friday meeting to a `BibleStudyLesson`, `anchor_unit`, `generation_key`, and meeting audience rows.
+- Key fields: `lesson`, `anchor_unit`, `generation_key`, `meeting_kind`, `meeting_datetime`, `location`, `location_en`, `meeting_link`, `group_direction`, `group_direction_en`, `group_questions`, `group_questions_en`, `status`, optional `service_event`, and audit fields.
 - Still has older discussion-leader fields: `discussion_leader_user` and `discussion_leader_name`.
-- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings when the parent lesson and schedule are published and their single active primary `ChurchStructureMembership` matches a `BibleStudyMeetingAudienceScope` row (the selected unit or a descendant). Since BS-STRUCT.2A, zero-row V2 meetings fail closed for ordinary users. `BibleStudyMeeting.small_group` is mirror/display/backfill/history/idempotency compatibility only, and `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
+- Current visibility is `BibleStudyMeeting.can_be_seen_by(user)`: staff/superuser/Bible Study managers can see all; ordinary users can see published meetings when the parent lesson and schedule are published and their single active primary `ChurchStructureMembership` matches a `BibleStudyMeetingAudienceScope` row (the selected unit or a descendant). Since BS-STRUCT.2A, zero-row V2 meetings fail closed for ordinary users. `BibleStudyMeeting.small_group` was removed in BS-MEETING-MIRROR.1A, and `Profile.small_group` alone no longer grants v2 `BibleStudyMeeting` visibility.
 
 `BibleStudyMeetingRole`
 
 - Represents one per-meeting responsibility.
 - Role choices: `discussion_leader`, `worship_lead`, `pianist`, `support`, `host`.
-- Key fields: `meeting`, `role`, nullable `user`, free-text `display_name`, `notes`, `notes_en`, timestamps.
+- Key fields: `meeting`, `role`, nullable `user`, free-text `display_name`, `notes`, `notes_en`, `confirmed_at`, `confirmation_note`, timestamps.
 - `get_display_name()` prefers `display_name`, then falls back to the linked user's full name or username, then blank.
-- There is no confirmation/status/accepted/declined field.
+- `confirm(note="")` records `confirmed_at` and an optional `confirmation_note`; there is no separate accepted/declined state.
 - There is no model-level requirement that either `user` or `display_name` be present; BS-ROLE.1B enforces the nonblank assignee requirement at the form layer.
 
 `BibleStudyMeetingWorshipSong`
@@ -48,6 +48,7 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 - Worship management (`manage_bible_study_meeting_worship_songs.html`) shows meeting context, existing worship songs, and current meeting roles for reference.
 - Template filters localize role labels and use `role.get_display_name()` for the visible person name.
 - Meeting detail can continue to show free-text fallback names because it is a meeting-preparation surface, not a personalized "my role" identity surface.
+- My Serving lists linked-user Bible Study meeting roles and owns their confirmation action.
 
 ### Current Permission Boundary
 
@@ -95,6 +96,7 @@ The desired direction is:
 - Staff or authorized Bible Study managers can record who is responsible for discussion leading, worship leading, piano, support, or hosting.
 - Ordinary users can see meeting preparation details according to the current small-group visibility rules.
 - Today can show "your Bible Study role this week" only when the role row is reliably linked to the signed-in user.
+- My Serving can show and confirm linked-user Bible Study meeting roles.
 - Small groups can still record guest or one-off names when no account exists.
 
 ## 3. Recommended Design Direction
@@ -106,29 +108,24 @@ The desired direction is:
 - If both `user` and `display_name` are present, treat `user` as the identity contract. Display can remain a separate UX decision, but Today identity must not depend on the manual name.
 - Keep `BibleStudyMeetingRole` separate from `TeamAssignment`; Friday Bible Study meeting responsibilities are not Ministry Operations serving assignments.
 - Keep ordinary-user visibility based on `BibleStudyMeeting.can_be_seen_by()`; since BS-STRUCT.2A, current v2 meeting visibility uses `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`, zero-row meetings fail closed for ordinary users, and neither `Profile.small_group` nor the legacy `BibleStudyMeeting.small_group` mirror grants ordinary access.
-- Role work targets the v2 stack only. Per CS-CORE.3C (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`), Bible Study V2 is the active product path and legacy V1 `BibleStudySession` is a retirement/archive candidate; do not extend role assignment to V1 sessions.
+- Role work targets the v2 stack only. Per CS-CORE.3C and later BS-V1-SCHEMA-RETIRE.1A (`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`), Bible Study V2 is the active product path and legacy V1 `BibleStudySession` schema is removed; do not extend role assignment to V1 sessions.
 
 ## 4. Confirmation Decision
 
-Recommendation: no confirmation workflow for now.
+Current decision: Bible Study role confirmation is implemented in My Serving.
 
-Use display-only responsibility surfacing first:
+Implemented behavior:
 
-- Managers record the role.
-- The linked user can see the responsibility on meeting detail and now on Today for linked-user roles.
-- No accept/decline state is added in this slice.
+- Managers record the role on the V2 meeting.
+- The linked user can see the responsibility on meeting detail, on Today as read-only role context, and in My Serving as serving work.
+- My Serving confirms linked-user `BibleStudyMeetingRole` rows by setting `confirmed_at` and optional `confirmation_note`.
+- There is no separate declined state, swap request, reminder, availability, automation, or conversion into `TeamAssignment`.
 
-Why this fits now:
+Boundary:
 
-- Bible Study roles appear to be lightweight small-group preparation responsibilities, not formal ministry scheduling assignments.
-- Existing product boundaries already keep Bible Study roles separate from `TeamAssignment`, confirmation status, swap requests, reminders, availability, and automation.
-- Adding confirmation would require product decisions around who can accept, decline, reassign, remind, override, and audit. That is a separate workflow design, not a polish prerequisite.
-
-Tradeoffs:
-
-- No confirmation keeps the workflow simple and avoids schema/workflow expansion.
-- It does not prove the person has accepted the responsibility.
-- If real users later need acceptance/decline, plan a separate confirmation milestone with explicit UX, permissions, status fields, notifications/reminders if needed, and tests.
+- Today remains a general dashboard and does not render the confirmation form.
+- My Serving is the serving workspace for the confirm action.
+- Bible Study meeting audience visibility or `ChurchStructureMembership` belonging does not imply a Bible Study serving role; only explicit `BibleStudyMeetingRole.user` rows drive My Serving Bible Study role confirmation.
 
 ## 5. Implementation Milestone Split
 
@@ -143,7 +140,7 @@ Completed scope:
 - Clarify `BibleStudyMeetingRoleForm` help text so managers choose a user when the person has an account.
 - Require at least one assignee signal: linked `user` or `display_name`.
 - Warn/help managers that a display-name-only role can show on meeting detail but cannot appear as "my role" on Today.
-- BS-ROLE.1B kept the `user` queryset limited to active users in the meeting small group, with the existing selected-user exception on edit; CS-CORE.3B later changed the role and worship user pickers to use membership-core matching for the meeting's legacy small group, preserving that saved-user exception.
+- BS-ROLE.1B kept the `user` queryset limited to active users in the meeting small group, with the existing selected-user exception on edit; CS-CORE.3B and BS-STRUCT.2A later changed the role and worship user pickers to use membership-core matching for the meeting audience rows, preserving that saved-user exception.
 - Keep role management restricted to current Bible Study managers.
 
 Likely affected files later:
@@ -153,7 +150,7 @@ Likely affected files later:
 - `templates/studies/bible_study_meeting_role_form.html`
 - `studies/tests.py`
 
-Schema result: no schema change was added. A schema change would become necessary only if product requires database-level nonblank assignee enforcement, confirmation status, audit history, or richer role assignment metadata.
+Schema result: BS-ROLE.1B itself added no schema change. Later migration `studies/0013_biblestudymeetingrole_confirmation_note_and_more` added `confirmed_at` and `confirmation_note` for My Serving confirmation. A future schema change would be necessary only if product requires database-level nonblank assignee enforcement, declined/swap status, richer audit history, or broader role assignment metadata.
 
 ### BS-ROLE.1C - Meeting Detail Display Cleanup
 
@@ -190,24 +187,23 @@ Likely affected files later:
 Completed boundaries:
 
 - No identity inference from `display_name`, username/full-name matching, old discussion-leader names, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
-- No role confirmation/status/accept/decline/reminder/notification workflow.
+- No role confirmation form on Today, and no accept/decline/reminder/notification workflow.
 - No schema/migration/URL/runtime-visibility change from the role-chip slice itself.
 - No additional visibility source beyond the already-visible `BibleStudyMeeting.can_be_seen_by()` result.
 
-### Optional Future Confirmation Milestone
+### Historical Confirmation Milestone
 
-Only plan this if real use shows that Bible Study responsibilities need accept/decline tracking.
+Superseded: basic Bible Study role confirmation is now implemented in My Serving through `confirmed_at` and `confirmation_note`. Future work should be framed as enhancements beyond basic confirmation, not as first-time confirmation.
 
 Potential scope:
 
-- Confirmation status.
-- Who can confirm.
-- Who can override.
+- Decline/swap status.
+- Who can decline, swap, or override.
 - How declined roles are reassigned.
 - Whether notifications/reminders are needed.
 - Audit/history expectations.
 
-This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
+These enhancements should remain separate from BS-ROLE.1B/1C, Today role-chip surfacing, and the completed My Serving confirmation workflow.
 
 ## 6. Data and Visibility Contract
 
@@ -227,7 +223,7 @@ This should remain separate from BS-ROLE.1B/1C and Today role-chip surfacing.
 - No notification/reminder system.
 - No Community Activities.
 - No automatic role assignment.
-- No role confirmation unless separately approved.
+- No Today-owned role confirmation workflow.
 - No swap requests, availability, checklist engine, or automation.
 - No role-slice migration or expansion of Bible Study meeting visibility beyond the separately completed CS-CORE.2C-B source switch.
 - No conversion of `BibleStudyMeetingRole` into `TeamAssignment`.
@@ -241,9 +237,9 @@ Make the existing role management workflow safer and clearer:
 
 - Add form-level validation requiring either `user` or `display_name`.
 - Add manager-facing help text explaining that linked users are required for Today "my role" surfacing, while display names are fallback-only.
-- Preserve the group-limited user picker. Historical note: BS-ROLE.1B used profile-based meeting-small-group filtering; since CS-CORE.3B the role and worship pickers use membership-core matching for the meeting's legacy small group.
+- Preserve the group-limited user picker. Historical note: BS-ROLE.1B used profile-based meeting-small-group filtering; since CS-CORE.3B / BS-STRUCT.2A the role and worship pickers use membership-core matching for the meeting audience rows.
 - Preserve current meeting detail display and permissions.
-- Do not add confirmation/status fields.
+- Historical note: BS-ROLE.1B did not add confirmation/status fields; later My Serving role-confirmation work added `confirmed_at` and `confirmation_note`.
 - BS-ROLE.1B itself did not change Today.
 
 This gave TODAY-HOME.1D a cleaner data contract without changing runtime visibility or creating a heavier workflow. BS-ROLE.1B did not change Today/Home files; TODAY-HOME.1D later completed the read-only Today surfacing separately.
@@ -255,7 +251,7 @@ Completed BS-ROLE.1B coverage:
 - Linked-user role saves and displays.
 - Display-name fallback role saves and displays.
 - Blank `user` plus blank `display_name` is rejected by the form.
-- User picker remains limited to the meeting's legacy small group, while preserving the currently selected user on edit; since CS-CORE.3B, role and worship user pickers enforce this through membership-core matching.
+- User picker remains limited to the meeting audience, while preserving the currently selected user on edit; since CS-CORE.3B / BS-STRUCT.2A, role and worship user pickers enforce this through membership-core matching.
 - Ordinary users still cannot manage roles.
 
 Completed TODAY-HOME.1D coverage:
@@ -266,7 +262,7 @@ Completed TODAY-HOME.1D coverage:
 - Today hides roles when the meeting is not visible.
 - Chinese role label rendering is covered.
 - Today does not expose role-management controls.
-- Today does not render a role confirmation form.
+- Today does not render a role confirmation form; My Serving owns confirmation.
 
 Future-only coverage for BS-ROLE.1C, if approved:
 
@@ -275,6 +271,13 @@ Future-only coverage for BS-ROLE.1C, if approved:
 - Other-group users cannot see another group's meeting roles.
 - Chinese and English labels remain natural.
 
-Future-only coverage for optional confirmation, only if real use later justifies it:
+Current confirmation coverage should stay focused on My Serving:
 
-- Confirmation status, accept/decline permissions, reassignment/override behavior, notification/reminder behavior if approved, and audit expectations.
+- Linked-user Bible Study roles appear in the appropriate My Serving confirmation context.
+- Confirming a role records `confirmed_at` and optional `confirmation_note`.
+- Display-name-only roles and audience-visible meetings without an explicit linked role do not become My Serving assignments.
+- Today remains read-only role context and does not expose confirmation controls.
+
+Future-only coverage, only if separately approved:
+
+- Decline/swap permissions, reassignment/override behavior, notification/reminder behavior, and richer audit expectations.

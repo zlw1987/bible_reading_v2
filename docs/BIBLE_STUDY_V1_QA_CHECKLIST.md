@@ -1,16 +1,24 @@
 # Bible Study V1 QA Checklist
 
-Reference: `docs/BIBLE_STUDY_V2_GROUP_MEETING_MODEL_PLAN.md`, `docs/IA_NAVIGATION_REDESIGN_PLAN.md`, and `docs/ROADMAP_REVISED_PRE_PILOT.md` are the current sources for future Bible Study direction.
+Historical/superseded checklist: Bible Study V1 app/admin/runtime/schema has
+since been retired and removed. Current Bible Study direction lives on the V2
+path (`BibleStudySeries` + `BibleStudyLesson` + `BibleStudyMeeting`) with
+structure audience rows plus active primary membership; see
+`docs/BIBLE_STUDY_STRUCTURE_NATIVE_MIGRATION_PLAN.md` and
+`docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`. The older
+`docs/BIBLE_STUDY_V2_GROUP_MEETING_MODEL_PLAN.md`,
+`docs/IA_NAVIGATION_REDESIGN_PLAN.md`, and `docs/ROADMAP_REVISED_PRE_PILOT.md`
+references below are historical pilot-era context only.
 
 ## 1. Purpose
 
-This checklist verifies existing Bible Study V1 browser flows, including Bible Study sessions, guides, scope visibility, and session-level worship songs.
+This checklist verified historical Bible Study V1 browser flows, including Bible Study sessions, guides, scope visibility, and session-level worship songs.
 
-It is not a feature roadmap. Use it before deployment and after major changes.
+It is not a feature roadmap and must not be used as current QA guidance after V1 schema retirement.
 
 Automated tests still matter, but manual QA checks UI, bilingual behavior, permissions, and the full session flow in a browser.
 
-Bible Study V1 exists and may remain useful for stabilization, but it is superseded for future planning by Bible Study V2. Do not treat the V1 session model or session-level worship set as final. Do not use this checklist to justify proceeding to Lighting Pilot Checklist V1 before Bible Study V2 planning is resolved.
+Bible Study V1 no longer exists as current app/runtime schema. Do not treat the V1 session model or session-level worship set as current, and do not use this checklist to revive V1.
 
 ## 2. Test Accounts Needed
 

@@ -9,40 +9,40 @@
 
 ## 1. Purpose
 
-CS-H.7E implements transition behavior for syncing `Profile.small_group` when staff approve a mapped small-group `ChurchStructureMembership`.
+CS-H.7E implemented transition behavior for syncing `Profile.small_group` when staff approved a mapped small-group `ChurchStructureMembership`.
 
-Sync is needed during the transition because current runtime consumers still read the legacy `Profile.small_group` field. `/studies/`, reading progress, `ServiceEvent`, and related behavior do not yet use `ChurchStructureMembership`, so approving membership alone does not change what the user can see or do in those flows.
+Historical/superseded: sync was needed during the transition because then-current runtime consumers still read the legacy `Profile.small_group` field. `/studies/`, reading progress, `ServiceEvent`, and related behavior did not yet use `ChurchStructureMembership`, so approving membership alone did not change what the user could see or do in those flows.
 
-This implementation does not change models, migrations, signup behavior, consumer queries, or consumer source of truth. Runtime visibility can change only because `Profile.small_group` changes.
+This implementation did not change models, migrations, signup behavior, consumer queries, or consumer source of truth at that time. Historical runtime visibility could change only because `Profile.small_group` changed.
 
-## 2. Current Behavior
+## 2. Historical Behavior
 
 CS-H.7D approval updates the requested `ChurchStructureMembership` record to an active membership.
 
-Current approval:
+Historical CS-H.7D approval:
 - sets the membership active
 - sets the membership primary
 - records approval metadata
 - blocks approval when the user already has a current active primary membership
 - does not change `Profile.small_group`
 
-Therefore, approved membership by itself does not affect current `/studies/`, reading progress, `ServiceEvent`, or related visibility. Those consumers continue to depend on `Profile.small_group`.
+Therefore, approved membership by itself did not affect then-current `/studies/`, reading progress, `ServiceEvent`, or related visibility. Those consumers depended on `Profile.small_group` at that historical point.
 
-## 3. Implemented CS-H.7E Behavior
+## 3. Historical Implemented CS-H.7E Behavior
 
-On approve, CS-H.7E syncs `user.profile.small_group` only when all of these are true:
+On approve, CS-H.7E synced `user.profile.small_group` only when all of these were true:
 - the approved membership is moving through the normal `requested` to `active` approval flow
 - the approved membership is active
 - the approved membership is primary
 - the approved `ChurchStructureUnit` maps to exactly one active legacy `SmallGroup`
 
-When those conditions are met, set `user.profile.small_group` to the mapped legacy `SmallGroup`.
+When those conditions were met, CS-H.7E set `user.profile.small_group` to the mapped legacy `SmallGroup`.
 
-This preserves existing runtime behavior because `/studies/`, reading progress, `ServiceEvent`, and related consumers already read `Profile.small_group`. CS-H.7E should not switch those consumers to membership.
+At that time, this preserved existing runtime behavior because `/studies/`, reading progress, `ServiceEvent`, and related consumers already read `Profile.small_group`. CS-H.7E did not switch those consumers to membership; later consumer and field-retirement slices retired that bridge separately.
 
 ## 4. No Sync Cases
 
-Do not sync `Profile.small_group` when:
+Historical CS-H.7E did not sync `Profile.small_group` when:
 - the approved unit has no legacy `SmallGroup` mapping
 - the approved unit maps to multiple legacy small groups
 - the mapped legacy `SmallGroup` is inactive
@@ -50,19 +50,19 @@ Do not sync `Profile.small_group` when:
 - the membership is not primary
 - the action is not the normal `requested` to `active` approval flow
 
-Reject, blocked approval, cancellation, needs-clarification, manual edits, backfill, signup capture, and consumer migration should not update `Profile.small_group` as part of CS-H.7E.
+Reject, blocked approval, cancellation, needs-clarification, manual edits, backfill, signup capture, and consumer migration did not update `Profile.small_group` as part of CS-H.7E.
 
 ## 5. Conflict and Transfer Rule
 
 V1 rule: if the user already has `Profile.small_group` set to a different small group than the mapped group, approval may update it only when staff explicitly approve the request.
 
-Because CS-H.7D approval already requires staff action, this may be acceptable for V1. The implementation should still make the consequence visible: approving this mapped request may change the user's current legacy small group and therefore affect current runtime visibility.
+Because CS-H.7D approval already required staff action, this was acceptable for the transition. The implementation made the consequence visible: approving this mapped request could change the user's then-current legacy small group and therefore affect then-current runtime visibility.
 
-Future implementation should include a warning message and tests for this transfer case. The warning should be shown before or during approval when the mapped group differs from the user's current `Profile.small_group`.
+Historical implementation guidance included a warning message and tests for this transfer case. The warning was shown before or during approval when the mapped group differed from the user's then-current `Profile.small_group`.
 
 ## 6. Tests Added
 
-CS-H.7E implementation tests cover:
+CS-H.7E transition-era implementation tests covered:
 - mapped unit approval updates `Profile.small_group`
 - unmapped unit approval does not update `Profile.small_group`
 - inactive legacy group does not sync
@@ -87,8 +87,8 @@ Mitigations should include exact mapping checks, an active legacy group requirem
 
 ## 8. Completion
 
-CS-H.7E is implemented for the confirmed transition behavior:
+CS-H.7E was implemented for the confirmed transition behavior:
 
-Approval to a mapped small-group unit should immediately make the user belong to that legacy small group in the current runtime.
+At that time, approval to a mapped small-group unit immediately made the user belong to that legacy small group in the then-current runtime.
 
-Consumers still read `Profile.small_group`. CS-H.7E did not add signup capture, audience filtering, or consumer migration.
+Historical/superseded: consumers still read `Profile.small_group` during CS-H.7E. CS-H.7E did not add signup capture, audience filtering, or consumer migration, and the approval-sync bridge was later retired when `Profile.small_group` was removed.

@@ -1,10 +1,14 @@
 # ServiceEvent MinistryContext QA Checklist
 
+> **Superseded current-state note:** `ServiceEvent.ministry_context` was removed in `SERVICE-EVENT-CONTEXT.1C` (migration `events/0008`). Current Host / Language display uses `ServiceEvent.host_language_unit` and, when blank, an audience-derived structure fallback. This checklist is historical QA evidence for the former label-only FK and must not be used as current implementation guidance.
+
 Manual/browser QA checklist for CS-F.3A/CS-F.3B closure after CS-F.3 added optional `ServiceEvent.ministry_context` and CS-F.3B clarified that the current UI is label-only.
 
 This checklist verifies label-only behavior for `events.ServiceEvent`. It must not be used to expand scope into ServiceEvent audience filtering, TeamAssignment filtering, MinistryTeam changes, My Serving changes, Bible Study changes, Community Activities, Checklist V1, `ChurchStructureUnit`, scheduling, reminders, availability, swaps, attendance, or role-aware permissions.
 
-Current code reality:
+Historical code reality at CS-F.3 / CS-F.3B time:
+
+This section is historical and no longer describes the current code after `SERVICE-EVENT-CONTEXT.1C`.
 
 - `ServiceEvent` is in the `events` app.
 - `ServiceEvent.ministry_context` is optional and nullable.

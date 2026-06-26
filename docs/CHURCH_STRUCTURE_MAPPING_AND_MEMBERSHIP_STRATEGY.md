@@ -8,8 +8,9 @@
 > rows are superseded. Current normal Bible Study V2 generation is
 > structure-native through audience rows, `generation_key`, and `anchor_unit`;
 > ServiceEvent audience rows match active primary `ChurchStructureMembership`;
-> `Profile.small_group` and multiple legacy scope/mirror fields have been
-> removed. Current architecture direction and the staged migration plan live in
+> `Profile.small_group`, the legacy structure object tables, and multiple
+> legacy scope/mirror fields have been removed. Current architecture direction
+> and the staged migration plan live in
 > `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` and
 > `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
 
@@ -27,41 +28,53 @@ Long-term target:
 - `ChurchStructureUnit` is the canonical church structure source.
 - `ChurchStructureMembership` is the canonical user belonging / membership source.
 
-Short-term transition:
-- `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remain the source of truth for current runtime behavior.
-- `ChurchStructureUnit` is initially a mirror or mapped structure.
-- CS-H.3B adds nullable mapping fields on the legacy structure models, but those fields do not drive runtime behavior.
-- CS-H.3C can populate `ChurchStructureUnit` rows and fill those mapping fields through an explicit management command, but the mappings still do not drive runtime behavior.
-- No existing behavior should switch to `ChurchStructureUnit` until a specific consumer is planned, implemented, and tested.
+Historical short-term transition:
+- At the CS-H.3 planning point, `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` remained the source of truth for then-current runtime behavior.
+- `ChurchStructureUnit` was initially a mirror or mapped structure.
+- CS-H.3B added nullable mapping fields on the legacy structure models, but those fields did not drive runtime behavior at that time.
+- CS-H.3C could populate `ChurchStructureUnit` rows and fill those mapping fields through an explicit management command, but the mappings still did not drive runtime behavior then.
+- No behavior was to switch to `ChurchStructureUnit` until a specific consumer was planned, implemented, and tested. That consumer-by-consumer migration has since proceeded; current state is summarized in the status note above.
 
 Current behavior must remain explicit by consumer:
-- Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses active primary `ChurchStructureMembership` since CS-CORE.2C-B; `Profile.small_group` alone no longer grants v2 meeting visibility.
-- Bible Study schedule scope and meeting generation continue to resolve selected audience units to legacy `SmallGroup` rows.
-- Legacy `BibleStudySession`, reading progress, ServiceEvent legacy fallback, TeamAssignment / My Serving, and roles remain unchanged by CS-CORE.2C-B.
-- ServiceEvent structure-audience behavior uses `ServiceEventAudienceScope` rows when present and legacy `scope_type`, `district`, and `small_group` fallback when no rows exist.
-- `ServiceEvent.ministry_context` remains label-only.
+- Bible Study v2 `BibleStudyMeeting` ordinary-member visibility uses `BibleStudyMeetingAudienceScope` rows plus active primary `ChurchStructureMembership`; zero-row V2 meetings fail closed for ordinary users, and `Profile.small_group` / `BibleStudyMeeting.small_group` no longer exist.
+- Bible Study schedule scope and normal meeting generation use `BibleStudySeriesAudienceScope` rows and structure-unit-native targets (`generation_key`, `anchor_unit`, and meeting audience rows), not legacy `SmallGroup` resolution.
+- V1 `BibleStudySession` schema is removed; historical V1 references in this strategy are planning context only.
+- ServiceEvent visibility uses `ServiceEventAudienceScope` rows plus active primary `ChurchStructureMembership`; zero-row ServiceEvents fail closed for ordinary users, and legacy `scope_type` / `district` / `small_group` fields are removed.
+- Host / Language display uses `ServiceEvent.host_language_unit` plus the audience-derived structure fallback; `ServiceEvent.ministry_context` is removed.
+- TeamAssignment / My Serving remain explicit serving concepts and are not inferred from membership.
 
-## 3. SmallGroup Absorption Strategy
+## 3. Historical SmallGroup Absorption Strategy
 
-`SmallGroup` should eventually be represented as `ChurchStructureUnit` rows.
+Historical/superseded: this section records the CS-H.3-era bridge plan before
+legacy structure row/table retirement. The current canonical local structure is
+`ChurchStructureUnit`; legacy `SmallGroup`, `District`, and `MinistryContext`
+models/tables are removed from current code.
 
 Likely future mapping:
 - `SmallGroup` -> `ChurchStructureUnit` with `unit_type=small_group`, or
 - `SmallGroup` -> `ChurchStructureUnit` with `unit_type=fellowship`, depending on final naming.
 
-Rules:
+Historical rules at that bridge point:
 - Do not delete `SmallGroup` early.
 - Do not replace `Profile.small_group` early.
 - Do not replace `BibleStudyMeeting.small_group` early.
 - During coexistence, `Profile.small_group` and `BibleStudyMeeting.small_group` continue to work.
-- A future migration should map each current `SmallGroup` to exactly one `ChurchStructureUnit`.
+- A future migration should map each then-current `SmallGroup` to exactly one `ChurchStructureUnit`.
 - Avoid dual-edit drift by deciding which side is editable during the transition.
 
-Recommended transition stance:
-- Legacy models remain editable source-of-truth until mapping is seeded and verified.
-- `ChurchStructureUnit` mirrors them at first.
+Current resolution: those bridge concerns were resolved by the later consumer
+switches, field removals, guarded legacy object-row purge, and final legacy
+structure table retirement. Do not use this section as current implementation
+guidance.
+
+Historical recommended transition stance:
+- Legacy models remained editable source-of-truth until mapping was seeded and verified.
+- `ChurchStructureUnit` mirrored them at first.
 - Only after admin QA should any staff workflow edit structure through `ChurchStructureUnit`.
-- CS-H.3B prepares this by adding nullable mapping fields only; CS-H.3C owns idempotent seeding/mapping through the `seed_church_structure_units` command.
+- CS-H.3B prepared this by adding nullable mapping fields only; CS-H.3C owned idempotent seeding/mapping through the `seed_church_structure_units` command.
+
+Current resolution: `ChurchStructureUnit` is the canonical local structure model,
+and the legacy structure object tables / mapping FKs are removed.
 
 ## 4. Membership Strategy
 
@@ -91,24 +104,26 @@ Clarifications:
 - Membership does not automatically assign ministry serving roles.
 - Notes must not store sensitive counseling, pastoral, medical, financial, or private information.
 
-This membership model should eventually replace `Profile.small_group` as the canonical belonging source, but only after staged migration and visibility tests.
+Historical/superseded: this membership model was intended to eventually replace
+`Profile.small_group` as the canonical belonging source. That replacement has
+since happened for migrated consumers, and `Profile.small_group` was removed.
 
 CS-H.4 design recommendation:
 - Use `ChurchStructureMembership` as the eventual canonical belonging source.
 - Prefer a single membership lifecycle model with `status=requested` for V1 unless implementation discovers stronger audit needs for a separate request model.
 - Treat only approved active membership as eligible for future visibility.
-- Keep `Profile.small_group` as the runtime source for now.
+- Historical/superseded at the CS-H.4 point: keep `Profile.small_group` as the runtime source for that stage. Current migrated consumers use active primary membership, and `Profile.small_group` is removed.
 - See `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`.
 
-CS-H.5A implementation status:
+CS-H.5A implementation status (historical/superseded):
 - `ChurchStructureMembership` exists as a model-only foundation.
 - Signup and Profile can write requested memberships for staff review.
 - Staff request review, approve/reject actions, and narrow `Profile.small_group` approval sync exist.
-- No runtime consumer uses membership as source of truth yet.
+- At that time, no runtime consumer used membership as source of truth yet; current migrated consumers now use active primary membership where explicitly approved.
 - CS-H.5C adds an explicit backfill command from `Profile.small_group`.
 - CS-H.5D records user-attested production/staging backfill verification. Exact command-output counts were not recorded.
 - CS-H.5E improves Django Admin clarity but does not change source of truth.
-- No runtime consumer reads membership yet.
+- Historical/superseded: no runtime consumer read membership yet at CS-H.5A/5E time.
 
 CS-H.5B hardening status:
 - `ChurchStructureMembership` has active/date-window query helpers.
@@ -127,10 +142,10 @@ CS-H.5D verification status:
 - Historical/superseded: runtime still used `Profile.small_group` at this CS-H.5D verification point. Current approved migrated consumers use active primary `ChurchStructureMembership`, and `Profile.small_group` was removed in PROFILE-SG-FIELD-RETIRE.1A.
 
 CS-H.5E admin clarity status:
-- Django Admin distinguishes legacy current-runtime models from future foundation models.
-- `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` must not be deleted yet.
-- Admin mapping status is visible for legacy models.
-- Custom staff admin UI remains future.
+- Historical/superseded: Django Admin distinguished legacy current-runtime models from future foundation models at the CS-H.5E point.
+- Historical/superseded: `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group` were not to be deleted in that slice.
+- Admin mapping status was visible for legacy models during the bridge period.
+- The active legacy mapping/admin surfaces were later retired with the row/table retirement slices.
 
 ## 5. Registration / Onboarding Strategy
 
@@ -168,11 +183,15 @@ Likely user states:
 - rejected / needs clarification
 - ended / transferred membership
 
-Current behavior mapping:
-- Today, current pilot behavior may use `Profile.small_group`.
-- A user without `Profile.small_group` receives current safe empty/limited states where implemented.
-- Future membership may drive visibility only after explicit consumer migration.
-- During transition, approved primary small-group membership can synchronize `Profile.small_group`.
+Historical behavior mapping:
+- At this CS-H.3/CS-H.5 planning point, pilot behavior could use `Profile.small_group`.
+- A user without `Profile.small_group` received then-current safe empty/limited states where implemented.
+- Membership could drive visibility only after explicit consumer migration.
+- During transition, approved primary small-group membership could synchronize `Profile.small_group`.
+
+Current behavior: migrated consumers use active primary `ChurchStructureMembership`
+only where explicitly switched, with app-specific audience/snapshot rows as
+applicable. `Profile.small_group` is removed.
 
 Important transition rule:
 - Do not trust requested membership for visibility.
@@ -293,10 +312,10 @@ Future signup requested unit should probably point to:
 - not arbitrary operational units
 - not `MinistryTeam`
 
-Open decisions:
-- Should users request only leaf/small-group units?
-- Should users be allowed to request ministry context or district if unsure?
-- Should there be a "Not sure / New visitor" option?
+Historical/resolved decisions:
+- CS-H.6 chose active leaf small-group/fellowship-style units for ordinary requests.
+- Broader ministry-context/district request routing remains a future product choice, not current legacy-model behavior.
+- The request flow includes a "Not sure / New visitor" path.
 
 Recommendation:
 - Offer known small-group/fellowship leaf units when available.
@@ -307,16 +326,16 @@ Recommendation:
 
 ## 10. Admin Approval Workflow
 
-Future staff workflow:
+Historical staff workflow plan:
 - Staff sees pending requested assignments.
 - Staff can approve into official membership.
 - Staff can change requested unit before approval.
 - Staff can reject or mark needs clarification.
 - Staff can assign no group / visitor state.
-- Approval creates or activates future membership.
-- During transition, approval updates `Profile.small_group` when the approved primary unit maps to a `SmallGroup`.
+- Approval creates or activates membership.
+- Historical/superseded: during transition, approval updated `Profile.small_group` when the approved primary unit mapped to a `SmallGroup`.
 
-Do not implement this now.
+This workflow was later implemented and then the legacy sync portion was retired.
 
 The workflow should be simple enough for non-technical staff: review request, choose official group/unit, approve, or mark for clarification.
 
@@ -332,15 +351,19 @@ Historical note: this CS-H-era section originally said `/studies/` visibility us
 
 ### Reading Group Progress
 
-Current group progress uses `Profile.small_group` / `SmallGroup`.
-
-Do not switch now.
+Current group progress uses membership-core own-group resolution plus
+structure-aware role scopes where applicable. Historical/superseded: this
+section originally said group progress used `Profile.small_group` / `SmallGroup`
+and should not switch in this slice.
 
 ### ServiceEvent
 
-`ServiceEvent.ministry_context` remains label-only.
-
-Audience/filtering remains future work.
+Current ServiceEvent visibility uses `ServiceEventAudienceScope` rows plus
+active primary membership, with zero-row events failing closed for ordinary
+users. Host / Language display uses `ServiceEvent.host_language_unit` plus
+audience-derived fallback. Historical/superseded: this section originally said
+`ServiceEvent.ministry_context` remained label-only and audience filtering was
+future work.
 
 ### Community Activities
 
@@ -362,10 +385,10 @@ Checkpoint result:
 - signup and Profile create pending `ChurchStructureMembership(status=requested)` rows without updating `Profile.small_group`
 - Profile updates an existing pending request and normal users cannot self-edit `Profile.small_group`
 - staff list/detail surfaces signup-created and Profile-created pending requests
-- approving a mapped request activates membership and syncs `Profile.small_group` only when the approved active primary unit maps to exactly one active legacy `SmallGroup`
-- reject and requested/pending states do not sync `Profile.small_group`
+- historical/superseded: approving a mapped request activated membership and synced `Profile.small_group` only when the approved active primary unit mapped to exactly one active legacy `SmallGroup`
+- historical/superseded: reject and requested/pending states did not sync `Profile.small_group`
 - requested memberships do not grant access, permissions, serving assignments, audience eligibility, or runtime visibility before approval
-- `/studies/` v2 meeting visibility has since switched in CS-CORE.2C-B; reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, and other consumers remain legacy `Profile.small_group` based until separate consumer migration work
+- Later slices superseded the remaining legacy-belonging claims: Bible Study V2 meeting visibility, group progress, reflection, Prayer, and ServiceEvent use their approved membership/audience/snapshot paths; ServiceEvent and Bible Study zero-row fallbacks fail closed; V1 `BibleStudySession` and `Profile.small_group` are removed. My Serving remains explicit assignment-based.
 
 No signup/profile feature expansion, consumer migration, audience filtering, or Community Activities work was added in CS-H.8.
 
@@ -374,7 +397,7 @@ No signup/profile feature expansion, consumer migration, audience filtering, or 
 CS-H.10 records the current CMS hardening baseline after the membership request flow work.
 
 Checkpoint result:
-- CS-H.7E approval sync rule is complete: approved active primary memberships sync `Profile.small_group` only when the approved unit maps to exactly one active legacy `SmallGroup`
+- Historical/superseded CS-H.7E approval sync rule completed at that time: approved active primary memberships synced `Profile.small_group` only when the approved unit mapped to exactly one active legacy `SmallGroup`. That sync was later retired and `Profile.small_group` was removed.
 - CS-H.8 integration checkpoint is complete
 - CS-H.9 membership request UX hardening is complete
 - mobile nav polish remains deferred and the current mobile header behavior is accepted for now
@@ -401,11 +424,11 @@ Recommended phases:
 - CS-H.8: integrated membership request flow checkpoint. Completed.
 - CS-H.9: membership request UX hardening. Completed.
 - CS-H.10: CMS hardening checkpoint. Completed.
-- Later: migrate selected consumers from `Profile.small_group` to membership.
+- Historical/superseded later step: migrate selected consumers from `Profile.small_group` to membership. The approved consumer migrations and field removals have since completed for the current migrated surfaces.
 
-No hard cutover should happen early.
+Historical rule: no hard cutover should happen early. Current state reflects the later approved cutover/removal slices, not an early unapproved cutover.
 
-## 15. Risks
+## 15. Historical Risks
 
 Known risks:
 - two sources of truth drift
@@ -419,7 +442,7 @@ Known risks:
 - confusing membership with serving assignments
 - approving requests without enough context
 
-Mitigation direction:
+Mitigation direction at the CS-H.3 planning point:
 - keep legacy behavior during coexistence
 - use explicit mapping rather than name matching
 - make seeding idempotent
@@ -427,9 +450,12 @@ Mitigation direction:
 - separate membership from permissions and serving
 - add one consumer at a time only after tests
 
-## 16. Non-Goals
+Current note: the coexistence risks were addressed consumer-by-consumer; legacy
+fields/tables named above are no longer current runtime authorities.
 
-CS-H.3/CS-H.3B/CS-H.3C do not include:
+## 16. Historical Non-Goals
+
+CS-H.3/CS-H.3B/CS-H.3C did not include:
 - signup changes
 - membership model
 - audience selector
@@ -442,23 +468,26 @@ CS-H.3/CS-H.3B/CS-H.3C do not include:
 - deletion of `District`
 - deletion of `MinistryContext`
 
-## 17. Open Decisions
+These are historical non-goals for the early mapping slices; later approved
+slices replaced or removed those fields/models where current docs say they are
+retired.
 
-Open decisions:
-- mapping FK vs mapping table
-- exact `unit_type` name for `SmallGroup` / fellowship
-- whether implementation should support broader district/ministry-context request routing, beyond the CS-H.6 recommendation to prefer active leaf small-group/fellowship units plus "Not sure / New visitor"
-- whether to add requested unit to `Profile` or create a separate request model
-- exact approval capability and staff/superuser override rules
-- whether approved membership syncs `Profile.small_group` immediately
-- when membership becomes source of truth for `/studies/`
-- how to handle transfers
-- how to handle orphan districts or groups during seed
-- when to enforce one active Whole Church root in the database
+## 17. Historical / Resolved Decisions
 
-Current recommendation:
+Historical/resolved decisions:
+- mapping FK vs mapping table was resolved for the bridge period, then superseded by legacy table retirement.
+- exact `unit_type` naming was resolved in the implemented `ChurchStructureUnit` model.
+- request routing prefers active leaf small-group/fellowship units plus "Not sure / New visitor" unless a later product slice says otherwise.
+- requested-unit capture and approval use `ChurchStructureMembership` rows rather than making `Profile.small_group` the current source.
+- approval capability and staff/superuser override rules were implemented in the membership request workflow.
+- approved membership no longer syncs `Profile.small_group`; the sync was retired and the field removed.
+- `/studies/` migration was answered by the Bible Study V2 membership/audience-row migration.
+- transfers and orphan/seed issues are historical setup concerns unless reopened by a new migration slice.
+- active-root enforcement belongs to the current `ChurchStructureUnit` setup policy, not to legacy table coexistence.
+
+Historical recommendation:
 - long-term source of truth: `ChurchStructureUnit` + `ChurchStructureMembership`
-- short-term runtime source of truth: current legacy models
+- short-term runtime source of truth at CS-H.3 time: current legacy models
 - mapping: explicit nullable FK fields, added in CS-H.3B
 - seeding: explicit dry-run/apply management command, added in CS-H.3C
 - data QA: production/staging seeded structure QA closed in CS-H.3E

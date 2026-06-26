@@ -8,7 +8,7 @@ The project remains a lightweight church spiritual life and ministry workflow sy
 
 This is a planning artifact only. Do not implement models, migrations, views, templates, or permission changes from this document without a separate implementation task.
 
-For the future flexible hierarchy foundation, see `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`. This domain plan records current boundaries; the foundation plan records how CM/EM, districts, small groups, and future variable-depth structures may eventually align without hard-coding Church -> CM/EM -> District -> SmallGroup forever.
+For the flexible hierarchy foundation, see `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`. This domain plan began before the completed structure migration and contains historical planning examples. Current structure rows live in `ChurchStructureUnit`, current belonging for migrated consumers lives in active primary `ChurchStructureMembership`, and the legacy `SmallGroup` / `District` / `MinistryContext` tables plus `Profile.small_group` field are removed from current models.
 
 ## 2. Fellowship Small Groups
 
@@ -18,9 +18,14 @@ Examples:
 - Rainbow 1
 - Rainbow 4
 
-A person currently belongs to one fellowship small group at a time, represented today by `SmallGroup` and `Profile.small_group`.
+Current migrated belonging is represented by active primary
+`ChurchStructureMembership` on `ChurchStructureUnit`. Historical/superseded:
+earlier app behavior represented a person's current fellowship small group through
+`SmallGroup` and `Profile.small_group`, both now removed from current models.
 
 Future planning may consider historical membership:
+
+Historical design sketch, superseded by `ChurchStructureMembership`:
 
 `SmallGroupMembership`
 - `user`
@@ -32,10 +37,14 @@ Future planning may consider historical membership:
 Do not implement this now.
 
 Important distinctions:
-- Fellowship `SmallGroup` is not the same as `MinistryTeam`.
+- Historical/superseded: legacy fellowship `SmallGroup` was not the same as `MinistryTeam`.
 - Friday Bible Study happens at the fellowship small group level.
-- `BibleStudyMeeting` should remain anchored to `SmallGroup`.
-- `SmallGroup` membership may change over time, but current app behavior can continue using the current active group until historical membership is planned.
+- Current `BibleStudyMeeting` identity/display/visibility uses `anchor_unit`,
+  `generation_key`, and `BibleStudyMeetingAudienceScope`, not a legacy
+  `SmallGroup` FK.
+- Group belonging may change over time; current migrated consumers use active
+  primary `ChurchStructureMembership` until richer membership-history behavior is
+  explicitly planned.
 
 ## 3. Small Group Coworker Structure
 
@@ -175,28 +184,24 @@ They should not be modeled as `MinistryTeam`.
 There is no separate "Combined Ministry".
 Combined events should be represented by an event/activity involving both CM and EM.
 
-Future planning may consider:
-
-`MinistryContext`
-- `code`: CM / EM
-- `name`
-- `name_en`
-- `is_active`
+Historical planning considered a legacy `MinistryContext` row for CM / EM.
+Current local structure uses `ChurchStructureUnit` for these ministry/language
+units; the legacy `MinistryContext` table is removed.
 
 For `ServiceEvent`, future planning may consider:
-- current foundation field: optional `ministry_context` FK label on one event
-- `participating_ministries`: ManyToMany to `MinistryContext`
-- `lead_ministry`: optional FK to `MinistryContext`, if ownership/leadership needs to be tracked
+- current foundation field: `host_language_unit` label on one event, with audience-derived fallback
+- participating ministry/language units through app-specific `ServiceEventAudienceScope` rows or a separately approved structure-unit relationship
+- lead ministry/language unit through a separately approved `ChurchStructureUnit` relationship if ownership/leadership needs to be tracked
 
 Important distinction:
-- current `ServiceEvent.ministry_context` is an optional label only and does not filter audiences or assignments
-- `participating_ministries` answers: who is this event for / who participates?
-- `lead_ministry` answers: who is responsible for leading/owning it?
+- current `ServiceEvent.host_language_unit` is a display label only and does not filter audiences or assignments
+- `ServiceEventAudienceScope` answers who can see the event, matched through active primary membership
+- a future lead unit would answer who is responsible for leading/owning it
 
 Examples:
-- CM Sunday Service: `participating_ministries = [CM]`
-- EM Sunday Service: `participating_ministries = [EM]`
-- Monthly combined Sunday Service: `participating_ministries = [CM, EM]`
+- CM Sunday Service: audience/host units select CM structure units as appropriate.
+- EM Sunday Service: audience/host units select EM structure units as appropriate.
+- Monthly combined Sunday Service: audience rows can select both CM and EM units, or a shared ancestor/root unit when the whole church is intended.
 
 Do not create a fake COMBINED ministry record.
 Do not implement this now.
@@ -240,6 +245,11 @@ Real scenarios include:
 - whole church
 - selected districts
 - selected groups across ministries
+
+Future Community Activities should use `ChurchStructureUnit` app-specific
+audience rows for these scenarios. Historical sketches using legacy
+`ministry_context` / `district` / `small_group` segments are superseded unless a
+future design explicitly reintroduces a different structure-backed segment model.
 
 Recommended future concept:
 
@@ -286,17 +296,13 @@ Recommended future concept:
 Examples:
 
 Entire EM + CM Rainbow 1 + CM Rainbow 4:
-- audience segment: `ministry_context = EM`
-- audience segment: `small_group = Rainbow 1`
-- audience segment: `small_group = Rainbow 4`
+- current audience rows: EM `ChurchStructureUnit`, Rainbow 1 small-group unit, Rainbow 4 small-group unit
 
 EM + CM District 1:
-- audience segment: `ministry_context = EM`
-- audience segment: `district = CM District 1`
+- current audience rows: EM `ChurchStructureUnit`, CM District 1 structure unit
 
 CM selected small groups:
-- audience segment: `small_group = Rainbow 1`
-- audience segment: `small_group = Rainbow 4`
+- current audience rows: Rainbow 1 and Rainbow 4 small-group structure units
 
 Whole church:
 - audience segment: `whole_church`
@@ -312,29 +318,31 @@ Avoid exposing private membership lists in UI. The list should answer "can this 
 
 ## 10. District Relationship
 
-District may need to relate to `MinistryContext` in the future.
+Historical/superseded: District might need to relate to `MinistryContext` in the future.
 
 Examples:
 - CM District 1 / 第一区
 - CM District 2 / 第二区
 
-Future planning may consider:
+Historical planning considered:
 - `District.ministry_context`
 - `SmallGroup -> District -> MinistryContext`
 
-Do not implement this now.
+Do not implement this legacy relationship now.
 
-Longer-term planning may introduce `ChurchStructureUnit` for variable-depth hierarchy after Bible Study V2 and Community Activities prove the need. Until then, keep `District` and `SmallGroup` canonical and avoid destructive migration.
+Current state supersedes that plan: `ChurchStructureUnit` is already the
+canonical local variable-depth hierarchy. Legacy `District` and `SmallGroup`
+tables are removed from current models.
 
 ## 11. Roadmap Implications
 
 Recommended next sequence:
-- Bible Study V2 Flow QA
-- QA fixes if needed
-- Later Church Structure Foundation, after Bible Study V2 Flow QA and before advanced mixed audience segments
+- Historical: Bible Study V2 Flow QA
+- Historical: QA fixes if needed
+- Completed/superseded: Church Structure Foundation after Bible Study V2 Flow QA and before advanced mixed audience segments
 - Later role-aware editing permissions, if needed
-- Later `ServiceEvent` participating_ministries / `MinistryContext` planning
-- Later Community Activities V1 with audience segments
+- Later `ServiceEvent` structure-unit host/lead/participation planning only if needed; do not use removed `ServiceEvent.ministry_context`
+- Later Community Activities V1 with `ChurchStructureUnit` app-specific audience rows
 - Checklist V1 remains deferred
 
 Checklist V1 should remain deferred until Lighting Pilot validation and should not be revived because of Community Activities.

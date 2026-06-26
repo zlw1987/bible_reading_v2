@@ -1,5 +1,13 @@
 # Church Structure Membership Approval Workflow Design
 
+> **Current-state update:** this CS-H.7 design predates the completed Church
+> Structure migration. Staff approval workflow slices were implemented, and
+> approved migrated runtime paths now use active primary `ChurchStructureMembership`
+> or app-specific audience/snapshot rows. `Profile.small_group`, `SmallGroup`,
+> `District`, and `MinistryContext` are removed from current models. Statements
+> below that say runtime still uses those legacy objects are historical
+> bridge-period context only.
+
 ## 1. Purpose
 
 CS-H.7 designs the future staff/admin workflow for reviewing requested `ChurchStructureMembership` records and approving them into official active membership.
@@ -8,9 +16,9 @@ This workflow is needed after the CS-H.6 signup requested-unit flow because sign
 
 This is design-only. It does not change code, models, migrations, Django Admin, signup behavior, `Profile.small_group`, forms, views, templates, URLs, or any runtime consumer. CS-H.7A later records the implementation plan without changing code.
 
-## 2. Current State
+## 2. Historical Current State
 
-Current runtime behavior still uses:
+Historical/superseded runtime behavior at this design point still used:
 - `MinistryContext`
 - `District`
 - `SmallGroup`
@@ -89,7 +97,7 @@ Future approval logic should handle:
 - requested unit is not membership-eligible
 - requested unit was moved or renamed
 - transfer from one group to another
-- request conflicts with current `Profile.small_group`
+- historical/superseded: request conflicts with then-current `Profile.small_group`
 
 Approval should not create duplicate active primary membership. For transfers, the implementation should end the old active primary membership before activating the new primary membership, or otherwise require staff to resolve the conflict before approval.
 
@@ -114,7 +122,7 @@ Recommended list/detail fields:
 - request note
 - status
 - submitted date
-- current `Profile.small_group`
+- then-current `Profile.small_group` at this design point
 - existing active primary membership, if any
 - warning that notes must be non-sensitive
 
@@ -150,7 +158,7 @@ Known risks:
 
 Mitigation direction:
 - require explicit approval capability
-- show current `Profile.small_group` and active membership context
+- historical/superseded: show then-current `Profile.small_group` and active membership context
 - block or warn on duplicate active primary membership
 - keep notes operational only
 - validate requestable/approvable unit eligibility

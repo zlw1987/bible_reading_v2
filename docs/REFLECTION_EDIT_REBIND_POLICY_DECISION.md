@@ -1,5 +1,13 @@
 # CS-CORE.4C.1/4C.2 Reflection Edit Re-bind Policy Decision and Implementation
 
+> **Current-state update:** this policy record predates the completed reflection
+> structure migration. `ReflectionComment.small_group_at_post` and
+> `Profile.small_group` are removed; reflection group read/write paths now use
+> `ReflectionComment.structure_unit_at_post` plus active primary
+> `ChurchStructureMembership`, and missing/invalid snapshots fail closed for
+> ordinary users. Body text below that describes `small_group_at_post` or
+> `Profile.small_group` as active runtime is historical Policy C context only.
+
 ## 1. Purpose and Status
 
 This is a **docs-only policy decision record** (CS-CORE.4C.1) for one specific,
@@ -20,25 +28,29 @@ with an explicit comment that the test "documents the existing re-bind, not an
 endorsement of future policy." CS-CORE.4C.1 recorded the deliberate decision that
 CS-CORE.4A asked for, and CS-CORE.4C.2 implemented it.
 
-**Status:** Policy C is active after CS-CORE.4C.2. The runtime change is limited to
-`comments.views.edit_comment()`: an existing top-level group-shared reflection that
-stays group-shared preserves its existing `small_group_at_post`; a private/church
-reflection newly changed to group visibility stamps the editor's current
-`Profile.small_group`; replies still inherit the parent snapshot. CS-CORE.4C.2 made no
-model, migration, form, admin, URL, template, CSS, management-command,
-membership-core, `structure_unit_at_post`, group-progress, ServiceEvent, Bible Study,
-or data-migration change. Existing posts that were already re-bound under the old
-behavior were not mass-rewritten. Reflection create/edit group binding remains
-legacy-driven by `Profile.small_group`.
+**Historical status:** Policy C became active after CS-CORE.4C.2. At that time,
+the runtime change was limited to `comments.views.edit_comment()`: an existing
+top-level group-shared reflection that stayed group-shared preserved its existing
+`small_group_at_post`; a private/church reflection newly changed to group
+visibility stamped the editor's current `Profile.small_group`; replies still
+inherited the parent snapshot. CS-CORE.4C.2 made no model, migration, form,
+admin, URL, template, CSS, management-command, membership-core,
+`structure_unit_at_post`, group-progress, ServiceEvent, Bible Study, or
+data-migration change. Existing posts that were already re-bound under the old
+behavior were not mass-rewritten. Current state supersedes that legacy runtime:
+reflection group read/write uses `ReflectionComment.structure_unit_at_post` plus
+active primary `ChurchStructureMembership`; `ReflectionComment.small_group_at_post`
+and `Profile.small_group` are removed.
 
 CS-CORE.4D later added nullable `ReflectionComment.structure_unit_at_post` as an
-additive, write-only companion snapshot. It mirrors the Policy C write rules recorded
-here: replies inherit the parent structure snapshot; an already-group top-level
-reflection that stays group preserves its existing structure snapshot; and a
-private/church reflection newly changed to group stamps the editor's current mapped
-structure unit when one exists. This does not change Policy C's legacy runtime
-behavior: visibility still reads `small_group_at_post` and current `Profile.small_group`,
-not `structure_unit_at_post`.
+additive, write-only companion snapshot. It mirrored the Policy C write rules
+recorded here: replies inherit the parent structure snapshot; an already-group
+top-level reflection that stays group preserves its existing structure snapshot;
+and a private/church reflection newly changed to group stamps the editor's
+current mapped structure unit when one exists. Historical/superseded: CS-CORE.4D
+did not yet change Policy C's legacy runtime behavior. Later reflection
+migration slices made `structure_unit_at_post` the current group visibility
+snapshot and removed the legacy mirror.
 
 Related docs:
 
@@ -254,9 +266,10 @@ CS-CORE.4C.2 implements Policy C as follows:
   CS-CORE plan No-Go Rule 9).
 
 CS-CORE.4D was later approved as that separate `structure_unit_at_post` slice. It
-mirrors the Policy C snapshot decisions into the additive field only; it does not read
-the new field for visibility and does not change the legacy `small_group_at_post`
-runtime policy above.
+mirrored the Policy C snapshot decisions into the additive field only and did not
+yet read the new field for visibility. Historical/superseded: later reflection
+slices switched group read/write to `structure_unit_at_post` plus active primary
+membership and removed `small_group_at_post`.
 
 ## 7. Test Changes in CS-CORE.4C.2
 

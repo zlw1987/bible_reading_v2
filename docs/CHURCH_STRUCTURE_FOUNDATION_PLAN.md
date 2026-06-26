@@ -2,12 +2,23 @@
 
 ## 1. Purpose
 
-Church Structure Foundation is a future foundational module for representing the church's people and organizational structure.
+Church Structure Foundation began as a future foundational module for representing
+the church's people and organizational structure.
 
-It should eventually support:
+Current-state update: the flexible foundation is now implemented for the current
+codebase. `ChurchStructureUnit` is the canonical local structure model, active
+primary `ChurchStructureMembership` is the canonical local belonging source for
+migrated consumers, and the legacy `Profile.small_group`, `SmallGroup`,
+`District`, `MinistryContext`, `SmallGroup.district`, and
+`District.ministry_context` runtime/schema surfaces are removed. Historical
+sections below that mention those legacy objects describe the bridge period and
+must not be read as current schema/runtime guidance.
+
+It should support, through separately approved consumers:
 - Bible Study schedule scope and meeting generation.
 - Community Activities audience visibility and signup eligibility.
-- Future `ServiceEvent` visibility/context, if separately planned.
+- ServiceEvent visibility/context through `ServiceEventAudienceScope` and
+  `host_language_unit`.
 - User profile scoping and membership context.
 
 The project remains a lightweight church spiritual life and ministry workflow system, not a full church ERP.
@@ -20,7 +31,16 @@ Church Structure Foundation is not:
 - `BibleStudyMeeting`
 - a full ERP org chart
 
-This began as a future planning artifact. CS-F.1 implemented the short-term `MinistryContext` bridge, CS-F.2 uses that bridge only for Bible Study Schedule scope eligibility, CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only, CS-H.2 adds a model-only `ChurchStructureUnit` foundation, CS-H.2A hardens tree validation, CS-H.3 records the mapping/membership/source-of-truth strategy, CS-H.3B adds nullable legacy-to-`ChurchStructureUnit` mapping fields, CS-H.3C adds an explicit dry-run/apply seeding command, CS-H.3D records successful GoDaddy production/staging seeding verification, CS-H.3E closes the remaining seeded data QA item, CS-H.4 records the `ChurchStructureMembership` design, CS-H.5A adds the model-only membership foundation, CS-H.5B hardens membership helpers/validation, CS-H.5C adds an explicit dry-run/apply membership backfill command, CS-H.5D records user-attested GoDaddy production/staging backfill verification, and CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models. Do not implement additional models, views, templates, permissions, audience selection, filtering, signup changes, custom staff admin UI, or runtime behavior changes from this document without a separate implementation task.
+This began as a future planning artifact. CS-F.1 implemented the short-term
+`MinistryContext` bridge, CS-F.2 used that bridge only for Bible Study Schedule
+scope eligibility, and CS-F.3 added optional `ServiceEvent.ministry_context`
+labeling only. Those bridge surfaces are now historical/superseded. Later CS-H
+and CS-CORE slices implemented `ChurchStructureUnit`, `ChurchStructureMembership`,
+structure audience rows, migrated approved consumers, and retired the legacy
+structure fields/tables. Do not implement additional models, views, templates,
+permissions, audience selection, filtering, signup changes, custom staff admin UI,
+or runtime behavior changes from this document without a separate implementation
+task.
 
 ## 2. Current Reality
 
@@ -30,7 +50,9 @@ Known church structure:
 - CM has districts such as District 1 / 第一区 and District 2 / 第二区.
 - Districts contain fellowship small groups.
 - Example fellowship small groups include Rainbow 1 and Rainbow 4.
-- A person currently belongs to one fellowship small group at a time, but membership may change over time.
+- Current migrated belonging is active primary `ChurchStructureMembership`;
+  historical planning assumed a person belonged to one fellowship small group at a
+  time.
 - Friday Bible Study uses fellowship small group as the smallest unit.
 
 Example structure:
@@ -49,18 +71,18 @@ Church
 
 This example should not become a permanent hard-coded schema assumption. Future church structures may need more or fewer levels, and different branches may need different depth.
 
-## 3. Current Code Reality
+## 3. Historical Code Reality
 
-Current code assumptions:
-- `District` exists.
-- `SmallGroup` exists.
-- `Profile.small_group` exists.
-- CS-F.1 adds `MinistryContext` and nullable `District.ministry_context` as the short-term bridge.
+Historical/superseded code assumptions from the bridge period:
+- `District` existed.
+- `SmallGroup` existed.
+- `Profile.small_group` existed.
+- CS-F.1 added `MinistryContext` and nullable `District.ministry_context` as the short-term bridge.
 - CS-H.2 adds `ChurchStructureUnit` as a model-only flexible tree foundation.
 - CS-H.2A adds indirect cycle validation and safe ancestor/path display for corrupted tree states.
-- CS-H.3 records that long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging.
-- CS-H.3B adds nullable `church_structure_unit` mapping fields on `MinistryContext`, `District`, and `SmallGroup`.
-- CS-H.3C adds `seed_church_structure_units` to explicitly seed/map current `MinistryContext`, `District`, and `SmallGroup` rows into `ChurchStructureUnit`.
+- CS-H.3 recorded that long-term source of truth should be `ChurchStructureUnit` for structure and `ChurchStructureMembership` for belonging; current state uses those models for the approved migrated consumers.
+- CS-H.3B added nullable `church_structure_unit` mapping fields on `MinistryContext`, `District`, and `SmallGroup`; those legacy tables and bridge FKs were later removed.
+- CS-H.3C added `seed_church_structure_units` to explicitly seed/map then-current `MinistryContext`, `District`, and `SmallGroup` rows into `ChurchStructureUnit`.
 - CS-H.3D verifies GoDaddy production/staging seeding: 35 units created, 33 legacy records linked, and the second dry-run reported no pending create/update/link work.
 - CS-H.3E records that the `Santa Clara 3` legacy data issue was corrected or otherwise handled and the seeded structure data QA item is closed, provided final dry-run remains clean.
 - CS-H.4 designs `ChurchStructureMembership`, requested-unit approval, backfill, and visibility migration strategy without implementation.
@@ -70,34 +92,31 @@ Current code assumptions:
 - CS-H.5D records production/staging backfill verification as user-attested. Exact command-output counts were not recorded.
 - CS-H.5E improves Django Admin clarity so legacy current-runtime models and future foundation models are clearly distinguished.
 - There is no automatic `ChurchStructureUnit` data seeding through migrations or app startup.
-- There is no automatic membership backfill, signup/onboarding approval flow, or membership-driven visibility yet.
-- Current Bible Study schedule scope uses:
-  - whole church
-  - ministry context
-  - district
-  - small group
+- Historical/superseded: at this stage there was no automatic membership backfill, signup/onboarding approval flow, or membership-driven visibility yet.
+- Historical/superseded: Bible Study schedule scope used legacy whole church / ministry context / district / small group fields at this stage. Current Bible Study schedule audience uses `BibleStudySeriesAudienceScope` rows, normal V2 generation is structure-unit-native, and meeting visibility uses `BibleStudyMeetingAudienceScope` plus active primary membership.
 - Current Community Activities planning expects future audience segments.
 
-## 4. Short-Term Model Direction
+## 4. Historical Short-Term Model Direction
 
-CS-F.1 implements the practical near-term bridge before a flexible hierarchy is justified:
+Historical/superseded: CS-F.1 implemented the practical near-term bridge before a flexible hierarchy was justified:
 
 `MinistryContext`
 - CM
 - EM
 
-Relationships:
-- `District` belongs to `MinistryContext`.
-- `SmallGroup` belongs to `District`.
-- User belongs to current `SmallGroup` through `Profile.small_group`.
+Historical relationships:
+- `District` belonged to `MinistryContext`.
+- `SmallGroup` belonged to `District`.
+- User belonged to the then-current `SmallGroup` through `Profile.small_group`.
 
-This fits current Bible Study V2 scope and near-term Community Activities planning with minimal migration risk.
+This fit the then-current Bible Study V2 scope and near-term Community Activities planning with minimal migration risk.
 
-This is not the final flexible hierarchy model if the church needs variable-depth organization.
+This was not the final flexible hierarchy model. Current structure is `ChurchStructureUnit`.
 
 ## 5. Long-Term Flexible Hierarchy Direction
 
-Future planning may introduce a flexible tree model.
+Historical/superseded: future planning was expected to introduce a flexible tree
+model. Current structure uses `ChurchStructureUnit`.
 
 Suggested concept:
 
@@ -150,14 +169,14 @@ Suggested concept:
 - `note` optional
 
 Rules:
-- Current user small group may remain on `Profile.small_group` in the near term.
+- Historical/superseded: at this planning stage, the user's then-current small group could remain on `Profile.small_group` in the near term. Current belonging for migrated consumers is active primary `ChurchStructureMembership`, and `Profile.small_group` was removed.
 - Future membership history can be added later.
-- Long-term membership source of truth should be `ChurchStructureMembership`.
+- Current migrated belonging source is `ChurchStructureMembership`; richer membership history remains future planning.
 - Requested signup/onboarding units should require staff approval before becoming active membership.
 - CS-H.4 recommends keeping requested membership separate from visibility; only approved active membership should count for future consumers.
-- CS-H.5A adds the membership table only; current runtime behavior still uses `Profile.small_group`.
+- Historical/superseded: CS-H.5A added the membership table only while runtime behavior still used `Profile.small_group`.
 - CS-H.5B query helpers count only active memberships within their date window; requested, rejected, cancelled, and ended memberships are excluded.
-- CS-H.5C adds a command to backfill active primary memberships from existing `Profile.small_group` values where the small group is mapped to `ChurchStructureUnit`; it does not change `Profile.small_group` or switch runtime consumers.
+- Historical/superseded: CS-H.5C added a command to backfill active primary memberships from existing `Profile.small_group` values where the small group was mapped to `ChurchStructureUnit`; it did not change `Profile.small_group` or switch runtime consumers in that slice.
 - CS-H.5D records production/staging backfill verification by user confirmation; membership still does not drive runtime visibility.
 - CS-H.5E improves admin clarity only. Historical/superseded: at that point legacy `SmallGroup`, `District`, `MinistryContext`, and `Profile.small_group` remained current runtime source during transition. Current migrated runtime uses structure units / memberships where separately switched, and `Profile.small_group` has been removed.
 - Do not import phone/private/sensitive data.
@@ -165,14 +184,14 @@ Rules:
 
 ## 7. Relationship to Existing SmallGroup
 
-### Option A - Keep Current District and SmallGroup Canonical
+### Option A - Historical: Keep District and SmallGroup Canonical
 
-Keep existing `SmallGroup` and `District` as canonical for now. Add `MinistryContext` first if CM/EM scoping becomes necessary. Later add flexible `ChurchStructureUnit` only when proven needed.
+Historical/superseded option: keep existing `SmallGroup` and `District` as canonical for the bridge period. Add `MinistryContext` first if CM/EM scoping becomes necessary. Later add flexible `ChurchStructureUnit` only when proven needed.
 
 Pros:
 - Lower migration risk.
 - Fits current Bible Study V2 scope.
-- Preserves `Profile.small_group`.
+- Preserved `Profile.small_group` during the bridge period.
 - Avoids broad data conversion before real product need is proven.
 
 Cons:
@@ -195,17 +214,18 @@ Cons:
 
 ### Recommendation
 
-Do not switch current behavior to the flexible tree immediately.
+Historical/superseded: do not switch then-current behavior to the flexible tree immediately.
 
 Short term:
-- Keep `District` and `SmallGroup`.
-- Keep `MinistryContext` as the bridge for CM/EM.
-- Keep `Profile.small_group` as the current primary-small-group field.
+- Historical/superseded: keep `District` and `SmallGroup`.
+- Historical/superseded: keep `MinistryContext` as the bridge for CM/EM.
+- Historical/superseded: keep `Profile.small_group` as the current primary-small-group field.
 - Keep `ChurchStructureUnit` mapping fields optional and non-runtime during seeding/mapping.
 - Keep signup/onboarding assignment approval separate from final membership.
 
 Long term:
-- Map current structure into `ChurchStructureUnit` only after Bible Study V2 and Community Activities needs prove the need.
+- Historical/superseded: map then-current structure into `ChurchStructureUnit`
+  only after Bible Study V2 and Community Activities needs prove the need.
 - Move belonging to `ChurchStructureMembership` only after model design, approval workflow, and visibility tests.
 - Avoid destructive migration.
 
@@ -219,9 +239,12 @@ Bible Study V2 near-term uses `BibleStudySeries` scope:
 
 Historical note: early schedule generation used the `MinistryContext` -> `District` -> `SmallGroup` bridge through the `BibleStudySeries` eligible-small-groups helper. Current normal V2 generation is structure-native from `BibleStudySeriesAudienceScope` rows to active small-group `ChurchStructureUnit` leaf targets.
 
-Future Bible Study schedule scope may use `ChurchStructureUnit` or audience segments.
+Current Bible Study schedule scope uses `BibleStudySeriesAudienceScope` rows to
+`ChurchStructureUnit`; normal V2 meeting generation and visibility are
+structure-native through audience rows, `generation_key`, `anchor_unit`, and
+active primary membership.
 
-A future Bible Study schedule can target:
+A Bible Study schedule can target, through structure audience rows:
 - whole church
 - CM
 - EM
@@ -266,13 +289,26 @@ Important boundaries:
 - `BibleStudyMeetingRole` remains for one-meeting Bible Study responsibilities.
 - `CommunityActivity` remains for signup-oriented activities.
 
-CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only. It is metadata for identifying the ministry context of an official church service/event anchor and must not drive audience filtering, `TeamAssignment` visibility, My Serving visibility, or MinistryTeam behavior.
+Historical/superseded: CS-F.3 added optional `ServiceEvent.ministry_context`
+labeling only. It was metadata for identifying the ministry context of an
+official church service/event anchor and did not drive audience filtering,
+`TeamAssignment` visibility, My Serving visibility, or MinistryTeam behavior.
+Current Host / Language display uses `ServiceEvent.host_language_unit` plus the
+audience-derived structure fallback.
 
-CS-F.3B clarifies the current UI wording: this field should be presented as a Ministry Context Label / 事工标签（可选）, separate from the existing single Audience Scope / 覆盖对象 fields. Flexible hierarchy, multi-select audience scope, `ChurchStructureUnit`, and CM/EM-aware ServiceEvent filtering remain future work.
+Historical/superseded: CS-F.3B clarified the then-current UI wording for the
+removed label field. Flexible hierarchy and multi-select ServiceEvent audience
+scope are no longer future work for the current codebase: ServiceEvent visibility
+uses `ServiceEventAudienceScope` rows plus active primary membership, and zero-row
+events fail closed for ordinary users.
 
-CS-F.3C clarifies the limited current ServiceEvent scope UI: Audience Scope supports Whole Church, one District, or one Small Group. Selecting District binds the event at the district level and does not expand into child small-group selection. Multi-level and multi-select audience selection remain future Church Structure work. MinistryTeam handbook/manual links open in a new tab.
+Historical/superseded: CS-F.3C clarified the limited then-current ServiceEvent
+scope UI where Audience Scope supported Whole Church, one District, or one Small
+Group. Current ServiceEvent audience selection is row-based through
+`ServiceEventAudienceScope`; the legacy fixed scope fields were removed.
 
-Future `ServiceEvent` may reference participating structure units or multiple `MinistryContext` records, but this should be separately planned.
+Current `ServiceEvent` audience references structure units through
+`ServiceEventAudienceScope`; `MinistryContext` records are removed.
 
 ## 11. Flexible Hierarchy Rules
 
@@ -305,11 +341,11 @@ Do not build:
 
 ## 13. Roadmap Placement
 
-Church Structure Foundation should be treated as the current foundation step:
+Historical roadmap placement for the foundation step:
 - Bible Study V2 Flow QA has passed
-- CS-F.1 implements the short-term `MinistryContext` bridge
-- CS-F.2 adds `MinistryContext` as a Bible Study Schedule scope
-- CS-F.3 adds optional `ServiceEvent.ministry_context` labeling only
+- CS-F.1 implemented the short-term `MinistryContext` bridge
+- CS-F.2 added `MinistryContext` as a Bible Study Schedule scope
+- CS-F.3 added optional `ServiceEvent.ministry_context` labeling only
 - CS-H.2 adds model-only `ChurchStructureUnit` foundation with no seeding, no mapping, no audience selection, and no filtering
 - CS-H.2A hardens `ChurchStructureUnit` cycle validation without adding seeding, mapping, audience selection, or filtering
 - CS-H.3 records mapping, membership, and signup/onboarding approval strategy without implementation
@@ -327,7 +363,12 @@ Church Structure Foundation should be treated as the current foundation step:
 - before implementing advanced mixed audience segments
 - before implementing CM/EM-aware `ServiceEvent` filtering
 
-Keep signup approval, audience selection, Community Activities, Checklist V1, and role-aware Bible Study editing permissions deferred until separately chosen. `ChurchStructureMembership` exists as a model/helper foundation with an explicit backfill command and user-attested production/staging verification. Runtime behavior still uses the legacy structure models and `Profile.small_group`.
+Historical/superseded: at this roadmap point, signup approval, audience selection,
+Community Activities, Checklist V1, and role-aware Bible Study editing permissions
+remained deferred until separately chosen, and runtime behavior still used legacy
+structure models plus `Profile.small_group`. Current approved runtime consumers
+now use the structure-native sources documented above, while Community Activities,
+Checklist V1, and broader role-aware editing remain separately approved future work.
 
 CS-MAP (`docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`) is the staff-facing visibility/setup-readiness layer over this foundation: CS-MAP.1 is the completed docs-only plan, CS-MAP.2 proposes a read-only staff structure map with mapping-health indicators, CS-MAP.3 is an optional setup readiness checklist, and CS-SETUP.1 (limited setup/edit UI) is explicitly not approved. Django Admin remains the structure write surface during transition; CS-MAP work changes no schema or runtime behavior.
 
@@ -335,8 +376,8 @@ CS-MAP (`docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`) is the staff-fa
 
 This plan documents:
 - flexible hierarchy through the model-only `ChurchStructureUnit` tree foundation
-- implemented short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
-- CS-H.3 long-term source-of-truth decision: `ChurchStructureUnit` plus `ChurchStructureMembership`
+- historical short-term bridge using `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`
+- CS-H.3 long-term source-of-truth decision, now implemented for approved consumers: `ChurchStructureUnit` plus `ChurchStructureMembership`
 - CS-H.3 signup/onboarding direction: requested unit plus staff approval, not direct self-assignment
 - CS-H.3B nullable mapping fields from legacy structure models to `ChurchStructureUnit`
 - CS-H.3C explicit `seed_church_structure_units` command for idempotent seeding/mapping
@@ -350,7 +391,7 @@ This plan documents:
 - CS-H.5E Django Admin clarity for legacy structure vs future structure/membership foundation
 - no automatic `ChurchStructureUnit` data seeding or source-of-truth migration
 - long-term variable-depth structure with separate membership history
-- Bible Study relationship through current schedule scope, including `MinistryContext`, and possible future structure-unit scope later
+- Bible Study relationship through historical schedule scope, including `MinistryContext`, and current structure-unit audience scope
 - Community Activities relationship through future audience segments
 - ServiceEvent and Ministry Operations boundaries
 - roadmap placement after Bible Study V2 Flow QA and before advanced mixed audience work

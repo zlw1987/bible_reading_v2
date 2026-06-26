@@ -9,22 +9,35 @@ current module's useful behavior and supporting the real church Bible Study
 workflow. That original BS-STRUCT.1A slice changed no models, migrations, forms,
 views, templates, tests, or runtime behavior.
 
-Status: **partially migrated through BS-STRUCT.2A; the `BibleStudyMeeting.small_group`
-mirror FK was removed in BS-MEETING-MIRROR.1A** (migration `studies/0011`) after
-preflight audits confirmed zero populated values and no live runtime/visibility/
-display/admin/generation dependency. V2 meeting visibility remains
-`BibleStudyMeetingAudienceScope` rows + active primary `ChurchStructureMembership`;
-normal generation stays structure-unit-native via `generation_key` and `anchor_unit`;
-display/grouping uses `anchor_unit` and audience rows. The mirror cleanup command
-(`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror→audience backfill
-(`backfill_bible_study_meeting_audience_scopes`), and the legacy-vs-membership shadow
-audit (`audit_bible_study_membership_readiness`) were retired with the field; the
-references to `BibleStudyMeeting.small_group` below are historical. The design slices
-that followed BS-STRUCT.1A are now implemented:
+Status: **implemented and superseded as a current migration plan.** The active V2
+Bible Study path uses `BibleStudySeries` + `BibleStudyLesson` +
+`BibleStudyMeeting`; normal generation is structure-unit-native via
+`BibleStudySeriesAudienceScope`, `BibleStudyMeetingAudienceScope`, `generation_key`,
+and `anchor_unit`; V2 meeting visibility / `/studies/` / Today / role-worship
+pickers use meeting audience rows plus active primary `ChurchStructureMembership`;
+and zero-row V2 meetings fail closed for ordinary users. The
+`BibleStudyMeeting.small_group` mirror FK was removed in BS-MEETING-MIRROR.1A
+(migration `studies/0011`). The mirror cleanup command
+(`cleanup_bible_study_v2_small_group_mirrors`), the one-time mirror-to-audience
+backfill (`backfill_bible_study_meeting_audience_scopes`), and the
+legacy-vs-membership shadow audit (`audit_bible_study_membership_readiness`) were
+retired with the field. References below to `BibleStudyMeeting.small_group`,
+zero-row fallback, legacy scope cleanup commands, or V1 archive cleanup are
+historical/superseded slice notes unless explicitly marked current. The design
+slices that followed BS-STRUCT.1A are now implemented:
+
+Current-state update: V1 `BibleStudySession`, `BibleStudyGuide`, and V1-only
+`BibleStudyWorshipSong` schema were removed in `studies/0012`; `BibleStudyMeetingRole`
+confirmation state/notes were added in `studies/0013`, with My Serving as the
+confirmation workspace. Current V2 Bible Study uses `BibleStudySeries` +
+`BibleStudyMeeting`, audience rows, `anchor_unit`, `generation_key`, and active
+primary `ChurchStructureMembership`; legacy `SmallGroup` / `District` /
+`MinistryContext` tables were removed in `accounts/0015`.
 
 - the meeting-audience model foundation exists (`BibleStudyMeetingAudienceScope`,
-  `anchor_unit`, nullable `small_group` mirror, `generation_key`, `meeting_kind`
-  — BS-STRUCT.1B);
+  `anchor_unit`, `generation_key`, `meeting_kind` — BS-STRUCT.1B). Historical:
+  BS-STRUCT.1B also carried a nullable `small_group` mirror, which was later
+  removed in BS-MEETING-MIRROR.1A;
 - backfill/audit and normal-generation/manual-form writers populate meeting
   audience rows (BS-STRUCT.1C / 1D / 1H);
 - visibility, V2 landing / Today, and role/worship pickers now treat
@@ -32,12 +45,14 @@ that followed BS-STRUCT.1A are now implemented:
   Zero-row V2 meetings fail closed for ordinary users, and
   `BibleStudyMeeting.small_group` no longer grants ordinary runtime access
   (BS-STRUCT.1E / 1F / 2A);
-- a read-only retirement-readiness audit command exists (BS-STRUCT.1J);
+- historical/superseded: a read-only retirement-readiness audit command existed
+  during the transition (BS-STRUCT.1J) and was later retired with the mirror field;
 - normal generation is **structure-unit-native**: it targets `ChurchStructureUnit`
   leaf small-group units and keys idempotency on a per-unit `generation_key`
-  (BS-STRUCT.1L). After BS-V2-MIRROR.1B, new generated normal meetings leave
-  `BibleStudyMeeting.small_group` null; old mirror values remain compatibility /
-  fallback-display / diagnostic cleanup blockers only;
+  (BS-STRUCT.1L). Historical/superseded: after BS-V2-MIRROR.1B, new generated
+  normal meetings left `BibleStudyMeeting.small_group` null and old mirror values
+  remained compatibility / fallback-display / diagnostic cleanup blockers only;
+  BS-MEETING-MIRROR.1A later removed the mirror field;
 - normal generation now **requires** series structure audience rows: a schedule
   with zero `BibleStudySeriesAudienceScope` rows **fails closed** (no meetings,
   manager warning) instead of falling back to legacy `scope_type` / `district` /
@@ -47,10 +62,9 @@ that followed BS-STRUCT.1A are now implemented:
   `ministry_context` / `district` / `small_group` values. BS-SERIES-SCOPE.1B
   adds the guarded dry-run-first
   `cleanup_bible_study_series_legacy_scope_fields` command for existing values:
-  safe cleanup only clears rows that already have valid
-  `BibleStudySeriesAudienceScope` rows. No cleanup runs automatically;
-  unsafe/mismatched rows remain blocked for review, and field/schema removal is
-  later;
+  safe cleanup only cleared rows that already had valid
+  `BibleStudySeriesAudienceScope` rows. Historical/superseded: this cleanup
+  command and the legacy fields were retired in BS-SERIES-FIELD-RETIRE.1A;
 - the staff meeting manage-list filter is **structure-audience aware**: it
   filters by `ChurchStructureUnit` (GET `unit`) over meeting audience rows
   (unit-or-descendant), matches audience rows only, and no longer exposes a
@@ -60,15 +74,16 @@ that followed BS-STRUCT.1A are now implemented:
   chooses an active `UNIT_SMALL_GROUP` `ChurchStructureUnit` (`audience_unit`)
   as the audience source of truth, writes the audience row + `anchor_unit` +
   per-unit `generation_key`, and no longer exposes a legacy `small_group`
-  select (BS-STRUCT.1O). After BS-V2-MIRROR.1B, new manual normal creates leave
-  `BibleStudyMeeting.small_group` null; manual edits preserve an existing old
-  mirror only if it still maps to the selected unit, and clear stale mismatches;
+  select (BS-STRUCT.1O). Historical/superseded: after BS-V2-MIRROR.1B, new manual
+  normal creates left `BibleStudyMeeting.small_group` null and manual edits
+  preserved or cleared old mirrors by mapping; BS-MEETING-MIRROR.1A later removed
+  the mirror field;
 - BS-V2-KEY.1A adds a dry-run-first backfill command for existing normal V2
   meetings that already have one safe small-group audience row but are missing
   the structure-native `generation_key` and/or null `anchor_unit`. It prepares
-  for future `BibleStudyMeeting.small_group` mirror retirement, but does not
-  change V2 visibility/runtime behavior and does not delete or alter
-  `small_group`;
+  for the later `BibleStudyMeeting.small_group` mirror retirement, but did not
+  change V2 visibility/runtime behavior or delete/alter `small_group` in that
+  slice. The mirror field was removed later in BS-MEETING-MIRROR.1A;
 - BS-V2-MIRROR.1A moves V2 member/staff display labels to
   `anchor_unit` / meeting audience units first, with `small_group` retained only
   as a legacy/invalid-data fallback label. It does not change visibility,
@@ -86,17 +101,16 @@ that followed BS-STRUCT.1A are now implemented:
   `BibleStudyMeeting.small_group` mirrors. Safe cleanup only clears rows that
   already have correct structure-native identity: `generation_key`,
   `anchor_unit`, and exactly one matching active small-group audience row. No
-  cleanup runs automatically; unsafe or mismatched rows remain blocked for
-  review. This does not remove the model field or DB constraint, and later
-  field/constraint cleanup remains a separate migration;
+  No cleanup ran automatically; unsafe or mismatched rows remained blocked for
+  review. Historical/superseded: this cleanup command was retired when
+  BS-MEETING-MIRROR.1A removed the model field and DB constraint;
 - BS-SERIES-SCOPE.1B adds the dry-run-first guarded cleanup command
   `cleanup_bible_study_series_legacy_scope_fields` for existing
   `BibleStudySeries.scope_type` / `ministry_context` / `district` /
   `small_group` values. Safe cleanup only clears series rows that already have
-  valid `BibleStudySeriesAudienceScope` rows. No cleanup runs automatically;
-  unsafe/mismatched rows remain blocked for review. This does not remove the
-  model fields or DB constraints, and later field/schema cleanup remains a
-  separate migration;
+  valid `BibleStudySeriesAudienceScope` rows. Historical/superseded: this cleanup
+  command was retired when BS-SERIES-FIELD-RETIRE.1A removed the legacy model
+  fields and DB constraints;
 - obsolete small-group-keyed write/generation helpers were removed
   (`write_normal_meeting_audience_scope`, the compatibility-only
   `sync_normal_meeting_audience_scope`, and the never-produced
@@ -111,10 +125,11 @@ that followed BS-STRUCT.1A are now implemented:
   migration were created.
 
 So the document as a whole is **no longer "docs-only / changes no runtime
-behavior."** The runtime now reads meeting audience rows, and zero-row V2
-meetings fail closed for ordinary users. What remains is the legacy generation /
-idempotency / display bridge and V1 archive retirement, not an ordinary-user
-zero-row runtime access path.
+behavior."** The runtime now reads meeting audience rows, zero-row V2 meetings
+fail closed for ordinary users, the V2 meeting mirror field is removed, and V1
+schema is removed. Remaining historical sections record how those transitions
+happened; they are not current instructions to preserve or rebuild a legacy
+generation / idempotency / display bridge.
 This document does not stage/commit/push anything.
 
 It deliberately follows the proven ServiceEvent runtime-migration pattern

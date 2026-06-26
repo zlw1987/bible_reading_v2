@@ -342,9 +342,29 @@ def staff_structure_map(request):
                 "name": row["name"],
             }
         )
+        row["sibling_order_parent_key"] = (
+            str(row["parent_id"]) if row["parent_id"] else "root"
+        )
+        row["sibling_order_index"] = 0
+        row["sibling_order_count"] = 1
+        row["can_order_up"] = False
+        row["can_order_down"] = False
         row["shows_sibling_order_form"] = False
         row["sibling_order_units"] = []
         row["sibling_order_parent_label"] = ""
+
+    rows_by_unit_id = {
+        row["unit"].id: row
+        for row in structure_rows
+    }
+    for sibling_units in sibling_groups.values():
+        sibling_count = len(sibling_units)
+        for index, sibling_unit in enumerate(sibling_units):
+            row = rows_by_unit_id[sibling_unit["id"]]
+            row["sibling_order_index"] = index
+            row["sibling_order_count"] = sibling_count
+            row["can_order_up"] = index > 0
+            row["can_order_down"] = index < sibling_count - 1
 
     seen_parent_ids = set()
     for row in structure_rows:

@@ -4351,6 +4351,10 @@ class StaffStructureMapEditModeTests(TestCase):
             response,
             "change serving assignments or visibility rules",
         )
+        self.assertContains(
+            response,
+            "Use the up/down arrows to reorder units under the same parent; this does not move units or change memberships, permissions, or serving assignments.",
+        )
         self.assertNotContains(response, "only change display names")
 
     def test_edit_mode_shows_inactive_unit_review_section(self):
@@ -4432,6 +4436,7 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertContains(response, "自动结束归属")
         self.assertContains(response, "改写适用范围或职分范围")
         self.assertContains(response, "不会改变服事安排或可见性规则")
+        self.assertContains(response, "可用上下箭头调整同一上级下的显示顺序")
         self.assertNotContains(response, "这里只能修改显示名称")
 
     def test_edit_mode_root_has_no_rename_but_child_does(self):
@@ -4492,10 +4497,27 @@ class StaffStructureMapEditModeTests(TestCase):
         self.login_admin()
 
         response = self.client.get(self.url, {"edit": "1"})
+        content = response.content.decode()
 
         self.assertContains(response, self.order_siblings_url)
+        self.assertContains(response, "This level order has changed")
         self.assertContains(response, "Save this level order")
-        self.assertContains(response, "Only reorders units under the same parent")
+        self.assertContains(response, 'data-sibling-order-control')
+        self.assertContains(response, 'data-direction="up"')
+        self.assertContains(response, 'data-direction="down"')
+        self.assertContains(response, 'data-sibling-save-bar')
+        self.assertContains(response, 'hidden')
+        self.assertContains(response, 'data-parent-id="1"')
+        self.assertContains(response, 'data-depth="1"')
+        self.assertContains(response, 'data-ancestors="1"')
+        self.assertContains(response, "function getSubtreeBlock(row)")
+        self.assertContains(response, "moveSiblingRow(row, direction)")
+        self.assertNotContains(response, "structure-sibling-order-list")
+        self.assertNotContains(response, "<strong>Same-level order</strong>", html=True)
+        self.assertLess(
+            content.index('data-sibling-order-controls'),
+            content.index("District 1"),
+        )
 
     def test_edit_mode_renders_sibling_reorder_controls_for_active_siblings_zh(self):
         ChurchStructureUnit.objects.create(
@@ -4512,7 +4534,9 @@ class StaffStructureMapEditModeTests(TestCase):
         response = self.client.get(self.url, {"edit": "1"})
 
         self.assertContains(response, "保存此层排序")
-        self.assertContains(response, "只调整同一上级下的显示顺序")
+        self.assertContains(response, "此层顺序已调整")
+        self.assertContains(response, "可用上下箭头调整同一上级下的显示顺序")
+        self.assertNotContains(response, "<strong>同层排序</strong>", html=True)
 
     def test_non_edit_mode_does_not_render_sort_order_control(self):
         self.set_language("en")
@@ -4525,6 +4549,8 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotContains(response, 'aria-label="Order"')
         self.assertNotContains(response, self.order_siblings_url)
         self.assertNotContains(response, "Save this level order")
+        self.assertNotContains(response, "structure-row-order-controls")
+        self.assertNotContains(response, 'aria-label="Same-level ordering tools"')
 
     def test_edit_mode_action_menu_links_to_detail_and_admin(self):
         self.set_language("en")

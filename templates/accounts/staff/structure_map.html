@@ -111,6 +111,13 @@
             This page does not hard-delete units, move/reparent units, cascade-disable children, automatically end memberships, rewrite audience or role scopes, or change serving assignments or visibility rules.
             {% endif %}
         </p>
+        <p>
+            {% if language == "zh" %}
+            可用上下箭头调整同一上级下的显示顺序；不会移动单元或改变归属、权限、服事。
+            {% else %}
+            Use the up/down arrows to reorder units under the same parent; this does not move units or change memberships, permissions, or serving assignments.
+            {% endif %}
+        </p>
     </div>
     {% endif %}
 
@@ -119,47 +126,28 @@
         {% if edit_mode and row.shows_sibling_order_form %}
         <form method="post"
               action="{% url 'staff_structure_units_order_siblings' %}"
-              class="structure-sibling-order-form"
+              class="structure-sibling-save-form"
               data-sibling-order-form
+              data-sibling-save-bar
               data-parent-id="{% if row.parent_id %}{{ row.parent_id }}{% else %}root{% endif %}"
-              style="--structure-depth: {{ row.depth }};">
+              hidden>
             {% csrf_token %}
             <input type="hidden"
                    name="parent_id"
                    value="{% if row.parent_id %}{{ row.parent_id }}{% else %}root{% endif %}">
-            <div class="structure-sibling-order-heading">
-                <strong>
-                    {% if language == "zh" %}同层排序{% else %}Same-level order{% endif %}
-                </strong>
-                <span class="muted">
-                    {{ row.sibling_order_parent_label }} ·
-                    {% if language == "zh" %}
-                    只调整同一上级下的显示顺序。
-                    {% else %}
-                    Only reorders units under the same parent.
-                    {% endif %}
-                </span>
-            </div>
-            <ol class="structure-sibling-order-list" data-sibling-order-list>
+            <span class="structure-sibling-save-message">
+                {% if language == "zh" %}此层顺序已调整{% else %}This level order has changed{% endif %}
+            </span>
+            <span data-sibling-order-inputs>
                 {% for sibling in row.sibling_order_units %}
-                <li data-sibling-order-item>
-                    <input type="hidden" name="unit_ids" value="{{ sibling.id }}">
-                    <span>{{ sibling.name }}</span>
-                    <span class="structure-sibling-order-buttons">
-                        <button type="button"
-                                class="structure-icon-button"
-                                data-sibling-order-up
-                                aria-label="{% if language == 'zh' %}上移{% else %}Move up{% endif %} {{ sibling.name }}">↑</button>
-                        <button type="button"
-                                class="structure-icon-button"
-                                data-sibling-order-down
-                                aria-label="{% if language == 'zh' %}下移{% else %}Move down{% endif %} {{ sibling.name }}">↓</button>
-                    </span>
-                </li>
+                <input type="hidden" name="unit_ids" value="{{ sibling.id }}">
                 {% endfor %}
-            </ol>
+            </span>
             <button type="submit" class="button">
                 {% if language == "zh" %}保存此层排序{% else %}Save this level order{% endif %}
+            </button>
+            <button type="button" class="button-secondary button" data-sibling-order-cancel>
+                {% if language == "zh" %}取消{% else %}Cancel{% endif %}
             </button>
         </form>
         {% endif %}
@@ -179,6 +167,26 @@
                     aria-label="{% if language == 'zh' %}展开{% else %}Expand{% endif %} {{ row.name }}">▶</button>
             {% else %}
             <span class="tree-toggle-spacer" aria-hidden="true"></span>
+            {% endif %}
+            {% if edit_mode %}
+            <div class="structure-row-order-controls"
+                 data-sibling-order-controls
+                 aria-label="{% if language == 'zh' %}同层排序工具{% else %}Same-level ordering tools{% endif %}">
+                <button type="button"
+                        class="structure-icon-button"
+                        data-sibling-order-control
+                        data-direction="up"
+                        data-parent-id="{{ row.sibling_order_parent_key }}"
+                        {% if not row.can_order_up %}disabled{% endif %}
+                        aria-label="{% if language == 'zh' %}上移{% else %}Move up{% endif %} {{ row.name }}">↑</button>
+                <button type="button"
+                        class="structure-icon-button"
+                        data-sibling-order-control
+                        data-direction="down"
+                        data-parent-id="{{ row.sibling_order_parent_key }}"
+                        {% if not row.can_order_down %}disabled{% endif %}
+                        aria-label="{% if language == 'zh' %}下移{% else %}Move down{% endif %} {{ row.name }}">↓</button>
+            </div>
             {% endif %}
             <div class="structure-map-row-content">
                 <span class="structure-map-unit-name">{{ row.name }}</span>
@@ -489,6 +497,91 @@
             });
         }
 
+        function parentKeyForRow(row) {
+            return row.getAttribute("data-parent-id") || "root";
+        }
+
+        function depthForRow(row) {
+            return parseInt(row.getAttribute("data-depth") || "0", 10);
+        }
+
+        function currentSiblingRows(parentKey) {
+            return Array.prototype.slice.call(root.querySelectorAll("[data-structure-row]")).filter(function (row) {
+                return parentKeyForRow(row) === parentKey;
+            });
+        }
+
+        function getSubtreeBlock(row) {
+            var depth = depthForRow(row);
+            var block = [row];
+            var node = row.nextElementSibling;
+
+            while (node) {
+                if (node.matches("[data-structure-row]") && depthForRow(node) <= depth) {
+                    break;
+                }
+                block.push(node);
+                node = node.nextElementSibling;
+            }
+
+            return block;
+        }
+
+        function updateOrderControls(parentKey) {
+            var siblingRows = currentSiblingRows(parentKey);
+            siblingRows.forEach(function (row, index) {
+                var up = row.querySelector("[data-sibling-order-control][data-direction='up']");
+                var down = row.querySelector("[data-sibling-order-control][data-direction='down']");
+                if (up) { up.disabled = index === 0; }
+                if (down) { down.disabled = index === siblingRows.length - 1; }
+            });
+        }
+
+        function updateDirtySaveForm(parentKey) {
+            var form = root.querySelector("[data-sibling-order-form][data-parent-id='" + parentKey + "']");
+            if (!form) { return; }
+
+            var inputContainer = form.querySelector("[data-sibling-order-inputs]");
+            if (!inputContainer) { return; }
+
+            inputContainer.textContent = "";
+            currentSiblingRows(parentKey).forEach(function (row) {
+                var input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "unit_ids";
+                input.value = row.getAttribute("data-unit-id");
+                inputContainer.appendChild(input);
+            });
+            form.hidden = false;
+        }
+
+        function moveBlockBefore(block, referenceNode) {
+            block.forEach(function (node) {
+                root.insertBefore(node, referenceNode);
+            });
+        }
+
+        function moveSiblingRow(row, direction) {
+            var parentKey = parentKeyForRow(row);
+            var siblingRows = currentSiblingRows(parentKey);
+            var index = siblingRows.indexOf(row);
+            var target = direction === "up" ? siblingRows[index - 1] : siblingRows[index + 1];
+
+            if (!target) { return; }
+
+            var rowBlock = getSubtreeBlock(row);
+            if (direction === "up") {
+                moveBlockBefore(rowBlock, target);
+            } else {
+                var targetBlock = getSubtreeBlock(target);
+                moveBlockBefore(rowBlock, targetBlock[targetBlock.length - 1].nextElementSibling);
+            }
+
+            updateDirtySaveForm(parentKey);
+            updateOrderControls(parentKey);
+            updateVisibility();
+        }
+
         root.querySelectorAll("[data-structure-toggle]").forEach(function (toggle) {
             toggle.addEventListener("click", function () {
                 var row = toggle.closest("[data-structure-row]");
@@ -498,54 +591,29 @@
             });
         });
 
+        root.querySelectorAll("[data-sibling-order-control]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                if (button.disabled) { return; }
+                var row = button.closest("[data-structure-row]");
+                if (!row) { return; }
+                moveSiblingRow(row, button.getAttribute("data-direction"));
+            });
+        });
+
+        root.querySelectorAll("[data-sibling-order-cancel]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                window.location.reload();
+            });
+        });
+
+        Array.prototype.slice.call(root.querySelectorAll("[data-structure-row]")).forEach(function (row) {
+            updateOrderControls(parentKeyForRow(row));
+        });
+
         updateVisibility();
     }
 
     document.querySelectorAll("[data-structure-tree]").forEach(initStructureTree);
-
-    function initSiblingOrderForm(form) {
-        if (form.dataset.siblingOrderReady) { return; }
-        form.dataset.siblingOrderReady = "1";
-        var list = form.querySelector("[data-sibling-order-list]");
-        if (!list) { return; }
-
-        function updateButtons() {
-            var items = Array.prototype.slice.call(list.querySelectorAll("[data-sibling-order-item]"));
-            items.forEach(function (item, index) {
-                var up = item.querySelector("[data-sibling-order-up]");
-                var down = item.querySelector("[data-sibling-order-down]");
-                if (up) { up.disabled = index === 0; }
-                if (down) { down.disabled = index === items.length - 1; }
-            });
-        }
-
-        form.addEventListener("click", function (event) {
-            var up = event.target.closest("[data-sibling-order-up]");
-            var down = event.target.closest("[data-sibling-order-down]");
-            if (!up && !down) { return; }
-
-            var item = event.target.closest("[data-sibling-order-item]");
-            if (!item) { return; }
-
-            if (up) {
-                var previous = item.previousElementSibling;
-                if (previous) {
-                    list.insertBefore(item, previous);
-                }
-            }
-            if (down) {
-                var next = item.nextElementSibling;
-                if (next) {
-                    list.insertBefore(next, item);
-                }
-            }
-            updateButtons();
-        });
-
-        updateButtons();
-    }
-
-    document.querySelectorAll("[data-sibling-order-form]").forEach(initSiblingOrderForm);
 })();
 </script>
 {% endblock %}

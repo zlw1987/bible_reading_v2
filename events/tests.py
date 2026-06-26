@@ -2158,8 +2158,14 @@ class ServiceEventFoundationTests(TestCase):
     def test_member_detail_shows_details_and_back_link(self):
         self.set_language("en")
         event = self.create_visible_event(
-            start_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
-            end_datetime=datetime(2026, 6, 12, 21, 0, tzinfo=datetime_timezone.utc),
+            start_datetime=timezone.make_aware(
+                datetime(2026, 6, 12, 19, 30),
+                timezone.get_current_timezone(),
+            ),
+            end_datetime=timezone.make_aware(
+                datetime(2026, 6, 12, 21, 0),
+                timezone.get_current_timezone(),
+            ),
         )
 
         self.client.login(username="regular", password="testpass123")

@@ -897,7 +897,70 @@ def manage_bible_study_meeting_roles(request, meeting_id):
         messages.error(request, study_ui_text(language, "no_permission"))
         return redirect("bible_study_meeting_detail", meeting_id=meeting.id)
 
+    role_selector_labels = {
+        "en": {
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER: "Discussion Leader",
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD: "Worship Lead",
+            BibleStudyMeetingRole.ROLE_PIANIST: "Pianist",
+            BibleStudyMeetingRole.ROLE_SUPPORT: "Support",
+            BibleStudyMeetingRole.ROLE_HOST: "Host",
+        },
+        "zh": {
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER: "查经带领",
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD: "敬拜带领",
+            BibleStudyMeetingRole.ROLE_PIANIST: "伴奏",
+            BibleStudyMeetingRole.ROLE_SUPPORT: "配搭",
+            BibleStudyMeetingRole.ROLE_HOST: "接待",
+        },
+    }
+    add_role_selector_options = [
+        {
+            "value": BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            "label": role_selector_labels[language].get(
+                BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+                "Discussion Leader",
+            ),
+        },
+        {
+            "value": BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            "label": role_selector_labels[language].get(
+                BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+                "Worship Lead",
+            ),
+        },
+        {
+            "value": BibleStudyMeetingRole.ROLE_PIANIST,
+            "label": role_selector_labels[language].get(
+                BibleStudyMeetingRole.ROLE_PIANIST,
+                "Pianist",
+            ),
+        },
+        {
+            "value": BibleStudyMeetingRole.ROLE_SUPPORT,
+            "label": role_selector_labels[language].get(
+                BibleStudyMeetingRole.ROLE_SUPPORT,
+                "Support",
+            ),
+        },
+        {
+            "value": BibleStudyMeetingRole.ROLE_HOST,
+            "label": role_selector_labels[language].get(
+                BibleStudyMeetingRole.ROLE_HOST,
+                "Host",
+            ),
+        },
+    ]
+    valid_add_role_values = {
+        option["value"] for option in add_role_selector_options
+    }
+
+    def normalize_add_role(value):
+        if value in valid_add_role_values:
+            return value
+        return BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER
+
     if request.method == "POST":
+        selected_add_role = normalize_add_role(request.POST.get("role"))
         form = BibleStudyMeetingRoleForm(
             request.POST,
             language=language,
@@ -907,15 +970,18 @@ def manage_bible_study_meeting_roles(request, meeting_id):
             role = form.save(commit=False)
             role.meeting = meeting
             role.save()
-            message = (
-                "聚会同工分工已保存。"
-                if language == "zh"
-                else study_ui_text(language, "meeting_role_saved")
+            messages.success(
+                request,
+                "同工分工已保存。" if language == "zh" else "Meeting role saved.",
             )
-            messages.success(request, message)
             return redirect("manage_bible_study_meeting_roles", meeting_id=meeting.id)
     else:
-        form = BibleStudyMeetingRoleForm(language=language, meeting=meeting)
+        selected_add_role = normalize_add_role(request.GET.get("role"))
+        form = BibleStudyMeetingRoleForm(
+            language=language,
+            meeting=meeting,
+            initial={"role": selected_add_role},
+        )
 
     return render(
         request,
@@ -924,6 +990,8 @@ def manage_bible_study_meeting_roles(request, meeting_id):
             "meeting": meeting,
             "meeting_roles": meeting.roles.select_related("user"),
             "form": form,
+            "add_role_selector_options": add_role_selector_options,
+            "selected_add_role": selected_add_role,
         },
     )
 

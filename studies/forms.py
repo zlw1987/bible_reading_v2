@@ -2,8 +2,13 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 
-from accounts.models import ChurchStructureUnit
+from accounts.models import (
+    ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleType,
+)
 from accounts.ordering import (
     order_units_by_display_label,
     order_units_by_sibling_key,
@@ -903,6 +908,169 @@ def meeting_role_form_text(language):
     return MEETING_ROLE_FORM_TEXT.get(language, MEETING_ROLE_FORM_TEXT["en"])
 
 
+MEETING_ROLE_CANDIDATE_ROLE_CODES = {
+    BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER: (
+        ChurchStructureUnitRoleType.CODE_EDIFY
+    ),
+    BibleStudyMeetingRole.ROLE_WORSHIP_LEAD: (
+        ChurchStructureUnitRoleType.CODE_WORSHIP
+    ),
+}
+
+MEETING_ROLE_CANDIDATE_NOTES = {
+    "en": {
+        "role_specific_edify": (
+            "Candidates are limited to Edify coworkers for this meeting's anchor unit."
+        ),
+        "role_specific_worship": (
+            "Candidates are limited to Worship coworkers for this meeting's anchor unit."
+        ),
+        "all_coworkers_edify": (
+            "No Edify coworkers are configured; showing all active coworkers for "
+            "this meeting's anchor unit."
+        ),
+        "all_coworkers_worship": (
+            "No Worship coworkers are configured; showing all active coworkers for "
+            "this meeting's anchor unit."
+        ),
+        "no_coworkers": (
+            "No coworker roles are configured for this anchor unit; showing the "
+            "current fallback picker."
+        ),
+        "no_anchor": (
+            "This meeting has no anchor unit; coworker-based candidate filtering "
+            "is not available."
+        ),
+    },
+    "zh": {
+        "role_specific_edify": "候选人仅限此聚会归属单元的带查经同工。",
+        "role_specific_worship": "候选人仅限此聚会归属单元的敬拜同工。",
+        "all_coworkers_edify": (
+            "尚未配置带查经同工；正在显示此聚会归属单元的所有当前同工。"
+        ),
+        "all_coworkers_worship": (
+            "尚未配置敬拜同工；正在显示此聚会归属单元的所有当前同工。"
+        ),
+        "no_coworkers": (
+            "此归属单元尚未配置同工角色；正在显示当前备用候选人。"
+        ),
+        "no_anchor": "此聚会没有归属单元；无法使用同工候选人筛选。",
+    },
+}
+
+
+def _current_meeting_role_user_queryset(meeting):
+    user_model = get_user_model()
+    users = user_model.objects.filter(is_active=True)
+    if meeting:
+        users = filter_users_for_meeting_audience(users, meeting)
+    return users
+
+
+def _active_coworker_assignments_for_unit(unit):
+    today = timezone.localdate()
+    return (
+        ChurchStructureUnitRoleAssignment.objects.filter(
+            unit=unit,
+            is_active=True,
+            role_type__is_active=True,
+            user__is_active=True,
+            start_date__lte=today,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .select_related("role_type", "user")
+    )
+
+
+def _users_from_coworker_assignments(assignments):
+    user_model = get_user_model()
+    return user_model.objects.filter(
+        id__in=assignments.values("user_id"),
+        is_active=True,
+    )
+
+
+def _meeting_role_candidate_note(language, key):
+    return MEETING_ROLE_CANDIDATE_NOTES.get(
+        language,
+        MEETING_ROLE_CANDIDATE_NOTES["en"],
+    )[key]
+
+
+def bible_study_meeting_role_candidate_queryset(meeting, role, language="en"):
+    """Return the linked-user picker source for one Bible Study meeting role.
+
+    Coworker roles only narrow candidate display for discussion/worship setup.
+    Final responsibility still requires an explicit BibleStudyMeetingRole.user.
+    """
+    current_queryset = _current_meeting_role_user_queryset(meeting)
+    result = {
+        "queryset": current_queryset,
+        "source": "current",
+        "note": "",
+        "is_warning": False,
+        "setup_unit": None,
+    }
+    coworker_role_code = MEETING_ROLE_CANDIDATE_ROLE_CODES.get(role)
+    if not coworker_role_code:
+        return result
+
+    if not meeting or not meeting.anchor_unit_id:
+        result.update(
+            {
+                "source": "no_anchor",
+                "note": _meeting_role_candidate_note(language, "no_anchor"),
+                "is_warning": True,
+            }
+        )
+        return result
+
+    active_assignments = _active_coworker_assignments_for_unit(meeting.anchor_unit)
+    role_assignments = active_assignments.filter(role_type__code=coworker_role_code)
+    note_suffix = (
+        "edify"
+        if coworker_role_code == ChurchStructureUnitRoleType.CODE_EDIFY
+        else "worship"
+    )
+
+    if role_assignments.exists():
+        result.update(
+            {
+                "queryset": _users_from_coworker_assignments(role_assignments),
+                "source": f"role_specific_{coworker_role_code}",
+                "note": _meeting_role_candidate_note(
+                    language,
+                    f"role_specific_{note_suffix}",
+                ),
+            }
+        )
+        return result
+
+    if active_assignments.exists():
+        result.update(
+            {
+                "queryset": _users_from_coworker_assignments(active_assignments),
+                "source": f"all_coworkers_no_{coworker_role_code}",
+                "note": _meeting_role_candidate_note(
+                    language,
+                    f"all_coworkers_{note_suffix}",
+                ),
+                "is_warning": True,
+            }
+        )
+        return result
+
+    result.update(
+        {
+            "source": "no_coworkers",
+            "note": _meeting_role_candidate_note(language, "no_coworkers"),
+            "is_warning": True,
+            "setup_unit": meeting.anchor_unit,
+        }
+    )
+    return result
+
+
 class BibleStudyMeetingRoleForm(forms.ModelForm):
     class Meta:
         model = BibleStudyMeetingRole
@@ -935,13 +1103,15 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
             (BibleStudyMeetingRole.ROLE_HOST, text["host"]),
         ]
 
+        role = self._selected_role()
+        candidate_result = bible_study_meeting_role_candidate_queryset(
+            meeting,
+            role,
+            language,
+        )
+        users = candidate_result["queryset"]
         user_model = get_user_model()
-        users = user_model.objects.filter(is_active=True)
         if meeting:
-            users = filter_users_for_meeting_audience(
-                users,
-                meeting,
-            )
             if self.instance.user_id:
                 users = users | user_model.objects.filter(id=self.instance.user_id)
         self.fields["user"].queryset = order_users_by_visible_identity(
@@ -949,6 +1119,10 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
         )
         self.fields["user"].help_text = text["user_help"]
         self.fields["display_name"].help_text = text["display_name_help"]
+        self.candidate_source = candidate_result["source"]
+        self.candidate_note = candidate_result["note"]
+        self.candidate_note_is_warning = candidate_result["is_warning"]
+        self.candidate_setup_unit = candidate_result["setup_unit"]
 
         self.fields["display_name"].widget.attrs.update(
             {"placeholder": text["display_name_placeholder"]}
@@ -959,6 +1133,18 @@ class BibleStudyMeetingRoleForm(forms.ModelForm):
         self.fields["notes_en"].widget.attrs.update(
             {"placeholder": text["notes_en_placeholder"]}
         )
+
+    def _selected_role(self):
+        role_field_name = self.add_prefix("role")
+        if self.is_bound:
+            return self.data.get(role_field_name)
+        if self.instance and self.instance.pk:
+            return self.instance.role
+        role = self.initial.get("role")
+        if role:
+            return role
+        self.initial["role"] = BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER
+        return BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER
 
     def clean(self):
         cleaned = super().clean()

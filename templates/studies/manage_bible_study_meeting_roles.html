@@ -59,15 +59,49 @@
     {{ form.non_field_errors }}
     <h2>{% if language == "zh" %}新增同工分工{% else %}Add Meeting Role{% endif %}</h2>
 
+    <div class="notice-panel">
+        <p>
+            {% if language == "zh" %}
+            请先选择分工类型，页面会按该分工刷新可选用户。
+            {% else %}
+            Choose a role type first so the user picker can use the matching candidate pool.
+            {% endif %}
+        </p>
+        <div class="actions">
+            {% for option in add_role_selector_options %}
+            <a class="button {% if option.value != selected_add_role %}button-secondary{% endif %}"
+               href="{% url 'manage_bible_study_meeting_roles' meeting.id %}?role={{ option.value }}">
+                {{ option.label }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
     {% for field in form %}
+    {% if field.name == "role" %}
+    {{ field.as_hidden }}
+    {{ field.errors }}
+    {% else %}
     <div class="form-row">
         {{ field.label_tag }}
+        {% if field.name == "user" and form.candidate_note %}
+        <div class="{% if form.candidate_note_is_warning %}notice-panel{% else %}muted{% endif %}">
+            <p>{{ form.candidate_note }}</p>
+            {% if form.candidate_setup_unit %}
+            <a class="button button-secondary"
+               href="{% url 'church_structure_unit_detail' form.candidate_setup_unit.id %}">
+                {% if language == "zh" %}配置归属单元同工{% else %}Configure Anchor Unit Coworkers{% endif %}
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
         {{ field }}
         {% if field.help_text %}
         <p class="muted">{{ field.help_text }}</p>
         {% endif %}
         {{ field.errors }}
     </div>
+    {% endif %}
     {% endfor %}
 
     <div class="actions">

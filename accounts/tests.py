@@ -2334,7 +2334,7 @@ class ChurchStructureAdminClarityTests(TestCase):
             response,
             "Membership/belonging is separate from serving",
         )
-        self.assertContains(response, "object rows have been purged")
+        self.assertContains(response, "object rows and schema surfaces have been retired/removed")
         self.assertContains(response, "Path label")
 
     def test_church_structure_membership_admin_explains_belonging_status(self):

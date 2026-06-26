@@ -30,6 +30,17 @@
     {% for field in form %}
     <div class="form-row">
         {{ field.label_tag }}
+        {% if field.name == "user" and form.candidate_note %}
+        <div class="{% if form.candidate_note_is_warning %}notice-panel{% else %}muted{% endif %}">
+            <p>{{ form.candidate_note }}</p>
+            {% if form.candidate_setup_unit %}
+            <a class="button button-secondary"
+               href="{% url 'church_structure_unit_detail' form.candidate_setup_unit.id %}">
+                {% if language == "zh" %}配置归属单元同工{% else %}Configure Anchor Unit Coworkers{% endif %}
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
         {{ field }}
         {% if field.help_text %}
         <p class="muted">{{ field.help_text }}</p>

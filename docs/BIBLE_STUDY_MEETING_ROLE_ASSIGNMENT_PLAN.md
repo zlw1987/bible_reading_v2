@@ -1,6 +1,6 @@
 # Bible Study Meeting Role Assignment Plan
 
-Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete; Bible Study role confirmation in My Serving complete.
+Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete; Bible Study role confirmation in My Serving complete. UNIT-COWORKER-BS-CANDIDATE.1E makes discussion-leader and worship-lead user pickers prefer active Edify/Worship coworkers from the meeting `anchor_unit`, falling back to all active anchor-unit coworkers and then to the existing audience-membership picker when setup is missing.
 
 Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for Today-page surfacing, My Serving confirmation, and clearer Friday Bible Study preparation UX. BS-ROLE.1B, TODAY-HOME.1D, and My Serving Bible Study role confirmation are now complete; this plan still does not approve any further code, schema, migration, permission, notification, or workflow expansion.
 
@@ -34,7 +34,8 @@ Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for T
 
 - `BibleStudyMeetingRoleForm` exposes `role`, `user`, `display_name`, `notes`, and `notes_en`.
 - BS-ROLE.1B originally limited the `user` queryset to active users whose `profile.small_group` matched the meeting's small group, plus the already-selected user when editing.
-- Since CS-CORE.3B and BS-STRUCT.2A, `BibleStudyMeetingRoleForm` and `BibleStudyMeetingWorshipSongForm` user pickers use membership-core matching against the meeting's `BibleStudyMeetingAudienceScope` rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates.
+- Since CS-CORE.3B and BS-STRUCT.2A, `BibleStudyMeetingWorshipSongForm` user pickers use membership-core matching against the meeting's `BibleStudyMeetingAudienceScope` rows, while preserving the currently saved user on edit. Zero-row meetings return no ordinary candidates.
+- Since UNIT-COWORKER-BS-CANDIDATE.1E, `BibleStudyMeetingRoleForm` keeps that audience-membership picker as the fallback, but discussion-leader candidates first use active `edify` coworkers on the meeting `anchor_unit`, worship-lead candidates first use active `worship` coworkers on the `anchor_unit`, and role-specific setup gaps fall back to all active coworkers on that anchor unit. Display-name-only roles remain display fallback only and are not candidate assignments.
 - The placeholder/help text frames `display_name` as a fallback when no user is selected, and BS-ROLE.1B form validation requires either a linked `user` or non-empty `display_name`.
 - Staff/authorized users create roles through `manage_bible_study_meeting_roles`.
 - Staff/authorized users edit roles through `edit_bible_study_meeting_role`.

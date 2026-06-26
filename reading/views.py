@@ -905,6 +905,22 @@ def home(request):
         week_end,
     )
 
+    # Today de-duplication: a Church Gathering already shown in today's bucket
+    # should not appear again in the This Week bucket. get_gatherings_for_window()
+    # intentionally uses overlap-window semantics for long events, so do the
+    # final presentation-level de-dupe here.
+    today_gathering_event_ids = {
+        row["event"].id
+        for row in today_gatherings
+    }
+    week_gatherings = [
+        row
+        for row in week_gatherings
+        if row["event"].id not in today_gathering_event_ids
+    ]
+    if not week_gatherings:
+        show_all_gatherings_link = False
+
     study_meeting_context = get_v2_landing_context(request.user)
     today_study_meetings = get_study_meeting_rows_for_window(
         request.user,

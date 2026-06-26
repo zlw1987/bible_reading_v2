@@ -17,9 +17,11 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleType,
 )
 from events.models import ServiceEvent
-from ministry.models import TeamAssignment
+from ministry.models import TeamAssignment, TeamAssignmentMember
 from .forms import (
     BibleStudyLessonForm,
     BibleStudyMeetingForm,
@@ -204,6 +206,27 @@ class BibleStudyModuleTests(TestCase):
         }
         data.update(overrides)
         return ChurchStructureMembership.objects.create(**data)
+
+    def create_coworker_role_type(self, code, **overrides):
+        data = {
+            "code": code,
+            "name": code,
+            "name_en": code.title(),
+            "is_active": True,
+        }
+        data.update(overrides)
+        return ChurchStructureUnitRoleType.objects.create(**data)
+
+    def create_coworker_assignment(self, user, unit, role_type, **overrides):
+        data = {
+            "unit": unit,
+            "role_type": role_type,
+            "user": user,
+            "is_active": True,
+            "start_date": timezone.localdate() - timezone.timedelta(days=1),
+        }
+        data.update(overrides)
+        return ChurchStructureUnitRoleAssignment.objects.create(**data)
 
     def create_meeting_worship_song(self, meeting, **overrides):
         data = {
@@ -2728,6 +2751,242 @@ class BibleStudyModuleTests(TestCase):
         self.assertIn(rainbow5_member, users)
         self.assertNotIn(rainbow4_member, users)
 
+    def test_discussion_role_form_uses_edify_coworkers_on_anchor_unit(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        edify = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_EDIFY,
+        )
+        worship = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_WORSHIP,
+        )
+        edify_user = User.objects.create_user(username="edify_coworker")
+        worship_user = User.objects.create_user(username="worship_coworker")
+        self.create_coworker_assignment(edify_user, self.group_unit, edify)
+        self.create_coworker_assignment(worship_user, self.group_unit, worship)
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        users = form.fields["user"].queryset
+        self.assertIn(edify_user, users)
+        self.assertNotIn(worship_user, users)
+        self.assertEqual(form.candidate_source, "role_specific_edify")
+        self.assertIn("Edify coworkers", form.candidate_note)
+
+    def test_discussion_role_form_falls_back_to_all_anchor_coworkers(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        worship = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_WORSHIP,
+        )
+        worship_user = User.objects.create_user(username="fallback_worship")
+        self.create_coworker_assignment(worship_user, self.group_unit, worship)
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(worship_user, form.fields["user"].queryset)
+        self.assertEqual(form.candidate_source, "all_coworkers_no_edify")
+        self.assertTrue(form.candidate_note_is_warning)
+        self.assertIn("No Edify coworkers", form.candidate_note)
+
+    def test_worship_role_form_uses_worship_coworkers_on_anchor_unit(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        edify = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_EDIFY,
+        )
+        worship = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_WORSHIP,
+        )
+        edify_user = User.objects.create_user(username="worship_form_edify")
+        worship_user = User.objects.create_user(username="worship_form_worship")
+        self.create_coworker_assignment(edify_user, self.group_unit, edify)
+        self.create_coworker_assignment(worship_user, self.group_unit, worship)
+
+        form = BibleStudyMeetingRoleForm(
+            data=self.meeting_role_post_data(
+                role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+                user=worship_user.id,
+            ),
+            meeting=meeting,
+        )
+
+        users = form.fields["user"].queryset
+        self.assertIn(worship_user, users)
+        self.assertNotIn(edify_user, users)
+        self.assertEqual(form.candidate_source, "role_specific_worship")
+        self.assertIn("Worship coworkers", form.candidate_note)
+
+    def test_worship_role_form_falls_back_to_all_anchor_coworkers(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        edify = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_EDIFY,
+        )
+        edify_user = User.objects.create_user(username="fallback_edify")
+        self.create_coworker_assignment(edify_user, self.group_unit, edify)
+
+        form = BibleStudyMeetingRoleForm(
+            data=self.meeting_role_post_data(
+                role=BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+                user=edify_user.id,
+            ),
+            meeting=meeting,
+        )
+
+        self.assertIn(edify_user, form.fields["user"].queryset)
+        self.assertEqual(form.candidate_source, "all_coworkers_no_worship")
+        self.assertTrue(form.candidate_note_is_warning)
+        self.assertIn("No Worship coworkers", form.candidate_note)
+
+    def test_role_form_no_coworkers_uses_current_fallback_and_setup_link_data(self):
+        member = User.objects.create_user(username="no_coworkers_member")
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["user"].queryset)
+        self.assertEqual(form.candidate_source, "no_coworkers")
+        self.assertTrue(form.candidate_note_is_warning)
+        self.assertEqual(form.candidate_setup_unit, self.group_unit)
+
+    def test_role_form_no_anchor_uses_current_fallback(self):
+        member = User.objects.create_user(username="no_anchor_member")
+        self.create_membership(member, self.group_unit)
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(member, form.fields["user"].queryset)
+        self.assertEqual(form.candidate_source, "no_anchor")
+        self.assertTrue(form.candidate_note_is_warning)
+        self.assertIn("no anchor unit", form.candidate_note)
+
+    def test_role_form_excludes_inactive_future_and_expired_coworkers(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        edify = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_EDIFY,
+        )
+        active_user = User.objects.create_user(username="active_edify")
+        inactive_assignment_user = User.objects.create_user(username="inactive_edify")
+        future_user = User.objects.create_user(username="future_edify")
+        expired_user = User.objects.create_user(username="expired_edify")
+        inactive_user = User.objects.create_user(
+            username="inactive_edify_user",
+            is_active=False,
+        )
+        self.create_coworker_assignment(active_user, self.group_unit, edify)
+        self.create_coworker_assignment(
+            inactive_assignment_user,
+            self.group_unit,
+            edify,
+            is_active=False,
+        )
+        self.create_coworker_assignment(
+            future_user,
+            self.group_unit,
+            edify,
+            start_date=timezone.localdate() + timezone.timedelta(days=1),
+        )
+        self.create_coworker_assignment(
+            expired_user,
+            self.group_unit,
+            edify,
+            end_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+        # Defensive picker coverage: bulk_create bypasses model validation so
+        # the queryset must still filter out inactive linked users.
+        ChurchStructureUnitRoleAssignment.objects.bulk_create(
+            [
+                ChurchStructureUnitRoleAssignment(
+                    unit=self.group_unit,
+                    role_type=edify,
+                    user=inactive_user,
+                    is_active=True,
+                    start_date=timezone.localdate() - timezone.timedelta(days=1),
+                )
+            ]
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        users = form.fields["user"].queryset
+        self.assertIn(active_user, users)
+        self.assertNotIn(inactive_assignment_user, users)
+        self.assertNotIn(future_user, users)
+        self.assertNotIn(expired_user, users)
+        self.assertNotIn(inactive_user, users)
+
+    def test_role_candidate_filtering_does_not_create_runtime_assignments(self):
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        edify = self.create_coworker_role_type(
+            ChurchStructureUnitRoleType.CODE_EDIFY,
+        )
+        edify_user = User.objects.create_user(username="edify_no_mutation")
+        self.create_coworker_assignment(edify_user, self.group_unit, edify)
+        counts = {
+            "memberships": ChurchStructureMembership.objects.count(),
+            "roles": BibleStudyMeetingRole.objects.count(),
+            "church_roles": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+        }
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertIn(edify_user, form.fields["user"].queryset)
+        self.assertEqual(ChurchStructureMembership.objects.count(), counts["memberships"])
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), counts["roles"])
+        self.assertEqual(ChurchRoleAssignment.objects.count(), counts["church_roles"])
+        self.assertEqual(TeamAssignment.objects.count(), counts["team_assignments"])
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            counts["team_assignment_members"],
+        )
+
+    def test_display_name_only_role_is_not_a_candidate_source(self):
+        named_user = User.objects.create_user(username="display_name_only_user")
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        self.create_meeting_role(
+            meeting,
+            user=None,
+            display_name=named_user.username,
+        )
+
+        form = BibleStudyMeetingRoleForm(meeting=meeting)
+
+        self.assertNotIn(named_user, form.fields["user"].queryset)
+        self.assertEqual(form.candidate_source, "no_coworkers")
+
     def test_meeting_role_form_keeps_selected_user_outside_audience_on_edit(self):
         # other_user belongs to Rainbow 5, outside the Rainbow 4 audience row.
         self.create_membership(self.other_user, self.other_group_unit)
@@ -2823,6 +3082,26 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "如果这位同工已有账号，请选择用户")
         self.assertContains(response, "只填写显示姓名的分工仍会显示在聚会详情")
+
+    def test_meeting_role_management_links_anchor_unit_when_no_coworkers(self):
+        self.set_language("en")
+        meeting = self.create_meeting(
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            anchor_unit=self.group_unit,
+        )
+        self.client.login(username="study_staff", password="testpass123")
+
+        response = self.client.get(
+            reverse("manage_bible_study_meeting_roles", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No coworker roles are configured")
+        self.assertContains(response, "Configure Anchor Unit Coworkers")
+        self.assertContains(
+            response,
+            reverse("church_structure_unit_detail", args=[self.group_unit.id]),
+        )
 
     def test_regular_user_cannot_access_meeting_role_management_page(self):
         self.set_language("en")
@@ -3507,7 +3786,10 @@ class BibleStudyModuleTests(TestCase):
     def test_normal_user_can_view_own_published_group_meeting(self):
         self.set_language("en")
         meeting = self.create_meeting(
-            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            meeting_datetime=timezone.make_aware(
+                datetime(2026, 6, 12, 19, 30),
+                timezone.get_current_timezone(),
+            ),  
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
         BibleStudyMeetingAudienceScope.objects.create(
@@ -3863,7 +4145,10 @@ class BibleStudyModuleTests(TestCase):
         )
         meeting = self.create_meeting(
             lesson=lesson,
-            meeting_datetime=datetime(2026, 6, 12, 19, 30, tzinfo=datetime_timezone.utc),
+            meeting_datetime=timezone.make_aware(
+                datetime(2026, 6, 12, 19, 30),
+                timezone.get_current_timezone(),
+            ),
             status=BibleStudyMeeting.STATUS_PUBLISHED,
         )
         BibleStudyMeetingAudienceScope.objects.create(

@@ -11,9 +11,14 @@ readiness, and a seed-command discoverability note when defaults are missing.
 UNIT-COWORKER.1D narrows the add-coworker user picker to active users whose
 active primary `ChurchStructureMembership` is directly on the current unit or
 its immediate parent, with a staff-controlled `coworker_user_scope=all`
-fallback for special cross-unit cases. Bible Study picker filtering, Today, My
-Serving long-term role display, role confirmation, runtime visibility, and
-permission inference remain unimplemented and require separate approval.
+fallback for special cross-unit cases. UNIT-COWORKER-BS-CANDIDATE.1E adds
+Bible Study V2 meeting-role candidate filtering for discussion and worship
+roles: active `edify` / `worship` coworkers on the meeting `anchor_unit` are
+preferred, all active anchor-unit coworkers are the setup fallback, and the
+existing audience-membership picker remains the fallback when no anchor unit or
+no coworkers exist. Today, My Serving long-term role display, long-term coworker role confirmation,
+runtime visibility, and permission inference remain unimplemented and require
+separate approval.
 
 ## 1. Purpose and Product Problem
 

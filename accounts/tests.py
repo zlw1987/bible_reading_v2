@@ -17,6 +17,10 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleProfile,
+    ChurchStructureUnitRoleRequirement,
+    ChurchStructureUnitRoleType,
     Profile,
 )
 from accounts.permissions import (
@@ -1105,6 +1109,356 @@ class ChurchStructureUnitFoundationTests(TestCase):
             district.path_label("en"),
             "Whole Church > Chinese Ministry > District 1",
         )
+
+
+class ChurchStructureUnitCoworkerRoleFoundationTests(TestCase):
+    def call_seed_command(self, *args):
+        output = StringIO()
+        call_command("seed_structure_unit_coworker_roles", *args, stdout=output)
+        return output.getvalue()
+
+    def test_seed_command_dry_run_does_not_write_defaults(self):
+        output = self.call_seed_command()
+
+        self.assertIn("Structure unit coworker role seed mode: DRY RUN", output)
+        self.assertIn("Would create role type lead", output)
+        self.assertEqual(ChurchStructureUnitRoleType.objects.count(), 0)
+        self.assertEqual(ChurchStructureUnitRoleProfile.objects.count(), 0)
+        self.assertEqual(ChurchStructureUnitRoleRequirement.objects.count(), 0)
+
+    def test_seed_command_apply_creates_default_presets(self):
+        output = self.call_seed_command("--apply")
+
+        self.assertIn("Structure unit coworker role seed mode: APPLY", output)
+        self.assertEqual(ChurchStructureUnitRoleType.objects.count(), 6)
+        self.assertEqual(ChurchStructureUnitRoleProfile.objects.count(), 5)
+        self.assertEqual(ChurchStructureUnitRoleRequirement.objects.count(), 10)
+
+        lead = ChurchStructureUnitRoleType.objects.get(
+            code=ChurchStructureUnitRoleType.CODE_LEAD
+        )
+        self.assertTrue(lead.is_system_default)
+        self.assertTrue(lead.is_active)
+
+        for profile in ChurchStructureUnitRoleProfile.objects.all():
+            self.assertTrue(
+                ChurchStructureUnitRoleRequirement.objects.filter(
+                    profile=profile,
+                    role_type=lead,
+                    is_required=True,
+                    is_active=True,
+                ).exists(),
+                msg=f"{profile.code} must require Lead",
+            )
+
+        small_group_profile = ChurchStructureUnitRoleProfile.objects.get(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT
+        )
+        required_codes = set(
+            ChurchStructureUnitRoleRequirement.objects.filter(
+                profile=small_group_profile,
+                is_required=True,
+                is_active=True,
+            ).values_list("role_type__code", flat=True)
+        )
+        self.assertEqual(
+            required_codes,
+            {
+                ChurchStructureUnitRoleType.CODE_LEAD,
+                ChurchStructureUnitRoleType.CODE_ASSISTANT_LEAD,
+                ChurchStructureUnitRoleType.CODE_CARING,
+                ChurchStructureUnitRoleType.CODE_EDIFY,
+                ChurchStructureUnitRoleType.CODE_OUTREACH,
+            },
+        )
+        worship_requirement = ChurchStructureUnitRoleRequirement.objects.get(
+            profile=small_group_profile,
+            role_type__code=ChurchStructureUnitRoleType.CODE_WORSHIP,
+        )
+        self.assertFalse(worship_requirement.is_required)
+
+    def test_seed_command_is_idempotent_after_apply(self):
+        self.call_seed_command("--apply")
+        second_dry_run = self.call_seed_command()
+        second_apply = self.call_seed_command("--apply")
+
+        self.assertIn("role types skipped: 6", second_dry_run)
+        self.assertIn("profiles skipped: 5", second_dry_run)
+        self.assertIn("requirements skipped: 10", second_dry_run)
+        self.assertIn("role types skipped: 6", second_apply)
+        self.assertEqual(ChurchStructureUnitRoleType.objects.count(), 6)
+        self.assertEqual(ChurchStructureUnitRoleProfile.objects.count(), 5)
+        self.assertEqual(ChurchStructureUnitRoleRequirement.objects.count(), 10)
+
+    def test_seed_command_apply_does_not_mutate_units_or_assign_coworkers(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-SEED-SG",
+            name="Seed Group",
+        )
+
+        self.call_seed_command("--apply")
+
+        unit.refresh_from_db()
+        self.assertIsNone(unit.role_profile)
+        self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
+
+    def test_multiple_users_can_hold_same_role_on_same_unit(self):
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-SG",
+            name="Coworker Group",
+        )
+        first_user = User.objects.create_user(username="coworker_lead_one")
+        second_user = User.objects.create_user(username="coworker_lead_two")
+
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=first_user,
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=second_user,
+        )
+
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=unit,
+                role_type=role_type,
+                is_active=True,
+            ).count(),
+            2,
+        )
+
+    def test_same_user_cannot_hold_overlapping_active_duplicate_assignment(self):
+        today = timezone.localdate()
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-DUP",
+            name="Duplicate Group",
+        )
+        user = User.objects.create_user(username="coworker_dup_user")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            start_date=today,
+        )
+
+        duplicate = ChurchStructureUnitRoleAssignment(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            start_date=today + timedelta(days=7),
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            duplicate.full_clean()
+
+        self.assertIn("user", context.exception.message_dict)
+
+    def test_same_user_can_have_non_overlapping_historical_and_current_assignment(self):
+        today = timezone.localdate()
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-HISTORY",
+            name="History Group",
+        )
+        user = User.objects.create_user(username="coworker_history_user")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            start_date=today - timedelta(days=30),
+            end_date=today - timedelta(days=1),
+        )
+
+        current = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            start_date=today,
+        )
+
+        self.assertTrue(current.active_for_date(today))
+
+    def test_inactive_duplicate_assignment_does_not_block_active_assignment(self):
+        today = timezone.localdate()
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-INACTIVE-DUP",
+            name="Inactive Duplicate Group",
+        )
+        user = User.objects.create_user(username="coworker_inactive_dup_user")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            is_active=False,
+            start_date=today,
+        )
+
+        active = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            start_date=today,
+        )
+
+        self.assertTrue(active.is_active)
+
+    def test_role_assignment_does_not_create_other_runtime_assignments(self):
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-B",
+            name="Coworker Boundary",
+        )
+        user = User.objects.create_user(username="coworker_boundary")
+
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+        )
+
+        self.assertFalse(ChurchStructureMembership.objects.filter(user=user).exists())
+        self.assertFalse(ChurchRoleAssignment.objects.filter(user=user).exists())
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_unit_with_children_can_use_small_group_role_profile(self):
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        parent_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-PARENT",
+            name="Parent Group",
+            role_profile=profile,
+        )
+        child_unit = ChurchStructureUnit.objects.create(
+            parent=parent_unit,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="COWORKER-CHILD",
+            name="Child Unit",
+        )
+
+        self.assertEqual(parent_unit.role_profile, profile)
+        self.assertIn(child_unit, parent_unit.children.all())
+
+    def test_childless_unit_is_not_treated_as_small_group_without_role_profile(self):
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        ChurchStructureUnitRoleRequirement.objects.create(
+            profile=profile,
+            role_type=role_type,
+            is_required=True,
+        )
+        childless_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DEPARTMENT,
+            code="COWORKER-DEPT",
+            name="Childless Department",
+        )
+
+        self.assertEqual(list(childless_unit.children.all()), [])
+        self.assertIsNone(childless_unit.role_profile)
+        self.assertEqual(childless_unit.missing_required_role_types(), [])
+
+    def test_missing_required_roles_are_reported_without_auto_assignment(self):
+        lead = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        ChurchStructureUnitRoleRequirement.objects.create(
+            profile=profile,
+            role_type=lead,
+            is_required=True,
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-MISSING",
+            name="Missing Lead Group",
+            role_profile=profile,
+        )
+        user = User.objects.create_user(username="missing_lead_user")
+
+        self.assertEqual(unit.missing_required_role_types(), [lead])
+        self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
+
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=lead,
+            user=user,
+        )
+
+        self.assertEqual(unit.missing_required_role_types(), [])
+
+    def test_active_assignment_rejects_inactive_role_type(self):
+        inactive_role = ChurchStructureUnitRoleType.objects.create(
+            code="inactive_role",
+            name="Inactive Role",
+            is_active=False,
+        )
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="COWORKER-INACTIVE",
+            name="Inactive Role Group",
+        )
+        user = User.objects.create_user(username="inactive_role_user")
+        assignment = ChurchStructureUnitRoleAssignment(
+            unit=unit,
+            role_type=inactive_role,
+            user=user,
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            assignment.full_clean()
+
+        self.assertIn("role_type", context.exception.message_dict)
 
 
 class ChurchStructureSelectorLayerTests(TestCase):

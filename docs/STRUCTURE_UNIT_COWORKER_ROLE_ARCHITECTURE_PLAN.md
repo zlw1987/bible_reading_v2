@@ -1,7 +1,11 @@
 # Structure Unit Coworker Role Architecture Plan
 
-Status: UNIT-COWORKER.1A docs-only design. No code, schema, migration, template,
-permission, data, or runtime behavior change is approved by this document.
+Status: UNIT-COWORKER.1A docs-only design complete. UNIT-COWORKER.1B adds the
+narrow model/admin foundation, nullable explicit unit role profile selection,
+globally scoped role types with globally unique codes, and a dry-run/apply
+preset seed command. Bible Study picker filtering, Today, My Serving long-term
+role display, role confirmation, runtime visibility, and permission changes
+remain unimplemented and require separate approval.
 
 ## 1. Purpose and Product Problem
 
@@ -294,8 +298,9 @@ readiness gaps visible.
 Open decision: whether role assignments need full date-window history in the
 first model slice or can start with active/inactive plus audit timestamps.
 
-Open decision: whether custom role types should be global, per-profile, per-unit,
-or support both global and per-unit scopes.
+Resolved for V1: UNIT-COWORKER.1B implements global role types with globally
+unique codes. Per-profile or per-unit scoped custom role types remain deferred
+future work and would require a separately approved slice if needed.
 
 Open decision: whether inactive users already assigned to a role should remain
 visible for historical cleanup in setup UI.

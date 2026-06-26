@@ -4,6 +4,130 @@ from django.db import models
 from django.utils import timezone
 
 
+class ChurchStructureUnitRoleType(models.Model):
+    CODE_LEAD = "lead"
+    CODE_ASSISTANT_LEAD = "assistant_lead"
+    CODE_CARING = "caring"
+    CODE_EDIFY = "edify"
+    CODE_OUTREACH = "outreach"
+    CODE_WORSHIP = "worship"
+
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    is_system_default = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "code"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    def clean(self):
+        if self.code:
+            self.code = self.code.strip().lower()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_name(self, language="zh"):
+        if language == "en" and self.name_en:
+            return self.name_en
+        return self.name
+
+
+class ChurchStructureUnitRoleProfile(models.Model):
+    CODE_GENERAL_UNIT = "general_unit"
+    CODE_DISTRICT_UNIT = "district_unit"
+    CODE_SMALL_GROUP_UNIT = "small_group_unit"
+    CODE_DEPARTMENT_UNIT = "department_unit"
+    CODE_CUSTOM = "custom"
+
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    is_system_default = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "code"]
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    def clean(self):
+        if self.code:
+            self.code = self.code.strip().lower()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_name(self, language="zh"):
+        if language == "en" and self.name_en:
+            return self.name_en
+        return self.name
+
+
+class ChurchStructureUnitRoleRequirement(models.Model):
+    profile = models.ForeignKey(
+        ChurchStructureUnitRoleProfile,
+        on_delete=models.CASCADE,
+        related_name="role_requirements",
+    )
+    role_type = models.ForeignKey(
+        ChurchStructureUnitRoleType,
+        on_delete=models.PROTECT,
+        related_name="profile_requirements",
+    )
+    is_required = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["profile__sort_order", "sort_order", "role_type__sort_order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "role_type"],
+                name="unique_structure_unit_role_requirement",
+            ),
+        ]
+
+    def __str__(self):
+        required_label = "required" if self.is_required else "optional"
+        return f"{self.profile.code}: {self.role_type.code} ({required_label})"
+
+    def clean(self):
+        errors = {}
+
+        if self.is_active:
+            if self.profile_id and not self.profile.is_active:
+                errors["profile"] = "Active requirements must use an active role profile."
+            if self.role_type_id and not self.role_type.is_active:
+                errors["role_type"] = "Active requirements must use an active role type."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
 class ChurchStructureUnit(models.Model):
     UNIT_ROOT = "root"
     UNIT_MINISTRY_CONTEXT = "ministry_context"
@@ -36,6 +160,18 @@ class ChurchStructureUnit(models.Model):
     name_en = models.CharField(max_length=120, blank=True)
     description = models.TextField(blank=True)
     description_en = models.TextField(blank=True)
+    role_profile = models.ForeignKey(
+        ChurchStructureUnitRoleProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="units",
+        help_text=(
+            "Explicit coworker-role profile for setup/readiness. This is not "
+            "computed from leaf-node status and does not grant membership, "
+            "permissions, or serving assignments."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -67,6 +203,9 @@ class ChurchStructureUnit(models.Model):
 
         if self.unit_type == self.UNIT_ROOT and self.parent_id:
             errors["parent"] = "Root church structure units cannot have a parent."
+
+        if self.role_profile_id and not self.role_profile.is_active:
+            errors["role_profile"] = "Church structure units require an active role profile."
 
         seen_parent_ids = set()
         current = self.parent
@@ -120,6 +259,38 @@ class ChurchStructureUnit(models.Model):
     def path_label(self, language="zh"):
         units = self.get_ancestors() + [self]
         return " > ".join(unit.display_name(language) for unit in units)
+
+    def missing_required_role_types(self, target_date=None):
+        if not self.role_profile_id:
+            return []
+
+        target_date = target_date or timezone.localdate()
+        required_role_types = list(
+            ChurchStructureUnitRoleType.objects.filter(
+                profile_requirements__profile=self.role_profile,
+                profile_requirements__is_active=True,
+                profile_requirements__is_required=True,
+                is_active=True,
+            ).distinct()
+        )
+        if not required_role_types:
+            return []
+
+        covered_role_type_ids = set(
+            self.coworker_role_assignments.filter(
+                is_active=True,
+                role_type__in=required_role_types,
+                start_date__lte=target_date,
+            )
+            .filter(models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date))
+            .values_list("role_type_id", flat=True)
+        )
+
+        return [
+            role_type
+            for role_type in required_role_types
+            if role_type.id not in covered_role_type_ids
+        ]
 
 
 class ChurchStructureMembership(models.Model):
@@ -282,6 +453,99 @@ class ChurchStructureMembership(models.Model):
                 errors["is_primary"] = (
                     "A user can have only one active primary church structure membership."
                 )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class ChurchStructureUnitRoleAssignment(models.Model):
+    unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.PROTECT,
+        related_name="coworker_role_assignments",
+    )
+    role_type = models.ForeignKey(
+        ChurchStructureUnitRoleType,
+        on_delete=models.PROTECT,
+        related_name="unit_assignments",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="structure_unit_role_assignments",
+    )
+    is_active = models.BooleanField(default=True)
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Operational/non-sensitive notes only. Do not store counseling, "
+            "pastoral, medical, financial, or private information."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["unit", "role_type__sort_order", "user__username", "id"]
+        indexes = [
+            models.Index(fields=["unit", "is_active"]),
+            models.Index(fields=["role_type", "is_active"]),
+            models.Index(fields=["user", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.role_type.display_name('en')} ({self.unit})"
+
+    def active_for_date(self, date):
+        if not self.is_active or not self.start_date:
+            return False
+        if self.start_date > date:
+            return False
+        if self.end_date and self.end_date < date:
+            return False
+        return True
+
+    def clean(self):
+        errors = {}
+
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            errors["end_date"] = "End date cannot be before start date."
+
+        if self.is_active:
+            if self.unit_id and not self.unit.is_active:
+                errors["unit"] = "Active coworker role assignments require an active unit."
+            if self.role_type_id and not self.role_type.is_active:
+                errors["role_type"] = (
+                    "Active coworker role assignments require an active role type."
+                )
+            if self.user_id and not self.user.is_active:
+                errors["user"] = "Active coworker role assignments require an active user."
+
+            if self.unit_id and self.role_type_id and self.user_id and self.start_date:
+                overlapping = ChurchStructureUnitRoleAssignment.objects.filter(
+                    unit=self.unit,
+                    role_type=self.role_type,
+                    user=self.user,
+                    is_active=True,
+                ).filter(
+                    models.Q(end_date__isnull=True)
+                    | models.Q(end_date__gte=self.start_date)
+                )
+                if self.end_date:
+                    overlapping = overlapping.filter(start_date__lte=self.end_date)
+                if self.pk:
+                    overlapping = overlapping.exclude(pk=self.pk)
+                if overlapping.exists():
+                    errors["user"] = (
+                        "This user already has an overlapping active coworker "
+                        "role assignment for this unit and role type."
+                    )
 
         if errors:
             raise ValidationError(errors)

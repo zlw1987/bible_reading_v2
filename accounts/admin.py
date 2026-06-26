@@ -3,6 +3,10 @@ from .models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleProfile,
+    ChurchStructureUnitRoleRequirement,
+    ChurchStructureUnitRoleType,
     Profile,
 )
 
@@ -16,7 +20,7 @@ STRUCTURE_UNIT_NOTE = (
     "BibleStudyMeetingAudienceScope, generation_key, and anchor_unit. "
     "Membership/belonging is separate from serving, TeamAssignment, and role "
     "assignments. Legacy SmallGroup / District / MinistryContext object rows "
-    "have been purged; their model/table deletion remains a later schema slice."
+    "and schema surfaces have been retired/removed."
 )
 
 MEMBERSHIP_NOTE = (
@@ -41,12 +45,13 @@ class ChurchStructureUnitAdmin(admin.ModelAdmin):
         "name",
         "name_en",
         "unit_type",
+        "role_profile",
         "parent",
         "path_label_en",
         "is_active",
         "sort_order",
     )
-    list_filter = ("unit_type", "is_active")
+    list_filter = ("unit_type", "role_profile", "is_active")
     search_fields = ("code", "name", "name_en")
     ordering = ("parent_id", "sort_order", "code")
     readonly_fields = ("admin_runtime_note", "path_label_en", "created_at", "updated_at")
@@ -63,6 +68,7 @@ class ChurchStructureUnitAdmin(admin.ModelAdmin):
                     "name_en",
                     "description",
                     "description_en",
+                    "role_profile",
                     "is_active",
                     "sort_order",
                     "path_label_en",
@@ -84,6 +90,96 @@ class ChurchStructureUnitAdmin(admin.ModelAdmin):
         return obj.path_label("en")
 
     path_label_en.short_description = "Path label"
+
+
+@admin.register(ChurchStructureUnitRoleType)
+class ChurchStructureUnitRoleTypeAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "name",
+        "name_en",
+        "is_active",
+        "is_system_default",
+        "sort_order",
+    )
+    list_filter = ("is_active", "is_system_default")
+    search_fields = ("code", "name", "name_en")
+    ordering = ("sort_order", "code")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ChurchStructureUnitRoleProfile)
+class ChurchStructureUnitRoleProfileAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "name",
+        "name_en",
+        "is_active",
+        "is_system_default",
+        "sort_order",
+    )
+    list_filter = ("is_active", "is_system_default")
+    search_fields = ("code", "name", "name_en")
+    ordering = ("sort_order", "code")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ChurchStructureUnitRoleRequirement)
+class ChurchStructureUnitRoleRequirementAdmin(admin.ModelAdmin):
+    list_display = (
+        "profile",
+        "role_type",
+        "is_required",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = (
+        "profile",
+        "role_type",
+        "is_required",
+        "is_active",
+    )
+    search_fields = (
+        "profile__code",
+        "profile__name",
+        "profile__name_en",
+        "role_type__code",
+        "role_type__name",
+        "role_type__name_en",
+    )
+    raw_id_fields = ("profile", "role_type")
+    ordering = ("profile__sort_order", "sort_order", "role_type__sort_order")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(ChurchStructureUnitRoleAssignment)
+class ChurchStructureUnitRoleAssignmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "unit",
+        "role_type",
+        "user",
+        "is_active",
+        "start_date",
+        "end_date",
+    )
+    list_filter = (
+        "role_type",
+        "is_active",
+        "unit__unit_type",
+    )
+    search_fields = (
+        "unit__code",
+        "unit__name",
+        "unit__name_en",
+        "role_type__code",
+        "role_type__name",
+        "role_type__name_en",
+        "user__username",
+        "user__email",
+    )
+    raw_id_fields = ("unit", "role_type", "user")
+    ordering = ("unit__parent_id", "unit__sort_order", "role_type__sort_order")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(ChurchStructureMembership)

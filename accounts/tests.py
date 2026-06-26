@@ -4256,6 +4256,9 @@ class StaffStructureMapEditModeTests(TestCase):
         self.sort_order_child_url = reverse(
             "staff_structure_unit_update_sort_order", args=[self.child.id]
         )
+        self.order_siblings_url = reverse(
+            "staff_structure_units_order_siblings"
+        )
         self.disable_root_url = reverse(
             "staff_structure_unit_disable", args=[self.root.id]
         )
@@ -4289,6 +4292,13 @@ class StaffStructureMapEditModeTests(TestCase):
         }
         payload.update(overrides)
         return payload
+
+    def post_sibling_order(self, parent_id, unit_ids, **kwargs):
+        payload = {
+            "parent_id": "root" if parent_id is None else str(parent_id),
+            "unit_ids": [str(unit_id) for unit_id in unit_ids],
+        }
+        return self.client.post(self.order_siblings_url, payload, **kwargs)
 
     # --- view / edit mode ---------------------------------------------------
 
@@ -4469,6 +4479,41 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertIn(f'action="{self.sort_order_root_url}"', content)
         self.assertIn(f'action="{self.sort_order_child_url}"', content)
 
+    def test_edit_mode_renders_sibling_reorder_controls_for_active_siblings_en(self):
+        ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertContains(response, self.order_siblings_url)
+        self.assertContains(response, "Save this level order")
+        self.assertContains(response, "Only reorders units under the same parent")
+
+    def test_edit_mode_renders_sibling_reorder_controls_for_active_siblings_zh(self):
+        ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        self.set_language("zh")
+        self.login_admin()
+
+        response = self.client.get(self.url, {"edit": "1"})
+
+        self.assertContains(response, "保存此层排序")
+        self.assertContains(response, "只调整同一上级下的显示顺序")
+
     def test_non_edit_mode_does_not_render_sort_order_control(self):
         self.set_language("en")
         self.login_admin()
@@ -4478,6 +4523,8 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertNotContains(response, self.sort_order_child_url)
         self.assertNotContains(response, "Save order")
         self.assertNotContains(response, 'aria-label="Order"')
+        self.assertNotContains(response, self.order_siblings_url)
+        self.assertNotContains(response, "Save this level order")
 
     def test_edit_mode_action_menu_links_to_detail_and_admin(self):
         self.set_language("en")
@@ -4716,6 +4763,347 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertIsNotNone(entry)
         self.assertIn("Updated structure unit sort_order", entry.change_message)
         self.assertIn("sort_order: 3 -> 44", entry.change_message)
+
+    # --- sibling order POST -------------------------------------------------
+
+    def test_admin_can_save_valid_sibling_order(self):
+        first = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        third = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D3",
+            name="三区",
+            name_en="District 3",
+            sort_order=30,
+        )
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            self.root.id,
+            [third.id, self.child.id, first.id],
+        )
+
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        first.refresh_from_db()
+        self.child.refresh_from_db()
+        third.refresh_from_db()
+        self.assertEqual(third.sort_order, 10)
+        self.assertEqual(self.child.sort_order, 20)
+        self.assertEqual(first.sort_order, 30)
+
+    def test_sibling_order_update_preserves_structure_and_related_rows(self):
+        from events.models import ServiceEventAudienceScope
+        from studies.models import BibleStudySeriesAudienceScope
+
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        grandchild = ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            name_en="District 2A",
+            sort_order=4,
+        )
+        membership = ChurchStructureMembership.objects.create(
+            user=self.normal_user,
+            unit=self.child,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.normal_user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_SMALL_GROUP,
+            structure_unit=grandchild,
+        )
+        event = ServiceEvent.objects.create(
+            title="Sibling Order Safety Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.child,
+        )
+        team = MinistryTeam.objects.create(name="Sibling Order Safety Team")
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        team_membership = TeamMembership.objects.create(
+            team=team,
+            user=self.normal_user,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=team_membership,
+        )
+        series = BibleStudySeries.objects.create(
+            title="Sibling Order Safety Series",
+            start_date=timezone.localdate(),
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.child,
+        )
+        before = {
+            "child_parent_id": self.child.parent_id,
+            "child_name": self.child.name,
+            "child_name_en": self.child.name_en,
+            "child_code": self.child.code,
+            "child_unit_type": self.child.unit_type,
+            "child_is_active": self.child.is_active,
+            "sibling_parent_id": sibling.parent_id,
+            "grandchild_parent_id": grandchild.parent_id,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+        }
+        self.login_admin()
+
+        self.post_sibling_order(self.root.id, [self.child.id, sibling.id])
+
+        self.child.refresh_from_db()
+        sibling.refresh_from_db()
+        grandchild.refresh_from_db()
+        membership.refresh_from_db()
+        after = {
+            "child_parent_id": self.child.parent_id,
+            "child_name": self.child.name,
+            "child_name_en": self.child.name_en,
+            "child_code": self.child.code,
+            "child_unit_type": self.child.unit_type,
+            "child_is_active": self.child.is_active,
+            "sibling_parent_id": sibling.parent_id,
+            "grandchild_parent_id": grandchild.parent_id,
+            "memberships": ChurchStructureMembership.objects.count(),
+            "service_scopes": ServiceEventAudienceScope.objects.count(),
+            "series_scopes": BibleStudySeriesAudienceScope.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+        }
+        self.assertEqual(before, after)
+        self.assertEqual(self.child.sort_order, 10)
+        self.assertEqual(sibling.sort_order, 20)
+        self.assertEqual(membership.unit_id, self.child.id)
+
+    def test_sibling_order_update_preserves_parent_child_hierarchy_in_display(self):
+        first = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            name_en="District 1",
+            sort_order=1,
+        )
+        grandchild = ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            name_en="District 2A",
+            sort_order=1,
+        )
+        self.login_admin()
+
+        self.post_sibling_order(self.root.id, [self.child.id, first.id])
+        response = self.client.get(self.url)
+
+        units = [row["unit"] for row in response.context["structure_rows"]]
+        self.assertLess(units.index(self.child), units.index(grandchild))
+        self.assertLess(units.index(grandchild), units.index(first))
+        grandchild.refresh_from_db()
+        self.assertEqual(grandchild.parent_id, self.child.id)
+
+    def test_sibling_order_rejects_mixed_parent_unit_ids(self):
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            sort_order=1,
+        )
+        grandchild = ChurchStructureUnit.objects.create(
+            parent=self.child,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="D2A",
+            name="二区 A 组",
+            sort_order=5,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            self.root.id,
+            [self.child.id, sibling.id, grandchild.id],
+            follow=True,
+        )
+
+        self.assertContains(response, "Order was not saved")
+        self.child.refresh_from_db()
+        sibling.refresh_from_db()
+        grandchild.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+        self.assertEqual(sibling.sort_order, 1)
+        self.assertEqual(grandchild.parent_id, self.child.id)
+
+    def test_sibling_order_rejects_omitted_active_sibling(self):
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            sort_order=1,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            self.root.id,
+            [self.child.id],
+            follow=True,
+        )
+
+        self.assertContains(response, "Order was not saved")
+        sibling.refresh_from_db()
+        self.child.refresh_from_db()
+        self.assertEqual(sibling.sort_order, 1)
+        self.assertEqual(self.child.sort_order, 3)
+
+    def test_sibling_order_rejects_duplicate_ids(self):
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            sort_order=1,
+        )
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            self.root.id,
+            [self.child.id, sibling.id, self.child.id],
+            follow=True,
+        )
+
+        self.assertContains(response, "Order was not saved")
+        self.child.refresh_from_db()
+        sibling.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+        self.assertEqual(sibling.sort_order, 1)
+
+    def test_sibling_order_rejects_inactive_unit(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            self.root.id,
+            [self.child.id, self.inactive_child.id],
+            follow=True,
+        )
+
+        self.assertContains(response, "Order was not saved")
+        self.child.refresh_from_db()
+        self.inactive_child.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+        self.assertEqual(self.inactive_child.sort_order, 9)
+        self.assertFalse(self.inactive_child.is_active)
+
+    def test_sibling_order_rejects_invalid_parent_id(self):
+        self.set_language("en")
+        self.login_admin()
+
+        response = self.post_sibling_order(
+            999999,
+            [self.child.id],
+            follow=True,
+        )
+
+        self.assertContains(response, "Order was not saved")
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.sort_order, 3)
+
+    def test_unauthorized_users_cannot_save_sibling_order(self):
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            sort_order=1,
+        )
+        self.login_viewer()
+
+        viewer_response = self.post_sibling_order(
+            self.root.id,
+            [sibling.id, self.child.id],
+        )
+
+        self.assertEqual(viewer_response.status_code, 302)
+        sibling.refresh_from_db()
+        self.child.refresh_from_db()
+        self.assertEqual(sibling.sort_order, 1)
+        self.assertEqual(self.child.sort_order, 3)
+
+        self.client.logout()
+        self.client.login(username="structure_plain", password="PlainPass123!")
+        normal_response = self.post_sibling_order(
+            self.root.id,
+            [sibling.id, self.child.id],
+        )
+
+        self.assertEqual(normal_response.status_code, 302)
+        sibling.refresh_from_db()
+        self.child.refresh_from_db()
+        self.assertEqual(sibling.sort_order, 1)
+        self.assertEqual(self.child.sort_order, 3)
+
+    def test_sibling_order_update_writes_logentry_audit(self):
+        from django.contrib.admin.models import LogEntry
+        from django.contrib.contenttypes.models import ContentType
+
+        sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="D1",
+            name="一区",
+            sort_order=1,
+        )
+        self.login_admin()
+
+        self.post_sibling_order(self.root.id, [self.child.id, sibling.id])
+
+        ct = ContentType.objects.get_for_model(ChurchStructureUnit)
+        entry = LogEntry.objects.filter(
+            content_type=ct,
+            object_id=str(self.root.id),
+            user=self.admin,
+        ).first()
+        self.assertIsNotNone(entry)
+        self.assertIn("Reordered same-parent structure unit siblings", entry.change_message)
+        self.assertIn(f"parent_id={self.root.id!r}", entry.change_message)
+        self.assertIn(f"ordered_unit_ids={[self.child.id, sibling.id]!r}", entry.change_message)
 
     # --- add child POST -----------------------------------------------------
 

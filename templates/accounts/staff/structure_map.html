@@ -116,6 +116,53 @@
 
     <div class="structure-map-tree" data-structure-tree>
         {% for row in structure_rows %}
+        {% if edit_mode and row.shows_sibling_order_form %}
+        <form method="post"
+              action="{% url 'staff_structure_units_order_siblings' %}"
+              class="structure-sibling-order-form"
+              data-sibling-order-form
+              data-parent-id="{% if row.parent_id %}{{ row.parent_id }}{% else %}root{% endif %}"
+              style="--structure-depth: {{ row.depth }};">
+            {% csrf_token %}
+            <input type="hidden"
+                   name="parent_id"
+                   value="{% if row.parent_id %}{{ row.parent_id }}{% else %}root{% endif %}">
+            <div class="structure-sibling-order-heading">
+                <strong>
+                    {% if language == "zh" %}同层排序{% else %}Same-level order{% endif %}
+                </strong>
+                <span class="muted">
+                    {{ row.sibling_order_parent_label }} ·
+                    {% if language == "zh" %}
+                    只调整同一上级下的显示顺序。
+                    {% else %}
+                    Only reorders units under the same parent.
+                    {% endif %}
+                </span>
+            </div>
+            <ol class="structure-sibling-order-list" data-sibling-order-list>
+                {% for sibling in row.sibling_order_units %}
+                <li data-sibling-order-item>
+                    <input type="hidden" name="unit_ids" value="{{ sibling.id }}">
+                    <span>{{ sibling.name }}</span>
+                    <span class="structure-sibling-order-buttons">
+                        <button type="button"
+                                class="structure-icon-button"
+                                data-sibling-order-up
+                                aria-label="{% if language == 'zh' %}上移{% else %}Move up{% endif %} {{ sibling.name }}">↑</button>
+                        <button type="button"
+                                class="structure-icon-button"
+                                data-sibling-order-down
+                                aria-label="{% if language == 'zh' %}下移{% else %}Move down{% endif %} {{ sibling.name }}">↓</button>
+                    </span>
+                </li>
+                {% endfor %}
+            </ol>
+            <button type="submit" class="button">
+                {% if language == "zh" %}保存此层排序{% else %}Save this level order{% endif %}
+            </button>
+        </form>
+        {% endif %}
         <div class="structure-map-row"
              data-structure-row
              data-unit-id="{{ row.unit.id }}"
@@ -455,6 +502,50 @@
     }
 
     document.querySelectorAll("[data-structure-tree]").forEach(initStructureTree);
+
+    function initSiblingOrderForm(form) {
+        if (form.dataset.siblingOrderReady) { return; }
+        form.dataset.siblingOrderReady = "1";
+        var list = form.querySelector("[data-sibling-order-list]");
+        if (!list) { return; }
+
+        function updateButtons() {
+            var items = Array.prototype.slice.call(list.querySelectorAll("[data-sibling-order-item]"));
+            items.forEach(function (item, index) {
+                var up = item.querySelector("[data-sibling-order-up]");
+                var down = item.querySelector("[data-sibling-order-down]");
+                if (up) { up.disabled = index === 0; }
+                if (down) { down.disabled = index === items.length - 1; }
+            });
+        }
+
+        form.addEventListener("click", function (event) {
+            var up = event.target.closest("[data-sibling-order-up]");
+            var down = event.target.closest("[data-sibling-order-down]");
+            if (!up && !down) { return; }
+
+            var item = event.target.closest("[data-sibling-order-item]");
+            if (!item) { return; }
+
+            if (up) {
+                var previous = item.previousElementSibling;
+                if (previous) {
+                    list.insertBefore(item, previous);
+                }
+            }
+            if (down) {
+                var next = item.nextElementSibling;
+                if (next) {
+                    list.insertBefore(next, item);
+                }
+            }
+            updateButtons();
+        });
+
+        updateButtons();
+    }
+
+    document.querySelectorAll("[data-sibling-order-form]").forEach(initSiblingOrderForm);
 })();
 </script>
 {% endblock %}

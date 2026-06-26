@@ -43,6 +43,11 @@ urlpatterns = [
         name="staff_structure_unit_update_sort_order",
     ),
     path(
+        "staff/structure/units/order-siblings/",
+        views.staff_structure_units_order_siblings,
+        name="staff_structure_units_order_siblings",
+    ),
+    path(
         "staff/structure/units/<int:unit_id>/disable/",
         views.staff_structure_unit_disable,
         name="staff_structure_unit_disable",

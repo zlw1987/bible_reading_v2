@@ -237,9 +237,9 @@ def staff_structure_map(request):
 
     The default map view is review-first: counts only, no member rosters.
     Edit mode is gated to users who can change ChurchStructureUnit and exposes
-    rename, sibling sort-order edits, add-child, safe soft-disable,
-    inactive-unit review/re-enable, and detail/admin links. Membership
-    maintenance lives on the unit detail page.
+    rename, sibling sort-order edits, same-parent bulk sibling ordering,
+    add-child, safe soft-disable, inactive-unit review/re-enable, and
+    detail/admin links. Membership maintenance lives on the unit detail page.
 
     Edit mode does not hard-delete units, move/reparent units,
     cascade-disable/re-enable children, automatically end/create memberships,
@@ -330,6 +330,40 @@ def staff_structure_map(request):
         if unit.id not in visited:
             walk(unit, 0, [])
 
+    sibling_groups = {}
+    parent_names = {
+        unit.id: unit.display_name(language)
+        for unit in units
+    }
+    for row in structure_rows:
+        sibling_groups.setdefault(row["parent_id"], []).append(
+            {
+                "id": row["unit"].id,
+                "name": row["name"],
+            }
+        )
+        row["shows_sibling_order_form"] = False
+        row["sibling_order_units"] = []
+        row["sibling_order_parent_label"] = ""
+
+    seen_parent_ids = set()
+    for row in structure_rows:
+        parent_id = row["parent_id"]
+        sibling_units = sibling_groups.get(parent_id, [])
+        if parent_id in seen_parent_ids or len(sibling_units) < 2:
+            continue
+        seen_parent_ids.add(parent_id)
+        row["shows_sibling_order_form"] = True
+        row["sibling_order_units"] = sibling_units
+        if parent_id:
+            row["sibling_order_parent_label"] = parent_names.get(parent_id) or (
+                "上级单元" if language == "zh" else "Parent unit"
+            )
+        else:
+            row["sibling_order_parent_label"] = (
+                "顶层" if language == "zh" else "Root level"
+            )
+
     indicators = {
         "direct_parent_memberships": counters["direct_parent_memberships"],
         "active_root_units": ChurchStructureUnit.objects.filter(
@@ -350,11 +384,12 @@ def staff_structure_map(request):
 
     # Edit mode is a lightweight read/write affordance layer. The default view
     # stays review-first and read-only; entering edit mode exposes rename,
-    # sibling sort-order edits, add-child, safe soft-disable, and detail/admin
-    # links to users who can change ChurchStructureUnit. It does not hard-delete,
-    # move/reparent, cascade-disable, auto-end memberships, rewrite
-    # audience/role scopes, change serving or visibility semantics, or infer
-    # leadership/serving from membership.
+    # sibling sort-order edits, same-parent bulk sibling ordering, add-child,
+    # safe soft-disable, and detail/admin links to users who can change
+    # ChurchStructureUnit. It does not hard-delete, move/reparent,
+    # cascade-disable, auto-end memberships, rewrite audience/role scopes,
+    # change serving or visibility semantics, or infer leadership/serving from
+    # membership.
     can_admin_units = request.user.has_perm(
         "accounts.change_churchstructureunit"
     )
@@ -465,6 +500,18 @@ def _staff_structure_edit_url():
     return f"{reverse('staff_structure_map')}?edit=1"
 
 
+def _staff_structure_order_siblings_error(request, language):
+    messages.error(
+        request,
+        (
+            "排序保存失败；只能重排同一上级下的启用单元。"
+            if language == "zh"
+            else "Order was not saved. Only active siblings under the same parent can be reordered."
+        ),
+    )
+    return redirect(_staff_structure_edit_url())
+
+
 @staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
@@ -519,6 +566,96 @@ def staff_structure_unit_update_sort_order(request, unit_id):
         request,
         "结构单元排序已更新。" if language == "zh"
         else "Structure unit order updated.",
+    )
+    return redirect(_staff_structure_edit_url())
+
+
+@staff_member_required
+@user_passes_test(can_change_church_structure_units)
+@require_POST
+def staff_structure_units_order_siblings(request):
+    language = get_user_language(request)
+    raw_parent_id = (request.POST.get("parent_id") or "").strip()
+    raw_unit_ids = request.POST.getlist("unit_ids")
+
+    if raw_parent_id in ("", "root"):
+        parent = None
+        parent_id = None
+    else:
+        try:
+            parent_id = int(raw_parent_id)
+        except (TypeError, ValueError):
+            return _staff_structure_order_siblings_error(request, language)
+
+        parent = ChurchStructureUnit.objects.filter(id=parent_id).first()
+        if parent is None:
+            return _staff_structure_order_siblings_error(request, language)
+
+    try:
+        ordered_unit_ids = [int(unit_id) for unit_id in raw_unit_ids]
+    except (TypeError, ValueError):
+        return _staff_structure_order_siblings_error(request, language)
+
+    if not ordered_unit_ids or len(ordered_unit_ids) != len(set(ordered_unit_ids)):
+        return _staff_structure_order_siblings_error(request, language)
+
+    with transaction.atomic():
+        units = list(
+            ChurchStructureUnit.objects.select_for_update().filter(
+                id__in=ordered_unit_ids
+            )
+        )
+        if len(units) != len(ordered_unit_ids):
+            return _staff_structure_order_siblings_error(request, language)
+
+        units_by_id = {unit.id: unit for unit in units}
+        if any(not unit.is_active for unit in units):
+            return _staff_structure_order_siblings_error(request, language)
+
+        if any(unit.parent_id != parent_id for unit in units):
+            return _staff_structure_order_siblings_error(request, language)
+
+        active_sibling_ids = set(
+            ChurchStructureUnit.objects.filter(
+                parent_id=parent_id,
+                is_active=True,
+            ).values_list("id", flat=True)
+        )
+        if set(ordered_unit_ids) != active_sibling_ids:
+            return _staff_structure_order_siblings_error(request, language)
+
+        old_new_parts = []
+        for index, unit_id in enumerate(ordered_unit_ids, start=1):
+            unit = units_by_id[unit_id]
+            old_sort_order = unit.sort_order
+            new_sort_order = index * 10
+            old_new_parts.append(f"{unit_id}: {old_sort_order!r} -> {new_sort_order!r}")
+            if old_sort_order != new_sort_order:
+                unit.sort_order = new_sort_order
+                unit.save(update_fields=["sort_order"])
+
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnit
+            ).pk,
+            object_id=parent.pk if parent else None,
+            object_repr=str(parent) if parent else "Root-level structure units",
+            action_flag=CHANGE,
+            change_message=(
+                "Reordered same-parent structure unit siblings via staff "
+                "structure map (STRUCTURE-TREE-ORDER-DRAG.1E). "
+                f"parent_id={parent_id!r}; ordered_unit_ids={ordered_unit_ids!r}; "
+                f"sort_order changes: {'; '.join(old_new_parts)}. "
+                "Only sibling sort_order values were changed; no parent, "
+                "child, membership, audience scope, role scope, serving "
+                "assignment, or visibility data was changed."
+            ),
+        )
+
+    messages.success(
+        request,
+        "同层排序已保存。" if language == "zh" else "Sibling order saved.",
     )
     return redirect(_staff_structure_edit_url())
 

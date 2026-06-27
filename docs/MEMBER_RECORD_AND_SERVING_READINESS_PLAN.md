@@ -180,8 +180,16 @@ the first delegated-management slices.
 ## A.5 Suggested phases
 
 - `UNIT-LEAD-MANAGE.1A` — docs-only delegated-management design (this section).
-- `UNIT-LEAD-MANAGE.1B` — read-only "My Units" entry: list managed units +
-  current coworker roster + missing-required-role warnings. No edits.
+- `UNIT-LEAD-MANAGE.1B` — **implemented (read-only).** The `/my-units/`
+  ("My Units" / 我负责的单位) entry lists managed units + current coworker roster
+  grouped by role type + missing-required-role readiness, with no edits. The
+  helpers `can_manage_unit_coworkers` / `get_manageable_structure_units`
+  (`accounts/unit_management.py`) derive management from staff/superuser status
+  or an active `lead` ancestor-or-self assignment only; the central
+  `CAP_MANAGE_STRUCTURE_COWORKERS` capability (A.3) is still deferred and was
+  not added in this slice. A guarded global nav link (`should_show_my_units_nav`)
+  shows only to staff and active leads. No models, migrations, forms, or data
+  changes; no member-record/readiness models were introduced.
 - `UNIT-LEAD-MANAGE.1C` — delegated coworker management for authorized leads:
   add / end coworker assignments within managed units, reusing the
   `UNIT-COWORKER.1C` setup logic but gated by `can_manage_unit_coworkers`.

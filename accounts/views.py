@@ -45,6 +45,7 @@ from .ordering import (
     structure_unit_sibling_sort_key,
 )
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
+from .unit_management import get_manageable_structure_units
 
 
 @staff_member_required
@@ -1876,6 +1877,84 @@ def profile(request):
             "active_primary_membership_label": active_primary_membership_label,
         },
     )
+
+@login_required
+def my_units(request):
+    """Read-only "My Units" / 我负责的单位 delegated-management discovery.
+
+    UNIT-LEAD-MANAGE.1B: lists the structure units the signed-in user may manage
+    coworkers for (active lead ancestor-or-self, or staff/superuser sees all),
+    plus current coworker-role readiness for each. This is a read-only
+    operational surface, NOT the admin structure tree editor (/staff/structure/),
+    and it exposes no add/end coworker actions. Management is never inferred from
+    membership, audience visibility, serving, or non-lead coworker roles.
+    """
+    language = get_user_language(request)
+    today = timezone.localdate()
+    units = get_manageable_structure_units(request.user)
+
+    unit_cards = []
+    for unit in units:
+        active_assignments = (
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=unit,
+                is_active=True,
+                start_date__lte=today,
+            )
+            .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+            .select_related("role_type", "user")
+            .order_by(
+                "role_type__sort_order",
+                "role_type__code",
+                "user__username",
+                "id",
+            )
+        )
+
+        role_groups = []
+        current_role_type_id = None
+        current_group = None
+        for assignment in active_assignments:
+            if assignment.role_type_id != current_role_type_id:
+                current_role_type_id = assignment.role_type_id
+                current_group = {
+                    "role_type": assignment.role_type,
+                    "role_label": assignment.role_type.display_name(language),
+                    "assignments": [],
+                }
+                role_groups.append(current_group)
+            current_group["assignments"].append(assignment)
+
+        missing_required_roles = unit.missing_required_role_types(today)
+        unit_cards.append(
+            {
+                "unit": unit,
+                "path": unit.path_label(language),
+                "name": unit.display_name(language),
+                "has_role_profile": bool(unit.role_profile_id),
+                "role_profile_label": (
+                    unit.role_profile.display_name(language)
+                    if unit.role_profile_id
+                    else ""
+                ),
+                "unit_type_label": unit.get_unit_type_display(),
+                "missing_required_roles": [
+                    role_type.display_name(language)
+                    for role_type in missing_required_roles
+                ],
+                "role_groups": role_groups,
+            }
+        )
+
+    return render(
+        request,
+        "accounts/my_units.html",
+        {
+            "active_nav": "my_units",
+            "unit_cards": unit_cards,
+        },
+    )
+
 
 class ProfilePasswordChangeView(PasswordChangeView):
     form_class = LocalizedPasswordChangeForm

@@ -21,6 +21,8 @@ urlpatterns = [
         name="password_change_done",
     ),
 
+    path("my-units/", views.my_units, name="my_units"),
+
     path("staff/", views.staff_overview, name="staff_overview"),
     path(
         "staff/structure/",

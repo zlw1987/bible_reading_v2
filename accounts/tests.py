@@ -41,6 +41,12 @@ from accounts.permissions import (
     get_user_membership_progress_own_group,
     has_capability,
 )
+from accounts.unit_management import (
+    can_manage_unit_coworkers,
+    get_manageable_structure_units,
+    get_user_active_lead_units,
+    should_show_my_units_nav,
+)
 from comments.models import ReflectionComment, ReflectionReport
 from events.models import ServiceEvent, ServiceEventAudienceScope
 from ministry.models import (
@@ -8246,3 +8252,299 @@ class GroupProgressPermissionSourceSwitchTests(TestCase):
                 candidate.id in accessible,
             )
 
+
+
+class MyUnitsReadOnlyTests(TestCase):
+    """UNIT-LEAD-MANAGE.1B read-only My Units entry.
+
+    Management is granted only by staff/superuser or an active `lead` coworker
+    assignment on the unit or an ancestor. Membership/belonging, audience
+    visibility, and non-lead coworker roles never grant management. This surface
+    is read-only and exposes no add/end coworker actions.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.url = reverse("my_units")
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+
+        # A district subtree (district -> group -> nested), plus a sibling branch.
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="MU-DISTRICT",
+            name="负责区",
+            name_en="Lead District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MU-GROUP",
+            name="小组A",
+            name_en="Group A",
+        )
+        self.nested = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="MU-NESTED",
+            name="子单元",
+            name_en="Nested",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MU-SIBLING",
+            name="无关组",
+            name_en="Unrelated Group",
+        )
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.lead_role,
+            user=user,
+            **kwargs,
+        )
+
+    # --- helper: get_manageable_structure_units --------------------------------
+
+    def test_staff_sees_all_active_units(self):
+        staff = User.objects.create_user(username="mu_staff", is_staff=True)
+        units = get_manageable_structure_units(staff)
+        self.assertEqual(
+            {u.id for u in units},
+            {self.district.id, self.group.id, self.nested.id, self.sibling.id},
+        )
+
+    def test_superuser_sees_all_active_units(self):
+        superuser = User.objects.create_superuser(
+            username="mu_super", email="mu_super@example.com", password="x"
+        )
+        units = get_manageable_structure_units(superuser)
+        self.assertIn(self.sibling.id, {u.id for u in units})
+
+    def test_staff_does_not_see_inactive_units(self):
+        staff = User.objects.create_user(username="mu_staff_inactive", is_staff=True)
+        self.sibling.is_active = False
+        self.sibling.save()
+        units = get_manageable_structure_units(staff)
+        self.assertNotIn(self.sibling.id, {u.id for u in units})
+
+    def test_lead_on_unit_sees_that_unit(self):
+        user = User.objects.create_user(username="mu_group_lead")
+        self._lead(user, self.group)
+        ids = {u.id for u in get_manageable_structure_units(user)}
+        self.assertIn(self.group.id, ids)
+
+    def test_lead_on_parent_sees_descendant_units(self):
+        user = User.objects.create_user(username="mu_district_lead")
+        self._lead(user, self.district)
+        ids = {u.id for u in get_manageable_structure_units(user)}
+        self.assertEqual(ids, {self.district.id, self.group.id, self.nested.id})
+
+    def test_lead_on_one_branch_does_not_see_sibling_branch(self):
+        user = User.objects.create_user(username="mu_branch_lead")
+        self._lead(user, self.group)
+        ids = {u.id for u in get_manageable_structure_units(user)}
+        self.assertNotIn(self.sibling.id, ids)
+        self.assertNotIn(self.district.id, ids)
+
+    def test_inactive_lead_assignment_does_not_grant_visibility(self):
+        user = User.objects.create_user(username="mu_inactive_lead")
+        self._lead(user, self.group, is_active=False)
+        self.assertEqual(get_manageable_structure_units(user), [])
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_expired_lead_assignment_does_not_grant_visibility(self):
+        user = User.objects.create_user(username="mu_expired_lead")
+        self._lead(
+            user,
+            self.group,
+            start_date=self.today - timedelta(days=30),
+            end_date=self.today - timedelta(days=1),
+        )
+        self.assertEqual(get_manageable_structure_units(user), [])
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_not_yet_started_lead_assignment_does_not_grant_visibility(self):
+        user = User.objects.create_user(username="mu_future_lead")
+        self._lead(user, self.group, start_date=self.today + timedelta(days=7))
+        self.assertEqual(get_manageable_structure_units(user), [])
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_non_lead_coworker_assignment_does_not_grant_visibility(self):
+        user = User.objects.create_user(username="mu_edify")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=user,
+        )
+        self.assertEqual(get_manageable_structure_units(user), [])
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_membership_alone_does_not_grant_visibility(self):
+        user = User.objects.create_user(username="mu_member")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self.assertEqual(get_manageable_structure_units(user), [])
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_lead_on_inactive_unit_is_not_listed(self):
+        user = User.objects.create_user(username="mu_inactive_unit_lead")
+        self._lead(user, self.group)
+        self.group.is_active = False
+        self.group.save()
+        ids = {u.id for u in get_manageable_structure_units(user)}
+        self.assertNotIn(self.group.id, ids)
+
+    def test_active_lead_on_inactive_unit_does_not_show_nav(self):
+        user = User.objects.create_user(username="mu_inactive_unit_nav")
+        self._lead(user, self.group)
+        self.group.is_active = False
+        self.group.save()
+        # The only active lead assignment is on an inactive unit, so there is
+        # nothing manageable and the nav link must stay hidden.
+        self.assertEqual(get_user_active_lead_units(user), [])
+        self.assertFalse(should_show_my_units_nav(user))
+
+    def test_active_lead_on_inactive_unit_cannot_manage_it(self):
+        user = User.objects.create_user(username="mu_inactive_unit_manage")
+        self._lead(user, self.group)
+        self.group.is_active = False
+        self.group.save()
+        self.assertFalse(can_manage_unit_coworkers(user, self.group))
+
+    def test_staff_listing_only_lists_active_units(self):
+        staff = User.objects.create_user(
+            username="mu_staff_active_only", is_staff=True
+        )
+        self.sibling.is_active = False
+        self.sibling.save()
+        ids = {u.id for u in get_manageable_structure_units(staff)}
+        self.assertEqual(ids, {self.district.id, self.group.id, self.nested.id})
+        self.assertNotIn(self.sibling.id, ids)
+
+    # --- helper: can_manage_unit_coworkers -------------------------------------
+
+    def test_can_manage_ancestor_or_self_but_not_sibling(self):
+        user = User.objects.create_user(username="mu_can_manage")
+        self._lead(user, self.district)
+        self.assertTrue(can_manage_unit_coworkers(user, self.district))
+        self.assertTrue(can_manage_unit_coworkers(user, self.group))
+        self.assertTrue(can_manage_unit_coworkers(user, self.nested))
+        self.assertFalse(can_manage_unit_coworkers(user, self.sibling))
+
+    def test_anonymous_cannot_manage(self):
+        self.assertFalse(can_manage_unit_coworkers(AnonymousUser(), self.group))
+        self.assertEqual(get_manageable_structure_units(AnonymousUser()), [])
+
+    # --- nav guard -------------------------------------------------------------
+
+    def test_nav_flag_true_for_lead_and_staff_false_for_member(self):
+        lead = User.objects.create_user(username="mu_nav_lead")
+        self._lead(lead, self.group)
+        staff = User.objects.create_user(username="mu_nav_staff", is_staff=True)
+        member = User.objects.create_user(username="mu_nav_member")
+        ChurchStructureMembership.objects.create(
+            user=member,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self.assertTrue(should_show_my_units_nav(lead))
+        self.assertTrue(should_show_my_units_nav(staff))
+        self.assertFalse(should_show_my_units_nav(member))
+
+    # --- view ------------------------------------------------------------------
+
+    def test_view_requires_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response["Location"])
+
+    def test_staff_view_lists_active_units(self):
+        User.objects.create_user(
+            username="mu_view_staff", password="pw", is_staff=True
+        )
+        self.client.login(username="mu_view_staff", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Lead District")
+        self.assertContains(response, "Unrelated Group")
+
+    def test_lead_view_shows_led_unit_and_not_sibling(self):
+        user = User.objects.create_user(username="mu_view_lead", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="mu_view_lead", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Group A")
+        self.assertNotContains(response, "Unrelated Group")
+
+    def test_empty_state_for_user_with_no_manageable_units(self):
+        User.objects.create_user(username="mu_view_empty", password="pw")
+        self.client.login(username="mu_view_empty", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You do not currently lead any units.")
+
+    def test_view_shows_missing_required_role_readiness(self):
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        ChurchStructureUnitRoleRequirement.objects.create(
+            profile=profile,
+            role_type=self.edify_role,
+            is_required=True,
+        )
+        self.group.role_profile = profile
+        self.group.save()
+        user = User.objects.create_user(username="mu_view_missing", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="mu_view_missing", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Missing Required Roles")
+        self.assertContains(response, "Edify")
+
+    def test_view_shows_no_role_profile_note(self):
+        user = User.objects.create_user(username="mu_view_noprofile", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="mu_view_noprofile", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertContains(response, "No coworker role profile selected yet.")
+
+    def test_view_is_read_only_no_post_actions(self):
+        user = User.objects.create_user(username="mu_view_readonly", password="pw")
+        self._lead(user, self.group)
+        # An active coworker to confirm the roster renders without an end action.
+        other = User.objects.create_user(username="mu_view_roster_member")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=other,
+        )
+        self.client.login(username="mu_view_readonly", password="pw")
+        get_response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(get_response.status_code, 200)
+        # No add/end coworker form actions are exposed on this surface.
+        self.assertNotContains(get_response, "end_structure_unit_coworker_assignment")
+        self.assertNotContains(get_response, "add_structure_unit_coworker_assignment")
+        # No coworker management form is rendered in the page content area.
+        self.assertNotContains(get_response, "structure-membership-form")

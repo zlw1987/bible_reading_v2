@@ -25,7 +25,11 @@ The next product direction built on this foundation — delegated unit managemen
 unit-specific care records, and a configurable warning-only serving-readiness
 policy/evaluator — is designed (docs-only) in
 [Member Record, Faith Statement, Delegated Unit Management, and Configurable Serving Readiness Plan](MEMBER_RECORD_AND_SERVING_READINESS_PLAN.md)
-(`MEMBER-RECORD.1A`).
+(`MEMBER-RECORD.1A`). The first read-only slice of that direction,
+`UNIT-LEAD-MANAGE.1B`, is now implemented: a read-only `/my-units/` entry that
+lists the units a user may manage (staff/superuser or active `lead`
+ancestor-or-self) plus their coworker roster and missing-required-role
+readiness, with no edit actions. See that plan's Section A.5 for status.
 
 ## 1. Purpose and Product Problem
 

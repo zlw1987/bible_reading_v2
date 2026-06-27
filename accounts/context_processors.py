@@ -1,5 +1,6 @@
 from .language import get_user_language, SUPPORTED_LANGUAGES
 from .ui_text import UI_TEXT
+from .unit_management import should_show_my_units_nav
 
 
 READING_NAV_URLS = {
@@ -134,6 +135,8 @@ def get_active_nav(request):
         return "prayer"
     if url_name == "my_serving":
         return "my_serving"
+    if url_name == "my_units":
+        return "my_units"
     if url_name in PROFILE_NAV_URLS:
         return "profile"
 
@@ -153,4 +156,5 @@ def language_context(request):
         "supported_languages": SUPPORTED_LANGUAGES,
         "ui": UI_TEXT[language],
         "active_nav": get_active_nav(request),
+        "show_my_units_nav": should_show_my_units_nav(request.user),
     }

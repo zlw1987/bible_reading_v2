@@ -5,10 +5,16 @@ views, templates, permissions, management commands, tests, or data changes).
 `MEMBER-RECORD.1B` is implemented as a narrow model/admin/test foundation: it
 adds the global `ChurchMemberRecord` model (one-to-one with the user) recording
 Faith Statement + baptism facts only, with admin registration and focused tests.
-It stores no course/training progress and no serving-readiness result. This
-document records the broader approved product direction; the remaining sections
-(self-editable profile/contact split, unit care records, serving-readiness
-policy/evaluator) stay design-only until each is separately approved.
+It stores no course/training progress and no serving-readiness result.
+`SERVING-READINESS.1A-B` is implemented as the configurable
+`ServingReadinessPolicy` / `ServingReadinessRequirement` model foundation, the
+default SVCA policy seed command, and the read-only `get_serving_readiness`
+evaluator returning a structured, warning-only result computed on demand (never
+a stored boolean); it is **not** integrated into any assignment surface yet
+(`SERVING-READINESS.1C`). This document records the broader approved product
+direction; the remaining sections (self-editable profile/contact split, unit
+care records, and the readiness assignment-surface integration) stay design-only
+until each is separately approved.
 
 This plan sits downstream of
 [Structure Unit Coworker Role Architecture Plan](STRUCTURE_UNIT_COWORKER_ROLE_ARCHITECTURE_PLAN.md)
@@ -733,11 +739,34 @@ implementation.
   surface remain deferred to later, separately approved slices.
 - `MEMBER-RECORD.1C` — `ChurchStructureUnitMemberRecord` + scoped access +
   audit, behind privacy review.
-- `SERVING-READINESS.1A` — `ServingReadinessPolicy` /
-  `ServingReadinessRequirement` models + default SVCA policy seed (dry-run/apply).
-- `SERVING-READINESS.1B` — `get_serving_readiness` evaluator + structured result.
+- `SERVING-READINESS.1A-B` — **implemented (model + seed + evaluator
+  foundation).** Added the configurable `ServingReadinessPolicy` and
+  `ServingReadinessRequirement` models (migration
+  `accounts/0018_servingreadinesspolicy_servingreadinessrequirement`), the
+  dry-run/apply `seed_serving_readiness_policies` command seeding the default
+  SVCA policy (`svca_default_formal_serving`) + Faith Statement / baptism
+  requirements, and the read-only evaluator `accounts/serving_readiness.py`
+  (`get_serving_readiness` / `evaluate_serving_readiness` returning structured
+  `ServingReadinessResult` / `ServingReadinessCheck`). Policy `code` normalizes
+  lower-case; at most one active default policy is enforced via model
+  validation (a simple, SQLite/PostgreSQL-portable choice — a "single active
+  default" rule has no field to hang a partial unique constraint on).
+  `accepted_statuses` is stored as a portable, comma-separated, normalized,
+  validated string (no PostgreSQL-only ArrayField) and checked against
+  `ChurchMemberRecord` Faith Statement / baptism choices. The evaluator is
+  read-only: no policy → neutral `no_policy` ready result; no record → `no_record`
+  (not ready when required requirements exist); inactive user → `inactive_user`;
+  all required pass → `ready`; any required unmet → `pending`; recommended-unmet
+  warns only. It never creates a member record or assignment, never reads
+  membership/legacy structure to infer facts, and never grants permissions.
+  Both new models are admin-registered with bilingual clarity notes
+  distinguishing warning-only policy from permission, assignment, and stored
+  readiness. **Not** integrated into any assignment form/page yet (that is
+  `SERVING-READINESS.1C`); no data migration; the seed was not applied to
+  local/dev or GoDaddy data.
 - `SERVING-READINESS.1C` — warning-only integration across coworker, ministry,
-  weekly-serving, and Bible Study assignment surfaces (E).
+  weekly-serving, and Bible Study assignment surfaces (E). **Not yet
+  implemented.**
 
 # J. Non-Goals for Remaining Future Slices
 
@@ -749,8 +778,12 @@ The following remain non-goals unless a later slice explicitly approves them:
 - No ordinary-user, My Units, or My Serving member-record UI.
 - No member-record access for delegated leads until privacy/permission review.
 - No `ChurchStructureUnitMemberRecord` until a separate privacy-scoped slice.
-- No `ServingReadinessPolicy`, `ServingReadinessRequirement`, or evaluator until
-  a separate serving-readiness slice.
+- No assignment-surface integration of serving-readiness warnings until
+  `SERVING-READINESS.1C`.
+- No hard-blocking based on readiness unless a later policy slice explicitly
+  approves it.
+- No additional context-specific policy selection, ministry-specific policy
+  routing, or course/training requirement sources until later slices.
 - No stored `eligible_for_formal_serving` / `is_ready_to_serve` boolean.
 - No new runtime authority for `Profile.small_group` / `SmallGroup` / `District`
   / `MinistryContext` / legacy scope fields / legacy bridges.

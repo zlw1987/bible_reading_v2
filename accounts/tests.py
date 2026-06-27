@@ -27,6 +27,17 @@ from accounts.models import (
     ChurchStructureUnitRoleRequirement,
     ChurchStructureUnitRoleType,
     Profile,
+    ServingReadinessPolicy,
+    ServingReadinessRequirement,
+)
+from accounts.serving_readiness import (
+    STATUS_INACTIVE_USER,
+    STATUS_NO_POLICY,
+    STATUS_NO_RECORD,
+    STATUS_PENDING,
+    STATUS_READY,
+    evaluate_serving_readiness,
+    get_serving_readiness,
 )
 from accounts.permissions import (
     CAP_MANAGE_CHURCH_MEMBERSHIPS,
@@ -9202,3 +9213,668 @@ class ChurchMemberRecordAdminTests(TestCase):
         # future configurable readiness, never a stored boolean
         self.assertContains(response, "warning-only policy")
         self.assertContains(response, "never a stored boolean")
+
+
+class ServingReadinessPolicyModelTests(TestCase):
+    """SERVING-READINESS.1A policy model foundation."""
+
+    def test_can_create_policy(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="church_a_policy",
+            name="政策甲",
+            name_en="Policy A",
+        )
+        self.assertEqual(policy.code, "church_a_policy")
+        self.assertTrue(policy.is_active)
+        self.assertFalse(policy.is_default)
+
+    def test_code_normalizes_lower_case(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="  Church_B_Policy  ",
+            name="政策乙",
+        )
+        policy.refresh_from_db()
+        self.assertEqual(policy.code, "church_b_policy")
+
+    def test_at_most_one_active_default_policy(self):
+        ServingReadinessPolicy.objects.create(
+            code="default_one",
+            name="默认一",
+            is_default=True,
+            is_active=True,
+        )
+        with self.assertRaises(ValidationError):
+            ServingReadinessPolicy.objects.create(
+                code="default_two",
+                name="默认二",
+                is_default=True,
+                is_active=True,
+            )
+
+    def test_inactive_default_does_not_block_active_default(self):
+        ServingReadinessPolicy.objects.create(
+            code="retired_default",
+            name="停用默认",
+            is_default=True,
+            is_active=False,
+        )
+        # An inactive default must not count against the single-active-default rule.
+        policy = ServingReadinessPolicy.objects.create(
+            code="live_default",
+            name="启用默认",
+            is_default=True,
+            is_active=True,
+        )
+        self.assertTrue(policy.is_default)
+
+    def test_display_name_helper_is_bilingual(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="bilingual_policy",
+            name="中文名称",
+            name_en="English Name",
+        )
+        self.assertEqual(policy.display_name("en"), "English Name")
+        self.assertEqual(policy.display_name("zh"), "中文名称")
+
+    def test_no_stored_readiness_result_field(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="no_result_policy",
+            name="无结果政策",
+        )
+        for name in ("eligible_for_formal_serving", "is_ready_to_serve"):
+            with self.assertRaises(FieldDoesNotExist):
+                ServingReadinessPolicy._meta.get_field(name)
+            self.assertFalse(hasattr(policy, name))
+
+
+class ServingReadinessRequirementModelTests(TestCase):
+    """SERVING-READINESS.1A requirement model foundation."""
+
+    def setUp(self):
+        self.policy = ServingReadinessPolicy.objects.create(
+            code="req_test_policy",
+            name="要求测试政策",
+        )
+
+    def test_can_create_requirement(self):
+        requirement = ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT,
+            accepted_statuses="signed,waived",
+            severity=ServingReadinessRequirement.SEVERITY_REQUIRED,
+            label="信仰宣言",
+            label_en="Faith Statement",
+        )
+        self.assertEqual(
+            requirement.accepted_status_set(), {"signed", "waived"}
+        )
+
+    def test_accepted_statuses_normalize_and_dedupe(self):
+        requirement = ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+            accepted_statuses="  Baptized , recognized ,baptized,",
+            label="受洗",
+        )
+        requirement.refresh_from_db()
+        self.assertEqual(requirement.accepted_statuses, "baptized,recognized")
+        self.assertEqual(
+            requirement.accepted_status_set(), {"baptized", "recognized"}
+        )
+
+    def test_invalid_faith_statement_status_rejected(self):
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=self.policy,
+                requirement_type=(
+                    ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+                ),
+                accepted_statuses="signed,baptized",
+                label="信仰宣言",
+            )
+
+    def test_invalid_baptism_status_rejected(self):
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=self.policy,
+                requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+                accepted_statuses="baptized,signed",
+                label="受洗",
+            )
+
+    def test_unsupported_requirement_type_rejected(self):
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=self.policy,
+                requirement_type="membership_class",
+                accepted_statuses="completed",
+                label="会员课程",
+            )
+
+    def test_empty_accepted_statuses_rejected(self):
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=self.policy,
+                requirement_type=(
+                    ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+                ),
+                accepted_statuses="  , ,",
+                label="信仰宣言",
+            )
+
+    def test_duplicate_active_requirement_type_rejected(self):
+        ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            label="信仰宣言",
+        )
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=self.policy,
+                requirement_type=(
+                    ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+                ),
+                accepted_statuses="waived",
+                label="信仰宣言二",
+            )
+
+    def test_duplicate_inactive_requirement_type_allowed(self):
+        ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            label="信仰宣言",
+        )
+        # An inactive duplicate (historical/disabled) must not be blocked.
+        second = ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="waived",
+            label="信仰宣言二",
+            is_active=False,
+        )
+        self.assertFalse(second.is_active)
+
+    def test_active_requirement_on_inactive_policy_rejected(self):
+        inactive_policy = ServingReadinessPolicy.objects.create(
+            code="inactive_policy",
+            name="停用政策",
+            is_active=False,
+        )
+        with self.assertRaises(ValidationError):
+            ServingReadinessRequirement.objects.create(
+                policy=inactive_policy,
+                requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+                accepted_statuses="baptized",
+                label="受洗",
+            )
+
+    def test_creating_requirement_does_not_create_records_or_assignments(self):
+        before = {
+            "records": ChurchMemberRecord.objects.count(),
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+            accepted_statuses="baptized,recognized",
+            label="受洗",
+        )
+        self.assertEqual(ChurchMemberRecord.objects.count(), before["records"])
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(), before["church_role"]
+        )
+        self.assertEqual(
+            TeamAssignment.objects.count(), before["team_assignment"]
+        )
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_member"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+
+    def test_display_helpers_are_bilingual(self):
+        requirement = ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            label="信仰宣言",
+            label_en="Faith Statement",
+            message="信仰宣言尚未签署。",
+            message_en="Faith Statement is not signed.",
+        )
+        self.assertEqual(requirement.display_label("en"), "Faith Statement")
+        self.assertEqual(requirement.display_label("zh"), "信仰宣言")
+        self.assertEqual(
+            requirement.display_message("en"), "Faith Statement is not signed."
+        )
+        self.assertEqual(requirement.display_message("zh"), "信仰宣言尚未签署。")
+
+
+class ServingReadinessSeedCommandTests(TestCase):
+    """SERVING-READINESS.1A default SVCA policy seed command."""
+
+    POLICY_CODE = "svca_default_formal_serving"
+
+    def _call(self, *args):
+        out = StringIO()
+        call_command("seed_serving_readiness_policies", *args, stdout=out)
+        return out.getvalue()
+
+    def test_dry_run_creates_nothing(self):
+        output = self._call("--dry-run")
+        self.assertEqual(ServingReadinessPolicy.objects.count(), 0)
+        self.assertEqual(ServingReadinessRequirement.objects.count(), 0)
+        self.assertIn("DRY RUN", output)
+
+    def test_default_invocation_is_dry_run(self):
+        self._call()
+        self.assertEqual(ServingReadinessPolicy.objects.count(), 0)
+        self.assertEqual(ServingReadinessRequirement.objects.count(), 0)
+
+    def test_dry_run_reports_would_create(self):
+        output = self._call("--dry-run")
+        self.assertIn(f"Would create policy {self.POLICY_CODE}", output)
+        self.assertIn("Would create requirement", output)
+        self.assertIn("faith_statement", output)
+        self.assertIn("baptism", output)
+
+    def test_apply_creates_policy_and_requirements(self):
+        self._call("--apply")
+        policy = ServingReadinessPolicy.objects.get(code=self.POLICY_CODE)
+        self.assertTrue(policy.is_default)
+        self.assertTrue(policy.is_active)
+        self.assertEqual(policy.requirements.count(), 2)
+
+    def test_apply_is_idempotent(self):
+        self._call("--apply")
+        output = self._call("--apply")
+        self.assertEqual(
+            ServingReadinessPolicy.objects.filter(code=self.POLICY_CODE).count(),
+            1,
+        )
+        self.assertEqual(ServingReadinessRequirement.objects.count(), 2)
+        self.assertIn("policies skipped: 1", output)
+        self.assertIn("requirements skipped: 2", output)
+
+    def test_created_requirements_have_expected_accepted_statuses(self):
+        self._call("--apply")
+        policy = ServingReadinessPolicy.objects.get(code=self.POLICY_CODE)
+        faith = policy.requirements.get(
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+        )
+        baptism = policy.requirements.get(
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM
+        )
+        self.assertEqual(
+            faith.accepted_status_set(), {"signed", "waived", "not_required"}
+        )
+        self.assertEqual(
+            baptism.accepted_status_set(),
+            {"baptized", "recognized", "waived", "not_required"},
+        )
+        self.assertEqual(
+            faith.severity, ServingReadinessRequirement.SEVERITY_REQUIRED
+        )
+        self.assertEqual(
+            baptism.severity, ServingReadinessRequirement.SEVERITY_REQUIRED
+        )
+
+    def test_apply_does_not_create_member_records(self):
+        before = ChurchMemberRecord.objects.count()
+        self._call("--apply")
+        self.assertEqual(ChurchMemberRecord.objects.count(), before)
+
+    def test_apply_does_not_create_assignments(self):
+        before = {
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        self._call("--apply")
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(), before["church_role"]
+        )
+        self.assertEqual(
+            TeamAssignment.objects.count(), before["team_assignment"]
+        )
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_member"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+
+    def test_dry_run_and_apply_together_rejected(self):
+        with self.assertRaises(CommandError):
+            self._call("--dry-run", "--apply")
+
+
+class ServingReadinessEvaluatorTests(TestCase):
+    """SERVING-READINESS.1B read-only evaluator."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="readiness_user")
+
+    def _seed_default_policy(self):
+        call_command(
+            "seed_serving_readiness_policies", "--apply", stdout=StringIO()
+        )
+        return ServingReadinessPolicy.objects.get(
+            code="svca_default_formal_serving"
+        )
+
+    def _make_record(self, **kwargs):
+        return ChurchMemberRecord.objects.create(user=self.user, **kwargs)
+
+    def test_no_policy_returns_neutral_ready_result(self):
+        result = get_serving_readiness(self.user, language="en")
+        self.assertEqual(result.status, STATUS_NO_POLICY)
+        self.assertTrue(result.is_ready)
+        self.assertEqual(result.warnings, [])
+        self.assertIsNone(result.policy_used)
+
+    def test_no_record_with_required_policy_is_not_ready(self):
+        self._seed_default_policy()
+        result = get_serving_readiness(self.user, language="en")
+        self.assertEqual(result.status, STATUS_NO_RECORD)
+        self.assertFalse(result.is_ready)
+        self.assertTrue(result.warnings)
+        self.assertIsNone(result.record)
+
+    def test_signed_and_baptized_passes(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        result = get_serving_readiness(self.user, language="en")
+        self.assertEqual(result.status, STATUS_READY)
+        self.assertTrue(result.is_ready)
+        self.assertEqual(result.warnings, [])
+        self.assertEqual(len(result.passed_requirements), 2)
+        self.assertEqual(result.missing_requirements, [])
+
+    def test_signed_and_recognized_passes(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_RECOGNIZED,
+        )
+        result = get_serving_readiness(self.user)
+        self.assertEqual(result.status, STATUS_READY)
+        self.assertTrue(result.is_ready)
+
+    def test_waived_and_not_required_statuses_pass(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_WAIVED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_REQUIRED,
+        )
+        result = get_serving_readiness(self.user)
+        self.assertTrue(result.is_ready)
+        self.assertEqual(result.status, STATUS_READY)
+
+    def test_declined_faith_statement_fails(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        result = get_serving_readiness(self.user)
+        self.assertEqual(result.status, STATUS_PENDING)
+        self.assertFalse(result.is_ready)
+        self.assertEqual(len(result.missing_requirements), 1)
+        self.assertEqual(
+            result.missing_requirements[0].requirement_type,
+            ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT,
+        )
+
+    def test_not_baptized_fails(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        result = get_serving_readiness(self.user)
+        self.assertEqual(result.status, STATUS_PENDING)
+        self.assertFalse(result.is_ready)
+
+    def test_unknown_statuses_fail(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_UNKNOWN,
+            baptism_status=ChurchMemberRecord.BAPTISM_UNKNOWN,
+        )
+        result = get_serving_readiness(self.user)
+        self.assertEqual(result.status, STATUS_PENDING)
+        self.assertFalse(result.is_ready)
+        self.assertEqual(len(result.missing_requirements), 2)
+
+    def test_recommended_unmet_warns_but_stays_ready(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="recommended_policy",
+            name="建议政策",
+            is_default=True,
+            is_active=True,
+        )
+        ServingReadinessRequirement.objects.create(
+            policy=policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            severity=ServingReadinessRequirement.SEVERITY_REQUIRED,
+            label="信仰宣言",
+        )
+        ServingReadinessRequirement.objects.create(
+            policy=policy,
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+            accepted_statuses="baptized",
+            severity=ServingReadinessRequirement.SEVERITY_RECOMMENDED,
+            label="受洗",
+            message="建议有受洗记录。",
+            message_en="A baptism record is recommended.",
+        )
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        result = get_serving_readiness(self.user, language="en")
+        self.assertTrue(result.is_ready)
+        self.assertEqual(result.status, STATUS_READY)
+        self.assertIn("A baptism record is recommended.", result.warnings)
+
+    def test_inactive_user_returns_inactive_user_status(self):
+        policy = self._seed_default_policy()
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        result = evaluate_serving_readiness(self.user, policy, language="en")
+        self.assertEqual(result.status, STATUS_INACTIVE_USER)
+        self.assertFalse(result.is_ready)
+        self.assertTrue(result.warnings)
+
+    def test_evaluator_messages_render_in_english_and_chinese(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        en_result = get_serving_readiness(self.user, language="en")
+        zh_result = get_serving_readiness(self.user, language="zh")
+        self.assertIn(
+            "Faith Statement is not signed or confirmed.", en_result.warnings
+        )
+        self.assertIn("信仰宣言尚未签署或确认。", zh_result.warnings)
+
+    def test_explicit_inactive_policy_is_honored_when_passed(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="explicit_inactive",
+            name="显式停用政策",
+            is_active=False,
+        )
+        ServingReadinessRequirement.objects.create(
+            policy=policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            is_active=False,
+            label="信仰宣言",
+        )
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+        )
+        # No active requirements -> ready, but the explicit policy is used.
+        result = get_serving_readiness(self.user, policy=policy)
+        self.assertEqual(result.policy_used, policy)
+        self.assertTrue(result.is_ready)
+
+    def test_evaluator_does_not_create_or_change_records_or_assignments(self):
+        self._seed_default_policy()
+        before = {
+            "records": ChurchMemberRecord.objects.count(),
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        get_serving_readiness(self.user)
+        self.assertEqual(ChurchMemberRecord.objects.count(), before["records"])
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(), before["church_role"]
+        )
+        self.assertEqual(
+            TeamAssignment.objects.count(), before["team_assignment"]
+        )
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_member"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+
+    def test_evaluator_does_not_infer_facts_from_membership(self):
+        # A user with active belonging but no member record must still be
+        # treated as no_record: belonging never substitutes for facts.
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="RSG1",
+            name="Readiness Group",
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timedelta(days=1),
+        )
+        self._seed_default_policy()
+        result = get_serving_readiness(self.user)
+        self.assertEqual(result.status, STATUS_NO_RECORD)
+        self.assertFalse(result.is_ready)
+        self.assertIsNone(result.record)
+
+
+class ServingReadinessAdminTests(TestCase):
+    """SERVING-READINESS.1A admin registration and clarity wording."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="readiness_admin",
+            email="readiness_admin@example.com",
+            password="AdminPass123!",
+        )
+        self.client.login(username="readiness_admin", password="AdminPass123!")
+        self.policy = ServingReadinessPolicy.objects.create(
+            code="admin_policy",
+            name="管理政策",
+            name_en="Admin Policy",
+        )
+        self.requirement = ServingReadinessRequirement.objects.create(
+            policy=self.policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            label="信仰宣言",
+        )
+
+    def test_policy_changelist_renders(self):
+        response = self.client.get(
+            reverse("admin:accounts_servingreadinesspolicy_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_policy_change_page_renders_with_clarity_note(self):
+        response = self.client.get(
+            reverse(
+                "admin:accounts_servingreadinesspolicy_change",
+                args=[self.policy.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Serving Readiness Policy")
+        self.assertContains(response, "服事预备政策")
+        self.assertContains(response, "does NOT grant any permission")
+        self.assertContains(response, "does NOT block any assignment")
+        self.assertContains(response, "never a stored boolean")
+        self.assertContains(response, "Belonging remains ChurchStructureMembership")
+
+    def test_requirement_changelist_renders(self):
+        response = self.client.get(
+            reverse("admin:accounts_servingreadinessrequirement_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_requirement_change_page_renders_with_clarity_note(self):
+        response = self.client.get(
+            reverse(
+                "admin:accounts_servingreadinessrequirement_change",
+                args=[self.requirement.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Faith Statement and baptism facts")
+        self.assertContains(response, "computed on demand")

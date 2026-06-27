@@ -49,6 +49,16 @@ ordinary-user, My Units, or My Serving UI and does not change coworker, belongin
 serving, candidate-filtering, or readiness behavior. See that plan's Section I /
 B.2–B.4 for status and corrections.
 
+`SERVING-READINESS.1A-B` then added the configurable, warning-only
+`ServingReadinessPolicy` / `ServingReadinessRequirement` models, the default SVCA
+policy seed command, and the read-only `get_serving_readiness` evaluator
+(`accounts/serving_readiness.py`) returning a structured readiness result computed
+on demand. It does not grant permissions, create records/assignments, read
+membership to infer facts, or store any readiness boolean, and it is **not** yet
+wired into coworker / ministry / weekly-serving / Bible Study assignment surfaces
+(that warning-only integration is `SERVING-READINESS.1C`). See that plan's
+Section D / I for status.
+
 ## 1. Purpose and Product Problem
 
 `ChurchStructureUnit` is now the local canonical church structure model, but the

@@ -9,6 +9,8 @@ from .models import (
     ChurchStructureUnitRoleRequirement,
     ChurchStructureUnitRoleType,
     Profile,
+    ServingReadinessPolicy,
+    ServingReadinessRequirement,
 )
 
 STRUCTURE_UNIT_NOTE = (
@@ -50,6 +52,18 @@ MEMBER_RECORD_NOTE = (
     "remains ChurchStructureMembership; serving assignments remain "
     "TeamAssignmentMember / BibleStudyMeetingRole. Notes must stay operational "
     "and non-sensitive."
+)
+
+SERVING_READINESS_POLICY_NOTE = (
+    "Serving Readiness Policy / 服事预备政策（仅提醒）: a configurable, "
+    "warning-only church rule describing which ChurchMemberRecord facts and "
+    "statuses count as 'ready to serve.' It does NOT grant any permission or "
+    "capability, does NOT block any assignment by itself, and does NOT store a "
+    "per-user readiness result — readiness is computed on demand by the "
+    "evaluator (accounts.serving_readiness), never a stored boolean. "
+    "Requirements currently support Faith Statement and baptism facts from "
+    "ChurchMemberRecord only. Belonging remains ChurchStructureMembership and "
+    "serving remains TeamAssignmentMember / BibleStudyMeetingRole."
 )
 
 
@@ -311,6 +325,115 @@ class ChurchMemberRecordAdmin(admin.ModelAdmin):
 
     def admin_runtime_note(self, obj=None):
         return MEMBER_RECORD_NOTE
+
+    admin_runtime_note.short_description = "Admin clarity note"
+
+
+class ServingReadinessRequirementInline(admin.TabularInline):
+    model = ServingReadinessRequirement
+    extra = 0
+    fields = (
+        "requirement_type",
+        "accepted_statuses",
+        "severity",
+        "label",
+        "label_en",
+        "is_active",
+        "sort_order",
+    )
+
+
+@admin.register(ServingReadinessPolicy)
+class ServingReadinessPolicyAdmin(admin.ModelAdmin):
+    list_display = (
+        "code",
+        "display_name",
+        "is_default",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("is_default", "is_active")
+    search_fields = ("code", "name", "name_en")
+    readonly_fields = ("admin_runtime_note", "created_at", "updated_at")
+    ordering = ("sort_order", "code")
+    inlines = (ServingReadinessRequirementInline,)
+    fieldsets = (
+        (
+            "Serving Readiness Policy / 服事预备政策（仅提醒）",
+            {
+                "fields": (
+                    "admin_runtime_note",
+                    "code",
+                    "name",
+                    "name_en",
+                    "description",
+                    "description_en",
+                    "is_default",
+                    "is_active",
+                    "sort_order",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
+
+    def display_name(self, obj):
+        return obj.display_name("zh")
+
+    display_name.short_description = "Name"
+
+    def admin_runtime_note(self, obj=None):
+        return SERVING_READINESS_POLICY_NOTE
+
+    admin_runtime_note.short_description = "Admin clarity note"
+
+
+@admin.register(ServingReadinessRequirement)
+class ServingReadinessRequirementAdmin(admin.ModelAdmin):
+    list_display = (
+        "policy",
+        "requirement_type",
+        "severity",
+        "accepted_statuses",
+        "is_active",
+        "sort_order",
+    )
+    list_filter = ("policy", "requirement_type", "severity", "is_active")
+    search_fields = (
+        "policy__code",
+        "policy__name",
+        "label",
+        "label_en",
+    )
+    autocomplete_fields = ("policy",)
+    readonly_fields = ("admin_runtime_note", "created_at", "updated_at")
+    ordering = ("policy", "sort_order")
+    fieldsets = (
+        (
+            "Serving Readiness Requirement / 服事预备要求（仅提醒）",
+            {
+                "fields": (
+                    "admin_runtime_note",
+                    "policy",
+                    "requirement_type",
+                    "accepted_statuses",
+                    "severity",
+                    "label",
+                    "label_en",
+                    "message",
+                    "message_en",
+                    "is_active",
+                    "sort_order",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
+
+    def admin_runtime_note(self, obj=None):
+        return SERVING_READINESS_POLICY_NOTE
 
     admin_runtime_note.short_description = "Admin clarity note"
 

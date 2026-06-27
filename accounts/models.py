@@ -844,3 +844,253 @@ class ChurchMemberRecord(models.Model):
         return self.BAPTISM_STATUS_LABELS_ZH.get(
             self.baptism_status, self.baptism_status
         )
+
+
+class ServingReadinessPolicy(models.Model):
+    """Configurable church serving-readiness policy (SERVING-READINESS.1A).
+
+    A policy is a data-driven church rule describing which `ChurchMemberRecord`
+    facts (and which statuses) are required for "ready to serve." It is
+    warning-only and advisory:
+
+    - It does NOT grant any permission/capability.
+    - It does NOT block any assignment surface by itself (V1 readiness is
+      warning-only; see the serving-readiness plan, Section D.6).
+    - It does NOT store a per-user readiness result; readiness is computed on
+      demand by the evaluator in `accounts.serving_readiness`.
+
+    Belonging stays `ChurchStructureMembership`; serving stays
+    `TeamAssignmentMember` / `BibleStudyMeetingRole`. A policy never reads
+    membership to infer facts.
+    """
+
+    code = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text="Stable lower-case identifier, e.g. svca_default_formal_serving.",
+    )
+    name = models.CharField(max_length=120)
+    name_en = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+    description_en = models.TextField(blank=True)
+    is_default = models.BooleanField(
+        default=False,
+        help_text=(
+            "When set, this policy is the default the evaluator resolves when no "
+            "explicit policy is passed. At most one active default is allowed."
+        ),
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "code"]
+        verbose_name_plural = "Serving readiness policies"
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+    def clean(self):
+        errors = {}
+
+        if self.code:
+            self.code = self.code.strip().lower()
+
+        if self.is_default and self.is_active:
+            duplicates = ServingReadinessPolicy.objects.filter(
+                is_default=True,
+                is_active=True,
+            )
+            if self.pk:
+                duplicates = duplicates.exclude(pk=self.pk)
+            if duplicates.exists():
+                errors["is_default"] = (
+                    "Only one active default serving-readiness policy is allowed."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_name(self, language="zh"):
+        if language == "en" and self.name_en:
+            return self.name_en
+        return self.name
+
+    def display_description(self, language="zh"):
+        if language == "en" and self.description_en:
+            return self.description_en
+        return self.description
+
+
+class ServingReadinessRequirement(models.Model):
+    """A single member-fact requirement within a `ServingReadinessPolicy`.
+
+    Each requirement checks one supported `ChurchMemberRecord` fact field
+    against a configured set of accepted status codes. Accepted statuses are
+    stored as a portable, comma-separated, normalized lower-case string (no
+    PostgreSQL-only ArrayField) and validated against the member-record choice
+    set for the requirement type.
+
+    Requirements are advisory inputs to the warning-only evaluator. They do not
+    grant permissions, create assignments, or read membership.
+    """
+
+    REQUIREMENT_FAITH_STATEMENT = "faith_statement"
+    REQUIREMENT_BAPTISM = "baptism"
+
+    REQUIREMENT_TYPE_CHOICES = [
+        (REQUIREMENT_FAITH_STATEMENT, "Faith Statement"),
+        (REQUIREMENT_BAPTISM, "Baptism"),
+    ]
+
+    SEVERITY_REQUIRED = "required"
+    SEVERITY_RECOMMENDED = "recommended"
+
+    SEVERITY_CHOICES = [
+        (SEVERITY_REQUIRED, "Required"),
+        (SEVERITY_RECOMMENDED, "Recommended"),
+    ]
+
+    policy = models.ForeignKey(
+        ServingReadinessPolicy,
+        on_delete=models.CASCADE,
+        related_name="requirements",
+    )
+    requirement_type = models.CharField(
+        max_length=32,
+        choices=REQUIREMENT_TYPE_CHOICES,
+        help_text=(
+            "Supported V1 fact sources: faith_statement and baptism, both read "
+            "from ChurchMemberRecord. Course/training requirement types are not "
+            "supported by the V1 evaluator."
+        ),
+    )
+    accepted_statuses = models.CharField(
+        max_length=255,
+        help_text=(
+            "Comma-separated member-record status codes that satisfy this "
+            "requirement, validated against the requirement type's choices."
+        ),
+    )
+    severity = models.CharField(
+        max_length=16,
+        choices=SEVERITY_CHOICES,
+        default=SEVERITY_REQUIRED,
+        help_text=(
+            "required severity affects is_ready; recommended is warning-only. "
+            "Even required requirements are warning-only at assignment surfaces "
+            "in V1."
+        ),
+    )
+    label = models.CharField(max_length=120)
+    label_en = models.CharField(max_length=120, blank=True)
+    message = models.TextField(blank=True)
+    message_en = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["policy__sort_order", "sort_order", "id"]
+
+    def __str__(self):
+        return f"{self.policy.code}: {self.requirement_type} ({self.severity})"
+
+    @classmethod
+    def valid_status_codes_for_type(cls, requirement_type):
+        """Return the member-record status codes valid for a requirement type.
+
+        Returns None for unsupported types so callers/validation can reject
+        them clearly.
+        """
+        if requirement_type == cls.REQUIREMENT_FAITH_STATEMENT:
+            return {
+                code for code, _ in ChurchMemberRecord.FAITH_STATEMENT_STATUS_CHOICES
+            }
+        if requirement_type == cls.REQUIREMENT_BAPTISM:
+            return {code for code, _ in ChurchMemberRecord.BAPTISM_STATUS_CHOICES}
+        return None
+
+    @staticmethod
+    def normalize_status_tokens(raw):
+        """Split/trim/lower a comma-separated status string, de-duplicated."""
+        cleaned = []
+        seen = set()
+        for token in (raw or "").split(","):
+            token = token.strip().lower()
+            if not token or token in seen:
+                continue
+            seen.add(token)
+            cleaned.append(token)
+        return cleaned
+
+    def accepted_status_set(self):
+        return set(self.normalize_status_tokens(self.accepted_statuses))
+
+    def clean(self):
+        errors = {}
+
+        requirement_type = (self.requirement_type or "").strip().lower()
+        self.requirement_type = requirement_type
+
+        valid_codes = self.valid_status_codes_for_type(requirement_type)
+        if valid_codes is None:
+            errors["requirement_type"] = (
+                "Unsupported requirement type. The V1 evaluator supports only "
+                "faith_statement and baptism."
+            )
+
+        cleaned_statuses = self.normalize_status_tokens(self.accepted_statuses)
+        self.accepted_statuses = ",".join(cleaned_statuses)
+        if not cleaned_statuses:
+            errors["accepted_statuses"] = "At least one accepted status is required."
+        elif valid_codes is not None:
+            unknown = [code for code in cleaned_statuses if code not in valid_codes]
+            if unknown:
+                errors["accepted_statuses"] = (
+                    f"Unknown status code(s) for {requirement_type}: "
+                    f"{', '.join(unknown)}."
+                )
+
+        if self.is_active:
+            if self.policy_id and not self.policy.is_active:
+                errors["policy"] = (
+                    "Active requirements must belong to an active policy."
+                )
+            if self.policy_id and valid_codes is not None:
+                duplicates = ServingReadinessRequirement.objects.filter(
+                    policy_id=self.policy_id,
+                    requirement_type=requirement_type,
+                    is_active=True,
+                )
+                if self.pk:
+                    duplicates = duplicates.exclude(pk=self.pk)
+                if duplicates.exists():
+                    errors["requirement_type"] = (
+                        "This policy already has an active requirement of type "
+                        f"{requirement_type}."
+                    )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_label(self, language="zh"):
+        if language == "en" and self.label_en:
+            return self.label_en
+        return self.label
+
+    def display_message(self, language="zh"):
+        if language == "en" and self.message_en:
+            return self.message_en
+        return self.message

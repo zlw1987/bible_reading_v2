@@ -16,6 +16,8 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitRoleAssignment,
+    ChurchStructureUnitRoleType,
 )
 from events.models import ServiceEvent
 from reading.templatetags.datetime_extras import member_datetime
@@ -1796,6 +1798,72 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Discussion Leader")
         self.assertContains(response, "View Bible Study")
         self.assertNotContains(response, "Confirm Assignment")
+
+    def test_my_serving_team_assignment_and_ongoing_role_are_separate(self):
+        # A team weekly serving assignment and an ongoing structure coworker
+        # role must both render, in separate sections, with the ongoing role not
+        # duplicated as a serving item.
+        self.set_language("en")
+        upcoming = (timezone.now() + timezone.timedelta(days=5)).replace(
+            hour=19, minute=30, second=0, microsecond=0
+        )
+        self.event.start_datetime = upcoming
+        self.event.save()
+        self.create_assignment()
+        edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify Coworker",
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm_unit,
+            role_type=edify_role,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        # Weekly serving still renders as before.
+        self.assertContains(response, "Sunday Service")
+        self.assertContains(response, "Lighting Team")
+        # Ongoing role renders once in its own section.
+        self.assertContains(response, "Ongoing Structure Roles", count=1)
+        self.assertContains(response, "Edify Coworker", count=1)
+
+    def test_my_serving_bible_study_role_and_ongoing_role_are_separate(self):
+        # A weekly Bible Study meeting role and an ongoing structure coworker
+        # role both render; the ongoing role is not duplicated as a meeting role.
+        self.set_language("en")
+        self.ensure_structure_membership()
+        meeting = self.create_bible_study_meeting(title_en="Both Sections Lesson")
+        self.create_bible_study_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify Coworker",
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm_unit,
+            role_type=edify_role,
+            user=self.user,
+        )
+        self.client.login(username="regular_assign", password="testpass123")
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        # Weekly Bible Study role still renders as before.
+        self.assertContains(response, "Both Sections Lesson")
+        self.assertContains(response, "Discussion Leader")
+        # Ongoing role renders once in its own section.
+        self.assertContains(response, "Ongoing Structure Roles", count=1)
+        self.assertContains(response, "Edify Coworker", count=1)
 
     def test_chinese_my_serving_bible_study_role_labels_render(self):
         self.set_language("zh")
@@ -4252,3 +4320,268 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertContains(response, "Dry Run")
         self.assertContains(response, "Import")
         self.assertContains(response, "Use event_title for the Chinese/local title.")
+
+
+class MyServingOngoingStructureRoleTests(TestCase):
+    """MYSERVING-STRUCTROLE.1A: read-only "Ongoing Structure Roles" section.
+
+    These cover the new My Serving section that surfaces a user's OWN active
+    long-term ``ChurchStructureUnitRoleAssignment`` rows (ongoing structure
+    coworker roles). The section is conceptually separate from this-week serving
+    (``TeamAssignmentMember`` / ``BibleStudyMeetingRole``) and from belonging
+    (``ChurchStructureMembership``); none of those imply an ongoing role here.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.user = User.objects.create_user(
+            username="ongoing_viewer",
+            email="ongoing-viewer@example.com",
+            password="testpass123",
+        )
+        self.other = User.objects.create_user(
+            username="ongoing_other",
+            email="ongoing-other@example.com",
+            password="testpass123",
+        )
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+        self.worship_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_WORSHIP,
+            name="敬拜同工",
+            name_en="Worship",
+        )
+
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="OSR-DISTRICT",
+            name="负责区",
+            name_en="Lead District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="OSR-GROUP",
+            name="小组A",
+            name_en="Group A",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _assign(self, user, unit, role_type, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=user,
+            **kwargs,
+        )
+
+    def _login_viewer(self):
+        self.client.login(username="ongoing_viewer", password="testpass123")
+
+    # --- visibility of own active roles ---------------------------------------
+
+    def test_active_lead_role_shows_section(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.lead_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ongoing Structure Roles")
+        self.assertContains(
+            response,
+            "This is an ongoing structure role, not a weekly serving assignment.",
+        )
+
+    def test_active_edify_role_shows_role(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.edify_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ongoing Structure Roles")
+        self.assertContains(response, "Edify")
+
+    def test_english_role_and_unit_path_render(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.worship_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertContains(response, "Worship")
+        self.assertContains(response, "Lead District &gt; Group A")
+
+    def test_chinese_role_and_unit_path_render(self):
+        self.set_language("zh")
+        self._assign(self.user, self.group, self.worship_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertContains(response, "长期同工角色")
+        self.assertContains(response, "敬拜同工")
+        self.assertContains(response, "负责区 &gt; 小组A")
+
+    # --- inactive / expired / future / scope exclusions -----------------------
+
+    def test_inactive_assignment_not_shown(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.lead_role, is_active=False)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_expired_assignment_not_shown(self):
+        self.set_language("en")
+        self._assign(
+            self.user,
+            self.group,
+            self.lead_role,
+            start_date=self.today - timezone.timedelta(days=30),
+            end_date=self.today - timezone.timedelta(days=1),
+        )
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_future_assignment_not_shown(self):
+        self.set_language("en")
+        self._assign(
+            self.user,
+            self.group,
+            self.lead_role,
+            start_date=self.today + timezone.timedelta(days=5),
+        )
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_assignment_on_inactive_unit_not_shown(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.lead_role)
+        # Deactivate the unit after the (valid, active) assignment exists.
+        self.group.is_active = False
+        self.group.save()
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_inactive_role_type_assignment_not_shown(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.edify_role)
+        # Deactivate the role type after the (valid, active) assignment exists.
+        self.edify_role.is_active = False
+        self.edify_role.save()
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_other_users_assignment_not_shown(self):
+        self.set_language("en")
+        self._assign(self.other, self.group, self.lead_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    # --- belonging / capability are not ongoing roles -------------------------
+
+    def test_membership_alone_does_not_create_ongoing_role(self):
+        self.set_language("en")
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    def test_church_role_assignment_alone_does_not_create_ongoing_role(self):
+        self.set_language("en")
+        ChurchRoleAssignment.objects.create(
+            user=self.user,
+            role=ChurchRoleAssignment.ROLE_GROUP_LEADER,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Ongoing Structure Roles")
+
+    # --- management link gating ----------------------------------------------
+
+    def test_lead_role_exposes_manage_unit_link(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.lead_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertContains(response, "Manage unit coworkers")
+        self.assertContains(response, reverse("my_unit_detail", args=[self.group.id]))
+
+    def test_non_lead_coworker_role_has_no_manage_link(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.edify_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertContains(response, "Ongoing Structure Roles")
+        self.assertNotContains(response, "Manage unit coworkers")
+
+    def test_section_exposes_no_staff_structure_links(self):
+        self.set_language("en")
+        self._assign(self.user, self.group, self.edify_role)
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertNotContains(response, "/staff/structure/")
+
+    # --- empty access ---------------------------------------------------------
+
+    def test_user_without_ongoing_roles_still_accesses_my_serving(self):
+        self.set_language("en")
+        self._login_viewer()
+
+        response = self.client.get(reverse("my_serving"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Ongoing Structure Roles")

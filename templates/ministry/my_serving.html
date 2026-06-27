@@ -111,6 +111,54 @@
 </div>
 {% endif %}
 
+{% if ongoing_structure_roles %}
+<section class="serving-section">
+    <h2 class="serving-section-title">
+        {% if language == "zh" %}长期同工角色{% else %}Ongoing Structure Roles{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}这是长期同工角色，不是本周服事排班。{% else %}This is an ongoing structure role, not a weekly serving assignment.{% endif %}
+    </p>
+    <div class="grid grid-2">
+        {% for role in ongoing_structure_roles %}
+        <article class="card serving-card">
+            <div class="serving-card-head">
+                <h3 class="card-title serving-card-title">
+                    <span class="muted">{% if language == "zh" %}角色{% else %}Role{% endif %}:</span>
+                    {{ role.role_label }}
+                </h3>
+            </div>
+            <dl class="serving-card-meta">
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}单位{% else %}Unit{% endif %}</dt>
+                    <dd>{{ role.unit_path }}</dd>
+                </div>
+                {% if role.start_date %}
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}开始时间{% else %}Since{% endif %}</dt>
+                    <dd>{{ role.start_date|date:"Y-m-d" }}</dd>
+                </div>
+                {% endif %}
+                {% if role.notes %}
+                <div class="serving-card-meta-item">
+                    <dt>{% if language == "zh" %}备注{% else %}Note{% endif %}</dt>
+                    <dd>{{ role.notes }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+            {% if role.can_manage %}
+            <div class="actions">
+                <a class="button button-secondary" href="{% url 'my_unit_detail' role.unit_id %}">
+                    {% if language == "zh" %}管理单位同工{% else %}Manage unit coworkers{% endif %}
+                </a>
+            </div>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
 {% if manageable_teams %}
 <section class="serving-section">
     <h2 class="serving-section-title">{% if language == "zh" %}我负责的团队{% else %}Teams I manage{% endif %}</h2>

@@ -89,6 +89,51 @@ def get_user_active_lead_units(user, target_date=None):
     return list(units.values())
 
 
+def get_user_active_structure_roles(user, target_date=None):
+    """Return the signed-in user's OWN active long-term coworker role assignments.
+
+    Used by the read-only "Ongoing Structure Roles" section on My Serving
+    (``MYSERVING-STRUCTROLE.1A``). This is intentionally narrow:
+
+    - Only assignments whose ``user`` is this user are returned. This is the
+      user's own ongoing structure coworker roles, NOT every unit the user can
+      manage. A ``lead`` on a parent unit may manage descendant units in My
+      Units, but that does not create an ongoing role row here.
+    - "Active" matches ``ChurchStructureUnitRoleAssignment.active_for_date``:
+      ``is_active`` true, ``start_date`` reached, and ``end_date`` null or not
+      yet past. In addition, the role type and unit must both be active.
+    - This is a ``ChurchStructureUnitRoleAssignment`` (ongoing structure
+      coworker role). It is distinct from ``ChurchStructureMembership``
+      (belonging / ordinary care context), ``TeamAssignmentMember`` (weekly
+      serving), and ``BibleStudyMeetingRole`` (a specific Bible Study meeting
+      role). It never implies serving, capability, or staff/superuser status.
+
+    Read-only. Returns a list ordered for display (by unit, then role-type sort
+    order). ``select_related`` keeps unit/role-type label and path rendering
+    cheap.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return []
+
+    user_id = getattr(user, "pk", None)
+    if user_id is None:
+        return []
+
+    target_date = target_date or timezone.localdate()
+    return list(
+        ChurchStructureUnitRoleAssignment.objects.filter(
+            user_id=user_id,
+            is_active=True,
+            role_type__is_active=True,
+            unit__is_active=True,
+            start_date__lte=target_date,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+        .select_related("unit", "unit__parent", "role_type")
+        .order_by("unit__sort_order", "role_type__sort_order", "id")
+    )
+
+
 def can_manage_unit_coworkers(user, unit, target_date=None):
     """Whether ``user`` may manage/read coworkers for ``unit`` in this surface.
 

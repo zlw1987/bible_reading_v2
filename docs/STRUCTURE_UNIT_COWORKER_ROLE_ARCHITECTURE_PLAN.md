@@ -16,9 +16,14 @@ Bible Study V2 meeting-role candidate filtering for discussion and worship
 roles: active `edify` / `worship` coworkers on the meeting `anchor_unit` are
 preferred, all active anchor-unit coworkers are the setup fallback, and the
 existing audience-membership picker remains the fallback when no anchor unit or
-no coworkers exist. Today, My Serving long-term role display, long-term coworker role confirmation,
-runtime visibility, and permission inference remain unimplemented and require
-separate approval.
+no coworkers exist. MYSERVING-STRUCTROLE.1A adds the read-only "Ongoing
+Structure Roles" section on My Serving (see Section 7): it lists the signed-in
+user's OWN active `ChurchStructureUnitRoleAssignment` rows (role label + unit
+path, optional start date / note), separate from this-week serving, with a
+delegated `my_unit_detail` management link shown only when
+`can_manage_unit_coworkers` is true and no `/staff/structure/` links. Today,
+long-term coworker role confirmation, runtime visibility, and permission
+inference remain unimplemented and require separate approval.
 
 The next product direction built on this foundation — delegated unit management
 ("My Units") driven by `lead` coworker assignments, a global member record,
@@ -220,13 +225,25 @@ grant a permission. The final weekly responsibility remains an explicit
 Today should continue to show concrete weekly Bible Study role context only from
 linked-user `BibleStudyMeetingRole` rows that are visible to the signed-in user.
 
-My Serving can later show long-term structure coworker roles as a separate
-"ongoing roles" section if that product slice is approved. That display should
-be clearly separate from this-week serving assignments and Bible Study meeting
-role confirmation.
+My Serving shows long-term structure coworker roles as a separate "Ongoing
+Structure Roles" section, implemented in `MYSERVING-STRUCTROLE.1A`. That section
+lists only the signed-in user's OWN active `ChurchStructureUnitRoleAssignment`
+rows (`assignment.user == request.user`), never every unit the user can manage:
+a `lead` on a parent unit may manage descendant units in My Units, but only the
+user's explicit role assignments appear here. "Active" means `is_active`,
+`start_date` reached, `end_date` null/not past, plus active role type and active
+unit. The display is read-only and visually/conceptually separate from this-week
+serving (`TeamAssignmentMember` / `BibleStudyMeetingRole`); it adds no role
+confirmation. The selector and row builder live in
+`accounts.unit_management.get_user_active_structure_roles` and
+`ministry.views.build_ongoing_structure_role_rows`. A delegated `my_unit_detail`
+management link appears only when `can_manage_unit_coworkers` returns true (active
+`lead` ancestor-or-self / staff); non-lead coworkers (Edify/Worship/Caring) see
+no management link, and no `/staff/structure/` links are exposed.
 
-Do not design automatic confirmation for long-term structure roles in this
-slice. Role confirmation for Bible Study meeting roles remains tied to explicit
+Today still shows only explicit linked-user `BibleStudyMeetingRole` rows.
+Automatic confirmation for long-term structure roles is not designed in this
+slice; role confirmation for Bible Study meeting roles remains tied to explicit
 `BibleStudyMeetingRole.user` assignments.
 
 ## 8. Permission and Serving Boundaries
@@ -285,12 +302,13 @@ Phase 4 - Bible Study candidate filtering:
   no coworkers exist.
 - Keep final assignment in `BibleStudyMeetingRole.user`.
 
-Phase 5 - optional My Serving long-term role display:
+Phase 5 - My Serving long-term role display (`MYSERVING-STRUCTROLE.1A`,
+implemented):
 
-- Show ongoing structure roles separately from this-week assignments only if
-  product review approves it.
-- Do not add long-term role confirmation in this phase unless separately
-  designed.
+- Shows the signed-in user's own ongoing structure roles separately from
+  this-week assignments in a read-only "Ongoing Structure Roles" section.
+- Does not add long-term role confirmation, assignment editing, Today content,
+  membership, capability, or Bible Study candidate changes.
 
 ## 10. Non-Goals
 

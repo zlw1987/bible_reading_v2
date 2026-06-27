@@ -14,6 +14,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 from accounts.ordering import order_team_memberships_by_visible_identity
+from accounts.unit_management import (
+    can_manage_unit_coworkers,
+    get_user_active_structure_roles,
+)
 from events.models import (
     ServiceEvent,
     get_service_event_effective_end,
@@ -1124,6 +1128,39 @@ def deactivate_team_membership(request, membership_id):
     return redirect("manage_team_members", team_id=team_id)
 
 
+def build_ongoing_structure_role_rows(user, language, target_date=None):
+    """Build display rows for the My Serving "Ongoing Structure Roles" section.
+
+    Read-only. Each row describes one of the user's OWN active long-term
+    ``ChurchStructureUnitRoleAssignment`` rows (see
+    ``accounts.unit_management.get_user_active_structure_roles``). These ongoing
+    structure coworker roles are conceptually separate from this-week serving:
+    they are not ``TeamAssignmentMember`` (weekly serving) nor
+    ``BibleStudyMeetingRole`` (a specific Bible Study meeting role), and a
+    long-term Edify/Worship coworker is NOT automatically this week's discussion
+    or worship lead. The optional management link points only at the delegated
+    ``my_unit_detail`` surface, and only when ``can_manage_unit_coworkers`` is
+    true (active ``lead`` ancestor-or-self / staff). No ``/staff/structure/``
+    links are exposed here.
+    """
+    target_date = target_date or timezone.localdate()
+    rows = []
+    for assignment in get_user_active_structure_roles(user, target_date=target_date):
+        rows.append(
+            {
+                "role_label": assignment.role_type.display_name(language),
+                "unit_path": assignment.unit.path_label(language),
+                "start_date": assignment.start_date,
+                "notes": assignment.notes,
+                "unit_id": assignment.unit_id,
+                "can_manage": can_manage_unit_coworkers(
+                    user, assignment.unit, target_date=target_date
+                ),
+            }
+        )
+    return rows
+
+
 @login_required
 def my_serving(request):
     tab = (request.GET.get("tab") or "upcoming").strip()
@@ -1149,11 +1186,19 @@ def my_serving(request):
         if not serving_item_needs_attention(item)
     ]
     serving_sections = build_my_serving_sections(serving_items)
+    language = get_user_language(request)
     leader_needs_attention = []
+    ongoing_structure_roles = []
     if tab in {"upcoming", "all"}:
         leader_needs_attention = leader_needs_attention_rows(
             request.user,
-            language=get_user_language(request),
+            language=language,
+        )
+        # Ongoing long-term coworker roles are current-state context, not weekly
+        # history, so they are shown on the current-facing tabs only.
+        ongoing_structure_roles = build_ongoing_structure_role_rows(
+            request.user,
+            language,
         )
 
     return render(
@@ -1165,9 +1210,10 @@ def my_serving(request):
             "scheduled_items": scheduled_items,
             "serving_sections": serving_sections,
             "leader_needs_attention": leader_needs_attention,
+            "ongoing_structure_roles": ongoing_structure_roles,
             "manageable_teams": manageable_assignment_teams(request.user),
             "tab": tab,
-            "confirm_form": TeamAssignmentConfirmForm(language=get_user_language(request)),
+            "confirm_form": TeamAssignmentConfirmForm(language=language),
         },
     )
 

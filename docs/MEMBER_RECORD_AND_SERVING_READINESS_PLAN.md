@@ -208,6 +208,17 @@ the first delegated-management slices.
   `BibleStudyMeetingRole` rows are created; the delegated page exposes no
   `/staff/structure/` links. The central `CAP_MANAGE_STRUCTURE_COWORKERS`
   capability (A.3) remains deferred. No new models, migrations, or data changes.
+- `MYSERVING-STRUCTROLE.1A` — **implemented (read-only, separate surface).**
+  A read-only "Ongoing Structure Roles" section on My Serving lists the
+  signed-in user's OWN active `ChurchStructureUnitRoleAssignment` rows (role
+  label + unit path, optional start date/note). It shows only explicit role
+  assignments for that user — not every unit the user can manage — and is
+  visually/conceptually separate from this-week serving
+  (`TeamAssignmentMember` / `BibleStudyMeetingRole`). The optional delegated
+  `my_unit_detail` link appears only when `can_manage_unit_coworkers` is true
+  (active `lead` ancestor-or-self / staff); no `/staff/structure/` links, no
+  membership, capability, serving, member-record, or readiness changes. See the
+  coworker architecture plan's Section 7 for details.
 - Later (separate approval) — unit member-record management, only after the
   privacy/permission review in Sections B–C.
 

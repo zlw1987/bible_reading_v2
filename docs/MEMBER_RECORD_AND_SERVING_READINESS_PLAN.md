@@ -10,10 +10,14 @@ It stores no course/training progress and no serving-readiness result.
 `ServingReadinessPolicy` / `ServingReadinessRequirement` model foundation, the
 default SVCA policy seed command, and the read-only `get_serving_readiness`
 evaluator returning a structured, warning-only result computed on demand (never
-a stored boolean); it is **not** integrated into any assignment surface yet
-(`SERVING-READINESS.1C`). This document records the broader approved product
-direction; the remaining sections (self-editable profile/contact split, unit
-care records, and the readiness assignment-surface integration) stay design-only
+a stored boolean). `SERVING-READINESS.1C` is implemented as the warning-only
+integration of that evaluator across the selected assignment surfaces (delegated
+My Units / staff structure coworker add, ministry `TeamMembership`, weekly
+`TeamAssignmentMember`, and `BibleStudyMeetingRole`): a thin helper emits the
+evaluator's existing warnings as advisory `messages.warning` reminders after a
+save succeeds, never blocking the save and never shown to ordinary members. This
+document records the broader approved product direction; the remaining sections
+(self-editable profile/contact split and unit care records) stay design-only
 until each is separately approved.
 
 This plan sits downstream of
@@ -623,6 +627,14 @@ Boundary: calling the readiness evaluator from these surfaces does not couple th
 concepts. Readiness is an advisory read; it does not create belonging, does not
 grant capability, and serving remains separate from belonging.
 
+> Status (`SERVING-READINESS.1C`, implemented): all four surfaces above now call
+> the evaluator through `add_serving_readiness_warnings` after a successful save
+> and surface any warnings as staff-facing `messages.warning` reminders. The save
+> is never blocked, display-name-only / no-linked-user rows are skipped, no active
+> policy means no warnings (unchanged behavior), and ordinary members never see
+> the reminders. No `ChurchMemberRecord`, membership, capability, or serving row
+> is created by the warning path.
+
 ---
 
 # F. Google Sheet Fields (product evidence only)
@@ -764,9 +776,29 @@ implementation.
   readiness. **Not** integrated into any assignment form/page yet (that is
   `SERVING-READINESS.1C`); no data migration; the seed was not applied to
   local/dev or GoDaddy data.
-- `SERVING-READINESS.1C` — warning-only integration across coworker, ministry,
-  weekly-serving, and Bible Study assignment surfaces (E). **Not yet
-  implemented.**
+- `SERVING-READINESS.1C` — **implemented (warning-only integration).** The
+  read-only evaluator is now surfaced as advisory, warning-only guidance on the
+  selected assignment surfaces (E). A thin presentation helper
+  `get_serving_readiness_warning_messages(user, language)` /
+  `add_serving_readiness_warnings(request, user, language, subject_label=None)`
+  (`accounts/serving_readiness.py`) reuses the evaluator's existing warning text
+  (prefixed `Serving readiness warning:` / `服事预备提醒：`) and emits it via
+  Django `messages.warning` after a save succeeds. Integrated surfaces: delegated
+  My Units coworker add (`add_my_unit_coworker_assignment`), staff Church
+  Structure coworker add (`add_structure_unit_coworker_assignment`), ministry
+  `TeamMembership` add/edit, weekly `TeamAssignmentMember` create/edit (per
+  assigned member, name-prefixed), and `BibleStudyMeetingRole` add/edit.
+  Warnings are advisory only: they never block a save, never invalidate a form,
+  and add no confirmation step. With no active default policy the surfaces behave
+  exactly as before. Display-name-only / no-linked-user rows are not evaluated.
+  The helper creates no `ChurchMemberRecord`, no membership, no role/assignment
+  rows; it never reads membership/legacy structure to infer facts and never
+  grants permissions. Warnings are staff/lead-facing only — they are not shown on
+  ordinary My Serving, Today, or ordinary attendee/student pages, are not stored
+  on the assignment row, and expose no member-record details, internal IDs, or
+  raw model names. No member-record UI, no delegated member-record access, no
+  hard-blocking, and no stored readiness boolean were added. No models,
+  migrations, or data changes.
 
 # J. Non-Goals for Remaining Future Slices
 

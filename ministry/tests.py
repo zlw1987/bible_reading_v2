@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 
 from django.apps import apps
 from django.contrib.auth.models import User
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command, CommandError
@@ -13,11 +14,13 @@ from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 
 from accounts.models import (
+    ChurchMemberRecord,
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleType,
+    ServingReadinessPolicy,
 )
 from events.models import ServiceEvent
 from reading.templatetags.datetime_extras import member_datetime
@@ -4585,3 +4588,238 @@ class MyServingOngoingStructureRoleTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Ongoing Structure Roles")
+
+
+class ServingReadinessMinistryWarningTests(TestCase):
+    """SERVING-READINESS.1C warning integration on ministry serving surfaces.
+
+    Covers ministry ``TeamMembership`` (manage/edit) and weekly
+    ``TeamAssignmentMember`` (create/edit) surfaces. Warnings are advisory and
+    warning-only: linked-user saves still succeed, display-name-only rows are not
+    evaluated, no policy preserves prior behavior, and ordinary My Serving never
+    shows readiness warnings.
+    """
+
+    def setUp(self):
+        self.manager = User.objects.create_user(
+            username="readiness_pastor",
+            email="readiness-pastor@example.com",
+            password="pw",
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.manager,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+        self.member = User.objects.create_user(
+            username="readiness_member", email="rm@example.com", password="pw"
+        )
+        self.team = MinistryTeam.objects.create(name="灯光", name_en="Lighting")
+        self.event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+    # --- helpers ---------------------------------------------------------------
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _seed_policy(self):
+        call_command(
+            "seed_serving_readiness_policies", "--apply", stdout=StringIO()
+        )
+
+    def _make_record(self, user, **kwargs):
+        return ChurchMemberRecord.objects.create(user=user, **kwargs)
+
+    def _readiness_messages(self, response):
+        return [
+            message.message
+            for message in get_messages(response.wsgi_request)
+            if "Serving readiness warning" in message.message
+            or "服事预备提醒" in message.message
+        ]
+
+    def _login_manager(self):
+        self.set_language("en")
+        self.client.login(username="readiness_pastor", password="pw")
+
+    def _membership_post(self, **overrides):
+        data = {
+            "user": self.member.id,
+            "display_name": "",
+            "email": "",
+            "role": TeamMembership.ROLE_MEMBER,
+            "skill_level": "",
+            "notes": "",
+            "is_active": "on",
+        }
+        data.update(overrides)
+        return self.client.post(
+            reverse("manage_team_members", args=[self.team.id]), data
+        )
+
+    # --- C. TeamMembership -----------------------------------------------------
+
+    def test_membership_linked_user_unready_warns_and_saves(self):
+        self._seed_policy()
+        self._login_manager()
+        response = self._membership_post()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            TeamMembership.objects.filter(team=self.team, user=self.member).exists()
+        )
+        self.assertTrue(self._readiness_messages(response))
+
+    def test_membership_linked_user_ready_does_not_warn(self):
+        self._seed_policy()
+        self._make_record(
+            self.member,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self._login_manager()
+        response = self._membership_post()
+        self.assertTrue(
+            TeamMembership.objects.filter(team=self.team, user=self.member).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_display_name_only_membership_does_not_warn(self):
+        self._seed_policy()
+        self._login_manager()
+        response = self._membership_post(
+            user="", display_name="Guest Helper", email="guest@example.com"
+        )
+        self.assertTrue(
+            TeamMembership.objects.filter(
+                team=self.team, display_name="Guest Helper"
+            ).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_membership_no_policy_preserves_previous_behavior(self):
+        self._login_manager()
+        response = self._membership_post()
+        self.assertTrue(
+            TeamMembership.objects.filter(team=self.team, user=self.member).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_membership_save_not_blocked_by_unready(self):
+        self._seed_policy()
+        self._make_record(
+            self.member,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        self._login_manager()
+        response = self._membership_post()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            TeamMembership.objects.filter(team=self.team, user=self.member).exists()
+        )
+
+    def test_membership_warning_does_not_create_member_record(self):
+        self._seed_policy()
+        self._login_manager()
+        before = ChurchMemberRecord.objects.count()
+        self._membership_post()
+        self.assertEqual(ChurchMemberRecord.objects.count(), before)
+
+    # --- D. TeamAssignmentMember -----------------------------------------------
+
+    def _assignment_post(self, membership, **overrides):
+        data = {
+            "service_event": self.event.id,
+            "ministry_team": self.team.id,
+            "assigned_members": [membership.id],
+            "status": TeamAssignment.STATUS_SCHEDULED,
+            "notes": "Operational note.",
+        }
+        data.update(overrides)
+        return self.client.post(reverse("create_team_assignment"), data)
+
+    def test_assignment_member_linked_unready_warns_and_saves(self):
+        self._seed_policy()
+        membership = TeamMembership.objects.create(
+            team=self.team, user=self.member, role=TeamMembership.ROLE_MEMBER
+        )
+        self._login_manager()
+        response = self._assignment_post(membership)
+        self.assertEqual(response.status_code, 302)
+        assignment = TeamAssignment.objects.get(ministry_team=self.team)
+        self.assertEqual(assignment.assigned_members.count(), 1)
+        self.assertTrue(self._readiness_messages(response))
+
+    def test_assignment_member_linked_ready_does_not_warn(self):
+        self._seed_policy()
+        self._make_record(
+            self.member,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        membership = TeamMembership.objects.create(
+            team=self.team, user=self.member, role=TeamMembership.ROLE_MEMBER
+        )
+        self._login_manager()
+        response = self._assignment_post(membership)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 1)
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_assignment_display_name_only_member_does_not_warn(self):
+        self._seed_policy()
+        membership = TeamMembership.objects.create(
+            team=self.team,
+            display_name="Guest Helper",
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self._login_manager()
+        response = self._assignment_post(membership)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 1)
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_assignment_confirmation_behavior_unchanged(self):
+        # The warning path must not alter that members are synced onto the
+        # assignment row (no extra/missing TeamAssignmentMember rows).
+        self._seed_policy()
+        membership = TeamMembership.objects.create(
+            team=self.team, user=self.member, role=TeamMembership.ROLE_MEMBER
+        )
+        self._login_manager()
+        self._assignment_post(membership)
+        assignment = TeamAssignment.objects.get(ministry_team=self.team)
+        self.assertEqual(
+            list(
+                assignment.assignment_members.values_list("membership_id", flat=True)
+            ),
+            [membership.id],
+        )
+        self.assertIsNone(assignment.assignment_members.first().confirmed_at)
+
+    def test_ordinary_my_serving_does_not_show_readiness_warnings(self):
+        self._seed_policy()
+        membership = TeamMembership.objects.create(
+            team=self.team, user=self.member, role=TeamMembership.ROLE_MEMBER
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            created_by=self.manager,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+        self.set_language("en")
+        self.client.login(username="readiness_member", password="pw")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Serving readiness warning")
+        self.assertNotContains(response, "服事预备提醒")

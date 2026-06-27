@@ -14,6 +14,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 from accounts.ordering import order_team_memberships_by_visible_identity
+from accounts.serving_readiness import add_serving_readiness_warnings
 from accounts.unit_management import (
     can_manage_unit_coworkers,
     get_user_active_structure_roles,
@@ -553,6 +554,25 @@ def leader_needs_attention_rows(user, *, days=LEADER_NEEDS_ATTENTION_DAYS, langu
     return issue_rows
 
 
+def warn_assignment_member_readiness(request, memberships, language):
+    """Emit advisory, warning-only serving-readiness reminders for assigned members.
+
+    SERVING-READINESS.1C: for each assigned ``TeamMembership`` with a linked user,
+    surface staff-facing readiness warnings (prefixed with the member's visible
+    name when several may be warned at once). Display-name-only memberships (no
+    linked user) are skipped. Never blocks the save; makes no data changes.
+    """
+    for membership in memberships:
+        if not membership.user_id:
+            continue
+        add_serving_readiness_warnings(
+            request,
+            membership.user,
+            language=language,
+            subject_label=membership.get_display_name(),
+        )
+
+
 def sync_assignment_members(assignment, memberships):
     selected_ids = {membership.id for membership in memberships}
     assignment.assignment_members.exclude(membership_id__in=selected_ids).delete()
@@ -1049,6 +1069,12 @@ def manage_team_members(request, team_id):
             membership.team = team
             membership.save()
             messages.success(request, ministry_ui_text(language, "membership_saved"))
+            # SERVING-READINESS.1C: advisory, warning-only reminder for a linked
+            # user. Display-name-only memberships (no linked user) are not
+            # evaluated. Never blocks the save above.
+            add_serving_readiness_warnings(
+                request, membership.user, language=language
+            )
             return redirect("manage_team_members", team_id=team.id)
     else:
         form = TeamMembershipForm(language=language, team=team)
@@ -1090,6 +1116,12 @@ def edit_team_membership(request, membership_id):
         if form.is_valid():
             membership = form.save()
             messages.success(request, ministry_ui_text(language, "membership_saved"))
+            # SERVING-READINESS.1C: advisory, warning-only reminder for a linked
+            # user. Display-name-only memberships (no linked user) are not
+            # evaluated. Never blocks the save above.
+            add_serving_readiness_warnings(
+                request, membership.user, language=language
+            )
             return redirect("manage_team_members", team_id=membership.team_id)
     else:
         form = TeamMembershipForm(
@@ -1576,6 +1608,9 @@ def create_team_assignment(request):
             assignment.save()
             sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
             messages.success(request, ministry_ui_text(language, "assignment_saved"))
+            warn_assignment_member_readiness(
+                request, form.cleaned_data["assigned_members"], language
+            )
             return redirect("team_assignment_detail", assignment_id=assignment.id)
     else:
         form = TeamAssignmentForm(
@@ -1616,6 +1651,9 @@ def edit_team_assignment(request, assignment_id):
             assignment = form.save()
             sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
             messages.success(request, ministry_ui_text(language, "assignment_saved"))
+            warn_assignment_member_readiness(
+                request, form.cleaned_data["assigned_members"], language
+            )
             return redirect("team_assignment_detail", assignment_id=assignment.id)
     else:
         form = TeamAssignmentForm(

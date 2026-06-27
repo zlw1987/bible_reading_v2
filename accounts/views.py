@@ -45,6 +45,7 @@ from .ordering import (
     structure_unit_sibling_sort_key,
 )
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
+from .serving_readiness import add_serving_readiness_warnings
 from .unit_management import (
     can_manage_unit_coworkers,
     get_manageable_structure_units,
@@ -1652,6 +1653,9 @@ def add_structure_unit_coworker_assignment(request, unit_id):
                 else f"Added coworker role for {assignment.user.username}."
             ),
         )
+        # SERVING-READINESS.1C: advisory, warning-only readiness reminder for the
+        # assigned user. Never blocks the save above.
+        add_serving_readiness_warnings(request, assignment.user, language=language)
     else:
         detail = _first_form_error(form)
         messages.error(
@@ -2142,6 +2146,10 @@ def add_my_unit_coworker_assignment(request, unit_id):
                 else f"Added coworker role for {assignment.user.username}."
             ),
         )
+        # SERVING-READINESS.1C: advisory, warning-only readiness reminder shown only
+        # to the assigning lead/staff user. Never blocks the save above and never
+        # appears on ordinary My Serving / Today.
+        add_serving_readiness_warnings(request, assignment.user, language=language)
     else:
         detail = _first_form_error(form)
         messages.error(

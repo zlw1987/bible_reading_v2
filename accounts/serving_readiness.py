@@ -43,6 +43,13 @@ INACTIVE_USER_WARNING = {
     "zh": "该账号未启用，暂不评估服事预备情况。",
 }
 
+# Staff-facing prefix so a readiness reminder is self-describing when it appears
+# alongside other Django messages on an assignment surface (SERVING-READINESS.1C).
+WARNING_PREFIX = {
+    "en": "Serving readiness warning: ",
+    "zh": "服事预备提醒：",
+}
+
 
 @dataclass
 class ServingReadinessCheck:
@@ -234,3 +241,68 @@ def evaluate_serving_readiness(user, policy, language="en"):
         policy_used=policy,
         record=record,
     )
+
+
+def get_serving_readiness_warning_messages(user, language="en"):
+    """Return staff-facing, advisory serving-readiness warning strings for ``user``.
+
+    Thin presentation wrapper over :func:`get_serving_readiness` for assignment
+    surfaces (SERVING-READINESS.1C). Returns an empty list when:
+
+    - ``user`` is missing/None (e.g. a display-name-only assignment with no linked
+      user — those are not evaluated);
+    - no active default policy is configured (unconfigured churches stay silent,
+      so behavior is unchanged until ``seed_serving_readiness_policies --apply``);
+    - the user is ready and the evaluator produced no warnings.
+
+    Otherwise it returns concise, non-shaming operational messages (no member-record
+    IDs, no sensitive notes, no raw model names), each prefixed so staff/leads can
+    tell the message is an advisory readiness reminder. The messages reuse the
+    evaluator's existing warning text rather than re-deriving requirement logic.
+
+    Read-only and warning-only: it never blocks a save, never creates a member
+    record or assignment, never reads ``ChurchStructureMembership`` (or legacy
+    structure) to infer facts, and never grants permissions.
+    """
+    language = _normalize_language(language)
+    if user is None:
+        return []
+
+    result = get_serving_readiness(user, language=language)
+    if result.status == STATUS_NO_POLICY:
+        return []
+    if not result.warnings:
+        return []
+
+    prefix = WARNING_PREFIX[language]
+    return [f"{prefix}{warning}" for warning in result.warnings]
+
+
+def add_serving_readiness_warnings(request, user, language="en", subject_label=None):
+    """Emit advisory serving-readiness warnings as staff-facing Django messages.
+
+    Used by assignment surfaces (SERVING-READINESS.1C) after a save succeeds. Each
+    message is added at ``messages.WARNING`` level so it reads as advisory guidance
+    distinct from the success message, and is never stored on the assignment row.
+
+    ``subject_label`` (e.g. a member's visible name) is prepended when several
+    people may be warned in one action (weekly team assignments), so staff can tell
+    whom each reminder concerns. It is never an internal ID or model name.
+
+    Returns the list of emitted messages (possibly empty). Warning-only: it never
+    blocks the save and makes no data changes.
+    """
+    warnings = get_serving_readiness_warning_messages(user, language=language)
+    if not warnings:
+        return []
+
+    # Imported lazily so the read-only evaluator module stays importable without a
+    # request/messages context (e.g. from management commands or tests).
+    from django.contrib import messages
+
+    for warning in warnings:
+        if subject_label:
+            messages.warning(request, f"{subject_label} — {warning}")
+        else:
+            messages.warning(request, warning)
+    return warnings

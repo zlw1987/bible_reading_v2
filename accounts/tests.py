@@ -4,6 +4,7 @@ from io import StringIO
 from pathlib import Path
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.messages import get_messages
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.management import call_command, CommandError
 from django.db import connection, IntegrityError, transaction
@@ -38,6 +39,7 @@ from accounts.serving_readiness import (
     STATUS_READY,
     evaluate_serving_readiness,
     get_serving_readiness,
+    get_serving_readiness_warning_messages,
 )
 from accounts.permissions import (
     CAP_MANAGE_CHURCH_MEMBERSHIPS,
@@ -9031,6 +9033,220 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         self.assertContains(response, "Edify")
 
 
+class ServingReadinessCoworkerWarningIntegrationTests(TestCase):
+    """SERVING-READINESS.1C readiness warnings on coworker-add surfaces.
+
+    Covers the delegated My Units add (``add_my_unit_coworker_assignment``) and the
+    staff Church Structure add (``add_structure_unit_coworker_assignment``).
+    Warnings are advisory and warning-only: the assignment row is always created,
+    no readiness state hard-blocks the save, and ordinary users never see them.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SRW-GROUP",
+            name="小组",
+            name_en="Group",
+        )
+        self.candidate = User.objects.create_user(username="srw_candidate")
+        ChurchStructureMembership.objects.create(
+            user=self.candidate,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+
+    # --- helpers ---------------------------------------------------------------
+
+    def _seed_policy(self):
+        call_command(
+            "seed_serving_readiness_policies", "--apply", stdout=StringIO()
+        )
+
+    def _make_record(self, user, **kwargs):
+        return ChurchMemberRecord.objects.create(user=user, **kwargs)
+
+    def _readiness_messages(self, response):
+        return [
+            message.message
+            for message in get_messages(response.wsgi_request)
+            if "Serving readiness warning" in message.message
+            or "服事预备提醒" in message.message
+        ]
+
+    def _login_group_lead(self, username="srw_lead"):
+        user = User.objects.create_user(username=username, password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.lead_role,
+            user=user,
+            start_date=self.today,
+        )
+        self.client.login(username=username, password="pw")
+        return user
+
+    def _login_superuser(self, username="srw_staff"):
+        User.objects.create_superuser(
+            username=username, email=f"{username}@example.com", password="pw"
+        )
+        self.client.login(username=username, password="pw")
+
+    def _my_units_add(self):
+        return self.client.post(
+            reverse("add_my_unit_coworker_assignment", args=[self.group.id])
+            + "?lang=en",
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+
+    def _staff_add(self):
+        return self.client.post(
+            reverse("add_structure_unit_coworker_assignment", args=[self.group.id])
+            + "?lang=en",
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+
+    def _assignment_exists(self):
+        return ChurchStructureUnitRoleAssignment.objects.filter(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=self.candidate,
+            is_active=True,
+        ).exists()
+
+    # --- My Units delegated add ------------------------------------------------
+
+    def test_my_units_ready_user_saves_without_readiness_warning(self):
+        self._seed_policy()
+        self._make_record(
+            self.candidate,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self._login_group_lead()
+        response = self._my_units_add()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self._assignment_exists())
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_my_units_no_member_record_saves_with_warning(self):
+        self._seed_policy()
+        self._login_group_lead()
+        response = self._my_units_add()
+        self.assertTrue(self._assignment_exists())
+        messages = self._readiness_messages(response)
+        self.assertTrue(messages)
+        self.assertIn("No church member record is on file", " ".join(messages))
+
+    def test_my_units_declined_faith_statement_saves_with_warning(self):
+        self._seed_policy()
+        self._make_record(
+            self.candidate,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self._login_group_lead()
+        response = self._my_units_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertIn(
+            "Faith Statement is not signed or confirmed.",
+            " ".join(self._readiness_messages(response)),
+        )
+
+    def test_my_units_not_baptized_saves_with_warning(self):
+        self._seed_policy()
+        self._make_record(
+            self.candidate,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        self._login_group_lead()
+        response = self._my_units_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertIn(
+            "No baptism or recognized baptism record.",
+            " ".join(self._readiness_messages(response)),
+        )
+
+    def test_my_units_non_staff_lead_sees_warning_after_authorized_add(self):
+        self._seed_policy()
+        lead = self._login_group_lead()
+        self.assertFalse(lead.is_staff)
+        response = self._my_units_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertTrue(self._readiness_messages(response))
+
+    def test_my_units_warning_does_not_expose_admin_or_record_links(self):
+        self._seed_policy()
+        self._login_group_lead()
+        response = self._my_units_add()
+        joined = " ".join(self._readiness_messages(response))
+        self.assertTrue(joined)
+        self.assertNotIn("/admin/", joined)
+        self.assertNotIn("churchmemberrecord", joined.lower())
+
+    def test_my_units_no_policy_saves_without_warning(self):
+        self._login_group_lead()
+        response = self._my_units_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_my_units_warning_does_not_create_member_record(self):
+        self._seed_policy()
+        self._login_group_lead()
+        before = ChurchMemberRecord.objects.count()
+        self._my_units_add()
+        self.assertEqual(ChurchMemberRecord.objects.count(), before)
+
+    # --- Staff Church Structure add --------------------------------------------
+
+    def test_staff_add_saves_with_warning_for_unready_user(self):
+        self._seed_policy()
+        self._login_superuser()
+        response = self._staff_add()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self._assignment_exists())
+        self.assertTrue(self._readiness_messages(response))
+
+    def test_staff_add_saves_without_warning_for_ready_user(self):
+        self._seed_policy()
+        self._make_record(
+            self.candidate,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self._login_superuser()
+        response = self._staff_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_staff_add_no_policy_preserves_previous_behavior(self):
+        self._login_superuser()
+        response = self._staff_add()
+        self.assertTrue(self._assignment_exists())
+        self.assertEqual(self._readiness_messages(response), [])
+
+
 class ChurchMemberRecordModelTests(TestCase):
     """MEMBER-RECORD.1B global member fact record model foundation."""
 
@@ -9815,6 +10031,123 @@ class ServingReadinessEvaluatorTests(TestCase):
         self.assertEqual(result.status, STATUS_NO_RECORD)
         self.assertFalse(result.is_ready)
         self.assertIsNone(result.record)
+
+
+class ServingReadinessWarningHelperTests(TestCase):
+    """SERVING-READINESS.1C warning-message helper (advisory, warning-only)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="warning_user")
+
+    def _seed_default_policy(self):
+        call_command(
+            "seed_serving_readiness_policies", "--apply", stdout=StringIO()
+        )
+
+    def _make_record(self, **kwargs):
+        return ChurchMemberRecord.objects.create(user=self.user, **kwargs)
+
+    def test_no_policy_returns_no_messages(self):
+        self.assertEqual(
+            get_serving_readiness_warning_messages(self.user, language="en"), []
+        )
+
+    def test_ready_user_returns_no_messages(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self.assertEqual(
+            get_serving_readiness_warning_messages(self.user, language="en"), []
+        )
+
+    def test_none_user_returns_no_messages(self):
+        self._seed_default_policy()
+        self.assertEqual(get_serving_readiness_warning_messages(None), [])
+
+    def test_no_record_returns_concise_warning(self):
+        self._seed_default_policy()
+        messages = get_serving_readiness_warning_messages(self.user, language="en")
+        self.assertTrue(messages)
+        joined = " ".join(messages)
+        self.assertIn("Serving readiness warning:", joined)
+        self.assertIn("No church member record is on file", joined)
+        # No internal IDs / model names leak into the staff-facing message.
+        self.assertNotIn("ChurchMemberRecord", joined)
+        self.assertNotIn(str(self.user.pk), joined)
+
+    def test_pending_faith_statement_returns_warning(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        messages = get_serving_readiness_warning_messages(self.user, language="en")
+        joined = " ".join(messages)
+        self.assertIn("Faith Statement is not signed or confirmed.", joined)
+
+    def test_pending_baptism_returns_warning(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        messages = get_serving_readiness_warning_messages(self.user, language="en")
+        joined = " ".join(messages)
+        self.assertIn("No baptism or recognized baptism record.", joined)
+
+    def test_chinese_messages_use_chinese_prefix(self):
+        self._seed_default_policy()
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_DECLINED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        messages = get_serving_readiness_warning_messages(self.user, language="zh")
+        joined = " ".join(messages)
+        self.assertIn("服事预备提醒：", joined)
+        self.assertIn("信仰宣言尚未签署或确认。", joined)
+
+    def test_recommended_unmet_warns_but_user_stays_ready(self):
+        policy = ServingReadinessPolicy.objects.create(
+            code="helper_recommended_policy",
+            name="建议政策",
+            is_default=True,
+            is_active=True,
+        )
+        ServingReadinessRequirement.objects.create(
+            policy=policy,
+            requirement_type=(
+                ServingReadinessRequirement.REQUIREMENT_FAITH_STATEMENT
+            ),
+            accepted_statuses="signed",
+            severity=ServingReadinessRequirement.SEVERITY_REQUIRED,
+            label="信仰宣言",
+        )
+        ServingReadinessRequirement.objects.create(
+            policy=policy,
+            requirement_type=ServingReadinessRequirement.REQUIREMENT_BAPTISM,
+            accepted_statuses="baptized",
+            severity=ServingReadinessRequirement.SEVERITY_RECOMMENDED,
+            label="受洗",
+            message="建议有受洗记录。",
+            message_en="A baptism record is recommended.",
+        )
+        self._make_record(
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_NOT_BAPTIZED,
+        )
+        # Ready (only required requirement met) but the recommended one still warns.
+        self.assertTrue(get_serving_readiness(self.user).is_ready)
+        messages = get_serving_readiness_warning_messages(self.user, language="en")
+        self.assertTrue(messages)
+        self.assertIn("A baptism record is recommended.", " ".join(messages))
+
+    def test_helper_creates_no_member_record(self):
+        self._seed_default_policy()
+        before = ChurchMemberRecord.objects.count()
+        get_serving_readiness_warning_messages(self.user, language="en")
+        self.assertEqual(ChurchMemberRecord.objects.count(), before)
 
 
 class ServingReadinessAdminTests(TestCase):

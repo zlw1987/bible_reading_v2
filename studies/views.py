@@ -11,6 +11,7 @@ from django.utils import timezone
 from accounts.language import get_user_language
 from accounts.models import ChurchStructureUnit
 from accounts.ordering import order_units_by_display_label
+from accounts.serving_readiness import add_serving_readiness_warnings
 from accounts.permissions import (
     CAP_MANAGE_BIBLE_STUDIES,
     CAP_PUBLISH_BIBLE_STUDY_GUIDES,
@@ -974,6 +975,10 @@ def manage_bible_study_meeting_roles(request, meeting_id):
                 request,
                 "同工分工已保存。" if language == "zh" else "Meeting role saved.",
             )
+            # SERVING-READINESS.1C: advisory, warning-only reminder for a linked
+            # user. Display-name-only roles (no linked user) are not evaluated;
+            # candidate filtering is unchanged and the save above is never blocked.
+            add_serving_readiness_warnings(request, role.user, language=language)
             return redirect("manage_bible_study_meeting_roles", meeting_id=meeting.id)
     else:
         selected_add_role = normalize_add_role(request.GET.get("role"))
@@ -1027,13 +1032,19 @@ def edit_bible_study_meeting_role(request, role_id):
             meeting=meeting_role.meeting,
         )
         if form.is_valid():
-            form.save()
+            meeting_role = form.save()
             message = (
                 "聚会同工分工已保存。"
                 if language == "zh"
                 else study_ui_text(language, "meeting_role_saved")
             )
             messages.success(request, message)
+            # SERVING-READINESS.1C: advisory, warning-only reminder for a linked
+            # user. Display-name-only roles (no linked user) are not evaluated;
+            # candidate filtering is unchanged and the save above is never blocked.
+            add_serving_readiness_warnings(
+                request, meeting_role.user, language=language
+            )
             return redirect(
                 "manage_bible_study_meeting_roles",
                 meeting_id=meeting_role.meeting_id,

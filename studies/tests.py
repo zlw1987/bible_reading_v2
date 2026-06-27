@@ -4,6 +4,7 @@ from unittest import mock
 
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.core.management import call_command, CommandError
 from django.db import connection
@@ -14,11 +15,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import (
+    ChurchMemberRecord,
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleType,
+    ServingReadinessPolicy,
 )
 from events.models import ServiceEvent
 from ministry.models import TeamAssignment, TeamAssignmentMember
@@ -6218,3 +6221,242 @@ class BibleStudyV2AdminSurfaceTests(SimpleTestCase):
         # The active V2 Bible Study path must remain administrable.
         self.assertIn(BibleStudyMeeting, admin.site._registry)
         self.assertIn(BibleStudyMeetingWorshipSong, admin.site._registry)
+
+
+class ServingReadinessBibleStudyRoleWarningTests(TestCase):
+    """SERVING-READINESS.1C warnings on BibleStudyMeetingRole assignment.
+
+    Assigning/updating a linked-user meeting role surfaces a staff-facing,
+    warning-only readiness reminder after the save succeeds. Display-name-only
+    roles are not evaluated, candidate filtering is unchanged, ordinary
+    attendee/student pages never show the warnings, and a long-term Edify/Worship
+    coworker does not auto-create a member record or this-week role.
+    """
+
+    def setUp(self):
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT, code="CH", name="教会"
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="GRP",
+            name="小组",
+            name_en="Group",
+        )
+        self.staff = User.objects.create_user(
+            username="bs_role_staff",
+            email="bs-role-staff@example.com",
+            password="pw",
+            is_staff=True,
+        )
+        self.manager = User.objects.create_user(
+            username="bs_role_manager", email="bs-rm@example.com", password="pw"
+        )
+        self.candidate = User.objects.create_user(
+            username="bs_role_candidate", email="bs-rc@example.com", password="pw"
+        )
+        self.series = BibleStudySeries.objects.create(
+            title="约翰福音查经",
+            title_en="John Study",
+            status=BibleStudySeries.STATUS_PUBLISHED,
+        )
+        self.lesson = BibleStudyLesson.objects.create(
+            series=self.series,
+            title="第一课",
+            title_en="Lesson 1",
+            scripture_reference="John 1",
+            lesson_date=timezone.localdate() + timezone.timedelta(days=3),
+            prestudy_datetime=timezone.now() + timezone.timedelta(days=2),
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+            created_by=self.manager,
+        )
+        self.meeting = BibleStudyMeeting.objects.create(
+            lesson=self.lesson,
+            meeting_datetime=timezone.now() + timezone.timedelta(days=3),
+            location="小组家",
+            discussion_leader_user=self.manager,
+            discussion_leader_name="Leader fallback",
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+            created_by=self.manager,
+        )
+        # Make the candidate an audience-eligible linked user so the meeting-role
+        # picker accepts them (candidate filtering itself is unchanged here).
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=self.meeting, unit=self.group_unit
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.candidate,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+
+    # --- helpers ---------------------------------------------------------------
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _seed_policy(self):
+        call_command(
+            "seed_serving_readiness_policies", "--apply", stdout=StringIO()
+        )
+
+    def _make_record(self, user, **kwargs):
+        return ChurchMemberRecord.objects.create(user=user, **kwargs)
+
+    def _readiness_messages(self, response):
+        return [
+            message.message
+            for message in get_messages(response.wsgi_request)
+            if "Serving readiness warning" in message.message
+            or "服事预备提醒" in message.message
+        ]
+
+    def _add_role(self, **overrides):
+        data = {
+            "role": BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            "user": self.candidate.id,
+            "display_name": "",
+            "notes": "",
+            "notes_en": "",
+        }
+        data.update(overrides)
+        return self.client.post(
+            reverse("manage_bible_study_meeting_roles", args=[self.meeting.id]),
+            data,
+        )
+
+    # --- add -------------------------------------------------------------------
+
+    def test_linked_user_no_record_saves_and_warns(self):
+        self._seed_policy()
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        response = self._add_role()
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            BibleStudyMeetingRole.objects.filter(
+                meeting=self.meeting, user=self.candidate
+            ).exists()
+        )
+        self.assertTrue(self._readiness_messages(response))
+
+    def test_linked_user_ready_record_saves_without_warning(self):
+        self._seed_policy()
+        self._make_record(
+            self.candidate,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        response = self._add_role()
+        self.assertTrue(
+            BibleStudyMeetingRole.objects.filter(
+                meeting=self.meeting, user=self.candidate
+            ).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_display_name_only_role_does_not_warn(self):
+        self._seed_policy()
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        response = self._add_role(user="", display_name="Guest Leader")
+        self.assertTrue(
+            BibleStudyMeetingRole.objects.filter(
+                meeting=self.meeting, display_name="Guest Leader"
+            ).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_no_policy_preserves_previous_behavior(self):
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        response = self._add_role()
+        self.assertTrue(
+            BibleStudyMeetingRole.objects.filter(
+                meeting=self.meeting, user=self.candidate
+            ).exists()
+        )
+        self.assertEqual(self._readiness_messages(response), [])
+
+    def test_add_does_not_create_member_record(self):
+        self._seed_policy()
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        before = ChurchMemberRecord.objects.count()
+        self._add_role()
+        self.assertEqual(ChurchMemberRecord.objects.count(), before)
+
+    # --- edit ------------------------------------------------------------------
+
+    def test_edit_linked_user_unready_warns_and_saves(self):
+        self._seed_policy()
+        role = BibleStudyMeetingRole.objects.create(
+            meeting=self.meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.candidate,
+        )
+        self.set_language("en")
+        self.client.login(username="bs_role_staff", password="pw")
+        response = self.client.post(
+            reverse("edit_bible_study_meeting_role", args=[role.id]),
+            {
+                "role": BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+                "user": self.candidate.id,
+                "display_name": "",
+                "notes": "",
+                "notes_en": "",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(self._readiness_messages(response))
+
+    # --- boundaries ------------------------------------------------------------
+
+    def test_long_term_edify_coworker_does_not_create_record_or_week_role(self):
+        # A long-term Edify coworker status must not auto-create readiness facts
+        # or this-week BibleStudyMeetingRole rows.
+        edify_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group_unit,
+            role_type=edify_type,
+            user=self.candidate,
+            is_active=True,
+            start_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+        self._seed_policy()
+        self.assertFalse(
+            ChurchMemberRecord.objects.filter(user=self.candidate).exists()
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.filter(
+                meeting=self.meeting, user=self.candidate
+            ).count(),
+            0,
+        )
+
+    def test_ordinary_attendee_detail_page_has_no_readiness_warning(self):
+        self._seed_policy()
+        BibleStudyMeetingRole.objects.create(
+            meeting=self.meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.candidate,
+        )
+        self.set_language("en")
+        self.client.login(username="bs_role_candidate", password="pw")
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[self.meeting.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Serving readiness warning")
+        self.assertNotContains(response, "服事预备提醒")

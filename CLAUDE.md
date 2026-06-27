@@ -1,5 +1,7 @@
 # CLAUDE.md — Bible Reading V2 / CMS
 
+@AGENTS.md
+
 `AGENTS.md` is the canonical instruction file. If this file conflicts with `AGENTS.md`, follow `AGENTS.md`.
 
 This file only adds Claude-specific reminders.

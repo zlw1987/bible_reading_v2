@@ -20,6 +20,13 @@ no coworkers exist. Today, My Serving long-term role display, long-term coworker
 runtime visibility, and permission inference remain unimplemented and require
 separate approval.
 
+The next product direction built on this foundation — delegated unit management
+("My Units") driven by `lead` coworker assignments, a global member record,
+unit-specific care records, and a configurable warning-only serving-readiness
+policy/evaluator — is designed (docs-only) in
+[Member Record, Faith Statement, Delegated Unit Management, and Configurable Serving Readiness Plan](MEMBER_RECORD_AND_SERVING_READINESS_PLAN.md)
+(`MEMBER-RECORD.1A`).
+
 ## 1. Purpose and Product Problem
 
 `ChurchStructureUnit` is now the local canonical church structure model, but the

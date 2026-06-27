@@ -1,9 +1,14 @@
 # Member Record, Faith Statement, Delegated Unit Management, and Configurable Serving Readiness Plan
 
-Status: `MEMBER-RECORD.1A` docs-only design. No models, migrations, forms,
-views, templates, permissions, management commands, tests, or data changes are
-made in this slice. This document records an approved next product direction so
-it can be reviewed before any implementation slice is approved.
+Status: `MEMBER-RECORD.1A` was docs-only design (no models, migrations, forms,
+views, templates, permissions, management commands, tests, or data changes).
+`MEMBER-RECORD.1B` is implemented as a narrow model/admin/test foundation: it
+adds the global `ChurchMemberRecord` model (one-to-one with the user) recording
+Faith Statement + baptism facts only, with admin registration and focused tests.
+It stores no course/training progress and no serving-readiness result. This
+document records the broader approved product direction; the remaining sections
+(self-editable profile/contact split, unit care records, serving-readiness
+policy/evaluator) stay design-only until each is separately approved.
 
 This plan sits downstream of
 [Structure Unit Coworker Role Architecture Plan](STRUCTURE_UNIT_COWORKER_ROLE_ARCHITECTURE_PLAN.md)
@@ -60,8 +65,10 @@ and "who is serving this week" (`TeamAssignmentMember` / `BibleStudyMeetingRole`
 
 - Profile: lightweight, self-editable user settings (`Profile`,
   currently `preferred_language` / `must_change_password`).
-- Member record (global): church-wide person facts (membership class, Faith
-  Statement, baptism). One row per linked user.
+- Member record (global): church-wide Faith Statement and baptism facts, plus
+  future church-wide facts as approved. One row per linked user. Course/training
+  progress (membership class, etc.) is deferred to a future course/training
+  module and is not part of this record.
 - Unit member record (local): unit-scoped operational/care data (attendance
   state, joined-group date, care notes) for one user in one unit.
 - Coworker role assignment: `ChurchStructureUnitRoleAssignment`, an explicit
@@ -219,6 +226,12 @@ the first delegated-management slices.
   (active `lead` ancestor-or-self / staff); no `/staff/structure/` links, no
   membership, capability, serving, member-record, or readiness changes. See the
   coworker architecture plan's Section 7 for details.
+- `MYUNITS-UX.1A` — **backlog (not implemented).** My Units
+  hierarchy/filter/search/compact UX for large admin views. Super admin currently
+  sees all units as flat cards on `/my-units/`, which is too noisy at scale; a
+  later slice should add hierarchy grouping, filtering, search, and a compact
+  display. Future UX polish only — do not implement during member-record /
+  readiness backend slices.
 - Later (separate approval) — unit member-record management, only after the
   privacy/permission review in Sections B–C.
 
@@ -275,10 +288,23 @@ not unit-specific status. It is admin/pastoral-owned, not self-edited by default
 > membership only) or `ChurchMembershipFile`. Avoid `MemberProfile` (collides
 > conceptually with `Profile`). Recommended: `ChurchMemberRecord`.
 
+> Correction (`MEMBER-RECORD.1B`): course/training pathway statuses
+> (`membership_class_status`, C201 / 认识我们的教会, 福音真理班, 受浸预备班,
+> 基础真理班, and similar) are **deferred to a future course/training/discipleship
+> module** and are **not** stored on `ChurchMemberRecord` V1. Different people and
+> different churches follow different paths (e.g. a gospel-friend path vs a
+> transferring-Christian path at SVCA), so course completion must not be
+> hard-coded into the global member fact record. Faith Statement status remains on
+> `ChurchMemberRecord` because it is directly relevant to future formal membership
+> / formal serving readiness; baptism status/date remain for the same reason.
+> Sections B.3 and the `class_completed_pending_signature` Faith Statement value
+> are therefore deferred/dropped accordingly.
+
 Proposed fields (concepts only):
 
 - `user` — OneToOne to `AUTH_USER_MODEL`.
-- `membership_class_status` — C201 / "认识我们的教会" progress (B.3).
+- ~~`membership_class_status` — C201 / "认识我们的教会" progress (B.3).~~
+  **Deferred to a future course/training module; not on `ChurchMemberRecord` V1.**
 - `faith_statement_status` — Faith Statement / 信仰宣言 status (B.4).
   **Not `faith_status`.** This field is specifically about the Faith Statement,
   not a generic spiritual-state label.
@@ -300,7 +326,14 @@ specifically the Faith Statement / 信仰宣言 acceptance-and-signature state, 
 generic faith status, and conflating the two would invite mislabeling someone's
 spiritual standing.
 
-## B.3 Membership class / C201 status (separate field)
+## B.3 Membership class / C201 status (DEFERRED — future course/training module)
+
+> Correction (`MEMBER-RECORD.1B`): this is **not** implemented on
+> `ChurchMemberRecord` and is **deferred to a future course/training/discipleship
+> module**. C201 / 认识我们的教会 / 福音真理班 / 受浸预备班 / 基础真理班 and any
+> other membership/training course status belong there, not in the global member
+> fact record. The values below are retained only as future design notes for that
+> later module.
 
 Recommended values:
 
@@ -321,24 +354,27 @@ Statement / 信仰宣言; signing is what theoretically makes them a formal memb
 if also baptized they are eligible to begin formal serving. Eligibility is a
 warning, never a hard block in V1.
 
-Recommended V1 values:
+Implemented V1 values (`MEMBER-RECORD.1B`):
 
-- `unknown`
+- `unknown` (default)
 - `not_started`
-- `class_completed_pending_signature`
 - `sent_pending_signature`
 - `signed`
 - `waived`
 - `declined`
 - `not_required`
 
+> Correction (`MEMBER-RECORD.1B`): `class_completed_pending_signature` was
+> **dropped** from the implemented Faith Statement choices. Because course/class
+> progress is deferred to a future course/training module (B.3), the Faith
+> Statement field must not encode class progress.
+
 Notes / open alternatives:
 
-- `class_completed_pending_signature` and `sent_pending_signature` are two
-  flavors of "pending." If staff find the distinction noisy, collapse to a
-  single `pending_signature` and rely on `membership_class_status` for the
-  class fact. Recommended: keep both initially (they map to real SVCA states),
-  revisit after pilot use.
+- The dropped `class_completed_pending_signature` value would have encoded class
+  progress into the Faith Statement field; that concern now belongs to the future
+  course/training module. `sent_pending_signature` remains the single
+  "pending signature" state in V1.
 - `signed` is the readiness-satisfying value; `waived` / `not_required` also
   satisfy readiness for churches that configure it so (Section D).
 - `declined` is a real, non-shaming operational state (chose not to sign).
@@ -432,8 +468,10 @@ Do **not** hard-code SVCA's formal serving rule into the user/profile/member
 model, and do **not** store a single `eligible_for_formal_serving` boolean.
 Separate three layers:
 
-1. **Member facts** — `ChurchMemberRecord` (B): the church-wide truth about a
-   person (membership class, Faith Statement, baptism).
+1. **Member facts** — the church-wide truth about a person. The V1 fact source
+   is `ChurchMemberRecord` (B): Faith Statement + baptism. Future course/training
+   facts (e.g. membership class) may come from a separate course/training module,
+   not from `ChurchMemberRecord`.
 2. **Serving readiness policy** — configurable church rule: which facts (and
    which statuses) are required, and at what severity.
 3. **Evaluated readiness result** — computed on demand by an evaluator; never a
@@ -483,14 +521,17 @@ Proposed fields:
 
 ### D.4 Requirement types
 
-V1:
+V1 implemented fact sources on `ChurchMemberRecord`:
 
-- `membership_class` → checks `ChurchMemberRecord.membership_class_status`.
 - `faith_statement` → checks `ChurchMemberRecord.faith_statement_status`.
 - `baptism` → checks `ChurchMemberRecord.baptism_status`.
 
 Future (do not build in V1):
 
+- Course/training requirements supplied by a future course/training module, such
+  as `membership_class`, `baptism_preparation_class`, `basic_truth_class`,
+  C201/C301, etc. These are not on `ChurchMemberRecord` and need their own fact
+  source.
 - `background_check`, `training`, `child_safety_training`, `age`,
   `manual_review`, `custom`.
 
@@ -596,8 +637,8 @@ Mapping guidance / boundaries for later slices:
 - 教会服事 (church serving) should eventually connect to Ministry /
   `TeamMembership` / `TeamAssignment` concepts, not small-group coworker roles.
 - Faith Statement → `ChurchMemberRecord.faith_statement_status` (+ signed date).
-- C201 → `ChurchMemberRecord.membership_class_status`. C301 / 小组同工培训 are
-  candidate future `training` requirement sources (not V1).
+- C201 / C301 / 小组同工培训 / 福音真理班 / 受浸预备班 / 基础真理班 → future
+  course/training module, not `ChurchMemberRecord` V1.
 - 受洗时间 → `ChurchMemberRecord.baptism_status` + `baptism_date`.
 - birthday / mobile / email → self-editable profile/contact (B.1), privacy-scoped.
 - unstable / no-longer-come / graduated → unit `attendance_state` (C.1).
@@ -646,9 +687,10 @@ These are deliberate decision points for review before implementation.
    keeps `Profile` lightweight and self-editable while member facts are
    admin/pastoral-owned with different permissions.
 
-4. **Faith Statement pending granularity.** Recommended: keep
-   `class_completed_pending_signature` and `sent_pending_signature`. Alternative:
-   collapse to one `pending_signature` and lean on `membership_class_status`.
+4. **Faith Statement pending granularity.** Resolved for `MEMBER-RECORD.1B`:
+   `class_completed_pending_signature` is not a Faith Statement status because
+   course/class progress is deferred to a future course/training module. Keep
+   `sent_pending_signature` as the V1 pending signature state.
 
 5. **Formal member status.** Recommended: derive from Faith Statement signature;
    add stored `formal_member_status` only if a church needs an independent roll.
@@ -669,8 +711,26 @@ implementation.
 
 - `MEMBER-RECORD.1A` — this docs-only design (current slice).
 - `UNIT-LEAD-MANAGE.1A/1B/1C` — delegated management (A.5).
-- `MEMBER-RECORD.1B` — `ChurchMemberRecord` model + admin + self-editable
-  profile/contact split, behind privacy review.
+- `MEMBER-RECORD.1B` — **implemented (narrow model/admin/test foundation).**
+  Added the global `ChurchMemberRecord` (OneToOne to `AUTH_USER_MODEL`, migration
+  `accounts/0017_churchmemberrecord`) storing Faith Statement status
+  (`faith_statement_status`, **not** `faith_status`) + signed date, baptism
+  status + date, non-sensitive `notes`, and `created_by` / `updated_by` /
+  `created_at` / `updated_at` audit fields, plus narrow bilingual fact-display
+  helpers `faith_statement_status_label` / `baptism_status_label`. The Faith
+  Statement choices intentionally drop `class_completed_pending_signature` and the
+  record stores **no** course/training/membership-class progress
+  (`membership_class_status`, C201, etc.) — those varying pathways are deferred
+  to a future course/training module (see B.3 / B.4 corrections). It is
+  admin-only (registered with a bilingual clarity note distinguishing member
+  facts vs deferred course progress vs belonging vs serving vs future
+  configurable readiness); no ordinary-user / My Units / My Serving UI was added.
+  No serving-readiness storage/helper (`eligible_for_formal_serving` /
+  `is_ready_to_serve` / `get_serving_readiness`) was added; readiness stays a
+  future configurable, warning-only, computed concern. No data migration, no
+  auto-created records, no Google-Sheet/baptism-form import. The self-editable
+  profile/contact split (B.1) and the privacy-scoped member-record management
+  surface remain deferred to later, separately approved slices.
 - `MEMBER-RECORD.1C` — `ChurchStructureUnitMemberRecord` + scoped access +
   audit, behind privacy review.
 - `SERVING-READINESS.1A` — `ServingReadinessPolicy` /
@@ -679,12 +739,19 @@ implementation.
 - `SERVING-READINESS.1C` — warning-only integration across coworker, ministry,
   weekly-serving, and Bible Study assignment surfaces (E).
 
-# J. Non-Goals (this slice)
+# J. Non-Goals for Remaining Future Slices
 
-- No models, migrations, fixtures, forms, views, templates, URLs, permissions,
-  management commands, tests, or data changes.
+The following remain non-goals unless a later slice explicitly approves them:
+
 - No import of the Google Sheet.
+- No import of baptismal candidate forms.
 - No hard-blocking of any assignment surface.
+- No ordinary-user, My Units, or My Serving member-record UI.
+- No member-record access for delegated leads until privacy/permission review.
+- No `ChurchStructureUnitMemberRecord` until a separate privacy-scoped slice.
+- No `ServingReadinessPolicy`, `ServingReadinessRequirement`, or evaluator until
+  a separate serving-readiness slice.
+- No stored `eligible_for_formal_serving` / `is_ready_to_serve` boolean.
 - No new runtime authority for `Profile.small_group` / `SmallGroup` / `District`
   / `MinistryContext` / legacy scope fields / legacy bridges.
 - No inference of management, member facts, or readiness from

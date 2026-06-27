@@ -703,3 +703,144 @@ class Profile(models.Model):
     must_change_password = models.BooleanField(default=False)
     def __str__(self):
         return self.user.get_username()
+
+
+class ChurchMemberRecord(models.Model):
+    """Global church member fact record (MEMBER-RECORD.1B).
+
+    One row per user, recording stable church-wide facts (Faith Statement and
+    baptism) that are directly relevant to future formal membership / formal
+    serving-readiness evaluation.
+
+    This is NOT belonging (`ChurchStructureMembership`), NOT serving
+    (`TeamAssignmentMember` / `BibleStudyMeetingRole`), and NOT a capability
+    grant. It does not store course/training/discipleship progress (e.g. C201 /
+    认识我们的教会 / 福音真理班 / 受浸预备班 / 基础真理班) — those varying
+    pathways are deferred to a future course/training module. It also does not
+    store or imply serving readiness; readiness is future configurable,
+    warning-only policy computed on demand, never a stored boolean here.
+    """
+
+    FAITH_STATEMENT_UNKNOWN = "unknown"
+    FAITH_STATEMENT_NOT_STARTED = "not_started"
+    FAITH_STATEMENT_SENT_PENDING_SIGNATURE = "sent_pending_signature"
+    FAITH_STATEMENT_SIGNED = "signed"
+    FAITH_STATEMENT_WAIVED = "waived"
+    FAITH_STATEMENT_DECLINED = "declined"
+    FAITH_STATEMENT_NOT_REQUIRED = "not_required"
+
+    FAITH_STATEMENT_STATUS_CHOICES = [
+        (FAITH_STATEMENT_UNKNOWN, "Unknown"),
+        (FAITH_STATEMENT_NOT_STARTED, "Not started"),
+        (FAITH_STATEMENT_SENT_PENDING_SIGNATURE, "Sent, pending signature"),
+        (FAITH_STATEMENT_SIGNED, "Signed"),
+        (FAITH_STATEMENT_WAIVED, "Waived"),
+        (FAITH_STATEMENT_DECLINED, "Declined"),
+        (FAITH_STATEMENT_NOT_REQUIRED, "Not required"),
+    ]
+
+    FAITH_STATEMENT_STATUS_LABELS_ZH = {
+        FAITH_STATEMENT_UNKNOWN: "未知",
+        FAITH_STATEMENT_NOT_STARTED: "未开始",
+        FAITH_STATEMENT_SENT_PENDING_SIGNATURE: "已发送，待签署",
+        FAITH_STATEMENT_SIGNED: "已签署",
+        FAITH_STATEMENT_WAIVED: "已豁免",
+        FAITH_STATEMENT_DECLINED: "已婉拒",
+        FAITH_STATEMENT_NOT_REQUIRED: "无需",
+    }
+
+    BAPTISM_UNKNOWN = "unknown"
+    BAPTISM_NOT_BAPTIZED = "not_baptized"
+    BAPTISM_BAPTIZED = "baptized"
+    BAPTISM_RECOGNIZED = "recognized"
+    BAPTISM_WAIVED = "waived"
+    BAPTISM_NOT_REQUIRED = "not_required"
+
+    BAPTISM_STATUS_CHOICES = [
+        (BAPTISM_UNKNOWN, "Unknown"),
+        (BAPTISM_NOT_BAPTIZED, "Not baptized"),
+        (BAPTISM_BAPTIZED, "Baptized"),
+        (BAPTISM_RECOGNIZED, "Recognized (baptized elsewhere)"),
+        (BAPTISM_WAIVED, "Waived"),
+        (BAPTISM_NOT_REQUIRED, "Not required"),
+    ]
+
+    BAPTISM_STATUS_LABELS_ZH = {
+        BAPTISM_UNKNOWN: "未知",
+        BAPTISM_NOT_BAPTIZED: "未受浸",
+        BAPTISM_BAPTIZED: "已受浸",
+        BAPTISM_RECOGNIZED: "已认可（在他处受浸）",
+        BAPTISM_WAIVED: "已豁免",
+        BAPTISM_NOT_REQUIRED: "无需",
+    }
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="church_member_record",
+    )
+    faith_statement_status = models.CharField(
+        max_length=32,
+        choices=FAITH_STATEMENT_STATUS_CHOICES,
+        default=FAITH_STATEMENT_UNKNOWN,
+        help_text=(
+            "Faith Statement / 信仰宣言 acceptance-and-signature state. This is "
+            "specifically the Faith Statement status, not a generic spiritual "
+            "status, and not course/training progress."
+        ),
+    )
+    faith_statement_signed_date = models.DateField(null=True, blank=True)
+    baptism_status = models.CharField(
+        max_length=32,
+        choices=BAPTISM_STATUS_CHOICES,
+        default=BAPTISM_UNKNOWN,
+    )
+    baptism_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Operational membership notes only. Do not store counseling, "
+            "medical, financial, immigration, or highly sensitive pastoral "
+            "details."
+        ),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_church_member_records",
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_church_member_records",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["user__username", "id"]
+
+    def __str__(self):
+        return f"Member record: {self.user.get_username()}"
+
+    def faith_statement_status_label(self, language="zh"):
+        if language == "en":
+            return dict(self.FAITH_STATEMENT_STATUS_CHOICES).get(
+                self.faith_statement_status, self.faith_statement_status
+            )
+        return self.FAITH_STATEMENT_STATUS_LABELS_ZH.get(
+            self.faith_statement_status, self.faith_statement_status
+        )
+
+    def baptism_status_label(self, language="zh"):
+        if language == "en":
+            return dict(self.BAPTISM_STATUS_CHOICES).get(
+                self.baptism_status, self.baptism_status
+            )
+        return self.BAPTISM_STATUS_LABELS_ZH.get(
+            self.baptism_status, self.baptism_status
+        )

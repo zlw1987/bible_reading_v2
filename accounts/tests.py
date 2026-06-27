@@ -4,9 +4,9 @@ from io import StringIO
 from pathlib import Path
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.core.exceptions import ValidationError
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.management import call_command, CommandError
-from django.db import connection
+from django.db import connection, IntegrityError, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -18,6 +18,7 @@ from accounts.forms import (
     create_or_update_signup_membership_request,
 )
 from accounts.models import (
+    ChurchMemberRecord,
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
@@ -9017,3 +9018,187 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         response = self.client.get(self._detail_url(self.group) + "?lang=en")
         self.assertContains(response, "Missing Required Roles")
         self.assertContains(response, "Edify")
+
+
+class ChurchMemberRecordModelTests(TestCase):
+    """MEMBER-RECORD.1B global member fact record model foundation."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="member_record_user")
+
+    def test_can_create_with_default_statuses(self):
+        record = ChurchMemberRecord.objects.create(user=self.user)
+        self.assertEqual(
+            record.faith_statement_status,
+            ChurchMemberRecord.FAITH_STATEMENT_UNKNOWN,
+        )
+        self.assertEqual(record.baptism_status, ChurchMemberRecord.BAPTISM_UNKNOWN)
+        self.assertEqual(record.faith_statement_status, "unknown")
+        self.assertEqual(record.baptism_status, "unknown")
+
+    def test_one_to_one_uniqueness_prevents_duplicate_records(self):
+        ChurchMemberRecord.objects.create(user=self.user)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                ChurchMemberRecord.objects.create(user=self.user)
+
+    def test_faith_statement_status_choices_cover_required_values(self):
+        codes = {code for code, _ in ChurchMemberRecord.FAITH_STATEMENT_STATUS_CHOICES}
+        self.assertEqual(
+            codes,
+            {
+                "unknown",
+                "not_started",
+                "sent_pending_signature",
+                "signed",
+                "waived",
+                "declined",
+                "not_required",
+            },
+        )
+        # Course/class progress must not be encoded into the Faith Statement field.
+        self.assertNotIn("class_completed_pending_signature", codes)
+
+    def test_baptism_status_choices_cover_required_values(self):
+        codes = {code for code, _ in ChurchMemberRecord.BAPTISM_STATUS_CHOICES}
+        self.assertEqual(
+            codes,
+            {
+                "unknown",
+                "not_baptized",
+                "baptized",
+                "recognized",
+                "waived",
+                "not_required",
+            },
+        )
+
+    def test_faith_statement_status_field_present_and_faith_status_absent(self):
+        self.assertIsNotNone(
+            ChurchMemberRecord._meta.get_field("faith_statement_status")
+        )
+        with self.assertRaises(FieldDoesNotExist):
+            ChurchMemberRecord._meta.get_field("faith_status")
+
+    def test_course_training_status_fields_absent(self):
+        for field_name in ("membership_class_status", "c201_status", "course_status"):
+            with self.assertRaises(FieldDoesNotExist):
+                ChurchMemberRecord._meta.get_field(field_name)
+
+    def test_nullable_dates_can_be_blank(self):
+        record = ChurchMemberRecord.objects.create(user=self.user)
+        self.assertIsNone(record.faith_statement_signed_date)
+        self.assertIsNone(record.baptism_date)
+
+    def test_notes_help_text_warns_against_sensitive_information(self):
+        help_text = ChurchMemberRecord._meta.get_field("notes").help_text
+        self.assertIn("Operational membership notes only", help_text)
+        self.assertIn("counseling", help_text)
+        self.assertIn("medical", help_text)
+        self.assertIn("financial", help_text)
+        self.assertIn("immigration", help_text)
+
+    def test_status_label_helpers_are_bilingual(self):
+        record = ChurchMemberRecord.objects.create(
+            user=self.user,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self.assertEqual(record.faith_statement_status_label("en"), "Signed")
+        self.assertEqual(record.faith_statement_status_label("zh"), "已签署")
+        self.assertEqual(record.baptism_status_label("en"), "Baptized")
+        self.assertEqual(record.baptism_status_label("zh"), "已受浸")
+
+    def test_creating_record_does_not_create_belonging_serving_or_role_rows(self):
+        before = {
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        ChurchMemberRecord.objects.create(
+            user=self.user,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(ChurchRoleAssignment.objects.count(), before["church_role"])
+        self.assertEqual(TeamAssignment.objects.count(), before["team_assignment"])
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(), before["team_assignment_member"]
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+
+    def test_creating_record_does_not_grant_permissions(self):
+        ChurchMemberRecord.objects.create(
+            user=self.user,
+            faith_statement_status=ChurchMemberRecord.FAITH_STATEMENT_SIGNED,
+            baptism_status=ChurchMemberRecord.BAPTISM_BAPTIZED,
+        )
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
+
+    def test_no_stored_serving_readiness_field_or_property(self):
+        record = ChurchMemberRecord.objects.create(user=self.user)
+        for name in ("eligible_for_formal_serving", "is_ready_to_serve"):
+            with self.assertRaises(FieldDoesNotExist):
+                ChurchMemberRecord._meta.get_field(name)
+            self.assertFalse(hasattr(record, name))
+
+
+class ChurchMemberRecordAdminTests(TestCase):
+    """MEMBER-RECORD.1B admin registration and clarity wording."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="member_record_admin",
+            email="member_record_admin@example.com",
+            password="AdminPass123!",
+        )
+        self.client.login(username="member_record_admin", password="AdminPass123!")
+
+    def test_change_page_renders_member_record(self):
+        member = User.objects.create_user(username="rendered_member")
+        record = ChurchMemberRecord.objects.create(user=member)
+        response = self.client.get(
+            reverse("admin:accounts_churchmemberrecord_change", args=[record.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_changelist_renders(self):
+        response = self.client.get(
+            reverse("admin:accounts_churchmemberrecord_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_note_distinguishes_facts_courses_belonging_serving_readiness(self):
+        member = User.objects.create_user(username="noted_member")
+        record = ChurchMemberRecord.objects.create(user=member)
+        response = self.client.get(
+            reverse("admin:accounts_churchmemberrecord_change", args=[record.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Member Record")
+        self.assertContains(response, "教会成员记录")
+        # member facts only in V1
+        self.assertContains(response, "Faith Statement")
+        self.assertContains(response, "baptism facts only")
+        # course/training progress deferred to a future module
+        self.assertContains(response, "future course/training")
+        self.assertContains(response, "认识我们的教会")
+        # belonging vs serving distinction
+        self.assertContains(response, "Belonging remains ChurchStructureMembership")
+        self.assertContains(response, "TeamAssignmentMember / BibleStudyMeetingRole")
+        # future configurable readiness, never a stored boolean
+        self.assertContains(response, "warning-only policy")
+        self.assertContains(response, "never a stored boolean")

@@ -42,6 +42,13 @@ on local candidates with no "all active users" fallback; edits create/end only
 `ChurchStructureUnitRoleAssignment` rows and never membership, capabilities,
 serving, or meeting roles. See that plan's Section A.5 for status.
 
+`MEMBER-RECORD.1B` then added the narrow, admin-only global `ChurchMemberRecord`
+model/admin/test foundation (Faith Statement + baptism facts only; course/training
+progress deferred to a future module; no stored serving readiness). It adds no
+ordinary-user, My Units, or My Serving UI and does not change coworker, belonging,
+serving, candidate-filtering, or readiness behavior. See that plan's Section I /
+B.2–B.4 for status and corrections.
+
 ## 1. Purpose and Product Problem
 
 `ChurchStructureUnit` is now the local canonical church structure model, but the

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    ChurchMemberRecord,
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
@@ -35,6 +36,20 @@ MEMBERSHIP_NOTE = (
     "users. Membership does "
     "not grant staff capabilities, role assignments, or TeamAssignment/My "
     "Serving. Notes must stay operational and non-sensitive."
+)
+
+
+MEMBER_RECORD_NOTE = (
+    "Church Member Record / 教会成员记录（成员事实）: a global, church-wide "
+    "member fact record. V1 records Faith Statement / 信仰宣言 status and "
+    "baptism facts only. Course/training progress (e.g. C201 / 认识我们的教会 / "
+    "福音真理班 / 受浸预备班 / 基础真理班) belongs to a future course/training "
+    "module and is NOT stored here. This record does not grant serving "
+    "eligibility by itself; serving readiness is future configurable, "
+    "warning-only policy computed on demand, never a stored boolean. Belonging "
+    "remains ChurchStructureMembership; serving assignments remain "
+    "TeamAssignmentMember / BibleStudyMeetingRole. Notes must stay operational "
+    "and non-sensitive."
 )
 
 
@@ -253,6 +268,51 @@ class ChurchRoleAssignmentAdmin(admin.ModelAdmin):
         "structure_unit__code",
         "structure_unit__name",
     )
+
+
+@admin.register(ChurchMemberRecord)
+class ChurchMemberRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "faith_statement_status",
+        "baptism_status",
+        "updated_at",
+    )
+    list_filter = ("faith_statement_status", "baptism_status")
+    search_fields = (
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "user__email",
+    )
+    raw_id_fields = ("user", "created_by", "updated_by")
+    readonly_fields = ("admin_runtime_note", "created_at", "updated_at")
+    ordering = ("user__username",)
+    fieldsets = (
+        (
+            "Church Member Records / 教会成员记录（成员事实）",
+            {
+                "fields": (
+                    "admin_runtime_note",
+                    "user",
+                    "faith_statement_status",
+                    "faith_statement_signed_date",
+                    "baptism_status",
+                    "baptism_date",
+                    "notes",
+                    "created_by",
+                    "updated_by",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
+
+    def admin_runtime_note(self, obj=None):
+        return MEMBER_RECORD_NOTE
+
+    admin_runtime_note.short_description = "Admin clarity note"
 
 
 @admin.register(Profile)

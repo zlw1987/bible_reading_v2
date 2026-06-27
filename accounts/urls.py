@@ -22,6 +22,21 @@ urlpatterns = [
     ),
 
     path("my-units/", views.my_units, name="my_units"),
+    path(
+        "my-units/<int:unit_id>/",
+        views.my_unit_detail,
+        name="my_unit_detail",
+    ),
+    path(
+        "my-units/<int:unit_id>/coworkers/add/",
+        views.add_my_unit_coworker_assignment,
+        name="add_my_unit_coworker_assignment",
+    ),
+    path(
+        "my-units/coworkers/<int:assignment_id>/end/",
+        views.end_my_unit_coworker_assignment,
+        name="end_my_unit_coworker_assignment",
+    ),
 
     path("staff/", views.staff_overview, name="staff_overview"),
     path(

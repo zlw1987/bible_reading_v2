@@ -190,9 +190,24 @@ the first delegated-management slices.
   not added in this slice. A guarded global nav link (`should_show_my_units_nav`)
   shows only to staff and active leads. No models, migrations, forms, or data
   changes; no member-record/readiness models were introduced.
-- `UNIT-LEAD-MANAGE.1C` — delegated coworker management for authorized leads:
-  add / end coworker assignments within managed units, reusing the
-  `UNIT-COWORKER.1C` setup logic but gated by `can_manage_unit_coworkers`.
+- `UNIT-LEAD-MANAGE.1C` — **implemented.** Delegated coworker management for
+  authorized leads. A per-unit operational page (`my_unit_detail`,
+  `GET /my-units/<id>/`) plus POST actions `add_my_unit_coworker_assignment`
+  (`/my-units/<id>/coworkers/add/`) and `end_my_unit_coworker_assignment`
+  (`/my-units/coworkers/<id>/end/`) let authorized users add / end coworker
+  `ChurchStructureUnitRoleAssignment` rows within managed units. Every action is
+  gated by `can_manage_unit_coworkers` (active `lead` ancestor-or-self, staff, or
+  superuser); non-manageable or inactive units return 404. It reuses the
+  `UNIT-COWORKER.1C/1D` `StructureUnitCoworkerAssignmentForm` and
+  `coworker_assignment_local_user_queryset`; non-staff leads are pinned to local
+  candidates (active primary membership on the unit or immediate parent) with no
+  "all active users" fallback, while staff/superuser may still widen the picker
+  via `?coworker_user_scope=all`. Ending sets `is_active=False` + `end_date`
+  (rows are retained, never deleted). No membership, capability,
+  `TeamAssignment`, `TeamAssignmentMember`, `ChurchRoleAssignment`, or
+  `BibleStudyMeetingRole` rows are created; the delegated page exposes no
+  `/staff/structure/` links. The central `CAP_MANAGE_STRUCTURE_COWORKERS`
+  capability (A.3) remains deferred. No new models, migrations, or data changes.
 - Later (separate approval) — unit member-record management, only after the
   privacy/permission review in Sections B–C.
 

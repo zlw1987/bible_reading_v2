@@ -25,7 +25,9 @@
 {% else %}
 {% for card in unit_cards %}
 <section class="card">
-    <h2 class="card-title">{{ card.name }}</h2>
+    <h2 class="card-title">
+        <a href="{% url 'my_unit_detail' card.unit.id %}">{{ card.name }}</a>
+    </h2>
     <p class="page-subtitle">{{ card.path }}</p>
 
     <dl class="detail-list">
@@ -78,6 +80,12 @@
     {% else %}
     <p class="muted">{% if language == "zh" %}没有当前同工。{% else %}No active coworkers.{% endif %}</p>
     {% endif %}
+
+    <p>
+        <a class="button button-secondary" href="{% url 'my_unit_detail' card.unit.id %}">
+            {% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %}
+        </a>
+    </p>
 </section>
 {% endfor %}
 {% endif %}

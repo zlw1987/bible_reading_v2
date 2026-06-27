@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponseForbidden
+from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
@@ -45,7 +45,10 @@ from .ordering import (
     structure_unit_sibling_sort_key,
 )
 from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
-from .unit_management import get_manageable_structure_units
+from .unit_management import (
+    can_manage_unit_coworkers,
+    get_manageable_structure_units,
+)
 
 
 @staff_member_required
@@ -1954,6 +1957,275 @@ def my_units(request):
             "unit_cards": unit_cards,
         },
     )
+
+
+def _delegated_coworker_user_scope(request):
+    """Resolve the coworker candidate scope for the delegated My Units surface.
+
+    UNIT-LEAD-MANAGE.1C: the "all active users" fallback is reserved for
+    staff/superuser. Non-staff delegated leads are always pinned to local
+    candidates (active primary membership on the unit or its immediate parent),
+    matching the UNIT-COWORKER.1D candidate rule, and cannot widen the picker.
+    """
+    is_admin = bool(
+        getattr(request.user, "is_staff", False)
+        or getattr(request.user, "is_superuser", False)
+    )
+    requested_all = (
+        request.GET.get("coworker_user_scope")
+        == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+    )
+    if is_admin and requested_all:
+        return StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL
+    return StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL
+
+
+def _build_active_coworker_role_groups(unit, today, language):
+    """Active coworker assignments for ``unit`` grouped by role type.
+
+    Returns a list of ``{role_type, role_label, assignments}`` dicts ordered by
+    role-type sort order. Read-only helper; mutates nothing.
+    """
+    active_assignments = (
+        ChurchStructureUnitRoleAssignment.objects.filter(
+            unit=unit,
+            is_active=True,
+            start_date__lte=today,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .select_related("role_type", "user")
+        .order_by(
+            "role_type__sort_order",
+            "role_type__code",
+            "user__username",
+            "id",
+        )
+    )
+
+    role_groups = []
+    current_role_type_id = None
+    current_group = None
+    for assignment in active_assignments:
+        if assignment.role_type_id != current_role_type_id:
+            current_role_type_id = assignment.role_type_id
+            current_group = {
+                "role_type": assignment.role_type,
+                "role_label": assignment.role_type.display_name(language),
+                "assignments": [],
+            }
+            role_groups.append(current_group)
+        current_group["assignments"].append(assignment)
+    return role_groups
+
+
+@login_required
+def my_unit_detail(request, unit_id):
+    """Delegated coworker-management page for one manageable structure unit.
+
+    UNIT-LEAD-MANAGE.1C: authorized leads (active ``lead`` ancestor-or-self) and
+    staff/superuser may add and end long-term coworker role assignments for the
+    active units they manage, gated by ``can_manage_unit_coworkers``. This is the
+    operational My Units surface, separate from the admin structure tree at
+    ``/staff/structure/``. It changes only ``ChurchStructureUnitRoleAssignment``
+    rows; it never touches membership, permissions, serving, or meeting roles.
+    """
+    language = get_user_language(request)
+    today = timezone.localdate()
+    unit = get_object_or_404(
+        ChurchStructureUnit.objects.select_related("parent", "role_profile"),
+        id=unit_id,
+    )
+    if not can_manage_unit_coworkers(request.user, unit):
+        raise Http404("Unit is not manageable by this user.")
+
+    is_coworker_admin = bool(
+        getattr(request.user, "is_staff", False)
+        or getattr(request.user, "is_superuser", False)
+    )
+    coworker_user_scope = _delegated_coworker_user_scope(request)
+
+    role_groups = _build_active_coworker_role_groups(unit, today, language)
+    missing_required_roles = unit.missing_required_role_types(today)
+    coworker_defaults_missing = (
+        not ChurchStructureUnitRoleProfile.objects.exists()
+        or not ChurchStructureUnitRoleType.objects.exists()
+    )
+
+    add_form = StructureUnitCoworkerAssignmentForm(
+        unit=unit,
+        language=language,
+        user_scope=coworker_user_scope,
+    )
+    add_form_action_url = reverse(
+        "add_my_unit_coworker_assignment",
+        args=[unit.id],
+    )
+    if coworker_user_scope == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL:
+        add_form_action_url += "?coworker_user_scope=all"
+
+    return render(
+        request,
+        "accounts/my_unit_detail.html",
+        {
+            "active_nav": "my_units",
+            "unit": unit,
+            "unit_path": unit.path_label(language),
+            "unit_name": unit.display_name(language),
+            "has_role_profile": bool(unit.role_profile_id),
+            "role_profile_label": (
+                unit.role_profile.display_name(language)
+                if unit.role_profile_id
+                else ""
+            ),
+            "missing_required_roles": [
+                role_type.display_name(language)
+                for role_type in missing_required_roles
+            ],
+            "role_groups": role_groups,
+            "coworker_defaults_missing": coworker_defaults_missing,
+            "add_form": add_form,
+            "add_form_action_url": add_form_action_url,
+            "coworker_user_scope": coworker_user_scope,
+            "is_coworker_admin": is_coworker_admin,
+            "coworker_local_user_count": (
+                coworker_assignment_local_user_queryset(unit).count()
+            ),
+        },
+    )
+
+
+@login_required
+@require_POST
+def add_my_unit_coworker_assignment(request, unit_id):
+    """Create a coworker role assignment from the delegated My Units surface.
+
+    UNIT-LEAD-MANAGE.1C: gated by ``can_manage_unit_coworkers``. Reuses the
+    UNIT-COWORKER.1C/1D ``StructureUnitCoworkerAssignmentForm`` (local candidate
+    scope for non-staff leads). Creates only a ``ChurchStructureUnitRoleAssignment``
+    row; no membership, capability, serving, or meeting-role rows.
+    """
+    language = get_user_language(request)
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    if not can_manage_unit_coworkers(request.user, unit):
+        raise Http404("Unit is not manageable by this user.")
+
+    coworker_user_scope = _delegated_coworker_user_scope(request)
+    form = StructureUnitCoworkerAssignmentForm(
+        request.POST,
+        unit=unit,
+        language=language,
+        user_scope=coworker_user_scope,
+    )
+
+    if form.is_valid():
+        assignment = form.save()
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureUnitRoleAssignment
+            ).pk,
+            object_id=assignment.pk,
+            object_repr=str(assignment),
+            action_flag=ADDITION,
+            change_message=(
+                "Added structure unit coworker role assignment via delegated My "
+                "Units surface (UNIT-LEAD-MANAGE.1C). No memberships, permissions, "
+                "TeamAssignment rows, TeamAssignmentMember rows, or "
+                "BibleStudyMeetingRole rows were created."
+            ),
+        )
+        messages.success(
+            request,
+            (
+                f"已添加 {assignment.user.username} 的同工角色。"
+                if language == "zh"
+                else f"Added coworker role for {assignment.user.username}."
+            ),
+        )
+    else:
+        detail = _first_form_error(form)
+        messages.error(
+            request,
+            (
+                "同工角色未添加。"
+                if language == "zh"
+                else "Coworker role was not added."
+            )
+            + (f" {detail}" if detail else ""),
+        )
+
+    redirect_url = reverse("my_unit_detail", args=[unit.id])
+    if coworker_user_scope == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL:
+        redirect_url += "?coworker_user_scope=all"
+    return redirect(redirect_url)
+
+
+@login_required
+@require_POST
+def end_my_unit_coworker_assignment(request, assignment_id):
+    """End/deactivate a coworker assignment from the delegated My Units surface.
+
+    UNIT-LEAD-MANAGE.1C: gated by ``can_manage_unit_coworkers`` on the
+    assignment's unit. Sets ``is_active=False`` and an ``end_date`` (mirroring the
+    staff end behavior); the row is retained, never deleted, and no unrelated
+    assignment, membership, serving, or meeting-role rows are touched.
+    """
+    language = get_user_language(request)
+    assignment = get_object_or_404(
+        ChurchStructureUnitRoleAssignment.objects.select_related(
+            "unit",
+            "user",
+            "role_type",
+        ),
+        id=assignment_id,
+    )
+    if not can_manage_unit_coworkers(request.user, assignment.unit):
+        raise Http404("Assignment is not manageable by this user.")
+
+    if not assignment.is_active:
+        messages.info(
+            request,
+            (
+                "该同工角色已经结束。"
+                if language == "zh"
+                else "That coworker role is already ended."
+            ),
+        )
+        return redirect("my_unit_detail", unit_id=assignment.unit_id)
+
+    today = timezone.localdate()
+    assignment.is_active = False
+    if not assignment.end_date or assignment.end_date > today:
+        assignment.end_date = (
+            assignment.start_date
+            if assignment.start_date and assignment.start_date > today
+            else today
+        )
+    assignment.save(update_fields=["is_active", "end_date", "updated_at"])
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureUnitRoleAssignment
+        ).pk,
+        object_id=assignment.pk,
+        object_repr=str(assignment),
+        action_flag=CHANGE,
+        change_message=(
+            "Ended/deactivated structure unit coworker role assignment via "
+            "delegated My Units surface (UNIT-LEAD-MANAGE.1C). Row was retained; "
+            "no memberships, permissions, TeamAssignment rows, "
+            "TeamAssignmentMember rows, or BibleStudyMeetingRole rows were changed."
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"已结束 {assignment.user.username} 的同工角色。"
+            if language == "zh"
+            else f"Ended coworker role for {assignment.user.username}."
+        ),
+    )
+    return redirect("my_unit_detail", unit_id=assignment.unit_id)
 
 
 class ProfilePasswordChangeView(PasswordChangeView):

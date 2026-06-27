@@ -8548,3 +8548,472 @@ class MyUnitsReadOnlyTests(TestCase):
         self.assertNotContains(get_response, "add_structure_unit_coworker_assignment")
         # No coworker management form is rendered in the page content area.
         self.assertNotContains(get_response, "structure-membership-form")
+
+
+class MyUnitDelegatedCoworkerEditTests(TestCase):
+    """UNIT-LEAD-MANAGE.1C delegated coworker add/end on the My Units surface.
+
+    Editing is gated only by ``can_manage_unit_coworkers`` (active ``lead``
+    ancestor-or-self, or staff/superuser). Edits create/end only
+    ``ChurchStructureUnitRoleAssignment`` rows; never membership, capabilities,
+    serving, or meeting roles. Non-staff leads are pinned to local candidates and
+    cannot widen the picker to all active users.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="MUD-DISTRICT",
+            name="负责区",
+            name_en="Lead District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MUD-GROUP",
+            name="小组A",
+            name_en="Group A",
+        )
+        self.nested = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="MUD-NESTED",
+            name="子单元",
+            name_en="Nested",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MUD-SIBLING",
+            name="无关组",
+            name_en="Unrelated Group",
+        )
+
+        # A local candidate: active primary membership directly on the group.
+        self.candidate = User.objects.create_user(username="mud_candidate")
+        ChurchStructureMembership.objects.create(
+            user=self.candidate,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+
+    # --- fixture helpers -------------------------------------------------------
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.lead_role,
+            user=user,
+            **kwargs,
+        )
+
+    def _make_lead_login(self, username, unit):
+        user = User.objects.create_user(username=username, password="pw")
+        self._lead(user, unit)
+        self.client.login(username=username, password="pw")
+        return user
+
+    def _detail_url(self, unit):
+        return reverse("my_unit_detail", args=[unit.id])
+
+    def _add_url(self, unit, scope=None):
+        url = reverse("add_my_unit_coworker_assignment", args=[unit.id])
+        if scope:
+            url += f"?coworker_user_scope={scope}"
+        return url
+
+    def _end_url(self, assignment):
+        return reverse("end_my_unit_coworker_assignment", args=[assignment.id])
+
+    # --- detail access ---------------------------------------------------------
+
+    def test_anonymous_redirected_from_detail(self):
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response["Location"])
+
+    def test_ordinary_user_without_lead_cannot_access_detail(self):
+        User.objects.create_user(username="mud_plain", password="pw")
+        self.client.login(username="mud_plain", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_active_lead_can_access_own_unit_detail(self):
+        self._make_lead_login("mud_group_lead", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manage Unit Coworkers")
+
+    def test_lead_on_parent_can_access_descendant_detail(self):
+        self._make_lead_login("mud_district_lead", self.district)
+        response = self.client.get(self._detail_url(self.nested))
+        self.assertEqual(response.status_code, 200)
+
+    def test_lead_on_one_branch_cannot_access_sibling_detail(self):
+        self._make_lead_login("mud_branch_lead", self.group)
+        response = self.client.get(self._detail_url(self.sibling))
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_unit_cannot_be_managed(self):
+        self._make_lead_login("mud_inactive_unit", self.group)
+        self.group.is_active = False
+        self.group.save()
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_expired_lead_cannot_access_detail(self):
+        user = User.objects.create_user(username="mud_expired", password="pw")
+        self._lead(
+            user,
+            self.group,
+            start_date=self.today - timedelta(days=30),
+            end_date=self.today - timedelta(days=1),
+        )
+        self.client.login(username="mud_expired", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_future_lead_cannot_access_detail(self):
+        user = User.objects.create_user(username="mud_future", password="pw")
+        self._lead(user, self.group, start_date=self.today + timedelta(days=7))
+        self.client.login(username="mud_future", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_inactive_lead_assignment_cannot_access_detail(self):
+        user = User.objects.create_user(username="mud_inactive_lead", password="pw")
+        self._lead(user, self.group, is_active=False)
+        self.client.login(username="mud_inactive_lead", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_lead_coworker_cannot_access_detail(self):
+        user = User.objects.create_user(username="mud_edify", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=user,
+        )
+        self.client.login(username="mud_edify", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_membership_alone_cannot_access_detail(self):
+        self.client.force_login(self.candidate)
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_staff_can_access_active_unit_detail(self):
+        User.objects.create_user(username="mud_staff", password="pw", is_staff=True)
+        self.client.login(username="mud_staff", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_access_active_unit_detail(self):
+        User.objects.create_superuser(
+            username="mud_super", email="mud_super@example.com", password="pw"
+        )
+        self.client.login(username="mud_super", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+
+    # --- add assignment --------------------------------------------------------
+
+    def test_delegated_lead_can_add_assignment(self):
+        self._make_lead_login("mud_add_lead", self.group)
+        response = self.client.post(
+            self._add_url(self.group),
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.group,
+                role_type=self.edify_role,
+                user=self.candidate,
+                is_active=True,
+            ).exists()
+        )
+
+    def test_delegated_lead_cannot_add_to_unmanageable_unit(self):
+        self._make_lead_login("mud_add_branch", self.group)
+        response = self.client.post(
+            self._add_url(self.sibling),
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(unit=self.sibling).exists()
+        )
+
+    def test_non_staff_lead_cannot_use_all_users_fallback(self):
+        # An unrelated user with no local membership is not a local candidate.
+        outsider = User.objects.create_user(username="mud_outsider")
+        self._make_lead_login("mud_no_all", self.group)
+        response = self.client.post(
+            self._add_url(self.group, scope="all"),
+            {
+                "role_type": self.edify_role.id,
+                "user": outsider.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        # Scope stayed local, so the non-local user was rejected: nothing created.
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(user=outsider).exists()
+        )
+
+    def test_non_staff_lead_detail_hides_all_users_fallback(self):
+        self._make_lead_login("mud_hide_all", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertNotContains(response, "Show all active users")
+        self.assertNotContains(response, "coworker_user_scope=all")
+
+    def test_staff_can_use_all_users_fallback(self):
+        outsider = User.objects.create_user(username="mud_staff_outsider")
+        User.objects.create_user(
+            username="mud_staff_all", password="pw", is_staff=True
+        )
+        self.client.login(username="mud_staff_all", password="pw")
+        response = self.client.post(
+            self._add_url(self.group, scope="all"),
+            {
+                "role_type": self.edify_role.id,
+                "user": outsider.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.group, user=outsider, is_active=True
+            ).exists()
+        )
+
+    def test_local_picker_includes_unit_and_parent_members(self):
+        parent_member = User.objects.create_user(username="mud_parent_member")
+        ChurchStructureMembership.objects.create(
+            user=parent_member,
+            unit=self.district,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        form = StructureUnitCoworkerAssignmentForm(
+            unit=self.group,
+            language="en",
+            user_scope=StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL,
+        )
+        picker_ids = set(form.fields["user"].queryset.values_list("id", flat=True))
+        self.assertIn(self.candidate.id, picker_ids)
+        self.assertIn(parent_member.id, picker_ids)
+
+    def test_local_picker_excludes_sibling_and_child_members(self):
+        sibling_member = User.objects.create_user(username="mud_sibling_member")
+        ChurchStructureMembership.objects.create(
+            user=sibling_member,
+            unit=self.sibling,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        child_member = User.objects.create_user(username="mud_child_member")
+        ChurchStructureMembership.objects.create(
+            user=child_member,
+            unit=self.nested,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        form = StructureUnitCoworkerAssignmentForm(
+            unit=self.group,
+            language="en",
+            user_scope=StructureUnitCoworkerAssignmentForm.USER_SCOPE_LOCAL,
+        )
+        picker_ids = set(form.fields["user"].queryset.values_list("id", flat=True))
+        self.assertNotIn(sibling_member.id, picker_ids)
+        self.assertNotIn(child_member.id, picker_ids)
+
+    def test_duplicate_assignment_validation_blocks_second_add(self):
+        self._make_lead_login("mud_dup_lead", self.group)
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=self.candidate,
+            start_date=self.today,
+        )
+        response = self.client.post(
+            self._add_url(self.group),
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.group,
+                role_type=self.edify_role,
+                user=self.candidate,
+            ).count(),
+            1,
+        )
+
+    # --- end assignment --------------------------------------------------------
+
+    def _make_active_assignment(self, unit):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.edify_role,
+            user=self.candidate,
+            start_date=self.today,
+        )
+
+    def test_delegated_lead_can_end_assignment(self):
+        self._make_lead_login("mud_end_lead", self.group)
+        assignment = self._make_active_assignment(self.group)
+        response = self.client.post(self._end_url(assignment))
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertFalse(assignment.is_active)
+        self.assertEqual(assignment.end_date, self.today)
+
+    def test_delegated_lead_cannot_end_in_unmanageable_unit(self):
+        assignment = self._make_active_assignment(self.sibling)
+        self._make_lead_login("mud_end_branch", self.group)
+        response = self.client.post(self._end_url(assignment))
+        self.assertEqual(response.status_code, 404)
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.is_active)
+
+    def test_get_to_end_route_does_not_mutate(self):
+        self._make_lead_login("mud_end_get", self.group)
+        assignment = self._make_active_assignment(self.group)
+        response = self.client.get(self._end_url(assignment))
+        self.assertEqual(response.status_code, 405)
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.is_active)
+
+    def test_ending_does_not_delete_row(self):
+        self._make_lead_login("mud_end_keep", self.group)
+        assignment = self._make_active_assignment(self.group)
+        self.client.post(self._end_url(assignment))
+        self.assertTrue(
+            ChurchStructureUnitRoleAssignment.objects.filter(id=assignment.id).exists()
+        )
+
+    def test_ended_assignment_not_shown_as_active(self):
+        self._make_lead_login("mud_end_hidden", self.group)
+        assignment = self._make_active_assignment(self.group)
+        self.client.post(self._end_url(assignment))
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertNotContains(response, self._end_url(assignment))
+
+    # --- boundary --------------------------------------------------------------
+
+    def test_add_and_end_do_not_create_other_rows(self):
+        membership_before = ChurchStructureMembership.objects.count()
+        self._make_lead_login("mud_boundary", self.group)
+        self.client.post(
+            self._add_url(self.group),
+            {
+                "role_type": self.edify_role.id,
+                "user": self.candidate.id,
+                "start_date": self.today.isoformat(),
+            },
+        )
+        assignment = ChurchStructureUnitRoleAssignment.objects.get(
+            unit=self.group, user=self.candidate, role_type=self.edify_role
+        )
+        self.client.post(self._end_url(assignment))
+
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), membership_before
+        )
+        self.assertEqual(ChurchRoleAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        # No staff capability or My Serving was granted to the assignee.
+        self.candidate.refresh_from_db()
+        self.assertFalse(self.candidate.is_staff)
+
+    def test_detail_does_not_expose_staff_structure_links(self):
+        self._make_lead_login("mud_no_staff_links", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertNotContains(response, "/staff/structure/")
+        self.assertNotContains(response, "church_structure_unit_detail")
+
+    # --- nav / readiness copy --------------------------------------------------
+
+    def test_list_links_to_detail_page(self):
+        self._make_lead_login("mud_list_link", self.group)
+        response = self.client.get(reverse("my_units") + "?lang=en")
+        self.assertContains(response, self._detail_url(self.group))
+
+    def test_detail_marks_my_units_nav_active(self):
+        self._make_lead_login("mud_nav_active", self.group)
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.context["active_nav"], "my_units")
+
+    def test_no_role_profile_copy_renders_english(self):
+        self._make_lead_login("mud_noprofile_en", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, "No coworker role profile selected yet.")
+
+    def test_no_role_profile_copy_renders_chinese(self):
+        self._make_lead_login("mud_noprofile_zh", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=zh")
+        self.assertContains(response, "尚未选择同工角色配置。")
+
+    def test_boundary_copy_renders(self):
+        self._make_lead_login("mud_boundary_copy", self.group)
+        response_en = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(
+            response_en,
+            "This page changes only long-term coworker roles.",
+        )
+        response_zh = self.client.get(self._detail_url(self.group) + "?lang=zh")
+        self.assertContains(response_zh, "此页面只更改长期同工角色")
+
+    def test_missing_required_role_readiness_renders(self):
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        ChurchStructureUnitRoleRequirement.objects.create(
+            profile=profile,
+            role_type=self.edify_role,
+            is_required=True,
+        )
+        self.group.role_profile = profile
+        self.group.save()
+        self._make_lead_login("mud_readiness", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, "Missing Required Roles")
+        self.assertContains(response, "Edify")

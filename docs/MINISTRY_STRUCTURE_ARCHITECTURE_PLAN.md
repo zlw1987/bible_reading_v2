@@ -1,10 +1,23 @@
 # Ministry Structure Architecture Plan
 
-Status: `MINISTRY-STRUCTURE.1A` docs-only architecture/planning slice. No model,
-migration, view, form, template, URL, admin, test, data, or runtime change is
-made or proposed for this slice. This document records the target design and the
-safe implementation phases so the architecture can be discussed and locked down
-before any code is written.
+Status: `MINISTRY-STRUCTURE.1A` created the full ministry-structure architecture
+plan (target design, alternatives, models/fields, boundaries, phases).
+`MINISTRY-STRUCTURE.1A-D` is a docs-only decision-lock slice that locked the key
+architecture decisions previously listed as open (see Section 14, now
+"Architecture Decisions Locked for 1B"): upgrade `MinistryTeam` in place, keep
+both `team_kind` and `is_assignable`, use a dedicated `MinistryTeamParentLink`
+with explicit nullable parent FKs, give `MinistryTeamRoleAssignment` an
+`is_active` + date-window history with multiple active Leads allowed, treat
+missing required roles as warnings only, follow the shared-vs-separate team
+guideline, introduce a new `CAP_MANAGE_MINISTRY_STRUCTURE` capability, and keep
+`TeamMembership.role` / `can_lead` as the permission source while the new role
+model stays additive in the foundation phase.
+
+The plan is now ready for `MINISTRY-STRUCTURE.1B` model/admin foundation. Runtime
+behavior changes — `is_assignable` enforcement, permission migration to
+`MinistryTeamRoleAssignment`, delegated ministry management — remain deferred to
+later, separately approved slices. No model, migration, view, form, template,
+URL, admin, test, data, or runtime change is made by this `1A-D` slice.
 
 Related existing docs:
 
@@ -47,8 +60,9 @@ lower-risk choice:
   directly transferable pattern. We replicate it in the ministry namespace
   instead of inventing a new shape.
 
-Three refinements/findings are surfaced for an explicit decision before
-implementation (details in the sections noted):
+Three refinements/findings were surfaced for an explicit decision and are now
+**locked** by `MINISTRY-STRUCTURE.1A-D` (see Section 14; details in the sections
+noted):
 
 1. **A dedicated `MinistryTeamParentLink` model is justified** (Section 5),
    unlike `ChurchStructureUnit` which uses a single self-referential `parent` FK.
@@ -271,17 +285,16 @@ grouping, and for *suggesting* an initial `is_assignable` default.
 - `True` → may be selected for `TeamAssignment`.
 - `False` → structure/container only; cannot be a `TeamAssignment` target.
 
-### 6.3 Are both needed?
+### 6.3 Both are kept (LOCKED)
 
-**Recommended: keep both, but they are not redundant.** `is_assignable` is the
+**Locked decision: keep both. They are not redundant.** `is_assignable` is the
 single behavioral truth (it decides what `TeamAssignment` may target);
 `team_kind` is descriptive and feeds display + default suggestion. A
 `team_kind=ministry_area` would default `is_assignable=False`, a
 `team_kind=team` would default `is_assignable=True`, but staff may override
 (e.g. an assignable `department`). Collapsing them would either lose the
-display taxonomy or overload one field with two meanings. If the team prefers
-minimalism, `is_assignable` alone is sufficient to protect assignment integrity;
-`team_kind` is the "nice to have" that improves the map and defaults.
+display taxonomy or overload one field with two meanings, so both ship in the
+foundation phase (Section 14, decision 2).
 
 ### 6.4 Assignment-time guard (later behavior slice, not foundation)
 
@@ -419,9 +432,12 @@ versa). To avoid that:
   mirrors how church-structure migrations retired inferred authority in favor of
   explicit assignment rows.
 
-This decision is left **open** for the user to confirm before the foundation
-slice, because it determines whether `TeamMembership.role`'s lead/coordinator
-values are eventually deprecated.
+This decision is **locked** (Section 14, decision 8): the foundation phase keeps
+`TeamMembership.role` / `can_lead` as the permission source and adds
+`MinistryTeamRoleAssignment` as additive-only rows. Whether
+`TeamMembership.role`'s lead/coordinator values are eventually deprecated is
+settled inside the later, separately approved permission-migration slice, not in
+the foundation phase.
 
 ---
 
@@ -553,8 +569,8 @@ phasing controls rollout risk, not product ambition.
   code.
 - **`MINISTRY-STRUCTURE.1B` — model/admin foundation:**
   - Add `MinistryTeamParentLink`.
-  - Add `MinistryTeam.team_kind`, `MinistryTeam.is_assignable`,
-    `MinistryTeam.role_profile` (pending Section 6 decision).
+  - Add `MinistryTeam.team_kind`, `MinistryTeam.is_assignable`, and
+    `MinistryTeam.role_profile` (all locked per Section 14, decisions 2 and 5).
   - Add `MinistryTeamRoleType` / `MinistryTeamRoleProfile` /
     `MinistryTeamRoleRequirement` / `MinistryTeamRoleAssignment`.
   - Admin registration; model/validation tests.
@@ -579,26 +595,58 @@ phasing controls rollout risk, not product ambition.
 
 ---
 
-## 14. Open Decisions
+## 14. Architecture Decisions Locked for 1B
 
-1. **Permission source (Section 8.1):** confirm that `TeamMembership.role`
-   remains the permission source through the foundation phase and that migrating
-   to `MinistryTeamRoleAssignment` is a later separate slice. Decide whether
-   `TeamMembership.role`'s lead/coordinator values are eventually deprecated.
-2. **`team_kind` vs `is_assignable` (Section 6.3):** keep both (recommended) or
-   ship `is_assignable` only.
-3. **Parent target shape (Section 5.2):** confirm the two-nullable-FK +
-   check-constraint design over a `GenericForeignKey`.
-4. **Role-assignment history:** start with active flag + date window
-   (recommended, mirrors `ChurchStructureUnitRoleAssignment`) or active flag
-   only.
-5. **Default required roles per profile (Section 7.5):** confirm `lead` required
-   everywhere; decide whether technical roles are required or optional for
-   `technical_team`.
-6. **Shared-vs-separate boundary (Section 11):** confirm the "same pool → one
-   team; separate pool → separate teams" rule as the setup guideline.
-7. **Capability ownership (Section 10):** confirm `CAP_MANAGE_MINISTRY_STRUCTURE`
-   as a new, separate capability rather than reusing `CAP_MANAGE_MINISTRY_TEAMS`.
+The product owner reviewed `MINISTRY-STRUCTURE.1A` and accepted the recommended
+architecture. The decisions below are **locked** for `MINISTRY-STRUCTURE.1B` and
+later slices. They are no longer open.
+
+1. **Upgrade `MinistryTeam` in place — LOCKED.** Existing `MinistryTeam` is
+   upgraded into the ministry-structure unit. **Do not** create a separate
+   parallel `MinistryStructureUnit` table. Existing `MinistryTeam` rows remain
+   the canonical ministry unit rows. *Rationale:* the serving objects already FK
+   `MinistryTeam`, so a parallel table would force dual-pointing or a mass
+   re-target for no benefit (Sections 0, 2, 4).
+2. **Keep both `team_kind` and `is_assignable` — LOCKED.** `team_kind` is
+   descriptive taxonomy for structure display and default suggestions;
+   `is_assignable` is the authoritative behavior gate for whether a team may be
+   selected for `TeamAssignment`. Existing teams default to `team_kind=team`,
+   `is_assignable=True`; new container/area units may use
+   `team_kind=ministry_area`, `is_assignable=False` (Section 6).
+3. **Parent link shape — LOCKED.** Use a dedicated `MinistryTeamParentLink` with
+   explicit nullable FKs `parent_team` (→ `MinistryTeam`) and `parent_church_unit`
+   (→ `ChurchStructureUnit`), enforcing exactly one parent target via check
+   constraint. **Do not** use `GenericForeignKey`. Support multiple parents and
+   at most one active primary display parent per child (Section 5).
+4. **Role-assignment history — LOCKED.** `MinistryTeamRoleAssignment` uses
+   `is_active` plus `start_date` / `end_date`, mirroring
+   `ChurchStructureUnitRoleAssignment`. Multiple active Leads are allowed; only
+   invalid overlapping duplicate assignments for the same user/team/role are
+   prevented (Section 7.4).
+5. **Default required-role direction — LOCKED.** Every active ministry role
+   profile can require at least one active `lead`. Missing required roles are
+   setup warnings / readiness signals only; they must **not** hard block team
+   creation, parent-link creation, assignment creation, or scheduling (Section
+   7). Whether technical roles are required vs optional for `technical_team` is a
+   preset-content choice deferred to the seed slice (`MINISTRY-STRUCTURE.1E`) and
+   does not affect the foundation model.
+6. **Shared-vs-separate guideline — LOCKED.** Same people / same leadership /
+   same responsibility / same assignment pool → one shared `MinistryTeam` with
+   multiple parent anchors. Separate members / separate leads / separate
+   assignments / separate responsibilities → separate `MinistryTeam` rows
+   (Section 11).
+7. **Capability direction — LOCKED.** Future ministry-structure management uses a
+   new `CAP_MANAGE_MINISTRY_STRUCTURE`. **Do not** reuse
+   `CAP_MANAGE_MINISTRY_TEAMS` or `CAP_MANAGE_TEAM_ASSIGNMENTS` for
+   structure-level authority. Staff/superuser remain global managers by default
+   (Section 10).
+8. **Permission-source transition — LOCKED.** In the `MINISTRY-STRUCTURE.1B`
+   foundation phase, **do not** change existing `can_manage_ministry_team`.
+   Existing `TeamMembership.role` / `can_lead` remains the current permission
+   source. New `MinistryTeamRoleAssignment` rows are **additive only** in the
+   foundation phase and do not drive permissions. Migrating ministry permissions
+   from `TeamMembership.role` to `MinistryTeamRoleAssignment` is a later,
+   separately approved slice with audit/backfill (Section 8.1).
 
 ---
 
@@ -610,8 +658,9 @@ Stop and re-confirm with the user before coding if any of these arise:
   visibility, `ChurchStructureMembership`, My Units, member/care records, My
   Serving, or Today behavior.
 - A change would make `MinistryTeamRoleAssignment` drive permissions or
-  assignment filtering before the Section 8.1 / Section 6.4 decisions are
-  approved.
+  `is_assignable` drive assignment filtering inside the foundation phase. Per the
+  locked decisions (Sections 8.1 and 6.4), those runtime changes belong to later,
+  separately approved slices, not to `MINISTRY-STRUCTURE.1B`.
 - A change would let a church anchor (Section 10) grant ministry management.
 - A change would require a destructive migration, dual-pointing every serving
   object, or a mass re-target of `TeamMembership` / `TeamAssignment`.

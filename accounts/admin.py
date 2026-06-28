@@ -4,6 +4,7 @@ from .models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitMemberRecord,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleProfile,
     ChurchStructureUnitRoleRequirement,
@@ -52,6 +53,22 @@ MEMBER_RECORD_NOTE = (
     "remains ChurchStructureMembership; serving assignments remain "
     "TeamAssignmentMember / BibleStudyMeetingRole. Notes must stay operational "
     "and non-sensitive."
+)
+
+
+UNIT_MEMBER_RECORD_NOTE = (
+    "Church Structure Unit Member Record / 单元成员记录（单元关怀）: "
+    "unit-specific operational/care data (attendance state, when the person "
+    "joined this unit, unit-local group notes, and restricted care/follow-up "
+    "notes). This is NOT canonical belonging — canonical belonging remains "
+    "ChurchStructureMembership. Global church-wide facts (Faith Statement / "
+    "信仰宣言, baptism) remain ChurchMemberRecord. Serving remains "
+    "TeamAssignmentMember / BibleStudyMeetingRole. A unit member record does "
+    "not grant membership, serving, audience visibility, permissions, or "
+    "management rights. Privacy boundary: group_notes and care_followup_notes "
+    "are sensitive and must NOT be exposed to ordinary users or delegated unit "
+    "leads until a later privacy/permission slice explicitly approves scoped "
+    "access; this data is admin-only for now."
 )
 
 SERVING_READINESS_POLICY_NOTE = (
@@ -325,6 +342,54 @@ class ChurchMemberRecordAdmin(admin.ModelAdmin):
 
     def admin_runtime_note(self, obj=None):
         return MEMBER_RECORD_NOTE
+
+    admin_runtime_note.short_description = "Admin clarity note"
+
+
+@admin.register(ChurchStructureUnitMemberRecord)
+class ChurchStructureUnitMemberRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "unit",
+        "attendance_state",
+        "joined_unit_date",
+        "updated_at",
+    )
+    list_filter = ("attendance_state", "unit__unit_type")
+    search_fields = (
+        "user__username",
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+        "unit__code",
+        "unit__name",
+        "unit__name_en",
+    )
+    raw_id_fields = ("user", "unit", "updated_by")
+    readonly_fields = ("admin_runtime_note", "created_at", "updated_at")
+    ordering = ("unit", "user__username")
+    fieldsets = (
+        (
+            "Unit Member Records / 单元成员记录（单元关怀）",
+            {
+                "fields": (
+                    "admin_runtime_note",
+                    "unit",
+                    "user",
+                    "attendance_state",
+                    "joined_unit_date",
+                    "group_notes",
+                    "care_followup_notes",
+                    "updated_by",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
+    )
+
+    def admin_runtime_note(self, obj=None):
+        return UNIT_MEMBER_RECORD_NOTE
 
     admin_runtime_note.short_description = "Admin clarity note"
 

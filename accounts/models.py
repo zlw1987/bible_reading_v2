@@ -846,6 +846,162 @@ class ChurchMemberRecord(models.Model):
         )
 
 
+class ChurchStructureUnitMemberRecord(models.Model):
+    """Unit-specific operational/care record (MEMBER-RECORD.1C).
+
+    One row per ``(unit, user)`` recording unit-local operational/care state:
+    an attendance state, when the person joined this unit, unit-local group
+    notes, and restricted care/follow-up notes. This is admin-only data for now.
+
+    Boundaries (do not weaken):
+
+    - This is NOT belonging. Canonical belonging remains
+      ``ChurchStructureMembership``; a unit member record never replaces,
+      implies, creates, or is read as membership, and no membership is required
+      for a record to exist.
+    - This is NOT a global member fact. Church-wide facts (Faith Statement,
+      baptism) remain ``ChurchMemberRecord`` and are not duplicated per unit.
+    - This is NOT serving. Serving remains ``TeamAssignmentMember`` /
+      ``BibleStudyMeetingRole``; a record never grants a serving assignment.
+    - This is NOT a permission/capability/visibility grant. It does not make any
+      ServiceEvent or Bible Study meeting visible, does not affect audience rows,
+      My Serving, or Today, and does not grant staff/superuser/capabilities or
+      any management right.
+    - Access for ordinary users and delegated unit leads is intentionally NOT
+      implemented in this slice. ``group_notes`` and ``care_followup_notes`` are
+      sensitive and stay admin-only until a later privacy/permission slice
+      explicitly approves scoped access.
+    """
+
+    ATTENDANCE_UNKNOWN = "unknown"
+    ATTENDANCE_ACTIVE = "active"
+    ATTENDANCE_UNSTABLE_ATTENDEE = "unstable_attendee"
+    ATTENDANCE_INACTIVE = "inactive"
+    ATTENDANCE_NO_LONGER_COMES = "no_longer_comes"
+    ATTENDANCE_GRADUATED = "graduated"
+    ATTENDANCE_MOVED = "moved"
+    ATTENDANCE_VISITOR = "visitor"
+    ATTENDANCE_OTHER = "other"
+
+    ATTENDANCE_STATE_CHOICES = [
+        (ATTENDANCE_UNKNOWN, "Unknown"),
+        (ATTENDANCE_ACTIVE, "Active"),
+        (ATTENDANCE_UNSTABLE_ATTENDEE, "Unstable attendee"),
+        (ATTENDANCE_INACTIVE, "Inactive"),
+        (ATTENDANCE_NO_LONGER_COMES, "No longer comes"),
+        (ATTENDANCE_GRADUATED, "Graduated"),
+        (ATTENDANCE_MOVED, "Moved"),
+        (ATTENDANCE_VISITOR, "Visitor"),
+        (ATTENDANCE_OTHER, "Other"),
+    ]
+
+    ATTENDANCE_STATE_LABELS_ZH = {
+        ATTENDANCE_UNKNOWN: "未知",
+        ATTENDANCE_ACTIVE: "稳定参加",
+        ATTENDANCE_UNSTABLE_ATTENDEE: "参加不稳定",
+        ATTENDANCE_INACTIVE: "不活跃",
+        ATTENDANCE_NO_LONGER_COMES: "已不再参加",
+        ATTENDANCE_GRADUATED: "已毕业",
+        ATTENDANCE_MOVED: "已搬离",
+        ATTENDANCE_VISITOR: "访客",
+        ATTENDANCE_OTHER: "其他",
+    }
+
+    unit = models.ForeignKey(
+        ChurchStructureUnit,
+        on_delete=models.PROTECT,
+        related_name="member_records",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="structure_unit_member_records",
+    )
+    attendance_state = models.CharField(
+        max_length=32,
+        choices=ATTENDANCE_STATE_CHOICES,
+        default=ATTENDANCE_UNKNOWN,
+        help_text=(
+            "Unit-local attendance/care state. This is operational unit data, "
+            "not belonging (ChurchStructureMembership), not a global member "
+            "fact, and not serving eligibility."
+        ),
+    )
+    joined_unit_date = models.DateField(null=True, blank=True)
+    group_notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Unit-local operational notes only. Do not store counseling, "
+            "medical, financial, immigration, or highly sensitive pastoral "
+            "details unless a later privacy policy explicitly allows it."
+        ),
+    )
+    care_followup_notes = models.TextField(
+        blank=True,
+        help_text=(
+            "Restricted care/follow-up notes. Treat as sensitive. Do not expose "
+            "to ordinary members or delegated leads until a privacy/permission "
+            "slice explicitly approves access."
+        ),
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_structure_unit_member_records",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["unit", "user__username", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["unit", "user"],
+                name="unique_church_structure_unit_member_record",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["unit", "attendance_state"]),
+            models.Index(fields=["user"]),
+        ]
+
+    def __str__(self):
+        unit_code = self.unit.code if self.unit_id else "?"
+        return f"Unit member record: {self.user.get_username()} @ {unit_code}"
+
+    def clean(self):
+        errors = {}
+
+        # A unit member record is always "current" in V1, so it requires an
+        # active unit and active user. This does NOT read or validate against
+        # ChurchStructureMembership; belonging is a separate concept.
+        if self.unit_id and not self.unit.is_active:
+            errors["unit"] = "Unit member records require an active unit."
+        if self.user_id and not self.user.is_active:
+            errors["user"] = "Unit member records require an active user."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def display_attendance_state(self, language="zh"):
+        if language == "en":
+            return dict(self.ATTENDANCE_STATE_CHOICES).get(
+                self.attendance_state, self.attendance_state
+            )
+        return self.ATTENDANCE_STATE_LABELS_ZH.get(
+            self.attendance_state, self.attendance_state
+        )
+
+    def unit_path_label(self, language="zh"):
+        return self.unit.path_label(language) if self.unit_id else ""
+
+
 class ServingReadinessPolicy(models.Model):
     """Configurable church serving-readiness policy (SERVING-READINESS.1A).
 

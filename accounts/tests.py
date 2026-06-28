@@ -23,6 +23,7 @@ from accounts.models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitMemberRecord,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleProfile,
     ChurchStructureUnitRoleRequirement,
@@ -63,14 +64,17 @@ from accounts.unit_management import (
 )
 from comments.models import ReflectionComment, ReflectionReport
 from events.models import ServiceEvent, ServiceEventAudienceScope
+from events.views import get_visible_service_events
 from ministry.models import (
     MinistryTeam,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
 )
+from ministry.views import my_serving_assignments
 from prayers.models import PrayerReport, PrayerRequest
 from reading.models import ReadingPlan, ReadingPlanDay
+from reading.views import get_today_serving_summary
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -79,6 +83,7 @@ from studies.models import (
     BibleStudySeries,
     BibleStudySeriesAudienceScope,
 )
+from studies.visibility import get_membership_audience_candidate_unit_ids
 
 
 def create_role_assignment_without_validation(**kwargs):
@@ -9741,6 +9746,374 @@ class ChurchMemberRecordAdminTests(TestCase):
         # future configurable readiness, never a stored boolean
         self.assertContains(response, "warning-only policy")
         self.assertContains(response, "never a stored boolean")
+
+
+class ChurchStructureUnitMemberRecordModelTests(TestCase):
+    """MEMBER-RECORD.1C unit-specific operational/care record model foundation.
+
+    The record is admin-only operational/care data. It is NOT belonging
+    (ChurchStructureMembership), NOT a global member fact (ChurchMemberRecord),
+    NOT serving (TeamAssignmentMember / BibleStudyMeetingRole), and never grants
+    membership, serving, audience visibility, permissions, or management rights.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="unit_record_user")
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMR-GROUP",
+            name="单元记录组",
+            name_en="Unit Record Group",
+        )
+
+    def test_can_create_unit_member_record(self):
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        self.assertEqual(record.unit, self.unit)
+        self.assertEqual(record.user, self.user)
+        self.assertIsNone(record.joined_unit_date)
+        self.assertEqual(record.group_notes, "")
+        self.assertEqual(record.care_followup_notes, "")
+
+    def test_default_attendance_state_is_unknown(self):
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        self.assertEqual(
+            record.attendance_state,
+            ChurchStructureUnitMemberRecord.ATTENDANCE_UNKNOWN,
+        )
+        self.assertEqual(record.attendance_state, "unknown")
+
+    def test_attendance_state_choices_cover_required_values(self):
+        codes = {
+            code
+            for code, _ in ChurchStructureUnitMemberRecord.ATTENDANCE_STATE_CHOICES
+        }
+        self.assertEqual(
+            codes,
+            {
+                "unknown",
+                "active",
+                "unstable_attendee",
+                "inactive",
+                "no_longer_comes",
+                "graduated",
+                "moved",
+                "visitor",
+                "other",
+            },
+        )
+
+    def test_unique_unit_user_prevents_duplicate_records(self):
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        with self.assertRaises(ValidationError):
+            ChurchStructureUnitMemberRecord.objects.create(
+                unit=self.unit, user=self.user
+            )
+
+    def test_same_user_can_have_records_in_different_units(self):
+        other_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMR-GROUP-2",
+            name="另一组",
+            name_en="Other Group",
+        )
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=other_unit, user=self.user
+        )
+        self.assertEqual(record.unit, other_unit)
+
+    def test_inactive_unit_is_rejected(self):
+        self.unit.is_active = False
+        self.unit.save()
+        with self.assertRaises(ValidationError):
+            ChurchStructureUnitMemberRecord.objects.create(
+                unit=self.unit, user=self.user
+            )
+
+    def test_inactive_user_is_rejected(self):
+        self.user.is_active = False
+        self.user.save()
+        with self.assertRaises(ValidationError):
+            ChurchStructureUnitMemberRecord.objects.create(
+                unit=self.unit, user=self.user
+            )
+
+    def test_joined_unit_date_can_be_blank(self):
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        self.assertIsNone(record.joined_unit_date)
+
+    def test_group_notes_help_text_warns_about_sensitive_data(self):
+        help_text = ChurchStructureUnitMemberRecord._meta.get_field(
+            "group_notes"
+        ).help_text
+        self.assertIn("Unit-local operational notes only", help_text)
+        self.assertIn("counseling", help_text)
+        self.assertIn("medical", help_text)
+        self.assertIn("financial", help_text)
+        self.assertIn("immigration", help_text)
+
+    def test_care_followup_notes_help_text_warns_about_sensitive_data(self):
+        help_text = ChurchStructureUnitMemberRecord._meta.get_field(
+            "care_followup_notes"
+        ).help_text
+        self.assertIn("Restricted care/follow-up notes", help_text)
+        self.assertIn("sensitive", help_text)
+        self.assertIn("delegated leads", help_text)
+
+    def test_display_helpers_are_bilingual(self):
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit,
+            user=self.user,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+        )
+        self.assertEqual(record.display_attendance_state("en"), "Active")
+        self.assertEqual(record.display_attendance_state("zh"), "稳定参加")
+        self.assertEqual(record.unit_path_label("en"), "Unit Record Group")
+        self.assertEqual(record.unit_path_label("zh"), "单元记录组")
+
+    def test_no_membership_or_management_inference_helpers(self):
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        for name in (
+            "can_manage",
+            "is_member",
+            "is_serving",
+            "is_ready_to_serve",
+        ):
+            self.assertFalse(hasattr(record, name))
+
+    def test_creating_record_does_not_create_belonging_serving_or_facts(self):
+        before = {
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+            "member_record": ChurchMemberRecord.objects.count(),
+        }
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit,
+            user=self.user,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+        )
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(ChurchRoleAssignment.objects.count(), before["church_role"])
+        self.assertEqual(TeamAssignment.objects.count(), before["team_assignment"])
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(), before["team_assignment_member"]
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+        self.assertEqual(
+            ChurchMemberRecord.objects.count(), before["member_record"]
+        )
+
+    def test_creating_record_does_not_grant_permissions(self):
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_staff)
+        self.assertFalse(self.user.is_superuser)
+        self.assertFalse(has_capability(self.user, CAP_MANAGE_CHURCH_MEMBERSHIPS))
+
+
+class ChurchStructureUnitMemberRecordBoundaryTests(TestCase):
+    """MEMBER-RECORD.1C: a unit member record never grants belonging-derived
+    visibility or serving. It must not make zero-row ServiceEvents visible, must
+    not appear in My Serving, must not affect Today, and must not affect Bible
+    Study meeting visibility candidacy."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="umr_boundary_user", password="pw"
+        )
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMR-BND",
+            name="边界组",
+            name_en="Boundary Group",
+        )
+        # The record alone must not behave like membership/serving anywhere.
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit,
+            user=self.user,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+        )
+
+    def test_record_does_not_make_zero_row_service_event_visible(self):
+        event = ServiceEvent.objects.create(
+            title="Zero-row Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        # No audience scope rows: ordinary users fail closed.
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertFalse(event.can_be_seen_by(self.user))
+        visible_ids = set(
+            get_visible_service_events(self.user).values_list("id", flat=True)
+        )
+        self.assertNotIn(event.id, visible_ids)
+
+    def test_record_does_not_appear_in_my_serving(self):
+        self.assertEqual(my_serving_assignments(self.user, tab="upcoming"), [])
+        self.assertEqual(my_serving_assignments(self.user, tab="past"), [])
+
+    def test_record_does_not_affect_today_serving_summary(self):
+        self.assertIsNone(get_today_serving_summary(self.user))
+
+    def test_record_does_not_grant_bible_study_audience_candidacy(self):
+        # Without a single active primary membership, the record gives no Bible
+        # Study audience candidacy (the Today/landing pre-filter feeder).
+        self.assertEqual(
+            get_membership_audience_candidate_unit_ids(self.user), []
+        )
+
+
+class ChurchStructureUnitMemberRecordAdminTests(TestCase):
+    """MEMBER-RECORD.1C admin registration and clarity wording (admin-only)."""
+
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="unit_record_admin",
+            email="unit_record_admin@example.com",
+            password="AdminPass123!",
+        )
+        self.client.login(username="unit_record_admin", password="AdminPass123!")
+        self.user = User.objects.create_user(username="unit_record_member")
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMR-ADMIN",
+            name="管理组",
+            name_en="Admin Group",
+        )
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit, user=self.user
+        )
+
+    def test_changelist_renders(self):
+        response = self.client.get(
+            reverse("admin:accounts_churchstructureunitmemberrecord_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_change_page_renders(self):
+        response = self.client.get(
+            reverse(
+                "admin:accounts_churchstructureunitmemberrecord_change",
+                args=[self.record.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_admin_note_distinguishes_record_belonging_facts_serving_privacy(self):
+        response = self.client.get(
+            reverse(
+                "admin:accounts_churchstructureunitmemberrecord_change",
+                args=[self.record.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        # unit member/care record
+        self.assertContains(response, "Unit Member Record")
+        self.assertContains(response, "单元成员记录")
+        # canonical belonging
+        self.assertContains(response, "ChurchStructureMembership")
+        # global member facts
+        self.assertContains(response, "ChurchMemberRecord")
+        # serving assignments
+        self.assertContains(response, "TeamAssignmentMember / BibleStudyMeetingRole")
+        # privacy boundary
+        self.assertContains(response, "care_followup_notes")
+        self.assertContains(response, "admin-only for now")
+        self.assertContains(response, "delegated unit")
+
+
+class ChurchStructureUnitMemberRecordUiBoundaryTests(TestCase):
+    """MEMBER-RECORD.1C: no non-admin UI exposes unit member/care records.
+
+    This slice adds no ordinary-user / My Units / My Serving / Today UI. A
+    delegated lead and an ordinary member must not see member-record fields or
+    care notes on their existing surfaces.
+    """
+
+    # Field-name / care markers that must never leak onto non-admin surfaces.
+    LEAK_MARKERS = (
+        "care_followup_notes",
+        "attendance_state",
+        "joined_unit_date",
+        "structure_unit_member_records",
+    )
+
+    def setUp(self):
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMR-UI",
+            name="界面组",
+            name_en="UI Group",
+        )
+        self.member = User.objects.create_user(
+            username="umr_ui_member", password="pw"
+        )
+        # A care record exists, with sensitive notes, for the member.
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit,
+            user=self.member,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+            group_notes="SENSITIVE-GROUP-NOTE",
+            care_followup_notes="SENSITIVE-CARE-NOTE",
+        )
+
+    def _assert_no_leak(self, response):
+        self.assertNotContains(response, "SENSITIVE-GROUP-NOTE")
+        self.assertNotContains(response, "SENSITIVE-CARE-NOTE")
+        for marker in self.LEAK_MARKERS:
+            self.assertNotContains(response, marker)
+
+    def test_delegated_lead_my_units_has_no_member_record_ui(self):
+        lead = User.objects.create_user(username="umr_ui_lead", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.unit, role_type=self.lead_role, user=lead
+        )
+        self.client.login(username="umr_ui_lead", password="pw")
+        list_response = self.client.get(reverse("my_units") + "?lang=en")
+        self.assertEqual(list_response.status_code, 200)
+        self._assert_no_leak(list_response)
+        detail_response = self.client.get(
+            reverse("my_unit_detail", args=[self.unit.id]) + "?lang=en"
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self._assert_no_leak(detail_response)
+
+    def test_ordinary_profile_page_has_no_member_record_fields(self):
+        self.client.login(username="umr_ui_member", password="pw")
+        response = self.client.get(reverse("profile") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self._assert_no_leak(response)
 
 
 class ServingReadinessPolicyModelTests(TestCase):

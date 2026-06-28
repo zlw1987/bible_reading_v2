@@ -15,10 +15,17 @@ integration of that evaluator across the selected assignment surfaces (delegated
 My Units / staff structure coworker add, ministry `TeamMembership`, weekly
 `TeamAssignmentMember`, and `BibleStudyMeetingRole`): a thin helper emits the
 evaluator's existing warnings as advisory `messages.warning` reminders after a
-save succeeds, never blocking the save and never shown to ordinary members. This
-document records the broader approved product direction; the remaining sections
-(self-editable profile/contact split and unit care records) stay design-only
-until each is separately approved.
+save succeeds, never blocking the save and never shown to ordinary members.
+`MEMBER-RECORD.1C` is implemented as an admin-only model/admin/test foundation
+for unit-specific operational/care records: it adds the
+`ChurchStructureUnitMemberRecord` model (with admin registration and focused
+tests) and is admin-only for now. It does not expose unit member/care records to
+ordinary users, My Units, My Serving, Today, or delegated leads; scoped
+non-admin access / privacy-permission UI remains deferred to a later, separately
+approved slice. This document records the broader approved product direction; the
+remaining design-only areas are now the self-editable profile/contact split,
+scoped unit-care access/UI, imports (Google Sheet / baptismal candidate forms),
+and the future course/training module, each deferred until separately approved.
 
 This plan sits downstream of
 [Structure Unit Coworker Role Architecture Plan](STRUCTURE_UNIT_COWORKER_ROLE_ARCHITECTURE_PLAN.md)
@@ -434,6 +441,15 @@ either become a serving hard-block (that is the readiness policy's job, D).
 
 ## C.1 `ChurchStructureUnitMemberRecord` (recommended)
 
+> Status (`MEMBER-RECORD.1C`, implemented): the `ChurchStructureUnitMemberRecord`
+> model + admin + tests now exist as an **admin-only** foundation (migration
+> `accounts/0019_churchstructureunitmemberrecord`). Fields below are the
+> implemented shape, except the date field shipped as `joined_unit_date` (not
+> `joined_group_date`) and the optional `local_display_order` / grouping hint was
+> **not** added in this slice. Scoped non-admin access (self / unit lead /
+> district lead / central admin) and any non-admin UI remain deferred to a later
+> privacy/permission slice per C.2 / C.3.
+
 A separate unit-scoped record attaches a user to a unit and stores unit-local
 operational/care data. Recommended name `ChurchStructureUnitMemberRecord`
 (consistent with `ChurchStructureUnit*` naming). Open alternative:
@@ -764,8 +780,31 @@ implementation.
   auto-created records, no Google-Sheet/baptism-form import. The self-editable
   profile/contact split (B.1) and the privacy-scoped member-record management
   surface remain deferred to later, separately approved slices.
-- `MEMBER-RECORD.1C` — `ChurchStructureUnitMemberRecord` + scoped access +
-  audit, behind privacy review.
+- `MEMBER-RECORD.1C` — **implemented (admin-only model/admin/test foundation).**
+  Added the unit-specific `ChurchStructureUnitMemberRecord` (FK `unit` →
+  `ChurchStructureUnit` `PROTECT`, FK `user` → `AUTH_USER_MODEL`, migration
+  `accounts/0019_churchstructureunitmemberrecord`) storing unit-local
+  operational/care data: `attendance_state` (choice, default `unknown`),
+  nullable `joined_unit_date`, sensitive `group_notes` and `care_followup_notes`
+  (each with a privacy warning help text), and `updated_by` / `created_at` /
+  `updated_at` audit, with a `unique(unit, user)` constraint and narrow bilingual
+  display helpers `display_attendance_state` / `unit_path_label` only. `clean()`
+  requires an active unit and active user; it does **not** read, require, or
+  create `ChurchStructureMembership`, and creating a record creates no belonging,
+  serving, role, global-fact, capability, or management row. It is unit-specific
+  operational/care data — **not** canonical belonging (which remains
+  `ChurchStructureMembership`), **not** a global member fact (which remains
+  `ChurchMemberRecord`), and **not** serving (which remains
+  `TeamAssignmentMember` / `BibleStudyMeetingRole`). It does not make a zero-row
+  ServiceEvent visible, does not appear in My Serving, does not affect Today, and
+  does not grant Bible Study audience candidacy. It is **admin-only for now**
+  (registered with a bilingual clarity note distinguishing unit care record vs
+  canonical belonging vs global member facts vs serving vs the privacy boundary);
+  no ordinary-user / My Units / My Serving / Today UI was added, and the
+  `/my-units/` and profile surfaces expose no member-record fields or care notes.
+  Delegated-lead / member-record read/write access remains **deferred** to a
+  later, separately approved privacy/permission slice (C.2 / C.3). No data
+  migration, no auto-created records, no Google-Sheet / baptism-form import.
 - `SERVING-READINESS.1A-B` — **implemented (model + seed + evaluator
   foundation).** Added the configurable `ServingReadinessPolicy` and
   `ServingReadinessRequirement` models (migration
@@ -824,7 +863,9 @@ The following remain non-goals unless a later slice explicitly approves them:
 - No hard-blocking of any assignment surface.
 - No ordinary-user, My Units, or My Serving member-record UI.
 - No member-record access for delegated leads until privacy/permission review.
-- No `ChurchStructureUnitMemberRecord` until a separate privacy-scoped slice.
+- The `ChurchStructureUnitMemberRecord` model now exists as an **admin-only**
+  foundation (`MEMBER-RECORD.1C`); scoped non-admin access / UI (ordinary user,
+  delegated lead) remains a non-goal until a separate privacy-scoped slice.
 - No assignment-surface integration of serving-readiness warnings until
   `SERVING-READINESS.1C`.
 - No hard-blocking based on readiness unless a later policy slice explicitly

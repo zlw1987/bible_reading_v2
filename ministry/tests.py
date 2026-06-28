@@ -34,10 +34,16 @@ from studies.models import (
 
 from .models import (
     MinistryTeam,
+    MinistryTeamParentLink,
+    MinistryTeamRoleAssignment,
+    MinistryTeamRoleProfile,
+    MinistryTeamRoleRequirement,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
 )
+from .permissions import can_manage_ministry_team
 from .forms import TeamAssignmentForm
 from .services.assignment_coverage import (
     assignment_coverage_queryset,
@@ -4823,3 +4829,343 @@ class ServingReadinessMinistryWarningTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Serving readiness warning")
         self.assertNotContains(response, "服事预备提醒")
+
+
+class MinistryStructureFoundationTests(TestCase):
+    """MINISTRY-STRUCTURE.1B model foundation tests (additive, no runtime change)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="ms_user", password="pw")
+        self.other_user = User.objects.create_user(username="ms_other", password="pw")
+        self.area = MinistryTeam.objects.create(
+            name="数字事工",
+            name_en="Digital Ministry",
+            team_kind=MinistryTeam.KIND_MINISTRY_AREA,
+            is_assignable=False,
+        )
+        self.team = MinistryTeam.objects.create(
+            name="投影团队", name_en="Projection Team"
+        )
+        self.church_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="华语",
+            name_en="CM",
+        )
+
+    # --- MinistryTeam field/default tests ---
+
+    def test_existing_team_defaults_to_team_kind_and_assignable(self):
+        team = MinistryTeam.objects.create(name="新团队", name_en="New Team")
+        team.refresh_from_db()
+        self.assertEqual(team.team_kind, MinistryTeam.KIND_TEAM)
+        self.assertTrue(team.is_assignable)
+        self.assertIsNone(team.role_profile)
+
+    def test_role_profile_may_be_null_and_set(self):
+        profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        self.team.role_profile = profile
+        self.team.save()
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.role_profile_id, profile.id)
+
+    def test_is_assignable_false_does_not_change_team_assignment_behavior(self):
+        # Foundation slice: a non-assignable team can still be used to create a
+        # TeamAssignment at the model level (enforcement is a later slice).
+        event = ServiceEvent.objects.create(
+            title="Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.area,  # is_assignable=False
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.assertEqual(assignment.ministry_team_id, self.area.id)
+
+    # --- Parent link tests ---
+
+    def test_parent_link_accepts_single_team_target(self):
+        link = MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area, is_primary=True
+        )
+        self.assertEqual(link.parent_team_id, self.area.id)
+        self.assertIsNone(link.parent_church_unit_id)
+
+    def test_parent_link_accepts_single_church_anchor_target(self):
+        link = MinistryTeamParentLink.objects.create(
+            child_team=self.area, parent_church_unit=self.church_unit, is_primary=True
+        )
+        self.assertEqual(link.parent_church_unit_id, self.church_unit.id)
+
+    def test_parent_link_rejects_no_target(self):
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(child_team=self.team).save()
+
+    def test_parent_link_rejects_both_targets(self):
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.team,
+                parent_team=self.area,
+                parent_church_unit=self.church_unit,
+            ).save()
+
+    def test_parent_link_rejects_self_parent(self):
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.team, parent_team=self.team
+            ).save()
+
+    def test_parent_link_rejects_cycle(self):
+        # area <- team (team's parent is area)
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area
+        )
+        # area's parent = team would close a cycle
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.area, parent_team=self.team
+            ).save()
+
+    def test_parent_link_rejects_duplicate_active_team_link(self):
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area
+        )
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.team, parent_team=self.area
+            ).save()
+
+    def test_parent_link_rejects_duplicate_active_church_anchor(self):
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_church_unit=self.church_unit
+        )
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.team, parent_church_unit=self.church_unit
+            ).save()
+
+    def test_parent_link_rejects_two_active_primary_links(self):
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area, is_primary=True
+        )
+        with self.assertRaises(ValidationError):
+            MinistryTeamParentLink(
+                child_team=self.team,
+                parent_church_unit=self.church_unit,
+                is_primary=True,
+            ).save()
+
+    def test_parent_link_allows_multiple_active_non_primary(self):
+        second_area = MinistryTeam.objects.create(
+            name="网络宣教", name_en="Internet Mission"
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area, is_primary=True
+        )
+        link2 = MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=second_area, is_primary=False
+        )
+        self.assertEqual(self.team.active_parent_links().count(), 2)
+        self.assertEqual(self.team.primary_parent_link().parent_team_id, self.area.id)
+        self.assertFalse(link2.is_primary)
+
+    def test_display_path_includes_church_anchor(self):
+        # CM (church) <- Digital Ministry (area) <- Projection Team (team)
+        MinistryTeamParentLink.objects.create(
+            child_team=self.area, parent_church_unit=self.church_unit, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_team=self.area, is_primary=True
+        )
+        path = self.team.display_path_label("en")
+        self.assertEqual(path, "CM > Digital Ministry > Projection Team")
+        self.assertEqual(self.team.primary_church_anchor().id, self.church_unit.id)
+        self.assertEqual(
+            [a.id for a in self.team.get_ministry_ancestors()], [self.area.id]
+        )
+
+    def test_parent_link_creates_no_membership_or_serving_objects(self):
+        MinistryTeamParentLink.objects.create(
+            child_team=self.team, parent_church_unit=self.church_unit
+        )
+        self.assertEqual(TeamMembership.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+        self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
+
+    # --- Role type / profile / requirement tests ---
+
+    def test_role_type_code_is_normalized_and_unique(self):
+        rt = MinistryTeamRoleType.objects.create(
+            code="  LEAD  ", name="负责人", name_en="Lead"
+        )
+        self.assertEqual(rt.code, "lead")
+        with self.assertRaises(ValidationError):
+            MinistryTeamRoleType(code="lead", name="dup", name_en="Dup").save()
+
+    def test_role_profile_code_is_normalized_and_unique(self):
+        profile = MinistryTeamRoleProfile.objects.create(
+            code="  Technical_Team ", name="技术", name_en="Technical"
+        )
+        self.assertEqual(profile.code, "technical_team")
+        with self.assertRaises(ValidationError):
+            MinistryTeamRoleProfile(code="technical_team", name="d", name_en="D").save()
+
+    def _seed_lead_profile(self):
+        profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleRequirement.objects.create(
+            profile=profile, role_type=lead, is_required=True
+        )
+        return profile, lead
+
+    def test_missing_required_role_types_reports_missing_lead(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        missing = self.team.missing_required_role_types()
+        self.assertEqual([rt.id for rt in missing], [lead.id])
+
+    def test_missing_required_role_types_empty_when_lead_assigned(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        self.assertEqual(self.team.missing_required_role_types(), [])
+
+    def test_missing_required_role_is_readiness_only_and_does_not_block_save(self):
+        profile, _lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        # Saving a team with a missing required role must not raise.
+        self.team.save()
+        self.team.refresh_from_db()
+        self.assertTrue(self.team.missing_required_role_types())
+
+    # --- Role assignment tests ---
+
+    def test_multiple_active_leads_allowed_for_different_users(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        a1 = MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        a2 = MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.other_user
+        )
+        self.assertTrue(a1.is_active and a2.is_active)
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.team, role_type=lead, is_active=True
+            ).count(),
+            2,
+        )
+
+    def test_overlapping_duplicate_assignment_rejected(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        with self.assertRaises(ValidationError):
+            MinistryTeamRoleAssignment(
+                team=self.team, role_type=lead, user=self.user
+            ).save()
+
+    def test_non_overlapping_historical_assignment_allowed(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        today = timezone.localdate()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            role_type=lead,
+            user=self.user,
+            start_date=today - timezone.timedelta(days=30),
+            end_date=today - timezone.timedelta(days=10),
+        )
+        # A new active window starting after the closed one is allowed.
+        new_assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            role_type=lead,
+            user=self.user,
+            start_date=today,
+        )
+        self.assertTrue(new_assignment.pk)
+
+    def test_inactive_assignment_does_not_satisfy_missing_required_role(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user, is_active=False
+        )
+        self.assertEqual(
+            [rt.id for rt in self.team.missing_required_role_types()], [lead.id]
+        )
+
+    def test_active_assignment_requires_active_team_role_user(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        inactive_team = MinistryTeam.objects.create(
+            name="停用", name_en="Inactive", is_active=False
+        )
+        with self.assertRaises(ValidationError):
+            MinistryTeamRoleAssignment(
+                team=inactive_team, role_type=lead, user=self.user
+            ).save()
+
+    def test_end_date_before_start_date_rejected(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        today = timezone.localdate()
+        with self.assertRaises(ValidationError):
+            MinistryTeamRoleAssignment(
+                team=self.team,
+                role_type=lead,
+                user=self.user,
+                start_date=today,
+                end_date=today - timezone.timedelta(days=1),
+            ).save()
+
+    def test_role_assignment_creates_no_team_membership(self):
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        self.assertEqual(TeamMembership.objects.count(), 0)
+
+    def test_role_assignment_does_not_drive_can_manage_ministry_team(self):
+        # A lead role assignment must NOT grant management; permission still
+        # comes from TeamMembership.role (none here), so the user cannot manage.
+        lead = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        self.assertFalse(can_manage_ministry_team(self.user, self.team))
+
+    def test_team_membership_lead_still_grants_management(self):
+        # Existing permission source unchanged: a TeamMembership lead can manage.
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        self.assertTrue(can_manage_ministry_team(self.user, self.team))

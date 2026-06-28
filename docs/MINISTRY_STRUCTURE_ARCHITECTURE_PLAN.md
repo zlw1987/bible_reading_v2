@@ -13,11 +13,30 @@ guideline, introduce a new `CAP_MANAGE_MINISTRY_STRUCTURE` capability, and keep
 `TeamMembership.role` / `can_lead` as the permission source while the new role
 model stays additive in the foundation phase.
 
-The plan is now ready for `MINISTRY-STRUCTURE.1B` model/admin foundation. Runtime
-behavior changes — `is_assignable` enforcement, permission migration to
-`MinistryTeamRoleAssignment`, delegated ministry management — remain deferred to
-later, separately approved slices. No model, migration, view, form, template,
-URL, admin, test, data, or runtime change is made by this `1A-D` slice.
+`MINISTRY-STRUCTURE.1B` implemented the additive model/admin/test foundation
+(migration `ministry/0003`): new `MinistryTeam.team_kind` / `is_assignable` /
+`role_profile` fields (existing rows default to `team_kind=team`,
+`is_assignable=True`), the dedicated `MinistryTeamParentLink` (explicit nullable
+`parent_team` / `parent_church_unit`, exactly-one-target check constraint,
+cycle/duplicate/primary `clean` validation), and the ministry role system
+(`MinistryTeamRoleType` / `MinistryTeamRoleProfile` /
+`MinistryTeamRoleRequirement` / `MinistryTeamRoleAssignment`) plus admin
+registration and read-only `MinistryTeam` structure helpers
+(`active_parent_links`, `primary_parent_link`, `get_ministry_ancestors`,
+`primary_church_anchor`, `display_path_label`, `missing_required_role_types`).
+This is additive only: it changes no runtime behavior, does not touch
+`can_manage_ministry_team` / `manageable_assignment_teams` (TeamMembership.role /
+can_lead remains the permission source), does not enforce `is_assignable` on
+`TeamAssignment`, does not change My Serving / Today / ServiceEvent / Bible Study
+visibility, seeds no defaults, and backfills no hierarchy or roles. The
+`CAP_MANAGE_MINISTRY_STRUCTURE` capability was intentionally **not** added to
+`accounts/permissions.py` in this slice (see Section 13 / Section 10): it would
+be an unused cross-app capability-registry change, so it stays documented-only
+until the later delegated-management slice.
+
+Runtime behavior changes — `is_assignable` enforcement, permission migration to
+`MinistryTeamRoleAssignment`, delegated ministry management + the new
+capability — remain deferred to later, separately approved slices.
 
 Related existing docs:
 
@@ -567,15 +586,30 @@ phasing controls rollout risk, not product ambition.
 
 - **`MINISTRY-STRUCTURE.1A` (this doc):** docs-only full architecture plan. No
   code.
-- **`MINISTRY-STRUCTURE.1B` — model/admin foundation:**
-  - Add `MinistryTeamParentLink`.
-  - Add `MinistryTeam.team_kind`, `MinistryTeam.is_assignable`, and
-    `MinistryTeam.role_profile` (all locked per Section 14, decisions 2 and 5).
-  - Add `MinistryTeamRoleType` / `MinistryTeamRoleProfile` /
-    `MinistryTeamRoleRequirement` / `MinistryTeamRoleAssignment`.
-  - Admin registration; model/validation tests.
+- **`MINISTRY-STRUCTURE.1B` — model/admin foundation (IMPLEMENTED, migration
+  `ministry/0003`):**
+  - Added `MinistryTeamParentLink` (explicit nullable `parent_team` /
+    `parent_church_unit`, exactly-one-target check constraint, cycle / duplicate
+    / single-active-primary `clean` validation enforced in Python for SQLite +
+    PostgreSQL portability).
+  - Added `MinistryTeam.team_kind`, `MinistryTeam.is_assignable`, and
+    `MinistryTeam.role_profile` (all locked per Section 14, decisions 2 and 5);
+    existing rows default to `team_kind=team`, `is_assignable=True`.
+  - Added `MinistryTeamRoleType` / `MinistryTeamRoleProfile` /
+    `MinistryTeamRoleRequirement` / `MinistryTeamRoleAssignment`, plus read-only
+    `MinistryTeam` structure helpers (`active_parent_links`,
+    `primary_parent_link`, `get_ministry_ancestors`, `primary_church_anchor`,
+    `display_path_label`, `missing_required_role_types`).
+  - Admin registration for all new models; focused model/validation tests.
   - **No runtime behavior change**: role assignments are additive only and do
-    not drive permissions or assignment filtering yet.
+    not drive permissions or assignment filtering. `can_manage_ministry_team` /
+    `manageable_assignment_teams` are untouched, `is_assignable` is not enforced,
+    and no defaults are seeded / no hierarchy is backfilled.
+  - The `CAP_MANAGE_MINISTRY_STRUCTURE` capability constant was **not** added in
+    this slice. Adding it to `accounts/permissions.py` (`ALL_CAPABILITIES`) would
+    be an unused cross-app capability-registry change with no consumer in the
+    foundation phase, so it stays documented-only (Section 10) until the later
+    delegated-management slice introduces a real check.
 - **`MINISTRY-STRUCTURE.1C` — read-only structure map:** a staff read-only
   ministry structure tree (kind, assignable flag, anchors, missing-required-role
   readiness). No edits.

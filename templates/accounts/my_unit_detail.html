@@ -149,4 +149,72 @@
         <button type="submit">{% if language == "zh" %}添加同工{% else %}Add Coworker{% endif %}</button>
     </form>
 </section>
+
+{# MEMBER-RECORD.1E: read-only, privacy-scoped member/care records for THIS unit. #}
+{# Every field below comes from build_unit_member_record_safe_snapshot, so only #}
+{# tier-allowed fields render; no raw DB ids, admin URLs, or model names appear. #}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}单元成员 / 关怀记录{% else %}Unit Member / Care Records{% endif %}</h2>
+
+    {% if not member_records_viewer_can_view_care %}
+    <p class="muted">
+        {% if language == "zh" %}受限关怀备注不会在此页面显示。{% else %}Restricted care notes are not shown on this page.{% endif %}
+    </p>
+    {% endif %}
+
+    {% if member_record_snapshots %}
+    {% for snapshot in member_record_snapshots %}
+    <div class="detail-list">
+        <strong>{{ snapshot.user_display }}</strong>
+        <dl class="detail-list">
+            <dt>{% if language == "zh" %}单位{% else %}Unit{% endif %}</dt>
+            <dd>{{ snapshot.unit_path }}</dd>
+
+            <dt>{% if language == "zh" %}出席状态{% else %}Attendance state{% endif %}</dt>
+            <dd>{{ snapshot.attendance_state_display }}</dd>
+
+            <dt>{% if language == "zh" %}加入单位{% else %}Joined unit{% endif %}</dt>
+            <dd>
+                {% if snapshot.joined_unit_date %}
+                {{ snapshot.joined_unit_date }}
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+            </dd>
+
+            {% if snapshot.can_view_group_notes %}
+            <dt>{% if language == "zh" %}小组备注{% else %}Group notes{% endif %}</dt>
+            <dd>
+                {% if snapshot.group_notes %}
+                {{ snapshot.group_notes|linebreaksbr }}
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+            </dd>
+            {% endif %}
+
+            {% if snapshot.can_view_care_notes %}
+            <dt>{% if language == "zh" %}受限关怀备注{% else %}Restricted care notes{% endif %}</dt>
+            <dd>
+                {% if snapshot.care_followup_notes %}
+                {{ snapshot.care_followup_notes|linebreaksbr }}
+                {% else %}
+                <span class="muted">—</span>
+                {% endif %}
+            </dd>
+            {% endif %}
+        </dl>
+    </div>
+    {% endfor %}
+    {% if member_records_viewer_can_view_care %}
+    <p class="muted">
+        {% if language == "zh" %}受限关怀备注仅对同工管理员开放。{% else %}Restricted care notes are visible only to staff/admin users.{% endif %}
+    </p>
+    {% endif %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}这个单位目前还没有成员 / 关怀记录。{% else %}No unit member/care records are on file for this unit yet.{% endif %}
+    </p>
+    {% endif %}
+</section>
 {% endblock %}

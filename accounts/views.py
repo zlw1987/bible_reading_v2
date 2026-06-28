@@ -33,6 +33,7 @@ from .models import (
     ChurchRoleAssignment,
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitMemberRecord,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleProfile,
     ChurchStructureUnitRoleType,
@@ -49,6 +50,9 @@ from .serving_readiness import add_serving_readiness_warnings
 from .unit_management import (
     can_manage_unit_coworkers,
     get_manageable_structure_units,
+)
+from .unit_member_record_access import (
+    build_unit_member_record_safe_snapshot,
 )
 
 
@@ -2114,6 +2118,41 @@ def my_unit_detail(request, unit_id):
         or not ChurchStructureUnitRoleType.objects.exists()
     )
 
+    # MEMBER-RECORD.1E: read-only, privacy-scoped member/care section for THIS
+    # unit only. Records are never auto-created and never inferred from
+    # ChurchStructureMembership; descendant/ancestor records are not pulled in.
+    # Every row is filtered through the MEMBER-RECORD.1D access helper, so the
+    # template only ever renders tier-allowed fields and never raw DB ids or
+    # admin URLs. This adds no create/edit/delete UI and grants no permission.
+    member_records = list(
+        ChurchStructureUnitMemberRecord.objects.filter(unit=unit).select_related(
+            "user", "unit", "unit__parent"
+        )
+    )
+    member_records.sort(
+        key=lambda record: (
+            (
+                record.user.get_full_name() or record.user.get_username()
+            ).lower(),
+            record.attendance_state,
+            record.id,
+        )
+    )
+    member_record_snapshots = []
+    for record in member_records:
+        snapshot = build_unit_member_record_safe_snapshot(
+            request.user, record, language=language
+        )
+        # Defensive: a `none` snapshot exposes no row detail, so never render it.
+        if snapshot.get("can_view_basic"):
+            member_record_snapshots.append(snapshot)
+    # Whether THIS viewer's tier may read restricted care notes on this page.
+    # The page is gated by can_manage_unit_coworkers, so the viewer is either a
+    # staff/superuser (admin-full) or an active lead (operational, no care
+    # notes); is_coworker_admin therefore matches the care-notes tier exactly and
+    # stays correct even when the unit has no records yet.
+    member_records_viewer_can_view_care = is_coworker_admin
+
     add_form = StructureUnitCoworkerAssignmentForm(
         unit=unit,
         language=language,
@@ -2152,6 +2191,10 @@ def my_unit_detail(request, unit_id):
             "is_coworker_admin": is_coworker_admin,
             "coworker_local_user_count": (
                 coworker_assignment_local_user_queryset(unit).count()
+            ),
+            "member_record_snapshots": member_record_snapshots,
+            "member_records_viewer_can_view_care": (
+                member_records_viewer_can_view_care
             ),
         },
     )

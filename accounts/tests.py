@@ -10105,20 +10105,28 @@ class ChurchStructureUnitMemberRecordUiBoundaryTests(TestCase):
         for marker in self.LEAK_MARKERS:
             self.assertNotContains(response, marker)
 
-    def test_delegated_lead_my_units_has_no_member_record_ui(self):
+    def test_delegated_lead_my_units_list_has_no_member_record_ui(self):
         lead = User.objects.create_user(username="umr_ui_lead", password="pw")
         ChurchStructureUnitRoleAssignment.objects.create(
             unit=self.unit, role_type=self.lead_role, user=lead
         )
         self.client.login(username="umr_ui_lead", password="pw")
+        # The compact My Units LIST page never exposes member/care records.
         list_response = self.client.get(reverse("my_units") + "?lang=en")
         self.assertEqual(list_response.status_code, 200)
         self._assert_no_leak(list_response)
+        # MEMBER-RECORD.1E: the DETAIL page now shows a read-only member/care
+        # section to delegated leads at the operational tier (group notes yes,
+        # restricted care notes no). Internal field-name markers still never leak.
         detail_response = self.client.get(
             reverse("my_unit_detail", args=[self.unit.id]) + "?lang=en"
         )
         self.assertEqual(detail_response.status_code, 200)
-        self._assert_no_leak(detail_response)
+        self.assertContains(detail_response, "Unit Member / Care Records")
+        self.assertContains(detail_response, "SENSITIVE-GROUP-NOTE")
+        self.assertNotContains(detail_response, "SENSITIVE-CARE-NOTE")
+        self.assertNotContains(detail_response, "care_followup_notes")
+        self.assertNotContains(detail_response, "structure_unit_member_records")
 
     def test_ordinary_profile_page_has_no_member_record_fields(self):
         self.client.login(username="umr_ui_member", password="pw")
@@ -10670,26 +10678,395 @@ class UnitMemberRecordAccessUiNonExposureTests(TestCase):
         for marker in self.LEAK_MARKERS:
             self.assertNotContains(response, marker)
 
-    def test_my_units_list_and_detail_show_no_member_record(self):
+    def test_my_units_list_shows_no_member_record(self):
         lead = User.objects.create_user(username="umra_ui_lead", password="pw")
         ChurchStructureUnitRoleAssignment.objects.create(
             unit=self.unit, role_type=self.lead_role, user=lead
         )
         self.client.login(username="umra_ui_lead", password="pw")
+        # The compact My Units LIST page never exposes member/care records.
         list_response = self.client.get(reverse("my_units") + "?lang=en")
         self.assertEqual(list_response.status_code, 200)
         self._assert_no_leak(list_response)
+        # MEMBER-RECORD.1E: the DETAIL page now surfaces a read-only member/care
+        # section to delegated leads at the operational tier (group notes yes,
+        # restricted care notes no); internal field-name markers still never leak.
         detail_response = self.client.get(
             reverse("my_unit_detail", args=[self.unit.id]) + "?lang=en"
         )
         self.assertEqual(detail_response.status_code, 200)
-        self._assert_no_leak(detail_response)
+        self.assertContains(detail_response, "GROUP-NOTE-1D")
+        self.assertNotContains(detail_response, "CARE-NOTE-1D")
+        self.assertNotContains(detail_response, "care_followup_notes")
+        self.assertNotContains(detail_response, "structure_unit_member_records")
 
     def test_ordinary_profile_page_shows_no_member_record(self):
         self.client.login(username="umra_ui_member", password="pw")
         response = self.client.get(reverse("profile") + "?lang=en")
         self.assertEqual(response.status_code, 200)
         self._assert_no_leak(response)
+
+
+class MyUnitMemberCareRecordReadOnlyTests(TestCase):
+    """MEMBER-RECORD.1E: read-only, privacy-scoped member/care section on the My
+    Units detail page (``/my-units/<id>/``).
+
+    The first non-admin UI exposure for unit member/care records. It renders only
+    the current unit's records, every field gated through the MEMBER-RECORD.1D
+    access helper: staff/superuser see basic + group notes + restricted care
+    notes; delegated leads see basic + group notes only. It adds no
+    create/edit/delete UI, grants no permission, infers no belonging or serving,
+    and never exposes records on the My Units list, profile, My Serving, or Today.
+    """
+
+    GROUP_NOTE = "GROUP-NOTE-1E"
+    CARE_NOTE = "CARE-NOTE-1E"
+    ANCESTOR_NOTE = "ANCESTOR-NOTE-1E"
+    DESCENDANT_NOTE = "DESCENDANT-NOTE-1E"
+    SIBLING_NOTE = "SIBLING-NOTE-1E"
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+
+        # district -> group(record unit) -> nested, plus an unrelated branch.
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="MR1E-DISTRICT",
+            name="记录区",
+            name_en="Record District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MR1E-GROUP",
+            name="记录组",
+            name_en="Record Group",
+        )
+        self.nested = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="MR1E-NESTED",
+            name="记录子单元",
+            name_en="Record Nested",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MR1E-SIBLING",
+            name="无关组",
+            name_en="Unrelated Group",
+        )
+
+        self.member = User.objects.create_user(
+            username="mr1e_member", first_name="Mem", last_name="Ber"
+        )
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.group,
+            user=self.member,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+            joined_unit_date=self.today - timedelta(days=10),
+            group_notes=self.GROUP_NOTE,
+            care_followup_notes=self.CARE_NOTE,
+        )
+
+    # --- fixture helpers -----------------------------------------------------
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit, role_type=self.lead_role, user=user, **kwargs
+        )
+
+    def _detail_url(self, unit=None):
+        return reverse("my_unit_detail", args=[(unit or self.group).id]) + "?lang=en"
+
+    def _login_staff(self):
+        User.objects.create_user(
+            username="mr1e_staff", password="pw", is_staff=True
+        )
+        self.client.login(username="mr1e_staff", password="pw")
+
+    def _login_group_lead(self):
+        user = User.objects.create_user(username="mr1e_lead", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="mr1e_lead", password="pw")
+        return user
+
+    # --- tier-scoped field visibility ----------------------------------------
+
+    def test_staff_sees_section_with_basic_group_and_care_fields(self):
+        self._login_staff()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unit Member / Care Records")
+        # basic
+        self.assertContains(response, "Mem Ber")
+        self.assertContains(response, "Active")
+        # operational + restricted care
+        self.assertContains(response, self.GROUP_NOTE)
+        self.assertContains(response, self.CARE_NOTE)
+        self.assertContains(response, "Restricted care notes")
+
+    def test_non_staff_lead_sees_basic_and_group_notes(self):
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unit Member / Care Records")
+        self.assertContains(response, "Mem Ber")
+        self.assertContains(response, self.GROUP_NOTE)
+
+    def test_non_staff_lead_does_not_see_care_notes(self):
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.CARE_NOTE)
+        # The page tells the lead the restricted notes are withheld.
+        self.assertContains(
+            response, "Restricted care notes are not shown on this page."
+        )
+
+    def test_ancestor_lead_sees_current_unit_records_operational(self):
+        user = User.objects.create_user(username="mr1e_district_lead", password="pw")
+        self._lead(user, self.district)
+        self.client.login(username="mr1e_district_lead", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.CARE_NOTE)
+
+    # --- access gating (no records visible to the unauthorized) --------------
+
+    def test_lead_on_unrelated_branch_cannot_access(self):
+        user = User.objects.create_user(username="mr1e_other_lead", password="pw")
+        self._lead(user, self.sibling)
+        self.client.login(username="mr1e_other_lead", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_membership_only_user_cannot_access(self):
+        user = User.objects.create_user(username="mr1e_membership", password="pw")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self.client.login(username="mr1e_membership", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_non_lead_coworker_cannot_access(self):
+        user = User.objects.create_user(username="mr1e_edify", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group, role_type=self.edify_role, user=user
+        )
+        self.client.login(username="mr1e_edify", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_team_assignment_member_only_user_cannot_access(self):
+        user = User.objects.create_user(username="mr1e_team", password="pw")
+        team = MinistryTeam.objects.create(name="MR1E Team")
+        membership = TeamMembership.objects.create(team=team, user=user)
+        event = ServiceEvent.objects.create(
+            title="MR1E Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+        self.client.login(username="mr1e_team", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    def test_bible_study_meeting_role_only_user_cannot_access(self):
+        user = User.objects.create_user(username="mr1e_bs", password="pw")
+        series = BibleStudySeries.objects.create(
+            title="MR1E 查经", title_en="MR1E Study"
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series, title="MR1E 课", lesson_date=self.today
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=self.group,
+            meeting_datetime=timezone.now() + timedelta(days=2),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=user,
+        )
+        self.client.login(username="mr1e_bs", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 404)
+
+    # --- current-unit-only scope --------------------------------------------
+
+    def test_only_current_unit_records_shown(self):
+        ancestor_member = User.objects.create_user(username="mr1e_anc")
+        descendant_member = User.objects.create_user(username="mr1e_desc")
+        sibling_member = User.objects.create_user(username="mr1e_sib")
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.district, user=ancestor_member, group_notes=self.ANCESTOR_NOTE
+        )
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.nested, user=descendant_member, group_notes=self.DESCENDANT_NOTE
+        )
+        ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.sibling, user=sibling_member, group_notes=self.SIBLING_NOTE
+        )
+        self._login_staff()
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.ANCESTOR_NOTE)
+        self.assertNotContains(response, self.DESCENDANT_NOTE)
+        self.assertNotContains(response, self.SIBLING_NOTE)
+
+    def test_empty_state_when_unit_has_no_records(self):
+        self.record.delete()
+        self._login_staff()
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unit Member / Care Records")
+        self.assertContains(
+            response,
+            "No unit member/care records are on file for this unit yet.",
+        )
+
+    # --- non-exposure on other surfaces -------------------------------------
+
+    def test_my_units_list_page_does_not_expose_records(self):
+        self._login_group_lead()
+        response = self.client.get(reverse("my_units") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.CARE_NOTE)
+        self.assertNotContains(response, "Unit Member / Care Records")
+
+    def test_profile_page_does_not_expose_records(self):
+        self.client.force_login(self.member)
+        response = self.client.get(reverse("profile") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.CARE_NOTE)
+        self.assertNotContains(response, "Unit Member / Care Records")
+
+    def test_my_serving_does_not_expose_records(self):
+        self.client.force_login(self.member)
+        response = self.client.get(reverse("my_serving") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.CARE_NOTE)
+        self.assertNotContains(response, "Unit Member / Care Records")
+
+    def test_today_does_not_expose_records(self):
+        self.client.force_login(self.member)
+        response = self.client.get(reverse("home") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.GROUP_NOTE)
+        self.assertNotContains(response, self.CARE_NOTE)
+        self.assertNotContains(response, "Unit Member / Care Records")
+
+    # --- privacy / snapshot rendering ---------------------------------------
+
+    def test_lead_page_renders_no_internal_ids_or_admin_urls(self):
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "care_followup_notes")
+        self.assertNotContains(response, "structure_unit_member_records")
+        self.assertNotContains(response, "/admin/")
+
+    def test_lead_page_omits_care_value_even_when_present(self):
+        # The record DOES have a care note; the lead's tier must still hide it.
+        self.assertTrue(self.record.care_followup_notes)
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertNotContains(response, self.CARE_NOTE)
+
+    def test_staff_page_includes_care_value(self):
+        self._login_staff()
+        response = self.client.get(self._detail_url())
+        self.assertContains(response, self.CARE_NOTE)
+
+    # --- boundary: GET is read-only and infers nothing ----------------------
+
+    def test_get_does_not_mutate_records_or_belonging_serving_rows(self):
+        self._login_staff()
+        before = {
+            "unit_member_record": ChurchStructureUnitMemberRecord.objects.count(),
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+            "church_member_record": ChurchMemberRecord.objects.count(),
+        }
+        response = self.client.get(self._detail_url(self.group))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.count(),
+            before["unit_member_record"],
+        )
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(), before["church_role"]
+        )
+        self.assertEqual(
+            TeamAssignment.objects.count(), before["team_assignment"]
+        )
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_member"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+        self.assertEqual(
+            ChurchMemberRecord.objects.count(), before["church_member_record"]
+        )
+
+    def test_get_does_not_grant_visibility_serving_or_bs_candidacy(self):
+        # Viewing a member's care record does not make a zero-row ServiceEvent
+        # visible to that member, nor add serving / Bible Study candidacy.
+        self._login_staff()
+        self.client.get(self._detail_url(self.group))
+        event = ServiceEvent.objects.create(
+            title="MR1E Zero-row",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertFalse(event.can_be_seen_by(self.member))
+        self.assertIsNone(get_today_serving_summary(self.member))
+        self.assertEqual(my_serving_assignments(self.member, tab="upcoming"), [])
+        self.assertEqual(
+            get_membership_audience_candidate_unit_ids(self.member), []
+        )
 
 
 class ServingReadinessPolicyModelTests(TestCase):

@@ -28,10 +28,15 @@ read-only access tiers `none` / `self-basic` / `unit-lead operational` /
 `admin-full` and tier-limited field/snapshot helpers for
 `ChurchStructureUnitMemberRecord`, but adds **no** non-admin UI and exposes no
 record in My Units, My Serving, Today, or profile. It grants no permission and
-infers no belonging or serving; scoped UI that would use the contract remains a
-later privacy/permission slice. This document records the broader approved product direction; the
+infers no belonging or serving. `MEMBER-RECORD.1E` then surfaced that contract as
+a read-only member/care section on the My Units **detail** page (`/my-units/<id>/`)
+only — staff/superuser see basic + group notes + restricted care notes, delegated
+unit leads see basic + group notes only — while the My Units list, profile, My
+Serving, Today, and staff overview still expose nothing; it adds no
+create/edit/delete/import UI, grants no permission, and infers no belonging or
+serving. This document records the broader approved product direction; the
 remaining design-only areas are now the self-editable profile/contact split,
-scoped unit-care access/UI, imports (Google Sheet / baptismal candidate forms),
+member-record write/import UI, imports (Google Sheet / baptismal candidate forms),
 and the future course/training module, each deferred until separately approved.
 
 This plan sits downstream of
@@ -471,10 +476,20 @@ either become a serving hard-block (that is the readiness policy's job, D).
 > explicit active-`lead` path only — membership, non-lead coworker roles,
 > `TeamAssignment` / `TeamAssignmentMember`, and `BibleStudyMeetingRole` grant
 > nothing. The helper is read-only (no membership read, no mutation, no permission
-> grant) and adds **no** non-admin UI; `/my-units/`, `/my-units/<id>/`, My
-> Serving, Today, and profile still expose no member-record fields or care notes.
-> Scoped UI that would consume this contract remains a later privacy/permission
-> slice. No schema, migration, or data change.
+> grant) and adds **no** non-admin UI. No schema, migration, or data change.
+>
+> Status (`MEMBER-RECORD.1E`, implemented): the C.3 contract above is now
+> consumed by a read-only member/care section on the My Units **detail** page
+> (`/my-units/<id>/`) only, rendered via `build_unit_member_record_safe_snapshot`
+> so only tier-allowed fields appear (no raw ids / admin URLs / model names).
+> Staff/superuser see basic + `group_notes` + `care_followup_notes`; delegated
+> unit leads see basic + `group_notes` only. It lists the current unit's records
+> only (no descendant/ancestor/sibling), never auto-fills from
+> `ChurchStructureMembership`, and shows an empty state when none exist. The My
+> Units **list** page, profile, My Serving, Today, and staff overview still expose
+> nothing. It adds no create/edit/delete/import UI, grants no permission, infers
+> no belonging/serving, and makes no schema, migration, admin, helper-semantics,
+> or data change.
 
 A separate unit-scoped record attaches a user to a unit and stores unit-local
 operational/care data. Recommended name `ChurchStructureUnitMemberRecord`
@@ -852,6 +867,30 @@ implementation.
   non-admin UI that consumes this contract remains a later, separately approved
   privacy/permission slice. Focused access-tier / field-visibility / boundary /
   UI-non-exposure tests were added.
+- `MEMBER-RECORD.1E` — **implemented (read-only My Units detail member/care
+  section).** Added a narrow, read-only member/care section to the My Units detail
+  page (`/my-units/<id>/`) only. It is the first non-admin UI exposure for
+  `ChurchStructureUnitMemberRecord`, built entirely on the `MEMBER-RECORD.1D`
+  access helper: each row is rendered through
+  `build_unit_member_record_safe_snapshot`, so the template only ever shows
+  tier-allowed fields and never raw DB ids, admin URLs, or model names.
+  Staff/superuser see basic fields + group notes + restricted care notes;
+  delegated unit leads (active `lead` ancestor-or-self, the same gate as the rest
+  of the page) see basic fields + group notes only, with an on-page note that
+  restricted care notes are withheld. The section lists records for the **current
+  unit only** (no descendant, ancestor, or sibling records), never auto-fills
+  missing rows from `ChurchStructureMembership`, never creates records, and shows
+  a clear empty state when the unit has none. It adds **no** create/edit/delete/
+  import UI, no forms, no schema change, no migration, no admin change, and no
+  data mutation, and does not change the access-helper semantics. It grants no
+  permission and infers no belonging, serving, or management from records. The
+  compact My Units **list** page, profile, My Serving, Today, and staff overview
+  still expose no member-record fields or care notes. Focused tier-visibility,
+  access-gating, current-unit-scope, empty-state, non-exposure, privacy/snapshot,
+  and read-only boundary tests were added (`MyUnitMemberCareRecordReadOnlyTests`);
+  the `MEMBER-RECORD.1C/1D` non-exposure tests that asserted the detail page
+  showed no records were updated to reflect this approved detail-page exposure
+  (list/profile non-exposure unchanged).
 - `SERVING-READINESS.1A-B` — **implemented (model + seed + evaluator
   foundation).** Added the configurable `ServingReadinessPolicy` and
   `ServingReadinessRequirement` models (migration
@@ -908,12 +947,15 @@ The following remain non-goals unless a later slice explicitly approves them:
 - No import of the Google Sheet.
 - No import of baptismal candidate forms.
 - No hard-blocking of any assignment surface.
-- No ordinary-user, My Units, or My Serving member-record UI.
-- No member-record access for delegated leads until privacy/permission review.
-- The `ChurchStructureUnitMemberRecord` model now exists as an **admin-only**
-  foundation (`MEMBER-RECORD.1C`), and `MEMBER-RECORD.1D` added a read-only
-  privacy/access **helper** contract for it; scoped non-admin **UI** (ordinary
-  user, delegated lead) that would surface records using that contract remains a
+- No ordinary-user / profile / My Serving / Today / staff-overview member-record
+  UI, and no member-record exposure on the My Units **list** page.
+- No create/edit/delete/import member-record UI for delegated leads (read-only
+  only); write access stays deferred to a later privacy/permission review.
+- The `ChurchStructureUnitMemberRecord` model began as an **admin-only**
+  foundation (`MEMBER-RECORD.1C`), `MEMBER-RECORD.1D` added a read-only
+  privacy/access **helper** contract for it, and `MEMBER-RECORD.1E` surfaced that
+  contract as a read-only member/care section on the My Units **detail** page
+  only. Any further scoped UI (other surfaces, or any write path) remains a
   non-goal until a separate privacy-scoped slice.
 - No assignment-surface integration of serving-readiness warnings until
   `SERVING-READINESS.1C`.

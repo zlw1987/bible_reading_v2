@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_GET
 
 from accounts.language import get_user_language
 from accounts.ordering import order_team_memberships_by_visible_identity
@@ -77,6 +78,10 @@ from .services.lighting_pilot_import import (
     import_lighting_pilot,
     read_csv_file,
 )
+from .structure_map import (
+    build_ministry_structure_map,
+    team_kind_options,
+)
 
 
 MY_SERVING_WEEK_DAYS = 7
@@ -87,6 +92,7 @@ def ministry_ui_text(language, key):
     labels = {
         "en": {
             "no_permission": "You do not have permission to manage ministry teams.",
+            "structure_no_permission": "The Ministry Structure page is staff-only.",
             "not_available": "This ministry team is not available.",
             "team_saved": "Ministry team saved.",
             "membership_saved": "Member saved.",
@@ -106,6 +112,7 @@ def ministry_ui_text(language, key):
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
+            "structure_no_permission": "事工结构页面仅限同工查看。",
             "not_available": "这个事工团队目前不可用。",
             "team_saved": "事工团队已保存。",
             "membership_saved": "成员已保存。",
@@ -681,6 +688,59 @@ def ministry_team_list(request):
             "teams": teams,
             "can_manage": can_manage,
             "can_import_lighting": can_import_lighting_pilot(request.user),
+        },
+    )
+
+
+def _user_is_staff(user):
+    return getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
+
+
+@login_required
+@require_GET
+def ministry_structure_map(request):
+    """Staff-only, read-only Ministry Structure map (MINISTRY-STRUCTURE.1C).
+
+    Shows ministry teams grouped under their church display anchors, the
+    ministry parent/child tree, shared (multi-parent) teams, unanchored teams,
+    container vs assignable status, and missing-required-role readiness.
+
+    Access is staff/superuser only. It is deliberately NOT granted by
+    ``TeamMembership.role``/``can_lead``, ``MinistryTeamRoleAssignment``,
+    ``ChurchStructureUnitRoleAssignment``, or ``ChurchStructureMembership`` — a
+    church anchor never grants access. This view is GET-only and read-only: it
+    creates/updates/deletes nothing, drives no permission, and changes no
+    serving, My Serving, Today, assignment, or visibility behavior.
+    """
+    language = get_user_language(request)
+    if not _user_is_staff(request.user):
+        messages.error(request, ministry_ui_text(language, "structure_no_permission"))
+        return redirect("ministry_team_list")
+
+    include_inactive = request.GET.get("inactive") == "1"
+    filters = {
+        "q": request.GET.get("q", ""),
+        "kind": request.GET.get("kind", ""),
+        "assignable": request.GET.get("assignable", ""),
+        "missing_required": request.GET.get("missing_required") == "1",
+        "unanchored": request.GET.get("unanchored") == "1",
+    }
+
+    structure = build_ministry_structure_map(
+        user=request.user,
+        language=language,
+        include_inactive=include_inactive,
+        filters=filters,
+    )
+
+    return render(
+        request,
+        "ministry/structure_map.html",
+        {
+            "structure": structure,
+            "filters": filters,
+            "include_inactive": include_inactive,
+            "kind_options": team_kind_options(language),
         },
     )
 

@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<style>
+.ms-map .ms-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--muted);
+}
+.ms-map .ms-badge-shared {
+    color: #2a4d8f;
+    border-color: #bcd0f0;
+    background: #eef3fc;
+}
+.ms-map .ms-badge-anchor {
+    color: #4a3a73;
+    border-color: #d2c6ec;
+    background: #f3eefb;
+}
+.ms-map .ms-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    align-items: center;
+}
+.ms-map .ms-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+}
+.ms-map .ms-anchor-group {
+    margin-bottom: 18px;
+}
+.ms-map .ms-anchor-heading {
+    margin: 0 0 6px;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.ms-map .structure-map-row.ms-reference {
+    opacity: 0.85;
+}
+.ms-map .structure-map-row.ms-reference .structure-map-unit-name {
+    font-weight: 500;
+}
+.ms-map .ms-node-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    align-items: baseline;
+}
+.ms-map .ms-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: flex-end;
+}
+.ms-map .ms-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13px;
+    color: var(--muted);
+}
+.ms-map .ms-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+}
+.ms-map .ms-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+}
+</style>
+
+<div class="ms-map">
+<p>
+    <a href="{% url 'ministry_team_list' %}">
+        ← {% if language == "zh" %}返回事工团队{% else %}Back to Ministry Teams{% endif %}
+    </a>
+</p>
+
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        只读视图：查看事工团队的上下级关系、教会显示锚点、共享团队，以及缺少的必要事工角色。
+        {% else %}
+        Read-only view of ministry team parent/child relationships, church display anchors, shared teams, and missing required ministry roles.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel">
+    <strong>{% if language == "zh" %}只用于事工组织展示{% else %}Ministry organization display only{% endif %}</strong>
+    <p>
+        {% if language == "zh" %}
+        此事工结构仅用于组织展示。教会结构锚点只表示显示位置，不代表成员归属、可见性、服事安排或权限。
+        {% else %}
+        This structure is for ministry organization only. Church anchors are display anchors and do not grant membership, visibility, serving assignment, or permissions.
+        {% endif %}
+    </p>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}图例{% else %}Legend{% endif %}</h2>
+    <div class="ms-legend">
+        <span class="ms-legend-item"><span class="ms-badge ms-badge-anchor">{% if language == "zh" %}教会锚点{% else %}Church anchor{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="status">{% if language == "zh" %}容器（不可排班）{% else %}Container / not assignable{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="ms-badge ms-badge-shared">{% if language == "zh" %}共享团队{% else %}Shared team{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="status status-warning">{% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="ms-badge">{% if language == "zh" %}也挂靠于此{% else %}Also linked here{% endif %}</span></span>
+        {% if include_inactive %}
+        <span class="ms-legend-item"><span class="status status-danger">{% if language == "zh" %}停用团队{% else %}Inactive team{% endif %}</span></span>
+        {% endif %}
+    </div>
+</section>
+
+<section class="card">
+    <form method="get" class="ms-filter-form">
+        <label class="ms-filter-field">
+            {% if language == "zh" %}搜索团队名称{% else %}Search team name{% endif %}
+            <input type="text" name="q" value="{{ filters.q }}" maxlength="160">
+        </label>
+        <label class="ms-filter-field">
+            {% if language == "zh" %}类型{% else %}Kind{% endif %}
+            <select name="kind">
+                <option value="">{% if language == "zh" %}全部类型{% else %}All kinds{% endif %}</option>
+                {% for value, label in kind_options %}
+                <option value="{{ value }}" {% if filters.kind == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="ms-filter-field">
+            {% if language == "zh" %}可排班/容器{% else %}Assignable / container{% endif %}
+            <select name="assignable">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                <option value="assignable" {% if filters.assignable == "assignable" %}selected{% endif %}>{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</option>
+                <option value="container" {% if filters.assignable == "container" %}selected{% endif %}>{% if language == "zh" %}容器{% else %}Container{% endif %}</option>
+            </select>
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="missing_required" value="1" {% if filters.missing_required %}checked{% endif %}>
+            {% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="unanchored" value="1" {% if filters.unanchored %}checked{% endif %}>
+            {% if language == "zh" %}仅未挂靠{% else %}Unanchored only{% endif %}
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="inactive" value="1" {% if include_inactive %}checked{% endif %}>
+            {% if language == "zh" %}包含停用团队{% else %}Include inactive{% endif %}
+        </label>
+        <button type="submit" class="button">{% if language == "zh" %}应用{% else %}Apply{% endif %}</button>
+        <a class="button-secondary button" href="{% url 'ministry_structure_map' %}">{% if language == "zh" %}清除{% else %}Clear{% endif %}</a>
+    </form>
+
+    <p class="ms-summary" style="margin-top:12px;">
+        <span>{% if language == "zh" %}启用团队{% else %}Active teams{% endif %}: {{ structure.summary.active_teams }}</span>
+        <span>{% if language == "zh" %}可排班{% else %}Assignable{% endif %}: {{ structure.summary.assignable_teams }}</span>
+        <span>{% if language == "zh" %}容器{% else %}Containers{% endif %}: {{ structure.summary.container_teams }}</span>
+        <span>{% if language == "zh" %}共享{% else %}Shared{% endif %}: {{ structure.summary.shared_teams }}</span>
+        <span>{% if language == "zh" %}未挂靠{% else %}Unanchored{% endif %}: {{ structure.summary.unanchored_teams }}</span>
+        <span>{% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}: {{ structure.summary.teams_missing_required_roles }}</span>
+    </p>
+</section>
+
+{% if structure.is_filtered %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}筛选结果{% else %}Filtered results{% endif %}</h2>
+    {% if structure.filtered_cards %}
+    <div class="structure-map-tree">
+        {% for card in structure.filtered_cards %}
+        <div class="structure-map-row" style="--structure-depth: 0;">
+            <span class="tree-toggle-spacer" aria-hidden="true"></span>
+            <div class="structure-map-row-content">
+                <span class="structure-map-unit-name">
+                    {% if card.can_view_detail %}
+                    <a href="{% url 'ministry_team_detail' card.team_id %}">{{ card.name }}</a>
+                    {% else %}{{ card.name }}{% endif %}
+                </span>
+                {% include "ministry/_structure_node_badges.html" with card=card is_primary_occurrence=True %}
+                {% if card.path_label %}
+                <span class="structure-map-meta">{{ card.path_label }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}没有符合条件的团队。{% else %}No teams match these filters.{% endif %}</p>
+    {% endif %}
+</section>
+{% else %}
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}已挂靠的事工结构{% else %}Anchored Ministry Structure{% endif %}</h2>
+    {% if structure.anchor_groups %}
+        {% for group in structure.anchor_groups %}
+        <div class="ms-anchor-group">
+            <h3 class="ms-anchor-heading">
+                <span class="ms-badge ms-badge-anchor">{% if language == "zh" %}教会锚点{% else %}Church anchor{% endif %}</span>
+                <span>{{ group.anchor_path }}</span>
+            </h3>
+            <div class="structure-map-tree">
+                {% for node in group.nodes %}
+                {% include "ministry/_structure_node_row.html" with node=node %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有挂靠到教会锚点的事工团队。{% else %}No ministry teams are linked under a church anchor yet.{% endif %}
+    </p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}尚未挂靠的事工团队{% else %}Unanchored Ministry Teams{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        这些启用团队还没有任何有效的上级链接（教会锚点或上级团队）。
+        {% else %}
+        These active teams have no active parent link yet (church anchor or parent team).
+        {% endif %}
+    </p>
+    {% if structure.unanchored_nodes %}
+    <div class="structure-map-tree">
+        {% for node in structure.unanchored_nodes %}
+        {% include "ministry/_structure_node_row.html" with node=node %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}没有未挂靠的启用团队。{% else %}No unanchored active teams.{% endif %}</p>
+    {% endif %}
+</section>
+
+{% if include_inactive %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}停用团队{% else %}Inactive Teams{% endif %}</h2>
+    {% if structure.inactive_nodes %}
+    <div class="structure-map-tree">
+        {% for node in structure.inactive_nodes %}
+        {% include "ministry/_structure_node_row.html" with node=node %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}没有停用团队。{% else %}No inactive teams.{% endif %}</p>
+    {% endif %}
+</section>
+{% endif %}
+
+{% endif %}
+</div>
+{% endblock %}

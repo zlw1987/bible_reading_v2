@@ -130,6 +130,9 @@
             <a class="button-secondary button" href="{% url 'ministry_team_list' %}">
                 {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
             </a>
+            <a class="button-secondary button" href="{% url 'ministry_structure_map' %}">
+                {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
+            </a>
             <a class="button-secondary button" href="{% url 'team_assignment_list' %}?tab=needs_confirmation">
                 {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
             </a>

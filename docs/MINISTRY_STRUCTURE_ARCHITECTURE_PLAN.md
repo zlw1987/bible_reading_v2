@@ -34,6 +34,22 @@ visibility, seeds no defaults, and backfills no hierarchy or roles. The
 be an unused cross-app capability-registry change, so it stays documented-only
 until the later delegated-management slice.
 
+`MINISTRY-STRUCTURE.1C` implemented a read-only staff **Ministry Structure**
+map (`ministry_structure_map`, `/ministry/structure/`) plus a small read-only
+helper module (`ministry/structure_map.py`). The page is staff/superuser-only
+(`request.user.is_staff or request.user.is_superuser`); access is **not** granted
+by `TeamMembership.role` / `can_lead`, `MinistryTeamRoleAssignment`,
+`ChurchStructureUnitRoleAssignment`, or `ChurchStructureMembership`, and a church
+anchor never grants access. It shows ministry teams grouped under their church
+display anchors (with the church ancestor path), the ministry parent/child tree,
+shared/multi-parent teams (primary occurrence expanded, additional occurrences as
+compact "also linked here" references), unanchored teams, container vs assignable
+status, active lead names, and missing-required-role readiness. It is GET-only and
+read-only: it creates/updates/deletes nothing, drives no permission, does not read
+membership as serving, and changes no My Serving / Today / `TeamAssignment` /
+`can_manage_ministry_team` / visibility behavior. The `CAP_MANAGE_MINISTRY_STRUCTURE`
+capability was again **not** added in this slice.
+
 Runtime behavior changes — `is_assignable` enforcement, permission migration to
 `MinistryTeamRoleAssignment`, delegated ministry management + the new
 capability — remain deferred to later, separately approved slices.
@@ -610,9 +626,23 @@ phasing controls rollout risk, not product ambition.
     be an unused cross-app capability-registry change with no consumer in the
     foundation phase, so it stays documented-only (Section 10) until the later
     delegated-management slice introduces a real check.
-- **`MINISTRY-STRUCTURE.1C` — read-only structure map:** a staff read-only
-  ministry structure tree (kind, assignable flag, anchors, missing-required-role
-  readiness). No edits.
+- **`MINISTRY-STRUCTURE.1C` — read-only structure map (IMPLEMENTED):** a staff
+  read-only ministry structure map (`ministry_structure_map`,
+  `/ministry/structure/`, template `ministry/structure_map.html` + node partials,
+  helper `ministry/structure_map.py`). Top-down anchored tree/cards using the
+  existing `structure-map` CSS with simple depth-indent connector styling (no
+  heavy JS diagram/canvas). Shows team kind, assignable vs container status,
+  church anchors with ancestor path, ministry parent/child nesting, shared
+  (multi-parent) teams with a primary occurrence plus compact "also linked here"
+  references, an explicit Unanchored section, active lead names, and
+  missing-required-role warnings; optional read-only filters (search, kind,
+  assignable/container, missing-required, unanchored-only, include-inactive).
+  Staff/superuser-only access (not granted by `TeamMembership`,
+  `MinistryTeamRoleAssignment`, `ChurchStructureUnitRoleAssignment`,
+  `ChurchStructureMembership`, or church anchors). GET-only and read-only: no
+  edits, no created/updated/deleted rows, no permission change, and no My Serving
+  / Today / `TeamAssignment` / `can_manage_ministry_team` / visibility change.
+  `CAP_MANAGE_MINISTRY_STRUCTURE` was not added.
 - **`MINISTRY-STRUCTURE.1D` — staff setup/edit UI:** create/edit teams, manage
   parent links + primary, select role profile, manage role assignments, surface
   missing-required-role warnings.

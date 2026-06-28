@@ -36,6 +36,7 @@ urlpatterns = [
         views.confirm_team_assignment,
         name="confirm_team_assignment",
     ),
+    path("structure/", views.ministry_structure_map, name="ministry_structure_map"),
     path("teams/", views.ministry_team_list, name="ministry_team_list"),
     path("teams/new/", views.create_ministry_team, name="create_ministry_team"),
     path("teams/<int:team_id>/schedule/", views.team_schedule, name="team_schedule"),

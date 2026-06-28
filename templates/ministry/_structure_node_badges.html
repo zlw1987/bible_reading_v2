@@ -1,0 +1,26 @@
+{% comment %}
+Read-only display badges for one ministry team card (MINISTRY-STRUCTURE.1C).
+Expects: card, is_primary_occurrence (bool).
+{% endcomment %}
+<span class="ms-node-badges">
+    <span class="status">{{ card.team_kind_label }}</span>
+    {% if card.is_assignable %}
+    <span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span>
+    {% else %}
+    <span class="status">{% if language == "zh" %}容器（不可排班）{% else %}Container / not assignable{% endif %}</span>
+    {% endif %}
+    {% if card.is_shared %}
+    <span class="ms-badge ms-badge-shared">{% if language == "zh" %}共享 · {{ card.active_parent_link_count }} 个上级{% else %}Shared · {{ card.active_parent_link_count }} parents{% endif %}</span>
+    {% endif %}
+    {% if not is_primary_occurrence %}
+    <span class="ms-badge">{% if language == "zh" %}也挂靠于此{% else %}Also linked here{% endif %}</span>
+    {% endif %}
+    {% if not card.is_active %}
+    <span class="status status-danger">{% if language == "zh" %}停用{% else %}Inactive{% endif %}</span>
+    {% endif %}
+    {% if card.is_active and card.missing_required_role_count %}
+    <span class="status status-warning">
+        {% if language == "zh" %}缺少必要角色{% else %}Missing required{% endif %}: {{ card.missing_required_role_labels|join:", " }}
+    </span>
+    {% endif %}
+</span>

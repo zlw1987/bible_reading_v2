@@ -1,0 +1,22 @@
+{% comment %}
+One ministry-structure tree row (MINISTRY-STRUCTURE.1C). Read-only.
+Expects: node (MinistryStructureDisplayNode with .card, .depth,
+.is_primary_occurrence).
+{% endcomment %}
+<div class="structure-map-row{% if not node.is_primary_occurrence %} ms-reference{% endif %}"
+     style="--structure-depth: {{ node.depth }};">
+    <span class="tree-toggle-spacer" aria-hidden="true"></span>
+    <div class="structure-map-row-content">
+        <span class="structure-map-unit-name">
+            {% if node.card.can_view_detail %}
+            <a href="{% url 'ministry_team_detail' node.card.team_id %}">{{ node.card.name }}</a>
+            {% else %}{{ node.card.name }}{% endif %}
+        </span>
+        {% include "ministry/_structure_node_badges.html" with card=node.card is_primary_occurrence=node.is_primary_occurrence %}
+        {% if node.is_primary_occurrence and node.card.active_lead_count %}
+        <span class="structure-map-meta">
+            {% if language == "zh" %}组长{% else %}Lead{% endif %}: {{ node.card.lead_names|join:", " }}
+        </span>
+        {% endif %}
+    </div>
+</div>

@@ -79,6 +79,7 @@ STAFF_NAV_URLS = {
     "create_recurring_service_events",
     "edit_service_event",
     "cancel_service_event",
+    "ministry_structure_map",
     "ministry_team_list",
     "create_ministry_team",
     "ministry_team_detail",

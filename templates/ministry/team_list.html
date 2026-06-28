@@ -20,6 +20,11 @@
         <a class="button" href="{% url 'create_ministry_team' %}">
             {% if language == "zh" %}新增事工团队{% else %}New Ministry Team{% endif %}
         </a>
+        {% if user.is_staff or user.is_superuser %}
+        <a class="button button-secondary" href="{% url 'ministry_structure_map' %}">
+            {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
+        </a>
+        {% endif %}
         {% if can_import_lighting %}
         <a class="button button-secondary" href="{% url 'lighting_pilot_import' %}">
             {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}

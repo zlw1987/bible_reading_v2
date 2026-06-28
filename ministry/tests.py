@@ -44,6 +44,7 @@ from .models import (
     TeamMembership,
 )
 from .permissions import can_manage_ministry_team
+from .structure_map import build_ministry_structure_map
 from .forms import TeamAssignmentForm
 from .services.assignment_coverage import (
     assignment_coverage_queryset,
@@ -5169,3 +5170,355 @@ class MinistryStructureFoundationTests(TestCase):
             team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
         )
         self.assertTrue(can_manage_ministry_team(self.user, self.team))
+
+
+class MinistryStructureMapTests(TestCase):
+    """MINISTRY-STRUCTURE.1C read-only staff Ministry Structure map tests.
+
+    Access is staff/superuser only and never granted by TeamMembership.role,
+    MinistryTeamRoleAssignment, ChurchStructureUnitRoleAssignment, or
+    ChurchStructureMembership. The page is GET-only and read-only.
+    """
+
+    def setUp(self):
+        self.regular = User.objects.create_user(username="ms_reg", password="pw")
+        self.staff = User.objects.create_user(
+            username="ms_staff", password="pw", is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username="ms_super", password="pw", email="super@example.com"
+        )
+        self.lead_user = User.objects.create_user(username="ms_lead", password="pw")
+
+        # Church anchors: Whole Church > CM
+        self.whole = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="WC",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="华语",
+            name_en="CM",
+            parent=self.whole,
+        )
+
+        # Teams
+        self.digital = MinistryTeam.objects.create(
+            name="数字事工",
+            name_en="Digital Ministry",
+            team_kind=MinistryTeam.KIND_MINISTRY_AREA,
+            is_assignable=False,
+        )
+        self.projection = MinistryTeam.objects.create(
+            name="投影团队", name_en="Projection Team", is_assignable=True
+        )
+        self.video = MinistryTeam.objects.create(
+            name="录影团队", name_en="Video Team", is_assignable=True
+        )
+        self.drama = MinistryTeam.objects.create(
+            name="戏剧团队", name_en="Drama Team", is_assignable=True
+        )
+        self.website = MinistryTeam.objects.create(
+            name="网站团队", name_en="Website Team", is_assignable=True
+        )
+
+        # Links: CM <- Digital <- Projection / Video. Website shared (CM primary
+        # + Digital secondary). Drama unanchored (no links).
+        MinistryTeamParentLink.objects.create(
+            child_team=self.digital, parent_church_unit=self.cm, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.digital, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.video, parent_team=self.digital, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.website, parent_church_unit=self.cm, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.website, parent_team=self.digital, is_primary=False
+        )
+
+        # Role profile requiring a lead. Projection has a lead, Video does not.
+        self.profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleRequirement.objects.create(
+            profile=self.profile, role_type=self.lead_type, is_required=True
+        )
+        for team in (self.projection, self.video):
+            team.role_profile = self.profile
+            team.save()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.lead_user
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _snapshot_counts(self):
+        return {
+            MinistryTeam: MinistryTeam.objects.count(),
+            MinistryTeamParentLink: MinistryTeamParentLink.objects.count(),
+            MinistryTeamRoleType: MinistryTeamRoleType.objects.count(),
+            MinistryTeamRoleProfile: MinistryTeamRoleProfile.objects.count(),
+            MinistryTeamRoleRequirement: MinistryTeamRoleRequirement.objects.count(),
+            MinistryTeamRoleAssignment: MinistryTeamRoleAssignment.objects.count(),
+            TeamMembership: TeamMembership.objects.count(),
+            TeamAssignment: TeamAssignment.objects.count(),
+            TeamAssignmentMember: TeamAssignmentMember.objects.count(),
+            ChurchStructureMembership: ChurchStructureMembership.objects.count(),
+            ChurchStructureUnitRoleAssignment: (
+                ChurchStructureUnitRoleAssignment.objects.count()
+            ),
+        }
+
+    # --- Access tests ---
+
+    def test_requires_login(self):
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_can_view(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ministry Structure")
+
+    def test_superuser_can_view(self):
+        self.client.login(username="ms_super", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_regular_user_redirected(self):
+        self.client.login(username="ms_reg", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_team_membership_lead_does_not_grant_access(self):
+        TeamMembership.objects.create(
+            team=self.projection,
+            user=self.regular,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        self.client.login(username="ms_reg", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_ministry_role_lead_does_not_grant_access(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.regular
+        )
+        self.client.login(username="ms_reg", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 302)
+
+    def test_church_structure_role_and_membership_do_not_grant_access(self):
+        church_lead = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="组长",
+            name_en="Lead",
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm, role_type=church_lead, user=self.regular
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.regular,
+            unit=self.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.client.login(username="ms_reg", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 302)
+
+    # --- Page rendering tests ---
+
+    def test_anchored_team_shows_church_ancestor_path(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Digital Ministry")
+        self.assertContains(response, "Whole Church &gt; CM")
+
+    def test_parent_team_child_appears(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Projection Team")
+        self.assertContains(response, "Video Team")
+
+    def test_unanchored_team_in_section(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Unanchored Ministry Teams")
+        self.assertContains(response, "Drama Team")
+
+    def test_shared_team_shows_shared_indicator(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Website Team")
+        self.assertContains(response, "Shared")
+        self.assertContains(response, "Also linked here")
+
+    def test_assignable_and_container_badges(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Assignable")
+        self.assertContains(response, "Container / not assignable")
+
+    def test_missing_required_role_warning_shown(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(response, "Missing required")
+
+    def test_team_detail_link_present_for_staff(self):
+        self.set_language("en")
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertContains(
+            response, reverse("ministry_team_detail", args=[self.projection.id])
+        )
+
+    # --- Boundary tests ---
+
+    def test_get_creates_no_rows(self):
+        before = self._snapshot_counts()
+        self.client.login(username="ms_staff", password="pw")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 200)
+        after = self._snapshot_counts()
+        self.assertEqual(before, after)
+
+    def test_can_manage_ministry_team_unchanged_by_get(self):
+        # Permission source stays TeamMembership.role; a role-assignment-only user
+        # is not a manager, and a lead membership still is - before and after GET.
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.video, role_type=self.lead_type, user=self.regular
+        )
+        TeamMembership.objects.create(
+            team=self.video, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+        )
+        self.assertFalse(can_manage_ministry_team(self.regular, self.video))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.video))
+        self.client.login(username="ms_staff", password="pw")
+        self.client.get(reverse("ministry_structure_map"))
+        self.assertFalse(can_manage_ministry_team(self.regular, self.video))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.video))
+
+    def test_get_does_not_change_team_assignments(self):
+        event = ServiceEvent.objects.create(
+            title="Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.digital,  # container, is_assignable=False
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.client.login(username="ms_staff", password="pw")
+        self.client.get(reverse("ministry_structure_map"))
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.ministry_team_id, self.digital.id)
+        self.assertEqual(TeamAssignment.objects.count(), 1)
+
+    # --- Helper tests ---
+
+    def test_helper_unanchored_team_with_no_links(self):
+        structure = build_ministry_structure_map(language="en")
+        unanchored_ids = {
+            node.card.team_id for node in structure.unanchored_nodes
+        }
+        self.assertIn(self.drama.id, unanchored_ids)
+
+    def test_helper_shared_team_multiple_parents(self):
+        structure = build_ministry_structure_map(language="en")
+        # Website is anchored (primary under CM) and referenced (under Digital).
+        primary_ids = []
+        reference_ids = []
+        for group in structure.anchor_groups:
+            for node in group.nodes:
+                if node.is_primary_occurrence:
+                    primary_ids.append(node.card.team_id)
+                else:
+                    reference_ids.append(node.card.team_id)
+        self.assertIn(self.website.id, primary_ids)
+        self.assertIn(self.website.id, reference_ids)
+        website_card = next(
+            node.card
+            for group in structure.anchor_groups
+            for node in group.nodes
+            if node.card.team_id == self.website.id
+        )
+        self.assertTrue(website_card.is_shared)
+        self.assertEqual(website_card.active_parent_link_count, 2)
+
+    def test_helper_missing_vs_present_lead(self):
+        structure = build_ministry_structure_map(language="en")
+        cards = {}
+        for group in structure.anchor_groups:
+            for node in group.nodes:
+                cards[node.card.team_id] = node.card
+        self.assertEqual(cards[self.projection.id].missing_required_role_count, 0)
+        self.assertEqual(cards[self.projection.id].active_lead_count, 1)
+        self.assertGreater(cards[self.video.id].missing_required_role_count, 0)
+
+    def test_helper_defends_against_cyclic_data(self):
+        # Bypass model validation via bulk_create to inject a primary-link cycle.
+        a = MinistryTeam.objects.create(name="甲", name_en="Alpha")
+        b = MinistryTeam.objects.create(name="乙", name_en="Beta")
+        MinistryTeamParentLink.objects.bulk_create(
+            [
+                MinistryTeamParentLink(
+                    child_team=a, parent_team=b, is_primary=True, is_active=True
+                ),
+                MinistryTeamParentLink(
+                    child_team=b, parent_team=a, is_primary=True, is_active=True
+                ),
+            ]
+        )
+        structure = build_ministry_structure_map(language="en")
+        surfaced = {
+            node.card.team_id
+            for node in structure.unanchored_nodes
+        }
+        self.assertIn(a.id, surfaced)
+        self.assertIn(b.id, surfaced)
+
+    def test_helper_church_anchor_is_not_permission_source(self):
+        structure = build_ministry_structure_map(
+            user=self.regular, language="en"
+        )
+        for group in structure.anchor_groups:
+            for node in group.nodes:
+                self.assertFalse(node.card.can_view_detail)
+
+    def test_helper_filtered_mode_returns_flat_cards(self):
+        structure = build_ministry_structure_map(
+            language="en", filters={"q": "Drama"}
+        )
+        self.assertTrue(structure.is_filtered)
+        names = {card.name for card in structure.filtered_cards}
+        self.assertEqual(names, {"Drama Team"})
+        self.assertTrue(structure.filtered_cards[0].path_label)

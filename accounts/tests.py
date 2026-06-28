@@ -8534,15 +8534,20 @@ class MyUnitsReadOnlyTests(TestCase):
         self.client.login(username="mu_view_missing", password="pw")
         response = self.client.get(self.url + "?lang=en")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Missing Required Roles")
-        self.assertContains(response, "Edify")
+        # MYUNITS-UX.1A: the list page now shows compact signals (a missing
+        # required count + a "Needs attention" badge), not the full per-role
+        # roster. The detail page is where individual role labels are reviewed.
+        self.assertContains(response, "Missing required")
+        self.assertContains(response, "Needs attention")
+        self.assertNotContains(response, "Edify")
 
     def test_view_shows_no_role_profile_note(self):
         user = User.objects.create_user(username="mu_view_noprofile", password="pw")
         self._lead(user, self.group)
         self.client.login(username="mu_view_noprofile", password="pw")
         response = self.client.get(self.url + "?lang=en")
-        self.assertContains(response, "No coworker role profile selected yet.")
+        # MYUNITS-UX.1A: compact "No role profile" signal on the list page.
+        self.assertContains(response, "No role profile")
 
     def test_view_is_read_only_no_post_actions(self):
         user = User.objects.create_user(username="mu_view_readonly", password="pw")
@@ -9031,6 +9036,313 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         response = self.client.get(self._detail_url(self.group) + "?lang=en")
         self.assertContains(response, "Missing Required Roles")
         self.assertContains(response, "Edify")
+
+
+class MyUnitsListUxTests(TestCase):
+    """MYUNITS-UX.1A compact hierarchy/filter/search on the /my-units/ list page.
+
+    This is a presentation/data-shaping slice only. It must not change the
+    permission model, must not mutate any assignment/membership/serving row, and
+    must keep the page a read-only operational surface separate from the admin
+    structure tree at ``/staff/structure/``.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.url = reverse("my_units")
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+
+        # district -> group -> nested, plus an unrelated sibling branch.
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="UX-DISTRICT",
+            name="负责区",
+            name_en="Lead District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UX-GROUP",
+            name="阿尔法小组",
+            name_en="Alpha Group",
+        )
+        self.nested = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="UX-NESTED",
+            name="子单元",
+            name_en="Nested Unit",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UX-SIBLING",
+            name="无关组",
+            name_en="Unrelated Group",
+        )
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.lead_role,
+            user=user,
+            **kwargs,
+        )
+
+    def _staff_login(self, username="ux_staff"):
+        User.objects.create_user(username=username, password="pw", is_staff=True)
+        self.client.login(username=username, password="pw")
+
+    # --- A. Staff / superuser compact view -----------------------------------
+
+    def test_staff_view_uses_compact_table_not_full_roster(self):
+        coworker = User.objects.create_user(username="ux_roster_member")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=coworker,
+        )
+        self._staff_login()
+        response = self.client.get(self.url + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        # Compact table layout, not repeated full roster cards.
+        self.assertContains(response, "my-units-table")
+        # Active units appear.
+        self.assertContains(response, "Lead District")
+        self.assertContains(response, "Alpha Group")
+        # The list page shows an active-coworker COUNT, not the roster names.
+        self.assertNotContains(response, "ux_roster_member")
+
+    def test_staff_view_excludes_inactive_units(self):
+        self.sibling.is_active = False
+        self.sibling.save()
+        self._staff_login("ux_staff_inactive")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertContains(response, "Lead District")
+        self.assertNotContains(response, "Unrelated Group")
+
+    def test_child_unit_renders_after_parent_in_hierarchy_order(self):
+        self._staff_login("ux_staff_order")
+        response = self.client.get(self.url + "?lang=en")
+        body = response.content.decode()
+        district_at = body.index("Lead District")
+        group_at = body.index("Alpha Group")
+        nested_at = body.index("Nested Unit")
+        self.assertLess(district_at, group_at)
+        self.assertLess(group_at, nested_at)
+
+    def test_detail_links_point_to_my_unit_detail(self):
+        self._staff_login("ux_staff_links")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertContains(
+            response, reverse("my_unit_detail", args=[self.group.id])
+        )
+
+    # --- B. Delegated lead view ----------------------------------------------
+
+    def test_lead_sees_subtree_not_unrelated_branch(self):
+        user = User.objects.create_user(username="ux_lead", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="ux_lead", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        # Manageable subtree (group + nested) renders; the unrelated sibling and
+        # the un-led ancestor district do not get their own manageable rows.
+        # (District's name can still appear inside a descendant's path label, so
+        # assert on the per-row detail link rather than the plain-text name.)
+        self.assertContains(response, reverse("my_unit_detail", args=[self.group.id]))
+        self.assertContains(response, reverse("my_unit_detail", args=[self.nested.id]))
+        self.assertNotContains(
+            response, reverse("my_unit_detail", args=[self.sibling.id])
+        )
+        self.assertNotContains(
+            response, reverse("my_unit_detail", args=[self.district.id])
+        )
+
+    def test_membership_alone_shows_empty_state_not_units(self):
+        user = User.objects.create_user(username="ux_member", password="pw")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self.client.login(username="ux_member", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertContains(response, "You do not currently lead any units.")
+        self.assertNotContains(response, "my-units-table")
+
+    def test_non_lead_coworker_shows_empty_state(self):
+        user = User.objects.create_user(username="ux_noncoworker", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=user,
+        )
+        self.client.login(username="ux_noncoworker", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertContains(response, "You do not currently lead any units.")
+
+    def test_no_staff_structure_link_for_non_staff_lead(self):
+        user = User.objects.create_user(username="ux_lead_nostaff", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="ux_lead_nostaff", password="pw")
+        response = self.client.get(self.url + "?lang=en")
+        self.assertNotContains(response, "/staff/structure")
+
+    # --- C. Filters / search --------------------------------------------------
+
+    def test_q_filters_by_code(self):
+        self._staff_login("ux_q_code")
+        response = self.client.get(self.url + "?lang=en&q=UX-SIBLING")
+        self.assertContains(response, "Unrelated Group")
+        self.assertNotContains(response, "Alpha Group")
+
+    def test_q_filters_by_chinese_name(self):
+        self._staff_login("ux_q_zh")
+        response = self.client.get(self.url + "?lang=en&q=阿尔法")
+        self.assertContains(response, "Alpha Group")
+        self.assertNotContains(response, "Unrelated Group")
+
+    def test_q_filters_by_english_name(self):
+        self._staff_login("ux_q_en")
+        response = self.client.get(self.url + "?lang=en&q=Nested")
+        self.assertContains(response, "Nested Unit")
+        self.assertNotContains(response, "Unrelated Group")
+
+    def _profile_with_required_edify(self):
+        profile = ChurchStructureUnitRoleProfile.objects.create(
+            code=ChurchStructureUnitRoleProfile.CODE_SMALL_GROUP_UNIT,
+            name="小组型单元",
+            name_en="Small-Group Unit",
+        )
+        ChurchStructureUnitRoleRequirement.objects.create(
+            profile=profile,
+            role_type=self.edify_role,
+            is_required=True,
+        )
+        return profile
+
+    def _detail_link(self, unit):
+        return reverse("my_unit_detail", args=[unit.id])
+
+    def test_attention_filter_shows_missing_or_no_profile(self):
+        # Each shown unit links to its detail page; path labels are plain text,
+        # so the detail link is the reliable "this row is present" signal (an
+        # ancestor's name can appear inside a descendant's path label).
+        # group: has a profile but is missing the required edify role.
+        self.group.role_profile = self._profile_with_required_edify()
+        self.group.save()
+        # district + nested: give a complete profile so they are NOT attention.
+        complete_profile = ChurchStructureUnitRoleProfile.objects.create(
+            code="ux_complete",
+            name="完整",
+            name_en="Complete",
+        )
+        for unit in (self.district, self.nested):
+            unit.role_profile = complete_profile
+            unit.save()
+        # sibling: keep no role profile (also "attention").
+        self._staff_login("ux_attention")
+        response = self.client.get(self.url + "?lang=en&attention=1")
+        self.assertContains(response, self._detail_link(self.group))  # missing
+        self.assertContains(response, self._detail_link(self.sibling))  # no prof
+        self.assertNotContains(response, self._detail_link(self.district))
+        self.assertNotContains(response, self._detail_link(self.nested))
+
+    def test_missing_required_filter(self):
+        self.group.role_profile = self._profile_with_required_edify()
+        self.group.save()
+        self._staff_login("ux_missing")
+        response = self.client.get(self.url + "?lang=en&missing_required=1")
+        # group has a profile with an unmet required role.
+        self.assertContains(response, self._detail_link(self.group))
+        # sibling/district/nested have no profile => no *missing required* count.
+        self.assertNotContains(response, self._detail_link(self.sibling))
+        self.assertNotContains(response, self._detail_link(self.district))
+        self.assertNotContains(response, self._detail_link(self.nested))
+
+    def test_no_role_profile_filter(self):
+        self.group.role_profile = self._profile_with_required_edify()
+        self.group.save()
+        self._staff_login("ux_noprofile")
+        response = self.client.get(self.url + "?lang=en&no_role_profile=1")
+        # sibling/district/nested have no profile; group has one.
+        self.assertContains(response, self._detail_link(self.sibling))
+        self.assertContains(response, self._detail_link(self.district))
+        self.assertContains(response, self._detail_link(self.nested))
+        self.assertNotContains(response, self._detail_link(self.group))
+
+    def test_filters_combine_without_expanding_permissions(self):
+        # Non-staff lead limited to the group subtree; a search term that also
+        # matches the unrelated branch must NOT surface it.
+        user = User.objects.create_user(username="ux_combine", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="ux_combine", password="pw")
+        response = self.client.get(self.url + "?lang=en&q=Group&no_role_profile=1")
+        self.assertContains(response, "Alpha Group")
+        self.assertNotContains(response, "Unrelated Group")
+
+    def test_empty_filter_result_shows_empty_state(self):
+        self._staff_login("ux_empty")
+        response = self.client.get(self.url + "?lang=en&q=zzz-no-match")
+        self.assertContains(response, "No manageable units match these filters.")
+        self.assertNotContains(response, "my-units-table")
+
+    def test_clear_filters_link_rendered_when_filters_active(self):
+        self._staff_login("ux_clear")
+        active = self.client.get(self.url + "?lang=en&q=Alpha")
+        self.assertContains(active, "Clear filters")
+        inactive = self.client.get(self.url + "?lang=en")
+        self.assertNotContains(inactive, "Clear filters")
+
+    # --- D. Boundary: list UX never mutates rows -----------------------------
+
+    def test_list_view_does_not_mutate_any_rows(self):
+        coworker = User.objects.create_user(username="ux_boundary_member")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=self.edify_role,
+            user=coworker,
+        )
+        ChurchStructureMembership.objects.create(
+            user=coworker,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        counts_before = {
+            "role_assignment": ChurchStructureUnitRoleAssignment.objects.count(),
+            "membership": ChurchStructureMembership.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_member": TeamAssignmentMember.objects.count(),
+            "meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        self._staff_login("ux_boundary")
+        response = self.client.get(
+            self.url + "?lang=en&q=Alpha&attention=1&missing_required=1"
+        )
+        self.assertEqual(response.status_code, 200)
+        counts_after = {
+            "role_assignment": ChurchStructureUnitRoleAssignment.objects.count(),
+            "membership": ChurchStructureMembership.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_member": TeamAssignmentMember.objects.count(),
+            "meeting_role": BibleStudyMeetingRole.objects.count(),
+        }
+        self.assertEqual(counts_before, counts_after)
 
 
 class ServingReadinessCoworkerWarningIntegrationTests(TestCase):

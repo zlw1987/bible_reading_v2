@@ -466,6 +466,79 @@ textarea {
     overflow-x: auto;
 }
 
+/* MYUNITS-UX.1A: compact hierarchy/filter/search overview for /my-units/. */
+.my-units-filter {
+    margin-bottom: 16px;
+}
+
+.my-units-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+}
+
+.my-units-filter-label {
+    display: block;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.my-units-filter-search {
+    display: block;
+    flex: 1 1 220px;
+}
+
+.my-units-filter-search input {
+    width: 100%;
+}
+
+.my-units-filter-checks {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+}
+
+.my-units-filter-checks legend {
+    padding: 0;
+}
+
+.my-units-filter-checks label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+}
+
+.my-units-filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.my-units-count,
+.my-units-empty {
+    margin: 4px 0 12px;
+}
+
+.my-units-table {
+    min-width: 720px;
+}
+
+.my-units-name a {
+    font-weight: 600;
+}
+
+.my-units-path {
+    font-size: 12px;
+    margin-top: 2px;
+}
+
 .notice-panel {
     background: var(--surface-soft);
     border: 1px solid var(--border);

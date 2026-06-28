@@ -236,12 +236,27 @@ the first delegated-management slices.
   (active `lead` ancestor-or-self / staff); no `/staff/structure/` links, no
   membership, capability, serving, member-record, or readiness changes. See the
   coworker architecture plan's Section 7 for details.
-- `MYUNITS-UX.1A` — **backlog (not implemented).** My Units
-  hierarchy/filter/search/compact UX for large admin views. Super admin currently
-  sees all units as flat cards on `/my-units/`, which is too noisy at scale; a
-  later slice should add hierarchy grouping, filtering, search, and a compact
-  display. Future UX polish only — do not implement during member-record /
-  readiness backend slices.
+- `MYUNITS-UX.1A` — **implemented (presentation only).** The `/my-units/`
+  (`my_units`) list page now renders a compact, hierarchy-aware overview instead
+  of a flat wall of full roster cards. Each manageable unit is one indented row
+  (depth relative to the user's manageable set) showing compact signals only:
+  unit name/path, unit type, role profile (or a neutral "No role profile" mark),
+  active-coworker count, missing-required-role count, and a "Needs attention"
+  badge. Simple query-parameter filters narrow the list **within** the user's
+  already permission-scoped manageable units and never widen it: `q` (matches
+  unit code / 中文 name / English name / path label), `attention=1` (missing
+  required roles > 0 **or** no role profile), `missing_required=1`, and
+  `no_role_profile=1`; filters combine, stay reflected in the controls, expose a
+  "Clear filters" reset, and show a distinct empty state when nothing matches.
+  Staff/superuser still have global manage visibility; non-staff delegated leads
+  still see only their manageable lead subtree (no unrelated branches, no
+  `/staff/structure/` links). The full roster and add/end coworker actions remain
+  on the detail page (`/my-units/<id>/`). Permission model is unchanged
+  (`can_manage_unit_coworkers` / `get_manageable_structure_units` untouched); no
+  new management powers, no readiness-warning changes, no new models/migrations,
+  and no data mutation. Note: for the page filter, "no role profile" counts as
+  attention for **all** unit types (the simplest V1 rule), but its on-row label
+  stays neutral ("No role profile") rather than an alarming state.
 - Later (separate approval) — unit member-record management, only after the
   privacy/permission review in Sections B–C.
 

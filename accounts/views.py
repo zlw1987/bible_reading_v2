@@ -1889,69 +1889,120 @@ def profile(request):
 def my_units(request):
     """Read-only "My Units" / 我负责的单位 delegated-management discovery.
 
-    UNIT-LEAD-MANAGE.1B: lists the structure units the signed-in user may manage
-    coworkers for (active lead ancestor-or-self, or staff/superuser sees all),
-    plus current coworker-role readiness for each. This is a read-only
-    operational surface, NOT the admin structure tree editor (/staff/structure/),
-    and it exposes no add/end coworker actions. Management is never inferred from
-    membership, audience visibility, serving, or non-lead coworker roles.
+    UNIT-LEAD-MANAGE.1B / MYUNITS-UX.1A: lists the structure units the signed-in
+    user may manage coworkers for (active lead ancestor-or-self, or staff/superuser
+    sees all). MYUNITS-UX.1A reshapes this into a compact, hierarchy-aware overview
+    with search/attention filters so that large manage scopes (especially
+    staff/superuser, who can manage every active unit) are not a flat wall of full
+    roster cards. The full roster and add/end coworker actions live on the detail
+    page (``/my-units/<id>/``).
+
+    This is a read-only operational surface, NOT the admin structure tree editor
+    (``/staff/structure/``), and it exposes no add/end coworker actions. Management
+    is never inferred from membership, audience visibility, serving, or non-lead
+    coworker roles. The filters below only narrow the already permission-scoped
+    list; they never expand what the user may manage.
     """
     language = get_user_language(request)
     today = timezone.localdate()
     units = get_manageable_structure_units(request.user)
 
-    unit_cards = []
-    for unit in units:
-        active_assignments = (
+    manageable_ids = {unit.id for unit in units}
+
+    # Active coworker counts for every manageable unit in a single grouped query
+    # (read-only; the full per-role roster stays on the detail page).
+    coworker_counts = {}
+    if manageable_ids:
+        for row in (
             ChurchStructureUnitRoleAssignment.objects.filter(
-                unit=unit,
+                unit_id__in=manageable_ids,
                 is_active=True,
                 start_date__lte=today,
             )
             .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
-            .select_related("role_type", "user")
-            .order_by(
-                "role_type__sort_order",
-                "role_type__code",
-                "user__username",
-                "id",
-            )
+            .values("unit_id")
+            .annotate(active_count=Count("id"))
+        ):
+            coworker_counts[row["unit_id"]] = row["active_count"]
+
+    all_cards = []
+    for unit in units:
+        # Indent depth is relative to the user's manageable set (pre-filter), so a
+        # delegated lead's subtree reads from depth 0 rather than its absolute tree
+        # depth. ``get_manageable_structure_units`` already returns path-ordered
+        # units, so each unit renders after its ancestors.
+        ancestors = unit.get_ancestors()
+        depth = sum(1 for ancestor in ancestors if ancestor.id in manageable_ids)
+        path = " > ".join(
+            ancestor_or_self.display_name(language)
+            for ancestor_or_self in ancestors + [unit]
         )
-
-        role_groups = []
-        current_role_type_id = None
-        current_group = None
-        for assignment in active_assignments:
-            if assignment.role_type_id != current_role_type_id:
-                current_role_type_id = assignment.role_type_id
-                current_group = {
-                    "role_type": assignment.role_type,
-                    "role_label": assignment.role_type.display_name(language),
-                    "assignments": [],
-                }
-                role_groups.append(current_group)
-            current_group["assignments"].append(assignment)
-
-        missing_required_roles = unit.missing_required_role_types(today)
-        unit_cards.append(
+        has_role_profile = bool(unit.role_profile_id)
+        missing_required_count = len(unit.missing_required_role_types(today))
+        needs_attention = missing_required_count > 0 or not has_role_profile
+        all_cards.append(
             {
                 "unit": unit,
-                "path": unit.path_label(language),
+                "depth": depth,
+                "indent": depth * 18,
+                "path": path,
                 "name": unit.display_name(language),
-                "has_role_profile": bool(unit.role_profile_id),
+                "code": unit.code,
+                "name_zh": unit.name,
+                "name_en": unit.name_en,
+                "unit_type_label": unit.get_unit_type_display(),
+                "has_role_profile": has_role_profile,
                 "role_profile_label": (
                     unit.role_profile.display_name(language)
                     if unit.role_profile_id
                     else ""
                 ),
-                "unit_type_label": unit.get_unit_type_display(),
-                "missing_required_roles": [
-                    role_type.display_name(language)
-                    for role_type in missing_required_roles
-                ],
-                "role_groups": role_groups,
+                "missing_required_count": missing_required_count,
+                "active_coworker_count": coworker_counts.get(unit.id, 0),
+                "needs_attention": needs_attention,
             }
         )
+
+    # --- Filters / search (read-only; never widen the manageable set) ----------
+    query = (request.GET.get("q") or "").strip()
+    filter_attention = request.GET.get("attention") == "1"
+    filter_missing_required = request.GET.get("missing_required") == "1"
+    filter_no_role_profile = request.GET.get("no_role_profile") == "1"
+    filters_active = bool(
+        query
+        or filter_attention
+        or filter_missing_required
+        or filter_no_role_profile
+    )
+    query_lower = query.lower()
+
+    def _card_matches(card):
+        if query_lower:
+            haystack = " ".join(
+                part
+                for part in (
+                    card["code"],
+                    card["name_zh"],
+                    card["name_en"],
+                    card["path"],
+                )
+                if part
+            ).lower()
+            if query_lower not in haystack:
+                return False
+        if filter_attention and not card["needs_attention"]:
+            return False
+        if filter_missing_required and card["missing_required_count"] <= 0:
+            return False
+        if filter_no_role_profile and card["has_role_profile"]:
+            return False
+        return True
+
+    unit_cards = (
+        [card for card in all_cards if _card_matches(card)]
+        if filters_active
+        else all_cards
+    )
 
     return render(
         request,
@@ -1959,6 +2010,14 @@ def my_units(request):
         {
             "active_nav": "my_units",
             "unit_cards": unit_cards,
+            "has_manageable_units": bool(all_cards),
+            "manageable_unit_count": len(all_cards),
+            "shown_unit_count": len(unit_cards),
+            "filters_active": filters_active,
+            "filter_q": query,
+            "filter_attention": filter_attention,
+            "filter_missing_required": filter_missing_required,
+            "filter_no_role_profile": filter_no_role_profile,
         },
     )
 

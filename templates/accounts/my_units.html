@@ -9,84 +9,127 @@
     <h1 class="page-title">{% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        查看你负责的单位及其同工角色情况。此页面为只读，不会更改归属、权限或服事安排。
+        你可以管理的单位。此页面为只读，提供精简的层级概览，不会更改归属、权限或服事安排。
         {% else %}
-        Review the units you lead and their coworker-role readiness. This page is read-only; it does not change belonging, permissions, or serving assignments.
+        Units you can manage. This page is a read-only, compact hierarchy overview; it does not change belonging, permissions, or serving assignments.
         {% endif %}
     </p>
 </section>
 
-{% if not unit_cards %}
+{% if not has_manageable_units %}
 <div class="card">
     <p class="muted">
         {% if language == "zh" %}你目前还没有负责的单位。{% else %}You do not currently lead any units.{% endif %}
     </p>
 </div>
 {% else %}
-{% for card in unit_cards %}
 <section class="card">
-    <h2 class="card-title">
-        <a href="{% url 'my_unit_detail' card.unit.id %}">{{ card.name }}</a>
-    </h2>
-    <p class="page-subtitle">{{ card.path }}</p>
+    <form method="get" class="my-units-filter" role="search">
+        <div class="my-units-filter-row">
+            <label class="my-units-filter-search" for="my-units-search">
+                <span class="my-units-filter-label">{% if language == "zh" %}搜索单位{% else %}Search units{% endif %}</span>
+                <input type="search"
+                       id="my-units-search"
+                       name="q"
+                       value="{{ filter_q }}"
+                       placeholder="{% if language == "zh" %}名称或代码{% else %}Name or code{% endif %}">
+            </label>
+            <fieldset class="my-units-filter-checks">
+                <legend class="my-units-filter-label">{% if language == "zh" %}筛选{% else %}Filters{% endif %}</legend>
+                <label>
+                    <input type="checkbox" name="attention" value="1" {% if filter_attention %}checked{% endif %}>
+                    {% if language == "zh" %}需要处理{% else %}Needs attention{% endif %}
+                </label>
+                <label>
+                    <input type="checkbox" name="missing_required" value="1" {% if filter_missing_required %}checked{% endif %}>
+                    {% if language == "zh" %}缺少必要同工{% else %}Missing required roles{% endif %}
+                </label>
+                <label>
+                    <input type="checkbox" name="no_role_profile" value="1" {% if filter_no_role_profile %}checked{% endif %}>
+                    {% if language == "zh" %}未选择角色模板{% else %}No role profile{% endif %}
+                </label>
+            </fieldset>
+            <div class="my-units-filter-actions">
+                <button type="submit" class="button">{% if language == "zh" %}筛选{% else %}Apply{% endif %}</button>
+                {% if filters_active %}
+                <a class="button button-secondary" href="{% url 'my_units' %}">
+                    {% if language == "zh" %}清除筛选{% else %}Clear filters{% endif %}
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
 
-    <dl class="detail-list">
-        <dt>{% if language == "zh" %}单元类型{% else %}Unit Type{% endif %}</dt>
-        <dd>{{ card.unit_type_label }}</dd>
-
-        <dt>{% if language == "zh" %}同工角色模板{% else %}Role Profile{% endif %}</dt>
-        <dd>
-            {% if card.has_role_profile %}
-            {{ card.role_profile_label }}
-            {% else %}
-            <span class="muted">
-                {% if language == "zh" %}尚未选择同工角色配置。{% else %}No coworker role profile selected yet.{% endif %}
-            </span>
-            {% endif %}
-        </dd>
-
-        <dt>{% if language == "zh" %}缺少必要同工{% else %}Missing Required Roles{% endif %}</dt>
-        <dd>
-            {% if not card.has_role_profile %}
-            <span class="muted">
-                {% if language == "zh" %}尚未选择同工角色配置。{% else %}No coworker role profile selected yet.{% endif %}
-            </span>
-            {% elif card.missing_required_roles %}
-            <ul class="staff-count-list">
-                {% for role_label in card.missing_required_roles %}
-                <li><span class="status status-warning">{{ role_label }}</span></li>
-                {% endfor %}
-            </ul>
-            {% else %}
-            <span class="status status-good">
-                {% if language == "zh" %}没有缺少必要同工{% else %}No missing required roles{% endif %}
-            </span>
-            {% endif %}
-        </dd>
-    </dl>
-
-    <h3>{% if language == "zh" %}当前同工{% else %}Active Coworkers{% endif %}</h3>
-    {% if card.role_groups %}
-    {% for group in card.role_groups %}
-    <div class="detail-list">
-        <strong>{{ group.role_label }}</strong>
-        <ul class="staff-count-list">
-            {% for assignment in group.assignments %}
-            <li>{{ assignment.user.get_full_name|default:assignment.user.username }} ({{ assignment.user.username }})</li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p class="muted">{% if language == "zh" %}没有当前同工。{% else %}No active coworkers.{% endif %}</p>
-    {% endif %}
-
-    <p>
-        <a class="button button-secondary" href="{% url 'my_unit_detail' card.unit.id %}">
-            {% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %}
-        </a>
+    {% if not unit_cards %}
+    <p class="muted my-units-empty">
+        {% if language == "zh" %}没有符合筛选条件的可管理单位。{% else %}No manageable units match these filters.{% endif %}
     </p>
+    {% else %}
+    <p class="muted my-units-count">
+        {% if filters_active %}
+        {% if language == "zh" %}显示 {{ shown_unit_count }} / {{ manageable_unit_count }} 个单位{% else %}Showing {{ shown_unit_count }} of {{ manageable_unit_count }} units{% endif %}
+        {% else %}
+        {% if language == "zh" %}共 {{ manageable_unit_count }} 个单位{% else %}{{ manageable_unit_count }} units{% endif %}
+        {% endif %}
+    </p>
+    <div class="table-wrap">
+        <table class="my-units-table">
+            <thead>
+                <tr>
+                    <th scope="col">{% if language == "zh" %}单位{% else %}Unit{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}单元类型{% else %}Type{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}角色模板{% else %}Role profile{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}当前同工{% else %}Active coworkers{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}缺少必要同工{% else %}Missing required{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}状态{% else %}Setup{% endif %}</th>
+                    <th scope="col">{% if language == "zh" %}操作{% else %}Actions{% endif %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in unit_cards %}
+                <tr class="my-units-row{% if card.needs_attention %} my-units-row-attention{% endif %}">
+                    <td>
+                        <span class="my-units-name" style="padding-left: {{ card.indent }}px;">
+                            <a href="{% url 'my_unit_detail' card.unit.id %}">{{ card.name }}</a>
+                        </span>
+                        <div class="my-units-path muted">{{ card.path }}</div>
+                    </td>
+                    <td>{{ card.unit_type_label }}</td>
+                    <td>
+                        {% if card.has_role_profile %}
+                        {{ card.role_profile_label }}
+                        {% else %}
+                        <span class="status status-warning">{% if language == "zh" %}未选择角色模板{% else %}No role profile{% endif %}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ card.active_coworker_count }}</td>
+                    <td>
+                        {% if not card.has_role_profile %}
+                        <span class="muted">&mdash;</span>
+                        {% elif card.missing_required_count %}
+                        <span class="status status-warning">{{ card.missing_required_count }}</span>
+                        {% else %}
+                        <span class="status status-good">{% if language == "zh" %}齐全{% else %}Complete{% endif %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if card.needs_attention %}
+                        <span class="status status-warning">{% if language == "zh" %}需要处理{% else %}Needs attention{% endif %}</span>
+                        {% else %}
+                        <span class="status status-good">{% if language == "zh" %}就绪{% else %}Ready{% endif %}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a class="button button-secondary" href="{% url 'my_unit_detail' card.unit.id %}">
+                            {% if language == "zh" %}打开单位{% else %}Open unit{% endif %}
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </section>
-{% endfor %}
 {% endif %}
 {% endblock %}

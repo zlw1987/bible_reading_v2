@@ -37,6 +37,16 @@ urlpatterns = [
         views.end_my_unit_coworker_assignment,
         name="end_my_unit_coworker_assignment",
     ),
+    path(
+        "my-units/<int:unit_id>/member-records/add/",
+        views.add_my_unit_member_record,
+        name="add_my_unit_member_record",
+    ),
+    path(
+        "my-units/<int:unit_id>/member-records/<int:record_id>/edit/",
+        views.edit_my_unit_member_record,
+        name="edit_my_unit_member_record",
+    ),
 
     path("staff/", views.staff_overview, name="staff_overview"),
     path(

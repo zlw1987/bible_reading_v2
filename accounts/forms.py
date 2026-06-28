@@ -17,6 +17,7 @@ from .language import get_user_language
 from .models import (
     ChurchStructureMembership,
     ChurchStructureUnit,
+    ChurchStructureUnitMemberRecord,
     ChurchStructureUnitRoleAssignment,
     ChurchStructureUnitRoleProfile,
     ChurchStructureUnitRoleType,
@@ -321,6 +322,105 @@ class StructureUnitCoworkerAssignmentForm(forms.Form):
             end_date=self.cleaned_data.get("end_date"),
             notes=self.cleaned_data.get("notes", ""),
         )
+
+
+class ChurchStructureUnitMemberRecordForm(forms.ModelForm):
+    """Staff/admin-only create/edit form for a unit member/care record.
+
+    `MEMBER-RECORD.1F`: a narrow write surface for
+    ``ChurchStructureUnitMemberRecord``. It is intentionally focused:
+
+    - The ``unit`` is fixed by the route, never an editable field, so POST can
+      never move a record to another unit.
+    - ``user`` candidates are all active users ordered by visible identity.
+      Membership is NOT required and is never created or inferred; a global
+      ``ChurchMemberRecord`` is NOT required either. This form creates only a
+      ``ChurchStructureUnitMemberRecord`` row.
+    - ``updated_by`` / ``created_at`` / ``updated_at`` are server-managed and are
+      not exposed.
+    - The ``(unit, user)`` uniqueness constraint is enforced gracefully here
+      because ``unit`` is not a form field (so Django's ModelForm unique check
+      excludes the constraint); the add path shows a clear error and the edit
+      path allows re-saving the same record.
+
+    Write permission (staff/superuser only) is enforced in the view via
+    ``can_write_unit_member_records``; this form does no permission check.
+    """
+
+    user = StructureSetupUserChoiceField(queryset=User.objects.none())
+
+    class Meta:
+        model = ChurchStructureUnitMemberRecord
+        fields = [
+            "user",
+            "attendance_state",
+            "joined_unit_date",
+            "group_notes",
+            "care_followup_notes",
+        ]
+        widgets = {
+            "joined_unit_date": forms.DateInput(attrs={"type": "date"}),
+            "group_notes": forms.Textarea(attrs={"rows": 3}),
+            "care_followup_notes": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, unit=None, language="zh", **kwargs):
+        super().__init__(*args, **kwargs)
+        if unit is None:
+            raise ValueError(
+                "ChurchStructureUnitMemberRecordForm requires a unit."
+            )
+        self.unit = unit
+        self.language = "zh" if language != "en" else "en"
+        # Fix the unit on the instance so model validation (active unit) runs and
+        # POST can never move the record to a different unit.
+        self.instance.unit = unit
+
+        UserModel = get_user_model()
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            UserModel.objects.filter(is_active=True)
+        )
+        self.fields["user"].label = "成员" if language == "zh" else "Member"
+        self.fields["attendance_state"].label = (
+            "出席状态" if language == "zh" else "Attendance state"
+        )
+        self.fields["joined_unit_date"].label = (
+            "加入单位" if language == "zh" else "Joined unit"
+        )
+        self.fields["group_notes"].label = (
+            "小组备注" if language == "zh" else "Group notes"
+        )
+        self.fields["care_followup_notes"].label = (
+            "受限关怀备注" if language == "zh" else "Restricted care notes"
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Enforce the (unit, user) uniqueness constraint gracefully. Django's
+        # ModelForm unique validation skips this constraint because ``unit`` is
+        # not a form field, so we check it explicitly against the fixed unit.
+        user = cleaned_data.get("user")
+        if user is not None:
+            duplicates = ChurchStructureUnitMemberRecord.objects.filter(
+                unit=self.unit, user=user
+            )
+            if self.instance.pk:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                self.add_error(
+                    "user",
+                    (
+                        "该成员在此单位已有成员 / 关怀记录。"
+                        if self.language == "zh"
+                        else (
+                            "This member already has a member/care record "
+                            "for this unit."
+                        )
+                    ),
+                )
+
+        return cleaned_data
 
 
 class ChurchStructureUnitChildForm(forms.ModelForm):

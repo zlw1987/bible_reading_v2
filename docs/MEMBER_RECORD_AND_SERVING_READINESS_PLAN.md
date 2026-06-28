@@ -34,10 +34,18 @@ only — staff/superuser see basic + group notes + restricted care notes, delega
 unit leads see basic + group notes only — while the My Units list, profile, My
 Serving, Today, and staff overview still expose nothing; it adds no
 create/edit/delete/import UI, grants no permission, and infers no belonging or
-serving. This document records the broader approved product direction; the
-remaining design-only areas are now the self-editable profile/contact split,
-member-record write/import UI, imports (Google Sheet / baptismal candidate forms),
-and the future course/training module, each deferred until separately approved.
+serving. `MEMBER-RECORD.1F` is implemented as a staff/superuser-only create/edit
+surface for unit member/care records, reachable only from the My Units detail
+page: it adds `ChurchStructureUnitMemberRecordForm`, the add/edit routes, and the
+form template. Delegated non-staff leads remain read-only and cannot access the
+add/edit routes. It adds no delete/archive/import/bulk UI, does not expose records
+on the My Units list, profile, My Serving, Today, or staff overview, grants no
+permission, infers no belonging or serving, and adds no schema migration. This
+document records the broader approved product direction; the remaining design-only
+areas are now the self-editable profile/contact split, import/bulk/delete/archive
+flows, a delegated-lead write path, other scoped member-record UI, imports (Google
+Sheet / baptismal candidate forms), and the future course/training module, each
+deferred until separately approved.
 
 This plan sits downstream of
 [Structure Unit Coworker Role Architecture Plan](STRUCTURE_UNIT_COWORKER_ROLE_ARCHITECTURE_PLAN.md)
@@ -891,6 +899,35 @@ implementation.
   the `MEMBER-RECORD.1C/1D` non-exposure tests that asserted the detail page
   showed no records were updated to reflect this approved detail-page exposure
   (list/profile non-exposure unchanged).
+- `MEMBER-RECORD.1F` — **implemented (staff/admin-only create/edit write
+  surface).** Added a narrow staff/superuser-only create/edit surface for
+  `ChurchStructureUnitMemberRecord`, reachable only from the My Units detail page
+  (`/my-units/<id>/member-records/add/` and
+  `/my-units/<id>/member-records/<record_id>/edit/`). Write permission is
+  resolved by a new explicit helper `can_write_unit_member_records` (staff /
+  superuser only — deliberately NOT routed through
+  `_user_is_structure_coworker_admin`, so a future central manage-coworkers
+  capability cannot silently inherit write access to restricted care notes).
+  Delegated (non-staff) leads remain **read-only** at the operational tier from
+  `MEMBER-RECORD.1E`: they see no add/edit affordance, are rejected (404) on the
+  routes, and never see care notes. The new `ChurchStructureUnitMemberRecordForm`
+  edits `user`, `attendance_state`, `joined_unit_date`, `group_notes`, and
+  `care_followup_notes`; the `unit` is fixed by the route (active units only) and
+  never an editable/POST field, so a record can never be moved across units.
+  `user` candidates are all active users (membership is NOT required and never
+  created/inferred; a global `ChurchMemberRecord` is NOT required). The
+  `(unit, user)` uniqueness constraint is enforced gracefully (add shows a clear
+  error; edit allows re-saving the same record); inactive unit (404) and inactive
+  user (invalid choice) are rejected; `updated_by` is set to the acting staff
+  user. It adds **no** delete/archive/import/bulk UI, no schema change, no
+  migration, and no Django admin change, and does not change the access-helper
+  read semantics. It grants no permission and infers no belonging, serving, or
+  management from records; ServiceEvent visibility, Today serving summary, My
+  Serving, Bible Study audience candidacy, and serving-readiness warnings are
+  unchanged. The My Units **list** page, profile, My Serving, Today, and staff
+  overview still expose no member-record fields or care notes. Focused
+  write-permission, entry-point, access-gating, add/edit behavior, display-after-
+  save, and boundary tests were added (`MyUnitMemberRecordWriteSurfaceTests`).
 - `SERVING-READINESS.1A-B` — **implemented (model + seed + evaluator
   foundation).** Added the configurable `ServingReadinessPolicy` and
   `ServingReadinessRequirement` models (migration
@@ -949,14 +986,20 @@ The following remain non-goals unless a later slice explicitly approves them:
 - No hard-blocking of any assignment surface.
 - No ordinary-user / profile / My Serving / Today / staff-overview member-record
   UI, and no member-record exposure on the My Units **list** page.
-- No create/edit/delete/import member-record UI for delegated leads (read-only
-  only); write access stays deferred to a later privacy/permission review.
+- No create/edit/delete/import member-record UI for delegated (non-staff) leads;
+  they remain read-only at the operational tier. `MEMBER-RECORD.1F` added a
+  staff/superuser-only create/edit surface; a delegated-lead write path stays
+  deferred to a later privacy/permission review.
+- No delete/archive/import/bulk member-record UI for any user (the
+  `MEMBER-RECORD.1F` staff/admin surface is create/edit of single records only).
 - The `ChurchStructureUnitMemberRecord` model began as an **admin-only**
   foundation (`MEMBER-RECORD.1C`), `MEMBER-RECORD.1D` added a read-only
-  privacy/access **helper** contract for it, and `MEMBER-RECORD.1E` surfaced that
-  contract as a read-only member/care section on the My Units **detail** page
-  only. Any further scoped UI (other surfaces, or any write path) remains a
-  non-goal until a separate privacy-scoped slice.
+  privacy/access **helper** contract for it, `MEMBER-RECORD.1E` surfaced that
+  contract as a read-only member/care section on the My Units **detail** page,
+  and `MEMBER-RECORD.1F` added a staff/superuser-only create/edit surface on that
+  same detail page. Any further scoped UI (other surfaces, delegated-lead write,
+  or delete/archive/import/bulk) remains a non-goal until a separate
+  privacy-scoped slice.
 - No assignment-surface integration of serving-readiness warnings until
   `SERVING-READINESS.1C`.
 - No hard-blocking based on readiness unless a later policy slice explicitly

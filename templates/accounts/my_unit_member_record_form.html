@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if is_edit %}
+{% if language == "zh" %}编辑单元成员 / 关怀记录{% else %}Edit Unit Member / Care Record{% endif %}
+{% else %}
+{% if language == "zh" %}新增单元成员 / 关怀记录{% else %}Add Unit Member / Care Record{% endif %}
+{% endif %}
+ | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <p class="page-subtitle">
+        <a href="{% url 'my_unit_detail' unit.id %}">&larr; {{ unit_name }}</a>
+    </p>
+    <h1 class="page-title">
+        {% if is_edit %}
+        {% if language == "zh" %}编辑单元成员 / 关怀记录{% else %}Edit Unit Member / Care Record{% endif %}
+        {% else %}
+        {% if language == "zh" %}新增单元成员 / 关怀记录{% else %}Add Unit Member / Care Record{% endif %}
+        {% endif %}
+    </h1>
+    <p class="page-subtitle">
+        <strong>{% if language == "zh" %}单位{% else %}Unit{% endif %}:</strong> {{ unit_path }}
+    </p>
+</section>
+
+<section class="card">
+    <div class="notice-panel">
+        <p>
+            {% if language == "zh" %}
+            关怀备注属于受限同工资料。除非已有明确隐私政策允许，请勿记录辅导、医疗、财务、移民或高度敏感的牧养细节。
+            {% else %}
+            Care notes are restricted staff/admin data. Do not store counseling, medical, financial, immigration, or highly sensitive pastoral details unless a privacy policy explicitly allows it.
+            {% endif %}
+        </p>
+    </div>
+
+    <form method="post" action="{{ form_action_url }}" class="structure-membership-form">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% for field in form %}
+        <div class="form-field">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+            <span class="form-help">{{ field.help_text }}</span>
+            {% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <div class="form-actions">
+            <button type="submit">{% if language == "zh" %}保存记录{% else %}Save record{% endif %}</button>
+            <a class="button-secondary button" href="{% url 'my_unit_detail' unit.id %}">
+                {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+            </a>
+        </div>
+    </form>
+</section>
+{% endblock %}

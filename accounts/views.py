@@ -18,6 +18,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .forms import (
     ChurchStructureUnitChildForm,
+    ChurchStructureUnitMemberRecordForm,
     LocalizedPasswordChangeForm,
     ProfileForm,
     SignUpForm,
@@ -53,6 +54,7 @@ from .unit_management import (
 )
 from .unit_member_record_access import (
     build_unit_member_record_safe_snapshot,
+    can_write_unit_member_records,
 )
 
 
@@ -2138,6 +2140,11 @@ def my_unit_detail(request, unit_id):
             record.id,
         )
     )
+    # MEMBER-RECORD.1F: staff/superuser-only create/edit entry points. Delegated
+    # (non-staff) leads stay read-only at the operational tier from
+    # MEMBER-RECORD.1E. Resolved via the explicit write helper so a future
+    # central manage-coworkers capability cannot silently gain write access.
+    member_records_viewer_can_write = can_write_unit_member_records(request.user)
     member_record_snapshots = []
     for record in member_records:
         snapshot = build_unit_member_record_safe_snapshot(
@@ -2145,6 +2152,13 @@ def my_unit_detail(request, unit_id):
         )
         # Defensive: a `none` snapshot exposes no row detail, so never render it.
         if snapshot.get("can_view_basic"):
+            # Attach an edit URL only for write-tier (staff/superuser) viewers.
+            # The snapshot helper itself stays free of raw DB ids / admin URLs;
+            # this My Units edit link is added here only for the staff path.
+            if member_records_viewer_can_write:
+                snapshot["edit_url"] = reverse(
+                    "edit_my_unit_member_record", args=[unit.id, record.id]
+                )
             member_record_snapshots.append(snapshot)
     # Whether THIS viewer's tier may read restricted care notes on this page.
     # The page is gated by can_manage_unit_coworkers, so the viewer is either a
@@ -2195,6 +2209,10 @@ def my_unit_detail(request, unit_id):
             "member_record_snapshots": member_record_snapshots,
             "member_records_viewer_can_view_care": (
                 member_records_viewer_can_view_care
+            ),
+            "member_records_viewer_can_write": member_records_viewer_can_write,
+            "add_member_record_url": reverse(
+                "add_my_unit_member_record", args=[unit.id]
             ),
         },
     )
@@ -2336,6 +2354,166 @@ def end_my_unit_coworker_assignment(request, assignment_id):
         ),
     )
     return redirect("my_unit_detail", unit_id=assignment.unit_id)
+
+
+@login_required
+def add_my_unit_member_record(request, unit_id):
+    """Staff/admin-only create surface for a unit member/care record.
+
+    MEMBER-RECORD.1F: a narrow write path reachable from the My Units detail
+    page. Gated by ``can_write_unit_member_records`` (staff/superuser only);
+    delegated non-staff leads are rejected with 404 and stay read-only. The unit
+    is fixed by the route (active units only), so POST can never choose or move
+    the unit. Creates only a ``ChurchStructureUnitMemberRecord`` row: no
+    membership, capability, serving, meeting-role, or global member-record rows,
+    and belonging/serving are never inferred from the record.
+    """
+    language = get_user_language(request)
+    unit = get_object_or_404(
+        ChurchStructureUnit.objects.select_related("parent"),
+        id=unit_id,
+        is_active=True,
+    )
+    if not can_write_unit_member_records(request.user):
+        raise Http404("Unit member records are not writable by this user.")
+
+    if request.method == "POST":
+        form = ChurchStructureUnitMemberRecordForm(
+            request.POST, unit=unit, language=language
+        )
+        if form.is_valid():
+            record = form.save(commit=False)
+            record.unit = unit
+            record.updated_by = request.user
+            record.save()
+            LogEntry.objects.log_action(
+                user_id=request.user.pk,
+                content_type_id=ContentType.objects.get_for_model(
+                    ChurchStructureUnitMemberRecord
+                ).pk,
+                object_id=record.pk,
+                object_repr=str(record),
+                action_flag=ADDITION,
+                change_message=(
+                    "Added unit member/care record via staff/admin My Units "
+                    "write surface (MEMBER-RECORD.1F). No memberships, "
+                    "permissions, ChurchStructureUnitRoleAssignment, "
+                    "ChurchRoleAssignment, TeamAssignment, TeamAssignmentMember, "
+                    "BibleStudyMeetingRole, or ChurchMemberRecord rows were "
+                    "created; belonging/serving were not inferred."
+                ),
+            )
+            messages.success(
+                request,
+                (
+                    f"已保存 {record.user.username} 的成员 / 关怀记录。"
+                    if language == "zh"
+                    else f"Saved member/care record for {record.user.username}."
+                ),
+            )
+            return redirect("my_unit_detail", unit_id=unit.id)
+    else:
+        form = ChurchStructureUnitMemberRecordForm(unit=unit, language=language)
+
+    return render(
+        request,
+        "accounts/my_unit_member_record_form.html",
+        {
+            "active_nav": "my_units",
+            "unit": unit,
+            "unit_path": unit.path_label(language),
+            "unit_name": unit.display_name(language),
+            "form": form,
+            "is_edit": False,
+            "form_action_url": reverse(
+                "add_my_unit_member_record", args=[unit.id]
+            ),
+        },
+    )
+
+
+@login_required
+def edit_my_unit_member_record(request, unit_id, record_id):
+    """Staff/admin-only edit surface for a unit member/care record.
+
+    MEMBER-RECORD.1F: gated by ``can_write_unit_member_records`` (staff/superuser
+    only); delegated non-staff leads are rejected with 404. The record must
+    belong to the route unit (active units only); the unit is fixed by the route,
+    so POST can never move the record to another unit. Updates only the record
+    row and ``updated_by``; it deletes nothing and creates no membership,
+    capability, serving, meeting-role, or global member-record rows.
+    """
+    language = get_user_language(request)
+    unit = get_object_or_404(
+        ChurchStructureUnit.objects.select_related("parent"),
+        id=unit_id,
+        is_active=True,
+    )
+    if not can_write_unit_member_records(request.user):
+        raise Http404("Unit member records are not writable by this user.")
+
+    record = get_object_or_404(
+        ChurchStructureUnitMemberRecord.objects.select_related("user", "unit"),
+        id=record_id,
+        unit=unit,
+    )
+
+    if request.method == "POST":
+        form = ChurchStructureUnitMemberRecordForm(
+            request.POST, instance=record, unit=unit, language=language
+        )
+        if form.is_valid():
+            record = form.save(commit=False)
+            # Re-fix the unit defensively so a tampered POST can never move it.
+            record.unit = unit
+            record.updated_by = request.user
+            record.save()
+            LogEntry.objects.log_action(
+                user_id=request.user.pk,
+                content_type_id=ContentType.objects.get_for_model(
+                    ChurchStructureUnitMemberRecord
+                ).pk,
+                object_id=record.pk,
+                object_repr=str(record),
+                action_flag=CHANGE,
+                change_message=(
+                    "Edited unit member/care record via staff/admin My Units "
+                    "write surface (MEMBER-RECORD.1F). The record was not moved "
+                    "to another unit and no memberships, permissions, "
+                    "ChurchStructureUnitRoleAssignment, ChurchRoleAssignment, "
+                    "TeamAssignment, TeamAssignmentMember, BibleStudyMeetingRole, "
+                    "or ChurchMemberRecord rows were created or deleted."
+                ),
+            )
+            messages.success(
+                request,
+                (
+                    f"已更新 {record.user.username} 的成员 / 关怀记录。"
+                    if language == "zh"
+                    else f"Updated member/care record for {record.user.username}."
+                ),
+            )
+            return redirect("my_unit_detail", unit_id=unit.id)
+    else:
+        form = ChurchStructureUnitMemberRecordForm(
+            instance=record, unit=unit, language=language
+        )
+
+    return render(
+        request,
+        "accounts/my_unit_member_record_form.html",
+        {
+            "active_nav": "my_units",
+            "unit": unit,
+            "unit_path": unit.path_label(language),
+            "unit_name": unit.display_name(language),
+            "form": form,
+            "is_edit": True,
+            "form_action_url": reverse(
+                "edit_my_unit_member_record", args=[unit.id, record.id]
+            ),
+        },
+    )
 
 
 class ProfilePasswordChangeView(PasswordChangeView):

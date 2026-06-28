@@ -68,6 +68,26 @@ _TIERS_WITH_GROUP_NOTES = frozenset(
 _TIERS_WITH_CARE_NOTES = frozenset({UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL})
 
 
+def can_write_unit_member_records(user):
+    """Whether ``user`` may create/edit unit member/care records (write tier).
+
+    `MEMBER-RECORD.1F` V1 write rule: staff / superuser only. This is checked
+    explicitly here (NOT via ``_user_is_structure_coworker_admin``) so that a
+    future central manage-coworkers capability cannot silently inherit write
+    access to restricted ``care_followup_notes``. Delegated (non-staff) leads
+    remain read-only at the operational tier from `MEMBER-RECORD.1E`; granting
+    them any write path is a separate, explicitly approved privacy slice.
+
+    Read-only check: it never mutates anything and never reads
+    ``ChurchStructureMembership`` (belonging) or any serving row.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return False
+    return bool(
+        getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
+    )
+
+
 def get_unit_member_record_access_tier(user, record, target_date=None):
     """Return the access tier ``user`` has for ``record``.
 

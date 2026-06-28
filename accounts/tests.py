@@ -71,6 +71,7 @@ from accounts.unit_member_record_access import (
     can_view_unit_member_record_basic,
     can_view_unit_member_record_care_notes,
     can_view_unit_member_record_group_notes,
+    can_write_unit_member_records,
     get_unit_member_record_access_tier,
 )
 from comments.models import ReflectionComment, ReflectionReport
@@ -11066,6 +11067,564 @@ class MyUnitMemberCareRecordReadOnlyTests(TestCase):
         self.assertEqual(my_serving_assignments(self.member, tab="upcoming"), [])
         self.assertEqual(
             get_membership_audience_candidate_unit_ids(self.member), []
+        )
+
+
+class MyUnitMemberRecordWriteSurfaceTests(TestCase):
+    """MEMBER-RECORD.1F: staff/admin-only create/edit surface for unit
+    member/care records, reachable from the My Units detail page.
+
+    Write access is staff/superuser only; delegated (non-staff) leads stay
+    read-only at the operational tier from MEMBER-RECORD.1E. The unit is fixed by
+    the route, records are never moved across units, and creating/editing a
+    record never creates membership, role, serving, meeting-role, or global
+    member-record rows and never infers belonging or serving.
+    """
+
+    NEW_GROUP_NOTE = "NEW-GROUP-NOTE-1F"
+    NEW_CARE_NOTE = "NEW-CARE-NOTE-1F"
+    EDIT_GROUP_NOTE = "EDIT-GROUP-NOTE-1F"
+    EDIT_CARE_NOTE = "EDIT-CARE-NOTE-1F"
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="MR1F-DISTRICT",
+            name="记录区",
+            name_en="Record District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MR1F-GROUP",
+            name="记录组",
+            name_en="Record Group",
+        )
+        self.other_group = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MR1F-OTHER",
+            name="另一组",
+            name_en="Other Group",
+        )
+        self.inactive_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="MR1F-INACTIVE",
+            name="停用组",
+            name_en="Inactive Group",
+            is_active=False,
+        )
+
+        self.member = User.objects.create_user(
+            username="mr1f_member", first_name="Mem", last_name="Ber"
+        )
+        self.member2 = User.objects.create_user(
+            username="mr1f_member2", first_name="Sec", last_name="Ond"
+        )
+        self.inactive_member = User.objects.create_user(
+            username="mr1f_inactive", first_name="In", last_name="Active",
+            is_active=False,
+        )
+
+        self.existing = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.group,
+            user=self.member,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+            joined_unit_date=self.today - timedelta(days=5),
+            group_notes="ORIGINAL-GROUP-1F",
+            care_followup_notes="ORIGINAL-CARE-1F",
+        )
+
+    # --- fixture helpers -----------------------------------------------------
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit, role_type=self.lead_role, user=user, **kwargs
+        )
+
+    def _add_url(self, unit=None):
+        return reverse(
+            "add_my_unit_member_record", args=[(unit or self.group).id]
+        ) + "?lang=en"
+
+    def _edit_url(self, record=None, unit=None):
+        record = record or self.existing
+        return reverse(
+            "edit_my_unit_member_record",
+            args=[(unit or self.group).id, record.id],
+        ) + "?lang=en"
+
+    def _detail_url(self, unit=None):
+        return reverse("my_unit_detail", args=[(unit or self.group).id]) + "?lang=en"
+
+    def _login_staff(self):
+        self.staff = User.objects.create_user(
+            username="mr1f_staff", password="pw", is_staff=True
+        )
+        self.client.login(username="mr1f_staff", password="pw")
+        return self.staff
+
+    def _login_group_lead(self):
+        user = User.objects.create_user(username="mr1f_lead", password="pw")
+        self._lead(user, self.group)
+        self.client.login(username="mr1f_lead", password="pw")
+        return user
+
+    def _add_payload(self, user=None, **overrides):
+        data = {
+            "user": (user or self.member2).id,
+            "attendance_state": (
+                ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE
+            ),
+            "joined_unit_date": "",
+            "group_notes": self.NEW_GROUP_NOTE,
+            "care_followup_notes": self.NEW_CARE_NOTE,
+        }
+        data.update(overrides)
+        return data
+
+    def _other_object_counts(self):
+        return {
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+            "church_member_record": ChurchMemberRecord.objects.count(),
+        }
+
+    # --- write-permission helper --------------------------------------------
+
+    def test_can_write_helper_staff_only(self):
+        staff = User.objects.create_user(username="mr1f_h_staff", is_staff=True)
+        superuser = User.objects.create_superuser(
+            username="mr1f_h_super", email="s@e.com", password="pw"
+        )
+        lead = User.objects.create_user(username="mr1f_h_lead")
+        self._lead(lead, self.group)
+        ordinary = User.objects.create_user(username="mr1f_h_ord")
+        self.assertTrue(can_write_unit_member_records(staff))
+        self.assertTrue(can_write_unit_member_records(superuser))
+        self.assertFalse(can_write_unit_member_records(lead))
+        self.assertFalse(can_write_unit_member_records(ordinary))
+        self.assertFalse(can_write_unit_member_records(AnonymousUser()))
+
+    # --- entry points on the detail page ------------------------------------
+
+    def test_staff_sees_add_and_edit_links(self):
+        self._login_staff()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add member/care record")
+        self.assertContains(
+            response,
+            reverse(
+                "add_my_unit_member_record", args=[self.group.id]
+            ),
+        )
+        self.assertContains(
+            response,
+            reverse(
+                "edit_my_unit_member_record",
+                args=[self.group.id, self.existing.id],
+            ),
+        )
+
+    def test_delegated_lead_does_not_see_add_or_edit_links(self):
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        # The read-only section is still shown (group note visible)...
+        self.assertContains(response, "ORIGINAL-GROUP-1F")
+        # ...but no add/edit affordances appear.
+        self.assertNotContains(response, "Add member/care record")
+        self.assertNotContains(
+            response,
+            reverse("add_my_unit_member_record", args=[self.group.id]),
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "edit_my_unit_member_record",
+                args=[self.group.id, self.existing.id],
+            ),
+        )
+
+    # --- access gating: only staff may reach the routes ----------------------
+
+    def _assert_blocked(self, username):
+        self.client.login(username=username, password="pw")
+        self.assertEqual(self.client.get(self._add_url()).status_code, 404)
+        self.assertEqual(
+            self.client.post(self._add_url(), self._add_payload()).status_code,
+            404,
+        )
+        self.assertEqual(self.client.get(self._edit_url()).status_code, 404)
+        self.assertEqual(
+            self.client.post(
+                self._edit_url(), self._add_payload(user=self.member)
+            ).status_code,
+            404,
+        )
+
+    def test_delegated_lead_cannot_access_routes(self):
+        before = ChurchStructureUnitMemberRecord.objects.count()
+        User.objects.create_user(username="mr1f_g_lead", password="pw")
+        self._lead(
+            User.objects.get(username="mr1f_g_lead"), self.group
+        )
+        self._assert_blocked("mr1f_g_lead")
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.count(), before
+        )
+
+    def test_ordinary_user_cannot_access_routes(self):
+        User.objects.create_user(username="mr1f_ord", password="pw")
+        self._assert_blocked("mr1f_ord")
+
+    def test_membership_only_user_cannot_access_routes(self):
+        user = User.objects.create_user(username="mr1f_mem_only", password="pw")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self._assert_blocked("mr1f_mem_only")
+
+    def test_non_lead_coworker_cannot_access_routes(self):
+        user = User.objects.create_user(username="mr1f_edify", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group, role_type=self.edify_role, user=user
+        )
+        self._assert_blocked("mr1f_edify")
+
+    def test_team_assignment_member_only_user_cannot_access_routes(self):
+        user = User.objects.create_user(username="mr1f_team", password="pw")
+        team = MinistryTeam.objects.create(name="MR1F Team")
+        membership = TeamMembership.objects.create(team=team, user=user)
+        event = ServiceEvent.objects.create(
+            title="MR1F Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+        self._assert_blocked("mr1f_team")
+
+    def test_bible_study_meeting_role_only_user_cannot_access_routes(self):
+        user = User.objects.create_user(username="mr1f_bs", password="pw")
+        series = BibleStudySeries.objects.create(
+            title="MR1F 查经", title_en="MR1F Study"
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series, title="MR1F 课", lesson_date=self.today
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=self.group,
+            meeting_datetime=timezone.now() + timedelta(days=2),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=user,
+        )
+        self._assert_blocked("mr1f_bs")
+
+    # --- add behavior --------------------------------------------------------
+
+    def test_staff_can_create_record(self):
+        staff = self._login_staff()
+        before_other = self._other_object_counts()
+        response = self.client.post(self._add_url(), self._add_payload())
+        self.assertRedirects(response, reverse("my_unit_detail", args=[self.group.id]))
+        record = ChurchStructureUnitMemberRecord.objects.get(
+            unit=self.group, user=self.member2
+        )
+        self.assertEqual(record.group_notes, self.NEW_GROUP_NOTE)
+        self.assertEqual(record.care_followup_notes, self.NEW_CARE_NOTE)
+        # updated_by is the acting staff user.
+        self.assertEqual(record.updated_by, staff)
+        # No unrelated belonging/serving/global rows were created.
+        self.assertEqual(self._other_object_counts(), before_other)
+
+    def test_add_fixes_unit_from_route_not_post(self):
+        self._login_staff()
+        # A malicious "unit" field in POST is ignored; the route unit wins.
+        self.client.post(
+            self._add_url(self.group),
+            self._add_payload(unit=self.other_group.id),
+        )
+        record = ChurchStructureUnitMemberRecord.objects.get(user=self.member2)
+        self.assertEqual(record.unit, self.group)
+
+    def test_add_rejects_inactive_unit_with_404(self):
+        self._login_staff()
+        self.assertEqual(
+            self.client.get(self._add_url(self.inactive_unit)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(
+                self._add_url(self.inactive_unit), self._add_payload()
+            ).status_code,
+            404,
+        )
+
+    def test_add_rejects_inactive_user(self):
+        self._login_staff()
+        before = ChurchStructureUnitMemberRecord.objects.count()
+        response = self.client.post(
+            self._add_url(), self._add_payload(user=self.inactive_member)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.count(), before
+        )
+        self.assertFalse(
+            ChurchStructureUnitMemberRecord.objects.filter(
+                user=self.inactive_member
+            ).exists()
+        )
+
+    def test_duplicate_add_shows_error_and_creates_no_duplicate(self):
+        self._login_staff()
+        before = ChurchStructureUnitMemberRecord.objects.filter(
+            unit=self.group, user=self.member
+        ).count()
+        response = self.client.post(
+            self._add_url(), self._add_payload(user=self.member)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already has a member/care record")
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.filter(
+                unit=self.group, user=self.member
+            ).count(),
+            before,
+        )
+
+    def test_add_does_not_require_membership_or_global_member_record(self):
+        self._login_staff()
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.member2).exists()
+        )
+        self.assertFalse(
+            ChurchMemberRecord.objects.filter(user=self.member2).exists()
+        )
+        response = self.client.post(self._add_url(), self._add_payload())
+        self.assertRedirects(response, reverse("my_unit_detail", args=[self.group.id]))
+        self.assertTrue(
+            ChurchStructureUnitMemberRecord.objects.filter(
+                unit=self.group, user=self.member2
+            ).exists()
+        )
+        # Still no membership / global member record was auto-created.
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.member2).exists()
+        )
+        self.assertFalse(
+            ChurchMemberRecord.objects.filter(user=self.member2).exists()
+        )
+
+    # --- edit behavior -------------------------------------------------------
+
+    def test_staff_can_edit_all_editable_fields(self):
+        staff = self._login_staff()
+        new_date = self.today - timedelta(days=2)
+        response = self.client.post(
+            self._edit_url(),
+            {
+                "user": self.member.id,
+                "attendance_state": (
+                    ChurchStructureUnitMemberRecord.ATTENDANCE_VISITOR
+                ),
+                "joined_unit_date": new_date.isoformat(),
+                "group_notes": self.EDIT_GROUP_NOTE,
+                "care_followup_notes": self.EDIT_CARE_NOTE,
+            },
+        )
+        self.assertRedirects(response, reverse("my_unit_detail", args=[self.group.id]))
+        self.existing.refresh_from_db()
+        self.assertEqual(
+            self.existing.attendance_state,
+            ChurchStructureUnitMemberRecord.ATTENDANCE_VISITOR,
+        )
+        self.assertEqual(self.existing.joined_unit_date, new_date)
+        self.assertEqual(self.existing.group_notes, self.EDIT_GROUP_NOTE)
+        self.assertEqual(self.existing.care_followup_notes, self.EDIT_CARE_NOTE)
+        self.assertEqual(self.existing.updated_by, staff)
+
+    def test_edit_cannot_move_record_to_another_unit_via_post(self):
+        self._login_staff()
+        self.client.post(
+            self._edit_url(),
+            {
+                "user": self.member.id,
+                "attendance_state": (
+                    ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE
+                ),
+                "joined_unit_date": "",
+                "group_notes": "X",
+                "care_followup_notes": "Y",
+                "unit": self.other_group.id,
+            },
+        )
+        self.existing.refresh_from_db()
+        self.assertEqual(self.existing.unit, self.group)
+
+    def test_edit_rejects_record_not_belonging_to_route_unit(self):
+        self._login_staff()
+        # Edit URL points at other_group but record belongs to group → 404.
+        url = reverse(
+            "edit_my_unit_member_record",
+            args=[self.other_group.id, self.existing.id],
+        )
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertEqual(
+            self.client.post(url, self._add_payload(user=self.member)).status_code,
+            404,
+        )
+
+    def test_edit_allows_resaving_same_user_on_same_record(self):
+        self._login_staff()
+        response = self.client.post(
+            self._edit_url(),
+            {
+                "user": self.member.id,
+                "attendance_state": (
+                    ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE
+                ),
+                "joined_unit_date": "",
+                "group_notes": self.EDIT_GROUP_NOTE,
+                "care_followup_notes": self.EDIT_CARE_NOTE,
+            },
+        )
+        self.assertRedirects(response, reverse("my_unit_detail", args=[self.group.id]))
+        self.existing.refresh_from_db()
+        self.assertEqual(self.existing.group_notes, self.EDIT_GROUP_NOTE)
+
+    def test_edit_rejects_change_to_inactive_user(self):
+        self._login_staff()
+        response = self.client.post(
+            self._edit_url(),
+            {
+                "user": self.inactive_member.id,
+                "attendance_state": (
+                    ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE
+                ),
+                "joined_unit_date": "",
+                "group_notes": "X",
+                "care_followup_notes": "Y",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.existing.refresh_from_db()
+        self.assertEqual(self.existing.user, self.member)
+
+    def test_edit_does_not_create_or_delete_unrelated_objects(self):
+        self._login_staff()
+        before_other = self._other_object_counts()
+        before_records = ChurchStructureUnitMemberRecord.objects.count()
+        self.client.post(
+            self._edit_url(),
+            {
+                "user": self.member.id,
+                "attendance_state": (
+                    ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE
+                ),
+                "joined_unit_date": "",
+                "group_notes": self.EDIT_GROUP_NOTE,
+                "care_followup_notes": self.EDIT_CARE_NOTE,
+            },
+        )
+        self.assertEqual(self._other_object_counts(), before_other)
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.count(), before_records
+        )
+
+    # --- display after save --------------------------------------------------
+
+    def test_created_record_shows_on_detail_for_staff_with_care(self):
+        self._login_staff()
+        self.client.post(self._add_url(), self._add_payload())
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sec Ond")
+        self.assertContains(response, self.NEW_GROUP_NOTE)
+        self.assertContains(response, self.NEW_CARE_NOTE)
+
+    def test_created_record_visible_to_lead_without_care(self):
+        # Staff creates a record...
+        self._login_staff()
+        self.client.post(self._add_url(), self._add_payload())
+        self.client.logout()
+        # ...a delegated lead sees the group note but not the care note.
+        self._login_group_lead()
+        response = self.client.get(self._detail_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.NEW_GROUP_NOTE)
+        self.assertNotContains(response, self.NEW_CARE_NOTE)
+
+    def test_my_units_list_still_hides_records(self):
+        self._login_staff()
+        self.client.post(self._add_url(), self._add_payload())
+        response = self.client.get(reverse("my_units") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.NEW_GROUP_NOTE)
+        self.assertNotContains(response, self.NEW_CARE_NOTE)
+        self.assertNotContains(response, "Unit Member / Care Records")
+
+    def test_other_surfaces_still_hide_records_after_save(self):
+        self._login_staff()
+        self.client.post(self._add_url(), self._add_payload())
+        self.client.logout()
+        self.client.force_login(self.member2)
+        for name in ("profile", "my_serving", "home"):
+            response = self.client.get(reverse(name) + "?lang=en")
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, self.NEW_GROUP_NOTE)
+            self.assertNotContains(response, self.NEW_CARE_NOTE)
+            self.assertNotContains(response, "Unit Member / Care Records")
+
+    # --- boundary: no readiness / visibility / serving / candidacy change ----
+
+    def test_create_does_not_grant_visibility_serving_or_bs_candidacy(self):
+        self._login_staff()
+        self.client.post(self._add_url(), self._add_payload())
+        event = ServiceEvent.objects.create(
+            title="MR1F Zero-row",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertFalse(event.can_be_seen_by(self.member2))
+        self.assertIsNone(get_today_serving_summary(self.member2))
+        self.assertEqual(
+            my_serving_assignments(self.member2, tab="upcoming"), []
+        )
+        self.assertEqual(
+            get_membership_audience_candidate_unit_ids(self.member2), []
         )
 
 

@@ -162,10 +162,25 @@
     </p>
     {% endif %}
 
+    {# MEMBER-RECORD.1F: staff/admin-only create entry point. Delegated leads do #}
+    {# not see this; their section stays read-only as in MEMBER-RECORD.1E. #}
+    {% if member_records_viewer_can_write %}
+    <p>
+        <a class="button" href="{{ add_member_record_url }}">
+            {% if language == "zh" %}新增成员 / 关怀记录{% else %}Add member/care record{% endif %}
+        </a>
+    </p>
+    {% endif %}
+
     {% if member_record_snapshots %}
     {% for snapshot in member_record_snapshots %}
     <div class="detail-list">
         <strong>{{ snapshot.user_display }}</strong>
+        {% if member_records_viewer_can_write and snapshot.edit_url %}
+        <a class="button-secondary button" href="{{ snapshot.edit_url }}">
+            {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+        </a>
+        {% endif %}
         <dl class="detail-list">
             <dt>{% if language == "zh" %}单位{% else %}Unit{% endif %}</dt>
             <dd>{{ snapshot.unit_path }}</dd>

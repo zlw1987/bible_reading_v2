@@ -62,6 +62,17 @@ from accounts.unit_management import (
     get_user_active_lead_units,
     should_show_my_units_nav,
 )
+from accounts.unit_member_record_access import (
+    UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL,
+    UNIT_MEMBER_RECORD_ACCESS_NONE,
+    UNIT_MEMBER_RECORD_ACCESS_SELF_BASIC,
+    UNIT_MEMBER_RECORD_ACCESS_UNIT_LEAD_OPERATIONAL,
+    build_unit_member_record_safe_snapshot,
+    can_view_unit_member_record_basic,
+    can_view_unit_member_record_care_notes,
+    can_view_unit_member_record_group_notes,
+    get_unit_member_record_access_tier,
+)
 from comments.models import ReflectionComment, ReflectionReport
 from events.models import ServiceEvent, ServiceEventAudienceScope
 from events.views import get_visible_service_events
@@ -10111,6 +10122,571 @@ class ChurchStructureUnitMemberRecordUiBoundaryTests(TestCase):
 
     def test_ordinary_profile_page_has_no_member_record_fields(self):
         self.client.login(username="umr_ui_member", password="pw")
+        response = self.client.get(reverse("profile") + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self._assert_no_leak(response)
+
+
+class UnitMemberRecordAccessHelperTests(TestCase):
+    """MEMBER-RECORD.1D privacy/access helper foundation (read-only).
+
+    Defines who may read which field tier of a ``ChurchStructureUnitMemberRecord``:
+    NONE / SELF_BASIC / UNIT_LEAD_OPERATIONAL / ADMIN_FULL. The helper is a
+    privacy contract only — it adds no non-admin UI, grants no permission, and
+    never infers belonging or serving. Lead (operational) access comes ONLY from
+    an explicit active ``lead`` ancestor-or-self coworker role; membership,
+    non-lead coworker roles, and serving never grant access.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.edify_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_EDIFY,
+            name="带查经同工",
+            name_en="Edify",
+        )
+        self.worship_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_WORSHIP,
+            name="敬拜同工",
+            name_en="Worship",
+        )
+        self.caring_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_CARING,
+            name="关怀同工",
+            name_en="Caring",
+        )
+
+        # district -> group(record unit) -> nested, plus an unrelated branch.
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="UMRA-DISTRICT",
+            name="访问区",
+            name_en="Access District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMRA-GROUP",
+            name="访问组",
+            name_en="Access Group",
+        )
+        self.nested = ChurchStructureUnit.objects.create(
+            parent=self.group,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="UMRA-NESTED",
+            name="访问子单元",
+            name_en="Access Nested",
+        )
+        self.other_branch = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMRA-OTHER",
+            name="无关组",
+            name_en="Unrelated Group",
+        )
+
+        self.member = User.objects.create_user(
+            username="umra_member", first_name="Mem", last_name="Ber"
+        )
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.group,
+            user=self.member,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+            joined_unit_date=self.today - timedelta(days=10),
+            group_notes="GROUP-NOTE-XYZ",
+            care_followup_notes="CARE-NOTE-XYZ",
+        )
+
+    def _lead(self, user, unit, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit, role_type=self.lead_role, user=user, **kwargs
+        )
+
+    def _coworker(self, user, unit, role_type, **kwargs):
+        return ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit, role_type=role_type, user=user, **kwargs
+        )
+
+    def _active_primary_membership(self, user, unit):
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+
+    # --- access tier ---------------------------------------------------------
+
+    def test_anonymous_user_gets_none(self):
+        self.assertEqual(
+            get_unit_member_record_access_tier(AnonymousUser(), self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_none_record_gets_none(self):
+        user = User.objects.create_user(username="umra_norecord")
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, None),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_unrelated_regular_user_gets_none(self):
+        user = User.objects.create_user(username="umra_unrelated")
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_membership_only_user_gets_none(self):
+        user = User.objects.create_user(username="umra_membership_only")
+        self._active_primary_membership(user, self.group)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_requested_membership_user_gets_none(self):
+        user = User.objects.create_user(username="umra_requested")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_non_lead_coworker_on_same_unit_gets_none(self):
+        # edify / worship / caring coworkers on the record's unit get nothing.
+        for role_type, username in (
+            (self.edify_role, "umra_edify"),
+            (self.worship_role, "umra_worship"),
+            (self.caring_role, "umra_caring"),
+        ):
+            user = User.objects.create_user(username=username)
+            self._coworker(user, self.group, role_type)
+            self.assertEqual(
+                get_unit_member_record_access_tier(user, self.record),
+                UNIT_MEMBER_RECORD_ACCESS_NONE,
+                f"{username} must not gain access",
+            )
+
+    def test_team_membership_user_gets_none(self):
+        user = User.objects.create_user(username="umra_team_member")
+        team = MinistryTeam.objects.create(name="UMRA Team")
+        TeamMembership.objects.create(team=team, user=user)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_team_assignment_member_user_gets_none(self):
+        user = User.objects.create_user(username="umra_team_assignment")
+        team = MinistryTeam.objects.create(name="UMRA Assign Team")
+        membership = TeamMembership.objects.create(team=team, user=user)
+        event = ServiceEvent.objects.create(
+            title="UMRA Event",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_bible_study_meeting_role_user_gets_none(self):
+        user = User.objects.create_user(username="umra_bs_role")
+        series = BibleStudySeries.objects.create(
+            title="UMRA 查经", title_en="UMRA Study"
+        )
+        lesson = BibleStudyLesson.objects.create(
+            series=series, title="UMRA 课", lesson_date=self.today
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            anchor_unit=self.group,
+            meeting_datetime=timezone.now() + timedelta(days=2),
+            status=BibleStudyMeeting.STATUS_PUBLISHED,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=user,
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_record_own_user_gets_self_basic(self):
+        self.assertEqual(
+            get_unit_member_record_access_tier(self.member, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_SELF_BASIC,
+        )
+
+    def test_active_lead_on_same_unit_gets_unit_lead_operational(self):
+        user = User.objects.create_user(username="umra_group_lead")
+        self._lead(user, self.group)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_UNIT_LEAD_OPERATIONAL,
+        )
+
+    def test_active_lead_on_ancestor_unit_gets_unit_lead_operational(self):
+        user = User.objects.create_user(username="umra_district_lead")
+        self._lead(user, self.district)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_UNIT_LEAD_OPERATIONAL,
+        )
+
+    def test_lead_on_unrelated_branch_gets_none(self):
+        user = User.objects.create_user(username="umra_other_lead")
+        self._lead(user, self.other_branch)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_lead_on_descendant_unit_gets_none(self):
+        # A lead of the nested child does not lead the parent group's record.
+        user = User.objects.create_user(username="umra_nested_lead")
+        self._lead(user, self.nested)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_inactive_lead_assignment_gets_none(self):
+        user = User.objects.create_user(username="umra_inactive_lead")
+        self._lead(user, self.group, is_active=False)
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_ended_lead_assignment_gets_none(self):
+        user = User.objects.create_user(username="umra_ended_lead")
+        self._lead(
+            user,
+            self.group,
+            start_date=self.today - timedelta(days=30),
+            end_date=self.today - timedelta(days=1),
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_future_start_lead_assignment_gets_none(self):
+        user = User.objects.create_user(username="umra_future_lead")
+        self._lead(user, self.group, start_date=self.today + timedelta(days=5))
+        self.assertEqual(
+            get_unit_member_record_access_tier(user, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_NONE,
+        )
+
+    def test_staff_gets_admin_full(self):
+        staff = User.objects.create_user(username="umra_staff", is_staff=True)
+        self.assertEqual(
+            get_unit_member_record_access_tier(staff, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL,
+        )
+
+    def test_superuser_gets_admin_full(self):
+        superuser = User.objects.create_superuser(
+            username="umra_super", email="umra_super@example.com", password="x"
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(superuser, self.record),
+            UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL,
+        )
+
+    def test_staff_who_owns_record_still_gets_admin_full(self):
+        # Staff/superuser is distinguished before self, so the fuller tier wins.
+        staff_owner = User.objects.create_user(
+            username="umra_staff_owner", is_staff=True
+        )
+        record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.other_branch, user=staff_owner
+        )
+        self.assertEqual(
+            get_unit_member_record_access_tier(staff_owner, record),
+            UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL,
+        )
+
+    # --- boolean convenience helpers track the tier --------------------------
+
+    def test_boolean_helpers_match_tier_grants(self):
+        unrelated = User.objects.create_user(username="umra_bool_none")
+        lead = User.objects.create_user(username="umra_bool_lead")
+        self._lead(lead, self.group)
+        staff = User.objects.create_user(username="umra_bool_staff", is_staff=True)
+
+        # NONE
+        self.assertFalse(can_view_unit_member_record_basic(unrelated, self.record))
+        self.assertFalse(
+            can_view_unit_member_record_group_notes(unrelated, self.record)
+        )
+        self.assertFalse(
+            can_view_unit_member_record_care_notes(unrelated, self.record)
+        )
+        # SELF_BASIC
+        self.assertTrue(can_view_unit_member_record_basic(self.member, self.record))
+        self.assertFalse(
+            can_view_unit_member_record_group_notes(self.member, self.record)
+        )
+        self.assertFalse(
+            can_view_unit_member_record_care_notes(self.member, self.record)
+        )
+        # UNIT_LEAD_OPERATIONAL
+        self.assertTrue(can_view_unit_member_record_basic(lead, self.record))
+        self.assertTrue(can_view_unit_member_record_group_notes(lead, self.record))
+        self.assertFalse(can_view_unit_member_record_care_notes(lead, self.record))
+        # ADMIN_FULL
+        self.assertTrue(can_view_unit_member_record_basic(staff, self.record))
+        self.assertTrue(can_view_unit_member_record_group_notes(staff, self.record))
+        self.assertTrue(can_view_unit_member_record_care_notes(staff, self.record))
+
+    # --- snapshot field visibility -------------------------------------------
+
+    def test_none_snapshot_excludes_all_person_unit_and_care_detail(self):
+        unrelated = User.objects.create_user(username="umra_snap_none")
+        snapshot = build_unit_member_record_safe_snapshot(
+            unrelated, self.record, language="en"
+        )
+        self.assertEqual(snapshot["access_tier"], UNIT_MEMBER_RECORD_ACCESS_NONE)
+        self.assertFalse(snapshot["can_view_basic"])
+        self.assertFalse(snapshot["can_view_group_notes"])
+        self.assertFalse(snapshot["can_view_care_notes"])
+        for key in (
+            "user_display",
+            "unit_path",
+            "attendance_state_display",
+            "joined_unit_date",
+            "group_notes",
+            "care_followup_notes",
+        ):
+            self.assertNotIn(key, snapshot)
+
+    def test_self_basic_snapshot_has_basic_only(self):
+        snapshot = build_unit_member_record_safe_snapshot(
+            self.member, self.record, language="en"
+        )
+        self.assertEqual(
+            snapshot["access_tier"], UNIT_MEMBER_RECORD_ACCESS_SELF_BASIC
+        )
+        self.assertTrue(snapshot["can_view_basic"])
+        self.assertEqual(snapshot["user_display"], "Mem Ber")
+        self.assertEqual(snapshot["unit_path"], "Access District > Access Group")
+        self.assertEqual(snapshot["attendance_state_display"], "Active")
+        self.assertEqual(
+            snapshot["joined_unit_date"], self.today - timedelta(days=10)
+        )
+        self.assertNotIn("group_notes", snapshot)
+        self.assertNotIn("care_followup_notes", snapshot)
+
+    def test_unit_lead_snapshot_has_basic_and_group_notes_only(self):
+        lead = User.objects.create_user(username="umra_snap_lead")
+        self._lead(lead, self.group)
+        snapshot = build_unit_member_record_safe_snapshot(
+            lead, self.record, language="en"
+        )
+        self.assertEqual(
+            snapshot["access_tier"],
+            UNIT_MEMBER_RECORD_ACCESS_UNIT_LEAD_OPERATIONAL,
+        )
+        self.assertTrue(snapshot["can_view_basic"])
+        self.assertTrue(snapshot["can_view_group_notes"])
+        self.assertEqual(snapshot["user_display"], "Mem Ber")
+        self.assertEqual(snapshot["group_notes"], "GROUP-NOTE-XYZ")
+        self.assertNotIn("care_followup_notes", snapshot)
+
+    def test_admin_full_snapshot_has_basic_group_and_care_notes(self):
+        staff = User.objects.create_user(username="umra_snap_staff", is_staff=True)
+        snapshot = build_unit_member_record_safe_snapshot(
+            staff, self.record, language="en"
+        )
+        self.assertEqual(
+            snapshot["access_tier"], UNIT_MEMBER_RECORD_ACCESS_ADMIN_FULL
+        )
+        self.assertTrue(snapshot["can_view_care_notes"])
+        self.assertEqual(snapshot["group_notes"], "GROUP-NOTE-XYZ")
+        self.assertEqual(snapshot["care_followup_notes"], "CARE-NOTE-XYZ")
+
+    def test_snapshot_localizes_basic_labels(self):
+        snapshot = build_unit_member_record_safe_snapshot(
+            self.member, self.record, language="zh"
+        )
+        self.assertEqual(snapshot["attendance_state_display"], "稳定参加")
+        self.assertEqual(snapshot["unit_path"], "访问区 > 访问组")
+
+    def test_snapshot_excludes_internal_ids_and_admin_urls(self):
+        staff = User.objects.create_user(username="umra_snap_ids", is_staff=True)
+        snapshot = build_unit_member_record_safe_snapshot(
+            staff, self.record, language="en"
+        )
+        # No id-bearing keys.
+        for key in snapshot:
+            self.assertNotIn("_id", key)
+            self.assertNotEqual(key, "id")
+            self.assertNotIn("url", key.lower())
+        # No raw pk values and no admin URL fragments leak into values. Skip
+        # bools (in Python ``True == 1`` would spuriously match a pk of 1).
+        raw_ids = {self.record.id, self.member.id, self.group.id}
+        for value in snapshot.values():
+            if not isinstance(value, bool):
+                self.assertNotIn(value, raw_ids)
+            self.assertNotIn("/admin/", str(value))
+
+    # --- boundary: no mutation, no belonging/serving inference ----------------
+
+    def _call_all_helpers(self, user):
+        get_unit_member_record_access_tier(user, self.record)
+        can_view_unit_member_record_basic(user, self.record)
+        can_view_unit_member_record_group_notes(user, self.record)
+        can_view_unit_member_record_care_notes(user, self.record)
+        build_unit_member_record_safe_snapshot(user, self.record)
+
+    def test_helpers_do_not_mutate_belonging_serving_or_role_rows(self):
+        staff = User.objects.create_user(username="umra_nomutate", is_staff=True)
+        before = {
+            "membership": ChurchStructureMembership.objects.count(),
+            "unit_role": ChurchStructureUnitRoleAssignment.objects.count(),
+            "church_role": ChurchRoleAssignment.objects.count(),
+            "team_assignment": TeamAssignment.objects.count(),
+            "team_assignment_member": TeamAssignmentMember.objects.count(),
+            "bs_meeting_role": BibleStudyMeetingRole.objects.count(),
+            "unit_member_record": ChurchStructureUnitMemberRecord.objects.count(),
+        }
+        self._call_all_helpers(staff)
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(), before["membership"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitRoleAssignment.objects.count(), before["unit_role"]
+        )
+        self.assertEqual(
+            ChurchRoleAssignment.objects.count(), before["church_role"]
+        )
+        self.assertEqual(
+            TeamAssignment.objects.count(), before["team_assignment"]
+        )
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_member"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(), before["bs_meeting_role"]
+        )
+        self.assertEqual(
+            ChurchStructureUnitMemberRecord.objects.count(),
+            before["unit_member_record"],
+        )
+
+    def test_helpers_do_not_make_zero_row_service_event_visible(self):
+        staff = User.objects.create_user(username="umra_bnd_event", is_staff=True)
+        self._call_all_helpers(staff)
+        event = ServiceEvent.objects.create(
+            title="UMRA Zero-row",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        # An ordinary member of the record's unit still fails closed.
+        self._active_primary_membership(self.member, self.group)
+        self.assertEqual(event.audience_scope_links.count(), 0)
+        self.assertFalse(event.can_be_seen_by(self.member))
+        visible_ids = set(
+            get_visible_service_events(self.member).values_list("id", flat=True)
+        )
+        self.assertNotIn(event.id, visible_ids)
+
+    def test_helpers_do_not_affect_today_my_serving_or_bs_candidacy(self):
+        # The record's own user, with the helpers exercised, gains no serving.
+        self._call_all_helpers(self.member)
+        self.assertIsNone(get_today_serving_summary(self.member))
+        self.assertEqual(my_serving_assignments(self.member, tab="upcoming"), [])
+        self.assertEqual(my_serving_assignments(self.member, tab="past"), [])
+        self.assertEqual(
+            get_membership_audience_candidate_unit_ids(self.member), []
+        )
+
+
+class UnitMemberRecordAccessUiNonExposureTests(TestCase):
+    """MEMBER-RECORD.1D: the access helper adds no non-admin UI.
+
+    Even with a unit member/care record on file and the access contract defined,
+    `/my-units/`, `/my-units/<id>/`, and the ordinary profile page must still
+    expose no member-record fields or care notes.
+    """
+
+    LEAK_MARKERS = (
+        "GROUP-NOTE-1D",
+        "CARE-NOTE-1D",
+        "care_followup_notes",
+        "attendance_state",
+        "joined_unit_date",
+        "structure_unit_member_records",
+    )
+
+    def setUp(self):
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="UMRA-UI",
+            name="界面访问组",
+            name_en="Access UI Group",
+        )
+        self.member = User.objects.create_user(
+            username="umra_ui_member", password="pw"
+        )
+        self.record = ChurchStructureUnitMemberRecord.objects.create(
+            unit=self.unit,
+            user=self.member,
+            attendance_state=ChurchStructureUnitMemberRecord.ATTENDANCE_ACTIVE,
+            group_notes="GROUP-NOTE-1D",
+            care_followup_notes="CARE-NOTE-1D",
+        )
+
+    def _assert_no_leak(self, response):
+        for marker in self.LEAK_MARKERS:
+            self.assertNotContains(response, marker)
+
+    def test_my_units_list_and_detail_show_no_member_record(self):
+        lead = User.objects.create_user(username="umra_ui_lead", password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.unit, role_type=self.lead_role, user=lead
+        )
+        self.client.login(username="umra_ui_lead", password="pw")
+        list_response = self.client.get(reverse("my_units") + "?lang=en")
+        self.assertEqual(list_response.status_code, 200)
+        self._assert_no_leak(list_response)
+        detail_response = self.client.get(
+            reverse("my_unit_detail", args=[self.unit.id]) + "?lang=en"
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self._assert_no_leak(detail_response)
+
+    def test_ordinary_profile_page_shows_no_member_record(self):
+        self.client.login(username="umra_ui_member", password="pw")
         response = self.client.get(reverse("profile") + "?lang=en")
         self.assertEqual(response.status_code, 200)
         self._assert_no_leak(response)

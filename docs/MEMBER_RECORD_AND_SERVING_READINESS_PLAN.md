@@ -22,7 +22,14 @@ for unit-specific operational/care records: it adds the
 tests) and is admin-only for now. It does not expose unit member/care records to
 ordinary users, My Units, My Serving, Today, or delegated leads; scoped
 non-admin access / privacy-permission UI remains deferred to a later, separately
-approved slice. This document records the broader approved product direction; the
+approved slice. `MEMBER-RECORD.1D` is implemented as a privacy/access **helper
+foundation only** (`accounts/unit_member_record_access.py`): it defines the
+read-only access tiers `none` / `self-basic` / `unit-lead operational` /
+`admin-full` and tier-limited field/snapshot helpers for
+`ChurchStructureUnitMemberRecord`, but adds **no** non-admin UI and exposes no
+record in My Units, My Serving, Today, or profile. It grants no permission and
+infers no belonging or serving; scoped UI that would use the contract remains a
+later privacy/permission slice. This document records the broader approved product direction; the
 remaining design-only areas are now the self-editable profile/contact split,
 scoped unit-care access/UI, imports (Google Sheet / baptismal candidate forms),
 and the future course/training module, each deferred until separately approved.
@@ -449,6 +456,25 @@ either become a serving hard-block (that is the readiness policy's job, D).
 > **not** added in this slice. Scoped non-admin access (self / unit lead /
 > district lead / central admin) and any non-admin UI remain deferred to a later
 > privacy/permission slice per C.2 / C.3.
+>
+> Status (`MEMBER-RECORD.1D`, implemented): the read-only privacy/access
+> **helper** layer now exists in `accounts/unit_member_record_access.py`,
+> defining the access contract for the C.3 tiers below
+> (`get_unit_member_record_access_tier` plus `can_view_unit_member_record_basic`
+> / `_group_notes` / `_care_notes` and `build_unit_member_record_safe_snapshot`).
+> The tiers are `UNIT_MEMBER_RECORD_ACCESS_NONE` / `_SELF_BASIC` /
+> `_UNIT_LEAD_OPERATIONAL` / `_ADMIN_FULL`: staff/superuser → admin-full (basic +
+> `group_notes` + `care_followup_notes`); active `lead` ancestor-or-self (via
+> `can_manage_unit_coworkers`, staff distinguished first) → unit-lead operational
+> (basic + `group_notes`, **not** `care_followup_notes`); the record's own user →
+> self-basic (basic fields only); everyone else → none. Lead access is the
+> explicit active-`lead` path only — membership, non-lead coworker roles,
+> `TeamAssignment` / `TeamAssignmentMember`, and `BibleStudyMeetingRole` grant
+> nothing. The helper is read-only (no membership read, no mutation, no permission
+> grant) and adds **no** non-admin UI; `/my-units/`, `/my-units/<id>/`, My
+> Serving, Today, and profile still expose no member-record fields or care notes.
+> Scoped UI that would consume this contract remains a later privacy/permission
+> slice. No schema, migration, or data change.
 
 A separate unit-scoped record attaches a user to a unit and stores unit-local
 operational/care data. Recommended name `ChurchStructureUnitMemberRecord`
@@ -805,6 +831,27 @@ implementation.
   Delegated-lead / member-record read/write access remains **deferred** to a
   later, separately approved privacy/permission slice (C.2 / C.3). No data
   migration, no auto-created records, no Google-Sheet / baptism-form import.
+- `MEMBER-RECORD.1D` — **implemented (privacy/access helper foundation only).**
+  Added the read-only `accounts/unit_member_record_access.py` access layer for
+  `ChurchStructureUnitMemberRecord`: the tier resolver
+  `get_unit_member_record_access_tier`, the boolean field-tier helpers
+  `can_view_unit_member_record_basic` / `_group_notes` / `_care_notes`, and the
+  tier-limited `build_unit_member_record_safe_snapshot`. Access tiers: `none`,
+  `self-basic` (basic fields only), `unit-lead operational` (basic + group
+  notes), `admin-full` (basic + group notes + care notes). Staff/superuser are
+  distinguished first as admin-full; the unit-lead tier reuses
+  `can_manage_unit_coworkers` so it is exactly the explicit active-`lead`
+  ancestor-or-self path; the record's own user is self-basic; everyone else is
+  none. Membership, non-lead coworker roles (edify/worship/caring/…),
+  `TeamAssignment` / `TeamAssignmentMember`, and `BibleStudyMeetingRole` grant no
+  access. The snapshot omits raw DB ids and admin URLs and only includes fields
+  the tier may read. This slice adds **no** non-admin UI, navigation, view,
+  template, permission, schema change, migration, or data mutation, and does not
+  change Django admin behavior; `/my-units/`, `/my-units/<id>/`, My Serving,
+  Today, and profile still expose no member-record fields or care notes. Scoped
+  non-admin UI that consumes this contract remains a later, separately approved
+  privacy/permission slice. Focused access-tier / field-visibility / boundary /
+  UI-non-exposure tests were added.
 - `SERVING-READINESS.1A-B` — **implemented (model + seed + evaluator
   foundation).** Added the configurable `ServingReadinessPolicy` and
   `ServingReadinessRequirement` models (migration
@@ -864,8 +911,10 @@ The following remain non-goals unless a later slice explicitly approves them:
 - No ordinary-user, My Units, or My Serving member-record UI.
 - No member-record access for delegated leads until privacy/permission review.
 - The `ChurchStructureUnitMemberRecord` model now exists as an **admin-only**
-  foundation (`MEMBER-RECORD.1C`); scoped non-admin access / UI (ordinary user,
-  delegated lead) remains a non-goal until a separate privacy-scoped slice.
+  foundation (`MEMBER-RECORD.1C`), and `MEMBER-RECORD.1D` added a read-only
+  privacy/access **helper** contract for it; scoped non-admin **UI** (ordinary
+  user, delegated lead) that would surface records using that contract remains a
+  non-goal until a separate privacy-scoped slice.
 - No assignment-surface integration of serving-readiness warnings until
   `SERVING-READINESS.1C`.
 - No hard-blocking based on readiness unless a later policy slice explicitly

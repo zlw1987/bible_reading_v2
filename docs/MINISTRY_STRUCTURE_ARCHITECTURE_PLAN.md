@@ -50,6 +50,39 @@ membership as serving, and changes no My Serving / Today / `TeamAssignment` /
 `can_manage_ministry_team` / visibility behavior. The `CAP_MANAGE_MINISTRY_STRUCTURE`
 capability was again **not** added in this slice.
 
+`MINISTRY-STRUCTURE.1D-A` implemented a staff-only **structure setup** UI for
+team metadata and parent links (`manage_ministry_team_structure`,
+`/ministry/teams/<id>/structure/`, template `ministry/manage_team_structure.html`).
+It is the first edit slice and is split out from the broader `1D`. Staff/superuser
+edit ministry-structure *display/organization* metadata on an existing
+`MinistryTeam` (`team_kind`, `is_assignable`, `role_profile` — existing active
+profiles only, none are seeded/created — and `is_active`) and manage
+`MinistryTeamParentLink` rows: add a ministry-parent link, add a church-anchor
+link, set the single active primary parent, and deactivate a link. Two explicit
+add-link forms keep the parent target unambiguous; all link writes defer to
+`MinistryTeamParentLink.full_clean()` (exactly-one-target, self-parent, cycle,
+duplicate-active, single-active-primary) and surface validation errors on the
+form. The first active parent link auto-becomes primary; setting a primary clears
+the previous primary; deactivating the primary promotes the sole remaining active
+link (or warns when none/several remain). Access is staff/superuser only and is
+deliberately **not** granted by `TeamMembership.role`/`can_lead`,
+`MinistryTeamRoleAssignment`, `ChurchStructureUnitRoleAssignment`, or
+`ChurchStructureMembership`; a church anchor never grants access. The shared
+`MinistryTeamForm` / `create_ministry_team` / `edit_ministry_team` flow is
+unchanged (so structure-edit access never leaks to non-staff team managers).
+Nothing here creates/updates `TeamMembership`, `TeamAssignment`,
+`TeamAssignmentMember`, `ChurchStructureMembership`,
+`ChurchStructureUnitRoleAssignment`, `BibleStudyMeetingRole`, or any
+`MinistryTeamRoleAssignment`; `can_manage_ministry_team`, TeamAssignment
+behavior, My Serving, and Today are unchanged; no hierarchy is inferred or
+backfilled and no migration was generated.
+
+Ministry **role assignment** UI (`MinistryTeamRoleAssignment` create/edit),
+role type/profile/requirement seed defaults, role-profile setup UI, missing-role
+bulk repair, delegated ministry management, the `CAP_MANAGE_MINISTRY_STRUCTURE`
+capability + permission migration, and `is_assignable` enforcement on
+`TeamAssignment` all remain deferred to later, separately approved slices.
+
 Runtime behavior changes — `is_assignable` enforcement, permission migration to
 `MinistryTeamRoleAssignment`, delegated ministry management + the new
 capability — remain deferred to later, separately approved slices.
@@ -645,7 +678,30 @@ phasing controls rollout risk, not product ambition.
   `CAP_MANAGE_MINISTRY_STRUCTURE` was not added.
 - **`MINISTRY-STRUCTURE.1D` — staff setup/edit UI:** create/edit teams, manage
   parent links + primary, select role profile, manage role assignments, surface
-  missing-required-role warnings.
+  missing-required-role warnings. Split into sub-slices:
+  - **`MINISTRY-STRUCTURE.1D-A` — team metadata + parent links (IMPLEMENTED):**
+    staff/superuser-only setup page per team (`manage_ministry_team_structure`,
+    `/ministry/teams/<id>/structure/`, template
+    `ministry/manage_team_structure.html`). Edits structure metadata
+    (`team_kind`, `is_assignable`, `role_profile` from existing active profiles
+    only, `is_active`) via `MinistryTeamStructureForm`, and manages
+    `MinistryTeamParentLink` rows (add ministry-parent / church-anchor link, set
+    primary, deactivate) via two explicit add-link forms
+    (`MinistryTeamParentTeamLinkForm` / `MinistryTeamChurchAnchorLinkForm`) that
+    defer to `MinistryTeamParentLink.full_clean()`. First active link
+    auto-primary; set-primary clears the prior primary; deactivating the primary
+    promotes a sole remaining link or warns. Staff/superuser-only (not granted by
+    `TeamMembership.role`, `MinistryTeamRoleAssignment`,
+    `ChurchStructureUnitRoleAssignment`, `ChurchStructureMembership`, or church
+    anchors). The shared create/edit ministry-team form is unchanged. No role
+    assignments, role-type/profile/requirement seeds, role-profile setup UI,
+    missing-role bulk repair, delegated management,
+    `CAP_MANAGE_MINISTRY_STRUCTURE` / permission migration, or `is_assignable`
+    enforcement; no membership/serving/assignment writes, no inferred hierarchy,
+    no migration.
+  - **`MINISTRY-STRUCTURE.1D-B` (and later) — role assignment UI** and the
+    remaining `1D` scope (role profile setup, missing-required-role surfacing in
+    edit, etc.) remain deferred to separately approved slices.
 - **`MINISTRY-STRUCTURE.1E` — seed defaults / dry-run backfill:** seed default
   role types/profiles/requirements; dry-run-first; `--apply` on explicit
   approval only.

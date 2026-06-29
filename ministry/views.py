@@ -5,6 +5,8 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -33,7 +35,10 @@ from studies.models import (
 )
 
 from .forms import (
+    MinistryTeamChurchAnchorLinkForm,
     MinistryTeamForm,
+    MinistryTeamParentTeamLinkForm,
+    MinistryTeamStructureForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
     TeamScheduleAssignmentForm,
@@ -42,6 +47,7 @@ from .forms import (
 )
 from .models import (
     MinistryTeam,
+    MinistryTeamRoleProfile,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
@@ -93,6 +99,18 @@ def ministry_ui_text(language, key):
         "en": {
             "no_permission": "You do not have permission to manage ministry teams.",
             "structure_no_permission": "The Ministry Structure page is staff-only.",
+            "structure_metadata_saved": "Ministry unit structure settings saved.",
+            "parent_link_added": "Parent link added.",
+            "parent_link_primary_set": "Primary parent updated.",
+            "parent_link_removed": "Parent link removed.",
+            "parent_link_primary_promoted": (
+                "The remaining parent link is now the primary parent."
+            ),
+            "parent_link_primary_cleared_warning": (
+                "The primary parent was removed. This unit now has no primary "
+                "parent; set one to control its display path."
+            ),
+            "link_not_available": "That parent link is not available.",
             "not_available": "This ministry team is not available.",
             "team_saved": "Ministry team saved.",
             "membership_saved": "Member saved.",
@@ -113,6 +131,15 @@ def ministry_ui_text(language, key):
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
             "structure_no_permission": "事工结构页面仅限同工查看。",
+            "structure_metadata_saved": "事工单位结构设置已保存。",
+            "parent_link_added": "上级链接已添加。",
+            "parent_link_primary_set": "主要上级已更新。",
+            "parent_link_removed": "上级链接已移除。",
+            "parent_link_primary_promoted": "剩下的上级链接已自动设为主要上级。",
+            "parent_link_primary_cleared_warning": (
+                "已移除主要上级。此单位目前没有主要上级；请设置一个以控制其显示路径。"
+            ),
+            "link_not_available": "这个上级链接目前不可用。",
             "not_available": "这个事工团队目前不可用。",
             "team_saved": "事工团队已保存。",
             "membership_saved": "成员已保存。",
@@ -745,6 +772,197 @@ def ministry_structure_map(request):
     )
 
 
+def _promote_parent_link_primary(team, link):
+    """Make ``link`` the single active primary parent of ``team``.
+
+    Clears ``is_primary`` from the team's other active parent links first so
+    ``MinistryTeamParentLink.full_clean`` never sees two active primaries.
+    """
+    with transaction.atomic():
+        team.parent_links.filter(is_active=True, is_primary=True).exclude(
+            pk=link.pk
+        ).update(is_primary=False)
+        if not link.is_primary:
+            link.is_primary = True
+            link.save()
+
+
+def _handle_add_parent_link(request, team, form, language):
+    """Validate + save a new parent link via the model. Returns success bool.
+
+    The link is created with ``is_primary=False``; the primary is then promoted
+    explicitly when requested, or automatically when the child has no active
+    primary yet (so the first parent link becomes the display path).
+    """
+    if not form.is_valid():
+        return False
+
+    link = form.build_link()
+    try:
+        link.save()
+    except ValidationError as error:
+        form.apply_model_errors(error)
+        return False
+
+    make_primary = form.cleaned_data.get("make_primary")
+    has_other_primary = (
+        team.parent_links.filter(is_active=True, is_primary=True)
+        .exclude(pk=link.pk)
+        .exists()
+    )
+    if make_primary or not has_other_primary:
+        _promote_parent_link_primary(team, link)
+
+    messages.success(request, ministry_ui_text(language, "parent_link_added"))
+    return True
+
+
+def _active_parent_link_for(team, request):
+    link_id = (request.POST.get("link_id") or "").strip()
+    try:
+        link_id = int(link_id)
+    except ValueError:
+        return None
+    return team.parent_links.filter(id=link_id, is_active=True).first()
+
+
+def _handle_set_primary(request, team, language):
+    link = _active_parent_link_for(team, request)
+    if link is None:
+        messages.error(request, ministry_ui_text(language, "link_not_available"))
+        return
+    _promote_parent_link_primary(team, link)
+    messages.success(request, ministry_ui_text(language, "parent_link_primary_set"))
+
+
+def _handle_deactivate_parent_link(request, team, language):
+    link = _active_parent_link_for(team, request)
+    if link is None:
+        messages.error(request, ministry_ui_text(language, "link_not_available"))
+        return
+
+    was_primary = link.is_primary
+    link.is_active = False
+    link.is_primary = False
+    link.save()
+    messages.success(request, ministry_ui_text(language, "parent_link_removed"))
+
+    if was_primary:
+        remaining = list(team.parent_links.filter(is_active=True))
+        if len(remaining) == 1:
+            _promote_parent_link_primary(team, remaining[0])
+            messages.info(
+                request,
+                ministry_ui_text(language, "parent_link_primary_promoted"),
+            )
+        elif remaining:
+            messages.warning(
+                request,
+                ministry_ui_text(language, "parent_link_primary_cleared_warning"),
+            )
+
+
+def _parent_link_display_rows(team, language, *, active):
+    """Build read display rows for a team's parent links."""
+    links = (
+        team.parent_links.filter(is_active=active)
+        .select_related("parent_team", "parent_church_unit")
+        .order_by("sort_order", "id")
+    )
+    rows = []
+    for link in links:
+        rows.append(
+            {
+                "id": link.id,
+                "label": link.parent_label(language),
+                "is_church_anchor": link.parent_church_unit_id is not None,
+                "is_primary": link.is_primary,
+            }
+        )
+    return rows
+
+
+@login_required
+def manage_ministry_team_structure(request, team_id):
+    """Staff-only ministry-structure setup for one ministry team.
+
+    Edits ministry-structure *display/organization* metadata (``team_kind``,
+    ``is_assignable``, ``role_profile``, ``is_active``) and manages
+    ``MinistryTeamParentLink`` rows (add ministry-parent / church-anchor links,
+    set the primary parent, deactivate a link). Access is staff/superuser only
+    and is deliberately NOT granted by ``TeamMembership.role``/``can_lead``,
+    ``MinistryTeamRoleAssignment``, ``ChurchStructureUnitRoleAssignment``, or
+    ``ChurchStructureMembership`` — a church anchor never grants access.
+
+    Nothing here touches ``can_manage_ministry_team`` / TeamAssignment /
+    membership / serving. A parent link (ministry unit or church anchor) is
+    display/organization only and grants no membership, visibility, serving, or
+    permission. No role assignments are created and no hierarchy is inferred.
+    """
+    language = get_user_language(request)
+    team = get_object_or_404(MinistryTeam, id=team_id)
+
+    if not _user_is_staff(request.user):
+        messages.error(request, ministry_ui_text(language, "structure_no_permission"))
+        return redirect("ministry_team_list")
+
+    metadata_form = MinistryTeamStructureForm(instance=team, language=language)
+    parent_team_form = MinistryTeamParentTeamLinkForm(
+        language=language, child_team=team
+    )
+    church_anchor_form = MinistryTeamChurchAnchorLinkForm(
+        language=language, child_team=team
+    )
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if action == "metadata":
+            metadata_form = MinistryTeamStructureForm(
+                request.POST, instance=team, language=language
+            )
+            if metadata_form.is_valid():
+                metadata_form.save()
+                messages.success(
+                    request, ministry_ui_text(language, "structure_metadata_saved")
+                )
+                return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "add_parent_team":
+            parent_team_form = MinistryTeamParentTeamLinkForm(
+                request.POST, language=language, child_team=team
+            )
+            if _handle_add_parent_link(request, team, parent_team_form, language):
+                return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "add_church_anchor":
+            church_anchor_form = MinistryTeamChurchAnchorLinkForm(
+                request.POST, language=language, child_team=team
+            )
+            if _handle_add_parent_link(request, team, church_anchor_form, language):
+                return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "set_primary":
+            _handle_set_primary(request, team, language)
+            return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "deactivate_link":
+            _handle_deactivate_parent_link(request, team, language)
+            return redirect("manage_ministry_team_structure", team_id=team.id)
+
+    return render(
+        request,
+        "ministry/manage_team_structure.html",
+        {
+            "team": team,
+            "display_path": team.display_path_label(language),
+            "metadata_form": metadata_form,
+            "parent_team_form": parent_team_form,
+            "church_anchor_form": church_anchor_form,
+            "active_links": _parent_link_display_rows(team, language, active=True),
+            "inactive_links": _parent_link_display_rows(team, language, active=False),
+            "has_role_profiles": MinistryTeamRoleProfile.objects.filter(
+                is_active=True
+            ).exists(),
+        },
+    )
+
+
 @login_required
 def lighting_pilot_import(request):
     language = get_user_language(request)
@@ -807,6 +1025,9 @@ def ministry_team_detail(request, team_id):
             "can_manage_team": can_manage_ministry_team(request.user, team),
             "can_manage_members": can_manage_team_memberships(request.user, team),
             "can_schedule_team": can_manage_team_assignment_for_team(request.user, team),
+            # MINISTRY-STRUCTURE.1D-A: structure setup is staff/superuser only and
+            # is deliberately NOT derived from TeamMembership.role / can_lead.
+            "can_manage_structure": _user_is_staff(request.user),
         },
     )
 

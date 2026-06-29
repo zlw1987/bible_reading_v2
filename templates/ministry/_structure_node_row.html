@@ -13,6 +13,11 @@ Expects: node (MinistryStructureDisplayNode with .card, .depth,
             {% else %}{{ node.card.name }}{% endif %}
         </span>
         {% include "ministry/_structure_node_badges.html" with card=node.card is_primary_occurrence=node.is_primary_occurrence %}
+        {% if user.is_staff or user.is_superuser %}
+        <a class="structure-map-meta" href="{% url 'manage_ministry_team_structure' node.card.team_id %}">
+            {% if language == "zh" %}管理{% else %}Manage{% endif %}
+        </a>
+        {% endif %}
         {% if node.is_primary_occurrence and node.card.active_lead_count %}
         <span class="structure-map-meta">
             {% if language == "zh" %}组长{% else %}Lead{% endif %}: {{ node.card.lead_names|join:", " }}

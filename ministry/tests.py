@@ -5522,3 +5522,431 @@ class MinistryStructureMapTests(TestCase):
         names = {card.name for card in structure.filtered_cards}
         self.assertEqual(names, {"Drama Team"})
         self.assertTrue(structure.filtered_cards[0].path_label)
+
+
+class MinistryTeamStructureSetupTests(TestCase):
+    """MINISTRY-STRUCTURE.1D-A staff-only structure setup UI tests.
+
+    The setup page edits ministry-structure metadata + parent links only.
+    Access is staff/superuser only and is never granted by TeamMembership.role,
+    MinistryTeamRoleAssignment, ChurchStructureUnitRoleAssignment, or
+    ChurchStructureMembership. Editing structure never creates membership,
+    serving, assignment, or role rows and never infers hierarchy.
+    """
+
+    def setUp(self):
+        self.regular = User.objects.create_user(username="st_reg", password="pw")
+        self.staff = User.objects.create_user(
+            username="st_staff", password="pw", is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username="st_super", password="pw", email="st_super@example.com"
+        )
+        self.lead_user = User.objects.create_user(username="st_lead", password="pw")
+
+        self.whole = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="WC",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="华语",
+            name_en="CM",
+            parent=self.whole,
+        )
+
+        self.area = MinistryTeam.objects.create(
+            name="数字事工",
+            name_en="Digital Ministry",
+            team_kind=MinistryTeam.KIND_MINISTRY_AREA,
+            is_assignable=False,
+        )
+        self.projection = MinistryTeam.objects.create(
+            name="投影团队", name_en="Projection Team", is_assignable=True
+        )
+        self.video = MinistryTeam.objects.create(
+            name="录影团队", name_en="Video Team", is_assignable=True
+        )
+        self.dept = MinistryTeam.objects.create(
+            name="部门", name_en="Department", is_assignable=False
+        )
+
+        self.profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+
+    def _structure_url(self, team):
+        return reverse("manage_ministry_team_structure", args=[team.id])
+
+    def _login(self, username):
+        self.client.login(username=username, password="pw")
+
+    def _snapshot_counts(self):
+        return {
+            TeamMembership: TeamMembership.objects.count(),
+            TeamAssignment: TeamAssignment.objects.count(),
+            TeamAssignmentMember: TeamAssignmentMember.objects.count(),
+            ChurchStructureMembership: ChurchStructureMembership.objects.count(),
+            ChurchStructureUnitRoleAssignment: (
+                ChurchStructureUnitRoleAssignment.objects.count()
+            ),
+            BibleStudyMeetingRole: BibleStudyMeetingRole.objects.count(),
+            MinistryTeamRoleAssignment: MinistryTeamRoleAssignment.objects.count(),
+        }
+
+    # --- Access tests ---
+
+    def test_requires_login(self):
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+
+    def test_staff_can_access(self):
+        self._login("st_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_access(self):
+        self._login("st_super")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 200)
+
+    def test_regular_user_redirected(self):
+        self._login("st_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_team_membership_lead_does_not_grant_access(self):
+        TeamMembership.objects.create(
+            team=self.projection,
+            user=self.regular,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        self._login("st_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_ministry_role_lead_does_not_grant_access(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.regular
+        )
+        self._login("st_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    def test_church_structure_lead_and_membership_do_not_grant_access(self):
+        church_lead = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="组长", name_en="Lead"
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm, role_type=church_lead, user=self.regular
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.regular,
+            unit=self.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self._login("st_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    # --- Metadata tests ---
+
+    def test_staff_can_update_team_kind_and_assignable(self):
+        self._login("st_staff")
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "metadata",
+                "team_kind": MinistryTeam.KIND_SUBTEAM,
+                # is_assignable checkbox omitted => False
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.projection.refresh_from_db()
+        self.assertEqual(self.projection.team_kind, MinistryTeam.KIND_SUBTEAM)
+        self.assertFalse(self.projection.is_assignable)
+        self.assertTrue(self.projection.is_active)
+
+    def test_role_profile_can_be_set_and_cleared(self):
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "metadata",
+                "team_kind": MinistryTeam.KIND_TEAM,
+                "is_assignable": "on",
+                "is_active": "on",
+                "role_profile": str(self.profile.id),
+            },
+        )
+        self.projection.refresh_from_db()
+        self.assertEqual(self.projection.role_profile_id, self.profile.id)
+
+        self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "metadata",
+                "team_kind": MinistryTeam.KIND_TEAM,
+                "is_assignable": "on",
+                "is_active": "on",
+                # role_profile omitted => null
+            },
+        )
+        self.projection.refresh_from_db()
+        self.assertIsNone(self.projection.role_profile_id)
+
+    def test_metadata_update_does_not_touch_serving_rows(self):
+        TeamMembership.objects.create(
+            team=self.projection, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+        )
+        before = self._snapshot_counts()
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "metadata",
+                "team_kind": MinistryTeam.KIND_SUBTEAM,
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(before, self._snapshot_counts())
+
+    # --- Parent link tests ---
+
+    def test_add_parent_team_link_becomes_primary(self):
+        self._login("st_staff")
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        self.assertEqual(response.status_code, 302)
+        link = MinistryTeamParentLink.objects.get(
+            child_team=self.projection, parent_team=self.area
+        )
+        self.assertTrue(link.is_active)
+        self.assertTrue(link.is_primary)
+
+    def test_add_church_anchor_link(self):
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_church_anchor", "parent_church_unit": str(self.cm.id)},
+        )
+        link = MinistryTeamParentLink.objects.get(
+            child_team=self.projection, parent_church_unit=self.cm
+        )
+        self.assertTrue(link.is_active)
+        self.assertTrue(link.is_primary)
+
+    def test_add_link_with_neither_parent_rejected(self):
+        self._login("st_staff")
+        before = MinistryTeamParentLink.objects.count()
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(MinistryTeamParentLink.objects.count(), before)
+
+    def test_self_parent_rejected(self):
+        self._login("st_staff")
+        before = MinistryTeamParentLink.objects.count()
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.projection.id)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(MinistryTeamParentLink.objects.count(), before)
+
+    def test_cycle_rejected_gracefully(self):
+        # video <- projection (projection is parent of video)
+        MinistryTeamParentLink.objects.create(
+            child_team=self.video, parent_team=self.projection, is_primary=True
+        )
+        self._login("st_staff")
+        # Try to make video a parent of projection => cycle.
+        before = MinistryTeamParentLink.objects.filter(
+            child_team=self.projection
+        ).count()
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.video.id)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            MinistryTeamParentLink.objects.filter(child_team=self.projection).count(),
+            before,
+        )
+
+    def test_duplicate_active_parent_link_rejected(self):
+        MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.area, is_primary=True
+        )
+        self._login("st_staff")
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            MinistryTeamParentLink.objects.filter(
+                child_team=self.projection, parent_team=self.area, is_active=True
+            ).count(),
+            1,
+        )
+
+    def test_multiple_active_parents_allowed(self):
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.dept.id)},
+        )
+        active = MinistryTeamParentLink.objects.filter(
+            child_team=self.projection, is_active=True
+        )
+        self.assertEqual(active.count(), 2)
+        # Only the first remains primary.
+        self.assertEqual(active.filter(is_primary=True).count(), 1)
+        self.assertEqual(
+            active.get(is_primary=True).parent_team_id, self.area.id
+        )
+
+    def test_set_primary_clears_previous_primary(self):
+        first = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.area, is_primary=True
+        )
+        second = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.dept, is_primary=False
+        )
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "set_primary", "link_id": str(second.id)},
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertFalse(first.is_primary)
+        self.assertTrue(second.is_primary)
+        self.assertEqual(
+            MinistryTeamParentLink.objects.filter(
+                child_team=self.projection, is_active=True, is_primary=True
+            ).count(),
+            1,
+        )
+
+    def test_deactivate_non_primary_link_keeps_others(self):
+        primary = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.area, is_primary=True
+        )
+        secondary = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.dept, is_primary=False
+        )
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "deactivate_link", "link_id": str(secondary.id)},
+        )
+        secondary.refresh_from_db()
+        primary.refresh_from_db()
+        self.assertFalse(secondary.is_active)
+        self.assertTrue(primary.is_active)
+        self.assertTrue(primary.is_primary)
+
+    def test_deactivate_primary_promotes_sole_remaining_link(self):
+        primary = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.area, is_primary=True
+        )
+        other = MinistryTeamParentLink.objects.create(
+            child_team=self.projection, parent_team=self.dept, is_primary=False
+        )
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "deactivate_link", "link_id": str(primary.id)},
+        )
+        primary.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(primary.is_active)
+        self.assertTrue(other.is_active)
+        self.assertTrue(other.is_primary)
+
+    def test_map_reflects_added_parent_link(self):
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_church_anchor", "parent_church_unit": str(self.cm.id)},
+        )
+        structure = build_ministry_structure_map(language="en")
+        anchored_ids = {
+            node.card.team_id
+            for group in structure.anchor_groups
+            for node in group.nodes
+        }
+        self.assertIn(self.projection.id, anchored_ids)
+
+    # --- Boundary tests ---
+
+    def test_add_link_creates_no_serving_or_role_rows(self):
+        before = self._snapshot_counts()
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_church_anchor", "parent_church_unit": str(self.cm.id)},
+        )
+        self.assertEqual(before, self._snapshot_counts())
+
+    def test_can_manage_ministry_team_unchanged_by_structure_edit(self):
+        TeamMembership.objects.create(
+            team=self.projection, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+        )
+        self.assertFalse(can_manage_ministry_team(self.regular, self.projection))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.projection))
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        self.assertFalse(can_manage_ministry_team(self.regular, self.projection))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.projection))
+
+    def test_structure_edit_does_not_change_team_assignments(self):
+        event = ServiceEvent.objects.create(
+            title="Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.area,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self._login("st_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {"action": "add_parent_team", "parent_team": str(self.area.id)},
+        )
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.ministry_team_id, self.area.id)
+        self.assertEqual(TeamAssignment.objects.count(), 1)

@@ -1,6 +1,7 @@
 from django import forms
 from django.utils import timezone
 
+from accounts.models import ChurchStructureUnit
 from accounts.ordering import (
     order_team_memberships_by_visible_identity,
     order_users_by_visible_identity,
@@ -9,6 +10,8 @@ from events.models import ServiceEvent
 
 from .models import (
     MinistryTeam,
+    MinistryTeamParentLink,
+    MinistryTeamRoleProfile,
     TeamAssignment,
     TeamMembership,
 )
@@ -141,6 +144,38 @@ ASSIGNMENT_FORM_TEXT = {
         "confirmation_help": "不要在这里记录辅导、代祷或敏感私人信息。",
     },
 }
+
+
+STRUCTURE_FORM_TEXT = {
+    "en": {
+        "team_kind": "Unit kind",
+        "is_assignable": "Assignable (can be a serving assignment target)",
+        "role_profile": "Role profile",
+        "is_active": "Active",
+        "role_profile_empty": "— No role profile —",
+        "make_primary": "Set as primary parent",
+        "parent_team": "Parent ministry unit",
+        "parent_church_unit": "Church anchor",
+        "parent_team_empty": "Select a parent ministry unit",
+        "parent_church_unit_empty": "Select a church anchor",
+    },
+    "zh": {
+        "team_kind": "单位类型",
+        "is_assignable": "可排班（可作为服事安排对象）",
+        "role_profile": "角色配置",
+        "is_active": "启用",
+        "role_profile_empty": "— 不设角色配置 —",
+        "make_primary": "设为主要上级",
+        "parent_team": "上级事工单位",
+        "parent_church_unit": "教会锚点",
+        "parent_team_empty": "选择一个上级事工单位",
+        "parent_church_unit_empty": "选择一个教会锚点",
+    },
+}
+
+
+def structure_form_text(language):
+    return STRUCTURE_FORM_TEXT.get(language, STRUCTURE_FORM_TEXT["en"])
 
 
 def team_form_text(language):
@@ -512,3 +547,130 @@ class TeamAssignmentConfirmForm(forms.Form):
             {"placeholder": text["confirmation_placeholder"]}
         )
         self.fields["confirmation_note"].help_text = text["confirmation_help"]
+
+
+# ---------------------------------------------------------------------------
+# MINISTRY-STRUCTURE.1D-A — staff-only ministry-structure setup forms.
+#
+# These edit ministry-structure *display/organization* metadata and parent
+# links only. They never create/update TeamMembership, TeamAssignment,
+# TeamAssignmentMember, ChurchStructureMembership, ChurchStructureUnitRoleAssignment,
+# or any role assignment, and a parent link (ministry unit or church anchor)
+# never grants membership, visibility, serving, or permissions. The views that
+# use them are staff/superuser-only.
+# ---------------------------------------------------------------------------
+
+
+class MinistryTeamStructureForm(forms.ModelForm):
+    """Edit ministry-structure metadata on an existing ``MinistryTeam``.
+
+    Scope is the structure-display fields only (``team_kind``,
+    ``is_assignable``, ``role_profile``, ``is_active``). Name/bilingual fields
+    stay on the existing ministry-team edit form. ``role_profile`` lists only
+    existing active profiles; this slice seeds/creates none.
+    """
+
+    class Meta:
+        model = MinistryTeam
+        fields = [
+            "team_kind",
+            "is_assignable",
+            "role_profile",
+            "is_active",
+        ]
+
+    def __init__(self, *args, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        text = structure_form_text(language)
+
+        # Import locally to avoid any import-order coupling with structure_map.
+        from .structure_map import team_kind_options
+
+        self.fields["team_kind"].choices = team_kind_options(language)
+        self.fields["role_profile"].queryset = MinistryTeamRoleProfile.objects.filter(
+            is_active=True
+        ).order_by("sort_order", "code")
+        self.fields["role_profile"].empty_label = text["role_profile_empty"]
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+
+
+class _BaseParentLinkForm(forms.Form):
+    """Shared add-parent-link behavior. Subclasses declare the parent field.
+
+    Validation defers to ``MinistryTeamParentLink.full_clean()`` (exactly-one
+    target, self-parent, cycle, duplicate-active, primary rules) so the UI never
+    bypasses model validation. Model errors are mapped back onto the form.
+    """
+
+    make_primary = forms.BooleanField(required=False)
+
+    parent_field_name = ""
+
+    def __init__(self, *args, language="en", child_team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.language = language
+        self.child_team = child_team
+        text = structure_form_text(language)
+        self.fields["make_primary"].label = text["make_primary"]
+        self._configure_parent_field(text)
+
+    def _configure_parent_field(self, text):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def build_link(self):
+        """Return an unsaved ``MinistryTeamParentLink`` from cleaned data.
+
+        ``is_primary`` is always ``False`` here; the view promotes the primary
+        explicitly so model validation never sees two active primaries at once.
+        """
+        link = MinistryTeamParentLink(
+            child_team=self.child_team,
+            is_primary=False,
+            is_active=True,
+        )
+        setattr(
+            link,
+            self.parent_field_name,
+            self.cleaned_data[self.parent_field_name],
+        )
+        return link
+
+    def apply_model_errors(self, error):
+        """Map a model ``ValidationError`` onto this form's fields."""
+        message_dict = getattr(error, "message_dict", None)
+        if message_dict is None:
+            self.add_error(None, error.messages)
+            return
+        for field, messages in message_dict.items():
+            target = field if field == self.parent_field_name else None
+            for message in messages:
+                self.add_error(target, message)
+
+
+class MinistryTeamParentTeamLinkForm(_BaseParentLinkForm):
+    parent_field_name = "parent_team"
+
+    def _configure_parent_field(self, text):
+        queryset = MinistryTeam.objects.filter(is_active=True).order_by("name")
+        if self.child_team is not None and self.child_team.pk:
+            queryset = queryset.exclude(pk=self.child_team.pk)
+        self.fields[self.parent_field_name] = forms.ModelChoiceField(
+            queryset=queryset,
+            label=text["parent_team"],
+            empty_label=text["parent_team_empty"],
+        )
+
+
+class MinistryTeamChurchAnchorLinkForm(_BaseParentLinkForm):
+    parent_field_name = "parent_church_unit"
+
+    def _configure_parent_field(self, text):
+        self.fields[self.parent_field_name] = forms.ModelChoiceField(
+            queryset=ChurchStructureUnit.objects.filter(is_active=True).order_by(
+                "code", "name"
+            ),
+            label=text["parent_church_unit"],
+            empty_label=text["parent_church_unit_empty"],
+        )

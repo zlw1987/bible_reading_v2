@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% load ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}管理事工结构{% else %}Manage Ministry Structure{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<style>
+.ms-structure-edit .ms-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-soft);
+    color: var(--muted);
+}
+.ms-structure-edit .ms-badge-anchor {
+    color: #4a3a73;
+    border-color: #d2c6ec;
+    background: #f3eefb;
+}
+.ms-structure-edit .ms-link-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+.ms-structure-edit .ms-link-row:last-child {
+    border-bottom: none;
+}
+.ms-structure-edit .ms-link-main {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    flex: 1 1 240px;
+    min-width: 0;
+}
+.ms-structure-edit .ms-link-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.ms-structure-edit .ms-link-actions form {
+    display: inline;
+    margin: 0;
+}
+.ms-structure-edit .ms-add-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+.ms-structure-edit .ms-add-field select {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.ms-structure-edit .ms-add-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-size: 14px;
+}
+@media (max-width: 640px) {
+    .ms-structure-edit .ms-link-actions,
+    .ms-structure-edit .ms-link-actions form,
+    .ms-structure-edit .ms-link-actions button {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+</style>
+
+<div class="ms-structure-edit">
+<p>
+    <a href="{% url 'ministry_structure_map' %}">
+        ← {% if language == "zh" %}返回事工结构{% else %}Back to Ministry Structure{% endif %}
+    </a>
+    &nbsp;·&nbsp;
+    <a href="{% url 'ministry_team_detail' team.id %}">
+        {% if language == "zh" %}事工团队详情{% else %}Team detail{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ team|ministry_team_name:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}管理事工结构（单位元数据与上级链接）{% else %}Manage ministry structure (unit metadata and parent links){% endif %}
+    </p>
+</div>
+
+<section class="notice-panel">
+    <strong>{% if language == "zh" %}仅用于组织展示{% else %}Organization display only{% endif %}</strong>
+    <p>
+        {% if language == "zh" %}
+        事工结构只用于组织展示。教会锚点和上级事工单位不会自动授予成员归属、可见性、服事安排或权限。
+        {% else %}
+        Ministry structure is for organization display only. Church anchors and parent ministry units do not automatically grant membership, visibility, serving assignment, or permissions.
+        {% endif %}
+    </p>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}当前显示路径{% else %}Current display path{% endif %}</h2>
+    <p class="muted">{{ display_path }}</p>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}单位结构设置{% else %}Unit structure settings{% endif %}</h2>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="metadata">
+        {{ metadata_form.non_field_errors }}
+        {% for field in metadata_form %}
+        <div class="form-row">
+            {{ field.label_tag }}
+            {{ field }}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        {% if not has_role_profiles %}
+        <p class="muted">
+            {% if language == "zh" %}还没有可用的角色配置。{% else %}No role profiles exist yet.{% endif %}
+        </p>
+        {% endif %}
+        <div class="actions">
+            <button type="submit">{% if language == "zh" %}保存{% else %}Save{% endif %}</button>
+        </div>
+    </form>
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}上级链接{% else %}Parent links{% endif %}</h2>
+    {% if active_links %}
+    <div>
+        {% for link in active_links %}
+        <div class="ms-link-row">
+            <span class="ms-link-main">
+                {% if link.is_church_anchor %}
+                <span class="ms-badge ms-badge-anchor">{% if language == "zh" %}教会锚点{% else %}Church anchor{% endif %}</span>
+                {% else %}
+                <span class="status">{% if language == "zh" %}事工单位{% else %}Ministry unit{% endif %}</span>
+                {% endif %}
+                <span>{{ link.label }}</span>
+                {% if link.is_primary %}
+                <span class="status status-good">{% if language == "zh" %}主要上级{% else %}Primary{% endif %}</span>
+                {% endif %}
+            </span>
+            <span class="ms-link-actions">
+                {% if not link.is_primary %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="set_primary">
+                    <input type="hidden" name="link_id" value="{{ link.id }}">
+                    <button type="submit" class="button button-secondary">
+                        {% if language == "zh" %}设为主要{% else %}Set primary{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="deactivate_link">
+                    <input type="hidden" name="link_id" value="{{ link.id }}">
+                    <button type="submit" class="button button-secondary">
+                        {% if language == "zh" %}移除{% else %}Remove{% endif %}
+                    </button>
+                </form>
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有有效的上级链接。{% else %}No active parent links yet.{% endif %}
+    </p>
+    {% endif %}
+</section>
+
+<div class="grid grid-2">
+    <section class="card">
+        <h2 class="card-title">{% if language == "zh" %}添加上级事工单位{% else %}Add ministry parent{% endif %}</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_parent_team">
+            {{ parent_team_form.non_field_errors }}
+            <label class="ms-add-field">
+                {{ parent_team_form.parent_team.label }}
+                {{ parent_team_form.parent_team }}
+                {{ parent_team_form.parent_team.errors }}
+            </label>
+            <label class="ms-add-check">
+                {{ parent_team_form.make_primary }}
+                {{ parent_team_form.make_primary.label }}
+            </label>
+            <div class="actions">
+                <button type="submit">{% if language == "zh" %}添加{% else %}Add{% endif %}</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">{% if language == "zh" %}添加教会锚点{% else %}Add church anchor{% endif %}</h2>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_church_anchor">
+            {{ church_anchor_form.non_field_errors }}
+            <label class="ms-add-field">
+                {{ church_anchor_form.parent_church_unit.label }}
+                {{ church_anchor_form.parent_church_unit }}
+                {{ church_anchor_form.parent_church_unit.errors }}
+            </label>
+            <label class="ms-add-check">
+                {{ church_anchor_form.make_primary }}
+                {{ church_anchor_form.make_primary.label }}
+            </label>
+            <div class="actions">
+                <button type="submit">{% if language == "zh" %}添加{% else %}Add{% endif %}</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+{% if inactive_links %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}已停用的上级链接{% else %}Inactive parent links{% endif %}</h2>
+    <div>
+        {% for link in inactive_links %}
+        <div class="ms-link-row">
+            <span class="ms-link-main">
+                {% if link.is_church_anchor %}
+                <span class="ms-badge ms-badge-anchor">{% if language == "zh" %}教会锚点{% else %}Church anchor{% endif %}</span>
+                {% else %}
+                <span class="status">{% if language == "zh" %}事工单位{% else %}Ministry unit{% endif %}</span>
+                {% endif %}
+                <span class="muted">{{ link.label }}</span>
+                <span class="status">{% if language == "zh" %}已停用{% else %}Inactive{% endif %}</span>
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+</div>
+{% endblock %}

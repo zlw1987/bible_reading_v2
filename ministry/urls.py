@@ -42,6 +42,11 @@ urlpatterns = [
     path("teams/<int:team_id>/schedule/", views.team_schedule, name="team_schedule"),
     path("teams/<int:team_id>/", views.ministry_team_detail, name="ministry_team_detail"),
     path("teams/<int:team_id>/edit/", views.edit_ministry_team, name="edit_ministry_team"),
+    path(
+        "teams/<int:team_id>/structure/",
+        views.manage_ministry_team_structure,
+        name="manage_ministry_team_structure",
+    ),
     path("teams/<int:team_id>/members/", views.manage_team_members, name="manage_team_members"),
     path(
         "teams/memberships/<int:membership_id>/edit/",

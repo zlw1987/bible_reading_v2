@@ -221,6 +221,11 @@
                     {% else %}{{ card.name }}{% endif %}
                 </span>
                 {% include "ministry/_structure_node_badges.html" with card=card is_primary_occurrence=True %}
+                {% if user.is_staff or user.is_superuser %}
+                <a class="structure-map-meta" href="{% url 'manage_ministry_team_structure' card.team_id %}">
+                    {% if language == "zh" %}管理{% else %}Manage{% endif %}
+                </a>
+                {% endif %}
                 {% if card.path_label %}
                 <span class="structure-map-meta">{{ card.path_label }}</span>
                 {% endif %}

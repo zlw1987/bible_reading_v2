@@ -46,11 +46,16 @@
     </p>
     {% endif %}
 
-    {% if can_manage_team or can_manage_members or can_schedule_team %}
+    {% if can_manage_team or can_manage_members or can_schedule_team or can_manage_structure %}
     <div class="actions">
         {% if can_manage_team %}
         <a class="button button-secondary" href="{% url 'edit_ministry_team' team.id %}">
             {% if language == "zh" %}编辑事工团队{% else %}Edit Ministry Team{% endif %}
+        </a>
+        {% endif %}
+        {% if can_manage_structure %}
+        <a class="button button-secondary" href="{% url 'manage_ministry_team_structure' team.id %}">
+            {% if language == "zh" %}管理事工结构{% else %}Manage Structure{% endif %}
         </a>
         {% endif %}
         {% if can_manage_members %}

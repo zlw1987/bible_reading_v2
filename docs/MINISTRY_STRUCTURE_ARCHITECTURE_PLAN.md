@@ -77,11 +77,32 @@ Nothing here creates/updates `TeamMembership`, `TeamAssignment`,
 behavior, My Serving, and Today are unchanged; no hierarchy is inferred or
 backfilled and no migration was generated.
 
+`MINISTRY-STRUCTURE.1E` implemented a safe seed management command
+(`seed_ministry_structure_roles`) that seeds/maintains the default ministry
+**role types, role profiles, and role requirement rows** only. It is dry-run by
+default and writes only when passed `--apply`; it is idempotent (create missing,
+update drifted system-default labels/`sort_order`/flags, skip unchanged) and
+never deletes extra custom role types/profiles/requirements. It seeds ten role
+types (`lead`, `assistant_lead`, `coordinator`, `scheduler`, `trainer`,
+`technical_lead`, `equipment_manager`, `member_care`, `admin`, `custom`), five
+profiles (`default_ministry_unit`, `technical_team`, `worship_related_team`,
+`project_team`, `custom`), and fourteen requirement rows. Only `lead` is
+`is_required=True` (required for every seeded active profile); all other seeded
+requirements are recommended `is_required=False` optional rows, so missing
+required roles remain warnings/readiness signals only. This seeds configuration
+records only: it assigns no people to roles (no `MinistryTeamRoleAssignment`),
+assigns no profile to any existing team, and creates/updates no
+`MinistryTeam` / `MinistryTeamParentLink` / `TeamMembership` / `TeamAssignment` /
+`TeamAssignmentMember` / `ChurchStructureMembership` /
+`ChurchStructureUnitRoleAssignment`. It changes no permission,
+`can_manage_ministry_team`, `is_assignable` enforcement, My Serving, Today, or
+visibility behavior, and generated no migration.
+
 Ministry **role assignment** UI (`MinistryTeamRoleAssignment` create/edit),
-role type/profile/requirement seed defaults, role-profile setup UI, missing-role
-bulk repair, delegated ministry management, the `CAP_MANAGE_MINISTRY_STRUCTURE`
-capability + permission migration, and `is_assignable` enforcement on
-`TeamAssignment` all remain deferred to later, separately approved slices.
+role-profile setup UI, missing-role bulk repair, delegated ministry management,
+the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and
+`is_assignable` enforcement on `TeamAssignment` all remain deferred to later,
+separately approved slices.
 
 Runtime behavior changes — `is_assignable` enforcement, permission migration to
 `MinistryTeamRoleAssignment`, delegated ministry management + the new
@@ -702,9 +723,25 @@ phasing controls rollout risk, not product ambition.
   - **`MINISTRY-STRUCTURE.1D-B` (and later) — role assignment UI** and the
     remaining `1D` scope (role profile setup, missing-required-role surfacing in
     edit, etc.) remain deferred to separately approved slices.
-- **`MINISTRY-STRUCTURE.1E` — seed defaults / dry-run backfill:** seed default
-  role types/profiles/requirements; dry-run-first; `--apply` on explicit
-  approval only.
+- **`MINISTRY-STRUCTURE.1E` — seed defaults (IMPLEMENTED):** the
+  `seed_ministry_structure_roles` management command seeds/maintains the default
+  ministry role types, role profiles, and requirement rows only. Dry-run by
+  default; writes only on explicit `--apply`; idempotent (create / update
+  drifted system-default labels, `sort_order`, and flags / skip unchanged) and
+  non-destructive (never deletes extra custom role types/profiles/requirements).
+  Seeds ten role types, five profiles, and fourteen requirement rows; only
+  `lead` is `is_required=True` for every seeded profile, all other seeded
+  requirements are recommended optional (`is_required=False`). Seeds
+  configuration records only: it assigns no people to roles (no
+  `MinistryTeamRoleAssignment`), does not assign a profile to any existing team,
+  and creates/updates no `MinistryTeam` / `MinistryTeamParentLink` /
+  `TeamMembership` / `TeamAssignment` / `TeamAssignmentMember` /
+  `ChurchStructureMembership` / `ChurchStructureUnitRoleAssignment`. No
+  permission, `can_manage_ministry_team`, `is_assignable` enforcement, My
+  Serving, Today, or visibility change; no migration. Role assignment UI,
+  role-profile setup UI, delegated ministry management,
+  `CAP_MANAGE_MINISTRY_STRUCTURE` / permission migration, and `is_assignable`
+  enforcement remain deferred.
 - **Later (separate approvals):**
   - `is_assignable` enforcement on `TeamAssignment` (behavior change, Section
     6.4).

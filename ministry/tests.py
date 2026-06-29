@@ -5172,6 +5172,237 @@ class MinistryStructureFoundationTests(TestCase):
         self.assertTrue(can_manage_ministry_team(self.user, self.team))
 
 
+class MinistryStructureRoleSeedTests(TestCase):
+    """MINISTRY-STRUCTURE.1E seed_ministry_structure_roles command tests.
+
+    The command seeds configuration records only (role types / profiles /
+    requirements). It must not assign users to ministry roles, must not create
+    or update ministry teams / parent links / memberships / serving
+    assignments, and must not assign a profile to any existing team.
+    """
+
+    EXPECTED_ROLE_TYPES = 10
+    EXPECTED_PROFILES = 5
+    EXPECTED_REQUIREMENTS = 14
+
+    def call_seed_command(self, *args):
+        output = StringIO()
+        call_command("seed_ministry_structure_roles", *args, stdout=output)
+        return output.getvalue()
+
+    def test_dry_run_writes_nothing(self):
+        output = self.call_seed_command()
+
+        self.assertIn("Ministry structure role seed mode: DRY RUN", output)
+        self.assertIn("Would create role type lead", output)
+        self.assertEqual(MinistryTeamRoleType.objects.count(), 0)
+        self.assertEqual(MinistryTeamRoleProfile.objects.count(), 0)
+        self.assertEqual(MinistryTeamRoleRequirement.objects.count(), 0)
+
+    def test_apply_creates_expected_role_types(self):
+        output = self.call_seed_command("--apply")
+
+        self.assertIn("Ministry structure role seed mode: APPLY", output)
+        self.assertEqual(
+            MinistryTeamRoleType.objects.count(), self.EXPECTED_ROLE_TYPES
+        )
+        expected_codes = {
+            MinistryTeamRoleType.CODE_LEAD,
+            MinistryTeamRoleType.CODE_ASSISTANT_LEAD,
+            MinistryTeamRoleType.CODE_COORDINATOR,
+            MinistryTeamRoleType.CODE_SCHEDULER,
+            MinistryTeamRoleType.CODE_TRAINER,
+            MinistryTeamRoleType.CODE_TECHNICAL_LEAD,
+            MinistryTeamRoleType.CODE_EQUIPMENT_MANAGER,
+            MinistryTeamRoleType.CODE_MEMBER_CARE,
+            MinistryTeamRoleType.CODE_ADMIN,
+            "custom",
+        }
+        self.assertEqual(
+            set(MinistryTeamRoleType.objects.values_list("code", flat=True)),
+            expected_codes,
+        )
+        lead = MinistryTeamRoleType.objects.get(
+            code=MinistryTeamRoleType.CODE_LEAD
+        )
+        self.assertTrue(lead.is_system_default)
+        self.assertTrue(lead.is_active)
+
+    def test_apply_creates_expected_profiles(self):
+        self.call_seed_command("--apply")
+
+        self.assertEqual(
+            MinistryTeamRoleProfile.objects.count(), self.EXPECTED_PROFILES
+        )
+        expected_codes = {
+            MinistryTeamRoleProfile.CODE_DEFAULT_MINISTRY_UNIT,
+            MinistryTeamRoleProfile.CODE_TECHNICAL_TEAM,
+            MinistryTeamRoleProfile.CODE_WORSHIP_RELATED_TEAM,
+            MinistryTeamRoleProfile.CODE_PROJECT_TEAM,
+            MinistryTeamRoleProfile.CODE_CUSTOM,
+        }
+        self.assertEqual(
+            set(MinistryTeamRoleProfile.objects.values_list("code", flat=True)),
+            expected_codes,
+        )
+        for profile in MinistryTeamRoleProfile.objects.all():
+            self.assertTrue(profile.is_system_default)
+            self.assertTrue(profile.is_active)
+
+    def test_apply_seeds_lead_requirement_for_every_profile(self):
+        self.call_seed_command("--apply")
+
+        lead = MinistryTeamRoleType.objects.get(
+            code=MinistryTeamRoleType.CODE_LEAD
+        )
+        for profile in MinistryTeamRoleProfile.objects.all():
+            self.assertTrue(
+                MinistryTeamRoleRequirement.objects.filter(
+                    profile=profile,
+                    role_type=lead,
+                    is_required=True,
+                    is_active=True,
+                ).exists(),
+                msg=f"{profile.code} must require Lead",
+            )
+
+    def test_only_lead_is_required_by_default(self):
+        self.call_seed_command("--apply")
+
+        required_codes = set(
+            MinistryTeamRoleRequirement.objects.filter(
+                is_required=True, is_active=True
+            ).values_list("role_type__code", flat=True)
+        )
+        self.assertEqual(required_codes, {MinistryTeamRoleType.CODE_LEAD})
+
+        # Recommended optional requirements exist but are not required.
+        technical = MinistryTeamRoleProfile.objects.get(
+            code=MinistryTeamRoleProfile.CODE_TECHNICAL_TEAM
+        )
+        optional_codes = set(
+            MinistryTeamRoleRequirement.objects.filter(
+                profile=technical, is_required=False, is_active=True
+            ).values_list("role_type__code", flat=True)
+        )
+        self.assertEqual(
+            optional_codes,
+            {
+                MinistryTeamRoleType.CODE_TECHNICAL_LEAD,
+                MinistryTeamRoleType.CODE_EQUIPMENT_MANAGER,
+                MinistryTeamRoleType.CODE_TRAINER,
+            },
+        )
+
+    def test_apply_is_idempotent(self):
+        self.call_seed_command("--apply")
+        second_dry_run = self.call_seed_command()
+        second_apply = self.call_seed_command("--apply")
+
+        self.assertIn(
+            f"role types skipped: {self.EXPECTED_ROLE_TYPES}", second_dry_run
+        )
+        self.assertIn(
+            f"profiles skipped: {self.EXPECTED_PROFILES}", second_dry_run
+        )
+        self.assertIn(
+            f"requirements skipped: {self.EXPECTED_REQUIREMENTS}", second_dry_run
+        )
+        self.assertIn(
+            f"role types skipped: {self.EXPECTED_ROLE_TYPES}", second_apply
+        )
+        self.assertEqual(
+            MinistryTeamRoleType.objects.count(), self.EXPECTED_ROLE_TYPES
+        )
+        self.assertEqual(
+            MinistryTeamRoleProfile.objects.count(), self.EXPECTED_PROFILES
+        )
+        self.assertEqual(
+            MinistryTeamRoleRequirement.objects.count(),
+            self.EXPECTED_REQUIREMENTS,
+        )
+
+    def test_apply_updates_stale_system_default_labels(self):
+        self.call_seed_command("--apply")
+        lead = MinistryTeamRoleType.objects.get(
+            code=MinistryTeamRoleType.CODE_LEAD
+        )
+        lead.name_en = "Stale Label"
+        lead.sort_order = 999
+        # Bypass the seed path to simulate drift on a system-default record.
+        MinistryTeamRoleType.objects.filter(pk=lead.pk).update(
+            name_en="Stale Label", sort_order=999
+        )
+
+        output = self.call_seed_command("--apply")
+
+        self.assertIn("Updated role type lead", output)
+        lead.refresh_from_db()
+        self.assertEqual(lead.name_en, "Lead")
+        self.assertEqual(lead.sort_order, 10)
+
+    def test_apply_does_not_delete_custom_records(self):
+        custom_type = MinistryTeamRoleType.objects.create(
+            code="my_custom_role", name="自定义", name_en="My Custom"
+        )
+        custom_profile = MinistryTeamRoleProfile.objects.create(
+            code="my_custom_profile", name="自定义模板", name_en="My Custom Profile"
+        )
+        custom_requirement = MinistryTeamRoleRequirement.objects.create(
+            profile=custom_profile, role_type=custom_type, is_required=False
+        )
+
+        self.call_seed_command("--apply")
+
+        self.assertTrue(
+            MinistryTeamRoleType.objects.filter(pk=custom_type.pk).exists()
+        )
+        self.assertTrue(
+            MinistryTeamRoleProfile.objects.filter(pk=custom_profile.pk).exists()
+        )
+        self.assertTrue(
+            MinistryTeamRoleRequirement.objects.filter(
+                pk=custom_requirement.pk
+            ).exists()
+        )
+
+    def test_apply_creates_no_assignments_or_team_changes(self):
+        team = MinistryTeam.objects.create(name="种子团队", name_en="Seed Team")
+
+        self.call_seed_command("--apply")
+
+        team.refresh_from_db()
+        self.assertIsNone(team.role_profile)
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)
+        self.assertEqual(MinistryTeamParentLink.objects.count(), 0)
+        self.assertEqual(TeamMembership.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(ChurchStructureMembership.objects.count(), 0)
+        self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
+
+    def test_seeded_default_profile_reports_missing_lead_then_satisfied(self):
+        self.call_seed_command("--apply")
+        profile = MinistryTeamRoleProfile.objects.get(
+            code=MinistryTeamRoleProfile.CODE_DEFAULT_MINISTRY_UNIT
+        )
+        lead = MinistryTeamRoleType.objects.get(
+            code=MinistryTeamRoleType.CODE_LEAD
+        )
+        team = MinistryTeam.objects.create(name="读经团队", name_en="Reading Team")
+        team.role_profile = profile
+        team.save()
+
+        missing = team.missing_required_role_types()
+        self.assertEqual([rt.id for rt in missing], [lead.id])
+
+        user = User.objects.create_user(username="seed_lead", password="pw")
+        MinistryTeamRoleAssignment.objects.create(
+            team=team, role_type=lead, user=user
+        )
+        self.assertEqual(team.missing_required_role_types(), [])
+
+
 class MinistryStructureMapTests(TestCase):
     """MINISTRY-STRUCTURE.1C read-only staff Ministry Structure map tests.
 

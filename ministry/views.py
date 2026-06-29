@@ -38,6 +38,7 @@ from .forms import (
     MinistryTeamChurchAnchorLinkForm,
     MinistryTeamForm,
     MinistryTeamParentTeamLinkForm,
+    MinistryTeamRoleAssignmentForm,
     MinistryTeamStructureForm,
     TeamAssignmentConfirmForm,
     TeamAssignmentForm,
@@ -48,6 +49,7 @@ from .forms import (
 from .models import (
     MinistryTeam,
     MinistryTeamRoleProfile,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
@@ -111,6 +113,12 @@ def ministry_ui_text(language, key):
                 "parent; set one to control its display path."
             ),
             "link_not_available": "That parent link is not available.",
+            "role_assignment_added": "Ministry role assignment added.",
+            "role_assignment_not_added": "Ministry role assignment was not added.",
+            "role_assignment_deactivated": "Ministry role assignment ended.",
+            "role_assignment_not_available": (
+                "That ministry role assignment is not available."
+            ),
             "not_available": "This ministry team is not available.",
             "team_saved": "Ministry team saved.",
             "membership_saved": "Member saved.",
@@ -140,6 +148,10 @@ def ministry_ui_text(language, key):
                 "已移除主要上级。此单位目前没有主要上级；请设置一个以控制其显示路径。"
             ),
             "link_not_available": "这个上级链接目前不可用。",
+            "role_assignment_added": "事工角色任命已添加。",
+            "role_assignment_not_added": "事工角色任命未添加。",
+            "role_assignment_deactivated": "事工角色任命已结束。",
+            "role_assignment_not_available": "这个事工角色任命目前不可用。",
             "not_available": "这个事工团队目前不可用。",
             "team_saved": "事工团队已保存。",
             "membership_saved": "成员已保存。",
@@ -882,6 +894,101 @@ def _parent_link_display_rows(team, language, *, active):
     return rows
 
 
+def _role_assignment_user_label(user):
+    if user is None:
+        return ""
+    full_name = user.get_full_name()
+    return full_name or user.username
+
+
+def _role_assignment_display_rows(team, language, *, active):
+    """Build read display rows for a team's ministry role assignments.
+
+    Read-only helper; mutates nothing. These rows describe explicit long-term
+    ``MinistryTeamRoleAssignment`` records only. They never imply TeamMembership,
+    TeamAssignment, My Serving, or any permission.
+    """
+    assignments = (
+        team.role_assignments.filter(is_active=active)
+        .select_related("role_type", "user")
+        .order_by("role_type__sort_order", "user__username", "id")
+    )
+    rows = []
+    for assignment in assignments:
+        rows.append(
+            {
+                "id": assignment.id,
+                "role_label": assignment.role_type.display_name(language),
+                "user_label": _role_assignment_user_label(assignment.user),
+                "start_date": assignment.start_date,
+                "end_date": assignment.end_date,
+                "notes": assignment.notes,
+                "is_active": assignment.is_active,
+            }
+        )
+    return rows
+
+
+def _handle_add_role_assignment(request, team, form, language):
+    """Validate + save one ministry role assignment. Returns success bool.
+
+    Creates exactly one ``MinistryTeamRoleAssignment`` row via the form, which
+    defers to model validation. Nothing else is created: no TeamMembership,
+    TeamAssignment, TeamAssignmentMember, ChurchStructureMembership,
+    ChurchStructureUnitRoleAssignment, or BibleStudyMeetingRole, and no
+    permission is granted.
+    """
+    if not form.is_valid():
+        messages.error(
+            request, ministry_ui_text(language, "role_assignment_not_added")
+        )
+        return False
+
+    form.save()
+    messages.success(request, ministry_ui_text(language, "role_assignment_added"))
+    return True
+
+
+def _handle_deactivate_role_assignment(request, team, language):
+    """Soft-deactivate one active ministry role assignment for this team.
+
+    Sets ``is_active=False`` and an ``end_date`` (mirroring the church coworker
+    deactivation convention) so the row is retained as history; it is never hard
+    deleted. A deactivated assignment no longer satisfies a missing-required-role
+    check.
+    """
+    assignment_id = (request.POST.get("role_assignment_id") or "").strip()
+    try:
+        assignment_id = int(assignment_id)
+    except ValueError:
+        messages.error(
+            request, ministry_ui_text(language, "role_assignment_not_available")
+        )
+        return
+
+    assignment = team.role_assignments.filter(
+        id=assignment_id, is_active=True
+    ).first()
+    if assignment is None:
+        messages.error(
+            request, ministry_ui_text(language, "role_assignment_not_available")
+        )
+        return
+
+    today = timezone.localdate()
+    assignment.is_active = False
+    if not assignment.end_date or assignment.end_date > today:
+        assignment.end_date = (
+            assignment.start_date
+            if assignment.start_date and assignment.start_date > today
+            else today
+        )
+    assignment.save(update_fields=["is_active", "end_date", "updated_at"])
+    messages.success(
+        request, ministry_ui_text(language, "role_assignment_deactivated")
+    )
+
+
 @login_required
 def manage_ministry_team_structure(request, team_id):
     """Staff-only ministry-structure setup for one ministry team.
@@ -912,6 +1019,9 @@ def manage_ministry_team_structure(request, team_id):
     )
     church_anchor_form = MinistryTeamChurchAnchorLinkForm(
         language=language, child_team=team
+    )
+    role_assignment_form = MinistryTeamRoleAssignmentForm(
+        language=language, team=team
     )
 
     if request.method == "POST":
@@ -944,6 +1054,22 @@ def manage_ministry_team_structure(request, team_id):
         elif action == "deactivate_link":
             _handle_deactivate_parent_link(request, team, language)
             return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "add_role_assignment":
+            role_assignment_form = MinistryTeamRoleAssignmentForm(
+                request.POST, language=language, team=team
+            )
+            if _handle_add_role_assignment(
+                request, team, role_assignment_form, language
+            ):
+                return redirect("manage_ministry_team_structure", team_id=team.id)
+        elif action == "deactivate_role_assignment":
+            _handle_deactivate_role_assignment(request, team, language)
+            return redirect("manage_ministry_team_structure", team_id=team.id)
+
+    missing_required_roles = [
+        role_type.display_name(language)
+        for role_type in team.missing_required_role_types()
+    ]
 
     return render(
         request,
@@ -954,8 +1080,19 @@ def manage_ministry_team_structure(request, team_id):
             "metadata_form": metadata_form,
             "parent_team_form": parent_team_form,
             "church_anchor_form": church_anchor_form,
+            "role_assignment_form": role_assignment_form,
             "active_links": _parent_link_display_rows(team, language, active=True),
             "inactive_links": _parent_link_display_rows(team, language, active=False),
+            "active_role_assignments": _role_assignment_display_rows(
+                team, language, active=True
+            ),
+            "inactive_role_assignments": _role_assignment_display_rows(
+                team, language, active=False
+            ),
+            "missing_required_roles": missing_required_roles,
+            "has_role_types": MinistryTeamRoleType.objects.filter(
+                is_active=True
+            ).exists(),
             "has_role_profiles": MinistryTeamRoleProfile.objects.filter(
                 is_active=True
             ).exists(),

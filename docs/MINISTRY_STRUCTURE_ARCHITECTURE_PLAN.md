@@ -98,8 +98,35 @@ assigns no profile to any existing team, and creates/updates no
 `can_manage_ministry_team`, `is_assignable` enforcement, My Serving, Today, or
 visibility behavior, and generated no migration.
 
-Ministry **role assignment** UI (`MinistryTeamRoleAssignment` create/edit),
-role-profile setup UI, missing-role bulk repair, delegated ministry management,
+`MINISTRY-STRUCTURE.1D-B` implemented the staff-only **ministry role assignment**
+UI as a new "Long-term Ministry Roles" section on the existing structure setup
+page (`manage_ministry_team_structure`, template
+`ministry/manage_team_structure.html`, form
+`MinistryTeamRoleAssignmentForm`). Staff/superuser may view active and historical
+`MinistryTeamRoleAssignment` rows for a team, add an assignment (role type, user,
+start date, optional end date, `is_active`, non-sensitive notes), and soft
+"end role" an active assignment (`is_active=False` plus an `end_date` mirroring
+the church coworker deactivation convention; rows are never hard deleted). The
+add form's `role_type` lists active role types only, its `user` list uses the
+shared visible-identity ordering, and all writes defer to
+`MinistryTeamRoleAssignment.full_clean()` so overlapping same-user/team/role
+duplicates are rejected gracefully while multiple active Leads (different users)
+are allowed. The page surfaces `team.missing_required_role_types()` as a warning
+when the team has a role profile requiring a role with no active assignment
+(clears once an active assignment covers it), shows a muted note when the team
+has no role profile, and degrades to a help message (run
+`seed_ministry_structure_roles` / configure role types) when no active role types
+exist — it never seeds automatically. Access is staff/superuser only and is
+deliberately **not** granted by `TeamMembership.role`/`can_lead`,
+`MinistryTeamRoleAssignment`, `ChurchStructureUnitRoleAssignment`, or
+`ChurchStructureMembership`. Role assignments stay additive/readiness only: they
+drive no permission, do not change `can_manage_ministry_team`, never appear in My
+Serving or Today, and create/update no `TeamMembership`, `TeamAssignment`,
+`TeamAssignmentMember`, `ChurchStructureMembership`,
+`ChurchStructureUnitRoleAssignment`, or `BibleStudyMeetingRole`. No migration was
+generated and `seed_ministry_structure_roles --apply` was not run.
+
+Role-profile setup UI, missing-role bulk repair, delegated ministry management,
 the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and
 `is_assignable` enforcement on `TeamAssignment` all remain deferred to later,
 separately approved slices.
@@ -720,9 +747,30 @@ phasing controls rollout risk, not product ambition.
     `CAP_MANAGE_MINISTRY_STRUCTURE` / permission migration, or `is_assignable`
     enforcement; no membership/serving/assignment writes, no inferred hierarchy,
     no migration.
-  - **`MINISTRY-STRUCTURE.1D-B` (and later) — role assignment UI** and the
-    remaining `1D` scope (role profile setup, missing-required-role surfacing in
-    edit, etc.) remain deferred to separately approved slices.
+  - **`MINISTRY-STRUCTURE.1D-B` — staff ministry role assignment UI
+    (IMPLEMENTED):** a "Long-term Ministry Roles" section on the staff-only
+    structure setup page (`manage_ministry_team_structure`, template
+    `ministry/manage_team_structure.html`, form
+    `MinistryTeamRoleAssignmentForm`). Staff/superuser view active + historical
+    `MinistryTeamRoleAssignment` rows, add an assignment (`role_type`, `user`,
+    `start_date`, optional `end_date`, `is_active`, non-sensitive `notes`), and
+    soft-deactivate ("end role") an active assignment (`is_active=False` + an
+    `end_date`; never hard deleted). Add-form `role_type` lists active types
+    only; writes defer to `MinistryTeamRoleAssignment.full_clean()` (overlapping
+    same user/team/role rejected; multiple active Leads for different users
+    allowed). Surfaces `missing_required_role_types()` as a warning (clears once
+    covered), a muted note when no role profile is set, and a help message when
+    no active role types exist (no auto-seed). Staff/superuser-only access (not
+    granted by `TeamMembership.role`/`can_lead`, `MinistryTeamRoleAssignment`,
+    `ChurchStructureUnitRoleAssignment`, or `ChurchStructureMembership`). Role
+    assignments are explicit and staff-managed: no permission migration, no My
+    Serving / Today exposure, no `can_manage_ministry_team` change, and no
+    `TeamMembership` / `TeamAssignment` / `TeamAssignmentMember` /
+    `ChurchStructureMembership` / `ChurchStructureUnitRoleAssignment` /
+    `BibleStudyMeetingRole` side effects. No migration; no seed apply.
+  - Role-profile setup UI, missing-role bulk repair, delegated ministry
+    management, `CAP_MANAGE_MINISTRY_STRUCTURE` / permission migration, and
+    `is_assignable` enforcement remain deferred to separately approved slices.
 - **`MINISTRY-STRUCTURE.1E` — seed defaults (IMPLEMENTED):** the
   `seed_ministry_structure_roles` management command seeds/maintains the default
   ministry role types, role profiles, and requirement rows only. Dry-run by

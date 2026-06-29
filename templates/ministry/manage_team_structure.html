@@ -247,5 +247,138 @@
     </div>
 </section>
 {% endif %}
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}长期事工角色{% else %}Long-term Ministry Roles{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        这些角色只记录长期事工责任；目前不会自动授予权限，也不会成为我的服事事项。
+        {% else %}
+        These roles record long-term ministry responsibility only; they do not currently grant permissions or create My Serving items.
+        {% endif %}
+    </p>
+
+    {% if team.role_profile %}
+        {% if missing_required_roles %}
+        <p class="status status-warning">
+            {% if language == "zh" %}缺少必要角色：{% else %}Missing required roles: {% endif %}
+            {{ missing_required_roles|join:", " }}
+        </p>
+        {% endif %}
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        此事工单位尚未选择角色配置，因此不会检查必要角色。
+        {% else %}
+        This ministry unit has no role profile selected, so required-role checks are not active.
+        {% endif %}
+    </p>
+    {% endif %}
+
+    {% if active_role_assignments %}
+    <div>
+        {% for assignment in active_role_assignments %}
+        <div class="ms-link-row">
+            <span class="ms-link-main">
+                <span class="status status-good">{{ assignment.role_label }}</span>
+                <span>{{ assignment.user_label }}</span>
+                <span class="muted">
+                    {{ assignment.start_date }}{% if assignment.end_date %} – {{ assignment.end_date }}{% endif %}
+                </span>
+                {% if assignment.notes %}
+                <span class="muted">· {{ assignment.notes }}</span>
+                {% endif %}
+            </span>
+            <span class="ms-link-actions">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="deactivate_role_assignment">
+                    <input type="hidden" name="role_assignment_id" value="{{ assignment.id }}">
+                    <button type="submit" class="button button-secondary">
+                        {% if language == "zh" %}结束角色{% else %}End role{% endif %}
+                    </button>
+                </form>
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}还没有有效的事工角色任命。{% else %}No active ministry role assignments yet.{% endif %}
+    </p>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}添加事工角色{% else %}Add ministry role{% endif %}</h2>
+    {% if has_role_types %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="add_role_assignment">
+        {{ role_assignment_form.non_field_errors }}
+        <label class="ms-add-field">
+            {{ role_assignment_form.role_type.label }}
+            {{ role_assignment_form.role_type }}
+            {{ role_assignment_form.role_type.errors }}
+        </label>
+        <label class="ms-add-field">
+            {{ role_assignment_form.user.label }}
+            {{ role_assignment_form.user }}
+            {{ role_assignment_form.user.errors }}
+        </label>
+        <label class="ms-add-field">
+            {{ role_assignment_form.start_date.label }}
+            {{ role_assignment_form.start_date }}
+            {{ role_assignment_form.start_date.errors }}
+        </label>
+        <label class="ms-add-field">
+            {{ role_assignment_form.end_date.label }}
+            {{ role_assignment_form.end_date }}
+            {{ role_assignment_form.end_date.errors }}
+        </label>
+        <label class="ms-add-field">
+            {{ role_assignment_form.notes.label }}
+            {{ role_assignment_form.notes }}
+            <span class="muted">{{ role_assignment_form.notes.help_text }}</span>
+            {{ role_assignment_form.notes.errors }}
+        </label>
+        <label class="ms-add-check">
+            {{ role_assignment_form.is_active }}
+            {{ role_assignment_form.is_active.label }}
+        </label>
+        <div class="actions">
+            <button type="submit">{% if language == "zh" %}添加{% else %}Add{% endif %}</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}
+        还没有可用的事工角色类型。请先运行 seed_ministry_structure_roles 命令或配置角色类型。
+        {% else %}
+        No ministry role types exist yet. Run the seed_ministry_structure_roles command or configure role types first.
+        {% endif %}
+    </p>
+    {% endif %}
+</section>
+
+{% if inactive_role_assignments %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}历史事工角色{% else %}Historical ministry roles{% endif %}</h2>
+    <div>
+        {% for assignment in inactive_role_assignments %}
+        <div class="ms-link-row">
+            <span class="ms-link-main">
+                <span class="status">{{ assignment.role_label }}</span>
+                <span class="muted">{{ assignment.user_label }}</span>
+                <span class="muted">
+                    {{ assignment.start_date }}{% if assignment.end_date %} – {{ assignment.end_date }}{% endif %}
+                </span>
+                <span class="status">{% if language == "zh" %}已结束{% else %}Ended{% endif %}</span>
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 </div>
 {% endblock %}

@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
@@ -11,7 +12,9 @@ from events.models import ServiceEvent
 from .models import (
     MinistryTeam,
     MinistryTeamParentLink,
+    MinistryTeamRoleAssignment,
     MinistryTeamRoleProfile,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamMembership,
 )
@@ -172,6 +175,37 @@ STRUCTURE_FORM_TEXT = {
         "parent_church_unit_empty": "选择一个教会锚点",
     },
 }
+
+
+ROLE_ASSIGNMENT_FORM_TEXT = {
+    "en": {
+        "role_type": "Ministry role",
+        "user": "User",
+        "start_date": "Start date",
+        "end_date": "End date (optional)",
+        "is_active": "Active",
+        "notes": "Non-sensitive notes",
+        "notes_placeholder": "Operational notes for this long-term role only.",
+        "notes_help": (
+            "Operational/non-sensitive notes only. Do not store counseling, "
+            "pastoral, prayer, medical, financial, or private information."
+        ),
+    },
+    "zh": {
+        "role_type": "事工角色",
+        "user": "用户",
+        "start_date": "开始日期",
+        "end_date": "结束日期（可选）",
+        "is_active": "启用",
+        "notes": "非敏感备注",
+        "notes_placeholder": "仅记录此长期角色的操作备注。",
+        "notes_help": "仅记录操作性、非敏感的备注。不要记录辅导、牧养、代祷、医疗、财务或私人信息。",
+    },
+}
+
+
+def role_assignment_form_text(language):
+    return ROLE_ASSIGNMENT_FORM_TEXT.get(language, ROLE_ASSIGNMENT_FORM_TEXT["en"])
 
 
 def structure_form_text(language):
@@ -674,3 +708,113 @@ class MinistryTeamChurchAnchorLinkForm(_BaseParentLinkForm):
             label=text["parent_church_unit"],
             empty_label=text["parent_church_unit_empty"],
         )
+
+
+# ---------------------------------------------------------------------------
+# MINISTRY-STRUCTURE.1D-B — staff-only ministry role assignment form.
+#
+# Creates a single explicit long-term ``MinistryTeamRoleAssignment`` row. It is
+# additive/readiness setup only: it never creates/updates TeamMembership,
+# TeamAssignment, TeamAssignmentMember, ChurchStructureMembership,
+# ChurchStructureUnitRoleAssignment, or BibleStudyMeetingRole, never drives
+# permissions, and never appears in My Serving. The view that uses it is
+# staff/superuser-only. Validation defers to
+# ``MinistryTeamRoleAssignment.full_clean()`` (overlapping same user/team/role
+# rejection, active team/role/user checks) so the UI never bypasses the model.
+# ---------------------------------------------------------------------------
+
+
+class MinistryRoleTypeChoiceField(forms.ModelChoiceField):
+    def __init__(self, *args, language="en", **kwargs):
+        self.language = language
+        super().__init__(*args, **kwargs)
+
+    def label_from_instance(self, role_type):
+        return role_type.display_name(self.language)
+
+
+class MinistryTeamRoleAssignmentForm(forms.Form):
+    role_type = MinistryRoleTypeChoiceField(
+        queryset=MinistryTeamRoleType.objects.none(),
+    )
+    user = forms.ModelChoiceField(queryset=get_user_model().objects.none())
+    start_date = forms.DateField(
+        initial=timezone.localdate,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    end_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    is_active = forms.BooleanField(required=False, initial=True)
+    notes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+    )
+
+    def __init__(self, *args, language="en", team=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if team is None:
+            raise ValueError("MinistryTeamRoleAssignmentForm requires a team.")
+        self.team = team
+        self.language = language
+        text = role_assignment_form_text(language)
+
+        self.fields["role_type"].queryset = MinistryTeamRoleType.objects.filter(
+            is_active=True
+        ).order_by("sort_order", "code")
+        self.fields["role_type"].language = language
+        self.fields["user"].queryset = order_users_by_visible_identity(
+            get_user_model().objects.filter(is_active=True)
+        )
+
+        for field_name in self.fields:
+            self.fields[field_name].label = text[field_name]
+        self.fields["notes"].widget.attrs.update(
+            {"placeholder": text["notes_placeholder"]}
+        )
+        self.fields["notes"].help_text = text["notes_help"]
+
+    def _build_assignment(self):
+        return MinistryTeamRoleAssignment(
+            team=self.team,
+            role_type=self.cleaned_data.get("role_type"),
+            user=self.cleaned_data.get("user"),
+            is_active=self.cleaned_data.get("is_active", True),
+            start_date=self.cleaned_data.get("start_date"),
+            end_date=self.cleaned_data.get("end_date"),
+            notes=self.cleaned_data.get("notes", ""),
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        # Defer overlap/active validation to the model so the UI never bypasses
+        # MinistryTeamRoleAssignment.full_clean(). Map model errors back to form
+        # fields when possible, otherwise to the non-field error list.
+        assignment = MinistryTeamRoleAssignment(
+            team=self.team,
+            role_type=cleaned_data.get("role_type"),
+            user=cleaned_data.get("user"),
+            is_active=cleaned_data.get("is_active", True),
+            start_date=cleaned_data.get("start_date"),
+            end_date=cleaned_data.get("end_date"),
+            notes=cleaned_data.get("notes", ""),
+        )
+        try:
+            assignment.full_clean()
+        except forms.ValidationError as error:
+            if hasattr(error, "message_dict"):
+                for field_name, messages in error.message_dict.items():
+                    target = field_name if field_name in self.fields else None
+                    for message in messages:
+                        self.add_error(target, message)
+            else:
+                self.add_error(None, error)
+
+        return cleaned_data
+
+    def save(self):
+        assignment = self._build_assignment()
+        assignment.save()
+        return assignment

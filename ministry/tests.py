@@ -6181,3 +6181,422 @@ class MinistryTeamStructureSetupTests(TestCase):
         assignment.refresh_from_db()
         self.assertEqual(assignment.ministry_team_id, self.area.id)
         self.assertEqual(TeamAssignment.objects.count(), 1)
+
+
+class MinistryTeamRoleAssignmentUITests(TestCase):
+    """MINISTRY-STRUCTURE.1D-B staff-only ministry role assignment UI tests.
+
+    The role assignment section lives on the staff-only structure setup page. It
+    creates/deactivates only ``MinistryTeamRoleAssignment`` rows. Access is
+    staff/superuser only and is never granted by TeamMembership.role,
+    MinistryTeamRoleAssignment, ChurchStructureUnitRoleAssignment, or
+    ChurchStructureMembership. Role assignments are additive: they drive no
+    permission, do not appear in My Serving, and create no membership/serving
+    rows.
+    """
+
+    def setUp(self):
+        self.regular = User.objects.create_user(username="ra_reg", password="pw")
+        self.staff = User.objects.create_user(
+            username="ra_staff", password="pw", is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username="ra_super", password="pw", email="ra_super@example.com"
+        )
+        self.alice = User.objects.create_user(username="ra_alice", password="pw")
+        self.bob = User.objects.create_user(username="ra_bob", password="pw")
+
+        self.whole = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="WC",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="华语",
+            name_en="CM",
+            parent=self.whole,
+        )
+
+        self.profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead", sort_order=10
+        )
+        self.coordinator_type = MinistryTeamRoleType.objects.create(
+            code="coordinator", name="协调同工", name_en="Coordinator", sort_order=30
+        )
+        self.lead_requirement = MinistryTeamRoleRequirement.objects.create(
+            profile=self.profile,
+            role_type=self.lead_type,
+            is_required=True,
+            is_active=True,
+        )
+
+        self.projection = MinistryTeam.objects.create(
+            name="投影团队",
+            name_en="Projection Team",
+            is_assignable=True,
+            role_profile=self.profile,
+        )
+
+    def _structure_url(self, team):
+        return reverse("manage_ministry_team_structure", args=[team.id])
+
+    def _login(self, username, language="en"):
+        # login() resets the session, so set the display language afterwards.
+        self.client.login(username=username, password="pw")
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _snapshot_counts(self):
+        return {
+            TeamMembership: TeamMembership.objects.count(),
+            TeamAssignment: TeamAssignment.objects.count(),
+            TeamAssignmentMember: TeamAssignmentMember.objects.count(),
+            ChurchStructureMembership: ChurchStructureMembership.objects.count(),
+            ChurchStructureUnitRoleAssignment: (
+                ChurchStructureUnitRoleAssignment.objects.count()
+            ),
+            BibleStudyMeetingRole: BibleStudyMeetingRole.objects.count(),
+        }
+
+    def _add_role_post(self, team, role_type, user, **extra):
+        data = {
+            "action": "add_role_assignment",
+            "role_type": str(role_type.id),
+            "user": str(user.id),
+            "start_date": timezone.localdate().isoformat(),
+            "is_active": "on",
+        }
+        data.update(extra)
+        return self.client.post(self._structure_url(team), data)
+
+    # --- Access tests ---
+
+    def test_staff_can_view_role_assignment_ui(self):
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Long-term Ministry Roles")
+
+    def test_superuser_can_view_role_assignment_ui(self):
+        self._login("ra_super")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Long-term Ministry Roles")
+
+    def test_regular_user_cannot_view(self):
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_team_membership_lead_cannot_view(self):
+        TeamMembership.objects.create(
+            team=self.projection,
+            user=self.regular,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    def test_ministry_role_lead_cannot_view(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.regular
+        )
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    def test_church_structure_lead_cannot_view(self):
+        church_lead = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="组长", name_en="Lead"
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm, role_type=church_lead, user=self.regular
+        )
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    def test_church_membership_does_not_grant_access(self):
+        ChurchStructureMembership.objects.create(
+            user=self.regular,
+            unit=self.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+
+    # --- Display tests ---
+
+    def test_no_role_types_shows_graceful_help(self):
+        # Deactivate all role types so none are available; the protected
+        # requirement row keeps the FK alive, so deactivate rather than delete.
+        self.lead_type.is_active = False
+        self.lead_type.save()
+        self.coordinator_type.is_active = False
+        self.coordinator_type.save()
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["has_role_types"])
+        self.assertContains(response, "No ministry role types exist yet")
+
+    def test_active_assignment_renders_role_user_and_start_date(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertContains(response, "Lead")
+        self.assertContains(response, self.alice.username)
+        self.assertContains(response, timezone.localdate().isoformat())
+
+    def test_inactive_assignment_renders_in_historical_section(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            is_active=False,
+            start_date=timezone.localdate() - timezone.timedelta(days=30),
+            end_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertContains(response, "Historical ministry roles")
+        self.assertEqual(len(response.context["inactive_role_assignments"]), 1)
+        self.assertEqual(len(response.context["active_role_assignments"]), 0)
+
+    def test_missing_required_lead_warning_appears_without_active_lead(self):
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertContains(response, "Missing required roles")
+        self.assertIn("Lead", response.context["missing_required_roles"])
+
+    def test_missing_required_lead_warning_clears_after_active_lead(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.context["missing_required_roles"], [])
+        self.assertNotContains(response, "Missing required roles")
+
+    def test_no_role_profile_shows_muted_note(self):
+        self.projection.role_profile = None
+        self.projection.save()
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertContains(response, "no role profile selected")
+        self.assertEqual(response.context["missing_required_roles"], [])
+
+    # --- Create / deactivate tests ---
+
+    def test_staff_can_create_lead_assignment(self):
+        self._login("ra_staff")
+        response = self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertEqual(response.status_code, 302)
+        assignment = MinistryTeamRoleAssignment.objects.get(
+            team=self.projection, role_type=self.lead_type, user=self.alice
+        )
+        self.assertTrue(assignment.is_active)
+        self.assertEqual(assignment.start_date, timezone.localdate())
+
+    def test_staff_can_create_coordinator_assignment(self):
+        self._login("ra_staff")
+        self._add_role_post(self.projection, self.coordinator_type, self.alice)
+        self.assertTrue(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.projection,
+                role_type=self.coordinator_type,
+                user=self.alice,
+                is_active=True,
+            ).exists()
+        )
+
+    def test_multiple_active_leads_for_different_users_allowed(self):
+        self._login("ra_staff")
+        self._add_role_post(self.projection, self.lead_type, self.alice)
+        self._add_role_post(self.projection, self.lead_type, self.bob)
+        active_leads = MinistryTeamRoleAssignment.objects.filter(
+            team=self.projection, role_type=self.lead_type, is_active=True
+        )
+        self.assertEqual(active_leads.count(), 2)
+
+    def test_duplicate_overlapping_assignment_rejected_gracefully(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_staff")
+        response = self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.projection,
+                role_type=self.lead_type,
+                user=self.alice,
+                is_active=True,
+            ).count(),
+            1,
+        )
+
+    def test_inactive_historical_assignment_does_not_block_new(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            is_active=False,
+            start_date=timezone.localdate() - timezone.timedelta(days=30),
+            end_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+        self._login("ra_staff")
+        response = self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.projection,
+                role_type=self.lead_type,
+                user=self.alice,
+                is_active=True,
+            ).count(),
+            1,
+        )
+
+    def test_staff_can_deactivate_assignment_without_deleting(self):
+        assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_staff")
+        response = self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "deactivate_role_assignment",
+                "role_assignment_id": str(assignment.id),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        assignment.refresh_from_db()
+        self.assertFalse(assignment.is_active)
+        self.assertEqual(assignment.end_date, timezone.localdate())
+        self.assertTrue(
+            MinistryTeamRoleAssignment.objects.filter(pk=assignment.pk).exists()
+        )
+
+    def test_deactivated_lead_no_longer_satisfies_required_lead(self):
+        assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self.assertEqual(self.projection.missing_required_role_types(), [])
+        self._login("ra_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "deactivate_role_assignment",
+                "role_assignment_id": str(assignment.id),
+            },
+        )
+        missing = self.projection.missing_required_role_types()
+        self.assertIn(self.lead_type, missing)
+
+    # --- Boundary tests ---
+
+    def test_add_role_creates_no_membership_or_serving_rows(self):
+        before = self._snapshot_counts()
+        self._login("ra_staff")
+        self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertEqual(before, self._snapshot_counts())
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 1)
+
+    def test_deactivate_role_creates_no_membership_or_serving_rows(self):
+        assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        before = self._snapshot_counts()
+        self._login("ra_staff")
+        self.client.post(
+            self._structure_url(self.projection),
+            {
+                "action": "deactivate_role_assignment",
+                "role_assignment_id": str(assignment.id),
+            },
+        )
+        self.assertEqual(before, self._snapshot_counts())
+
+    def test_can_manage_ministry_team_unchanged_by_role_assignment(self):
+        TeamMembership.objects.create(
+            team=self.projection, user=self.bob, role=TeamMembership.ROLE_LEAD
+        )
+        self.assertFalse(can_manage_ministry_team(self.alice, self.projection))
+        self.assertTrue(can_manage_ministry_team(self.bob, self.projection))
+        self._login("ra_staff")
+        self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertFalse(can_manage_ministry_team(self.alice, self.projection))
+        self.assertTrue(can_manage_ministry_team(self.bob, self.projection))
+
+    def test_ministry_role_lead_cannot_access_team_edit_route(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.regular
+        )
+        self._login("ra_reg")
+        response = self.client.get(
+            reverse("edit_ministry_team", args=[self.projection.id])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_ministry_role_lead_cannot_access_structure_setup(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.regular
+        )
+        self._login("ra_reg")
+        response = self.client.get(self._structure_url(self.projection))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    def test_ministry_role_assignment_not_shown_in_my_serving(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        self._login("ra_alice")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["serving_items"]), [])
+        self.assertEqual(list(response.context["ongoing_structure_roles"]), [])
+
+    def test_regular_user_cannot_create_role_assignment(self):
+        self._login("ra_reg")
+        response = self._add_role_post(self.projection, self.lead_type, self.alice)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)

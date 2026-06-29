@@ -147,9 +147,26 @@ migration, My Serving role display, delegated ministry management,
 done; `can_manage_ministry_team` and `MinistryTeamRoleAssignment`'s
 non-permission status are unchanged.
 
+`MINISTRY-STRUCTURE.1G` added a read-only **Ministry Structure readiness audit**
+(`audit_ministry_structure_readiness`, logic in `ministry/structure_readiness.py`).
+It inventories ministry teams (active/inactive, assignable/container, by kind)
+and reports parent-link, role-profile, and `is_assignable` assignment readiness
+as **blockers / warnings / info**, plus a static permission-boundary
+confirmation. It is strictly read-only: it has **no `--apply`**, mutates nothing,
+creates no defaults, assigns no roles, and repairs no rows. Options:
+`--verbose`, `--limit N`, `--fail-on-blockers` (exits non-zero only when blocker
+count > 0), `--team-id`, and `--include-inactive`. Blockers are an active
+(non-cancelled, non-completed) `TeamAssignment` on a non-assignable team, more
+than one active primary parent link for a team, and any active parent-link
+cycle; cancelled/completed assignments on a non-assignable team are reported as
+**info** (preserved by design, never blockers). It drives no permission, makes
+no permission decision, never reads `ChurchStructureMembership` as serving, and
+leaves My Serving and Today unchanged.
+
 Role-profile setup UI, missing-role bulk repair, delegated ministry management,
-and the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration all
-remain deferred to later, separately approved slices.
+the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and My
+Serving exposure of ministry role assignments all remain deferred to later,
+separately approved slices.
 
 Runtime behavior changes — permission migration to `MinistryTeamRoleAssignment`,
 delegated ministry management + the new capability — remain deferred to later,
@@ -833,6 +850,22 @@ phasing controls rollout risk, not product ambition.
   preserved and stay viewable in list/detail/My Serving (no
   `manageable_assignment_teams` narrowing). No permission, `can_manage_ministry_team`,
   My Serving role display, Today, or production-data change; no migration.
+- **`MINISTRY-STRUCTURE.1G` — readiness audit (IMPLEMENTED):** a read-only
+  `audit_ministry_structure_readiness` management command (logic in
+  `ministry/structure_readiness.py`). It inventories ministry teams and reports
+  parent-link, role-profile, and `is_assignable` assignment readiness as
+  blockers / warnings / info, plus a static permission-boundary confirmation.
+  Strictly read-only: **no `--apply`**, no data mutation, no defaults seeded, no
+  roles assigned, no rows repaired. Options `--verbose`, `--limit N`,
+  `--fail-on-blockers` (non-zero exit only when blocker count > 0), `--team-id`,
+  `--include-inactive`. Blockers are an active (non-cancelled, non-completed)
+  `TeamAssignment` on a non-assignable team, multiple active primary parent links
+  for one team, and active parent-link cycles; cancelled/completed assignments on
+  a non-assignable team are info (preserved by design). No permission, My
+  Serving, or Today change; no migration. Role-profile setup UI, missing-role
+  bulk repair, delegated ministry management, `CAP_MANAGE_MINISTRY_STRUCTURE` /
+  permission migration, and My Serving exposure of ministry roles remain
+  deferred.
 - **Later (separate approvals):**
   - Permission migration from `TeamMembership.role` to
     `MinistryTeamRoleAssignment` (Section 8.1).

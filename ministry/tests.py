@@ -56,6 +56,7 @@ from .services.copy_forward_suggestions import (
     MODE_TEAM,
     find_copy_forward_suggestion,
 )
+from .structure_readiness import run_audit
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -6965,3 +6966,288 @@ class MinistryTeamIsAssignableEnforcementTests(TestCase):
         response = self.client.get(reverse("my_serving"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sunday Service")
+
+
+class MinistryStructureReadinessAuditTests(TestCase):
+    """MINISTRY-STRUCTURE.1G read-only readiness audit command tests.
+
+    The ``audit_ministry_structure_readiness`` command must be strictly
+    read-only: it has no ``--apply``, mutates nothing, and only reports
+    blockers / warnings / info.
+    """
+
+    COMMAND = "audit_ministry_structure_readiness"
+
+    def setUp(self):
+        # Role config (not teams): a profile that requires an active Lead.
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.profile = MinistryTeamRoleProfile.objects.create(
+            code=MinistryTeamRoleProfile.CODE_DEFAULT_MINISTRY_UNIT,
+            name="默认事工单位",
+            name_en="Default Ministry Unit",
+        )
+        self.lead_requirement = MinistryTeamRoleRequirement.objects.create(
+            profile=self.profile,
+            role_type=self.lead_type,
+            is_required=True,
+        )
+        self.user = User.objects.create_user(
+            username="audit_user",
+            email="audit-user@example.com",
+            password="testpass123",
+        )
+        self.event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+    # ----- helpers ----------------------------------------------------------
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command(self.COMMAND, *args, stdout=out)
+        return out.getvalue()
+
+    def make_team(self, name, **overrides):
+        data = {"name": name, "name_en": name, "is_assignable": True}
+        data.update(overrides)
+        return MinistryTeam.objects.create(**data)
+
+    def make_non_assignable_assignment(self, team, status):
+        """Create an assignment in ``status`` on a now-non-assignable ``team``.
+
+        For active states this mirrors the real-world path (assignment created
+        while assignable, then the team flips to container), since 1F blocks a
+        new active assignment on a non-assignable team.
+        """
+        was_assignable = team.is_assignable
+        if not was_assignable:
+            team.is_assignable = True
+            team.save(update_fields=["is_assignable", "updated_at"])
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=team,
+            status=status,
+        )
+        team.is_assignable = False
+        team.save(update_fields=["is_assignable", "updated_at"])
+        return assignment
+
+    # ----- existence / read-only -------------------------------------------
+
+    def test_command_runs_with_no_teams(self):
+        output = self.run_command()
+        self.assertIn(
+            "Ministry Structure readiness audit (MINISTRY-STRUCTURE.1G, read-only)",
+            output,
+        )
+        self.assertIn("total_teams: 0", output)
+        self.assertIn("blockers present: none", output)
+
+    def test_no_apply_option_exists(self):
+        from ministry.management.commands.audit_ministry_structure_readiness import (
+            Command,
+        )
+
+        parser = Command().create_parser("manage.py", self.COMMAND)
+        dests = {action.dest for action in parser._actions}
+        self.assertNotIn("apply", dests)
+        self.assertIn("fail_on_blockers", dests)
+        self.assertIn("verbose", dests)
+        self.assertIn("limit", dests)
+
+    def test_command_is_read_only_snapshot_counts(self):
+        from accounts.models import (
+            ChurchStructureMembership,
+            ChurchStructureUnit,
+            ChurchStructureUnitRoleAssignment,
+        )
+        from studies.models import BibleStudyMeetingRole
+
+        team = self.make_team("Lighting", role_profile=self.profile)
+        anchor = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+            name_en="Chinese Ministry",
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=team, parent_church_unit=anchor, is_primary=True
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=timezone.localdate(),
+        )
+        membership = TeamMembership.objects.create(
+            team=team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event, ministry_team=team
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+
+        models = [
+            MinistryTeam,
+            MinistryTeamParentLink,
+            MinistryTeamRoleType,
+            MinistryTeamRoleProfile,
+            MinistryTeamRoleRequirement,
+            MinistryTeamRoleAssignment,
+            TeamMembership,
+            TeamAssignment,
+            TeamAssignmentMember,
+            ChurchStructureMembership,
+            ChurchStructureUnitRoleAssignment,
+            BibleStudyMeetingRole,
+        ]
+        before = {model.__name__: model.objects.count() for model in models}
+        self.run_command("--verbose")
+        after = {model.__name__: model.objects.count() for model in models}
+        self.assertEqual(before, after)
+
+    # ----- fail-on-blockers -------------------------------------------------
+
+    def test_fail_on_blockers_exits_zero_when_no_blockers(self):
+        self.make_team("Lighting")  # warnings only, no blockers
+        # Should not raise.
+        self.run_command("--fail-on-blockers")
+
+    def test_fail_on_blockers_nonzero_with_active_assignment_on_container(self):
+        team = self.make_team("Lighting")
+        self.make_non_assignable_assignment(team, TeamAssignment.STATUS_SCHEDULED)
+
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["active_assignments_on_non_assignable_team"], 1)
+        self.assertIn("active_assignments_on_non_assignable_team", audit["blockers"])
+
+        with self.assertRaises(CommandError):
+            self.run_command("--fail-on-blockers")
+
+    def test_cancelled_assignment_on_container_is_info_not_blocker(self):
+        team = self.make_team("Lighting", is_assignable=False)
+        TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_CANCELLED,
+        )
+        audit = run_audit()
+        self.assertEqual(
+            audit["stats"]["cancelled_assignments_on_non_assignable_team"], 1
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+        # --fail-on-blockers must not raise for an info-only finding.
+        self.run_command("--fail-on-blockers")
+
+    # ----- parent-link readiness -------------------------------------------
+
+    def test_active_team_no_parent_link_is_warning(self):
+        self.make_team("Lighting")
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["teams_no_active_parent_link"], 1)
+        self.assertIn("teams_no_active_parent_link", audit["warnings"])
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_no_primary_parent_is_warning(self):
+        team = self.make_team("Lighting")
+        anchor = self._make_anchor("CM")
+        MinistryTeamParentLink.objects.create(
+            child_team=team, parent_church_unit=anchor, is_primary=False
+        )
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["teams_no_primary_parent_link"], 1)
+        self.assertIn("teams_no_primary_parent_link", audit["warnings"])
+
+    def test_shared_team_multiple_parent_links_is_info(self):
+        team = self.make_team("Internet Mission")
+        cm = self._make_anchor("CM")
+        em = self._make_anchor("EM")
+        MinistryTeamParentLink.objects.create(
+            child_team=team, parent_church_unit=cm, is_primary=True
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=team, parent_church_unit=em, is_primary=False
+        )
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["shared_teams_multi_active_parent_link"], 1)
+        self.assertIn("shared_teams_multi_active_parent_link", audit["info"])
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_active_link_to_inactive_parent_team_is_warning(self):
+        parent = self.make_team("Digital Ministry", is_assignable=False)
+        child = self.make_team("Projection")
+        MinistryTeamParentLink.objects.create(
+            child_team=child, parent_team=parent, is_primary=True
+        )
+        # Deactivate the parent after the (valid) link exists.
+        parent.is_active = False
+        parent.save(update_fields=["is_active", "updated_at"])
+
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["teams_link_to_inactive_parent_team"], 1)
+        self.assertIn("teams_link_to_inactive_parent_team", audit["warnings"])
+
+    # ----- role-profile readiness ------------------------------------------
+
+    def test_assignable_team_no_role_profile_is_warning(self):
+        self.make_team("Lighting")  # assignable, no role_profile
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["assignable_teams_no_role_profile"], 1)
+        self.assertIn("assignable_teams_no_role_profile", audit["warnings"])
+
+    def test_missing_required_lead_is_warning(self):
+        self.make_team("Lighting", role_profile=self.profile)
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["teams_missing_required_lead"], 1)
+        self.assertIn("teams_missing_required_lead", audit["warnings"])
+
+    def test_active_lead_assignment_clears_missing_required_lead(self):
+        team = self.make_team("Lighting", role_profile=self.profile)
+        MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=timezone.localdate(),
+        )
+        audit = run_audit()
+        self.assertEqual(audit["stats"]["teams_missing_required_lead"], 0)
+        self.assertEqual(audit["stats"]["teams_missing_required_roles"], 0)
+
+    # ----- verbose / limit / filters ---------------------------------------
+
+    def test_verbose_output_respects_limit(self):
+        for i in range(5):
+            self.make_team(f"Team {i}")  # each: no parent link warning
+        output = self.run_command("--verbose", "--limit", "2")
+        self.assertIn("teams_no_active_parent_link:", output)
+        self.assertIn("(stopped at --limit 2)", output)
+
+    def test_team_id_filter_scopes_to_single_team(self):
+        keep = self.make_team("Keep")
+        self.make_team("Other")
+        output = self.run_command("--team-id", str(keep.id))
+        self.assertIn("total_teams: 1", output)
+
+    def test_invalid_team_id_raises(self):
+        with self.assertRaises(CommandError):
+            self.run_command("--team-id", "999999")
+
+    def _make_anchor(self, code):
+        from accounts.models import ChurchStructureUnit
+
+        return ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code=code,
+            name=code,
+            name_en=code,
+        )

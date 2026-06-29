@@ -80,6 +80,7 @@
     align-items: center;
     gap: 5px;
     font-size: 13px;
+    flex-shrink: 0;
 }
 .ms-map .ms-summary {
     display: flex;
@@ -88,6 +89,27 @@
     color: var(--muted);
     font-size: 13px;
     margin: 0;
+}
+@media (max-width: 640px) {
+    .ms-map .ms-filter-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .ms-map .ms-filter-field,
+    .ms-map .ms-filter-check {
+        width: 100%;
+    }
+    .ms-map .ms-filter-field input,
+    .ms-map .ms-filter-field select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .ms-map .ms-filter-form .button {
+        width: 100%;
+        text-align: center;
+        box-sizing: border-box;
+    }
 }
 </style>
 
@@ -102,9 +124,9 @@
     <h1 class="page-title">{% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}</h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        只读视图：查看事工团队的上下级关系、教会显示锚点、共享团队，以及缺少的必要事工角色。
+        只读视图：查看事工单位的上下级关系、教会显示锚点、共享单位，以及缺少的必要事工角色。
         {% else %}
-        Read-only view of ministry team parent/child relationships, church display anchors, shared teams, and missing required ministry roles.
+        Read-only view of ministry unit parent/child relationships, church display anchors, shared units, and missing required ministry roles.
         {% endif %}
     </p>
 </section>
@@ -126,11 +148,11 @@
         <span class="ms-legend-item"><span class="ms-badge ms-badge-anchor">{% if language == "zh" %}教会锚点{% else %}Church anchor{% endif %}</span></span>
         <span class="ms-legend-item"><span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span></span>
         <span class="ms-legend-item"><span class="status">{% if language == "zh" %}容器（不可排班）{% else %}Container / not assignable{% endif %}</span></span>
-        <span class="ms-legend-item"><span class="ms-badge ms-badge-shared">{% if language == "zh" %}共享团队{% else %}Shared team{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="ms-badge ms-badge-shared">{% if language == "zh" %}共享单位{% else %}Shared unit{% endif %}</span></span>
         <span class="ms-legend-item"><span class="status status-warning">{% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}</span></span>
         <span class="ms-legend-item"><span class="ms-badge">{% if language == "zh" %}也挂靠于此{% else %}Also linked here{% endif %}</span></span>
         {% if include_inactive %}
-        <span class="ms-legend-item"><span class="status status-danger">{% if language == "zh" %}停用团队{% else %}Inactive team{% endif %}</span></span>
+        <span class="ms-legend-item"><span class="status status-danger">{% if language == "zh" %}停用事工单位{% else %}Inactive unit{% endif %}</span></span>
         {% endif %}
     </div>
 </section>
@@ -138,7 +160,7 @@
 <section class="card">
     <form method="get" class="ms-filter-form">
         <label class="ms-filter-field">
-            {% if language == "zh" %}搜索团队名称{% else %}Search team name{% endif %}
+            {% if language == "zh" %}搜索事工单位{% else %}Search ministry units{% endif %}
             <input type="text" name="q" value="{{ filters.q }}" maxlength="160">
         </label>
         <label class="ms-filter-field">
@@ -175,7 +197,7 @@
     </form>
 
     <p class="ms-summary" style="margin-top:12px;">
-        <span>{% if language == "zh" %}启用团队{% else %}Active teams{% endif %}: {{ structure.summary.active_teams }}</span>
+        <span>{% if language == "zh" %}启用事工单位{% else %}Active units{% endif %}: {{ structure.summary.active_teams }}</span>
         <span>{% if language == "zh" %}可排班{% else %}Assignable{% endif %}: {{ structure.summary.assignable_teams }}</span>
         <span>{% if language == "zh" %}容器{% else %}Containers{% endif %}: {{ structure.summary.container_teams }}</span>
         <span>{% if language == "zh" %}共享{% else %}Shared{% endif %}: {{ structure.summary.shared_teams }}</span>
@@ -207,7 +229,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="muted">{% if language == "zh" %}没有符合条件的团队。{% else %}No teams match these filters.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}没有符合条件的事工单位。{% else %}No ministry units match these filters.{% endif %}</p>
     {% endif %}
 </section>
 {% else %}
@@ -230,18 +252,18 @@
         {% endfor %}
     {% else %}
     <p class="muted">
-        {% if language == "zh" %}还没有挂靠到教会锚点的事工团队。{% else %}No ministry teams are linked under a church anchor yet.{% endif %}
+        {% if language == "zh" %}还没有挂靠到教会锚点的事工单位。{% else %}No ministry units are linked under a church anchor yet.{% endif %}
     </p>
     {% endif %}
 </section>
 
 <section class="card">
-    <h2 class="card-title">{% if language == "zh" %}尚未挂靠的事工团队{% else %}Unanchored Ministry Teams{% endif %}</h2>
+    <h2 class="card-title">{% if language == "zh" %}尚未挂靠的事工单位{% else %}Unanchored Ministry Units{% endif %}</h2>
     <p class="muted">
         {% if language == "zh" %}
-        这些启用团队还没有任何有效的上级链接（教会锚点或上级团队）。
+        这些启用的事工单位还没有有效的上级链接（教会锚点或上级事工单位）。
         {% else %}
-        These active teams have no active parent link yet (church anchor or parent team).
+        These active ministry units have no active parent link yet (church anchor or parent ministry unit).
         {% endif %}
     </p>
     {% if structure.unanchored_nodes %}
@@ -251,13 +273,13 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="muted">{% if language == "zh" %}没有未挂靠的启用团队。{% else %}No unanchored active teams.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}没有未挂靠的启用事工单位。{% else %}No unanchored active units.{% endif %}</p>
     {% endif %}
 </section>
 
 {% if include_inactive %}
 <section class="card">
-    <h2 class="card-title">{% if language == "zh" %}停用团队{% else %}Inactive Teams{% endif %}</h2>
+    <h2 class="card-title">{% if language == "zh" %}停用事工单位{% else %}Inactive Units{% endif %}</h2>
     {% if structure.inactive_nodes %}
     <div class="structure-map-tree">
         {% for node in structure.inactive_nodes %}
@@ -265,7 +287,7 @@
         {% endfor %}
     </div>
     {% else %}
-    <p class="muted">{% if language == "zh" %}没有停用团队。{% else %}No inactive teams.{% endif %}</p>
+    <p class="muted">{% if language == "zh" %}没有停用事工单位。{% else %}No inactive units.{% endif %}</p>
     {% endif %}
 </section>
 {% endif %}

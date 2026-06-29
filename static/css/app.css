@@ -513,12 +513,40 @@ textarea {
     align-items: center;
     gap: 6px;
     font-size: 14px;
+    flex-shrink: 0;
 }
 
 .my-units-filter-actions {
     display: flex;
     gap: 8px;
     align-items: center;
+}
+
+@media (max-width: 640px) {
+    .my-units-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .my-units-filter-search {
+        flex: 1 1 auto;
+        width: 100%;
+    }
+
+    .my-units-filter-checks {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .my-units-filter-actions {
+        width: 100%;
+    }
+
+    .my-units-filter-actions .button {
+        flex: 1 1 auto;
+        text-align: center;
+    }
 }
 
 .my-units-count,

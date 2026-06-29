@@ -5367,7 +5367,7 @@ class MinistryStructureMapTests(TestCase):
         self.set_language("en")
         self.client.login(username="ms_staff", password="pw")
         response = self.client.get(reverse("ministry_structure_map"))
-        self.assertContains(response, "Unanchored Ministry Teams")
+        self.assertContains(response, "Unanchored Ministry Units")
         self.assertContains(response, "Drama Team")
 
     def test_shared_team_shows_shared_indicator(self):

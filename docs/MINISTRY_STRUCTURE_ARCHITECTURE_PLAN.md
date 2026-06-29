@@ -35,7 +35,7 @@ be an unused cross-app capability-registry change, so it stays documented-only
 until the later delegated-management slice.
 
 `MINISTRY-STRUCTURE.1C` implemented a read-only staff **Ministry Structure**
-map (`ministry_structure_map`, `/ministry/structure/`) plus a small read-only
+map (`ministry_structure_map`, `/structure/`) plus a small read-only
 helper module (`ministry/structure_map.py`). The page is staff/superuser-only
 (`request.user.is_staff or request.user.is_superuser`); access is **not** granted
 by `TeamMembership.role` / `can_lead`, `MinistryTeamRoleAssignment`,
@@ -52,7 +52,7 @@ capability was again **not** added in this slice.
 
 `MINISTRY-STRUCTURE.1D-A` implemented a staff-only **structure setup** UI for
 team metadata and parent links (`manage_ministry_team_structure`,
-`/ministry/teams/<id>/structure/`, template `ministry/manage_team_structure.html`).
+`/teams/<id>/structure/`, template `ministry/manage_team_structure.html`).
 It is the first edit slice and is split out from the broader `1D`. Staff/superuser
 edit ministry-structure *display/organization* metadata on an existing
 `MinistryTeam` (`team_kind`, `is_assignable`, `role_profile` — existing active
@@ -126,14 +126,35 @@ Serving or Today, and create/update no `TeamMembership`, `TeamAssignment`,
 `ChurchStructureUnitRoleAssignment`, or `BibleStudyMeetingRole`. No migration was
 generated and `seed_ministry_structure_roles --apply` was not run.
 
-Role-profile setup UI, missing-role bulk repair, delegated ministry management,
-the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and
-`is_assignable` enforcement on `TeamAssignment` all remain deferred to later,
-separately approved slices.
+`MINISTRY-STRUCTURE.1F` implemented `is_assignable` enforcement for
+`TeamAssignment` (no migration; enforcement only). A non-assignable
+(container/area) ministry unit can no longer be the target of a **new active**
+serving assignment: `TeamAssignment.clean()` rejects new non-cancelled
+assignments on a non-assignable team (structural backstop covering forms, the
+lighting import helper, and direct/programmatic saves), `TeamAssignmentForm`
+drops non-assignable teams from its create choices while keeping an existing
+assignment's current team selectable when editing, and the team schedule page
+(`/teams/<id>/schedule/`) blocks scheduling writes for a non-assignable team
+(POST rejected with a clear bilingual message; the schedule/edit/suggestion
+action UI is hidden on GET while existing assignments stay read-only-visible).
+Enforcement applies to **new/active** serving assignments only:
+existing/historical assignments are preserved and stay editable (so staff can
+view, cancel, or repair them), cancelled assignments are always allowed, and
+`manageable_assignment_teams` / list / detail / My Serving are unchanged so
+existing assignments on a now-non-assignable team never disappear. No permission
+migration, My Serving role display, delegated ministry management,
+`CAP_MANAGE_MINISTRY_STRUCTURE`, Today change, or production data cleanup was
+done; `can_manage_ministry_team` and `MinistryTeamRoleAssignment`'s
+non-permission status are unchanged.
 
-Runtime behavior changes — `is_assignable` enforcement, permission migration to
-`MinistryTeamRoleAssignment`, delegated ministry management + the new
-capability — remain deferred to later, separately approved slices.
+Role-profile setup UI, missing-role bulk repair, delegated ministry management,
+and the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration all
+remain deferred to later, separately approved slices.
+
+Runtime behavior changes — permission migration to `MinistryTeamRoleAssignment`,
+delegated ministry management + the new capability — remain deferred to later,
+separately approved slices. `is_assignable` enforcement landed in
+`MINISTRY-STRUCTURE.1F`.
 
 Related existing docs:
 
@@ -412,15 +433,25 @@ single behavioral truth (it decides what `TeamAssignment` may target);
 display taxonomy or overload one field with two meanings, so both ship in the
 foundation phase (Section 14, decision 2).
 
-### 6.4 Assignment-time guard (later behavior slice, not foundation)
+### 6.4 Assignment-time guard (IMPLEMENTED — `MINISTRY-STRUCTURE.1F`)
 
-`TeamAssignment` has no DB or app guard today preventing a container from being
-assigned. When `is_assignable` lands, a later slice should add an app-level
-validation in `TeamAssignmentForm` / `TeamScheduleAssignmentForm` (and the model
-`clean`) rejecting assignment to a non-assignable team. Existing assignment
-queries that list teams (`manageable_assignment_teams`, the assignment forms)
-would filter to `is_assignable=True`. This is a **behavior change** and must be
-its own approved slice, not part of the additive foundation.
+Implemented in `MINISTRY-STRUCTURE.1F`. `TeamAssignment.clean()` now rejects a
+**new active** (non-cancelled) assignment whose `ministry_team.is_assignable` is
+`False` (the structural backstop, guarded by `self._state.adding` so existing
+rows stay editable). `TeamAssignmentForm` excludes non-assignable teams from its
+create choices, keeps an existing assignment's current team selectable when
+editing (so staff can view/cancel/repair it), and rejects moving onto a
+different non-assignable team or reactivating a cancelled assignment onto a
+non-assignable team. The team schedule page blocks scheduling writes for a
+non-assignable team (POST rejected with a clear bilingual message; the
+schedule/edit/suggestion UI hidden on GET) while leaving existing assignments
+read-only-visible. The lighting import helper fails the row closed rather than
+creating an assignment for a non-assignable reused team. To avoid hiding
+history, `manageable_assignment_teams` itself is **not** filtered (it still backs
+list/detail/My Serving visibility); only the create/schedule write paths are
+gated. Enforcement applies to **new/active** assignments only; existing,
+historical, and cancelled assignments are preserved. No DB constraint was added
+and no migration was generated.
 
 ### 6.5 Backfill defaults
 
@@ -709,7 +740,7 @@ phasing controls rollout risk, not product ambition.
     delegated-management slice introduces a real check.
 - **`MINISTRY-STRUCTURE.1C` — read-only structure map (IMPLEMENTED):** a staff
   read-only ministry structure map (`ministry_structure_map`,
-  `/ministry/structure/`, template `ministry/structure_map.html` + node partials,
+  `/structure/`, template `ministry/structure_map.html` + node partials,
   helper `ministry/structure_map.py`). Top-down anchored tree/cards using the
   existing `structure-map` CSS with simple depth-indent connector styling (no
   heavy JS diagram/canvas). Shows team kind, assignable vs container status,
@@ -729,7 +760,7 @@ phasing controls rollout risk, not product ambition.
   missing-required-role warnings. Split into sub-slices:
   - **`MINISTRY-STRUCTURE.1D-A` — team metadata + parent links (IMPLEMENTED):**
     staff/superuser-only setup page per team (`manage_ministry_team_structure`,
-    `/ministry/teams/<id>/structure/`, template
+    `/teams/<id>/structure/`, template
     `ministry/manage_team_structure.html`). Edits structure metadata
     (`team_kind`, `is_assignable`, `role_profile` from existing active profiles
     only, `is_active`) via `MinistryTeamStructureForm`, and manages
@@ -790,9 +821,19 @@ phasing controls rollout risk, not product ambition.
   role-profile setup UI, delegated ministry management,
   `CAP_MANAGE_MINISTRY_STRUCTURE` / permission migration, and `is_assignable`
   enforcement remain deferred.
+- **`MINISTRY-STRUCTURE.1F` — `is_assignable` enforcement (IMPLEMENTED):** the
+  first behavior slice after the additive foundation. `TeamAssignment.clean()`
+  rejects new active (non-cancelled) assignments on a non-assignable team (model
+  backstop, guarded by `self._state.adding`); `TeamAssignmentForm` excludes
+  non-assignable teams from create choices, preserves an existing assignment's
+  current team when editing, and rejects moving/reactivating onto a
+  non-assignable team; the team schedule page blocks scheduling writes for a
+  non-assignable team (bilingual message; read-only on GET); the lighting import
+  helper fails such rows closed. Existing/historical/cancelled assignments are
+  preserved and stay viewable in list/detail/My Serving (no
+  `manageable_assignment_teams` narrowing). No permission, `can_manage_ministry_team`,
+  My Serving role display, Today, or production-data change; no migration.
 - **Later (separate approvals):**
-  - `is_assignable` enforcement on `TeamAssignment` (behavior change, Section
-    6.4).
   - Permission migration from `TeamMembership.role` to
     `MinistryTeamRoleAssignment` (Section 8.1).
   - Delegated ministry management + `CAP_MANAGE_MINISTRY_STRUCTURE` (Section 10).

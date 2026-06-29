@@ -20,6 +20,19 @@
     <p class="page-subtitle">{{ team|ministry_team_name:language }}</p>
 </div>
 
+{% if team_not_assignable %}
+<div class="card">
+    <p class="status status-warning">{{ team_not_assignable_message }}</p>
+    <p class="muted">
+        {% if language == "zh" %}
+        这个事工单位被设为不可排班，因此不能在这里新增或修改服事排班。已存在的排班仍可在下方查看，如需调整请到对应的服事排班详情页处理。
+        {% else %}
+        This ministry unit is set as non-assignable, so serving assignments cannot be created or changed here. Existing assignments remain visible below; manage them from each assignment's detail page.
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+
 <div class="card">
     <form method="get" class="assignment-filter-form">
         <div class="grid grid-2">
@@ -76,6 +89,7 @@
                     {% endif %}
                 </p>
             </div>
+            {% if not team_not_assignable %}
             <a class="button button-secondary" href="{{ item.action_url }}">
                 {% if item.assignment %}
                     {% if language == "zh" %}编辑{% else %}Edit{% endif %}
@@ -83,6 +97,7 @@
                     {% if language == "zh" %}安排{% else %}Schedule{% endif %}
                 {% endif %}
             </a>
+            {% endif %}
         </div>
 
         <div class="assignment-coverage-rows team-schedule-coverage">
@@ -105,6 +120,7 @@
             {% endfor %}
         </div>
 
+        {% if not team_not_assignable %}
         <div class="team-schedule-suggestions">
             <p class="muted">
                 {% if language == "zh" %}排班建议{% else %}Schedule Suggestions{% endif %}
@@ -130,6 +146,7 @@
                 {% endif %}
             </div>
         </div>
+        {% endif %}
 
         {% if item.is_active and active_form %}
         <form method="post" class="team-schedule-form">

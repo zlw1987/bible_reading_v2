@@ -3972,6 +3972,28 @@ class LightingPilotImportCommandTests(TestCase):
         self.assertEqual(team.name_en, "Lighting Team")
         self.assertIn("normalized Lighting Team", output)
 
+    def test_import_does_not_create_assignment_for_non_assignable_existing_team(self):
+        # MINISTRY-STRUCTURE.1F: a reused lighting team that was set to
+        # non-assignable must not receive a new serving assignment. The row
+        # fails closed and its per-row work rolls back; no assignment is created.
+        MinistryTeam.objects.create(
+            name="灯光组",
+            name_en="Lighting Team",
+            is_assignable=False,
+        )
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path)
+
+        self.assertIn("assignments_created=0", output)
+        self.assertIn("rows_errors=1", output)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        # The container team itself is preserved; nothing was assigned to it.
+        self.assertTrue(
+            MinistryTeam.objects.filter(name="灯光组", is_assignable=False).exists()
+        )
+
     def test_dry_run_does_not_normalize_legacy_lighting_team(self):
         team = MinistryTeam.objects.create(name="Lighting Team")
         csv_path = self.write_csv(self.csv_content())
@@ -6600,3 +6622,346 @@ class MinistryTeamRoleAssignmentUITests(TestCase):
         response = self._add_role_post(self.projection, self.lead_type, self.alice)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)
+
+
+class MinistryTeamIsAssignableEnforcementTests(TestCase):
+    """MINISTRY-STRUCTURE.1F — enforce ``is_assignable`` for TeamAssignment.
+
+    New active assignments require an assignable ministry unit; existing /
+    historical / cancelled assignments are preserved and stay editable so staff
+    can view, cancel, or repair them. No permission, My Serving, or Today change.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="assignable_staff",
+            email="assignable-staff@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.lead_user = User.objects.create_user(
+            username="assignable_lead",
+            email="assignable-lead@example.com",
+            password="testpass123",
+        )
+        self.member_user = User.objects.create_user(
+            username="assignable_member",
+            email="assignable-member@example.com",
+            password="testpass123",
+        )
+        self.assignable_team = MinistryTeam.objects.create(
+            name="灯光团队",
+            name_en="Lighting Team",
+            is_assignable=True,
+        )
+        self.container_team = MinistryTeam.objects.create(
+            name="数字事工",
+            name_en="Digital Ministry",
+            team_kind=MinistryTeam.KIND_MINISTRY_AREA,
+            is_assignable=False,
+        )
+        self.assignable_membership = TeamMembership.objects.create(
+            team=self.assignable_team,
+            user=self.member_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.container_lead_membership = TeamMembership.objects.create(
+            team=self.container_team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=3),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    # ----- model.clean() backstop -------------------------------------------
+
+    def test_model_rejects_new_active_assignment_for_non_assignable_team(self):
+        with self.assertRaises(ValidationError) as ctx:
+            TeamAssignment.objects.create(
+                service_event=self.event,
+                ministry_team=self.container_team,
+                status=TeamAssignment.STATUS_SCHEDULED,
+            )
+        self.assertIn("ministry_team", ctx.exception.message_dict)
+        self.assertIn(
+            TeamAssignment.NOT_ASSIGNABLE_ERROR,
+            ctx.exception.message_dict["ministry_team"],
+        )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+
+    def test_model_allows_cancelled_assignment_for_non_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.container_team,
+            status=TeamAssignment.STATUS_CANCELLED,
+        )
+        self.assertEqual(assignment.status, TeamAssignment.STATUS_CANCELLED)
+        self.assertTrue(
+            TeamAssignment.objects.filter(pk=assignment.pk).exists()
+        )
+
+    def test_model_allows_new_active_assignment_for_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.assertTrue(
+            TeamAssignment.objects.filter(pk=assignment.pk).exists()
+        )
+
+    def test_model_allows_editing_existing_assignment_after_team_becomes_container(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.assignable_team.is_assignable = False
+        self.assignable_team.save(update_fields=["is_assignable", "updated_at"])
+
+        assignment.refresh_from_db()
+        assignment.notes = "Repair note for a now-container team."
+        # Should not raise even though the team is now non-assignable.
+        assignment.save()
+
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.notes, "Repair note for a now-container team.")
+
+    # ----- TeamAssignmentForm ------------------------------------------------
+
+    def test_form_create_choices_exclude_non_assignable_team(self):
+        form = TeamAssignmentForm(
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        team_ids = set(
+            form.fields["ministry_team"].queryset.values_list("id", flat=True)
+        )
+        self.assertIn(self.assignable_team.id, team_ids)
+        self.assertNotIn(self.container_team.id, team_ids)
+
+    def test_form_edit_keeps_current_team_when_it_became_non_assignable(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.assignable_team.is_assignable = False
+        self.assignable_team.save(update_fields=["is_assignable", "updated_at"])
+
+        form = TeamAssignmentForm(
+            instance=assignment,
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        team_ids = set(
+            form.fields["ministry_team"].queryset.values_list("id", flat=True)
+        )
+        self.assertIn(self.assignable_team.id, team_ids)
+
+    def test_form_create_rejects_non_assignable_team_gracefully(self):
+        form = TeamAssignmentForm(
+            data={
+                "service_event": self.event.id,
+                "ministry_team": self.container_team.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "",
+            },
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("ministry_team", form.errors)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+
+    def test_form_edit_rejects_moving_to_different_non_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        form = TeamAssignmentForm(
+            data={
+                "service_event": self.event.id,
+                "ministry_team": self.container_team.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "",
+            },
+            instance=assignment,
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("ministry_team", form.errors)
+        assignment.refresh_from_db()
+        self.assertEqual(assignment.ministry_team_id, self.assignable_team.id)
+
+    def test_form_rejects_reactivating_cancelled_assignment_on_non_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_CANCELLED,
+        )
+        self.assignable_team.is_assignable = False
+        self.assignable_team.save(update_fields=["is_assignable", "updated_at"])
+
+        form = TeamAssignmentForm(
+            data={
+                "service_event": self.event.id,
+                "ministry_team": self.assignable_team.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "",
+            },
+            instance=assignment,
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("ministry_team", form.errors)
+        self.assertIn(
+            TeamAssignment.NOT_ASSIGNABLE_ERROR,
+            form.errors["ministry_team"],
+        )
+        # Exactly one message — model backstop and form do not double up.
+        self.assertEqual(len(form.errors["ministry_team"]), 1)
+
+    def test_form_allows_editing_unchanged_active_assignment_on_non_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        self.assignable_team.is_assignable = False
+        self.assignable_team.save(update_fields=["is_assignable", "updated_at"])
+
+        form = TeamAssignmentForm(
+            data={
+                "service_event": self.event.id,
+                "ministry_team": self.assignable_team.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Still editable for repair/cancel.",
+                "assigned_members": [self.assignable_membership.id],
+            },
+            instance=assignment,
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_form_assignable_team_still_valid(self):
+        form = TeamAssignmentForm(
+            data={
+                "service_event": self.event.id,
+                "ministry_team": self.assignable_team.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "",
+                "assigned_members": [self.assignable_membership.id],
+            },
+            language="en",
+            manageable_teams=MinistryTeam.objects.all(),
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    # ----- team schedule page -----------------------------------------------
+
+    def test_schedule_get_for_non_assignable_team_shows_notice(self):
+        self.set_language("en")
+        self.client.login(username="assignable_staff", password="testpass123")
+        response = self.client.get(
+            reverse("team_schedule", args=[self.container_team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["team_not_assignable"])
+        self.assertContains(
+            response,
+            "This ministry unit is not assignable for serving assignments.",
+        )
+
+    def test_schedule_post_for_non_assignable_team_does_not_create_assignment(self):
+        self.set_language("en")
+        self.client.login(username="assignable_staff", password="testpass123")
+        response = self.client.post(
+            reverse("team_schedule", args=[self.container_team.id]),
+            {
+                "event": self.event.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            TeamAssignment.objects.filter(ministry_team=self.container_team).count(),
+            0,
+        )
+
+    def test_team_lead_cannot_create_assignment_for_non_assignable_team_via_schedule(self):
+        self.client.login(username="assignable_lead", password="testpass123")
+        response = self.client.post(
+            reverse("team_schedule", args=[self.container_team.id]),
+            {
+                "event": self.event.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            TeamAssignment.objects.filter(ministry_team=self.container_team).count(),
+            0,
+        )
+
+    # ----- permissions / boundaries -----------------------------------------
+
+    def test_can_manage_ministry_team_unchanged_for_non_assignable_team(self):
+        # is_assignable does not affect TeamMembership-derived management.
+        self.assertTrue(
+            can_manage_ministry_team(self.lead_user, self.container_team)
+        )
+        self.assertFalse(
+            can_manage_ministry_team(self.member_user, self.container_team)
+        )
+
+    def test_role_assignment_does_not_grant_management_on_non_assignable_team(self):
+        role_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.container_team,
+            role_type=role_type,
+            user=self.member_user,
+            start_date=timezone.localdate(),
+        )
+        # A long-term ministry role still does not drive management permission.
+        self.assertFalse(
+            can_manage_ministry_team(self.member_user, self.container_team)
+        )
+
+    def test_my_serving_renders_existing_assignment_on_non_assignable_team(self):
+        assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=self.assignable_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=self.assignable_membership,
+        )
+        # Team becomes a container after the assignment already exists.
+        self.assignable_team.is_assignable = False
+        self.assignable_team.save(update_fields=["is_assignable", "updated_at"])
+
+        self.set_language("en")
+        self.client.login(username="assignable_member", password="testpass123")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")

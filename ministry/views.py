@@ -135,6 +135,9 @@ def ministry_ui_text(language, key):
                 "This event already has duplicate assignments for this team. "
                 "Please clean up the duplicates before using a suggestion."
             ),
+            "team_not_assignable": (
+                "This ministry unit is not assignable for serving assignments."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -165,6 +168,7 @@ def ministry_ui_text(language, key):
             "bible_study_role_not_available": "这个查经服事角色目前不可用。",
             "event_not_available": "这个聚会事件不适用于这个团队排班。",
             "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
+            "team_not_assignable": "这个事工单位目前不可用于服事排班。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -1180,6 +1184,17 @@ def team_schedule(request, team_id):
 
     filters = schedule_filter_values(request)
     base_path = request.path
+
+    # MINISTRY-STRUCTURE.1F: a non-assignable (container/area) ministry unit may
+    # not be scheduled from the team schedule page. Existing assignments stay
+    # viewable read-only in the grid below, but no scheduling write is allowed:
+    # block any POST and suppress the schedule/edit action UI on GET. Staff repair
+    # or cancel pre-existing assignments through the assignment detail/edit flow.
+    team_not_assignable = not team.is_assignable
+    if team_not_assignable and request.method == "POST":
+        messages.error(request, ministry_ui_text(language, "team_not_assignable"))
+        return redirect(f"{base_path}?{schedule_query_string(filters)}")
+
     event_filter = {
         "service_event__start_datetime__date__gte": filters["start_date"],
         "service_event__start_datetime__date__lte": filters["end_date"],
@@ -1317,7 +1332,7 @@ def team_schedule(request, team_id):
                 suggestion_mode,
             )
 
-    if form_instance is not None:
+    if form_instance is not None and not team_not_assignable:
         if request.method == "POST":
             active_form = TeamScheduleAssignmentForm(
                 request.POST,
@@ -1404,6 +1419,10 @@ def team_schedule(request, team_id):
         {
             "team": team,
             "filters": filters,
+            "team_not_assignable": team_not_assignable,
+            "team_not_assignable_message": ministry_ui_text(
+                language, "team_not_assignable"
+            ),
             "event_type_options": schedule_event_type_options(language),
             "schedule_rows": schedule_rows,
             "active_form": active_form,

@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
@@ -395,7 +396,23 @@ class TeamAssignmentForm(forms.ModelForm):
             self.fields[field_name].label = text[field_name]
 
         if manageable_teams is not None:
-            self.fields["ministry_team"].queryset = manageable_teams
+            # MINISTRY-STRUCTURE.1F: new assignments may only target assignable
+            # ministry units. When editing an existing assignment, keep its
+            # current team selectable even if it became non-assignable so staff
+            # can still view/cancel/repair it (the model backstop and clean()
+            # below still block moving it onto a *different* non-assignable team
+            # or reactivating a cancelled row onto a non-assignable one).
+            assignable_teams = manageable_teams.filter(is_assignable=True)
+            if (
+                self.instance
+                and self.instance.pk
+                and self.instance.ministry_team_id
+            ):
+                assignable_teams = MinistryTeam.objects.filter(
+                    Q(pk__in=assignable_teams.values("pk"))
+                    | Q(pk=self.instance.ministry_team_id)
+                ).order_by("name")
+            self.fields["ministry_team"].queryset = assignable_teams
 
         team = None
         if self.is_bound:
@@ -451,6 +468,33 @@ class TeamAssignmentForm(forms.ModelForm):
         if team and self.manageable_teams is not None:
             if not self.manageable_teams.filter(id=team.id).exists():
                 self.add_error("ministry_team", "You cannot manage assignments for this team.")
+
+        # MINISTRY-STRUCTURE.1F: block editing an existing assignment onto a
+        # *different* non-assignable team, or reactivating a previously cancelled
+        # assignment onto a non-assignable team. New active assignments are
+        # already rejected by TeamAssignment.clean() (model backstop); an
+        # unchanged, already-active assignment whose team merely became
+        # non-assignable is intentionally left editable so staff can repair or
+        # cancel it.
+        if (
+            team
+            and status != TeamAssignment.STATUS_CANCELLED
+            and not team.is_assignable
+            and self.instance
+            and self.instance.pk
+        ):
+            original_team_id = self.instance.ministry_team_id
+            original_status = self.instance.status
+            moving_to_different_team = (
+                original_team_id is not None and team.id != original_team_id
+            )
+            reactivating_cancelled = (
+                original_status == TeamAssignment.STATUS_CANCELLED
+            )
+            if moving_to_different_team or reactivating_cancelled:
+                self.add_error(
+                    "ministry_team", TeamAssignment.NOT_ASSIGNABLE_ERROR
+                )
 
         # Block duplicate active (non-cancelled) assignments for the same
         # ServiceEvent + MinistryTeam. A cancelled submission may always coexist

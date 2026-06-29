@@ -166,6 +166,17 @@ def import_row(row, stats, *, row_number, allow_past):
         row_number=row_number,
     )
 
+    # MINISTRY-STRUCTURE.1F: never create a serving assignment for a
+    # non-assignable (container/area) ministry unit. A freshly created lighting
+    # team defaults to assignable; this only trips if an existing reused team was
+    # set non-assignable. The per-row atomic block rolls back any team/event/
+    # membership work done above for this row, so no partial assignment is left.
+    if not team.is_assignable:
+        raise ValueError(
+            "Lighting team is not assignable for serving assignments; "
+            "no assignment was created for this row."
+        )
+
     playbook_link = value(row, "playbook_link")
     if playbook_link and team.playbook_link != playbook_link:
         team.playbook_link = playbook_link

@@ -10,8 +10,7 @@ class MinistryTeam(models.Model):
     # MINISTRY-STRUCTURE.1B: ``team_kind`` is descriptive taxonomy for the
     # structure map and default suggestions; it is NOT a behavior gate. The
     # authoritative gate for whether a team may be a ``TeamAssignment`` target is
-    # ``is_assignable`` (enforcement is a later, separately approved slice; this
-    # foundation slice only stores the flag and changes no assignment behavior).
+    # ``is_assignable``, enforced by MINISTRY-STRUCTURE.1F.
     KIND_MINISTRY_AREA = "ministry_area"
     KIND_DEPARTMENT = "department"
     KIND_TEAM = "team"
@@ -43,6 +42,12 @@ class MinistryTeam(models.Model):
             "Does not gate assignment, membership, visibility, or permissions."
         ),
     )
+    # MINISTRY-STRUCTURE.1F: ``is_assignable`` is the authoritative gate for
+    # whether this team may be a ``TeamAssignment`` target, now enforced — a
+    # non-assignable team cannot be the target of a new active serving
+    # assignment. (The help_text string below is intentionally left at its
+    # committed wording to avoid a no-op help_text-only migration; see this
+    # comment and the class docstring for current behavior.)
     is_assignable = models.BooleanField(
         default=True,
         help_text=(
@@ -317,6 +322,13 @@ class TeamAssignment(models.Model):
         (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    # MINISTRY-STRUCTURE.1F: canonical English message for the is_assignable
+    # enforcement. The bilingual UI copy lives in ministry.views.ministry_ui_text
+    # (key ``team_not_assignable``); the en string there matches this constant.
+    NOT_ASSIGNABLE_ERROR = (
+        "This ministry unit is not assignable for serving assignments."
+    )
+
     service_event = models.ForeignKey(
         ServiceEvent,
         on_delete=models.CASCADE,
@@ -375,6 +387,22 @@ class TeamAssignment(models.Model):
             self.STATUS_CANCELLED,
         }:
             errors["status"] = "Invalid team assignment status."
+
+        # MINISTRY-STRUCTURE.1F: a non-assignable (container/area) ministry unit
+        # may not be the target of a NEW active (non-cancelled) serving
+        # assignment. This is the structural backstop covering forms, the import
+        # helper, and any direct/programmatic save. It only fires for new rows
+        # (``self._state.adding``) so pre-existing/historical assignments whose
+        # team later became non-assignable stay editable — staff can still view,
+        # cancel, or repair them — and cancelled assignments are always allowed.
+        if (
+            self._state.adding
+            and self.ministry_team_id
+            and self.status != self.STATUS_CANCELLED
+            and "ministry_team" not in errors
+            and not self.ministry_team.is_assignable
+        ):
+            errors["ministry_team"] = self.NOT_ASSIGNABLE_ERROR
 
         if errors:
             raise ValidationError(errors)

@@ -4895,21 +4895,32 @@ class MinistryStructureFoundationTests(TestCase):
         self.team.refresh_from_db()
         self.assertEqual(self.team.role_profile_id, profile.id)
 
-    def test_is_assignable_false_does_not_change_team_assignment_behavior(self):
-        # Foundation slice: a non-assignable team can still be used to create a
-        # TeamAssignment at the model level (enforcement is a later slice).
+    def test_non_assignable_team_cannot_be_new_active_assignment_target(self):
+        # MINISTRY-STRUCTURE.1F: a non-assignable team may no longer be the target
+        # of a NEW active TeamAssignment (model backstop in TeamAssignment.clean,
+        # guarded by self._state.adding). An assignable team still works.
         event = ServiceEvent.objects.create(
             title="Service",
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now() + timezone.timedelta(days=1),
             status=ServiceEvent.STATUS_PUBLISHED,
         )
+
+        # self.area is is_assignable=False: a new active assignment is rejected.
+        with self.assertRaises(ValidationError):
+            TeamAssignment.objects.create(
+                service_event=event,
+                ministry_team=self.area,
+                status=TeamAssignment.STATUS_SCHEDULED,
+            )
+
+        # self.team is assignable (default): the assignment still succeeds.
         assignment = TeamAssignment.objects.create(
             service_event=event,
-            ministry_team=self.area,  # is_assignable=False
+            ministry_team=self.team,
             status=TeamAssignment.STATUS_SCHEDULED,
         )
-        self.assertEqual(assignment.ministry_team_id, self.area.id)
+        self.assertEqual(assignment.ministry_team_id, self.team.id)
 
     # --- Parent link tests ---
 
@@ -5686,15 +5697,19 @@ class MinistryStructureMapTests(TestCase):
             start_datetime=timezone.now() + timezone.timedelta(days=1),
             status=ServiceEvent.STATUS_PUBLISHED,
         )
+        # MINISTRY-STRUCTURE.1F enforces is_assignable for new active assignments,
+        # so the fixture assignment must target an assignable team. The boundary
+        # under test is unchanged: a structure-map GET is read-only and must not
+        # create/update/delete TeamAssignment rows.
         assignment = TeamAssignment.objects.create(
             service_event=event,
-            ministry_team=self.digital,  # container, is_assignable=False
+            ministry_team=self.projection,  # assignable
             status=TeamAssignment.STATUS_SCHEDULED,
         )
         self.client.login(username="ms_staff", password="pw")
         self.client.get(reverse("ministry_structure_map"))
         assignment.refresh_from_db()
-        self.assertEqual(assignment.ministry_team_id, self.digital.id)
+        self.assertEqual(assignment.ministry_team_id, self.projection.id)
         self.assertEqual(TeamAssignment.objects.count(), 1)
 
     # --- Helper tests ---
@@ -6191,9 +6206,13 @@ class MinistryTeamStructureSetupTests(TestCase):
             start_datetime=timezone.now() + timezone.timedelta(days=1),
             status=ServiceEvent.STATUS_PUBLISHED,
         )
+        # MINISTRY-STRUCTURE.1F enforces is_assignable for new active assignments,
+        # so the fixture assignment must target an assignable team (self.video).
+        # The boundary under test is unchanged: editing one team's structure must
+        # not create/update/delete TeamAssignment rows on any team.
         assignment = TeamAssignment.objects.create(
             service_event=event,
-            ministry_team=self.area,
+            ministry_team=self.video,  # assignable
             status=TeamAssignment.STATUS_SCHEDULED,
         )
         self._login("st_staff")
@@ -6202,7 +6221,7 @@ class MinistryTeamStructureSetupTests(TestCase):
             {"action": "add_parent_team", "parent_team": str(self.area.id)},
         )
         assignment.refresh_from_db()
-        self.assertEqual(assignment.ministry_team_id, self.area.id)
+        self.assertEqual(assignment.ministry_team_id, self.video.id)
         self.assertEqual(TeamAssignment.objects.count(), 1)
 
 

@@ -7251,3 +7251,328 @@ class MinistryStructureReadinessAuditTests(TestCase):
             name=code,
             name_en=code,
         )
+
+
+class MinistryStructureEntryPointTests(TestCase):
+    """MINISTRY-STRUCTURE.1H staff-only structure entry-point / guidance tests.
+
+    These cover the staff-only Manage Structure links and structure-setup
+    summary on the Ministry Team detail/list pages, the staff overview link to
+    ``/structure/``, and the existing structure-map Manage link. They are
+    discoverability/guidance only: access is staff/superuser and is never granted
+    by TeamMembership.role/can_lead, MinistryTeamRoleAssignment,
+    ChurchStructureUnitRoleAssignment, or ChurchStructureMembership, and a GET
+    creates/updates/deletes no rows and changes no permission.
+    """
+
+    def setUp(self):
+        self.regular = User.objects.create_user(username="ep_reg", password="pw")
+        self.staff = User.objects.create_user(
+            username="ep_staff", password="pw", is_staff=True
+        )
+        self.superuser = User.objects.create_superuser(
+            username="ep_super", password="pw", email="ep_super@example.com"
+        )
+        self.lead_user = User.objects.create_user(username="ep_lead", password="pw")
+
+        self.whole = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="WC",
+            name="全教会",
+            name_en="Whole Church",
+        )
+        self.cm = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="华语",
+            name_en="CM",
+            parent=self.whole,
+        )
+
+        self.profile = MinistryTeamRoleProfile.objects.create(
+            code="default_ministry_unit", name="默认", name_en="Default"
+        )
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code="lead", name="负责人", name_en="Lead"
+        )
+        MinistryTeamRoleRequirement.objects.create(
+            profile=self.profile, role_type=self.lead_type, is_required=True
+        )
+
+        # Ready: assignable, anchored under CM (primary), role profile + lead.
+        self.ready = MinistryTeam.objects.create(
+            name="投影团队",
+            name_en="Projection Team",
+            is_assignable=True,
+            role_profile=self.profile,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.ready, parent_church_unit=self.cm, is_primary=True
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.ready, role_type=self.lead_type, user=self.lead_user
+        )
+
+        # Gap: assignable, no parent link, no role profile.
+        self.gap = MinistryTeam.objects.create(
+            name="录影团队", name_en="Video Team", is_assignable=True
+        )
+
+        # Missing lead: anchored, role profile required-lead, but no lead assigned.
+        self.missing_lead = MinistryTeam.objects.create(
+            name="戏剧团队",
+            name_en="Drama Team",
+            is_assignable=True,
+            role_profile=self.profile,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.missing_lead, parent_church_unit=self.cm, is_primary=True
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def _login(self, username):
+        self.client.login(username=username, password="pw")
+
+    def _detail_url(self, team):
+        return reverse("ministry_team_detail", args=[team.id])
+
+    def _manage_url(self, team):
+        return reverse("manage_ministry_team_structure", args=[team.id])
+
+    def _snapshot_counts(self):
+        return {
+            TeamMembership: TeamMembership.objects.count(),
+            TeamAssignment: TeamAssignment.objects.count(),
+            TeamAssignmentMember: TeamAssignmentMember.objects.count(),
+            ChurchStructureMembership: ChurchStructureMembership.objects.count(),
+            ChurchStructureUnitRoleAssignment: (
+                ChurchStructureUnitRoleAssignment.objects.count()
+            ),
+            BibleStudyMeetingRole: BibleStudyMeetingRole.objects.count(),
+            MinistryTeamRoleAssignment: MinistryTeamRoleAssignment.objects.count(),
+        }
+
+    # --- Team detail: access to Manage Structure link ---
+
+    def test_team_detail_staff_sees_manage_structure_link(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._manage_url(self.ready))
+        self.assertContains(response, "Manage Structure")
+
+    def test_team_detail_superuser_sees_manage_structure_link(self):
+        self.set_language("en")
+        self._login("ep_super")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._manage_url(self.ready))
+
+    def test_team_detail_ordinary_member_no_manage_link(self):
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+        self.assertNotContains(response, "Structure setup")
+
+    def test_team_detail_membership_lead_no_manage_link(self):
+        TeamMembership.objects.create(
+            team=self.ready,
+            user=self.regular,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    def test_team_detail_membership_coordinator_no_manage_link(self):
+        TeamMembership.objects.create(
+            team=self.ready,
+            user=self.regular,
+            role=TeamMembership.ROLE_COORDINATOR,
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    def test_team_detail_ministry_role_lead_no_manage_link(self):
+        # View access via plain membership; the ministry lead role must not by
+        # itself surface the structure-management control.
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.ready, role_type=self.lead_type, user=self.regular
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    def test_team_detail_church_structure_lead_no_manage_link(self):
+        church_lead = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD, name="组长", name_en="Lead"
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.cm, role_type=church_lead, user=self.regular
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.regular,
+            unit=self.cm,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        # View access via plain membership; the church lead/membership must not
+        # surface the structure-management control.
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    # --- Team detail: summary fields and warnings ---
+
+    def test_team_detail_staff_sees_summary_fields(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertContains(response, "Structure setup")
+        self.assertContains(response, "Unit kind")
+        self.assertContains(response, "Role profile")
+        self.assertContains(response, "Display path")
+        self.assertContains(response, "Parent status")
+
+    def test_team_detail_staff_sees_unanchored_and_no_profile_warnings(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.gap))
+        self.assertContains(response, "Unanchored")
+        self.assertContains(response, "No role profile")
+
+    def test_team_detail_staff_sees_missing_lead_warning(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.missing_lead))
+        self.assertContains(response, "Missing Lead")
+
+    def test_team_detail_ready_team_clears_warnings(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.ready))
+        self.assertNotContains(response, "Unanchored")
+        self.assertNotContains(response, "Missing Lead")
+        self.assertNotContains(response, "No role profile")
+        self.assertContains(response, "Has primary parent")
+
+    def test_team_detail_chinese_summary_renders(self):
+        self.set_language("zh")
+        self._login("ep_staff")
+        response = self.client.get(self._detail_url(self.gap))
+        self.assertContains(response, "事工结构设置")
+        self.assertContains(response, "尚未挂靠")
+        self.assertContains(response, "未选择角色配置")
+
+    # --- Team list ---
+
+    def test_team_list_staff_sees_per_team_manage_link(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._manage_url(self.ready))
+        self.assertContains(response, self._manage_url(self.gap))
+
+    def test_team_list_staff_sees_compact_badges(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertContains(response, "Unanchored")
+        self.assertContains(response, "No role profile")
+        self.assertContains(response, "Missing Lead")
+
+    def test_team_list_ordinary_member_no_manage_link(self):
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    def test_team_list_team_lead_no_manage_link(self):
+        TeamMembership.objects.create(
+            team=self.ready,
+            user=self.regular,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self._manage_url(self.ready))
+
+    # --- Staff overview / map ---
+
+    def test_staff_overview_links_to_structure_map(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("staff_overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("ministry_structure_map"))
+        self.assertEqual(reverse("ministry_structure_map"), "/structure/")
+
+    def test_structure_map_node_manage_link_present(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_structure_map"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self._manage_url(self.ready))
+
+    # --- Boundary tests ---
+
+    def test_team_detail_get_creates_no_rows(self):
+        before = self._snapshot_counts()
+        self._login("ep_staff")
+        self.client.get(self._detail_url(self.ready))
+        self.client.get(self._detail_url(self.gap))
+        self.client.get(self._detail_url(self.missing_lead))
+        self.assertEqual(before, self._snapshot_counts())
+
+    def test_team_list_get_creates_no_rows(self):
+        before = self._snapshot_counts()
+        self._login("ep_staff")
+        self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(before, self._snapshot_counts())
+
+    def test_can_manage_ministry_team_unchanged_by_get(self):
+        TeamMembership.objects.create(
+            team=self.ready, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+        )
+        self.assertFalse(can_manage_ministry_team(self.regular, self.ready))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.ready))
+        self._login("ep_staff")
+        self.client.get(self._detail_url(self.ready))
+        self.client.get(reverse("ministry_team_list"))
+        self.assertFalse(can_manage_ministry_team(self.regular, self.ready))
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.ready))

@@ -53,6 +53,29 @@
         {% if team|ministry_team_description:language %}
         <p>{{ team|ministry_team_description:language|linebreaksbr }}</p>
         {% endif %}
+        {% if show_structure_entry and team.structure_summary %}
+        <p class="ms-node-badges">
+            {% if team.structure_summary.is_assignable %}
+            <span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span>
+            {% else %}
+            <span class="status">{% if language == "zh" %}不可排班{% else %}Not assignable{% endif %}</span>
+            {% endif %}
+            {% if team.structure_summary.is_unanchored %}
+            <span class="status status-warning">{% if language == "zh" %}尚未挂靠{% else %}Unanchored{% endif %}</span>
+            {% endif %}
+            {% if not team.structure_summary.has_role_profile %}
+            <span class="status status-warning">{% if language == "zh" %}未选择角色配置{% else %}No role profile{% endif %}</span>
+            {% endif %}
+            {% if team.structure_summary.missing_lead %}
+            <span class="status status-warning">{% if language == "zh" %}缺少负责人{% else %}Missing Lead{% endif %}</span>
+            {% endif %}
+        </p>
+        <p>
+            <a class="button button-secondary" href="{% url 'manage_ministry_team_structure' team.id %}">
+                {% if language == "zh" %}管理事工结构{% else %}Manage Structure{% endif %}
+            </a>
+        </p>
+        {% endif %}
     </div>
     {% endfor %}
 </div>

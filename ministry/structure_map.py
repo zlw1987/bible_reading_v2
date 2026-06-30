@@ -71,6 +71,94 @@ def team_kind_options(language="zh"):
 
 
 @dataclass
+class MinistryTeamStructureSetupSummary:
+    """Read-only structure-setup signals for one ministry team (1H).
+
+    A compact, cheap summary used by the staff-only structure entry points on the
+    Ministry Team detail/list pages. Display/readiness only: every field is
+    derived from existing read-only model helpers and nothing here grants
+    membership, serving/``TeamAssignment``, ``can_manage_ministry_team``, or any
+    permission. ``has_warnings`` is a convenience flag for "this unit needs
+    structure setup attention", never a behavior gate.
+    """
+
+    team_id: int
+    team_kind: str
+    team_kind_label: str
+    is_assignable: bool
+    is_active: bool
+    has_role_profile: bool
+    role_profile_label: str
+    display_path: str
+    has_active_parent_link: bool
+    has_primary_parent: bool
+    is_unanchored: bool
+    has_no_primary_parent: bool
+    missing_required_role_labels: list = field(default_factory=list)
+    missing_required_role_count: int = 0
+    missing_lead: bool = False
+    has_warnings: bool = False
+
+
+def build_team_structure_setup_summary(
+    team, language="zh", target_date=None, include_path=True
+):
+    """Build a read-only :class:`MinistryTeamStructureSetupSummary` for ``team``.
+
+    Cheap and read-only: it reads only the team's active parent links, role
+    profile, and missing-required-role helper (all existing read-only model
+    helpers) and mutates nothing. ``include_path=False`` skips the breadcrumb walk
+    for list views where the display path is not shown. This never reads
+    ``ChurchStructureMembership`` as serving and drives no permission.
+    """
+    target_date = target_date or timezone.localdate()
+
+    active_links = list(team.active_parent_links())
+    has_active_parent_link = bool(active_links)
+    has_primary_parent = any(link.is_primary for link in active_links)
+    is_unanchored = not has_active_parent_link
+    has_no_primary_parent = has_active_parent_link and not has_primary_parent
+
+    missing = (
+        team.missing_required_role_types(target_date) if team.is_active else []
+    )
+    missing_labels = [role_type.display_name(language) for role_type in missing]
+    missing_lead = any(role_type.code == LEAD_ROLE_CODE for role_type in missing)
+
+    has_role_profile = team.role_profile_id is not None
+    role_profile_label = (
+        team.role_profile.display_name(language) if has_role_profile else ""
+    )
+
+    has_warnings = bool(
+        is_unanchored
+        or has_no_primary_parent
+        or not has_role_profile
+        or missing_lead
+        or missing_labels
+    )
+
+    return MinistryTeamStructureSetupSummary(
+        team_id=team.id,
+        team_kind=team.team_kind,
+        team_kind_label=team_kind_label(team.team_kind, language),
+        is_assignable=team.is_assignable,
+        is_active=team.is_active,
+        has_role_profile=has_role_profile,
+        role_profile_label=role_profile_label,
+        display_path=team.display_path_label(language) if include_path else "",
+        has_active_parent_link=has_active_parent_link,
+        has_primary_parent=has_primary_parent,
+        is_unanchored=is_unanchored,
+        has_no_primary_parent=has_no_primary_parent,
+        missing_required_role_labels=missing_labels,
+        missing_required_role_count=len(missing_labels),
+        missing_lead=missing_lead,
+        has_warnings=has_warnings,
+    )
+
+
+@dataclass
 class MinistryStructureTeamCard:
     """Display signals for one ministry team node. No internal IDs are exposed
     in copy; ``team_id`` is used only for building detail links."""

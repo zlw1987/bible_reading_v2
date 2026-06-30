@@ -72,6 +72,80 @@
     {% endif %}
 </div>
 
+{% if can_manage_structure and structure_summary %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}事工结构设置{% else %}Structure setup{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        事工结构用于组织展示和长期责任记录；不会自动授予权限或创建服事安排。
+        {% else %}
+        Ministry structure records organization and long-term responsibility; it does not automatically grant permissions or create serving assignments.
+        {% endif %}
+    </p>
+
+    <ul class="staff-count-list">
+        <li>
+            <strong>{% if language == "zh" %}单位类型{% else %}Unit kind{% endif %}:</strong>
+            {{ structure_summary.team_kind_label }}
+        </li>
+        <li>
+            <strong>{% if language == "zh" %}可排班{% else %}Assignable{% endif %}:</strong>
+            {% if structure_summary.is_assignable %}
+            <span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span>
+            {% else %}
+            <span class="status">{% if language == "zh" %}不可排班{% else %}Not assignable{% endif %}</span>
+            {% endif %}
+        </li>
+        <li>
+            <strong>{% if language == "zh" %}角色配置{% else %}Role profile{% endif %}:</strong>
+            {% if structure_summary.has_role_profile %}
+            {{ structure_summary.role_profile_label }}
+            {% else %}
+            <span class="status status-warning">{% if language == "zh" %}未选择角色配置{% else %}No role profile{% endif %}</span>
+            {% endif %}
+        </li>
+        <li>
+            <strong>{% if language == "zh" %}显示路径{% else %}Display path{% endif %}:</strong>
+            {{ structure_summary.display_path }}
+        </li>
+        <li>
+            <strong>{% if language == "zh" %}上级状态{% else %}Parent status{% endif %}:</strong>
+            {% if structure_summary.is_unanchored %}
+            <span class="status status-warning">{% if language == "zh" %}尚未挂靠{% else %}Unanchored{% endif %}</span>
+            {% else %}
+            <span class="status status-good">{% if language == "zh" %}已挂靠上级{% else %}Has parent link{% endif %}</span>
+            {% if structure_summary.has_primary_parent %}
+            <span class="status status-good">{% if language == "zh" %}有主要上级{% else %}Has primary parent{% endif %}</span>
+            {% else %}
+            <span class="status status-warning">{% if language == "zh" %}缺少主要上级{% else %}No primary parent{% endif %}</span>
+            {% endif %}
+            {% endif %}
+        </li>
+        <li>
+            <strong>{% if language == "zh" %}必要角色{% else %}Required roles{% endif %}:</strong>
+            {% if structure_summary.missing_lead %}
+            <span class="status status-warning">{% if language == "zh" %}缺少负责人{% else %}Missing Lead{% endif %}</span>
+            {% endif %}
+            {% if structure_summary.missing_required_role_count %}
+            <span class="status status-warning">
+                {% if language == "zh" %}缺少必要角色{% else %}Missing required{% endif %}: {{ structure_summary.missing_required_role_labels|join:", " }}
+            </span>
+            {% elif structure_summary.has_role_profile %}
+            <span class="status status-good">{% if language == "zh" %}必要角色齐全{% else %}Required roles met{% endif %}</span>
+            {% else %}
+            <span class="muted">{% if language == "zh" %}未设角色配置，不检查必要角色{% else %}No role profile; required roles not checked{% endif %}</span>
+            {% endif %}
+        </li>
+    </ul>
+
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'manage_ministry_team_structure' team.id %}">
+            {% if language == "zh" %}管理事工结构{% else %}Manage Structure{% endif %}
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <div class="card">
     <h2>{% if language == "zh" %}成员{% else %}Members{% endif %}</h2>
     {% if memberships %}

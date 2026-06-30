@@ -163,6 +163,28 @@ cycle; cancelled/completed assignments on a non-assignable team are reported as
 no permission decision, never reads `ChurchStructureMembership` as serving, and
 leaves My Serving and Today unchanged.
 
+`MINISTRY-STRUCTURE.1H` added staff-facing **entry points and setup guidance**
+for Ministry Structure (UI/discoverability only; no migration). The Ministry Team
+detail page now shows a staff/superuser-only **Structure setup** summary card
+(unit kind, assignable/container, role profile, display path, parent/primary-parent
+status, and missing-required-role — including missing Lead — warnings) plus a
+**Manage Structure** link to the existing staff-only `/teams/<id>/structure/`
+page, and the Ministry Team list shows a staff-only per-team Manage Structure link
+with compact badges (assignable/container, unanchored, no role profile, missing
+Lead). The staff overview already links to the read-only `/structure/` map, and
+the structure map/node rows already carry a staff-only Manage link to
+`/teams/<id>/structure/`. A small read-only helper
+(`build_team_structure_setup_summary` in `ministry/structure_map.py`) builds the
+summary from existing model helpers. All of this is staff/superuser-gated and is
+deliberately **not** granted by `TeamMembership.role`/`can_lead`,
+`MinistryTeamRoleAssignment`, `ChurchStructureUnitRoleAssignment`, or
+`ChurchStructureMembership`. It only improves discoverability/guidance: actual
+structure editing stays on the staff-only `/teams/<id>/structure/` page, no
+permission/`can_manage_ministry_team` behavior changed, structure fields were not
+added to `MinistryTeamForm`, no delegated ministry management was added, and My
+Serving / Today / TeamAssignment / ServiceEvent / Bible Study behavior is
+unchanged. GET requests create/update/delete no rows.
+
 Role-profile setup UI, missing-role bulk repair, delegated ministry management,
 the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and My
 Serving exposure of ministry role assignments all remain deferred to later,
@@ -866,6 +888,26 @@ phasing controls rollout risk, not product ambition.
   bulk repair, delegated ministry management, `CAP_MANAGE_MINISTRY_STRUCTURE` /
   permission migration, and My Serving exposure of ministry roles remain
   deferred.
+- **`MINISTRY-STRUCTURE.1H` — staff structure entry points + setup guidance
+  (IMPLEMENTED):** a UI/discoverability slice (no migration, no new behavior).
+  The Ministry Team detail page gains a staff/superuser-only **Structure setup**
+  summary card (unit kind, assignable/container, role profile, display path,
+  parent/primary-parent status, missing-required-role / missing-Lead warnings)
+  and a **Manage Structure** link; the Ministry Team list gains a staff-only
+  per-team Manage Structure link with compact badges (assignable/container,
+  unanchored, no role profile, missing Lead); the staff overview link to the
+  read-only `/structure/` map and the structure map/node Manage links to
+  `/teams/<id>/structure/` are confirmed present (no duplicates added). A small
+  read-only `build_team_structure_setup_summary` helper
+  (`ministry/structure_map.py`) builds the summary. Staff/superuser-gated and
+  never granted by `TeamMembership.role`/`can_lead`,
+  `MinistryTeamRoleAssignment`, `ChurchStructureUnitRoleAssignment`, or
+  `ChurchStructureMembership`. Improves discoverability/guidance only: structure
+  editing stays on staff-only `/teams/<id>/structure/`; no permission /
+  `can_manage_ministry_team` change, no structure fields added to
+  `MinistryTeamForm`, no delegated management, no `CAP_MANAGE_MINISTRY_STRUCTURE`
+  wiring; My Serving / Today / TeamAssignment / ServiceEvent / Bible Study
+  unchanged; GET creates no rows.
 - **Later (separate approvals):**
   - Permission migration from `TeamMembership.role` to
     `MinistryTeamRoleAssignment` (Section 8.1).

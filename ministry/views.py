@@ -88,6 +88,7 @@ from .services.lighting_pilot_import import (
 )
 from .structure_map import (
     build_ministry_structure_map,
+    build_team_structure_setup_summary,
     team_kind_options,
 )
 
@@ -721,8 +722,21 @@ def schedule_event_type_options(language):
 
 @login_required
 def ministry_team_list(request):
+    language = get_user_language(request)
     can_manage = can_manage_ministry_teams(request.user)
-    teams = visible_teams_for_user(request.user)
+    teams = list(visible_teams_for_user(request.user))
+
+    # MINISTRY-STRUCTURE.1H: staff/superuser-only structure entry points. The
+    # per-team structure-setup summary (Manage Structure link + compact badges)
+    # is read-only and is deliberately NOT derived from TeamMembership.role /
+    # can_lead, MinistryTeamRoleAssignment, ChurchStructureUnitRoleAssignment, or
+    # ChurchStructureMembership.
+    show_structure_entry = _user_is_staff(request.user)
+    if show_structure_entry:
+        for team in teams:
+            team.structure_summary = build_team_structure_setup_summary(
+                team, language, include_path=False
+            )
 
     return render(
         request,
@@ -731,6 +745,7 @@ def ministry_team_list(request):
             "teams": teams,
             "can_manage": can_manage,
             "can_import_lighting": can_import_lighting_pilot(request.user),
+            "show_structure_entry": show_structure_entry,
         },
     )
 
@@ -1169,6 +1184,14 @@ def ministry_team_detail(request, team_id):
             # MINISTRY-STRUCTURE.1D-A: structure setup is staff/superuser only and
             # is deliberately NOT derived from TeamMembership.role / can_lead.
             "can_manage_structure": _user_is_staff(request.user),
+            # MINISTRY-STRUCTURE.1H: read-only structure-setup summary for the
+            # staff-only entry-point card. Built only for staff/superuser; never a
+            # permission source and never derived from membership/serving.
+            "structure_summary": (
+                build_team_structure_setup_summary(team, language)
+                if _user_is_staff(request.user)
+                else None
+            ),
         },
     )
 

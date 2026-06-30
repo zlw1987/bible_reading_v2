@@ -185,6 +185,28 @@ added to `MinistryTeamForm`, no delegated ministry management was added, and My
 Serving / Today / TeamAssignment / ServiceEvent / Bible Study behavior is
 unchanged. GET requests create/update/delete no rows.
 
+Post-`1H` Ministry Teams / Ministry Structure UI polish and navbar IA cleanup are
+complete. The Ministry Team list (`/teams/`) gained search / kind / assignable /
+active filters plus readiness checkboxes (missing required role, missing role
+profile, unanchored), the `/teams/` ↔ `/structure/` relationship was made
+clearer, and the Lighting Pilot Import was retired from the normal discoverable
+UI (its route/view/service/command remain available). The authenticated navbar
+was reorganized so primary nav keeps the main user workflows while staff/admin
+and account functions are grouped into caret dropdowns, and the staff menu has a
+Structure Setup / 结构设置 section linking both Church Structure and Ministry
+Structure. The Ministry Structure setup foundation is complete enough for the
+current product stage.
+
+Manual QA passed across desktop ordinary user, desktop staff user, the mobile
+hamburger drawer, the Staff dropdown, the account dropdown, the Today / My
+Serving / Bible Study serving core flows, and the Ministry Teams / Ministry
+Structure core flows. This polish/IA work changed no product boundary: Today
+stays a general dashboard, My Serving stays the serving workspace,
+`ChurchStructureMembership` / audience scope still does not imply serving, only
+explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user`
+personalize serving, and `MinistryTeamRoleAssignment` stays long-term structure
+responsibility only — not weekly/event serving and not permissions.
+
 Role-profile setup UI, missing-role bulk repair, delegated ministry management,
 the `CAP_MANAGE_MINISTRY_STRUCTURE` capability + permission migration, and My
 Serving exposure of ministry role assignments all remain deferred to later,

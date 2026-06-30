@@ -20,19 +20,23 @@ Bible Study meeting worship-set planning is implemented on the V2 meeting path.
 
 The role/scoped permission foundation exists.
 
-Navigation cleanup is complete.
+Navigation cleanup is complete. The authenticated navbar information architecture has been reorganized: primary nav keeps the main user workflows, while staff/admin and account functions are grouped into caret dropdowns, and the staff menu includes a Structure Setup / 结构设置 section linking both Church Structure and Ministry Structure.
 
 Reading Guide Posts are implemented.
 
-ServiceEvent Foundation V1 is implemented and entering QA/stabilization.
+ServiceEvent Foundation V1 is implemented and pilot-validated.
 
-MinistryTeam + TeamMembership Foundation is implemented and entering QA/stabilization.
+MinistryTeam + TeamMembership Foundation is implemented and pilot-validated.
 
-TeamAssignment V1 is implemented and entering QA/stabilization.
+TeamAssignment V1 is implemented and pilot-validated.
 
-My Serving Page V1 is implemented and entering QA/stabilization.
+My Serving Page V1 is implemented and pilot-validated.
 
-Lighting Team Pilot Data import support and setup UI are implemented and entering QA/stabilization.
+Lighting Team Pilot Data import support and setup UI are implemented and pilot-validated. The Lighting Pilot Import is retired from the normal discoverable UI while its route/view/service/command remain available.
+
+Ministry Structure architecture is implemented through `MINISTRY-STRUCTURE.1A`–`1H`: `MinistryTeam` was upgraded in place into the ministry-structure unit (kind / assignable / role profile, `MinistryTeamParentLink`, and the additive ministry role system), with a read-only staff Ministry Structure map at `/structure/`, staff-only structure setup and long-term ministry-role assignment UI at `/teams/<id>/structure/`, a seed command, a readiness audit, and `is_assignable` enforcement for new serving assignments. The Ministry Structure setup foundation is complete enough for the current product stage. Ministry Teams / Ministry Structure UI polish is complete: `/teams/` has search and readiness filters, and the `/teams/` ↔ `/structure/` relationship is clearer. The authenticated navbar IA cleanup is complete (see "Navigation cleanup" above).
+
+Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility only — not weekly/event serving and not permissions.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -641,6 +645,8 @@ For feature tasks:
 - No unrelated refactors.
 
 ## 11. Next Recommended Work
+
+Current direction (post Ministry Structure + navbar IA cleanup): the Church Structure and Ministry Structure foundations are complete enough for the current product stage, and the Today / My Serving / Bible Study serving core integration has been verified by manual QA. Next product work should be driven by real QA / user feedback or the next explicitly selected feature, not by further legacy cleanup — the legacy structure and Bible Study V1 retirement is already complete for the current codebase, so do not open new cleanup slices without a specific need.
 
 Current foundation status:
 

@@ -1,5 +1,13 @@
 # IA Navigation Redesign Plan
 
+Status: Implemented. The recommended top-level user navigation and the staff
+dropdown grouping described below are now in place. The authenticated navbar IA
+cleanup — primary nav for the main user workflows; staff/admin and account
+functions grouped into caret dropdowns; a staff Structure Setup / 结构设置
+section linking both Church Structure and Ministry Structure — is complete and
+passed manual QA. This document is retained as the originating IA rationale; the
+sequence in Section 8 is historical/superseded by the shipped navigation.
+
 ## 1. Purpose
 
 This document records the recommended information architecture and navigation reset before further feature development.
@@ -15,6 +23,17 @@ The project is no longer only a Bible reading check-in app. It is becoming a lig
 - Staff/admin navigation needs grouping as the system grows.
 
 ## 3. Recommended Top-Level User Navigation
+
+Superseded by the shipped IA. The original recommendation below kept Profile /
+个人资料 as a top-level item; the shipped navbar instead moves Profile and
+account functions into an account dropdown. The shipped IA is:
+
+- Primary nav: Today / 今日, Reading / 读经, Bible Study / 查经, Prayer / 代祷,
+  Church Gatherings / 教会聚会, My Serving / 我的服事.
+- Account dropdown: Profile / 个人资料, My Units / 我负责的单位 (when available),
+  language switch, logout.
+
+Original (historical) recommendation:
 
 English:
 - Today
@@ -90,7 +109,7 @@ Profile owns:
 
 ## 5. Staff Navigation Grouping
 
-Recommended staff dropdown groups:
+Shipped staff dropdown groups (updated to match the shipped IA):
 
 ### Content Management
 
@@ -99,10 +118,14 @@ Recommended staff dropdown groups:
 
 ### Ministry Operations
 
-- Service Events
+- Service Events / Church Gatherings
 - Ministry Teams
 - Team Assignments
-- Lighting Pilot Import/Setup
+
+### Structure Setup / 结构设置
+
+- Church Structure Setup & Review
+- Ministry Structure
 
 ### Users and Review
 
@@ -110,6 +133,10 @@ Recommended staff dropdown groups:
 - Reflection Reports
 - Prayer Reports
 - Django Admin
+
+Lighting Pilot Import/Setup is no longer listed in the staff dropdown: it is
+retired from normal discoverable UI and remains only as a retained
+route/view/service/command tool if needed.
 
 ## 6. Bilingual UI Principles
 

@@ -17,7 +17,7 @@
 {% if serving_summary %}
 {% if serving_summary.is_pending %}
 <div class="card dashboard-reminder">
-    <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}Needs your attention{% endif %}</h2>
+    <h2 class="card-title">{% if language == "zh" %}需要你留意{% else %}Needs your attention{% endif %}</h2>
     <p class="muted">
         {% if language == "zh" %}
             你有 {{ serving_summary.pending_count }} 个服事安排等待确认。

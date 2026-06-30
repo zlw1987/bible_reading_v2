@@ -720,6 +720,102 @@ def schedule_event_type_options(language):
     ]
 
 
+TEAM_LIST_ASSIGNABLE_VALUES = {"assignable", "container"}
+TEAM_LIST_ACTIVE_VALUES = {"active", "inactive"}
+
+
+def team_list_filter_values(request, *, is_staff):
+    """Parse and validate the /teams/ GET filter values.
+
+    Readiness filters (``missing_required`` / ``missing_profile`` /
+    ``unanchored``) are only honored for staff/superuser, because they read the
+    read-only structure-setup summary that is built for staff only. None of these
+    filters change visibility or permission scope: they only narrow the already
+    permission-filtered ``visible_teams_for_user`` list (see
+    ``apply_team_list_filters``).
+    """
+    kind = (request.GET.get("kind") or "").strip()
+    if kind not in dict(MinistryTeam.TEAM_KIND_CHOICES):
+        kind = ""
+    assignable = (request.GET.get("assignable") or "").strip()
+    if assignable not in TEAM_LIST_ASSIGNABLE_VALUES:
+        assignable = ""
+    active = (request.GET.get("active") or "").strip()
+    if active not in TEAM_LIST_ACTIVE_VALUES:
+        active = ""
+    return {
+        "q": (request.GET.get("q") or "").strip(),
+        "kind": kind,
+        "assignable": assignable,
+        "active": active,
+        "missing_required": is_staff and request.GET.get("missing_required") == "1",
+        "missing_profile": is_staff and request.GET.get("missing_profile") == "1",
+        "unanchored": is_staff and request.GET.get("unanchored") == "1",
+    }
+
+
+def team_list_filters_active(filters):
+    return bool(
+        filters["q"]
+        or filters["kind"]
+        or filters["assignable"]
+        or filters["active"]
+        or filters["missing_required"]
+        or filters["missing_profile"]
+        or filters["unanchored"]
+    )
+
+
+def apply_team_list_filters(teams, filters, *, is_staff):
+    """Filter the already-visible ``teams`` list in memory.
+
+    Operates only on teams the caller can already see (the input is
+    ``visible_teams_for_user``), so it can never widen visibility. It does not
+    read ``ChurchStructureMembership``, ``MinistryTeamRoleAssignment``, or
+    ``TeamMembership`` as a permission/serving source: the readiness checks use
+    the read-only ``structure_summary`` already attached for staff.
+    """
+    q_value = filters["q"].lower()
+    result = []
+    for team in teams:
+        if filters["kind"] and team.team_kind != filters["kind"]:
+            continue
+        if filters["assignable"] == "assignable" and not team.is_assignable:
+            continue
+        if filters["assignable"] == "container" and team.is_assignable:
+            continue
+        if filters["active"] == "active" and not team.is_active:
+            continue
+        if filters["active"] == "inactive" and team.is_active:
+            continue
+        if q_value:
+            haystack = " ".join(
+                part
+                for part in (
+                    team.name,
+                    team.name_en,
+                    team.description,
+                    team.description_en,
+                )
+                if part
+            ).lower()
+            if q_value not in haystack:
+                continue
+        if is_staff:
+            summary = getattr(team, "structure_summary", None)
+            if summary is not None:
+                if filters["missing_required"] and not (
+                    summary.missing_required_role_count or summary.missing_lead
+                ):
+                    continue
+                if filters["missing_profile"] and summary.has_role_profile:
+                    continue
+                if filters["unanchored"] and not summary.is_unanchored:
+                    continue
+        result.append(team)
+    return result
+
+
 @login_required
 def ministry_team_list(request):
     language = get_user_language(request)
@@ -738,14 +834,19 @@ def ministry_team_list(request):
                 team, language, include_path=False
             )
 
+    filters = team_list_filter_values(request, is_staff=show_structure_entry)
+    teams = apply_team_list_filters(teams, filters, is_staff=show_structure_entry)
+
     return render(
         request,
         "ministry/team_list.html",
         {
             "teams": teams,
             "can_manage": can_manage,
-            "can_import_lighting": can_import_lighting_pilot(request.user),
             "show_structure_entry": show_structure_entry,
+            "filters": filters,
+            "filters_active": team_list_filters_active(filters),
+            "kind_options": team_kind_options(language),
         },
     )
 
@@ -1975,7 +2076,6 @@ def team_assignment_list(request):
             "can_create": can_create,
             "can_show_new_assignment": can_show_new_assignment,
             "show_setup_actions": show_setup_actions,
-            "can_import_lighting": can_import_lighting_pilot(request.user),
         },
     )
 

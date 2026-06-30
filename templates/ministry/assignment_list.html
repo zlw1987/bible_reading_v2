@@ -124,11 +124,6 @@
         <a class="button button-secondary" href="{% url 'ministry_team_list' %}">
             {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
         </a>
-        {% if can_import_lighting %}
-        <a class="button button-secondary" href="{% url 'lighting_pilot_import' %}">
-            {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}
-        </a>
-        {% endif %}
         {% if can_show_new_assignment %}
         <a class="button" href="{% url 'create_team_assignment' %}">
             {% if language == "zh" %}新增排班{% else %}New Assignment{% endif %}

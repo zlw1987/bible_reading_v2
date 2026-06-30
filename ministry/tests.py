@@ -3002,7 +3002,10 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertContains(response, "Suggested setup steps")
         self.assertContains(response, "Create Recurring Events")
         self.assertContains(response, "Ministry Teams")
-        self.assertContains(response, "Lighting Pilot Import")
+        # Lighting Pilot Import is a retired pilot workflow; it must no longer be
+        # discoverable from the assignments empty-state setup CTAs.
+        self.assertNotContains(response, "Lighting Pilot Import")
+        self.assertNotContains(response, reverse("lighting_pilot_import"))
         self.assertContains(response, "New Assignment")
 
     def test_coverage_helper_reports_required_assignment_states_without_creating_rows(self):
@@ -7550,6 +7553,97 @@ class MinistryStructureEntryPointTests(TestCase):
         response = self.client.get(reverse("ministry_team_list"))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self._manage_url(self.ready))
+
+    # --- Team list: filters ---
+
+    def test_team_list_staff_renders_filter_form(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="q"')
+        self.assertContains(response, 'name="kind"')
+        self.assertContains(response, 'name="assignable"')
+        # Staff-only readiness filters.
+        self.assertContains(response, 'name="missing_required"')
+        self.assertContains(response, 'name="missing_profile"')
+        self.assertContains(response, 'name="unanchored"')
+
+    def test_team_list_ordinary_user_has_no_staff_readiness_filters(self):
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="missing_required"')
+        self.assertNotContains(response, 'name="unanchored"')
+
+    def test_team_list_q_filters_visible_results(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_team_list"), {"q": "Projection"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Projection Team")
+        self.assertNotContains(response, "Video Team")
+        self.assertNotContains(response, "Drama Team")
+
+    def test_team_list_unanchored_filter_narrows_to_unanchored(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(
+            reverse("ministry_team_list"), {"unanchored": "1"}
+        )
+        self.assertEqual(response.status_code, 200)
+        # Only the gap team is unanchored; ready/missing_lead are anchored.
+        self.assertContains(response, "Video Team")
+        self.assertNotContains(response, "Projection Team")
+        self.assertNotContains(response, "Drama Team")
+
+    def test_team_list_readiness_filter_does_not_widen_ordinary_visibility(self):
+        # An ordinary member passing a staff-only readiness filter must still only
+        # see teams they can already see; the filter is ignored for them and never
+        # exposes other teams.
+        TeamMembership.objects.create(
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_MEMBER
+        )
+        self.set_language("en")
+        self._login("ep_reg")
+        response = self.client.get(
+            reverse("ministry_team_list"), {"unanchored": "1"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Projection Team")
+        self.assertNotContains(response, "Video Team")
+        self.assertNotContains(response, "Drama Team")
+
+    # --- Team list: Lighting Pilot Import retired from normal UI ---
+
+    def test_team_list_no_lighting_pilot_import_link(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Lighting Pilot Import")
+        self.assertNotContains(response, reverse("lighting_pilot_import"))
+
+    def test_staff_menu_no_lighting_pilot_import_link(self):
+        self.set_language("en")
+        self._login("ep_staff")
+        # The staff dropdown menu is rendered from base.html on any staff page.
+        response = self.client.get(reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse("lighting_pilot_import"))
+
+    def test_team_list_get_with_filters_creates_no_rows(self):
+        before = self._snapshot_counts()
+        self._login("ep_staff")
+        self.client.get(
+            reverse("ministry_team_list"),
+            {"q": "Team", "assignable": "assignable", "unanchored": "1"},
+        )
+        self.assertEqual(before, self._snapshot_counts())
 
     # --- Staff overview / map ---
 

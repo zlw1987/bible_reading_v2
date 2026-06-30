@@ -90,6 +90,18 @@
     font-size: 13px;
     margin: 0;
 }
+.ms-map .ms-boundary-note {
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin: 0 0 16px;
+}
+.ms-map .ms-boundary-note strong {
+    color: var(--text);
+}
 @media (max-width: 640px) {
     .ms-map .ms-filter-form {
         flex-direction: column;
@@ -131,16 +143,14 @@
     </p>
 </section>
 
-<section class="notice-panel">
-    <strong>{% if language == "zh" %}只用于事工组织展示{% else %}Ministry organization display only{% endif %}</strong>
-    <p>
-        {% if language == "zh" %}
-        此事工结构仅用于组织展示。教会结构锚点只表示显示位置，不代表成员归属、可见性、服事安排或权限。
-        {% else %}
-        This structure is for ministry organization only. Church anchors are display anchors and do not grant membership, visibility, serving assignment, or permissions.
-        {% endif %}
-    </p>
-</section>
+<p class="ms-boundary-note">
+    <strong>{% if language == "zh" %}只用于事工组织展示。{% else %}Ministry organization display only.{% endif %}</strong>
+    {% if language == "zh" %}
+    教会结构锚点只表示显示位置，不代表成员归属、可见性、服事安排或权限。
+    {% else %}
+    Church anchors are display anchors and do not grant membership, visibility, serving assignment, or permissions.
+    {% endif %}
+</p>
 
 <section class="card">
     <h2 class="card-title">{% if language == "zh" %}图例{% else %}Legend{% endif %}</h2>

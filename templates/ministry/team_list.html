@@ -7,34 +7,152 @@
 {% endblock %}
 
 {% block content %}
+<style>
+.ms-team-list .ms-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    align-items: center;
+}
+.ms-team-list .ms-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    align-items: flex-end;
+}
+.ms-team-list .ms-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 13px;
+    color: var(--muted);
+}
+.ms-team-list .ms-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.ms-team-list .ms-node-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    align-items: baseline;
+    margin: 6px 0 0;
+}
+.ms-team-list .ms-badge-setup {
+    color: #2a4d8f;
+    border-color: #bcd0f0;
+    background: #eef3fc;
+}
+.ms-team-list .ms-result-count {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+}
+@media (max-width: 640px) {
+    .ms-team-list .ms-filter-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+    .ms-team-list .ms-filter-field,
+    .ms-team-list .ms-filter-check {
+        width: 100%;
+    }
+    .ms-team-list .ms-filter-field input,
+    .ms-team-list .ms-filter-field select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+</style>
+
+<div class="ms-team-list">
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}管理教会服事团队和成员{% else %}Manage church ministry teams and members{% endif %}
+        {% if language == "zh" %}
+        管理事工团队、团队成员和服事排班。
+        {% else %}
+        Manage ministry teams, their members, and serving schedules.
+        {% endif %}
     </p>
 </div>
 
 {% if can_manage %}
 <div class="card">
-    <div class="actions">
+    <div class="ms-toolbar">
         <a class="button" href="{% url 'create_ministry_team' %}">
             {% if language == "zh" %}新增事工团队{% else %}New Ministry Team{% endif %}
         </a>
-        {% if user.is_staff or user.is_superuser %}
+        {% if show_structure_entry %}
         <a class="button button-secondary" href="{% url 'ministry_structure_map' %}">
-            {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
-        </a>
-        {% endif %}
-        {% if can_import_lighting %}
-        <a class="button button-secondary" href="{% url 'lighting_pilot_import' %}">
-            {% if language == "zh" %}灯光组试点导入{% else %}Lighting Pilot Import{% endif %}
+            {% if language == "zh" %}查看事工结构{% else %}View Ministry Structure{% endif %}
         </a>
         {% endif %}
     </div>
 </div>
 {% endif %}
 
+<section class="card">
+    <form method="get" class="ms-filter-form">
+        <label class="ms-filter-field">
+            {% if language == "zh" %}搜索团队{% else %}Search teams{% endif %}
+            <input type="text" name="q" value="{{ filters.q }}" maxlength="160"
+                placeholder="{% if language == 'zh' %}名称或描述{% else %}Name or description{% endif %}">
+        </label>
+        <label class="ms-filter-field">
+            {% if language == "zh" %}类型{% else %}Kind{% endif %}
+            <select name="kind">
+                <option value="">{% if language == "zh" %}全部类型{% else %}All kinds{% endif %}</option>
+                {% for value, label in kind_options %}
+                <option value="{{ value }}" {% if filters.kind == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="ms-filter-field">
+            {% if language == "zh" %}可排班/容器{% else %}Assignable / container{% endif %}
+            <select name="assignable">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                <option value="assignable" {% if filters.assignable == "assignable" %}selected{% endif %}>{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</option>
+                <option value="container" {% if filters.assignable == "container" %}selected{% endif %}>{% if language == "zh" %}容器{% else %}Container{% endif %}</option>
+            </select>
+        </label>
+        {% if show_structure_entry %}
+        <label class="ms-filter-field">
+            {% if language == "zh" %}状态{% else %}Status{% endif %}
+            <select name="active">
+                <option value="">{% if language == "zh" %}全部{% else %}All{% endif %}</option>
+                <option value="active" {% if filters.active == "active" %}selected{% endif %}>{% if language == "zh" %}启用{% else %}Active{% endif %}</option>
+                <option value="inactive" {% if filters.active == "inactive" %}selected{% endif %}>{% if language == "zh" %}停用{% else %}Inactive{% endif %}</option>
+            </select>
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="missing_required" value="1" {% if filters.missing_required %}checked{% endif %}>
+            {% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="missing_profile" value="1" {% if filters.missing_profile %}checked{% endif %}>
+            {% if language == "zh" %}未选择角色配置{% else %}No role profile{% endif %}
+        </label>
+        <label class="ms-filter-check">
+            <input type="checkbox" name="unanchored" value="1" {% if filters.unanchored %}checked{% endif %}>
+            {% if language == "zh" %}尚未挂靠{% else %}Unanchored{% endif %}
+        </label>
+        {% endif %}
+        <button type="submit" class="button">{% if language == "zh" %}应用{% else %}Apply{% endif %}</button>
+        {% if filters_active %}
+        <a class="button button-secondary" href="{% url 'ministry_team_list' %}">{% if language == "zh" %}清除{% else %}Clear{% endif %}</a>
+        {% endif %}
+    </form>
+</section>
+
 {% if teams %}
+<p class="ms-result-count">
+    {% if language == "zh" %}显示 {{ teams|length }} 个团队{% else %}Showing {{ teams|length }} team{{ teams|length|pluralize }}{% endif %}
+</p>
 <div class="grid grid-2">
     {% for team in teams %}
     <div class="card">
@@ -58,16 +176,18 @@
             {% if team.structure_summary.is_assignable %}
             <span class="status status-good">{% if language == "zh" %}可排班{% else %}Assignable{% endif %}</span>
             {% else %}
-            <span class="status">{% if language == "zh" %}不可排班{% else %}Not assignable{% endif %}</span>
+            <span class="status">{% if language == "zh" %}容器{% else %}Container{% endif %}</span>
             {% endif %}
             {% if team.structure_summary.is_unanchored %}
-            <span class="status status-warning">{% if language == "zh" %}尚未挂靠{% else %}Unanchored{% endif %}</span>
+            <span class="status ms-badge-setup">{% if language == "zh" %}尚未挂靠{% else %}Unanchored{% endif %}</span>
             {% endif %}
             {% if not team.structure_summary.has_role_profile %}
-            <span class="status status-warning">{% if language == "zh" %}未选择角色配置{% else %}No role profile{% endif %}</span>
+            <span class="status ms-badge-setup">{% if language == "zh" %}未选择角色配置{% else %}No role profile{% endif %}</span>
             {% endif %}
             {% if team.structure_summary.missing_lead %}
             <span class="status status-warning">{% if language == "zh" %}缺少负责人{% else %}Missing Lead{% endif %}</span>
+            {% elif team.structure_summary.missing_required_role_count %}
+            <span class="status status-warning">{% if language == "zh" %}缺少必要角色{% else %}Missing required roles{% endif %}</span>
             {% endif %}
         </p>
         <p>
@@ -82,7 +202,9 @@
 {% else %}
 <div class="card">
     <p class="muted">
-        {% if can_manage %}
+        {% if filters_active %}
+            {% if language == "zh" %}没有符合筛选条件的事工团队。{% else %}No ministry teams match these filters.{% endif %}
+        {% elif can_manage %}
             {% if language == "zh" %}暂无事工团队。{% else %}No ministry teams found.{% endif %}
         {% else %}
             {% if language == "zh" %}你还没有被分配到任何事工团队。{% else %}You are not assigned to any ministry team.{% endif %}
@@ -90,4 +212,5 @@
     </p>
 </div>
 {% endif %}
+</div>
 {% endblock %}

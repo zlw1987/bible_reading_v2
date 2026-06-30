@@ -115,6 +115,9 @@ a {
 }
 
 .nav-staff-menu summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--primary);
     cursor: pointer;
     list-style: none;
@@ -203,7 +206,7 @@ a {
     text-decoration: underline;
 }
 
-.nav-account-caret {
+.nav-dropdown-caret {
     font-size: 10px;
     color: var(--muted);
 }

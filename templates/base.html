@@ -48,7 +48,8 @@
                 {% if user.is_staff %}
                 <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">
                     <summary class="nav-link{% if active_nav == 'staff' %} active{% endif %}">
-                        {% if language == "zh" %}同工管理{% else %}Staff{% endif %}
+                        <span>{% if language == "zh" %}同工管理{% else %}Staff{% endif %}</span>
+                        <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                     </summary>
                     <div class="nav-staff-menu-panel nav-dropdown-panel">
                         <a href="{% url 'staff_overview' %}">
@@ -122,7 +123,7 @@
                 <details class="nav-account-menu nav-dropdown" data-dropdown-var-prefix="account-menu">
                     <summary class="nav-link{% if active_nav == 'profile' or active_nav == 'my_units' %} active{% endif %}">
                         <span class="nav-account-name">{{ user.username }}</span>
-                        <span class="nav-account-caret" aria-hidden="true">▾</span>
+                        <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                     </summary>
                     <div class="nav-account-menu-panel nav-dropdown-panel">
                         <a href="{% url 'profile' %}">{{ ui.profile }}</a>

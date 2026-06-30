@@ -648,6 +648,8 @@ For feature tasks:
 
 Current direction (post Ministry Structure + navbar IA cleanup): the Church Structure and Ministry Structure foundations are complete enough for the current product stage, and the Today / My Serving / Bible Study serving core integration has been verified by manual QA. Next product work should be driven by real QA / user feedback or the next explicitly selected feature, not by further legacy cleanup — the legacy structure and Bible Study V1 retirement is already complete for the current codebase, so do not open new cleanup slices without a specific need.
 
+Pre-user-trial readiness tooling: SETUP-READINESS.1A adds `audit_trial_setup_readiness`, a single **read-only** management command that summarizes setup/data readiness across the core modules (Church Structure / membership, Ministry Teams, TeamAssignment / My Serving, Bible Study serving, audience visibility, permission/admin) as blockers / warnings / info before inviting real users to a trial. It mutates nothing, has no `--apply`, infers no serving from membership/visibility, and is **not** a production-deployment claim. The ministry-structure portion delegates to `ministry.structure_readiness.run_audit`. See `docs/TRIAL_SETUP_READINESS_RUNBOOK.md`.
+
 Current foundation status:
 
 CS-F.1 MinistryContext bridge foundation, CS-F.2 MinistryContext Bible Study Schedule scope, and CS-F.3 optional ServiceEvent MinistryContext labeling are complete after the Bible Study V2 Flow QA pass. `v0.9-pilot-rc1` was deployed and pilot validation passed.

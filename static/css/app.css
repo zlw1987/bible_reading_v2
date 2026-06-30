@@ -92,11 +92,6 @@ a {
     background: var(--primary);
 }
 
-.nav-user {
-    color: var(--muted);
-    font-size: 14px;
-}
-
 .nav-link {
     border-radius: 999px;
     padding: 6px 10px;
@@ -168,6 +163,86 @@ a {
         background: var(--surface-soft);
         text-decoration: none;
     }
+
+/* Right-side group: management (staff) dropdown + account dropdown. On desktop
+   it floats to the far right of the nav; in the mobile drawer it dissolves
+   (display: contents) so its children flow as ordinary full-width rows. */
+.site-header-inner--app .nav {
+    flex: 1 1 auto;
+}
+
+.nav-account-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.nav-account-menu {
+    position: relative;
+}
+
+.nav-account-menu[open] summary {
+    text-decoration: underline;
+}
+
+.nav-account-menu summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--primary);
+    cursor: pointer;
+    list-style: none;
+}
+
+    .nav-account-menu summary::-webkit-details-marker {
+        display: none;
+    }
+
+.nav-account-menu summary:hover {
+    text-decoration: underline;
+}
+
+.nav-account-caret {
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.nav-account-menu-panel {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    min-width: 200px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    display: grid;
+    gap: 4px;
+}
+
+.nav-account-menu-panel a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+
+    .nav-account-menu-panel a:hover {
+        background: var(--surface-soft);
+        text-decoration: none;
+    }
+
+.nav-account-menu-panel .nav-account-form {
+    margin: 0;
+}
+
+.nav-account-menu-panel .nav-account-form button {
+    width: 100%;
+    text-align: left;
+}
 
 .container {
     max-width: 1120px;
@@ -1353,8 +1428,15 @@ th {
         z-index: 40;
     }
 
+    /* The right-side group dissolves in the drawer so the staff and account
+       dropdowns flow as ordinary full-width column rows. */
+    body.primary-nav-open .nav-collapsible .nav-account-group {
+        display: contents;
+    }
+
     body.primary-nav-open .nav-collapsible .nav-link,
     body.primary-nav-open .nav-collapsible .nav-staff-menu,
+    body.primary-nav-open .nav-collapsible .nav-account-menu,
     body.primary-nav-open .nav-collapsible .inline-form,
     body.primary-nav-open .nav-collapsible .inline-form button {
         width: 100%;
@@ -1362,10 +1444,6 @@ th {
 
     body.primary-nav-open .nav-collapsible .nav-link {
         padding: 10px 12px;
-    }
-
-    body.primary-nav-open .nav-collapsible .nav-user {
-        padding: 4px 12px;
     }
 
     /* Hamburger morphs into a close (X) affordance while the drawer is open. */
@@ -1415,6 +1493,48 @@ th {
     }
 
     body.primary-nav-open .nav-staff-menu[open] .nav-staff-menu-panel {
+        position: static;
+        inset: auto;
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+        max-height: none;
+        overflow: visible;
+        box-shadow: none;
+        border: 1px solid var(--border);
+        z-index: auto;
+    }
+
+    /* Account dropdown mirrors the staff dropdown: fixed overlay on the older
+       mobile path (drawer closed), inline expansion inside the open drawer. */
+    .nav-account-menu[open] .nav-account-menu-panel {
+        position: fixed;
+        top: var(--account-menu-top, var(--nav-dropdown-top, 88px));
+        left: var(--account-menu-left, var(--nav-dropdown-left, 12px));
+        width: var(--account-menu-width, var(--nav-dropdown-width, calc(100vw - 24px)));
+        bottom: 12px;
+        bottom: max(12px, env(safe-area-inset-bottom));
+        min-width: 0;
+        max-width: calc(100vw - 24px);
+        max-height: none;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        z-index: 100;
+    }
+
+    body.primary-nav-open .nav-account-menu {
+        position: static;
+        width: 100%;
+    }
+
+    body.primary-nav-open .nav-account-menu summary {
+        display: flex;
+        width: 100%;
+        padding: 10px 12px;
+    }
+
+    body.primary-nav-open .nav-account-menu[open] .nav-account-menu-panel {
         position: static;
         inset: auto;
         width: 100%;

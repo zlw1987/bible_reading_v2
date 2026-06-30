@@ -44,15 +44,7 @@
                    href="{% url 'my_serving' %}">
                     {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
                 </a>
-                {% if show_my_units_nav %}
-                <a class="nav-link{% if active_nav == 'my_units' %} active{% endif %}"
-                   href="{% url 'my_units' %}">
-                    {% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}
-                </a>
-                {% endif %}
-                <a class="nav-link{% if active_nav == 'profile' %} active{% endif %}"
-                   href="{% url 'profile' %}">{{ ui.profile }}</a>
-
+                <div class="nav-account-group">
                 {% if user.is_staff %}
                 <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">
                     <summary class="nav-link{% if active_nav == 'staff' %} active{% endif %}">
@@ -93,10 +85,13 @@
                         </a>
 
                         <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}教会结构{% else %}Church Structure{% endif %}
+                            {% if language == "zh" %}结构设置{% else %}Structure Setup{% endif %}
                         </span>
                         <a href="{% url 'staff_structure_map' %}">
                             {% if language == "zh" %}教会结构设置与检查{% else %}Church Structure Setup & Review{% endif %}
+                        </a>
+                        <a href="{% url 'ministry_structure_map' %}">
+                            {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
                         </a>
 
                         <span class="nav-staff-menu-heading">
@@ -124,21 +119,35 @@
                 </details>
                 {% endif %}
 
-                <form method="post" action="{% url 'change_language' %}" class="inline-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <input type="hidden" name="language" value="{{ other_language }}">
-                    <button type="submit" class="button-secondary">
-                        {{ other_language_label }}
-                    </button>
-                </form>
+                <details class="nav-account-menu nav-dropdown" data-dropdown-var-prefix="account-menu">
+                    <summary class="nav-link{% if active_nav == 'profile' or active_nav == 'my_units' %} active{% endif %}">
+                        <span class="nav-account-name">{{ user.username }}</span>
+                        <span class="nav-account-caret" aria-hidden="true">▾</span>
+                    </summary>
+                    <div class="nav-account-menu-panel nav-dropdown-panel">
+                        <a href="{% url 'profile' %}">{{ ui.profile }}</a>
+                        {% if show_my_units_nav %}
+                        <a href="{% url 'my_units' %}">
+                            {% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}
+                        </a>
+                        {% endif %}
 
-                <span class="nav-user">{{ ui.hi }}, {{ user.username }}</span>
+                        <form method="post" action="{% url 'change_language' %}" class="inline-form nav-account-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            <input type="hidden" name="language" value="{{ other_language }}">
+                            <button type="submit" class="button-secondary">
+                                {{ other_language_label }}
+                            </button>
+                        </form>
 
-                <form method="post" action="{% url 'logout' %}" class="inline-form">
-                    {% csrf_token %}
-                    <button type="submit" class="button-secondary">{{ ui.logout }}</button>
-                </form>
+                        <form method="post" action="{% url 'logout' %}" class="inline-form nav-account-form">
+                            {% csrf_token %}
+                            <button type="submit" class="button-secondary">{{ ui.logout }}</button>
+                        </form>
+                    </div>
+                </details>
+                </div>
                 {% else %}
                 <form method="post" action="{% url 'change_language' %}" class="inline-form">
                     {% csrf_token %}

@@ -4,32 +4,33 @@ This module reports **drift** between the two ways a long-term ministry role is
 currently expressed:
 
 * the transitional/legacy ``TeamMembership.role`` (``lead`` / ``coordinator``),
-  which still drives runtime permissions (``can_manage_ministry_team`` /
-  team-leader scheduling), plus the deprecated/reserved ``TeamMembership.can_lead``
-  flag, which grants **no** permission today but is still audited as a warning; and
+  which after MINISTRY-ROLE-SOURCE.1C no longer drives runtime team-management
+  permission (it is kept only as legacy compatibility data), plus the
+  deprecated/reserved ``TeamMembership.can_lead`` flag, which grants **no**
+  permission and is still audited as a warning; and
 * the newer, explicit ``MinistryTeamRoleAssignment`` long-term ministry role,
-  which is the *intended future single source of truth* but does **not** yet
-  drive any permission.
+  which after MINISTRY-ROLE-SOURCE.1C is the runtime source of truth for
+  ``can_manage_ministry_team`` / team-leader scheduling.
 
 The locked source-of-truth direction is documented in
 ``docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md``:
 
 * ``TeamMembership`` = team membership / candidate pool only.
-* ``MinistryTeamRoleAssignment`` = long-term ministry responsibility and the
-  eventual team-management permission source.
+* ``MinistryTeamRoleAssignment`` = long-term ministry responsibility and, after
+  MINISTRY-ROLE-SOURCE.1C, the runtime team-management permission source.
 * ``TeamAssignmentMember`` = event-specific serving assignment.
 * ``TeamMembership.role`` / ``TeamMembership.can_lead`` are transitional / legacy
-  fields kept only for current runtime compatibility.
+  compatibility data only and no longer grant runtime team-management permission
+  after MINISTRY-ROLE-SOURCE.1C.
 
 This audit is strictly **read-only**: it creates, updates, or deletes nothing,
 has no apply mode, makes no permission decision, switches no source of truth,
 backfills no role assignments, and never infers serving from membership. The
 runtime permission source is unchanged by running it.
 
-Because runtime has not switched yet, most divergence is expected and is
-reported as a **warning** (transitional drift / setup gap), not a blocker.
-Blockers are reserved for high-confidence corruption that would make a future
-backfill/permission switch unsafe to automate.
+Divergence between the two systems is still reported as a **warning**
+(transitional drift / setup gap), not a blocker. Blockers are reserved for
+high-confidence corruption that would make a dedup/backfill unsafe to automate.
 """
 
 from collections import OrderedDict
@@ -79,8 +80,9 @@ INFO_KEYS = (
     "container_management_role_assignment_without_membership",
 )
 
-# Drift that is expected while runtime still reads the legacy fields. None of
-# these are fatal; they are the migration backlog this slice exposes.
+# Transitional drift / setup gaps between the legacy membership fields and the
+# ministry role model. None of these are fatal; they are the alignment backlog
+# this audit exposes (runtime already reads MinistryTeamRoleAssignment after 1C).
 WARNING_KEYS = (
     "legacy_management_membership_without_role_assignment",
     "management_role_assignment_without_membership",
@@ -110,13 +112,14 @@ VERBOSE_DETAIL_KEYS = BLOCKER_KEYS + WARNING_KEYS + INFO_DETAIL_KEYS
 
 PERMISSION_NOTES = (
     "Read-only: this audit changes no permission and switches no source of "
-    "truth. can_manage_ministry_team still reads TeamMembership.role "
-    "(role in {lead, coordinator}); TeamMembership.can_lead is "
-    "deprecated/reserved and grants no permission; MinistryTeamRoleAssignment "
-    "still drives no permission.",
-    "Locked target: MinistryTeamRoleAssignment becomes the single source of "
-    "truth for long-term ministry roles in a later, separately approved slice "
-    "(MINISTRY-ROLE-SOURCE.1B backfill, 1C permission read switch).",
+    "truth. After MINISTRY-ROLE-SOURCE.1C, can_manage_ministry_team reads active "
+    "MinistryTeamRoleAssignment rows (role_type code in {lead, coordinator}) for "
+    "the exact team; TeamMembership.role no longer grants team-management "
+    "permission and is legacy compatibility data only; TeamMembership.can_lead "
+    "is deprecated/reserved and grants no permission.",
+    "Source of truth: MinistryTeamRoleAssignment is the canonical long-term "
+    "ministry role source and, after the 1C read switch, the runtime "
+    "team-management permission source (1B backfilled it; 1C switched the read).",
     "TeamMembership stays the membership / candidate pool; TeamAssignmentMember "
     "stays the event-specific serving source. Neither membership nor a role "
     "assignment implies serving.",

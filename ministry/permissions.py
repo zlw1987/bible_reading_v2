@@ -1,3 +1,6 @@
+from django.db.models import Q
+from django.utils import timezone
+
 from accounts.permissions import (
     CAP_MANAGE_SERVICE_EVENTS,
     CAP_MANAGE_MINISTRY_TEAMS,
@@ -5,7 +8,71 @@ from accounts.permissions import (
     has_capability,
 )
 
-from .models import TeamMembership
+from .models import (
+    MinistryTeamRoleAssignment,
+    MinistryTeamRoleType,
+    TeamMembership,
+)
+
+
+# Ministry role-type codes that grant runtime team-management / team-scheduling
+# authority for the exact team the role is held on. Kept intentionally minimal:
+# assistant_lead / scheduler / technical_lead / admin / member_care / custom do
+# NOT grant team management here.
+MANAGEMENT_ROLE_TYPE_CODES = (
+    MinistryTeamRoleType.CODE_LEAD,
+    MinistryTeamRoleType.CODE_COORDINATOR,
+)
+
+
+def _active_management_role_assignments(user):
+    """Base queryset of the user's date-valid active lead/coordinator role
+    assignments on active teams.
+
+    Source of truth after MINISTRY-ROLE-SOURCE.1C: runtime ministry
+    team-management authority reads active ``MinistryTeamRoleAssignment`` rows,
+    not ``TeamMembership.role``. Exact-team only — ancestor ministry teams,
+    church-structure anchors, ``ChurchStructureMembership`` and
+    ``ChurchStructureUnitRoleAssignment`` are not consulted here.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return MinistryTeamRoleAssignment.objects.none()
+
+    today = timezone.localdate()
+    return (
+        MinistryTeamRoleAssignment.objects.filter(
+            user=user,
+            is_active=True,
+            team__is_active=True,
+            role_type__is_active=True,
+            role_type__code__in=MANAGEMENT_ROLE_TYPE_CODES,
+            start_date__lte=today,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+    )
+
+
+def user_has_active_ministry_management_role(user, team):
+    """True when the user holds an active lead/coordinator
+    ``MinistryTeamRoleAssignment`` for exactly ``team`` (date-window valid).
+
+    ``TeamMembership.role`` and ``TeamMembership.can_lead`` grant nothing here
+    after MINISTRY-ROLE-SOURCE.1C.
+    """
+    if team is None or not getattr(user, "is_authenticated", False):
+        return False
+
+    return _active_management_role_assignments(user).filter(team=team).exists()
+
+
+def user_managed_team_ids(user):
+    """Distinct team ids the user can manage via active lead/coordinator role
+    assignments (exact-team only)."""
+    return (
+        _active_management_role_assignments(user)
+        .values_list("team_id", flat=True)
+        .distinct()
+    )
 
 
 def can_manage_ministry_teams(user):
@@ -44,12 +111,10 @@ def can_manage_ministry_team(user, team):
     if can_manage_ministry_teams(user):
         return True
 
-    return user_team_memberships(user).filter(team=team).filter(
-        role__in=[
-            TeamMembership.ROLE_LEAD,
-            TeamMembership.ROLE_COORDINATOR,
-        ]
-    ).exists()
+    # MINISTRY-ROLE-SOURCE.1C: team-management authority now comes from an
+    # active lead/coordinator MinistryTeamRoleAssignment on this exact team, not
+    # from TeamMembership.role. Membership remains candidate pool only.
+    return user_has_active_ministry_management_role(user, team)
 
 
 def can_manage_team_memberships(user, team):

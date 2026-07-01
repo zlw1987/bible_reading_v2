@@ -64,6 +64,7 @@ from .permissions import (
     can_import_lighting_pilot,
     can_view_ministry_team,
     can_view_team_assignment,
+    user_managed_team_ids,
     user_team_memberships,
 )
 from .services.assignment_coverage import (
@@ -189,12 +190,10 @@ def manageable_assignment_teams(user):
     if can_manage_team_assignments(user):
         return teams
 
-    team_ids = [
-        membership.team_id
-        for membership in user_team_memberships(user)
-        if membership.is_leadership()
-    ]
-    return teams.filter(id__in=team_ids, is_active=True)
+    # MINISTRY-ROLE-SOURCE.1C: manageable teams come from active lead/coordinator
+    # MinistryTeamRoleAssignment rows (exact-team only), not TeamMembership.role.
+    team_ids = user_managed_team_ids(user)
+    return teams.filter(id__in=team_ids, is_active=True).distinct()
 
 
 def visible_assignments_for_user(user):

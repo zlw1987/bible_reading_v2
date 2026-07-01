@@ -16,9 +16,11 @@ This backfill is deliberately conservative:
 
 * It is **one-way only** (legacy membership role → role assignment). It never
   writes back to ``TeamMembership`` and implements no bidirectional sync.
-* It changes **no permission**: current runtime still reads
-  ``TeamMembership.role`` in {``lead``, ``coordinator``} for
-  ``can_manage_ministry_team`` until the separately approved 1C read switch.
+* It changes **no permission** and switches no source of truth: after
+  MINISTRY-ROLE-SOURCE.1C, ``can_manage_ministry_team`` reads active
+  ``MinistryTeamRoleAssignment`` rows (role_type code in {``lead``,
+  ``coordinator``}), not ``TeamMembership.role``. This backfill only *creates*
+  role-assignment rows; running it does not itself change any permission.
 * It creates only ``MinistryTeamRoleAssignment`` rows. It never creates
   ``TeamMembership`` rows, never deletes/deactivates/overwrites existing rows,
   and never mutates ``TeamMembership.role`` / ``TeamMembership.can_lead``.
@@ -74,10 +76,11 @@ VERBOSE_DETAIL_KEYS = (
 )
 
 PERMISSION_NOTES = (
-    "No permission change: can_manage_ministry_team still reads "
-    "TeamMembership.role in {lead, coordinator} until the separately approved "
-    "MINISTRY-ROLE-SOURCE.1C read switch. This backfill switches no source of "
-    "truth.",
+    "No permission change from running this backfill: it only creates "
+    "MinistryTeamRoleAssignment rows and switches no source of truth. After "
+    "MINISTRY-ROLE-SOURCE.1C, can_manage_ministry_team already reads active "
+    "MinistryTeamRoleAssignment rows (role_type code in {lead, coordinator}), "
+    "not TeamMembership.role.",
     "No TeamMembership mutation: TeamMembership.role and TeamMembership.can_lead "
     "are never written; no TeamMembership row is created, deleted, or "
     "deactivated. This is a one-way membership-role → MinistryTeamRoleAssignment "

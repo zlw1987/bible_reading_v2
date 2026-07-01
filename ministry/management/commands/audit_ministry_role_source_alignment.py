@@ -4,19 +4,21 @@ Thin wrapper over ``ministry.role_source_alignment.run_alignment_audit``. It
 prints a membership / role-assignment inventory and reports **drift** between:
 
 * the transitional legacy ``TeamMembership.role`` (``lead`` / ``coordinator``),
-  which still drives current runtime team-management permission;
+  which after MINISTRY-ROLE-SOURCE.1C no longer drives team-management
+  permission and is legacy compatibility data only;
 * the deprecated/reserved ``TeamMembership.can_lead`` flag, which grants no
   permission and is audited as a warning; and
-* the newer ``MinistryTeamRoleAssignment`` long-term ministry role (the intended
-  future single source of truth),
+* the newer ``MinistryTeamRoleAssignment`` long-term ministry role, which after
+  MINISTRY-ROLE-SOURCE.1C is the runtime team-management permission source,
 
 classified as blockers / warnings / info.
 
 This command is **read-only**: it has no ``--apply``, writes nothing, repairs no
 rows, assigns no roles, backfills nothing, switches no source of truth, and
-changes no permission. Current runtime team-management permission still reads
-``TeamMembership.role`` in {``lead``, ``coordinator``} until a later, separately
-approved migration slice. See ``docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md``.
+changes no permission. After MINISTRY-ROLE-SOURCE.1C, runtime team-management
+permission reads active ``MinistryTeamRoleAssignment`` rows (role_type code in
+{``lead``, ``coordinator``}) for the exact team, not ``TeamMembership.role``.
+See ``docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md``.
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -97,10 +99,12 @@ class Command(BaseCommand):
             "source of truth."
         )
         write(
-            "current runtime still uses TeamMembership.role (role in {lead, "
-            "coordinator}) for can_manage_ministry_team until a future "
-            "migration slice; TeamMembership.can_lead is deprecated/reserved and "
-            "grants no permission (audited as a warning)."
+            "after MINISTRY-ROLE-SOURCE.1C, runtime team-management permission "
+            "reads active MinistryTeamRoleAssignment rows (role_type code in "
+            "{lead, coordinator}) for the exact team; TeamMembership.role no "
+            "longer grants team-management permission (legacy compatibility data "
+            "only); TeamMembership.can_lead is deprecated/reserved and grants no "
+            "permission (audited as a warning)."
         )
         write("")
 
@@ -172,22 +176,23 @@ class Command(BaseCommand):
         if audit["blocker_count"] > 0:
             return (
                 "recommendation: resolve the duplicate active role assignment "
-                "rows before any MINISTRY-ROLE-SOURCE.1B backfill or 1C "
-                "permission switch; automated migration is unsafe while they "
-                "exist."
+                "rows; runtime already reads MinistryTeamRoleAssignment for "
+                "team management after 1C, and automated dedup/backfill is "
+                "unsafe while duplicates exist."
             )
         if audit["warning_count"] == 0:
             return (
                 "recommendation: legacy membership roles and ministry role "
-                "assignments are aligned; the 1B backfill / 1C permission "
-                "switch can proceed when separately approved."
+                "assignments are aligned; runtime already reads "
+                "MinistryTeamRoleAssignment for team management after 1C."
             )
 
         hints = []
         if stats["legacy_management_membership_without_role_assignment"]:
             hints.append(
-                "create matching MinistryTeamRoleAssignment rows for legacy "
-                "lead/coordinator memberships (1B backfill, when approved)"
+                "create matching MinistryTeamRoleAssignment rows (1B backfill) "
+                "for legacy lead/coordinator memberships so they retain "
+                "team-management permission under the 1C role-assignment source"
             )
         if stats["legacy_management_membership_display_name_only"]:
             hints.append(
@@ -215,8 +220,9 @@ class Command(BaseCommand):
                 "is not the long-term role source"
             )
         return (
-            "recommendation: transitional drift only (no blockers). Before the "
-            "1B backfill / 1C permission switch, "
+            "recommendation: transitional drift only (no blockers). Runtime "
+            "already reads MinistryTeamRoleAssignment for team management after "
+            "1C; to close the remaining alignment gaps, "
             + "; ".join(hints)
             + "."
         )

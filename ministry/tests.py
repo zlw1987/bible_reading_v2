@@ -43,7 +43,12 @@ from .models import (
     TeamAssignmentMember,
     TeamMembership,
 )
-from .permissions import can_manage_ministry_team
+from .permissions import (
+    can_manage_ministry_team,
+    user_has_active_ministry_management_role,
+    user_managed_team_ids,
+)
+from .views import manageable_assignment_teams
 from .structure_map import build_ministry_structure_map
 from .forms import TeamAssignmentForm
 from .services.assignment_coverage import (
@@ -105,6 +110,27 @@ class MinistryTeamFoundationTests(TestCase):
         self.other_team = MinistryTeam.objects.create(
             name="音响团队",
             name_en="Sound Team",
+        )
+        # MINISTRY-ROLE-SOURCE.1C: team-management authority comes from active
+        # lead/coordinator MinistryTeamRoleAssignment rows, so the role types
+        # must exist for tests that expect a team leader/coordinator to manage.
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+
+    def grant_management_role(self, user, team, role_type=None):
+        return MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            user=user,
+            role_type=role_type or self.lead_type,
+            start_date=timezone.localdate(),
         )
 
     def set_language(self, language="en"):
@@ -302,6 +328,9 @@ class MinistryTeamFoundationTests(TestCase):
             user=self.lead_user,
             role=TeamMembership.ROLE_LEAD,
         )
+        # After 1C the active lead role assignment (not membership.role) grants
+        # management.
+        self.grant_management_role(self.lead_user, self.team, self.lead_type)
         self.client.login(username="team_lead", password="testpass123")
 
         response = self.client.get(reverse("manage_team_members", args=[self.team.id]))
@@ -315,6 +344,10 @@ class MinistryTeamFoundationTests(TestCase):
             team=self.team,
             user=self.lead_user,
             role=TeamMembership.ROLE_COORDINATOR,
+        )
+        # Coordinator role assignment on self.team must not extend to other_team.
+        self.grant_management_role(
+            self.lead_user, self.team, self.coordinator_type
         )
         self.client.login(username="team_lead", password="testpass123")
 
@@ -482,6 +515,33 @@ class TeamAssignmentV1Tests(TestCase):
             user=self.can_lead_user,
             role=TeamMembership.ROLE_MEMBER,
             can_lead=True,
+        )
+        # MINISTRY-ROLE-SOURCE.1C: runtime team-management / scheduling authority
+        # now reads active lead/coordinator MinistryTeamRoleAssignment rows, not
+        # TeamMembership.role. The lead/coordinator memberships above are kept
+        # (candidate pool + legacy data), and matching active role assignments are
+        # created so lead_user / coordinator_user retain their manager authority.
+        self.lead_role_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.coordinator_role_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        self.lead_role_assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role_type=self.lead_role_type,
+            start_date=timezone.localdate(),
+        )
+        self.coordinator_role_assignment = MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            user=self.coordinator_user,
+            role_type=self.coordinator_role_type,
+            start_date=timezone.localdate(),
         )
         self.other_team_membership = TeamMembership.objects.create(
             team=self.other_team,
@@ -8338,3 +8398,370 @@ class MinistryRoleAssignmentBackfillTests(TestCase):
         self.assertTrue(membership.can_lead)
         self.assertTrue(membership.is_active)
         self.assertEqual(TeamMembership.objects.count(), 1)
+
+
+class MinistryTeamManagementRoleSourceTests(TestCase):
+    """MINISTRY-ROLE-SOURCE.1C permission-read-switch tests.
+
+    Runtime team-management / team-scheduling authority must come from active
+    lead/coordinator ``MinistryTeamRoleAssignment`` rows for the exact team, not
+    from ``TeamMembership.role``. ``TeamMembership.can_lead`` grants nothing;
+    membership remains candidate pool only.
+    """
+
+    def setUp(self):
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        self.scheduler_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_SCHEDULER,
+            name="排班同工",
+            name_en="Scheduler",
+        )
+        self.team = MinistryTeam.objects.create(name="Lighting", name_en="Lighting")
+        self.other_team = MinistryTeam.objects.create(name="Audio", name_en="Audio")
+
+        self.lead_user = User.objects.create_user(username="mrs_lead", password="pw")
+        self.coordinator_user = User.objects.create_user(
+            username="mrs_coordinator", password="pw"
+        )
+        self.membership_only_user = User.objects.create_user(
+            username="mrs_member_only", password="pw"
+        )
+        self.can_lead_user = User.objects.create_user(
+            username="mrs_can_lead", password="pw"
+        )
+        self.staff_user = User.objects.create_user(
+            username="mrs_staff", password="pw", is_staff=True
+        )
+        self.super_user = User.objects.create_superuser(
+            username="mrs_super", email="s@example.com", password="pw"
+        )
+        self.global_manager = User.objects.create_user(
+            username="mrs_pastor", password="pw"
+        )
+        ChurchRoleAssignment.objects.create(
+            user=self.global_manager,
+            role=ChurchRoleAssignment.ROLE_PASTOR,
+            scope_type=ChurchRoleAssignment.SCOPE_GLOBAL,
+        )
+
+    def make_role_assignment(self, user, team=None, role_type=None, **overrides):
+        data = {
+            "team": team or self.team,
+            "user": user,
+            "role_type": role_type or self.lead_type,
+            "start_date": timezone.localdate(),
+        }
+        data.update(overrides)
+        return MinistryTeamRoleAssignment.objects.create(**data)
+
+    # ----- requirement 1/2: active lead/coordinator role assignment grants -----
+
+    def test_active_lead_role_assignment_can_manage(self):
+        self.make_role_assignment(self.lead_user, role_type=self.lead_type)
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.team))
+        self.assertTrue(
+            user_has_active_ministry_management_role(self.lead_user, self.team)
+        )
+
+    def test_active_coordinator_role_assignment_can_manage(self):
+        self.make_role_assignment(
+            self.coordinator_user, role_type=self.coordinator_type
+        )
+        self.assertTrue(can_manage_ministry_team(self.coordinator_user, self.team))
+
+    # ----- requirement 3/4: membership role only no longer grants --------------
+
+    def test_membership_role_lead_only_cannot_manage(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.assertFalse(
+            can_manage_ministry_team(self.membership_only_user, self.team)
+        )
+
+    def test_membership_role_coordinator_only_cannot_manage(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_COORDINATOR,
+        )
+        self.assertFalse(
+            can_manage_ministry_team(self.membership_only_user, self.team)
+        )
+
+    # ----- requirement 5: can_lead grants nothing ------------------------------
+
+    def test_can_lead_membership_cannot_manage(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.can_lead_user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
+        )
+        self.assertFalse(can_manage_ministry_team(self.can_lead_user, self.team))
+
+    # ----- requirement 6: different-team role assignment does not grant --------
+
+    def test_role_assignment_on_different_team_does_not_grant(self):
+        self.make_role_assignment(self.lead_user, team=self.other_team)
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.other_team))
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- requirement 7: inactive role assignment does not grant --------------
+
+    def test_inactive_role_assignment_does_not_grant(self):
+        assignment = self.make_role_assignment(self.lead_user)
+        MinistryTeamRoleAssignment.objects.filter(pk=assignment.pk).update(
+            is_active=False
+        )
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- requirement 8: inactive role type does not grant --------------------
+
+    def test_inactive_role_type_does_not_grant(self):
+        self.make_role_assignment(self.lead_user)
+        MinistryTeamRoleType.objects.filter(pk=self.lead_type.pk).update(
+            is_active=False
+        )
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- requirement 9: future-dated role assignment does not grant ----------
+
+    def test_future_dated_role_assignment_does_not_grant(self):
+        self.make_role_assignment(
+            self.lead_user,
+            start_date=timezone.localdate() + timezone.timedelta(days=5),
+        )
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- requirement 10: expired role assignment does not grant --------------
+
+    def test_expired_role_assignment_does_not_grant(self):
+        self.make_role_assignment(
+            self.lead_user,
+            start_date=timezone.localdate() - timezone.timedelta(days=10),
+            end_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    def test_role_assignment_valid_today_at_window_edges_grants(self):
+        self.make_role_assignment(
+            self.lead_user,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate(),
+        )
+        self.assertTrue(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- non-management role types do not grant ------------------------------
+
+    def test_scheduler_role_assignment_does_not_grant_management(self):
+        self.make_role_assignment(self.lead_user, role_type=self.scheduler_type)
+        self.assertFalse(can_manage_ministry_team(self.lead_user, self.team))
+
+    # ----- requirement 11: staff / superuser / global capability unchanged -----
+
+    def test_staff_superuser_and_global_capability_still_manage(self):
+        self.assertTrue(can_manage_ministry_team(self.staff_user, self.team))
+        self.assertTrue(can_manage_ministry_team(self.super_user, self.team))
+        self.assertTrue(can_manage_ministry_team(self.global_manager, self.team))
+        # None of them needs a role assignment or membership.
+        self.assertFalse(
+            MinistryTeamRoleAssignment.objects.filter(
+                user__in=[self.staff_user, self.super_user, self.global_manager]
+            ).exists()
+        )
+
+    # ----- requirement 12: manageable_assignment_teams source ------------------
+
+    def test_manageable_assignment_teams_uses_role_assignments(self):
+        self.make_role_assignment(self.lead_user, team=self.team)
+        # Membership-role-only lead on other_team must NOT appear.
+        TeamMembership.objects.create(
+            team=self.other_team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        teams = list(manageable_assignment_teams(self.lead_user))
+        self.assertIn(self.team, teams)
+        self.assertNotIn(self.other_team, teams)
+
+    def test_manageable_assignment_teams_empty_for_membership_role_only(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.assertEqual(
+            list(manageable_assignment_teams(self.membership_only_user)), []
+        )
+
+    def test_user_managed_team_ids_matches_role_assignments(self):
+        self.make_role_assignment(self.lead_user, team=self.team)
+        self.assertEqual(
+            list(user_managed_team_ids(self.lead_user)), [self.team.id]
+        )
+        self.assertEqual(list(user_managed_team_ids(self.membership_only_user)), [])
+
+    # ----- requirement 14: manage-members view follows role source -------------
+
+    def _set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_manage_members_view_allows_role_assignment_holder(self):
+        self._set_language("en")
+        self.make_role_assignment(self.lead_user)
+        self.client.login(username="mrs_lead", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Manage Members")
+
+    def test_manage_members_view_denies_membership_role_only(self):
+        self._set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.client.login(username="mrs_member_only", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("ministry_team_list"))
+
+    # ----- requirement 13: team schedule view follows role source --------------
+
+    def test_team_schedule_view_allows_role_assignment_holder(self):
+        self._set_language("en")
+        self.make_role_assignment(self.lead_user)
+        self.client.login(username="mrs_lead", password="pw")
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_team_schedule_view_denies_membership_role_only(self):
+        self._set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_COORDINATOR,
+        )
+        self.client.login(username="mrs_member_only", password="pw")
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+        self.assertEqual(response.status_code, 302)
+
+    # ----- requirement 15: My Serving "Teams I manage" follows role source -----
+
+    def test_my_serving_manage_section_uses_role_assignment(self):
+        self._set_language("en")
+        self.make_role_assignment(self.lead_user)
+        self.client.login(username="mrs_lead", password="pw")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Teams I manage")
+        self.assertContains(response, reverse("team_schedule", args=[self.team.id]))
+
+    def test_my_serving_manage_section_hidden_for_membership_role_only(self):
+        self._set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.client.login(username="mrs_member_only", password="pw")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Teams I manage")
+        self.assertNotContains(
+            response, reverse("team_schedule", args=[self.team.id])
+        )
+
+    # ----- requirement 16: personal serving visibility unchanged ---------------
+
+    def test_personal_team_assignment_visibility_unchanged(self):
+        # A membership-role-only user with an actual event assignment still sees
+        # it on My Serving; the 1C permission switch does not touch serving.
+        self._set_language("en")
+        membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.membership_only_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        event = ServiceEvent.objects.create(
+            title="主日崇拜",
+            title_en="Sunday Service",
+            event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
+            start_datetime=timezone.now() + timezone.timedelta(days=2),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=self.team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            created_by=self.staff_user,
+        )
+        TeamAssignmentMember.objects.create(
+            assignment=assignment, membership=membership
+        )
+        self.client.login(username="mrs_member_only", password="pw")
+        response = self.client.get(reverse("my_serving"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Sunday Service")
+        # Still not a manager.
+        self.assertNotContains(response, "Teams I manage")
+
+    # ----- requirement 17/18: command output has no stale runtime claim --------
+
+    def test_audit_command_output_has_no_stale_runtime_claim(self):
+        out = StringIO()
+        call_command("audit_ministry_role_source_alignment", stdout=out)
+        output = out.getvalue()
+        self.assertNotIn("still uses TeamMembership.role", output)
+        self.assertNotIn("still reads TeamMembership.role", output)
+        self.assertIn("MinistryTeamRoleAssignment", output)
+
+    def test_backfill_command_output_has_no_stale_runtime_claim(self):
+        out = StringIO()
+        call_command(
+            "backfill_ministry_role_assignments_from_memberships", stdout=out
+        )
+        output = out.getvalue()
+        self.assertNotIn("still reads TeamMembership.role", output)
+        self.assertNotIn(
+            "until the separately approved MINISTRY-ROLE-SOURCE.1C", output
+        )
+
+    # ----- requirement 19: docs have no stale runtime claim --------------------
+
+    def test_docs_have_no_stale_runtime_permission_claim(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        stale_phrases = [
+            "can_manage_ministry_team still reads",
+            "TeamMembership.role remains the runtime permission source",
+            "TeamMembership.role remains the current runtime permission source",
+            "MinistryTeamRoleAssignment does NOT drive can_manage_ministry_team",
+        ]
+        for rel in [
+            "docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md",
+            "docs/MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md",
+            "docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md",
+        ]:
+            text = (repo_root / rel).read_text(encoding="utf-8")
+            for phrase in stale_phrases:
+                self.assertNotIn(
+                    phrase,
+                    text,
+                    msg=f"Stale runtime claim {phrase!r} found in {rel}",
+                )

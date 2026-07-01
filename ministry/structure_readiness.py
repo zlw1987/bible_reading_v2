@@ -7,9 +7,10 @@ MINISTRY-STRUCTURE.1F) and surfaces setup gaps as blockers / warnings / info.
 
 It is strictly **read-only**: it creates, updates, or deletes nothing, has no
 apply mode, makes no permission decision, and never repairs data. It does not
-read ``ChurchStructureMembership`` as belonging-to-serving and does not treat
-``MinistryTeamRoleAssignment`` as a permission source — those boundaries are
-unchanged by this audit (see ``permission_notes``).
+read ``ChurchStructureMembership`` as belonging-to-serving. Running this audit
+changes no runtime permission; separately, after MINISTRY-ROLE-SOURCE.1C runtime
+team-management permission reads active lead/coordinator
+``MinistryTeamRoleAssignment`` rows for the exact team (see ``permission_notes``).
 
 The findings mirror the locked architecture in
 ``docs/MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md``. Existing/historical/cancelled
@@ -98,10 +99,13 @@ VERBOSE_DETAIL_KEYS = BLOCKER_KEYS + WARNING_KEYS + (
 )
 
 PERMISSION_NOTES = (
-    "MinistryTeamRoleAssignment does NOT drive can_manage_ministry_team; "
-    "TeamMembership.role / can_lead remains the permission source.",
+    "After MINISTRY-ROLE-SOURCE.1C, can_manage_ministry_team reads active "
+    "MinistryTeamRoleAssignment rows (role_type code in {lead, coordinator}) for "
+    "the exact team; TeamMembership.role no longer grants team-management "
+    "permission and TeamMembership.can_lead grants none.",
     "CAP_MANAGE_MINISTRY_STRUCTURE is not wired into accounts/permissions yet.",
-    "Delegated ministry management (ancestor-or-self lead) remains deferred.",
+    "Delegated ministry management (ancestor-or-self lead) remains deferred; "
+    "team-management authority is exact-team only.",
     "My Serving does not show ministry role assignments; Today is unchanged.",
 )
 

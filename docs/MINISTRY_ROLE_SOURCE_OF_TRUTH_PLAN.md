@@ -4,10 +4,20 @@ Status: `MINISTRY-ROLE-SOURCE.1A` is a **docs + read-only audit** slice. It lock
 the intended future source-of-truth boundary for long-term ministry roles and
 adds a read-only drift audit. It changes **no** runtime permission, mutates no
 data, switches no source of truth, runs no backfill, and adds no migration or
-model-field change. Runtime permissions still read the legacy
-`TeamMembership.role` (`role` in {`lead`, `coordinator`}) until later, separately
-approved slices; `TeamMembership.can_lead` remains deprecated/reserved and grants
-no permission.
+model-field change.
+
+`MINISTRY-ROLE-SOURCE.1C` is **implemented**: runtime ministry team-management
+permission now reads active `MinistryTeamRoleAssignment` rows (role_type code in
+{`lead`, `coordinator`}) for the exact team, not `TeamMembership.role`.
+`can_manage_ministry_team`, `can_manage_team_assignment_for_team`,
+team scheduling, manage-members, and the My Serving "Teams I manage" section all
+follow this role-assignment source. `TeamMembership.role` is now legacy
+compatibility data only and no longer grants runtime team-management permission;
+`TeamMembership.can_lead` remains deprecated/reserved and grants no permission.
+Staff / superuser / global capability behavior is unchanged, and this slice is
+exact-team only (no ancestor ministry teams, church-structure anchors,
+`ChurchStructureMembership`, or `ChurchStructureUnitRoleAssignment`; no
+`CAP_MANAGE_MINISTRY_STRUCTURE` wiring; no model or migration change).
 
 `MINISTRY-ROLE-SOURCE.1A-FU1` is a docs + read-only-audit follow-up that
 clarifies the membership expectation for management-role holders by team kind
@@ -36,20 +46,21 @@ direction for *which* model owns long-term ministry role authority.
 There are currently two places that model a long-term ministry role, and they
 can disagree:
 
-* **`TeamMembership.role`** (`member` / `lead` / `coordinator`). Today this is
-  the *runtime permission source*:
-  `ministry.permissions.can_manage_ministry_team` (and team-leader scheduling)
-  grants team management when a user has an active `TeamMembership` on the team
-  with `role` in {`lead`, `coordinator`}.
+* **`TeamMembership.role`** (`member` / `lead` / `coordinator`). Historically
+  (before `1C`) this was the runtime permission source for
+  `ministry.permissions.can_manage_ministry_team` and team-leader scheduling.
+  After `1C` it is **legacy compatibility data only** and grants no runtime
+  team-management permission.
   **`TeamMembership.can_lead`** is a separate deprecated/reserved/transitional
-  flag: it grants **no** scheduling, member-management, or admin permission
-  today, but it still exists on the row and on the manage-members form, so this
+  flag: it grants **no** scheduling, member-management, or admin permission,
+  but it still exists on the row and on the manage-members form, so this
   audit reports `can_lead=True` as a warning.
 * **`MinistryTeamRoleAssignment`** (added in `MINISTRY-STRUCTURE.1B`). This is an
   explicit, dated, multi-active-allowed long-term ministry role tied to a
   `MinistryTeamRoleType` (`lead`, `assistant_lead`, `coordinator`, `scheduler`,
-  …). It is the more correct long-term model, but it is currently **additive
-  only**: it drives no permission and is never inferred from `TeamMembership`.
+  …). After `1C` it is the **runtime team-management permission source** (role
+  code in {`lead`, `coordinator`} on the exact team) and is never inferred from
+  `TeamMembership`.
 
 Keeping both as authoritative long-term role sources creates ambiguity: a future
 reader/permission check would not know which one wins, and the two can drift
@@ -88,8 +99,8 @@ These decisions are **locked** for the long-term direction:
   role expressed as a `MinistryTeamRoleAssignment` (role code `lead`), and it
   stays part of the structure/role model.
 * **Do not make `TeamMembership.role` the future canonical Lead source.**
-  `TeamMembership.role` is transitional/legacy; it drives current runtime
-  permission only until the `1C` read switch, and it is never promoted to the
+  `TeamMembership.role` is transitional/legacy; after the `1C` read switch it
+  drives no runtime team-management permission, and it is never promoted to the
   long-term role authority.
 * **Do not use bidirectional sync** between `TeamMembership.role` and
   `MinistryTeamRoleAssignment`. Only the `1B` one-way backfill (legacy membership
@@ -124,17 +135,23 @@ disagreement (`teams_management_role_user_disagreement`) stays a warning
 regardless of team kind, because both systems are then explicitly naming
 management users and they differ.
 
-## 3. Transitional state (current)
+## 3. State after `1C`
 
-While the migration is incomplete:
+After the `1C` read switch:
 
-* `TeamMembership.role` and `TeamMembership.can_lead` **remain** for current
-  runtime compatibility. `can_manage_ministry_team` still reads
-  `TeamMembership.role` in {`lead`, `coordinator`}.
-* `MinistryTeamRoleAssignment` **remains additive** and drives no permission.
-* This slice (`1A`) does **not** change any runtime permission, form, or UI. It
-  only documents the decision and exposes current drift/gaps via a read-only
-  audit.
+* `MinistryTeamRoleAssignment` (role code in {`lead`, `coordinator`}, active and
+  date-valid, on the exact team) is the **runtime team-management permission
+  source**. `can_manage_ministry_team`, `can_manage_team_assignment_for_team`,
+  team scheduling, manage-members, and the My Serving "Teams I manage" section
+  all read it.
+* `TeamMembership.role` and `TeamMembership.can_lead` **remain on the model and
+  the manage-members form as legacy compatibility data**, but grant no runtime
+  team-management permission. They are not removed in `1C`.
+* `TeamMembership` stays candidate-pool only; `TeamAssignmentMember` stays
+  event-specific serving only. Neither is inferred from the other or from a role
+  assignment.
+* `1C` is exact-team only and changes no model field, migration, or the
+  manage-members UI layout.
 
 ## 4. Migration path
 
@@ -160,11 +177,12 @@ Each later step is a separate, explicitly approved slice. Do not combine them.
   management memberships (display-name-only ones cannot be mapped); conservative
   conflict policy (Section 6.1) so a team where the two systems name different
   managers is reported, not auto-resolved.
-* **`MINISTRY-ROLE-SOURCE.1C`** — permission **read switch**: change
-  `can_manage_ministry_team` (and any related management check) to read
-  `MinistryTeamRoleAssignment` instead of `TeamMembership.role`, separately
-  approved and only after `1B` data is in place and verified. This is the step
-  that actually changes runtime authority.
+* **`MINISTRY-ROLE-SOURCE.1C`** — permission **read switch**. **Implemented.**
+  `can_manage_ministry_team`, `manageable_assignment_teams`, and related
+  management checks now read active `MinistryTeamRoleAssignment` rows (role code
+  in {`lead`, `coordinator`}, exact team) instead of `TeamMembership.role`. This
+  is the step that actually changed runtime authority. Exact-team only; staff /
+  superuser / global capability behavior unchanged; no model or migration change.
 * **`MINISTRY-ROLE-SOURCE.1D`** — manage-members UI cleanup/shortcut so the
   manage-members page stops presenting the long-term role as the canonical role
   source (members page focuses on the candidate pool; long-term role lives on the
@@ -261,9 +279,11 @@ rows from existing legacy management memberships. Options: `--apply`,
 `--apply` is not run without explicit user approval. It creates only
 `MinistryTeamRoleAssignment` rows; it never creates `TeamMembership` rows, never
 deletes/deactivates/overwrites any row, and never mutates `TeamMembership.role` /
-`TeamMembership.can_lead`. It changes no permission and switches no source of
-truth (the `1C` read switch remains a separate slice). There is no bidirectional
-sync — this is a one-way membership-role → role-assignment backfill.
+`TeamMembership.can_lead`. Running it changes no permission and switches no
+source of truth; after the `1C` read switch, runtime already reads
+`MinistryTeamRoleAssignment` for team management, so this backfill only ensures
+the role-assignment rows exist. There is no bidirectional sync — this is a
+one-way membership-role → role-assignment backfill.
 
 Scan: active `TeamMembership` rows where `is_active=True`, `team.is_active=True`,
 `user` is not null, and `role` in {`lead`, `coordinator`}. Mapping is minimal:
@@ -306,6 +326,6 @@ assignment).
 
 `ChurchStructureMembership` is church belonging and is unrelated to ministry
 serving or ministry role. `TeamMembership` is ministry candidate-pool belonging.
-`MinistryTeamRoleAssignment` is long-term ministry responsibility (and the
-future permission source). `TeamAssignmentMember` is event serving. None of these
-implies another; this plan does not change that.
+`MinistryTeamRoleAssignment` is long-term ministry responsibility (and, after
+`1C`, the runtime team-management permission source). `TeamAssignmentMember` is
+event serving. None of these implies another; this plan does not change that.

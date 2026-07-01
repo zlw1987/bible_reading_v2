@@ -7,8 +7,9 @@ missing ``MinistryTeamRoleAssignment`` rows from existing active, user-linked
 Dry-run by default: nothing is written unless ``--apply`` is passed. Even under
 ``--apply`` this command:
 
-* changes no permission (``can_manage_ministry_team`` still reads
-  ``TeamMembership.role`` until the separately approved 1C read switch);
+* changes no permission by running (after MINISTRY-ROLE-SOURCE.1C,
+  ``can_manage_ministry_team`` reads active ``MinistryTeamRoleAssignment`` rows,
+  role_type code in {``lead``, ``coordinator``}, not ``TeamMembership.role``);
 * switches no source of truth;
 * mutates no ``TeamMembership`` row (``role`` / ``can_lead`` untouched; no
   membership created / deleted / deactivated);

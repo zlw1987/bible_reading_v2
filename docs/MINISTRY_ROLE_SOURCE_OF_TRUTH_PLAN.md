@@ -1,10 +1,12 @@
 # Ministry Role Source-of-Truth Plan
 
-Status: `MINISTRY-ROLE-SOURCE.1A` is a **docs + read-only audit** slice. It locks
-the intended future source-of-truth boundary for long-term ministry roles and
-adds a read-only drift audit. It changes **no** runtime permission, mutates no
-data, switches no source of truth, runs no backfill, and adds no migration or
-model-field change.
+Status: complete through `MINISTRY-ROLE-SOURCE.1E-A`. `1A` was the
+**docs + read-only audit** slice that locked the intended source-of-truth
+boundary for long-term ministry roles and added a read-only drift audit. It
+changed **no** runtime permission, mutated no data, switched no source of truth,
+ran no backfill, and added no migration or model-field change. `1B` through
+`1E-A` subsequently completed the approved backfill, runtime read switch,
+manage-members UI cleanup, and deprecated-flag cleanup command described below.
 
 `MINISTRY-ROLE-SOURCE.1C` is **implemented**: runtime ministry team-management
 permission now reads active `MinistryTeamRoleAssignment` rows (role_type code in
@@ -388,8 +390,10 @@ row was actually cleared under `--apply`; a dry-run always reports `false`, and
 an `--apply` run with no `can_lead=True` rows in scope also reports `false`. The
 `--apply` mode is not run without explicit user approval.
 
-This command does not remove the `can_lead` model field; field
-deprecation/removal remains a later, separately approved audit + migration slice.
+This command does not remove the `can_lead` model field. Retirement of
+`TeamMembership.role` / `can_lead` remains an optional, separately approved
+audit + migration slice, not the current product priority. Do not reopen it
+unless a production blocker or audit warning provides a concrete reason.
 
 ## 7. Boundaries reminder
 

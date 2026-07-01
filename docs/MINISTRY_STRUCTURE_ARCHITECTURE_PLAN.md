@@ -269,6 +269,13 @@ command, which clears deprecated `can_lead=True` flags (active + inactive rows,
 role assignment, and changes no permission. Neither slice removes a model field
 or adds a migration.
 
+The ministry role source-of-truth work is therefore complete through
+`MINISTRY-ROLE-SOURCE.1E-A` for the current product stage. Field retirement for
+the remaining legacy compatibility columns is optional later work, not the
+current direction; do not reopen it without a production blocker or audit
+warning. Current attention should move to setup/trial readiness and real manual
+QA of Today, My Serving, Bible Study serving, and manager coverage flows.
+
 `MINISTRY-ROLE-SOURCE.1A-FU1` (docs + read-only audit) clarified that
 **assignable** teams (`is_assignable=True`) expect management-role holders to
 also be active `TeamMembership` rows (the team has a concrete schedulable member

@@ -1,6 +1,6 @@
 # Bible Study Meeting Role Assignment Plan
 
-Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete; Bible Study role confirmation in My Serving complete. UNIT-COWORKER-BS-CANDIDATE.1E makes discussion-leader and worship-lead user pickers prefer active Edify/Worship coworkers from the meeting `anchor_unit`, falling back to all active anchor-unit coworkers and then to the existing audience-membership picker when setup is missing.
+Status: BS-ROLE.1A docs-only planning complete; BS-ROLE.1B management form/UI polish complete; TODAY-HOME.1D linked Bible Study role chips on Today complete; Bible Study role confirmation in My Serving and MY-SERVING-BS.1B pending-role integration into the Today action center complete. UNIT-COWORKER-BS-CANDIDATE.1E makes discussion-leader and worship-lead user pickers prefer active Edify/Worship coworkers from the meeting `anchor_unit`, falling back to all active anchor-unit coworkers and then to the existing audience-membership picker when setup is missing.
 
 Scope: make small-group `BibleStudyMeetingRole` assignment reliable enough for Today-page surfacing, My Serving confirmation, and clearer Friday Bible Study preparation UX. BS-ROLE.1B, TODAY-HOME.1D, and My Serving Bible Study role confirmation are now complete; this plan still does not approve any further code, schema, migration, permission, notification, or workflow expansion.
 
@@ -118,7 +118,9 @@ Current decision: Bible Study role confirmation is implemented in My Serving.
 Implemented behavior:
 
 - Managers record the role on the V2 meeting.
-- The linked user can see the responsibility on meeting detail, on Today as read-only role context, and in My Serving as serving work.
+- The linked user can see the responsibility on meeting detail, on Today as
+  read-only agenda context and a pending action-center item when unconfirmed,
+  and in My Serving as serving work.
 - My Serving confirms linked-user `BibleStudyMeetingRole` rows by setting `confirmed_at` and optional `confirmation_note`.
 - There is no separate declined state, swap request, reminder, availability, automation, or conversion into `TeamAssignment`.
 
@@ -265,6 +267,17 @@ Completed TODAY-HOME.1D coverage:
 - Today does not expose role-management controls.
 - Today does not render a role confirmation form; My Serving owns confirmation.
 
+Completed MY-SERVING-BS.1B coverage:
+
+- Today counts a pending linked-user Bible Study meeting as one serving item,
+  including when that user holds multiple roles on the meeting.
+- The pending item is labelled as Bible Study serving and links to My Serving
+  for confirmation.
+- Audience-visible meetings without a linked role and display-name-only roles
+  do not become personal serving items.
+- The visible meeting remains an agenda row independently of whether the user
+  has a serving role.
+
 Future-only coverage for BS-ROLE.1C, if approved:
 
 - Meeting detail shows linked-user roles and display-name fallback roles.
@@ -277,7 +290,8 @@ Current confirmation coverage should stay focused on My Serving:
 - Linked-user Bible Study roles appear in the appropriate My Serving confirmation context.
 - Confirming a role records `confirmed_at` and optional `confirmation_note`.
 - Display-name-only roles and audience-visible meetings without an explicit linked role do not become My Serving assignments.
-- Today remains read-only role context and does not expose confirmation controls.
+- Today may show a pending linked-user role in the action center but remains
+  read-only and does not expose confirmation controls.
 
 Future-only coverage, only if separately approved:
 

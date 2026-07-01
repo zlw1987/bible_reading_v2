@@ -1,6 +1,9 @@
 # Today and My Serving Product Boundaries
 
-Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A product-boundaries note.
+Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A boundaries, updated through
+TODAY-AGENDA.1A and MY-SERVING-BS.1B. DOCS-QA-CHECKPOINT.1A records the current
+manual-QA checkpoint below; the checklist is not a claim that this round of
+manual QA has already been run.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 
@@ -14,7 +17,12 @@ Today may show:
 - completed reading as a small confirmation state;
 - visible church gatherings today and this week;
 - visible Bible Study V2 meetings today and this week;
-- compact serving notes only when backed by explicit assignment rows.
+- a personal action-center item for an unconfirmed `TeamAssignmentMember` or
+  linked-user `BibleStudyMeetingRole`;
+- compact serving notes only when backed by those explicit assignment/role
+  rows;
+- a manager-only Leader Needs Attention summary when explicit management
+  authority and near-term coverage gaps both exist.
 
 Today must not become a full serving management workspace. It should link to the owning module for management actions instead of duplicating those workflows.
 
@@ -52,7 +60,14 @@ Visibility is not serving assignment.
 
 Only explicit user assignment rows can show as "my serving."
 
-For Bible Study V2 roles, Today may show a compact role note only from `BibleStudyMeetingRole.user == request.user`. Display-name-only rows remain meeting-detail fallback and must not be matched to users by text. Do not infer role ownership from `display_name`, username/full-name matching, membership, small-group belonging, audience visibility, old discussion-leader fields, worship-song lead names, `TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
+For Bible Study V2 roles, Today may show a compact agenda role note and, while
+confirmation is pending, an action-center item only from
+`BibleStudyMeetingRole.user == request.user`. My Serving remains the confirmation
+workspace. Display-name-only rows remain meeting-detail fallback and must not be
+matched to users by text. Do not infer role ownership from `display_name`,
+username/full-name matching, membership, small-group belonging, audience
+visibility, old discussion-leader fields, worship-song lead names,
+`TeamAssignment`, `TeamMembership`, or `ServiceEvent`.
 
 Bible Study roles are not `TeamAssignment` rows. Their minimal confirmation status is owned by the approved BS-SERVING-CONFIRM.1A workflow and remains separate from `TeamAssignmentMember` confirmation.
 
@@ -89,3 +104,72 @@ Church membership / spiritual-administrative status:
 - requires a future ADR before implementation.
 
 No task in this milestone approves `ChurchStructureLeadershipAssignment`, a church membership/profile status model, a schema migration, or a Church Structure source-of-truth change.
+
+## DOCS-QA-CHECKPOINT.1A Manual QA
+
+Use real trial/demo data where possible and record pass/fail notes separately;
+this checklist does not authorize data changes.
+
+### Ordinary member
+
+- [ ] Today's reading card and check-in state appear.
+- [ ] A visible Church Gathering appears as agenda, not personal serving.
+- [ ] A visible Bible Study meeting with no linked role appears as agenda, not
+  personal serving.
+- [ ] No Today serving action or My Serving card appears without an explicit
+  `TeamAssignmentMember` or linked-user `BibleStudyMeetingRole`.
+
+### Team serving user
+
+- [ ] A pending `TeamAssignmentMember` appears in the Today action center.
+- [ ] My Serving can confirm the team assignment.
+- [ ] The related Church Gathering agenda row carries the compact serving note
+  without duplicating the full action item.
+
+### Bible Study serving user
+
+- [ ] A pending linked-user `BibleStudyMeetingRole` appears in the Today action
+  center as Bible Study serving.
+- [ ] The visible meeting still appears as a Bible Study agenda row.
+- [ ] My Serving shows the Bible Study serving card and its confirmation state.
+
+### Display-name-only Bible Study role
+
+- [ ] The meeting may remain visible through its ordinary audience rules.
+- [ ] The display-name-only role creates no personal serving item in Today's
+  action center or My Serving.
+
+### Team manager
+
+- [ ] A user with an active, date-valid lead/coordinator
+  `MinistryTeamRoleAssignment` sees Leader Needs Attention when the exact team
+  has a near-term coverage issue.
+- [ ] A `TeamMembership.role`-only or `can_lead`-only user does not see the
+  leader card.
+
+### Staff or global manager
+
+- [ ] The user sees the appropriate manager summary and links to the existing
+  management workflows.
+
+### Boundary checks
+
+- [ ] `ChurchStructureMembership` or audience visibility alone never creates
+  personal serving.
+- [ ] `MinistryTeamRoleAssignment` grants the approved management responsibility
+  but never appears as personal serving.
+
+## Do Not Reopen Unless Blocked
+
+Do not continue deleting legacy field surfaces unless a production blocker or
+audit warning appears. Retirement of `TeamMembership.role` / `can_lead` is an
+optional later migration slice, not the current priority.
+
+## Next Implementation Candidates
+
+- Run the Church Structure + Ministry + Bible Study setup/trial-readiness
+  checklist and review its read-only findings.
+- Perform the manual QA above with real demo data and make only evidence-backed
+  polish fixes.
+- Polish My Serving only if real users report confusion.
+- Avoid broad refactors.

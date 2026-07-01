@@ -24,7 +24,7 @@ from comments.reflection_visibility import (
 from events.models import ServiceEvent, get_service_event_effective_end
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
-from ministry.views import my_serving_assignments
+from ministry.views import leader_needs_attention_rows, my_serving_assignments
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -803,6 +803,28 @@ def get_study_meeting_rows_for_window(user, start_datetime, end_datetime):
     ]
 
 
+def get_today_leader_summary(user, *, language="en"):
+    """Compact manager-only "Leader Needs Attention" summary for Today.
+
+    Reuses My Serving's ``leader_needs_attention_rows``, which is manager-gated:
+    it returns rows only for a global assignment manager (staff / capability) or a
+    user with an active lead/coordinator ``MinistryTeamRoleAssignment`` on the
+    exact required team. ``TeamMembership.role`` / ``can_lead`` grant no manager
+    authority, so those users get no rows and no section. This is team-management
+    responsibility, not personal serving, and is never surfaced as My Serving.
+
+    Returns ``None`` (hiding the section) when there is nothing to act on, so an
+    ordinary user — and a manager whose teams are already covered — sees no card.
+    """
+    rows = leader_needs_attention_rows(user, language=language)
+    if not rows:
+        return None
+    return {
+        "count": len(rows),
+        "items": rows[:NEEDS_ATTENTION_CAP],
+    }
+
+
 @login_required
 def home(request):
     enrollments = (
@@ -940,6 +962,10 @@ def home(request):
             "today_items": today_items,
             "ended_plan_count": ended_plan_count,
             "serving_summary": get_today_serving_summary(request.user),
+            "leader_summary": get_today_leader_summary(
+                request.user,
+                language=get_user_language(request),
+            ),
             "today_gatherings": today_gatherings,
             "show_all_today_gatherings_link": show_all_today_gatherings_link,
             "today_study_meetings": today_study_meetings,

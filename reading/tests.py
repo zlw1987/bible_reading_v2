@@ -29,6 +29,8 @@ from comments.models import ReflectionComment
 from events.models import ServiceEvent, ServiceEventAudienceScope
 from ministry.models import (
     MinistryTeam,
+    MinistryTeamRoleAssignment,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
@@ -6695,6 +6697,132 @@ class TodayActionCenterTests(TestCase):
         self.assertNotIn('action="/studies', content)
         self.assertNotContains(response, "Accept role")
         self.assertNotContains(response, "Decline role")
+
+    # --- TODAY-AGENDA.1A: serving vs belonging vs management separation ---
+
+    def grant_ministry_management_role(self, user, team, code):
+        role_type, _ = MinistryTeamRoleType.objects.get_or_create(
+            code=code,
+            defaults={"name": code, "name_en": code.title()},
+        )
+        return MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            user=user,
+            role_type=role_type,
+            start_date=timezone.localdate(),
+        )
+
+    def make_uncovered_required_event(self, *, title_en, days_from_now=1):
+        # A near-term, visible event that requires a team but has no assignment,
+        # so it is an "Unassigned" coverage gap for managers of that team.
+        event = self.make_event(title_en=title_en, days_from_now=days_from_now)
+        event.required_teams.add(self.team)
+        return event
+
+    def test_team_serving_summary_requires_explicit_assignment_member(self):
+        # setUp gives self.user a TeamMembership (candidate pool) but no
+        # TeamAssignmentMember, so no personal serving is inferred from belonging.
+        self.make_visible_event(title_en="Membership Only Service")
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Confirm in My Serving")
+        self.assertNotContains(response, "You are serving")
+
+    def test_ministry_role_assignment_alone_is_not_personal_serving(self):
+        # A management role assignment is team-management responsibility, not a
+        # personal serving assignment; Today must not surface it as My Serving.
+        self.grant_ministry_management_role(
+            self.user,
+            self.team,
+            MinistryTeamRoleType.CODE_LEAD,
+        )
+        self.make_visible_event(title_en="Role Assignment Only Service")
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Confirm in My Serving")
+        self.assertNotContains(response, "You are serving")
+
+    def test_leader_summary_shown_for_global_staff_manager(self):
+        self.make_uncovered_required_event(title_en="Staff Managed Service")
+
+        response = self.get_home(user=self.staff)
+
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Staff Managed Service")
+        self.assertContains(response, "Lighting Team")
+        self.assertContains(response, "Review coverage")
+
+    def test_leader_summary_shown_for_active_ministry_role_manager(self):
+        lead_user = User.objects.create_user(
+            username="today_team_lead",
+            password="TestPass123!",
+        )
+        self.grant_ministry_management_role(
+            lead_user,
+            self.team,
+            MinistryTeamRoleType.CODE_LEAD,
+        )
+        self.make_uncovered_required_event(title_en="Lead Managed Service")
+
+        response = self.get_home(user=lead_user)
+
+        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Lead Managed Service")
+        self.assertContains(response, "Lighting Team")
+
+    def test_leader_summary_hidden_for_ordinary_member(self):
+        self.make_uncovered_required_event(title_en="Ordinary View Service")
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_leader_summary_hidden_for_team_membership_role_lead_without_assignment(self):
+        role_lead_user = User.objects.create_user(
+            username="today_role_lead_only",
+            password="TestPass123!",
+        )
+        TeamMembership.objects.create(
+            team=self.team,
+            user=role_lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.make_uncovered_required_event(title_en="Role Lead Only Service")
+
+        response = self.get_home(user=role_lead_user)
+
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_leader_summary_hidden_for_can_lead_membership(self):
+        can_lead_user = User.objects.create_user(
+            username="today_can_lead_only",
+            password="TestPass123!",
+        )
+        TeamMembership.objects.create(
+            team=self.team,
+            user=can_lead_user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
+        )
+        self.make_uncovered_required_event(title_en="Can Lead Only Service")
+
+        response = self.get_home(user=can_lead_user)
+
+        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
+
+    def test_leader_summary_bilingual_labels_render(self):
+        self.make_uncovered_required_event(title_en="Bilingual Managed Service")
+
+        chinese = self.get_home(user=self.staff, language="zh")
+        self.assertContains(chinese, "组长待处理")
+        self.assertContains(chinese, "查看排班")
 
 
 class ReadingStructureRuntimeReadinessAuditTests(TestCase):

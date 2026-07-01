@@ -70,6 +70,42 @@
 {% endif %}
 {% endif %}
 
+{# --- Zone 1b: Leader summary (actual team managers only) -------------- #}
+{# Manager-gated by leader_needs_attention_rows (active lead/coordinator #}
+{# MinistryTeamRoleAssignment or global/staff capability). This is #}
+{# team-management responsibility, not personal serving, so it is never #}
+{# shown as My Serving. TeamMembership.role / can_lead grant nothing here. #}
+{% if leader_summary %}
+<div class="card dashboard-reminder">
+    <h2 class="card-title">{% if language == "zh" %}组长待处理{% else %}Leader Needs Attention{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+            你负责的团队有 {{ leader_summary.count }} 项排班需要留意。
+        {% else %}
+            {{ leader_summary.count }} scheduling item{{ leader_summary.count|pluralize }} on teams you lead need attention.
+        {% endif %}
+    </p>
+    {% for row in leader_summary.items %}
+    <div class="dashboard-attention-row">
+        <p>
+            <strong>{{ row.event|event_title:language }}</strong>
+            <span class="status status-warning">{{ row.issue_label }}</span>
+        </p>
+        <p class="muted">
+            {{ row.event.start_datetime|member_datetime:language }} ·
+            {{ row.team|ministry_team_name:language }}
+        </p>
+        <a class="button button-secondary" href="{{ row.action_url }}">
+            {% if language == "zh" %}查看排班{% else %}Review coverage{% endif %}
+        </a>
+    </div>
+    {% endfor %}
+    <a class="button button-secondary" href="{% url 'my_serving' %}">
+        {% if language == "zh" %}打开我的服事{% else %}Open My Serving{% endif %}
+    </a>
+</div>
+{% endif %}
+
 {# --- Zone 2: Today's Reading ------------------------------------------ #}
 <h2 class="dashboard-section-title">
     {% if language == "zh" %}今日读经{% else %}Today's Reading{% endif %}

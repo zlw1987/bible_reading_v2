@@ -6824,6 +6824,152 @@ class TodayActionCenterTests(TestCase):
         self.assertContains(chinese, "组长待处理")
         self.assertContains(chinese, "查看排班")
 
+    # --- MY-SERVING-BS.1B: Bible Study serving in Today action center ----
+
+    def test_action_center_counts_pending_bible_study_role(self):
+        # A linked-user BibleStudyMeetingRole on a visible meeting is personal
+        # serving and is folded into the pending-confirmation action center,
+        # labelled as Bible Study serving (not team serving).
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Pending Study Serving Lesson",
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Pending Study Serving Lesson")
+        self.assertContains(response, "Bible Study serving")
+        self.assertContains(response, "Confirm in My Serving")
+
+    def test_action_center_ignores_visible_meeting_without_linked_role(self):
+        # Audience visibility alone is not serving: a visible meeting with no
+        # linked-user role must not appear in the personal action center.
+        self.make_meeting(
+            unit=self.group,
+            lesson_title_en="No Role Study Lesson",
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Confirm in My Serving")
+        # Still rendered as a plain agenda row, not as serving.
+        self.assertContains(response, "No Role Study Lesson")
+
+    def test_action_center_ignores_display_name_only_bible_study_role(self):
+        # Display-name-only roles never match the signed-in user, so they are
+        # never counted as personal serving.
+        self.user.first_name = "Grace"
+        self.user.last_name = "Lee"
+        self.user.save()
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Display Name Study Lesson",
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            display_name="Grace Lee",
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Confirm in My Serving")
+
+    def test_action_center_counts_team_and_bible_study_without_double_count(self):
+        # A pending team assignment and a pending Bible Study role are two
+        # distinct pending serving items; the total count reflects both and the
+        # single confirm call-to-action is not duplicated.
+        event = self.make_event(title_en="Team Pending Service")
+        self.make_assignment(event, confirmed=False)
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Study Pending Serving Lesson",
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=self.user,
+        )
+
+        response = self.get_home()
+        content = response.content.decode()
+
+        self.assertContains(response, "Needs your attention")
+        self.assertContains(
+            response,
+            "You have 2 serving assignments waiting for confirmation.",
+        )
+        self.assertContains(response, "Team Pending Service")
+        self.assertContains(response, "Study Pending Serving Lesson")
+        self.assertContains(response, "Bible Study serving")
+        self.assertEqual(content.count("Confirm in My Serving"), 1)
+
+    def test_action_center_counts_meeting_with_multiple_roles_once(self):
+        # A meeting is one Bible Study serving item even with several linked
+        # roles for the same user: it must not be counted per role.
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Multi Role Study Lesson",
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_WORSHIP_LEAD,
+            user=self.user,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(
+            response,
+            "You have 1 serving assignment waiting for confirmation.",
+        )
+
+    def test_visible_meeting_without_role_still_shown_as_agenda(self):
+        # Even with no personal role, a visible meeting remains an agenda row in
+        # the Bible study zone; it is simply not treated as serving.
+        self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Agenda Only Study Lesson",
+            meeting_datetime=self.local_datetime(0, hour=19),
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Today's Bible study")
+        self.assertContains(response, "Agenda Only Study Lesson")
+        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "My role:")
+
+    def test_action_center_bible_study_serving_bilingual(self):
+        meeting = self.make_meeting(
+            unit=self.group,
+            lesson_title_en="Bilingual Study Serving Lesson",
+        )
+        self.add_role(
+            meeting,
+            BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=self.user,
+        )
+
+        english = self.get_home(language="en")
+        self.assertContains(english, "Bible Study serving")
+
+        chinese = self.get_home(language="zh")
+        self.assertContains(chinese, "查经服事")
+
 
 class ReadingStructureRuntimeReadinessAuditTests(TestCase):
     """READING-STRUCT.1A read-only structure-runtime readiness inventory tests.

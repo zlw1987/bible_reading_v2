@@ -27,6 +27,16 @@
     </p>
     {% for item in serving_summary.items %}
     <div class="dashboard-attention-row">
+        {% if item.kind == "bible_study" %}
+        <p>
+            <strong>{{ item.meeting.lesson|study_lesson_title:language }}</strong>
+            <span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span>
+        </p>
+        <p class="muted">
+            {{ item.meeting.meeting_datetime|member_datetime:language }} ·
+            {% if language == "zh" %}查经服事{% else %}Bible Study serving{% endif %}
+        </p>
+        {% else %}
         <p>
             <strong>{{ item.assignment.service_event|event_title:language }}</strong>
             <span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span>
@@ -35,6 +45,7 @@
             {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
             {{ item.assignment.ministry_team|ministry_team_name:language }}
         </p>
+        {% endif %}
     </div>
     {% endfor %}
     <a class="button" href="{% url 'my_serving' %}">
@@ -53,6 +64,16 @@
     </p>
     {% for item in serving_summary.items %}
     <div class="dashboard-attention-row">
+        {% if item.kind == "bible_study" %}
+        <p>
+            <strong>{{ item.meeting.lesson|study_lesson_title:language }}</strong>
+            <span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span>
+        </p>
+        <p class="muted">
+            {{ item.meeting.meeting_datetime|member_datetime:language }} ·
+            {% if language == "zh" %}查经服事{% else %}Bible Study serving{% endif %}
+        </p>
+        {% else %}
         <p>
             <strong>{{ item.assignment.service_event|event_title:language }}</strong>
             <span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span>
@@ -61,6 +82,7 @@
             {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
             {{ item.assignment.ministry_team|ministry_team_name:language }}
         </p>
+        {% endif %}
     </div>
     {% endfor %}
     <a class="button" href="{% url 'my_serving' %}">

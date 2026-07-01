@@ -24,7 +24,15 @@ from comments.reflection_visibility import (
 from events.models import ServiceEvent, get_service_event_effective_end
 from events.views import can_manage_service_events, get_visible_service_events
 from ministry.models import TeamAssignment
-from ministry.views import leader_needs_attention_rows, my_serving_assignments
+from ministry.views import (
+    get_serving_item_sort_key,
+    get_serving_item_starts_at,
+    leader_needs_attention_rows,
+    my_bible_study_role_serving_items,
+    my_serving_assignments,
+    serving_item_kind,
+    serving_item_needs_attention,
+)
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,
@@ -601,7 +609,12 @@ def get_today_week_windows():
 
 
 def _user_serving_members(user):
-    """Personal, non-cancelled upcoming serving rows (My Serving semantics)."""
+    """Personal, non-cancelled upcoming team serving rows (My Serving semantics).
+
+    Team-assignment serving only. Used for the compact per-gathering serving
+    note; Bible Study serving is a separate agenda concept and is never folded
+    into a Church Gathering row.
+    """
     return [
         member
         for member in my_serving_assignments(user, tab="upcoming")
@@ -612,43 +625,90 @@ def _user_serving_members(user):
     ]
 
 
+def _user_serving_items(user):
+    """Personal upcoming serving items across team assignments and linked-user
+    Bible Study meeting roles, in My Serving order.
+
+    Team serving comes from ``TeamAssignmentMember`` rows (candidate-pool
+    ``TeamMembership`` alone is not serving). Bible Study serving comes from
+    ``BibleStudyMeetingRole.user == user`` on a visible meeting only:
+    display-name-only roles, other users' roles, and audience visibility alone
+    never count as personal serving. ``MinistryTeamRoleAssignment`` (team
+    management) and ``ChurchStructureMembership`` (belonging) are not serving and
+    are never included here.
+    """
+    team_items = _user_serving_members(user)
+    bible_study_items = list(my_bible_study_role_serving_items(user, tab="upcoming"))
+    return sorted(
+        [*team_items, *bible_study_items],
+        key=get_serving_item_sort_key,
+    )
+
+
+def _serving_summary_row(item):
+    """Normalise a team or Bible Study serving item into a compact Today row.
+
+    ``is_pending`` reuses My Serving's ``serving_item_needs_attention`` so the
+    Today action center and My Serving agree on what counts as awaiting
+    confirmation for each serving kind.
+    """
+    starts_at = get_serving_item_starts_at(item)
+    is_pending = serving_item_needs_attention(item)
+    if serving_item_kind(item) == "bible_study_role":
+        return {
+            "kind": "bible_study",
+            "meeting": item.meeting,
+            "roles": item.roles,
+            "starts_at": starts_at,
+            "is_pending": is_pending,
+        }
+    return {
+        "kind": "team",
+        "assignment": item.assignment,
+        "starts_at": starts_at,
+        "is_pending": is_pending,
+    }
+
+
 def get_today_serving_summary(user):
     """Count-aware Today serving reminder for the signed-in user (action center).
 
+    Covers both team-assignment serving and linked-user Bible Study serving.
     Pending confirmations take priority: the summary reports the total pending
-    count (``pending_count``) and surfaces the near-term pending rows (this-week
-    window) so a far-future pending assignment is counted but not shown as a full
-    row. When nothing is pending, a confirmed upcoming assignment within
-    ``NEAR_TERM_CONFIRMED_DAYS`` surfaces as a lightweight reminder instead.
+    count (``pending_count``) across both serving kinds and surfaces the
+    near-term pending rows (this-week window) so a far-future pending item is
+    counted but not shown as a full row. When nothing is pending, a confirmed
+    upcoming serving item within ``NEAR_TERM_CONFIRMED_DAYS`` surfaces as a
+    lightweight reminder instead.
 
-    Reuses My Serving's personal-assignment selector (upcoming, non-cancelled).
-    Returns ``None`` when there is nothing to show, hiding the section on Today.
+    Reuses My Serving's personal serving selectors and needs-attention
+    semantics. Returns ``None`` when there is nothing to show, hiding the
+    section on Today.
     """
     now = timezone.now()
-    upcoming = _user_serving_members(user)
+    rows = [_serving_summary_row(item) for item in _user_serving_items(user)]
 
-    pending = [member for member in upcoming if not member.confirmed_at]
-    pending_count = len(pending)
+    pending_rows = [row for row in rows if row["is_pending"]]
+    pending_count = len(pending_rows)
     if pending_count:
         week_cutoff = now + timedelta(days=THIS_WEEK_DAYS)
         near_term = [
-            member
-            for member in pending[:NEEDS_ATTENTION_CAP]
-            if member.assignment.service_event.start_datetime <= week_cutoff
+            row
+            for row in pending_rows[:NEEDS_ATTENTION_CAP]
+            if row["starts_at"] <= week_cutoff
         ]
         return {
             "is_pending": True,
             "pending_count": pending_count,
-            "items": near_term or pending[:1],
+            "items": near_term or pending_rows[:1],
         }
 
     confirmed_upcoming = next(
         (
-            member
-            for member in upcoming
-            if member.confirmed_at
-            and member.assignment.service_event.start_datetime
-            <= now + timedelta(days=NEAR_TERM_CONFIRMED_DAYS)
+            row
+            for row in rows
+            if not row["is_pending"]
+            and row["starts_at"] <= now + timedelta(days=NEAR_TERM_CONFIRMED_DAYS)
         ),
         None,
     )

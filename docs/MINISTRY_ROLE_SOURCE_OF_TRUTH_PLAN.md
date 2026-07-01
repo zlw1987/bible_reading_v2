@@ -9,6 +9,14 @@ model-field change. Runtime permissions still read the legacy
 approved slices; `TeamMembership.can_lead` remains deprecated/reserved and grants
 no permission.
 
+`MINISTRY-ROLE-SOURCE.1A-FU1` is a docs + read-only-audit follow-up that
+clarifies the membership expectation for management-role holders by team kind
+(assignable vs container; Section 2.1) and adjusts the alignment audit so the
+"management role assignment without membership" signal is a warning only for
+`is_assignable=True` teams and an allowed info counter for `is_assignable=False`
+container teams. It changes no permission, mutates no data, adds no migration or
+model-field change, and does not switch the source of truth.
+
 This plan sits beside `docs/MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md` (which
 introduced the ministry role system as additive) and narrows the long-term
 direction for *which* model owns long-term ministry role authority.
@@ -59,6 +67,53 @@ The long-term boundary is:
 Belonging, long-term role, and event serving stay three distinct concepts. None
 of them is inferred from the others.
 
+### 2.1 Assignable vs container teams (source-of-truth clarifications, `1A-FU1`)
+
+These decisions are **locked** for the long-term direction:
+
+* **`MinistryTeamRoleAssignment` remains the canonical source for long-term
+  ministry roles, including Lead.** It is not demoted, and it is not one of two
+  co-equal sources; it is the intended single source of truth.
+* **Do not remove Lead from Ministry Structure.** Lead is a long-term ministry
+  role expressed as a `MinistryTeamRoleAssignment` (role code `lead`), and it
+  stays part of the structure/role model.
+* **Do not make `TeamMembership.role` the future canonical Lead source.**
+  `TeamMembership.role` is transitional/legacy; it drives current runtime
+  permission only until the `1C` read switch, and it is never promoted to the
+  long-term role authority.
+* **Do not use bidirectional sync** between `TeamMembership.role` and
+  `MinistryTeamRoleAssignment`. Only the `1B` one-way backfill (legacy membership
+  role → role assignment) is planned; the reverse write-back is explicitly not a
+  goal.
+* **Multiple UI entry points are allowed in the future**, but **all canonical
+  role writes must go to `MinistryTeamRoleAssignment`.** A convenience shortcut
+  (for example, a future manage-members action) may exist, but it must write the
+  canonical role assignment rather than create a second source of truth.
+
+Membership expectation by team kind (`MinistryTeam.is_assignable`):
+
+* **`is_assignable=True` (assignable team):** management-role holders (`lead` /
+  `coordinator` `MinistryTeamRoleAssignment`) **should also be active
+  `TeamMembership` rows on that team.** An assignable team has a concrete
+  schedulable member pool, so a long-term manager is expected to be in that pool.
+  `is_assignable=True` means the team **may be selected for ServiceEvent required
+  teams / `TeamAssignment` across any event type** (not just Sunday worship), so
+  it needs a real candidate pool.
+* **`is_assignable=False` (container team):** management-role holders **do not
+  need a `TeamMembership`.** A container team is **structure/container only and
+  is not a direct `TeamAssignment` target**, so it has no schedulable member
+  pool; a `MinistryTeamRoleAssignment` may name a long-term leader without a
+  membership row. This case is reported by the alignment audit as an **allowed
+  info counter**, not a warning.
+
+The alignment audit reflects this: `management_role_assignment_without_membership`
+is a **warning only for `is_assignable=True` teams**; for `is_assignable=False`
+container teams the same shape is recorded as the allowed info counter
+`container_management_role_assignment_without_membership`. Team-level
+disagreement (`teams_management_role_user_disagreement`) stays a warning
+regardless of team kind, because both systems are then explicitly naming
+management users and they differ.
+
 ## 3. Transitional state (current)
 
 While the migration is incomplete:
@@ -75,10 +130,17 @@ While the migration is incomplete:
 
 Each later step is a separate, explicitly approved slice. Do not combine them.
 
-* **`MINISTRY-ROLE-SOURCE.1A` (this slice)** — docs + read-only drift audit.
+* **`MINISTRY-ROLE-SOURCE.1A`** — docs + read-only drift audit.
   Locks the boundary above and ships
   `audit_ministry_role_source_alignment` (read-only, no `--apply`). No runtime
   change.
+* **`MINISTRY-ROLE-SOURCE.1A-FU1`** — assignable/container membership expectation
+  clarification (Section 2.1) + read-only audit adjustment: the "management role
+  assignment without membership" signal becomes a warning only for
+  `is_assignable=True` teams and an allowed info counter
+  (`container_management_role_assignment_without_membership`) for
+  `is_assignable=False` container teams. Docs + audit only; no runtime change, no
+  migration, no data mutation, no source-of-truth switch.
 * **`MINISTRY-ROLE-SOURCE.1B`** — dry-run / optional `--apply` backfill from
   existing legacy `TeamMembership.role` (`lead` / `coordinator`) to matching
   active `MinistryTeamRoleAssignment` rows, separately approved. Dry-run by
@@ -90,10 +152,13 @@ Each later step is a separate, explicitly approved slice. Do not combine them.
   `MinistryTeamRoleAssignment` instead of `TeamMembership.role`, separately
   approved and only after `1B` data is in place and verified. This is the step
   that actually changes runtime authority.
-* **`MINISTRY-ROLE-SOURCE.1D`** — UI cleanup so the manage-members page stops
-  presenting the long-term role as the canonical role source (members page
-  focuses on the candidate pool; long-term role lives on the structure / role
-  assignment page), separately approved.
+* **`MINISTRY-ROLE-SOURCE.1D`** — manage-members UI cleanup/shortcut so the
+  manage-members page stops presenting the long-term role as the canonical role
+  source (members page focuses on the candidate pool; long-term role lives on the
+  structure / role assignment page), separately approved. Multiple UI entry
+  points are allowed, but any future manage-members shortcut must write the
+  canonical `MinistryTeamRoleAssignment` — it must not create a second source of
+  truth or introduce bidirectional sync.
 * **Later (optional)** — field deprecation/removal of `TeamMembership.role` /
   `TeamMembership.can_lead`, only after the data backfill (`1B`) and permission
   switch (`1C`) are complete and stable, and only via a separately approved
@@ -136,7 +201,11 @@ config-gap warning, not a blocker; the audit creates no role types.
 * active `TeamMembership` rows with `can_lead=True`;
 * active `MinistryTeamRoleAssignment` count;
 * active ministry role assignments by role-type code;
-* active `MinistryTeam` count.
+* active `MinistryTeam` count;
+* `container_management_role_assignment_without_membership` — **allowed** count
+  of management role assignments on `is_assignable=False` container teams whose
+  user has no active `TeamMembership` on that team. This is expected for
+  container teams (no schedulable member pool) and is info, not a warning.
 
 ### Warnings (transitional drift / setup gaps — not fatal)
 
@@ -144,8 +213,10 @@ config-gap warning, not a blocker; the audit creates no role types.
   linked user but **no** equivalent active `MinistryTeamRoleAssignment` on the
   same team;
 * active management `MinistryTeamRoleAssignment` (role code in {`lead`,
-  `coordinator`}) whose user has **no** active linked `TeamMembership` on that
-  team;
+  `coordinator`}) on an **`is_assignable=True`** team whose user has **no**
+  active linked `TeamMembership` on that team (for `is_assignable=False`
+  container teams this is not a warning — it is the allowed info counter
+  `container_management_role_assignment_without_membership`);
 * active `TeamMembership.can_lead=True` (transitional flag, not the long-term
   role source);
 * active management `TeamMembership` with **no linked user**

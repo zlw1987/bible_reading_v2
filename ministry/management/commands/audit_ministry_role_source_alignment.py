@@ -107,6 +107,15 @@ class Command(BaseCommand):
         write("inventory (info):")
         for key in INFO_KEYS:
             write(f"  {key}: {stats[key]}")
+        write(
+            "  note: container_management_role_assignment_without_membership is "
+            "ALLOWED info, not a warning — for non-assignable "
+            "(is_assignable=False) container teams a MinistryTeamRoleAssignment "
+            "may name a long-term leader without a candidate-pool TeamMembership. "
+            "The membership expectation applies to assignable "
+            "(is_assignable=True) teams, which may be ServiceEvent required-team "
+            "/ TeamAssignment targets for any event type."
+        )
         write("  active_role_assignments_by_code:")
         by_code = audit["active_role_assignments_by_code"]
         if by_code:

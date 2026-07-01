@@ -7749,6 +7749,21 @@ class MinistryRoleSourceAlignmentAuditTests(TestCase):
         self.assertIn("does NOT switch the source of truth", output)
         self.assertIn("blockers present: none", output)
 
+    def test_command_output_states_assignable_container_distinction(self):
+        # MINISTRY-ROLE-SOURCE.1A-FU1: the read-only report exposes the info
+        # counter and explains the assignable vs container membership
+        # expectation, alongside the existing read-only disclaimer.
+        output = self.run_command()
+        self.assertIn(
+            "container_management_role_assignment_without_membership", output
+        )
+        self.assertIn("is_assignable=True", output)
+        self.assertIn("is_assignable=False", output)
+        self.assertIn("container team", output)
+        # Read-only / no permission switch disclaimer still present.
+        self.assertIn("mode: read-only (no --apply exists; no data was changed)", output)
+        self.assertIn("does NOT change permissions", output)
+
     def test_no_apply_option_exists(self):
         from ministry.management.commands.audit_ministry_role_source_alignment import (
             Command,
@@ -7814,6 +7829,8 @@ class MinistryRoleSourceAlignmentAuditTests(TestCase):
     # ----- warning: role assignment without active membership ---------------
 
     def test_role_assignment_lead_without_membership_is_warning(self):
+        # self.team defaults to is_assignable=True.
+        self.assertTrue(self.team.is_assignable)
         self.make_role_assignment(self.lead_type, self.user)
         audit = run_alignment_audit()
         self.assertEqual(
@@ -7821,6 +7838,68 @@ class MinistryRoleSourceAlignmentAuditTests(TestCase):
         )
         self.assertIn(
             "management_role_assignment_without_membership", audit["warnings"]
+        )
+        # Assignable-team drift is a warning, not the allowed container info.
+        self.assertEqual(
+            audit["stats"][
+                "container_management_role_assignment_without_membership"
+            ],
+            0,
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_role_assignment_lead_on_container_team_without_membership_is_info(self):
+        # MINISTRY-ROLE-SOURCE.1A-FU1: for non-assignable container teams, a
+        # management role assignment without a TeamMembership is allowed and is
+        # recorded as an info counter, not a warning.
+        container_team = MinistryTeam.objects.create(
+            name="Digital Ministry",
+            name_en="Digital Ministry",
+            is_assignable=False,
+        )
+        self.make_role_assignment(self.lead_type, self.user, team=container_team)
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["management_role_assignment_without_membership"], 0
+        )
+        self.assertNotIn(
+            "management_role_assignment_without_membership", audit["warnings"]
+        )
+        self.assertEqual(
+            audit["stats"][
+                "container_management_role_assignment_without_membership"
+            ],
+            1,
+        )
+        # Info counters are not warnings and never affect the warning count on
+        # their own.
+        self.assertNotIn(
+            "container_management_role_assignment_without_membership",
+            audit["warnings"],
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_container_team_management_role_with_membership_clears_info(self):
+        # A container-team management role holder who also has an active
+        # TeamMembership produces neither the warning nor the info counter.
+        container_team = MinistryTeam.objects.create(
+            name="Digital Ministry",
+            name_en="Digital Ministry",
+            is_assignable=False,
+        )
+        TeamMembership.objects.create(
+            team=container_team, user=self.user, role=TeamMembership.ROLE_MEMBER
+        )
+        self.make_role_assignment(self.lead_type, self.user, team=container_team)
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["management_role_assignment_without_membership"], 0
+        )
+        self.assertEqual(
+            audit["stats"][
+                "container_management_role_assignment_without_membership"
+            ],
+            0,
         )
         self.assertEqual(audit["blocker_count"], 0)
 
@@ -7905,6 +7984,29 @@ class MinistryRoleSourceAlignmentAuditTests(TestCase):
         audit = run_alignment_audit()
         self.assertEqual(
             audit["stats"]["teams_management_role_user_disagreement"], 1
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_management_role_user_disagreement_warns_on_container_team(self):
+        # Disagreement stays a warning regardless of team kind: both systems are
+        # explicitly naming management users and they differ.
+        container_team = MinistryTeam.objects.create(
+            name="Digital Ministry",
+            name_en="Digital Ministry",
+            is_assignable=False,
+        )
+        TeamMembership.objects.create(
+            team=container_team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        self.make_role_assignment(
+            self.lead_type, self.other_user, team=container_team
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["teams_management_role_user_disagreement"], 1
+        )
+        self.assertIn(
+            "teams_management_role_user_disagreement", audit["warnings"]
         )
         self.assertEqual(audit["blocker_count"], 0)
 

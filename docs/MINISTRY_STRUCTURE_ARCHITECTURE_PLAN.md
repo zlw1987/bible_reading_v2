@@ -10,8 +10,9 @@ with explicit nullable parent FKs, give `MinistryTeamRoleAssignment` an
 `is_active` + date-window history with multiple active Leads allowed, treat
 missing required roles as warnings only, follow the shared-vs-separate team
 guideline, introduce a new `CAP_MANAGE_MINISTRY_STRUCTURE` capability, and keep
-`TeamMembership.role` / `can_lead` as the permission source while the new role
-model stays additive in the foundation phase.
+`TeamMembership.role` as the runtime permission source (`can_lead` is
+deprecated/reserved and grants no permission) while the new role model stays
+additive in the foundation phase.
 
 `MINISTRY-STRUCTURE.1B` implemented the additive model/admin/test foundation
 (migration `ministry/0003`): new `MinistryTeam.team_kind` / `is_assignable` /
@@ -25,8 +26,9 @@ registration and read-only `MinistryTeam` structure helpers
 (`active_parent_links`, `primary_parent_link`, `get_ministry_ancestors`,
 `primary_church_anchor`, `display_path_label`, `missing_required_role_types`).
 This is additive only: it changes no runtime behavior, does not touch
-`can_manage_ministry_team` / `manageable_assignment_teams` (TeamMembership.role /
-can_lead remains the permission source), does not enforce `is_assignable` on
+`can_manage_ministry_team` / `manageable_assignment_teams` (TeamMembership.role
+remains the runtime permission source; TeamMembership.can_lead is
+deprecated/reserved and grants no permission), does not enforce `is_assignable` on
 `TeamAssignment`, does not change My Serving / Today / ServiceEvent / Bible Study
 visibility, seeds no defaults, and backfills no hierarchy or roles. The
 `CAP_MANAGE_MINISTRY_STRUCTURE` capability was intentionally **not** added to
@@ -229,9 +231,23 @@ for current runtime compatibility only. `1A` changes no permission, mutates no
 data, switches no source of truth, runs no backfill, and adds no migration — the
 permission read switch from `TeamMembership.role` to `MinistryTeamRoleAssignment`
 remains deferred to a later, separately approved slice. See
-`docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md` for the full plan (1A docs/audit, 1B
-backfill, 1C permission read switch, 1D manage-members UI cleanup, later optional
-field retirement).
+`docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md` for the full plan (1A docs/audit,
+1A-FU1 assignable/container clarification, 1B backfill, 1C permission read switch,
+1D manage-members UI cleanup, later optional field retirement).
+
+`MINISTRY-ROLE-SOURCE.1A-FU1` (docs + read-only audit) clarified that
+**assignable** teams (`is_assignable=True`) expect management-role holders to
+also be active `TeamMembership` rows (the team has a concrete schedulable member
+pool), while **container** teams (`is_assignable=False`) do not — a
+`MinistryTeamRoleAssignment` may name a long-term leader on a container team
+without a membership row. `is_assignable=True` means the team is eligible as a
+ServiceEvent required-team / `TeamAssignment` target for **any event type** (not
+Sunday-only), which is why it needs a real candidate pool; `is_assignable=False`
+is structure/container only and is not a direct `TeamAssignment` target. The
+alignment audit reflects this: `management_role_assignment_without_membership` is
+a warning only for assignable teams, and container teams use the allowed info
+counter `container_management_role_assignment_without_membership`. No permission,
+source-of-truth, or `is_assignable` enforcement behavior changed.
 
 Related existing docs:
 
@@ -287,9 +303,10 @@ noted):
    style).
 
 2. **The biggest existing-system tension is the meaning of "Lead."** Today
-   `ministry/permissions.py::can_manage_ministry_team` infers lead/coordinator
-   authority from `TeamMembership.role` (`member` / `lead` / `coordinator`) and
-   `TeamMembership.can_lead`. The proposed `MinistryTeamRoleAssignment(lead)`
+   `ministry/permissions.py::can_manage_ministry_team` derives lead/coordinator
+   authority from `TeamMembership.role` in {`lead`, `coordinator`};
+   `TeamMembership.can_lead` is deprecated/reserved and grants no permission. The
+   proposed `MinistryTeamRoleAssignment(lead)`
    introduces a *second* source of "Lead." These must not silently diverge.
    Recommended path (Section 8): the new role-assignment model is **additive and
    does not drive permissions** in the foundation phase; migrating
@@ -657,7 +674,8 @@ versa). To avoid that:
   explicit assignment rows.
 
 This decision is **locked** (Section 14, decision 8): the foundation phase keeps
-`TeamMembership.role` / `can_lead` as the permission source and adds
+`TeamMembership.role` as the runtime permission source (`can_lead` is
+deprecated/reserved and grants no permission) and adds
 `MinistryTeamRoleAssignment` as additive-only rows. Whether
 `TeamMembership.role`'s lead/coordinator values are eventually deprecated is
 settled inside the later, separately approved permission-migration slice, not in
@@ -1001,8 +1019,9 @@ later slices. They are no longer open.
    (Section 10).
 8. **Permission-source transition — LOCKED.** In the `MINISTRY-STRUCTURE.1B`
    foundation phase, **do not** change existing `can_manage_ministry_team`.
-   Existing `TeamMembership.role` / `can_lead` remains the current permission
-   source. New `MinistryTeamRoleAssignment` rows are **additive only** in the
+   Existing `TeamMembership.role` remains the current runtime permission source;
+   `TeamMembership.can_lead` is deprecated/reserved and grants no permission. New
+   `MinistryTeamRoleAssignment` rows are **additive only** in the
    foundation phase and do not drive permissions. Migrating ministry permissions
    from `TeamMembership.role` to `MinistryTeamRoleAssignment` is a later,
    separately approved slice with audit/backfill (Section 8.1).

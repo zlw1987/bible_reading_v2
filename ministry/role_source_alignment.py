@@ -62,6 +62,12 @@ MANAGEMENT_MINISTRY_CODES = tuple(MEMBERSHIP_ROLE_TO_MINISTRY_CODE.values())
 
 
 # Inventory counters (plain summary; not severity-classified).
+#
+# ``container_management_role_assignment_without_membership`` is an **allowed**
+# info counter, not a warning: for non-assignable container teams a long-term
+# ``MinistryTeamRoleAssignment`` may name a leader without a candidate-pool
+# ``TeamMembership`` (a container team has no concrete schedulable member pool).
+# See MINISTRY-ROLE-SOURCE.1A-FU1 in docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md.
 INFO_KEYS = (
     "active_team_memberships",
     "team_memberships_role_member",
@@ -70,6 +76,7 @@ INFO_KEYS = (
     "team_memberships_can_lead_true",
     "active_role_assignments",
     "active_ministry_teams",
+    "container_management_role_assignment_without_membership",
 )
 
 # Drift that is expected while runtime still reads the legacy fields. None of
@@ -91,8 +98,15 @@ BLOCKER_KEYS = (
     "duplicate_active_role_assignment_user_team_role",
 )
 
+# Info-level counters that also carry capped verbose example rows. The
+# container-team drift is allowed (info), but examples are still useful when
+# reviewing which container role assignments have no membership.
+INFO_DETAIL_KEYS = (
+    "container_management_role_assignment_without_membership",
+)
+
 # Categories that carry capped example rows under ``--verbose``.
-VERBOSE_DETAIL_KEYS = BLOCKER_KEYS + WARNING_KEYS
+VERBOSE_DETAIL_KEYS = BLOCKER_KEYS + WARNING_KEYS + INFO_DETAIL_KEYS
 
 PERMISSION_NOTES = (
     "Read-only: this audit changes no permission and switches no source of "
@@ -106,6 +120,13 @@ PERMISSION_NOTES = (
     "TeamMembership stays the membership / candidate pool; TeamAssignmentMember "
     "stays the event-specific serving source. Neither membership nor a role "
     "assignment implies serving.",
+    "For assignable teams (is_assignable=True), management role holders should "
+    "also have an active TeamMembership because the team has a concrete "
+    "schedulable member pool and may be a ServiceEvent required-team / "
+    "TeamAssignment target (any event type). For non-assignable container teams "
+    "(is_assignable=False) MinistryTeamRoleAssignment may name long-term leaders "
+    "without requiring TeamMembership, so that case is reported as allowed info, "
+    "not a warning.",
     "See docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md.",
 )
 
@@ -260,17 +281,31 @@ def run_alignment_audit(target_date=None):
                 _membership_label(membership) + f" expected_code={target_code}"
             )
 
-    # --- Warning: management role assignment without active membership ------
+    # --- Management role assignment without active membership ----------------
+    # For assignable teams this is a warning (the team has a concrete
+    # schedulable member pool, so a management role holder should also be an
+    # active TeamMembership). For non-assignable container teams it is allowed
+    # and reported only as an info counter (MINISTRY-ROLE-SOURCE.1A-FU1).
     for assignment in active_role_assignments:
         if assignment.role_type.code not in MANAGEMENT_MINISTRY_CODES:
             continue
         team_member_users = membership_users_by_team.get(assignment.team_id, set())
-        if assignment.user_id not in team_member_users:
+        if assignment.user_id in team_member_users:
+            continue
+        label = (
+            f"assignment_id={assignment.id} team=#{assignment.team_id} "
+            f"user_id={assignment.user_id} role_code={assignment.role_type.code}"
+        )
+        if assignment.team.is_assignable:
             stats["management_role_assignment_without_membership"] += 1
-            details["management_role_assignment_without_membership"].append(
-                f"assignment_id={assignment.id} team=#{assignment.team_id} "
-                f"user_id={assignment.user_id} role_code={assignment.role_type.code}"
-            )
+            details["management_role_assignment_without_membership"].append(label)
+        else:
+            stats[
+                "container_management_role_assignment_without_membership"
+            ] += 1
+            details[
+                "container_management_role_assignment_without_membership"
+            ].append(label + " is_assignable=False (allowed for container team)")
 
     # --- Warning: both systems carry management roles but users disagree ----
     for team_id, member_users in mgmt_membership_users_by_team.items():

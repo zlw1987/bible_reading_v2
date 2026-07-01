@@ -264,13 +264,23 @@ class MinistryTeamForm(forms.ModelForm):
 
 
 class TeamMembershipForm(forms.ModelForm):
+    # MINISTRY-ROLE-SOURCE.1D: the normal manage-members form no longer edits
+    # ``role`` or ``can_lead``. After the 1C read switch neither field grants any
+    # runtime team-management / scheduling permission (that authority is an
+    # explicit active lead/coordinator ``MinistryTeamRoleAssignment``), so
+    # exposing them here implied a permission source that no longer exists.
+    # ``role`` is left off the form entirely: normal creates use the model
+    # default (``member``) and existing legacy ``role`` values are preserved
+    # untouched on edit. ``can_lead`` was already off the form; keeping it off
+    # means a save never sets it True (a malicious ``can_lead=on`` POST is
+    # ignored by the ModelForm). Long-term ministry roles are managed through
+    # ``MinistryTeamRoleAssignment`` on the staff-only structure setup page.
     class Meta:
         model = TeamMembership
         fields = [
             "user",
             "display_name",
             "email",
-            "role",
             "skill_level",
             "notes",
             "is_active",
@@ -287,11 +297,6 @@ class TeamMembershipForm(forms.ModelForm):
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
 
-        self.fields["role"].choices = [
-            (TeamMembership.ROLE_MEMBER, text["member"]),
-            (TeamMembership.ROLE_LEAD, text["lead"]),
-            (TeamMembership.ROLE_COORDINATOR, text["coordinator"]),
-        ]
         self.fields["display_name"].widget.attrs.update(
             {"placeholder": text["display_name_placeholder"]}
         )

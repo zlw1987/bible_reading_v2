@@ -20,6 +20,18 @@
 
 <div class="card">
     <h2>{% if language == "zh" %}添加成员{% else %}Add Member{% endif %}</h2>
+    <p class="muted">
+        {% if language == "zh" %}
+        这里管理团队成员名单（候选池）。成员条目本身不授予团队管理或排班权限。长期事工角色（负责人／协调人）请在事工结构设置中管理。
+        {% else %}
+        This manages the team member list (the candidate pool). A member entry does not grant team-management or scheduling permission. Manage long-term ministry roles (Lead / Coordinator) in Structure setup.
+        {% endif %}
+        {% if can_manage_structure %}
+        <a href="{% url 'manage_ministry_team_structure' team.id %}">
+            {% if language == "zh" %}前往事工结构设置的长期事工角色{% else %}Go to Long-term Ministry Roles in Structure setup{% endif %}
+        </a>
+        {% endif %}
+    </p>
     <form method="post">
         {% csrf_token %}
         {{ form.non_field_errors }}
@@ -44,8 +56,11 @@
         <div>
             <h3>{{ membership.get_display_name }}</h3>
             <p class="muted">
-                {{ membership|membership_role_label:language }}
-                ·
+                {% if membership.canonical_role_labels %}
+                    {% if language == "zh" %}长期事工角色{% else %}Long-term role{% endif %}:
+                    {{ membership.canonical_role_labels|join:", " }}
+                    ·
+                {% endif %}
                 {% if membership.is_active %}
                     {% if language == "zh" %}启用{% else %}Active{% endif %}
                 {% else %}

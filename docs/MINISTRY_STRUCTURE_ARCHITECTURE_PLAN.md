@@ -251,7 +251,23 @@ exact-team only (no ancestor ministry teams, church-structure anchors,
 behavior unchanged; no model or migration change). See
 `docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md` for the full plan (1A docs/audit,
 1A-FU1 assignable/container clarification, 1B backfill, 1C permission read switch,
-1D manage-members UI cleanup, later optional field retirement).
+1D manage-members UI cleanup, 1E-A `can_lead` data cleanup command, later optional
+field retirement).
+
+**`MINISTRY-ROLE-SOURCE.1D` and `1E-A` are implemented.** `1D` cleaned up the
+manage-members UI so it no longer presents `TeamMembership.role` /
+`TeamMembership.can_lead` as a leadership/permission control:
+`TeamMembershipForm` no longer includes `role` (normal creates default to
+`member`; existing legacy `role` values are preserved untouched on edit) and
+never included `can_lead`, so neither can be set from that UI. The members list
+now shows canonical long-term roles from active `MinistryTeamRoleAssignment` rows
+only and links staff to the structure-setup Long-term Ministry Roles section.
+`1E-A` shipped the dry-run-by-default `cleanup_team_membership_can_lead_flags`
+command, which clears deprecated `can_lead=True` flags (active + inactive rows,
+`--team-id` scope) under explicit `--apply` and only sets `can_lead` `True` →
+`False`; it never touches `TeamMembership.role`, creates/deletes no membership or
+role assignment, and changes no permission. Neither slice removes a model field
+or adds a migration.
 
 `MINISTRY-ROLE-SOURCE.1A-FU1` (docs + read-only audit) clarified that
 **assignable** teams (`is_assignable=True`) expect management-role holders to

@@ -37,6 +37,28 @@ source of truth, mutates no `TeamMembership` row, never backfills from
 `can_lead`, and never auto-resolves manager disagreements. See Section 6.1. The
 `--apply` mode is not run without explicit user approval.
 
+`MINISTRY-ROLE-SOURCE.1D` is **implemented**: the normal manage-members UI no
+longer presents `TeamMembership.role` or `TeamMembership.can_lead` as a
+leadership/permission control. `TeamMembershipForm` no longer includes `role`
+(normal creates use the model default `member`; existing legacy `role` values are
+preserved untouched on edit) and never included `can_lead`, so a save cannot set
+either from this UI (a malicious `can_lead=on` / `role=lead` POST is ignored).
+The manage-members page now shows canonical long-term roles from active
+`MinistryTeamRoleAssignment` rows (never from `TeamMembership.role`) and links
+staff to the structure-setup Long-term Ministry Roles section. It changes no
+runtime permission, mutates no data, removes no model field, and adds no
+migration.
+
+`MINISTRY-ROLE-SOURCE.1E-A` is **implemented** as a dry-run-by-default cleanup
+command (`cleanup_team_membership_can_lead_flags`, logic in
+`ministry/can_lead_cleanup.py`). It clears deprecated `TeamMembership.can_lead=True`
+flags (active and inactive rows; `--team-id` narrows scope). Dry-run by default;
+writes only under explicit `--apply`, and even then it only sets `can_lead`
+`True` → `False`. It never mutates `TeamMembership.role`, never
+creates/deletes/(de)activates a `TeamMembership` or `MinistryTeamRoleAssignment`
+row, infers no role from `can_lead`, and changes no permission. See Section 6.2.
+The `--apply` mode is not run without explicit user approval.
+
 This plan sits beside `docs/MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md` (which
 introduced the ministry role system as additive) and narrows the long-term
 direction for *which* model owns long-term ministry role authority.
@@ -52,9 +74,12 @@ can disagree:
   After `1C` it is **legacy compatibility data only** and grants no runtime
   team-management permission.
   **`TeamMembership.can_lead`** is a separate deprecated/reserved/transitional
-  flag: it grants **no** scheduling, member-management, or admin permission,
-  but it still exists on the row and on the manage-members form, so this
-  audit reports `can_lead=True` as a warning.
+  flag: it grants **no** scheduling, member-management, or admin permission. It
+  still exists on `TeamMembership` rows, but after `1D` it is not editable from
+  the normal manage-members UI (`TeamMembershipForm` does not include it). The
+  audit reports `can_lead=True` rows as a warning until
+  `cleanup_team_membership_can_lead_flags --apply` is explicitly approved/run
+  (see Section 6.2).
 * **`MinistryTeamRoleAssignment`** (added in `MINISTRY-STRUCTURE.1B`). This is an
   explicit, dated, multi-active-allowed long-term ministry role tied to a
   `MinistryTeamRoleType` (`lead`, `assistant_lead`, `coordinator`, `scheduler`,
@@ -144,9 +169,11 @@ After the `1C` read switch:
   source**. `can_manage_ministry_team`, `can_manage_team_assignment_for_team`,
   team scheduling, manage-members, and the My Serving "Teams I manage" section
   all read it.
-* `TeamMembership.role` and `TeamMembership.can_lead` **remain on the model and
-  the manage-members form as legacy compatibility data**, but grant no runtime
-  team-management permission. They are not removed in `1C`.
+* `TeamMembership.role` and `TeamMembership.can_lead` **remain on the model as
+  legacy compatibility data**, but grant no runtime team-management permission.
+  They are not removed in `1C`. (In `1C` they were still on the manage-members
+  form; `1D` later removed `role` from that form and confirmed `can_lead` is not
+  editable there — see Section 4.)
 * `TeamMembership` stays candidate-pool only; `TeamAssignmentMember` stays
   event-specific serving only. Neither is inferred from the other or from a role
   assignment.
@@ -183,17 +210,31 @@ Each later step is a separate, explicitly approved slice. Do not combine them.
   in {`lead`, `coordinator`}, exact team) instead of `TeamMembership.role`. This
   is the step that actually changed runtime authority. Exact-team only; staff /
   superuser / global capability behavior unchanged; no model or migration change.
-* **`MINISTRY-ROLE-SOURCE.1D`** — manage-members UI cleanup/shortcut so the
-  manage-members page stops presenting the long-term role as the canonical role
-  source (members page focuses on the candidate pool; long-term role lives on the
-  structure / role assignment page), separately approved. Multiple UI entry
-  points are allowed, but any future manage-members shortcut must write the
-  canonical `MinistryTeamRoleAssignment` — it must not create a second source of
-  truth or introduce bidirectional sync.
+* **`MINISTRY-ROLE-SOURCE.1D`** — manage-members UI cleanup. **Implemented.**
+  The manage-members page stops presenting the long-term role as the canonical
+  role source: `TeamMembershipForm` no longer includes `role` (normal creates use
+  the model default `member`; existing legacy `role` values are preserved
+  untouched on edit) and never included `can_lead`, so neither can be set from
+  this UI. The members list shows canonical long-term roles from active
+  `MinistryTeamRoleAssignment` rows (never from `TeamMembership.role`) and links
+  staff to the structure-setup Long-term Ministry Roles section. This slice adds
+  no manage-members write shortcut for canonical roles; any future one must write
+  `MinistryTeamRoleAssignment` and must not create a second source of truth or
+  bidirectional sync. No runtime permission change, no model-field removal, no
+  migration.
+* **`MINISTRY-ROLE-SOURCE.1E-A`** — deprecated `can_lead` flag cleanup command.
+  **Implemented** as `cleanup_team_membership_can_lead_flags` (Section 6.2).
+  Dry-run by default; `--apply` only on explicit approval; clears
+  `can_lead=True` → `False` on active and inactive rows (`--team-id` narrows
+  scope); reports `data_mutated`; never touches `TeamMembership.role`, never
+  creates/deletes/(de)activates a membership or role assignment, and changes no
+  permission. This closes the remaining `active_team_memberships_can_lead_true`
+  alignment warning without removing the field.
 * **Later (optional)** — field deprecation/removal of `TeamMembership.role` /
-  `TeamMembership.can_lead`, only after the data backfill (`1B`) and permission
-  switch (`1C`) are complete and stable, and only via a separately approved
-  audit + migration slice following the repo's field-retirement discipline.
+  `TeamMembership.can_lead`, only after the data backfill (`1B`), permission
+  switch (`1C`), UI cleanup (`1D`), and `can_lead` data cleanup (`1E-A`) are
+  complete and stable, and only via a separately approved audit + migration slice
+  following the repo's field-retirement discipline.
 
 ## 5. Explicit non-goals (for `1A`)
 
@@ -321,6 +362,34 @@ assignable-team "management role assignment without membership" warning surfaced
 by the alignment audit (that gap needs a membership, which this command never
 creates); it only backfills the reverse direction (membership role → role
 assignment).
+
+## 6.2 Deprecated `can_lead` cleanup command (`1E-A`)
+
+`cleanup_team_membership_can_lead_flags` (logic in
+`ministry/can_lead_cleanup.py`) clears the deprecated/reserved
+`TeamMembership.can_lead=True` flag, which after the `1C` read switch grants no
+permission (runtime team-management authority reads active lead/coordinator
+`MinistryTeamRoleAssignment` rows for the exact team). Leaving `can_lead=True`
+rows around is only stale legacy data that the alignment audit reports as the
+`active_team_memberships_can_lead_true` warning.
+
+It is dry-run by default and mutates nothing unless `--apply` is passed. Even
+under `--apply` it only sets `can_lead` `True` → `False`. It never touches
+`TeamMembership.role`, never creates/deletes/(de)activates a `TeamMembership` or
+`MinistryTeamRoleAssignment` row, infers no role from `can_lead`, and changes no
+permission. Both active and inactive memberships are in scope by default so the
+deprecated flag is cleared completely; `--team-id` narrows the scope to one team,
+and `--limit` caps verbose example rows only (it does not narrow scan/apply
+scope).
+
+Output reports `mode` (DRY RUN / APPLY), `candidates_checked`, `would_clear`,
+`cleared`, and `data_mutated`. `data_mutated` is `true` only when at least one
+row was actually cleared under `--apply`; a dry-run always reports `false`, and
+an `--apply` run with no `can_lead=True` rows in scope also reports `false`. The
+`--apply` mode is not run without explicit user approval.
+
+This command does not remove the `can_lead` model field; field
+deprecation/removal remains a later, separately approved audit + migration slice.
 
 ## 7. Boundaries reminder
 

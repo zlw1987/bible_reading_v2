@@ -152,9 +152,12 @@
         {% for membership in memberships %}
         <div>
             <h3>{{ membership.get_display_name }}</h3>
+            {% if membership.canonical_role_labels %}
             <p class="muted">
-                {{ membership|membership_role_label:language }}
+                {% if language == "zh" %}长期事工角色{% else %}Long-term role{% endif %}:
+                {{ membership.canonical_role_labels|join:", " }}
             </p>
+            {% endif %}
             {% if membership.skill_level %}
             <p>
                 <strong>{% if language == "zh" %}技能等级{% else %}Skill Level{% endif %}:</strong>

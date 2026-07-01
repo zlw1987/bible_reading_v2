@@ -1020,6 +1020,38 @@ def _role_assignment_user_label(user):
     return full_name or user.username
 
 
+def _canonical_role_labels_by_user(team, language, target_date=None):
+    """Map ``user_id`` -> list of canonical long-term ministry role labels for
+    exactly ``team``.
+
+    Read-only. Sourced only from active, date-window-valid
+    ``MinistryTeamRoleAssignment`` rows (with an active ``role_type``) on this
+    exact team — never from ``TeamMembership.role`` / ``TeamMembership.can_lead``.
+    These are long-term ministry roles for display truthfulness only; they are
+    not serving and (after MINISTRY-ROLE-SOURCE.1C the runtime permission source
+    lives on these same rows) this helper grants nothing by itself.
+    """
+    today = target_date or timezone.localdate()
+    assignments = (
+        team.role_assignments.filter(
+            is_active=True,
+            role_type__is_active=True,
+            start_date__lte=today,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .select_related("role_type", "user")
+        .order_by("role_type__sort_order", "id")
+    )
+    labels_by_user = {}
+    for assignment in assignments:
+        if assignment.user_id is None:
+            continue
+        labels_by_user.setdefault(assignment.user_id, []).append(
+            assignment.role_type.display_name(language)
+        )
+    return labels_by_user
+
+
 def _role_assignment_display_rows(team, language, *, active):
     """Build read display rows for a team's ministry role assignments.
 
@@ -1271,6 +1303,17 @@ def ministry_team_detail(request, team_id):
         team.memberships.filter(is_active=True)
         .select_related("user")
     )
+    # MINISTRY-ROLE-SOURCE.1D: show canonical long-term roles (from active
+    # MinistryTeamRoleAssignment rows) instead of the legacy TeamMembership.role
+    # label, which after 1C/1D is legacy compatibility data and no longer a
+    # role/leadership/permission source. Same helper as manage-members.
+    canonical_role_labels = _canonical_role_labels_by_user(team, language)
+    for membership in memberships:
+        membership.canonical_role_labels = (
+            canonical_role_labels.get(membership.user_id, [])
+            if membership.user_id is not None
+            else []
+        )
 
     return render(
         request,
@@ -1642,6 +1685,17 @@ def manage_team_members(request, team_id):
     memberships = order_team_memberships_by_visible_identity(
         team.memberships.select_related("user")
     )
+    # MINISTRY-ROLE-SOURCE.1D: annotate each member with its canonical long-term
+    # ministry role labels (from active MinistryTeamRoleAssignment rows), so the
+    # page can show the real long-term role source instead of implying the legacy
+    # TeamMembership.role grants permission.
+    canonical_role_labels = _canonical_role_labels_by_user(team, language)
+    for membership in memberships:
+        membership.canonical_role_labels = (
+            canonical_role_labels.get(membership.user_id, [])
+            if membership.user_id is not None
+            else []
+        )
 
     return render(
         request,
@@ -1650,6 +1704,10 @@ def manage_team_members(request, team_id):
             "team": team,
             "memberships": memberships,
             "form": form,
+            # Managing canonical long-term roles lives on the staff/superuser-only
+            # structure setup page; the link is shown only to staff (an ordinary
+            # lead/coordinator who can manage members here is not staff).
+            "can_manage_structure": _user_is_staff(request.user),
         },
     )
 

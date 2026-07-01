@@ -64,6 +64,8 @@ from .services.copy_forward_suggestions import (
 from .structure_readiness import run_audit
 from .role_source_alignment import run_alignment_audit
 from .role_source_backfill import run_backfill
+from .can_lead_cleanup import run_cleanup
+from .forms import TeamMembershipForm
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -8765,3 +8767,367 @@ class MinistryTeamManagementRoleSourceTests(TestCase):
                     text,
                     msg=f"Stale runtime claim {phrase!r} found in {rel}",
                 )
+
+
+class MinistryManageMembersUiCleanupTests(TestCase):
+    """MINISTRY-ROLE-SOURCE.1D manage-members UI cleanup.
+
+    After the 1C read switch the normal manage-members form must stop presenting
+    ``TeamMembership.role`` / ``TeamMembership.can_lead`` as leadership/permission
+    controls. Canonical long-term roles, when shown, come from active
+    ``MinistryTeamRoleAssignment`` rows only. The staff-only structure-setup link
+    for managing canonical roles is shown to staff, not to an ordinary
+    role-assignment manager.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="mmc_staff", password="pw", is_staff=True
+        )
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD, name="负责人", name_en="Lead"
+        )
+        self.team = MinistryTeam.objects.create(name="灯光", name_en="Lighting")
+        self.member_user = User.objects.create_user(
+            username="mmc_member", password="pw"
+        )
+        self.lead_user = User.objects.create_user(
+            username="mmc_lead", password="pw"
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def grant_lead_assignment(self, user, team=None):
+        return MinistryTeamRoleAssignment.objects.create(
+            team=team or self.team,
+            user=user,
+            role_type=self.lead_type,
+            start_date=timezone.localdate(),
+        )
+
+    # ----- requirement 1/2: form no longer exposes role / can_lead -------------
+
+    def test_membership_form_has_no_role_or_can_lead_field(self):
+        form = TeamMembershipForm(team=self.team)
+        self.assertNotIn("can_lead", form.fields)
+        self.assertNotIn("role", form.fields)
+
+    def test_manage_members_page_has_no_can_lead_or_role_input(self):
+        self.set_language("en")
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="can_lead"', html=False)
+        self.assertNotContains(response, 'name="role"', html=False)
+
+    # ----- requirement 2/6: malicious POST cannot set can_lead / role ----------
+
+    def test_posting_can_lead_and_role_is_ignored_on_create(self):
+        self.set_language("en")
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.post(
+            reverse("manage_team_members", args=[self.team.id]),
+            {
+                "user": self.member_user.id,
+                "display_name": "",
+                "email": "",
+                "role": TeamMembership.ROLE_LEAD,
+                "can_lead": "on",
+                "skill_level": "",
+                "notes": "",
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        membership = TeamMembership.objects.get(
+            team=self.team, user=self.member_user
+        )
+        # requirement 3/5: normal create defaults to member + can_lead False.
+        self.assertEqual(membership.role, TeamMembership.ROLE_MEMBER)
+        self.assertFalse(membership.can_lead)
+
+    def test_editing_membership_cannot_set_can_lead_true(self):
+        self.set_language("en")
+        membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.member_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.post(
+            reverse("edit_team_membership", args=[membership.id]),
+            {
+                "user": self.member_user.id,
+                "display_name": "",
+                "email": "",
+                "role": TeamMembership.ROLE_LEAD,
+                "can_lead": "on",
+                "skill_level": "Updated",
+                "notes": "",
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertFalse(membership.can_lead)
+        # Legacy role value is preserved (not mutated by this UI), not upgraded.
+        self.assertEqual(membership.role, TeamMembership.ROLE_MEMBER)
+        self.assertEqual(membership.skill_level, "Updated")
+
+    # ----- requirement 8: canonical roles are sourced from role assignments ----
+
+    def test_manage_members_shows_canonical_role_from_role_assignment(self):
+        self.set_language("en")
+        # Member-only membership row, but a canonical lead role assignment.
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.grant_lead_assignment(self.lead_user)
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertContains(response, "Long-term role")
+        self.assertContains(response, "Lead")
+
+    def test_manage_members_legacy_role_lead_without_assignment_not_shown_as_role(self):
+        self.set_language("en")
+        # Legacy role=lead but NO MinistryTeamRoleAssignment: must not surface as
+        # a canonical long-term role.
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Long-term role")
+        memberships = list(response.context["memberships"])
+        self.assertEqual(memberships[0].canonical_role_labels, [])
+
+    # ----- requirement 9: staff-only structure setup link ----------------------
+
+    def test_structure_setup_link_shown_for_staff(self):
+        self.set_language("en")
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertTrue(response.context["can_manage_structure"])
+        self.assertContains(
+            response,
+            reverse("manage_ministry_team_structure", args=[self.team.id]),
+        )
+
+    def test_structure_setup_link_hidden_for_nonstaff_role_manager(self):
+        self.set_language("en")
+        # A non-staff lead who can manage members must NOT see the staff-only
+        # structure-setup link.
+        self.grant_lead_assignment(self.lead_user)
+        self.client.login(username="mmc_lead", password="pw")
+        response = self.client.get(
+            reverse("manage_team_members", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["can_manage_structure"])
+        self.assertNotContains(
+            response,
+            reverse("manage_ministry_team_structure", args=[self.team.id]),
+        )
+
+    # ----- team detail: same canonical-role sourcing as manage-members ---------
+
+    def test_team_detail_does_not_show_legacy_role_as_canonical(self):
+        self.set_language("en")
+        # role=coordinator membership but NO MinistryTeamRoleAssignment: the
+        # legacy role must not be surfaced as a long-term role on team detail.
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.member_user,
+            role=TeamMembership.ROLE_COORDINATOR,
+        )
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("ministry_team_detail", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Long-term role")
+        memberships = list(response.context["memberships"])
+        self.assertEqual(memberships[0].canonical_role_labels, [])
+
+    def test_team_detail_shows_canonical_role_from_role_assignment(self):
+        self.set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.grant_lead_assignment(self.lead_user)
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("ministry_team_detail", args=[self.team.id])
+        )
+        self.assertContains(response, "Long-term role")
+        self.assertContains(response, "Lead")
+
+    def test_team_detail_legacy_lead_without_assignment_not_shown_as_role(self):
+        self.set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.lead_user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("ministry_team_detail", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Long-term role")
+        memberships = list(response.context["memberships"])
+        self.assertEqual(memberships[0].canonical_role_labels, [])
+
+    def test_team_detail_renders_display_name_only_member(self):
+        self.set_language("en")
+        TeamMembership.objects.create(
+            team=self.team,
+            user=None,
+            display_name="Guest Helper",
+            role=TeamMembership.ROLE_MEMBER,
+        )
+        self.client.login(username="mmc_staff", password="pw")
+        response = self.client.get(
+            reverse("ministry_team_detail", args=[self.team.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Guest Helper")
+        memberships = list(response.context["memberships"])
+        self.assertEqual(memberships[0].canonical_role_labels, [])
+
+
+class MinistryCanLeadCleanupCommandTests(TestCase):
+    """MINISTRY-ROLE-SOURCE.1E-A cleanup_team_membership_can_lead_flags tests.
+
+    The command clears deprecated ``can_lead=True`` flags. Dry-run by default;
+    ``--apply`` sets ``can_lead=False`` only. It never touches
+    ``TeamMembership.role``, never creates/deletes/(de)activates a membership or
+    role assignment, and changes no permission.
+    """
+
+    def setUp(self):
+        self.team = MinistryTeam.objects.create(name="灯光", name_en="Lighting")
+        self.other_team = MinistryTeam.objects.create(
+            name="音响", name_en="Audio"
+        )
+        self.user_a = User.objects.create_user(username="clc_a", password="pw")
+        self.user_b = User.objects.create_user(username="clc_b", password="pw")
+
+    def _make(self, team, user, **overrides):
+        data = {
+            "team": team,
+            "user": user,
+            "role": TeamMembership.ROLE_MEMBER,
+            "can_lead": True,
+            "is_active": True,
+        }
+        data.update(overrides)
+        return TeamMembership.objects.create(**data)
+
+    def test_dry_run_changes_no_data_and_reports_would_clear(self):
+        membership = self._make(self.team, self.user_a)
+        out = StringIO()
+        call_command("cleanup_team_membership_can_lead_flags", stdout=out)
+        output = out.getvalue()
+        membership.refresh_from_db()
+        self.assertTrue(membership.can_lead)
+        self.assertIn("mode: DRY RUN", output)
+        self.assertIn("would_clear: 1", output)
+        self.assertIn("data_mutated: false", output)
+
+    def test_apply_clears_can_lead_and_reports_data_mutated_true(self):
+        active = self._make(self.team, self.user_a)
+        inactive = self._make(self.team, self.user_b, is_active=False)
+        out = StringIO()
+        call_command(
+            "cleanup_team_membership_can_lead_flags", "--apply", stdout=out
+        )
+        output = out.getvalue()
+        active.refresh_from_db()
+        inactive.refresh_from_db()
+        # Both active and inactive rows are cleared (full deprecated-flag purge).
+        self.assertFalse(active.can_lead)
+        self.assertFalse(inactive.can_lead)
+        self.assertIn("mode: APPLY", output)
+        self.assertIn("cleared: 2", output)
+        self.assertIn("data_mutated: true", output)
+
+    def test_apply_does_not_change_membership_role(self):
+        membership = self._make(
+            self.team, self.user_a, role=TeamMembership.ROLE_LEAD
+        )
+        call_command("cleanup_team_membership_can_lead_flags", "--apply")
+        membership.refresh_from_db()
+        self.assertFalse(membership.can_lead)
+        self.assertEqual(membership.role, TeamMembership.ROLE_LEAD)
+
+    def test_apply_does_not_create_or_delete_rows(self):
+        self._make(self.team, self.user_a)
+        membership_count = TeamMembership.objects.count()
+        role_assignment_count = MinistryTeamRoleAssignment.objects.count()
+        call_command("cleanup_team_membership_can_lead_flags", "--apply")
+        self.assertEqual(TeamMembership.objects.count(), membership_count)
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.count(), role_assignment_count
+        )
+
+    def test_team_id_scopes_correctly(self):
+        this_team = self._make(self.team, self.user_a)
+        other = self._make(self.other_team, self.user_b)
+        call_command(
+            "cleanup_team_membership_can_lead_flags",
+            "--apply",
+            "--team-id",
+            str(self.team.id),
+        )
+        this_team.refresh_from_db()
+        other.refresh_from_db()
+        self.assertFalse(this_team.can_lead)
+        self.assertTrue(other.can_lead)
+
+    def test_apply_with_no_candidates_reports_data_mutated_false(self):
+        # No can_lead=True rows anywhere.
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.user_a,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=False,
+        )
+        out = StringIO()
+        call_command(
+            "cleanup_team_membership_can_lead_flags", "--apply", stdout=out
+        )
+        output = out.getvalue()
+        self.assertIn("cleared: 0", output)
+        self.assertIn("data_mutated: false", output)
+
+    def test_audit_no_longer_flags_can_lead_after_cleanup(self):
+        self._make(self.team, self.user_a)
+        before = run_alignment_audit()
+        self.assertEqual(
+            before["stats"]["active_team_memberships_can_lead_true"], 1
+        )
+        run_cleanup(apply=True)
+        after = run_alignment_audit()
+        self.assertEqual(
+            after["stats"]["active_team_memberships_can_lead_true"], 0
+        )
+        self.assertEqual(after["stats"]["team_memberships_can_lead_true"], 0)

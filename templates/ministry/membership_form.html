@@ -18,6 +18,16 @@
     <p class="page-subtitle">{{ team|ministry_team_name:language }}</p>
 </div>
 
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}
+        成员条目属于团队成员名单（候选池），不授予团队管理或排班权限。长期事工角色（负责人／协调人）请在事工结构设置中管理。
+        {% else %}
+        A member entry belongs to the team member list (the candidate pool) and does not grant team-management or scheduling permission. Manage long-term ministry roles (Lead / Coordinator) in Structure setup.
+        {% endif %}
+    </p>
+</div>
+
 <form method="post" class="card">
     {% csrf_token %}
     {{ form.non_field_errors }}

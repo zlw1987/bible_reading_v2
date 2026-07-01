@@ -17,6 +17,16 @@ clarifies the membership expectation for management-role holders by team kind
 container teams. It changes no permission, mutates no data, adds no migration or
 model-field change, and does not switch the source of truth.
 
+`MINISTRY-ROLE-SOURCE.1B` is **implemented** as a dry-run-by-default backfill
+command (`backfill_ministry_role_assignments_from_memberships`, logic in
+`ministry/role_source_backfill.py`). It creates missing
+`MinistryTeamRoleAssignment` rows from existing active, user-linked
+`TeamMembership.role` in {`lead`, `coordinator`}. It is dry-run by default and
+writes only under explicit `--apply`; it changes **no** permission, switches no
+source of truth, mutates no `TeamMembership` row, never backfills from
+`can_lead`, and never auto-resolves manager disagreements. See Section 6.1. The
+`--apply` mode is not run without explicit user approval.
+
 This plan sits beside `docs/MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md` (which
 introduced the ministry role system as additive) and narrows the long-term
 direction for *which* model owns long-term ministry role authority.
@@ -143,10 +153,13 @@ Each later step is a separate, explicitly approved slice. Do not combine them.
   migration, no data mutation, no source-of-truth switch.
 * **`MINISTRY-ROLE-SOURCE.1B`** — dry-run / optional `--apply` backfill from
   existing legacy `TeamMembership.role` (`lead` / `coordinator`) to matching
-  active `MinistryTeamRoleAssignment` rows, separately approved. Dry-run by
+  active `MinistryTeamRoleAssignment` rows. **Implemented** as
+  `backfill_ministry_role_assignments_from_memberships` (Section 6.1). Dry-run by
   default; `--apply` only on explicit approval; preserves the legacy fields;
   reports `data_mutated`; never deletes membership rows; only maps user-linked
-  management memberships (display-name-only ones cannot be mapped).
+  management memberships (display-name-only ones cannot be mapped); conservative
+  conflict policy (Section 6.1) so a team where the two systems name different
+  managers is reported, not auto-resolved.
 * **`MINISTRY-ROLE-SOURCE.1C`** — permission **read switch**: change
   `can_manage_ministry_team` (and any related management check) to read
   `MinistryTeamRoleAssignment` instead of `TeamMembership.role`, separately
@@ -235,6 +248,59 @@ Because runtime has not switched and most divergence is expected, drift is a
   active duplicates, so this is expected to be zero against clean data; if
   present it would make a future dedup/backfill ambiguous and must be resolved
   before `1B`/`1C`.
+
+## 6.1 One-way backfill command (`1B`)
+
+`backfill_ministry_role_assignments_from_memberships` (logic in
+`ministry/role_source_backfill.py`) creates missing `MinistryTeamRoleAssignment`
+rows from existing legacy management memberships. Options: `--apply`,
+`--verbose`, `--limit N` (caps verbose examples only; does not narrow scope),
+`--team-id ID`, `--role lead|coordinator`.
+
+**Dry-run by default.** Rows are written only under explicit `--apply`, and
+`--apply` is not run without explicit user approval. It creates only
+`MinistryTeamRoleAssignment` rows; it never creates `TeamMembership` rows, never
+deletes/deactivates/overwrites any row, and never mutates `TeamMembership.role` /
+`TeamMembership.can_lead`. It changes no permission and switches no source of
+truth (the `1C` read switch remains a separate slice). There is no bidirectional
+sync — this is a one-way membership-role → role-assignment backfill.
+
+Scan: active `TeamMembership` rows where `is_active=True`, `team.is_active=True`,
+`user` is not null, and `role` in {`lead`, `coordinator`}. Mapping is minimal:
+`lead` → role code `lead`, `coordinator` → role code `coordinator`. It never
+backfills from `can_lead=True` (reported only as an `ignored_can_lead_true`
+transparency count) and infers no scheduler / technical / admin / member-care
+roles.
+
+Per-candidate outcomes:
+
+* **`skipped_missing_role_type`** — the mapped `MinistryTeamRoleType` is missing
+  or inactive (config gap). The command creates no role type and no assignment;
+  seed via `seed_ministry_structure_roles` first.
+* **`skipped_existing`** — an exact active assignment already exists for the same
+  (team, user, role type). No duplicate is created.
+* **`conflict_existing_different_user`** — the same (team, role type) already has
+  an active assignment held by a *different* user. Although the model allows
+  multiple active Leads, this backfill is conservative: it reports the conflict,
+  creates nothing, and overwrites/deactivates nothing, leaving it for manual
+  decision. This is how the known team #1 disagreement is handled — it is
+  **skipped as a conflict, never auto-resolved**.
+* **`would_create` / `created`** — otherwise a new active
+  `MinistryTeamRoleAssignment` is planned (dry-run) or written (`--apply`) with
+  `start_date = timezone.localdate()` and the note "Backfilled from
+  TeamMembership.role by MINISTRY-ROLE-SOURCE.1B.", after `full_clean()`.
+* **`skipped_display_name_only`** — a management membership with no linked user
+  cannot become a user-linked role assignment; reported and skipped.
+
+`data_mutated` is `true` only when at least one row was actually created under
+`--apply`; a dry-run always reports `false`, and an `--apply` run that creates
+nothing (only conflicts/skips) also reports `false`.
+
+`1B` does **not** create `TeamMembership` rows and does **not** resolve the
+assignable-team "management role assignment without membership" warning surfaced
+by the alignment audit (that gap needs a membership, which this command never
+creates); it only backfills the reverse direction (membership role → role
+assignment).
 
 ## 7. Boundaries reminder
 

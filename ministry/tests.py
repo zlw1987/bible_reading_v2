@@ -58,6 +58,7 @@ from .services.copy_forward_suggestions import (
 )
 from .structure_readiness import run_audit
 from .role_source_alignment import run_alignment_audit
+from .role_source_backfill import run_backfill
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -8055,3 +8056,285 @@ class MinistryRoleSourceAlignmentAuditTests(TestCase):
 
         with self.assertRaises(CommandError):
             self.run_command("--fail-on-blockers")
+
+
+class MinistryRoleAssignmentBackfillTests(TestCase):
+    """MINISTRY-ROLE-SOURCE.1B one-way backfill tests.
+
+    ``backfill_ministry_role_assignments_from_memberships`` must be dry-run by
+    default, create rows only under ``--apply``, map only user-linked management
+    memberships (lead→lead, coordinator→coordinator), never backfill from
+    ``can_lead``, never mutate ``TeamMembership``, and never auto-resolve a team
+    where a different active user already holds the role assignment.
+    """
+
+    COMMAND = "backfill_ministry_role_assignments_from_memberships"
+
+    def setUp(self):
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        self.team = MinistryTeam.objects.create(name="Lighting", name_en="Lighting")
+        self.other_team = MinistryTeam.objects.create(name="Audio", name_en="Audio")
+        self.user = User.objects.create_user(username="bf_user", password="pw")
+        self.other_user = User.objects.create_user(username="bf_other", password="pw")
+
+    # ----- helpers ----------------------------------------------------------
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command(self.COMMAND, *args, stdout=out)
+        return out.getvalue()
+
+    def make_role_assignment(self, role_type, user, **overrides):
+        data = {
+            "team": self.team,
+            "role_type": role_type,
+            "user": user,
+            "start_date": timezone.localdate(),
+        }
+        data.update(overrides)
+        return MinistryTeamRoleAssignment.objects.create(**data)
+
+    # ----- dry-run default --------------------------------------------------
+
+    def test_dry_run_creates_no_rows_and_reports_not_mutated(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        before = MinistryTeamRoleAssignment.objects.count()
+        output = self.run_command("--verbose")
+        after = MinistryTeamRoleAssignment.objects.count()
+        self.assertEqual(before, after)
+        self.assertEqual(after, 0)
+        self.assertIn("mode: DRY RUN", output)
+        self.assertIn("data_mutated: false", output)
+        result = run_backfill()
+        self.assertEqual(result["stats"]["would_create"], 1)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertFalse(result["data_mutated"])
+
+    # ----- apply creates missing lead assignment ----------------------------
+
+    def test_apply_creates_missing_lead_role_assignment(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["created"], 1)
+        self.assertTrue(result["data_mutated"])
+        assignment = MinistryTeamRoleAssignment.objects.get()
+        self.assertEqual(assignment.team, self.team)
+        self.assertEqual(assignment.user, self.user)
+        self.assertEqual(assignment.role_type, self.lead_type)
+        self.assertTrue(assignment.is_active)
+
+    # ----- exact existing is skipped ----------------------------------------
+
+    def test_exact_existing_assignment_is_skipped_no_duplicate(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        self.make_role_assignment(self.lead_type, self.user)
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["skipped_existing"], 1)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertEqual(result["stats"]["would_create"], 0)
+        self.assertFalse(result["data_mutated"])
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.team, role_type=self.lead_type, user=self.user
+            ).count(),
+            1,
+        )
+
+    # ----- conflict: same team + role_type, different user ------------------
+
+    def test_conflict_existing_different_user_does_not_create(self):
+        # Different user already holds the active lead role assignment on team.
+        self.make_role_assignment(self.lead_type, self.other_user)
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["conflict_existing_different_user"], 1)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertFalse(result["data_mutated"])
+        # Existing assignment for the other user is untouched; no new row added.
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.team, role_type=self.lead_type
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            MinistryTeamRoleAssignment.objects.filter(
+                team=self.team, role_type=self.lead_type, user=self.user
+            ).exists()
+        )
+
+    # ----- missing/inactive role type ---------------------------------------
+
+    def test_missing_role_type_is_skipped_as_config_gap(self):
+        self.lead_type.delete()
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["skipped_missing_role_type"], 1)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertFalse(result["data_mutated"])
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)
+
+    def test_inactive_role_type_is_skipped_as_config_gap(self):
+        self.lead_type.is_active = False
+        self.lead_type.save()
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["skipped_missing_role_type"], 1)
+        self.assertEqual(result["stats"]["created"], 0)
+
+    # ----- display-name-only membership -------------------------------------
+
+    def test_display_name_only_membership_is_skipped(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=None,
+            display_name="Guest Lead",
+            role=TeamMembership.ROLE_LEAD,
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["skipped_display_name_only"], 1)
+        self.assertEqual(result["stats"]["candidates_checked"], 0)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertFalse(result["data_mutated"])
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)
+
+    # ----- can_lead is ignored ----------------------------------------------
+
+    def test_can_lead_true_member_is_ignored_and_creates_nothing(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["ignored_can_lead_true"], 1)
+        self.assertEqual(result["stats"]["candidates_checked"], 0)
+        self.assertEqual(result["stats"]["created"], 0)
+        self.assertFalse(result["data_mutated"])
+        self.assertEqual(MinistryTeamRoleAssignment.objects.count(), 0)
+
+    # ----- coordinator mapping ----------------------------------------------
+
+    def test_coordinator_membership_maps_to_coordinator_role_type(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_COORDINATOR
+        )
+        result = run_backfill(apply=True)
+        self.assertEqual(result["stats"]["created"], 1)
+        assignment = MinistryTeamRoleAssignment.objects.get()
+        self.assertEqual(assignment.role_type, self.coordinator_type)
+        self.assertEqual(assignment.user, self.user)
+
+    # ----- filters ----------------------------------------------------------
+
+    def test_team_id_filter_limits_scan(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        TeamMembership.objects.create(
+            team=self.other_team, user=self.other_user, role=TeamMembership.ROLE_LEAD
+        )
+        result = run_backfill(apply=True, team_id=self.team.id)
+        self.assertEqual(result["stats"]["created"], 1)
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(team=self.other_team).count(),
+            0,
+        )
+        self.assertEqual(
+            MinistryTeamRoleAssignment.objects.filter(team=self.team).count(), 1
+        )
+
+    def test_role_filter_limits_scan(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        TeamMembership.objects.create(
+            team=self.team, user=self.other_user, role=TeamMembership.ROLE_COORDINATOR
+        )
+        result = run_backfill(apply=True, role=TeamMembership.ROLE_COORDINATOR)
+        self.assertEqual(result["stats"]["created"], 1)
+        self.assertEqual(result["stats"]["candidates_checked"], 1)
+        self.assertTrue(
+            MinistryTeamRoleAssignment.objects.filter(
+                role_type=self.coordinator_type, user=self.other_user
+            ).exists()
+        )
+        self.assertFalse(
+            MinistryTeamRoleAssignment.objects.filter(
+                role_type=self.lead_type
+            ).exists()
+        )
+
+    # ----- created row shape ------------------------------------------------
+
+    def test_created_row_has_expected_note_and_start_date(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        run_backfill(apply=True)
+        assignment = MinistryTeamRoleAssignment.objects.get()
+        self.assertEqual(
+            assignment.notes,
+            "Backfilled from TeamMembership.role by MINISTRY-ROLE-SOURCE.1B.",
+        )
+        self.assertEqual(assignment.start_date, timezone.localdate())
+
+    # ----- apply with only conflicts/skips ----------------------------------
+
+    def test_apply_with_only_conflicts_reports_not_mutated(self):
+        # Conflict (different user) on self.team + exact-existing skip on
+        # other_team; nothing creatable, so --apply must report data_mutated false.
+        self.make_role_assignment(self.lead_type, self.other_user)
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        # Already-aligned lead on other_team (exact existing skip).
+        self.make_role_assignment(self.lead_type, self.user, team=self.other_team)
+        TeamMembership.objects.create(
+            team=self.other_team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        before = MinistryTeamRoleAssignment.objects.count()
+        output = self.run_command("--apply")
+        after = MinistryTeamRoleAssignment.objects.count()
+        self.assertEqual(before, after)
+        self.assertIn("conflict_existing_different_user: 1", output)
+        self.assertIn("skipped_existing: 1", output)
+        self.assertIn("data_mutated: false", output)
+
+    # ----- no side effects on TeamMembership --------------------------------
+
+    def test_no_side_effects_on_team_membership(self):
+        membership = TeamMembership.objects.create(
+            team=self.team,
+            user=self.user,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        run_backfill(apply=True)
+        membership.refresh_from_db()
+        self.assertEqual(membership.role, TeamMembership.ROLE_LEAD)
+        self.assertTrue(membership.can_lead)
+        self.assertTrue(membership.is_active)
+        self.assertEqual(TeamMembership.objects.count(), 1)

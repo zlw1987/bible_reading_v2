@@ -217,6 +217,22 @@ delegated ministry management + the new capability — remain deferred to later,
 separately approved slices. `is_assignable` enforcement landed in
 `MINISTRY-STRUCTURE.1F`.
 
+`MINISTRY-ROLE-SOURCE.1A` (docs + read-only audit) locked the long-term
+source-of-truth boundary between `TeamMembership` and `MinistryTeamRoleAssignment`
+and added a read-only drift audit (`audit_ministry_role_source_alignment`, logic
+in `ministry/role_source_alignment.py`). The locked direction:
+`TeamMembership` stays the membership / candidate pool; `MinistryTeamRoleAssignment`
+becomes the single source of truth for long-term ministry roles and the eventual
+team-management permission source; `TeamAssignmentMember` stays event-specific
+serving; and `TeamMembership.role` / `can_lead` remain transitional/legacy fields
+for current runtime compatibility only. `1A` changes no permission, mutates no
+data, switches no source of truth, runs no backfill, and adds no migration — the
+permission read switch from `TeamMembership.role` to `MinistryTeamRoleAssignment`
+remains deferred to a later, separately approved slice. See
+`docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md` for the full plan (1A docs/audit, 1B
+backfill, 1C permission read switch, 1D manage-members UI cleanup, later optional
+field retirement).
+
 Related existing docs:
 
 - `docs/MINISTRY_TEAM_OPERATIONS_V1_PLAN.md` — current Ministry Team Operations

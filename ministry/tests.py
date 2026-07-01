@@ -57,6 +57,7 @@ from .services.copy_forward_suggestions import (
     find_copy_forward_suggestion,
 )
 from .structure_readiness import run_audit
+from .role_source_alignment import run_alignment_audit
 
 
 class MinistryTeamFoundationTests(TestCase):
@@ -7689,3 +7690,266 @@ class MinistryStructureEntryPointTests(TestCase):
         self.client.get(reverse("ministry_team_list"))
         self.assertFalse(can_manage_ministry_team(self.regular, self.ready))
         self.assertTrue(can_manage_ministry_team(self.lead_user, self.ready))
+
+
+class MinistryRoleSourceAlignmentAuditTests(TestCase):
+    """MINISTRY-ROLE-SOURCE.1A read-only role source-of-truth alignment tests.
+
+    The ``audit_ministry_role_source_alignment`` command must be strictly
+    read-only: it has no ``--apply``, mutates nothing, changes no permission,
+    backfills no role, and only reports inventory + drift as
+    blockers / warnings / info.
+    """
+
+    COMMAND = "audit_ministry_role_source_alignment"
+
+    def setUp(self):
+        self.lead_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+        self.coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        self.team = MinistryTeam.objects.create(name="Lighting", name_en="Lighting")
+        self.user = User.objects.create_user(username="rsa_user", password="pw")
+        self.other_user = User.objects.create_user(username="rsa_other", password="pw")
+
+    # ----- helpers ----------------------------------------------------------
+
+    def run_command(self, *args):
+        out = StringIO()
+        call_command(self.COMMAND, *args, stdout=out)
+        return out.getvalue()
+
+    def make_role_assignment(self, role_type, user, **overrides):
+        data = {
+            "team": self.team,
+            "role_type": role_type,
+            "user": user,
+            "start_date": timezone.localdate(),
+        }
+        data.update(overrides)
+        return MinistryTeamRoleAssignment.objects.create(**data)
+
+    # ----- existence / read-only -------------------------------------------
+
+    def test_command_runs_and_states_read_only_no_permission_change(self):
+        output = self.run_command()
+        self.assertIn(
+            "Ministry role source-of-truth alignment audit "
+            "(MINISTRY-ROLE-SOURCE.1A, read-only)",
+            output,
+        )
+        self.assertIn("mode: read-only (no --apply exists; no data was changed)", output)
+        self.assertIn("does NOT change permissions", output)
+        self.assertIn("does NOT switch the source of truth", output)
+        self.assertIn("blockers present: none", output)
+
+    def test_no_apply_option_exists(self):
+        from ministry.management.commands.audit_ministry_role_source_alignment import (
+            Command,
+        )
+
+        parser = Command().create_parser("manage.py", self.COMMAND)
+        dests = {action.dest for action in parser._actions}
+        self.assertNotIn("apply", dests)
+        self.assertIn("fail_on_blockers", dests)
+        self.assertIn("verbose", dests)
+        self.assertIn("limit", dests)
+
+    def test_command_is_read_only_snapshot_counts(self):
+        membership = TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        self.make_role_assignment(self.lead_type, self.user)
+
+        models = [
+            MinistryTeam,
+            MinistryTeamRoleType,
+            MinistryTeamRoleAssignment,
+            TeamMembership,
+        ]
+        before = {model.__name__: model.objects.count() for model in models}
+        self.run_command("--verbose")
+        after = {model.__name__: model.objects.count() for model in models}
+        self.assertEqual(before, after)
+        self.assertEqual(membership.role, TeamMembership.ROLE_LEAD)
+
+    # ----- warning: legacy management membership without role assignment ----
+
+    def test_lead_membership_without_role_assignment_is_warning(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["legacy_management_membership_without_role_assignment"], 1
+        )
+        self.assertIn(
+            "legacy_management_membership_without_role_assignment", audit["warnings"]
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_matching_lead_membership_and_role_assignment_clears_warning(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        self.make_role_assignment(self.lead_type, self.user)
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["legacy_management_membership_without_role_assignment"], 0
+        )
+        self.assertEqual(
+            audit["stats"]["management_role_assignment_without_membership"], 0
+        )
+        self.assertEqual(
+            audit["stats"]["teams_management_role_user_disagreement"], 0
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- warning: role assignment without active membership ---------------
+
+    def test_role_assignment_lead_without_membership_is_warning(self):
+        self.make_role_assignment(self.lead_type, self.user)
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["management_role_assignment_without_membership"], 1
+        )
+        self.assertIn(
+            "management_role_assignment_without_membership", audit["warnings"]
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- warning: display-name-only management membership -----------------
+
+    def test_display_name_only_lead_membership_is_warning(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=None,
+            display_name="Guest Lead",
+            role=TeamMembership.ROLE_LEAD,
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["legacy_management_membership_display_name_only"], 1
+        )
+        # Display-name-only memberships are not counted as the user-linked
+        # "without role assignment" warning.
+        self.assertEqual(
+            audit["stats"]["legacy_management_membership_without_role_assignment"], 0
+        )
+        self.assertIn(
+            "legacy_management_membership_display_name_only", audit["warnings"]
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    def test_display_name_only_coordinator_membership_is_warning(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=None,
+            display_name="Guest Coordinator",
+            role=TeamMembership.ROLE_COORDINATOR,
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["legacy_management_membership_display_name_only"], 1
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- warning: can_lead=True -------------------------------------------
+
+    def test_can_lead_true_is_warning(self):
+        TeamMembership.objects.create(
+            team=self.team,
+            user=self.user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(audit["stats"]["active_team_memberships_can_lead_true"], 1)
+        self.assertEqual(audit["stats"]["team_memberships_can_lead_true"], 1)
+        self.assertIn("active_team_memberships_can_lead_true", audit["warnings"])
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- warning: coordinator role type missing (config gap) --------------
+
+    def test_coordinator_membership_without_coordinator_role_type_is_warning(self):
+        self.coordinator_type.delete()
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_COORDINATOR
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"][
+                "coordinator_membership_without_coordinator_role_type"
+            ],
+            1,
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- warning: management role user disagreement -----------------------
+
+    def test_management_role_user_disagreement_is_warning(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        # Different user holds the lead role assignment on the same team.
+        TeamMembership.objects.create(
+            team=self.team, user=self.other_user, role=TeamMembership.ROLE_MEMBER
+        )
+        self.make_role_assignment(self.lead_type, self.other_user)
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["teams_management_role_user_disagreement"], 1
+        )
+        self.assertEqual(audit["blocker_count"], 0)
+
+    # ----- fail-on-blockers --------------------------------------------------
+
+    def test_fail_on_blockers_exits_zero_for_warning_only(self):
+        TeamMembership.objects.create(
+            team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
+        )
+        audit = run_alignment_audit()
+        self.assertGreater(audit["warning_count"], 0)
+        self.assertEqual(audit["blocker_count"], 0)
+        # Should not raise on warnings.
+        self.run_command("--fail-on-blockers")
+
+    # ----- blocker: duplicate active role assignment ------------------------
+
+    def test_duplicate_active_role_assignment_is_blocker(self):
+        # The model's clean() rejects overlapping active duplicates, so bypass
+        # validation with bulk_create to simulate corrupt data.
+        today = timezone.localdate()
+        MinistryTeamRoleAssignment.objects.bulk_create(
+            [
+                MinistryTeamRoleAssignment(
+                    team=self.team,
+                    role_type=self.lead_type,
+                    user=self.user,
+                    start_date=today,
+                ),
+                MinistryTeamRoleAssignment(
+                    team=self.team,
+                    role_type=self.lead_type,
+                    user=self.user,
+                    start_date=today,
+                ),
+            ]
+        )
+        audit = run_alignment_audit()
+        self.assertEqual(
+            audit["stats"]["duplicate_active_role_assignment_user_team_role"], 1
+        )
+        self.assertIn(
+            "duplicate_active_role_assignment_user_team_role", audit["blockers"]
+        )
+        self.assertEqual(audit["blocker_count"], 1)
+
+        with self.assertRaises(CommandError):
+            self.run_command("--fail-on-blockers")

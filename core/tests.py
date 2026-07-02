@@ -8,7 +8,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from . import today_providers
+from . import setup_readiness, today_providers
 from .module_registry import (
     CAPABILITY_NAV,
     CAPABILITY_SETUP_CHECKS,
@@ -22,6 +22,12 @@ from .module_registry import (
     is_module_enabled,
     module_has_capability,
     validate_enabled_modules,
+)
+from .setup_readiness import (
+    ReadinessContext,
+    ReadinessSection,
+    build_readiness_sections,
+    register_readiness_provider,
 )
 from .today_providers import (
     build_today_context,
@@ -391,6 +397,161 @@ class TodayProviderRegistryTests(SimpleTestCase):
         for provider in today_providers._TODAY_PROVIDERS.values():
             declared_keys.update(provider.defaults)
         self.assertEqual(declared_keys, set(TODAY_CONTEXT_KEYS))
+
+
+class ReadinessProviderRegistryTests(SimpleTestCase):
+    """MODULAR-CORE.5A: the setup/readiness provider registry and aggregator."""
+
+    def isolated_registry(self, initial=None):
+        """Run against an empty (or seeded) readiness registry so the real
+        core/ministry/studies registrations are untouched."""
+        return patch.dict(
+            setup_readiness._READINESS_PROVIDERS, initial or {}, clear=True
+        )
+
+    def _section(self, key, title=None):
+        return ReadinessSection(key, title or key)
+
+    def _context(self):
+        now = timezone.now()
+        return ReadinessContext(now=now, target_date=now.date())
+
+    def test_non_callable_provider_raises(self):
+        with self.isolated_registry():
+            with self.assertRaises(ValueError) as ctx:
+                register_readiness_provider("core_check", object())
+            self.assertIn("callable", str(ctx.exception))
+
+    def test_duplicate_name_raises(self):
+        with self.isolated_registry():
+            register_readiness_provider("core_check", lambda ctx: [])
+            with self.assertRaises(ValueError):
+                register_readiness_provider("core_check", lambda ctx: [])
+
+    def test_unregistered_module_key_raises(self):
+        with self.isolated_registry():
+            with self.assertRaises(KeyError):
+                register_readiness_provider(
+                    "checklist_check",
+                    lambda ctx: [],
+                    module_key="checklist",
+                )
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events"])
+    def test_core_provider_always_runs_module_provider_gated(self):
+        # ministry disabled (events still enabled -> dependency-valid): the
+        # module provider is skipped, the core provider always contributes.
+        calls = {"core": 0, "ministry": 0}
+
+        def core_build(ctx):
+            calls["core"] += 1
+            return [self._section("church_structure")]
+
+        def ministry_build(ctx):
+            calls["ministry"] += 1
+            return [self._section("ministry_structure")]
+
+        with self.isolated_registry():
+            register_readiness_provider("church_structure", core_build)
+            register_readiness_provider(
+                "ministry", ministry_build, module_key="ministry"
+            )
+            sections = build_readiness_sections(self._context())
+
+        self.assertEqual(calls, {"core": 1, "ministry": 0})
+        self.assertEqual([s.key for s in sections], ["church_structure"])
+
+    @override_settings(CMS_ENABLED_MODULES=None)
+    def test_enabled_module_provider_runs_and_order_follows_registration(self):
+        with self.isolated_registry():
+            register_readiness_provider(
+                "church_structure", lambda ctx: [self._section("church_structure")]
+            )
+            register_readiness_provider(
+                "ministry",
+                lambda ctx: [
+                    self._section("ministry_structure"),
+                    self._section("team_serving"),
+                ],
+                module_key="ministry",
+            )
+            register_readiness_provider(
+                "studies",
+                lambda ctx: [self._section("bible_study_serving")],
+                module_key="studies",
+            )
+            register_readiness_provider(
+                "permission_admin",
+                lambda ctx: [self._section("permission_admin")],
+            )
+            sections = build_readiness_sections(self._context())
+
+        self.assertEqual(
+            [s.key for s in sections],
+            [
+                "church_structure",
+                "ministry_structure",
+                "team_serving",
+                "bible_study_serving",
+                "permission_admin",
+            ],
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_all_modules_disabled_keeps_only_core_providers(self):
+        with self.isolated_registry():
+            register_readiness_provider(
+                "church_structure", lambda ctx: [self._section("church_structure")]
+            )
+            register_readiness_provider(
+                "ministry",
+                lambda ctx: [self._section("ministry_structure")],
+                module_key="ministry",
+            )
+            register_readiness_provider(
+                "studies",
+                lambda ctx: [self._section("bible_study_serving")],
+                module_key="studies",
+            )
+            sections = build_readiness_sections(self._context())
+
+        self.assertEqual([s.key for s in sections], ["church_structure"])
+
+    @override_settings(CMS_ENABLED_MODULES=["ministry"])
+    def test_invalid_dependency_configuration_raises_through_aggregation(self):
+        # ministry-without-events must fail the same way everywhere the enabled
+        # set is read (MODULAR-CORE.2A); readiness aggregation is no exception.
+        with self.isolated_registry():
+            with self.assertRaises(ImproperlyConfigured):
+                build_readiness_sections(self._context())
+
+    def test_real_readiness_providers_cover_expected_names_and_modules(self):
+        # Importing the audit runner module registers the real providers.
+        import accounts.trial_setup_readiness  # noqa: F401
+
+        providers = setup_readiness._READINESS_PROVIDERS
+        self.assertEqual(
+            tuple(providers),
+            (
+                "church_structure",
+                "ministry",
+                "studies",
+                "audience_visibility",
+                "permission_admin",
+            ),
+        )
+        # Core providers (always run) vs module-gated providers.
+        module_keys = {name: p.module_key for name, p in providers.items()}
+        self.assertEqual(
+            module_keys,
+            {
+                "church_structure": None,
+                "ministry": "ministry",
+                "studies": "studies",
+                "audience_visibility": None,
+                "permission_admin": None,
+            },
+        )
 
 
 class ModuleGateTestBase(TestCase):

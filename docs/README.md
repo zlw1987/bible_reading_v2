@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.3B` and `RELEASE-HYGIENE.0A` (July 2026).
+`MODULAR-CORE.5A` and `RELEASE-HYGIENE.0A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -48,9 +48,15 @@ migration-safety instruction source.
   (`core/today_providers.py`, `MODULAR-CORE.3A`): enabled modules' registered
   providers are called and disabled modules keep safe default context. The
   provider bodies live in each module's `today_provider` module
-  (`MODULAR-CORE.3B`), registered explicitly from `reading.views`. This
-  is not app unloading or route-level hard-off; direct URLs, staff menu
-  entries, staff overview, and setup checks keep their existing behavior.
+  (`MODULAR-CORE.3B`), registered explicitly from `reading.views`. Setup/
+  readiness checks follow the same pattern (`MODULAR-CORE.5A`,
+  `core/setup_readiness.py`): the `audit_trial_setup_readiness` sections come
+  from registered providers — ministry and studies own their sections, Church
+  Structure / permission-admin and the always-run audience-visibility section
+  stay Core — aggregated for enabled modules only, registered explicitly from
+  `accounts.trial_setup_readiness`. This is not app unloading or route-level
+  hard-off; direct URLs, staff menu entries, staff overview, and the setup
+  checks route keep their existing behavior.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded
   ignore rules for local secrets/databases/backups/logs/audit output, and
   removed committed local audit artifacts. It did not build an external release

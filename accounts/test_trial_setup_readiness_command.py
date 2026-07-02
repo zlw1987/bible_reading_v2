@@ -10,7 +10,7 @@ from io import StringIO
 
 from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit
@@ -252,3 +252,79 @@ class TrialSetupReadinessCommandTests(TestCase):
         self.assertEqual(
             self.section(audit, "audience_visibility").blocker_count, 0
         )
+
+    # ----- MODULAR-CORE.5A module-owned readiness providers ----------------
+
+    ALL_SECTION_KEYS = [
+        "church_structure",
+        "ministry_structure",
+        "team_serving",
+        "bible_study_serving",
+        "audience_visibility",
+        "permission_admin",
+    ]
+    CORE_SECTION_KEYS = [
+        "church_structure",
+        "audience_visibility",
+        "permission_admin",
+    ]
+
+    def section_keys(self, audit):
+        return [section.key for section in audit["sections"]]
+
+    def test_default_all_modules_enabled_has_all_six_sections_in_order(self):
+        # Default settings enable every module: the aggregated report is
+        # identical to the pre-provider six-section layout and order.
+        self.assertEqual(self.section_keys(run_audit()), self.ALL_SECTION_KEYS)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events"]
+    )
+    def test_disabling_ministry_skips_ministry_owned_sections(self):
+        # ministry disabled (events still enabled -> dependency-valid): the
+        # ministry-owned sections drop; Core and studies sections stay.
+        keys = self.section_keys(run_audit())
+        self.assertNotIn("ministry_structure", keys)
+        self.assertNotIn("team_serving", keys)
+        for key in self.CORE_SECTION_KEYS:
+            self.assertIn(key, keys)
+        self.assertIn("bible_study_serving", keys)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "events", "ministry"]
+    )
+    def test_disabling_studies_skips_studies_owned_serving_section(self):
+        keys = self.section_keys(run_audit())
+        self.assertNotIn("bible_study_serving", keys)
+        # Core sections (including audience visibility) still run.
+        for key in self.CORE_SECTION_KEYS:
+            self.assertIn(key, keys)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "events", "ministry"]
+    )
+    def test_studies_disabled_still_flags_zero_audience_meeting_blocker(self):
+        # The zero-audience meeting blocker lives in the always-run Core
+        # audience-visibility section, so fail-closed checks survive disabling
+        # the studies module.
+        self.make_staff()
+        self.make_visible_meeting()  # member-visible, no audience rows
+
+        audit = run_audit()
+        section = self.section(audit, "audience_visibility")
+        self.assertEqual(
+            section.blockers["upcoming_visible_meetings_zero_audience"], 1
+        )
+        self.assertGreater(audit["blocker_count"], 0)
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_all_modules_disabled_keeps_only_core_sections(self):
+        keys = self.section_keys(run_audit())
+        self.assertEqual(keys, self.CORE_SECTION_KEYS)
+
+    @override_settings(CMS_ENABLED_MODULES=["ministry"])
+    def test_invalid_dependency_configuration_raises(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        with self.assertRaises(ImproperlyConfigured):
+            run_audit()

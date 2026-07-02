@@ -2,7 +2,8 @@
 
 Status: canonical current-state module boundary, updated through
 `MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, `MODULAR-CORE.2B`,
-`MODULAR-CORE.3A`, `MODULAR-CORE.3B`, and `MODULAR-CORE.4A` (July 2026).
+`MODULAR-CORE.3A`, `MODULAR-CORE.3B`, `MODULAR-CORE.4A`, and
+`MODULAR-CORE.5A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -51,7 +52,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (through MODULAR-CORE.4A)
+## Registry and feature gates (through MODULAR-CORE.5A)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -112,6 +113,32 @@ Registered in `core/module_registry.py`, enabled via
   module metadata. Today remains an always-available Core link. The account
   dropdown and the hard-coded staff dropdown are unchanged and are not
   module-gated.
+* `MODULAR-CORE.5A` adds the module-owned setup/readiness check foundation
+  (`core/setup_readiness.py`). Each readiness contribution registers a provider
+  under a unique name against `core.setup_readiness`; Core providers
+  (`module_key=None`) always run and module providers run only when their
+  module is enabled. `accounts.trial_setup_readiness` is the single explicit
+  registration site (no app auto-discovery) and wires providers in a fixed
+  order so the operator-facing section order (1..6) and existing output are
+  preserved. The ministry-structure / TeamAssignment serving sections are now
+  owned by `ministry/setup_readiness_provider.py`, and the Bible Study
+  meeting-serving section by `studies/setup_readiness_provider.py`. Church
+  Structure / membership readiness and the permission/admin section stay Core
+  providers. The `audit_trial_setup_readiness` command, its options, its
+  read-only guarantee, and the `COUNTER_LABELS` rendering are unchanged. With
+  the default all-modules-enabled configuration the report is identical to
+  before. Reading the enabled set keeps `MODULAR-CORE.2A` dependency validation
+  in force, so an invalid `CMS_ENABLED_MODULES` raises `ImproperlyConfigured`
+  here too.
+  * Still centralized (documented limitation): the ServiceEvent / Bible Study
+    **audience-visibility** section (section 5) stays a Core, always-run
+    provider. It merges events and studies audience rows into one operator
+    section, and its zero-audience fail-closed checks are the most important
+    trial blockers, so they are intentionally not gated behind
+    `events` / `studies` enablement. Events therefore has no dedicated
+    readiness provider yet; its trial-blocker checks live in this shared Core
+    section. A future slice may split it into events- and studies-owned
+    providers if module-gated audience readiness is ever wanted.
 
 ### What disabling a module does today
 
@@ -122,6 +149,12 @@ Registered in `core/module_registry.py`, enabled via
   hides its "Where to go next" card. Ministry gating also hides the Today
   action-center serving summary, the Leader Needs Attention card,
   per-gathering serving notes, and the profile page's My Serving card.
+* Skips its owned setup/readiness provider sections in the
+  `audit_trial_setup_readiness` report (`MODULAR-CORE.5A`): disabling `ministry`
+  drops the ministry-structure and TeamAssignment serving sections; disabling
+  `studies` drops the Bible Study meeting-serving section. Core sections
+  (Church Structure, permission/admin) and the always-run audience-visibility
+  section are unaffected, so fail-closed zero-audience blockers keep surfacing.
 * Requires a dependency-valid configuration. Disabling `events` also requires
   disabling `ministry`; keeping `ministry` enabled without `events` is rejected
   rather than silently producing a partial serving surface.
@@ -132,7 +165,10 @@ Registered in `core/module_registry.py`, enabled via
   Direct URLs of a disabled module remain reachable and are protected only
   by their existing per-view permission/visibility rules.
 * It does not gate the staff dropdown menu entries, the staff overview
-  (`/staff/`) sections, or setup/readiness checks.
+  (`/staff/`) sections, or the setup/readiness *route*. The
+  `audit_trial_setup_readiness` command and any setup route stay reachable;
+  `MODULAR-CORE.5A` only makes that command's module-specific *check sections*
+  run per module enablement, and Core / audience checks always run.
 * It does not perform Python import isolation: `reading.views` still
   imports the events/studies/ministry `today_provider` modules (which in
   turn import their apps' views helpers) at module load; gates are
@@ -157,10 +193,16 @@ Registered in `core/module_registry.py`, enabled via
 3. **Primary module nav is registry-driven (`MODULAR-CORE.4A`).** Enabled
    ordinary-user module links come from each module's registry metadata.
    Today stays Core; account and staff dropdowns remain separately hard-coded.
-4. **Setup/readiness checks should become module-owned and aggregated.**
-   `accounts.trial_setup_readiness` currently imports events / ministry /
-   studies directly; the target is per-module checks aggregated by a core
-   runner for enabled modules only.
+4. **Setup/readiness checks are provider/registry-driven (`MODULAR-CORE.5A`).**
+   Module-specific checks register readiness providers against
+   `core.setup_readiness` and are aggregated by `build_readiness_sections` for
+   enabled modules only; `accounts.trial_setup_readiness` is the single
+   explicit registration site. Ministry and studies checks are module-owned;
+   Church Structure / permission-admin checks stay Core. The shared
+   audience-visibility section remains a Core, always-run provider (see the
+   `MODULAR-CORE.5A` note above) — events has no dedicated provider yet, so do
+   not assume every capability-declared `contributes_setup_checks` module owns
+   its own provider file today.
 5. **Structure core stays general.** Do not hard-code one church's exact
    organization into Core; audience scoping stays per-module rows matched
    against membership.
@@ -174,7 +216,11 @@ Registered in `core/module_registry.py`, enabled via
 
 ## Follow-ups (not yet done)
 
-* Module-owned setup/readiness checks (rule 4).
+* Optional: split the shared audience-visibility readiness section into
+  events-owned and studies-owned providers, if module-gated audience readiness
+  is ever wanted. Today it stays a Core, always-run provider so fail-closed
+  zero-audience blockers surface regardless of module enablement
+  (`MODULAR-CORE.5A`).
 * Optional: gating staff menu sections and staff overview cards by module.
 * Optional: middleware/route-level gating for disabled module URLs, if a
   church-facing deployment ever needs hard-off modules.

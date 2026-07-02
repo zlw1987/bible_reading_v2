@@ -38,6 +38,16 @@ urlpatterns = [
         name="end_my_unit_coworker_assignment",
     ),
     path(
+        "my-units/<int:unit_id>/members/add/",
+        views.add_my_unit_member,
+        name="add_my_unit_member",
+    ),
+    path(
+        "my-units/members/<int:membership_id>/end/",
+        views.end_my_unit_member,
+        name="end_my_unit_member",
+    ),
+    path(
         "my-units/<int:unit_id>/member-records/add/",
         views.add_my_unit_member_record,
         name="add_my_unit_member_record",

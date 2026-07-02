@@ -8692,7 +8692,7 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         self._make_lead_login("mud_group_lead", self.group)
         response = self.client.get(self._detail_url(self.group) + "?lang=en")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Manage Unit Coworkers")
+        self.assertContains(response, "Group &amp; Coworker Management")
 
     def test_lead_on_parent_can_access_descendant_detail(self):
         self._make_lead_login("mud_district_lead", self.district)
@@ -9031,10 +9031,10 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         response_en = self.client.get(self._detail_url(self.group) + "?lang=en")
         self.assertContains(
             response_en,
-            "This page changes only long-term coworker roles.",
+            "The coworker section changes only long-term structure coworker roles.",
         )
         response_zh = self.client.get(self._detail_url(self.group) + "?lang=zh")
-        self.assertContains(response_zh, "此页面只更改长期同工角色")
+        self.assertContains(response_zh, "同工区块只更改长期结构同工角色")
 
     def test_missing_required_role_readiness_renders(self):
         profile = ChurchStructureUnitRoleProfile.objects.create(
@@ -9053,6 +9053,366 @@ class MyUnitDelegatedCoworkerEditTests(TestCase):
         response = self.client.get(self._detail_url(self.group) + "?lang=en")
         self.assertContains(response, "Missing Required Roles")
         self.assertContains(response, "Edify")
+
+
+class MyUnitSmallGroupMemberManageTests(TestCase):
+    """GROUP-MEMBERSHIP-MANAGE.1A small-group member management on My Units.
+
+    Assign/end belonging (``ChurchStructureMembership``) for small-group units
+    only, gated by ``can_manage_unit_members`` (staff/superuser or active
+    ``lead`` ancestor-or-self via ``can_manage_unit_coworkers``). Belonging is
+    never inferred from or granted to serving; membership alone never grants
+    management. "Unassigned" is a user state (no current/future active
+    membership and no pending request) — never a fake structure unit. Pending
+    signup/profile group requests stay in the staff membership-request
+    workflow and are shown read-only here.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="GMM-DISTRICT",
+            name="成员区",
+            name_en="Member District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="GMM-GROUP",
+            name="成员小组",
+            name_en="Member Group",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="GMM-SIBLING",
+            name="邻组",
+            name_en="Sibling Group",
+        )
+
+        # An existing active primary member of the managed group.
+        self.member = User.objects.create_user(username="gmm_member")
+        self.member_membership = ChurchStructureMembership.objects.create(
+            user=self.member,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        # A user with no membership rows at all: the assignable candidate.
+        self.unassigned = User.objects.create_user(username="gmm_unassigned")
+
+    # --- fixture helpers -------------------------------------------------------
+
+    def _make_lead_login(self, username, unit):
+        user = User.objects.create_user(username=username, password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.lead_role,
+            user=user,
+        )
+        self.client.login(username=username, password="pw")
+        return user
+
+    def _make_staff_login(self, username):
+        user = User.objects.create_user(
+            username=username, password="pw", is_staff=True
+        )
+        self.client.login(username=username, password="pw")
+        return user
+
+    def _detail_url(self, unit):
+        return reverse("my_unit_detail", args=[unit.id])
+
+    def _add_url(self, unit):
+        return reverse("add_my_unit_member", args=[unit.id])
+
+    def _end_url(self, membership):
+        return reverse("end_my_unit_member", args=[membership.id])
+
+    def _candidate_ids(self, response):
+        form = response.context["member_add_form"]
+        return set(form.fields["user"].queryset.values_list("id", flat=True))
+
+    # --- access ----------------------------------------------------------------
+
+    def test_staff_sees_member_section_on_small_group(self):
+        self._make_staff_login("gmm_staff")
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Group Members")
+        self.assertTrue(response.context["member_manage_enabled"])
+
+    def test_superuser_sees_member_section(self):
+        User.objects.create_superuser(
+            username="gmm_super", email="gmm_super@example.com", password="pw"
+        )
+        self.client.login(username="gmm_super", password="pw")
+        response = self.client.get(self._detail_url(self.group))
+        self.assertTrue(response.context["member_manage_enabled"])
+
+    def test_group_lead_sees_member_section(self):
+        self._make_lead_login("gmm_group_lead", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, "Group Members")
+
+    def test_district_lead_sees_member_section_on_descendant_group(self):
+        self._make_lead_login("gmm_district_lead", self.district)
+        response = self.client.get(self._detail_url(self.group))
+        self.assertTrue(response.context["member_manage_enabled"])
+
+    def test_ordinary_user_cannot_access_or_post(self):
+        User.objects.create_user(username="gmm_plain", password="pw")
+        self.client.login(username="gmm_plain", password="pw")
+        self.assertEqual(
+            self.client.get(self._detail_url(self.group)).status_code, 404
+        )
+        response = self.client.post(
+            self._add_url(self.group), {"user": self.unassigned.id}
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.unassigned).exists()
+        )
+
+    def test_membership_alone_does_not_grant_member_management(self):
+        self.client.force_login(self.member)
+        self.assertEqual(
+            self.client.get(self._detail_url(self.group)).status_code, 404
+        )
+        response = self.client.post(
+            self._add_url(self.group), {"user": self.unassigned.id}
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_sibling_group_lead_cannot_add_to_unmanaged_group(self):
+        self._make_lead_login("gmm_sibling_lead", self.sibling)
+        response = self.client.post(
+            self._add_url(self.group), {"user": self.unassigned.id}
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(user=self.unassigned).exists()
+        )
+
+    # --- small-group-only guard --------------------------------------------------
+
+    def test_district_page_has_no_member_section_and_add_is_blocked(self):
+        self._make_staff_login("gmm_staff_district")
+        response = self.client.get(self._detail_url(self.district) + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["member_manage_enabled"])
+        self.assertNotContains(response, "Group Members")
+        post_response = self.client.post(
+            self._add_url(self.district), {"user": self.unassigned.id}
+        )
+        self.assertEqual(post_response.status_code, 404)
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(unit=self.district).exists()
+        )
+
+    # --- listing ----------------------------------------------------------------
+
+    def test_page_lists_active_members(self):
+        self._make_lead_login("gmm_list_lead", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, "gmm_member")
+        member_ids = [
+            membership.id for membership in response.context["active_members"]
+        ]
+        self.assertEqual(member_ids, [self.member_membership.id])
+
+    def test_candidates_exclude_assigned_users(self):
+        self._make_lead_login("gmm_candidates_lead", self.group)
+        response = self.client.get(self._detail_url(self.group))
+        candidate_ids = self._candidate_ids(response)
+        self.assertIn(self.unassigned.id, candidate_ids)
+        self.assertNotIn(self.member.id, candidate_ids)
+
+    def test_candidates_exclude_pending_request_users(self):
+        requester = User.objects.create_user(username="gmm_requester")
+        pending = ChurchStructureMembership.objects.create(
+            user=requester,
+            unit=self.sibling,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            requested_by=requester,
+        )
+        self._make_lead_login("gmm_pending_lead", self.group)
+        response = self.client.get(self._detail_url(self.group))
+        self.assertNotIn(requester.id, self._candidate_ids(response))
+        pending.refresh_from_db()
+        self.assertEqual(
+            pending.status, ChurchStructureMembership.STATUS_REQUESTED
+        )
+
+    def test_pending_request_for_this_unit_is_shown_read_only(self):
+        requester = User.objects.create_user(username="gmm_unit_requester")
+        ChurchStructureMembership.objects.create(
+            user=requester,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            requested_by=requester,
+        )
+        self._make_lead_login("gmm_pending_view", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, "Pending request")
+        self.assertContains(response, "gmm_unit_requester")
+
+    # --- add member ---------------------------------------------------------------
+
+    def test_add_unassigned_user_creates_active_primary_membership(self):
+        self._make_lead_login("gmm_add_lead", self.group)
+        response = self.client.post(
+            self._add_url(self.group), {"user": self.unassigned.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        membership = ChurchStructureMembership.objects.get(user=self.unassigned)
+        self.assertEqual(membership.unit, self.group)
+        self.assertEqual(
+            membership.status, ChurchStructureMembership.STATUS_ACTIVE
+        )
+        self.assertTrue(membership.is_primary)
+        self.assertEqual(membership.start_date, self.today)
+        self.assertEqual(
+            membership.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertTrue(membership.is_current_primary)
+
+    def test_add_already_assigned_user_is_blocked(self):
+        self._make_lead_login("gmm_block_lead", self.group)
+        response = self.client.post(
+            self._add_url(self.group), {"user": self.member.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(
+                user=self.member,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(
+                user=self.member,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+            ).count(),
+            1,
+        )
+
+    def test_add_user_with_pending_request_is_blocked_and_request_kept(self):
+        requester = User.objects.create_user(username="gmm_req_block")
+        pending = ChurchStructureMembership.objects.create(
+            user=requester,
+            unit=self.sibling,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            requested_by=requester,
+        )
+        self._make_lead_login("gmm_req_block_lead", self.group)
+        response = self.client.post(
+            self._add_url(self.group), {"user": requester.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(user=requester).count(), 1
+        )
+        pending.refresh_from_db()
+        self.assertEqual(
+            pending.status, ChurchStructureMembership.STATUS_REQUESTED
+        )
+        self.assertEqual(pending.unit, self.sibling)
+
+    def test_add_does_not_create_serving_or_coworker_rows(self):
+        from ministry.models import TeamAssignmentMember, TeamMembership
+
+        self._make_lead_login("gmm_boundary_lead", self.group)
+        self.client.post(self._add_url(self.group), {"user": self.unassigned.id})
+        self.assertTrue(
+            ChurchStructureMembership.objects.filter(
+                user=self.unassigned,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+            ).exists()
+        )
+        self.assertFalse(
+            TeamMembership.objects.filter(user=self.unassigned).exists()
+        )
+        self.assertFalse(
+            TeamAssignmentMember.objects.filter(
+                membership__user=self.unassigned
+            ).exists()
+        )
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                user=self.unassigned
+            ).exists()
+        )
+
+    # --- end member ---------------------------------------------------------------
+
+    def test_end_membership_marks_ended_and_keeps_user(self):
+        self._make_lead_login("gmm_end_lead", self.group)
+        response = self.client.post(self._end_url(self.member_membership))
+        self.assertEqual(response.status_code, 302)
+        self.member_membership.refresh_from_db()
+        self.assertEqual(
+            self.member_membership.status,
+            ChurchStructureMembership.STATUS_ENDED,
+        )
+        self.assertFalse(self.member_membership.is_primary)
+        self.assertEqual(self.member_membership.end_date, self.today)
+        self.member.refresh_from_db()
+        self.assertTrue(self.member.is_active)
+
+    def test_sibling_group_lead_cannot_end_membership_outside_unit(self):
+        self._make_lead_login("gmm_end_sibling_lead", self.sibling)
+        response = self.client.post(self._end_url(self.member_membership))
+        self.assertEqual(response.status_code, 404)
+        self.member_membership.refresh_from_db()
+        self.assertEqual(
+            self.member_membership.status,
+            ChurchStructureMembership.STATUS_ACTIVE,
+        )
+
+    def test_end_requires_currently_active_membership(self):
+        ended = ChurchStructureMembership.objects.create(
+            user=self.unassigned,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=False,
+            start_date=self.today - timedelta(days=30),
+            end_date=self.today - timedelta(days=1),
+        )
+        self._make_lead_login("gmm_end_inactive_lead", self.group)
+        response = self.client.post(self._end_url(ended))
+        self.assertEqual(response.status_code, 302)
+        ended.refresh_from_db()
+        self.assertEqual(ended.status, ChurchStructureMembership.STATUS_ENDED)
+        self.assertEqual(ended.end_date, self.today - timedelta(days=1))
+
+    # --- bilingual copy -------------------------------------------------------------
+
+    def test_member_section_bilingual_copy_renders(self):
+        self._make_lead_login("gmm_lang_lead", self.group)
+        response_en = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response_en, "Group Members")
+        self.assertContains(response_en, "Add Unassigned User")
+        self.assertContains(response_en, "End membership")
+        response_zh = self.client.get(self._detail_url(self.group) + "?lang=zh")
+        self.assertContains(response_zh, "组员管理")
+        self.assertContains(response_zh, "添加未分配用户")
+        self.assertContains(response_zh, "结束归属")
 
 
 class MyUnitsListUxTests(TestCase):

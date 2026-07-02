@@ -1,18 +1,21 @@
-"""Delegated unit-management helpers (UNIT-LEAD-MANAGE.1B, read-only).
+"""Delegated unit-management permission/query helpers (UNIT-LEAD-MANAGE.1B).
 
-These helpers answer "which structure units may this user manage coworkers
-for" for the read-only ``/my-units/`` discovery surface. They are deliberately
-narrow:
+These helpers answer "which structure units may this user manage" for the
+``/my-units/`` surface. They are themselves read-only (they never create, end,
+or mutate any row), but they gate write surfaces: the delegated coworker
+add/end views, and — via :func:`can_manage_unit_members` — the
+GROUP-MEMBERSHIP-MANAGE.1A small-group belonging (``ChurchStructureMembership``)
+add/end surface. They are deliberately narrow:
 
 - Management is granted only by staff/superuser status or an explicit active
   ``lead`` coworker role assignment on the unit itself or an ancestor
   (ancestor-or-self), per the recommended permission model in
   ``docs/MEMBER_RECORD_AND_SERVING_READINESS_PLAN.md`` (Section A.2).
-- Management is NEVER inferred from ``ChurchStructureMembership`` (belonging),
-  audience visibility, ``TeamAssignment`` / ``TeamAssignmentMember`` / My
-  Serving, Bible Study visibility, or ordinary (non-lead) coworker roles.
-- These helpers are read-only. They do not create, end, or mutate any
-  assignment, membership, capability, or serving row.
+- Management authority is NEVER inferred from ``ChurchStructureMembership``
+  (belonging), audience visibility, ``TeamAssignment`` / ``TeamAssignmentMember``
+  / My Serving, Bible Study visibility, or ordinary (non-lead) coworker roles.
+- These helpers do not create, end, or mutate any assignment, membership,
+  capability, or serving row; write surfaces call them only to check authority.
 
 The dedicated central capability ``CAP_MANAGE_STRUCTURE_COWORKERS`` described in
 the plan (Section A.3) is intentionally NOT implemented in this slice; staff /
@@ -172,6 +175,28 @@ def can_manage_unit_coworkers(user, unit, target_date=None):
         .filter(unit_id__in=ancestor_or_self_ids)
         .exists()
     )
+
+
+def can_manage_unit_members(user, unit, target_date=None):
+    """Whether ``user`` may manage small-group MEMBERS (belonging) for ``unit``.
+
+    GROUP-MEMBERSHIP-MANAGE.1A. Same authority as
+    :func:`can_manage_unit_coworkers` (staff/superuser, or an active ``lead``
+    coworker assignment ancestor-or-self on an active unit), narrowed to
+    small-group units only: this surface assigns/ends
+    ``ChurchStructureMembership`` belonging rows, and 1A deliberately supports
+    only ``unit_type == UNIT_SMALL_GROUP``. District/church/root units fail
+    closed here even for staff.
+
+    Belonging management never grants or implies serving (TeamAssignment /
+    My Serving), capabilities, or role assignments, and membership/belonging
+    itself never grants this management authority.
+    """
+    if unit is None:
+        return False
+    if unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+        return False
+    return can_manage_unit_coworkers(user, unit, target_date=target_date)
 
 
 def should_show_my_units_nav(user, target_date=None):

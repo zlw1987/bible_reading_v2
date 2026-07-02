@@ -20,6 +20,7 @@ from .forms import (
     ChurchStructureUnitChildForm,
     ChurchStructureUnitMemberRecordForm,
     LocalizedPasswordChangeForm,
+    MyUnitMemberAddForm,
     ProfileForm,
     SignUpForm,
     StaffPasswordResetForm,
@@ -50,6 +51,7 @@ from .permissions import CAP_MANAGE_CHURCH_MEMBERSHIPS, has_capability
 from .serving_readiness import add_serving_readiness_warnings
 from .unit_management import (
     can_manage_unit_coworkers,
+    can_manage_unit_members,
     get_manageable_structure_units,
 )
 from .unit_member_record_access import (
@@ -2089,14 +2091,20 @@ def _build_active_coworker_role_groups(unit, today, language):
 
 @login_required
 def my_unit_detail(request, unit_id):
-    """Delegated coworker-management page for one manageable structure unit.
+    """Delegated management page for one manageable structure unit.
 
     UNIT-LEAD-MANAGE.1C: authorized leads (active ``lead`` ancestor-or-self) and
     staff/superuser may add and end long-term coworker role assignments for the
     active units they manage, gated by ``can_manage_unit_coworkers``. This is the
     operational My Units surface, separate from the admin structure tree at
-    ``/staff/structure/``. It changes only ``ChurchStructureUnitRoleAssignment``
-    rows; it never touches membership, permissions, serving, or meeting roles.
+    ``/staff/structure/``.
+
+    The coworker role section changes only ``ChurchStructureUnitRoleAssignment``
+    rows. GROUP-MEMBERSHIP-MANAGE.1A adds a small-group-only member section
+    (gated by ``can_manage_unit_members``) that may add/end
+    ``ChurchStructureMembership`` belonging rows. Neither section touches
+    permissions, serving (TeamAssignment / My Serving), or meeting roles, and
+    belonging never grants coworker roles or serving.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -2179,6 +2187,30 @@ def my_unit_detail(request, unit_id):
     if coworker_user_scope == StructureUnitCoworkerAssignmentForm.USER_SCOPE_ALL:
         add_form_action_url += "?coworker_user_scope=all"
 
+    # GROUP-MEMBERSHIP-MANAGE.1A: small-group member (belonging) management.
+    # Small-group units only; district/church/root pages get no member section.
+    # This section changes only ChurchStructureMembership rows and never
+    # serving, capability, or coworker-role rows. Pending signup/profile group
+    # requests for this unit are shown read-only: approval stays in the
+    # existing staff membership-request workflow and is never duplicated here.
+    member_manage_enabled = can_manage_unit_members(request.user, unit)
+    active_members = []
+    pending_member_requests = []
+    member_add_form = None
+    if member_manage_enabled:
+        active_members = order_by_related_user_visible_identity(
+            _active_membership_queryset()
+            .filter(unit=unit)
+            .select_related("user")
+        )
+        pending_member_requests = order_by_related_user_visible_identity(
+            ChurchStructureMembership.objects.filter(
+                unit=unit,
+                status=ChurchStructureMembership.STATUS_REQUESTED,
+            ).select_related("user")
+        )
+        member_add_form = MyUnitMemberAddForm(unit=unit, language=language)
+
     return render(
         request,
         "accounts/my_unit_detail.html",
@@ -2213,6 +2245,13 @@ def my_unit_detail(request, unit_id):
             "member_records_viewer_can_write": member_records_viewer_can_write,
             "add_member_record_url": reverse(
                 "add_my_unit_member_record", args=[unit.id]
+            ),
+            "member_manage_enabled": member_manage_enabled,
+            "active_members": active_members,
+            "pending_member_requests": pending_member_requests,
+            "member_add_form": member_add_form,
+            "can_review_membership_requests": can_manage_church_memberships(
+                request.user
             ),
         },
     )
@@ -2354,6 +2393,143 @@ def end_my_unit_coworker_assignment(request, assignment_id):
         ),
     )
     return redirect("my_unit_detail", unit_id=assignment.unit_id)
+
+
+@login_required
+@require_POST
+def add_my_unit_member(request, unit_id):
+    """Assign an unassigned user to a small group from the My Units surface.
+
+    GROUP-MEMBERSHIP-MANAGE.1A: gated by ``can_manage_unit_members``
+    (small-group unit + ``can_manage_unit_coworkers`` authority). Creates one
+    active primary ``ChurchStructureMembership`` row via
+    ``MyUnitMemberAddForm``; users with any current/future active membership
+    or pending group request are rejected (use the existing group change
+    request workflow instead). No serving, capability, coworker-role, or
+    TeamAssignment rows are created, and no user is deleted or moved.
+    """
+    language = get_user_language(request)
+    unit = get_object_or_404(ChurchStructureUnit, id=unit_id)
+    if not can_manage_unit_members(request.user, unit):
+        raise Http404("Unit members are not manageable by this user.")
+
+    form = MyUnitMemberAddForm(request.POST, unit=unit, language=language)
+    if form.is_valid():
+        try:
+            membership = form.save(approved_by=request.user)
+        except ValidationError:
+            # Race fail-closed: the model's single-active-primary clean fired
+            # between form validation and save. Nothing was created.
+            messages.error(
+                request,
+                (
+                    "组员未添加：该用户已有小组归属。"
+                    if language == "zh"
+                    else "Member was not added: this user already has a group belonging."
+                ),
+            )
+            return redirect("my_unit_detail", unit_id=unit.id)
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ChurchStructureMembership
+            ).pk,
+            object_id=membership.pk,
+            object_repr=str(membership),
+            action_flag=ADDITION,
+            change_message=(
+                "Added active primary church structure membership via delegated "
+                "My Units surface (GROUP-MEMBERSHIP-MANAGE.1A). Belonging only: "
+                "no permissions, TeamAssignment rows, TeamAssignmentMember rows, "
+                "coworker role assignments, or BibleStudyMeetingRole rows were "
+                "created."
+            ),
+        )
+        messages.success(
+            request,
+            (
+                f"已将 {membership.user.username} 添加为组员。"
+                if language == "zh"
+                else f"Added {membership.user.username} as a group member."
+            ),
+        )
+    else:
+        detail = _first_form_error(form)
+        messages.error(
+            request,
+            (
+                "组员未添加。"
+                if language == "zh"
+                else "Member was not added."
+            )
+            + (f" {detail}" if detail else ""),
+        )
+
+    return redirect("my_unit_detail", unit_id=unit.id)
+
+
+@login_required
+@require_POST
+def end_my_unit_member(request, membership_id):
+    """End a currently active membership row from the My Units surface.
+
+    GROUP-MEMBERSHIP-MANAGE.1A: gated by ``can_manage_unit_members`` on the
+    membership's own unit, so a lead can never end rows outside their managed
+    small groups. Marks the row ``ended`` (status + end date, primary flag
+    cleared); the row is retained and the user account is never deleted or
+    deactivated. Ending belonging changes scoped visibility only; it never
+    touches serving, capabilities, or coworker roles.
+    """
+    language = get_user_language(request)
+    membership = get_object_or_404(
+        ChurchStructureMembership.objects.select_related("unit", "user"),
+        id=membership_id,
+    )
+    if not can_manage_unit_members(request.user, membership.unit):
+        raise Http404("Membership is not manageable by this user.")
+
+    if not membership.is_active_membership:
+        messages.info(
+            request,
+            (
+                "该组员归属已不是有效状态。"
+                if language == "zh"
+                else "That membership is no longer active."
+            ),
+        )
+        return redirect("my_unit_detail", unit_id=membership.unit_id)
+
+    today = timezone.localdate()
+    membership.status = ChurchStructureMembership.STATUS_ENDED
+    membership.is_primary = False
+    if not membership.end_date or membership.end_date > today:
+        membership.end_date = today
+    membership.save()
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureMembership
+        ).pk,
+        object_id=membership.pk,
+        object_repr=str(membership),
+        action_flag=CHANGE,
+        change_message=(
+            "Ended church structure membership via delegated My Units surface "
+            "(GROUP-MEMBERSHIP-MANAGE.1A). Row was retained and the user account "
+            "was not changed; no permissions, TeamAssignment rows, "
+            "TeamAssignmentMember rows, coworker role assignments, or "
+            "BibleStudyMeetingRole rows were changed."
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"已结束 {membership.user.username} 的组员归属。"
+            if language == "zh"
+            else f"Ended group membership for {membership.user.username}."
+        ),
+    )
+    return redirect("my_unit_detail", unit_id=membership.unit_id)
 
 
 @login_required

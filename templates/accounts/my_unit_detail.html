@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}
-{% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %} | {{ ui.site_title }}
+{% if member_manage_enabled %}{% if language == "zh" %}小组与同工管理{% else %}Group &amp; Coworker Management{% endif %}{% else %}{% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %}{% endif %} | {{ ui.site_title }}
 {% endblock %}
 
 {% block content %}
@@ -9,13 +9,19 @@
     <p class="page-subtitle">
         <a href="{% url 'my_units' %}">&larr; {% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}</a>
     </p>
-    <h1 class="page-title">{% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %}</h1>
+    <h1 class="page-title">
+        {% if member_manage_enabled %}
+        {% if language == "zh" %}小组与同工管理{% else %}Group &amp; Coworker Management{% endif %}
+        {% else %}
+        {% if language == "zh" %}管理单位同工{% else %}Manage Unit Coworkers{% endif %}
+        {% endif %}
+    </h1>
     <p class="page-subtitle">{{ unit_path }}</p>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        此页面只更改长期同工角色，不会更改成员归属、权限或服事排班。
+        同工区块只更改长期结构同工角色。{% if member_manage_enabled %}小组组员区块更改小组归属。{% endif %}归属不会授予同工角色、权限或服事排班（服事/我的服事）。
         {% else %}
-        This page changes only long-term coworker roles. It does not change membership, permissions, or serving schedules.
+        The coworker section changes only long-term structure coworker roles.{% if member_manage_enabled %} For small groups, the Group Members section changes group belonging (membership).{% endif %} Belonging does not grant coworker roles, permissions, or serving schedules (TeamAssignment / My Serving).
         {% endif %}
     </p>
 </section>
@@ -149,6 +155,96 @@
         <button type="submit">{% if language == "zh" %}添加同工{% else %}Add Coworker{% endif %}</button>
     </form>
 </section>
+
+{# GROUP-MEMBERSHIP-MANAGE.1A: small-group member (belonging) management. #}
+{# Small-group units only. Changes only church-structure belonging; it never #}
+{# grants serving, coworker roles, or permissions. Pending group requests are #}
+{# read-only here — approval stays in the staff membership-request workflow. #}
+{% if member_manage_enabled %}
+<section class="card">
+    <h2 class="card-title">{% if language == "zh" %}组员管理{% else %}Group Members{% endif %}</h2>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        此区域只更改小组归属，不会更改同工角色、权限或服事安排。
+        {% else %}
+        This section changes only group belonging. It does not change coworker roles, permissions, or serving.
+        {% endif %}
+    </p>
+
+    <h3>{% if language == "zh" %}当前组员{% else %}Current Members{% endif %}</h3>
+    {% if active_members %}
+    <ul class="staff-count-list">
+        {% for membership in active_members %}
+        <li>
+            {{ membership.user.get_full_name|default:membership.user.username }} ({{ membership.user.username }})
+            {% if membership.is_primary %}
+            <span class="status status-good">{% if language == "zh" %}主要归属{% else %}Primary{% endif %}</span>
+            {% endif %}
+            <form method="post"
+                  action="{% url 'end_my_unit_member' membership.id %}"
+                  class="inline-action-form">
+                {% csrf_token %}
+                <button type="submit" class="button-danger">
+                    {% if language == "zh" %}结束归属{% else %}End membership{% endif %}
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">{% if language == "zh" %}目前没有组员。{% else %}No current members.{% endif %}</p>
+    {% endif %}
+
+    {% if pending_member_requests %}
+    <h3>{% if language == "zh" %}待审核申请{% else %}Pending Requests{% endif %}</h3>
+    <ul class="staff-count-list">
+        {% for membership in pending_member_requests %}
+        <li>
+            {{ membership.user.get_full_name|default:membership.user.username }} ({{ membership.user.username }})
+            <span class="status status-warning">{% if language == "zh" %}待审核{% else %}Pending request{% endif %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    <p class="muted">
+        {% if language == "zh" %}
+        待审核申请需经现有的申请审核流程处理，不能在此页面直接添加。
+        {% else %}
+        Pending requests are handled through the existing request review flow and cannot be added directly here.
+        {% endif %}
+        {% if can_review_membership_requests %}
+        <a href="{% url 'staff_membership_request_list' %}">
+            {% if language == "zh" %}前往审核{% else %}Review requests{% endif %}
+        </a>
+        {% endif %}
+    </p>
+    {% endif %}
+
+    <h3>{% if language == "zh" %}添加未分配用户{% else %}Add Unassigned User{% endif %}</h3>
+    <p class="muted">
+        {% if language == "zh" %}
+        已有小组归属的用户不会显示在下方；组别变更请使用现有的组别变更申请流程。
+        {% else %}
+        Users who already belong to a group are not listed below. To change groups, use the existing group change request flow.
+        {% endif %}
+    </p>
+    <form method="post"
+          action="{% url 'add_my_unit_member' unit.id %}"
+          class="structure-membership-form">
+        {% csrf_token %}
+        {% for field in member_add_form %}
+        <div class="form-field">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+            <span class="form-help">{{ field.help_text }}</span>
+            {% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">{% if language == "zh" %}添加组员{% else %}Add member{% endif %}</button>
+    </form>
+</section>
+{% endif %}
 
 {# MEMBER-RECORD.1E: read-only, privacy-scoped member/care records for THIS unit. #}
 {# Every field below comes from build_unit_member_record_safe_snapshot, so only #}

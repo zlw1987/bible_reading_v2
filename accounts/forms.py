@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.contrib.auth.forms import (
     AuthenticationForm,
@@ -155,6 +155,112 @@ class StructureMembershipAddForm(forms.Form):
             approved_by=approved_by,
             approved_at=timezone.now(),
             notes=self.cleaned_data.get("notes", ""),
+        )
+
+
+def _blocking_membership_filter(target_date):
+    """Membership rows that make a user NOT safely assignable to a group.
+
+    GROUP-MEMBERSHIP-MANAGE.1A "unassigned" rule: a user is addable only when
+    they have no active-status membership that is current or future for
+    ``target_date`` (naturally expired active rows do not block) and no pending
+    ``requested`` row anywhere (a pending signup/profile group request must be
+    approved/declined through the existing membership-request workflow, never
+    bypassed or duplicated here).
+    """
+    return Q(status=ChurchStructureMembership.STATUS_REQUESTED) | (
+        Q(status=ChurchStructureMembership.STATUS_ACTIVE)
+        & (Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+    )
+
+
+def unassigned_member_candidate_queryset(target_date=None):
+    """Active users with no current/future active membership and no pending request."""
+    target_date = target_date or timezone.localdate()
+    UserModel = get_user_model()
+    blocking = ChurchStructureMembership.objects.filter(
+        user=OuterRef("pk")
+    ).filter(_blocking_membership_filter(target_date))
+    return order_users_by_visible_identity(
+        UserModel.objects.filter(is_active=True).filter(~Exists(blocking))
+    )
+
+
+class MyUnitMemberAddForm(forms.Form):
+    """Assign one unassigned user to a small-group unit as active primary belonging.
+
+    GROUP-MEMBERSHIP-MANAGE.1A: deliberately minimal. Creates only a
+    ``ChurchStructureMembership`` row (belonging); it never creates serving,
+    capability, or coworker-role rows. The candidate queryset and ``clean``
+    both enforce the unassigned rule so a stale form cannot double-assign or
+    bypass a pending group request, and the model's ``full_clean`` keeps the
+    single-active-primary invariant as the last line of defense.
+    """
+
+    user = StructureSetupUserChoiceField(queryset=User.objects.none())
+
+    def __init__(self, *args, unit=None, language="zh", **kwargs):
+        super().__init__(*args, **kwargs)
+        if unit is None:
+            raise ValueError("MyUnitMemberAddForm requires a unit.")
+        if unit.unit_type != ChurchStructureUnit.UNIT_SMALL_GROUP:
+            raise ValueError("MyUnitMemberAddForm supports small-group units only.")
+        self.unit = unit
+        self.language = language
+        self.fields["user"].queryset = unassigned_member_candidate_queryset()
+        self.fields["user"].label = (
+            "选择未分配小组的用户" if language == "zh" else "Select an unassigned user"
+        )
+        self.fields["user"].help_text = (
+            "只显示目前没有小组归属、也没有待审核申请的用户。"
+            if language == "zh"
+            else (
+                "Only users with no current group belonging and no pending "
+                "group request are listed."
+            )
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if not self.unit.is_active:
+            raise forms.ValidationError(
+                "组员只能添加到启用中的小组。"
+                if self.language == "zh"
+                else "Members can only be added to an active small group."
+            )
+
+        user = cleaned_data.get("user")
+        if user:
+            today = timezone.localdate()
+            blocking = ChurchStructureMembership.objects.filter(user=user).filter(
+                _blocking_membership_filter(today)
+            )
+            if blocking.exists():
+                raise forms.ValidationError(
+                    "该用户已有小组归属或有待审核的申请，"
+                    "请使用组别变更申请流程。"
+                    if self.language == "zh"
+                    else (
+                        "This user already has a group belonging or a pending "
+                        "group request. Use the group change request flow instead."
+                    )
+                )
+
+        return cleaned_data
+
+    @transaction.atomic
+    def save(self, *, approved_by):
+        return ChurchStructureMembership.objects.create(
+            user=self.cleaned_data["user"],
+            unit=self.unit,
+            membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+            requested_by=approved_by,
+            approved_by=approved_by,
+            approved_at=timezone.now(),
         )
 
 

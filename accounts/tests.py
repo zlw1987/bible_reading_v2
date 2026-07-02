@@ -9254,7 +9254,11 @@ class MyUnitSmallGroupMemberManageTests(TestCase):
             pending.status, ChurchStructureMembership.STATUS_REQUESTED
         )
 
-    def test_pending_request_for_this_unit_is_shown_read_only(self):
+    def test_pending_request_for_this_unit_is_listed_with_badge(self):
+        # GROUP-MEMBERSHIP-REQUEST.1B added approve/reject controls to these
+        # rows; the delegated review flow itself is covered by
+        # MyUnitMemberRequestReviewTests. This test keeps asserting the row
+        # renders with the pending badge.
         requester = User.objects.create_user(username="gmm_unit_requester")
         ChurchStructureMembership.objects.create(
             user=requester,
@@ -9413,6 +9417,389 @@ class MyUnitSmallGroupMemberManageTests(TestCase):
         self.assertContains(response_zh, "组员管理")
         self.assertContains(response_zh, "添加未分配用户")
         self.assertContains(response_zh, "结束归属")
+
+
+class MyUnitMemberRequestReviewTests(TestCase):
+    """GROUP-MEMBERSHIP-REQUEST.1B delegated request review on My Units.
+
+    Approve/reject pending ``ChurchStructureMembership`` requests for
+    small-group units, gated by ``can_manage_unit_members`` (staff/superuser or
+    active ``lead`` ancestor-or-self). Approval reuses the shared staff
+    semantics (``approve_membership_request``) including the active-primary
+    fail-closed block. Belonging only: serving/team/Bible Study rows never
+    grant review rights and are never created by approval. Non-small-group
+    requests fail closed on this surface and stay staff-queue-only.
+    """
+
+    def setUp(self):
+        self.today = timezone.localdate()
+
+        self.lead_role = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="负责人",
+            name_en="Lead",
+        )
+
+        self.district = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="GMR-DISTRICT",
+            name="申请区",
+            name_en="Request District",
+        )
+        self.group = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="GMR-GROUP",
+            name="申请小组",
+            name_en="Request Group",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            parent=self.district,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="GMR-SIBLING",
+            name="邻组",
+            name_en="Sibling Group",
+        )
+
+        # A pending signup/profile-style group request for the managed group.
+        self.requester = User.objects.create_user(username="gmr_requester")
+        self.request_row = self._make_request(self.requester, self.group)
+
+        # An existing active primary member (membership alone grants nothing).
+        self.member = User.objects.create_user(username="gmr_member")
+        ChurchStructureMembership.objects.create(
+            user=self.member,
+            unit=self.group,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+
+    # --- fixture helpers -------------------------------------------------------
+
+    def _make_request(self, user, unit):
+        # Mirrors create_or_update_signup_membership_request row shape.
+        return ChurchStructureMembership.objects.create(
+            user=user,
+            unit=unit,
+            membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+            status=ChurchStructureMembership.STATUS_REQUESTED,
+            is_primary=False,
+            requested_by=user,
+        )
+
+    def _make_lead_login(self, username, unit):
+        user = User.objects.create_user(username=username, password="pw")
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=self.lead_role,
+            user=user,
+        )
+        self.client.login(username=username, password="pw")
+        return user
+
+    def _detail_url(self, unit):
+        return reverse("my_unit_detail", args=[unit.id])
+
+    def _approve_url(self, membership):
+        return reverse("approve_my_unit_member_request", args=[membership.id])
+
+    def _reject_url(self, membership):
+        return reverse("reject_my_unit_member_request", args=[membership.id])
+
+    def _assert_still_requested(self):
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status,
+            ChurchStructureMembership.STATUS_REQUESTED,
+        )
+        self.assertFalse(self.request_row.is_primary)
+        self.assertIsNone(self.request_row.approved_by)
+        self.assertIsNone(self.request_row.approved_at)
+
+    # --- page rendering ----------------------------------------------------------
+
+    def test_pending_request_rows_render_on_small_group_page(self):
+        self._make_lead_login("gmr_render_lead", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "gmr_requester")
+        self.assertContains(response, "Pending request")
+
+    def test_group_lead_sees_approve_reject_controls(self):
+        self._make_lead_login("gmr_controls_lead", self.group)
+        response = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response, self._approve_url(self.request_row))
+        self.assertContains(response, self._reject_url(self.request_row))
+        self.assertContains(response, "Approve")
+        self.assertContains(response, "Reject")
+
+    def test_ancestor_lead_sees_controls_for_descendant_group_request(self):
+        self._make_lead_login("gmr_district_lead", self.district)
+        response = self.client.get(self._detail_url(self.group))
+        self.assertContains(response, self._approve_url(self.request_row))
+        self.assertContains(response, self._reject_url(self.request_row))
+
+    def test_bilingual_review_copy_renders(self):
+        self._make_lead_login("gmr_lang_lead", self.group)
+        response_en = self.client.get(self._detail_url(self.group) + "?lang=en")
+        self.assertContains(response_en, "Approve")
+        self.assertContains(response_en, "Reject")
+        self.assertContains(
+            response_en,
+            "Approving changes group belonging only",
+        )
+        response_zh = self.client.get(self._detail_url(self.group) + "?lang=zh")
+        self.assertContains(response_zh, "批准")
+        self.assertContains(response_zh, "拒绝")
+        self.assertContains(response_zh, "批准只更改小组归属")
+
+    # --- authorization -------------------------------------------------------------
+
+    def test_ordinary_user_cannot_approve_or_reject(self):
+        User.objects.create_user(username="gmr_plain", password="pw")
+        self.client.login(username="gmr_plain", password="pw")
+        self.assertEqual(
+            self.client.post(self._approve_url(self.request_row)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(self.request_row)).status_code, 404
+        )
+        self._assert_still_requested()
+
+    def test_membership_only_user_cannot_approve_or_reject(self):
+        self.client.force_login(self.member)
+        self.assertEqual(
+            self.client.post(self._approve_url(self.request_row)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(self.request_row)).status_code, 404
+        )
+        self._assert_still_requested()
+
+    def test_sibling_group_lead_cannot_approve_or_reject(self):
+        self._make_lead_login("gmr_sibling_lead", self.sibling)
+        self.assertEqual(
+            self.client.post(self._approve_url(self.request_row)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(self.request_row)).status_code, 404
+        )
+        self._assert_still_requested()
+
+    def test_group_lead_cannot_review_request_for_other_unit(self):
+        other_requester = User.objects.create_user(username="gmr_other_requester")
+        other_request = self._make_request(other_requester, self.sibling)
+        self._make_lead_login("gmr_wrong_route_lead", self.group)
+        self.assertEqual(
+            self.client.post(self._approve_url(other_request)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(other_request)).status_code, 404
+        )
+        other_request.refresh_from_db()
+        self.assertEqual(
+            other_request.status, ChurchStructureMembership.STATUS_REQUESTED
+        )
+
+    def test_serving_rows_do_not_grant_review_rights(self):
+        from ministry.models import MinistryTeam, TeamMembership
+        from studies.models import (
+            BibleStudyLesson,
+            BibleStudyMeeting,
+            BibleStudyMeetingRole,
+            BibleStudySeries,
+        )
+
+        server = User.objects.create_user(username="gmr_server", password="pw")
+        team = MinistryTeam.objects.create(name="敬拜队", name_en="Worship Team")
+        TeamMembership.objects.create(
+            team=team,
+            user=server,
+            role=TeamMembership.ROLE_LEAD,
+            can_lead=True,
+        )
+        series = BibleStudySeries.objects.create(title="查经系列")
+        lesson = BibleStudyLesson.objects.create(
+            series=series,
+            title="第一课",
+            lesson_date=self.today,
+        )
+        meeting = BibleStudyMeeting.objects.create(
+            lesson=lesson,
+            meeting_datetime=timezone.now(),
+            anchor_unit=self.group,
+        )
+        BibleStudyMeetingRole.objects.create(
+            meeting=meeting,
+            role=BibleStudyMeetingRole.ROLE_DISCUSSION_LEADER,
+            user=server,
+        )
+        self.client.login(username="gmr_server", password="pw")
+        self.assertEqual(
+            self.client.post(self._approve_url(self.request_row)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(self.request_row)).status_code, 404
+        )
+        self._assert_still_requested()
+
+    def test_staff_can_approve_via_my_units(self):
+        staff = User.objects.create_user(
+            username="gmr_staff", password="pw", is_staff=True
+        )
+        self.client.login(username="gmr_staff", password="pw")
+        response = self.client.post(self._approve_url(self.request_row))
+        self.assertEqual(response.status_code, 302)
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status, ChurchStructureMembership.STATUS_ACTIVE
+        )
+        self.assertEqual(self.request_row.approved_by, staff)
+
+    # --- approve ---------------------------------------------------------------------
+
+    def test_approve_activates_requested_membership(self):
+        lead = self._make_lead_login("gmr_approve_lead", self.group)
+        response = self.client.post(self._approve_url(self.request_row))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._detail_url(self.group))
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status, ChurchStructureMembership.STATUS_ACTIVE
+        )
+        self.assertTrue(self.request_row.is_primary)
+        self.assertEqual(
+            self.request_row.membership_type,
+            ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
+        )
+        self.assertEqual(self.request_row.start_date, self.today)
+        self.assertEqual(self.request_row.approved_by, lead)
+        self.assertIsNotNone(self.request_row.approved_at)
+        self.assertEqual(self.request_row.requested_by, self.requester)
+        self.assertTrue(self.request_row.is_current_primary)
+
+    def test_approve_creates_no_serving_role_or_legacy_rows(self):
+        from ministry.models import TeamAssignmentMember, TeamMembership
+        from studies.models import BibleStudyMeetingRole
+
+        self._make_lead_login("gmr_boundary_lead", self.group)
+        self.client.post(self._approve_url(self.request_row))
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status, ChurchStructureMembership.STATUS_ACTIVE
+        )
+        self.assertFalse(
+            TeamMembership.objects.filter(user=self.requester).exists()
+        )
+        self.assertFalse(
+            TeamAssignmentMember.objects.filter(
+                membership__user=self.requester
+            ).exists()
+        )
+        self.assertFalse(
+            BibleStudyMeetingRole.objects.filter(user=self.requester).exists()
+        )
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                user=self.requester
+            ).exists()
+        )
+        self.assertFalse(
+            ChurchRoleAssignment.objects.filter(user=self.requester).exists()
+        )
+        # PROFILE-SG-FIELD-RETIRE.1A: the legacy profile group field no longer
+        # exists, so approval cannot write it.
+        with self.assertRaises(FieldDoesNotExist):
+            Profile._meta.get_field("small_group")
+
+    def test_approve_blocked_when_requester_has_active_primary(self):
+        ChurchStructureMembership.objects.create(
+            user=self.requester,
+            unit=self.sibling,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today,
+        )
+        self._make_lead_login("gmr_blocked_lead", self.group)
+        response = self.client.post(self._approve_url(self.request_row))
+        self.assertEqual(response.status_code, 302)
+        self._assert_still_requested()
+        # The existing active primary belonging is untouched.
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(
+                user=self.requester,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+            ).count(),
+            1,
+        )
+
+    # --- reject ---------------------------------------------------------------------
+
+    def test_reject_marks_rejected_and_not_primary(self):
+        self._make_lead_login("gmr_reject_lead", self.group)
+        response = self.client.post(self._reject_url(self.request_row))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self._detail_url(self.group))
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status, ChurchStructureMembership.STATUS_REJECTED
+        )
+        self.assertFalse(self.request_row.is_primary)
+
+    def test_reject_keeps_user_and_membership_row(self):
+        self._make_lead_login("gmr_keep_lead", self.group)
+        self.client.post(self._reject_url(self.request_row))
+        self.assertTrue(User.objects.filter(pk=self.requester.pk).exists())
+        self.assertTrue(
+            ChurchStructureMembership.objects.filter(
+                pk=self.request_row.pk
+            ).exists()
+        )
+
+    # --- method / state guards --------------------------------------------------------
+
+    def test_approve_and_reject_are_post_only(self):
+        self._make_lead_login("gmr_get_lead", self.group)
+        self.assertEqual(
+            self.client.get(self._approve_url(self.request_row)).status_code, 405
+        )
+        self.assertEqual(
+            self.client.get(self._reject_url(self.request_row)).status_code, 405
+        )
+        self._assert_still_requested()
+
+    def test_processed_request_cannot_be_reviewed_again(self):
+        self._make_lead_login("gmr_repeat_lead", self.group)
+        self.client.post(self._reject_url(self.request_row))
+        self.assertEqual(
+            self.client.post(self._approve_url(self.request_row)).status_code, 404
+        )
+        self.request_row.refresh_from_db()
+        self.assertEqual(
+            self.request_row.status, ChurchStructureMembership.STATUS_REJECTED
+        )
+
+    def test_non_small_group_request_fails_closed_even_for_staff(self):
+        district_requester = User.objects.create_user(
+            username="gmr_district_requester"
+        )
+        district_request = self._make_request(district_requester, self.district)
+        User.objects.create_user(
+            username="gmr_staff_district", password="pw", is_staff=True
+        )
+        self.client.login(username="gmr_staff_district", password="pw")
+        self.assertEqual(
+            self.client.post(self._approve_url(district_request)).status_code, 404
+        )
+        self.assertEqual(
+            self.client.post(self._reject_url(district_request)).status_code, 404
+        )
+        district_request.refresh_from_db()
+        self.assertEqual(
+            district_request.status, ChurchStructureMembership.STATUS_REQUESTED
+        )
 
 
 class MyUnitsListUxTests(TestCase):

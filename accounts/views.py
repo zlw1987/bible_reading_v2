@@ -2102,9 +2102,11 @@ def my_unit_detail(request, unit_id):
     The coworker role section changes only ``ChurchStructureUnitRoleAssignment``
     rows. GROUP-MEMBERSHIP-MANAGE.1A adds a small-group-only member section
     (gated by ``can_manage_unit_members``) that may add/end
-    ``ChurchStructureMembership`` belonging rows. Neither section touches
-    permissions, serving (TeamAssignment / My Serving), or meeting roles, and
-    belonging never grants coworker roles or serving.
+    ``ChurchStructureMembership`` belonging rows; GROUP-MEMBERSHIP-REQUEST.1B
+    lets the same authorized delegated managers approve/reject pending
+    (``requested``) ``ChurchStructureMembership`` rows for small-group units.
+    Neither section touches permissions, serving (TeamAssignment / My Serving),
+    or meeting roles, and belonging never grants coworker roles or serving.
     """
     language = get_user_language(request)
     today = timezone.localdate()
@@ -2190,9 +2192,10 @@ def my_unit_detail(request, unit_id):
     # GROUP-MEMBERSHIP-MANAGE.1A: small-group member (belonging) management.
     # Small-group units only; district/church/root pages get no member section.
     # This section changes only ChurchStructureMembership rows and never
-    # serving, capability, or coworker-role rows. Pending signup/profile group
-    # requests for this unit are shown read-only: approval stays in the
-    # existing staff membership-request workflow and is never duplicated here.
+    # serving, capability, or coworker-role rows. GROUP-MEMBERSHIP-REQUEST.1B:
+    # pending signup/profile group requests for this unit can be approved or
+    # rejected here by authorized delegated managers (shared semantics with the
+    # staff membership-request workflow, which remains available separately).
     member_manage_enabled = can_manage_unit_members(request.user, unit)
     active_members = []
     pending_member_requests = []
@@ -2533,6 +2536,125 @@ def end_my_unit_member(request, membership_id):
 
 
 @login_required
+@require_POST
+def approve_my_unit_member_request(request, membership_id):
+    """Approve a pending group request from the delegated My Units surface.
+
+    GROUP-MEMBERSHIP-REQUEST.1B: gated by ``can_manage_unit_members`` on the
+    request row's own unit (small-group units only; staff/superuser or active
+    ``lead`` ancestor-or-self). Only ``requested`` rows resolve — anything else
+    404s. Approval reuses the shared staff semantics via
+    ``approve_membership_request``: the row becomes the user's active primary
+    belonging, and it fails closed (row stays pending) when the requester
+    already has an active primary membership. Belonging only: no serving,
+    team, ministry-role, Bible Study role, coworker-role, or permission rows
+    are created, and no legacy profile field is written.
+    """
+    language = get_user_language(request)
+    membership = get_object_or_404(
+        ChurchStructureMembership.objects.select_related("unit", "user"),
+        id=membership_id,
+        status=ChurchStructureMembership.STATUS_REQUESTED,
+    )
+    if not can_manage_unit_members(request.user, membership.unit):
+        raise Http404("Membership request is not manageable by this user.")
+
+    try:
+        approved = approve_membership_request(membership, approved_by=request.user)
+    except ValidationError:
+        # Race fail-closed: the model's single-active-primary clean fired
+        # during save. The stored row is unchanged and stays pending.
+        approved = False
+
+    if not approved:
+        messages.error(
+            request,
+            (
+                "无法批准：该用户已有有效的主要小组归属，申请保持待审核。"
+                if language == "zh"
+                else (
+                    "Approval blocked: this user already has an active primary "
+                    "group belonging. The request stays pending."
+                )
+            ),
+        )
+        return redirect("my_unit_detail", unit_id=membership.unit_id)
+
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureMembership
+        ).pk,
+        object_id=membership.pk,
+        object_repr=str(membership),
+        action_flag=CHANGE,
+        change_message=(
+            "Approved church structure membership request via delegated My "
+            "Units surface (GROUP-MEMBERSHIP-REQUEST.1B). Belonging only: no "
+            "permissions, TeamAssignment rows, TeamAssignmentMember rows, "
+            "coworker role assignments, or BibleStudyMeetingRole rows were "
+            "created, and no legacy profile field was written."
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"已批准 {membership.user.username} 的加入申请。"
+            if language == "zh"
+            else f"Approved group request for {membership.user.username}."
+        ),
+    )
+    return redirect("my_unit_detail", unit_id=membership.unit_id)
+
+
+@login_required
+@require_POST
+def reject_my_unit_member_request(request, membership_id):
+    """Decline a pending group request from the delegated My Units surface.
+
+    GROUP-MEMBERSHIP-REQUEST.1B: gated by ``can_manage_unit_members`` on the
+    request row's own unit, mirroring the approve view. Uses the shared
+    ``reject_membership_request`` semantics: the row is marked rejected and
+    never primary; it is retained (no hard-delete) and the user account is
+    untouched.
+    """
+    language = get_user_language(request)
+    membership = get_object_or_404(
+        ChurchStructureMembership.objects.select_related("unit", "user"),
+        id=membership_id,
+        status=ChurchStructureMembership.STATUS_REQUESTED,
+    )
+    if not can_manage_unit_members(request.user, membership.unit):
+        raise Http404("Membership request is not manageable by this user.")
+
+    reject_membership_request(membership)
+    LogEntry.objects.log_action(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(
+            ChurchStructureMembership
+        ).pk,
+        object_id=membership.pk,
+        object_repr=str(membership),
+        action_flag=CHANGE,
+        change_message=(
+            "Declined church structure membership request via delegated My "
+            "Units surface (GROUP-MEMBERSHIP-REQUEST.1B). Row was retained as "
+            "rejected; the user account and all serving/role/permission rows "
+            "were untouched."
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"已拒绝 {membership.user.username} 的加入申请。"
+            if language == "zh"
+            else f"Declined group request for {membership.user.username}."
+        ),
+    )
+    return redirect("my_unit_detail", unit_id=membership.unit_id)
+
+
+@login_required
 def add_my_unit_member_record(request, unit_id):
     """Staff/admin-only create surface for a unit member/care record.
 
@@ -2832,6 +2954,51 @@ def get_requested_membership_or_404(membership_id):
     )
 
 
+def approve_membership_request(membership, *, approved_by):
+    """Shared approval semantics for a ``requested`` ChurchStructureMembership.
+
+    Used by the staff request review workflow and the delegated My Units
+    small-group review surface (GROUP-MEMBERSHIP-REQUEST.1B), so both paths
+    approve identically. Fails closed and returns ``False`` (leaving the row
+    untouched and pending) when the requester already has a current active
+    primary membership; returns ``True`` after activating the row.
+
+    CS-RETIRE.1A: the approved ChurchStructureMembership is the source of truth
+    for belonging; no legacy profile group field exists to mirror. Belonging
+    only: this never creates TeamMembership, TeamAssignment,
+    TeamAssignmentMember, MinistryTeamRoleAssignment, ChurchRoleAssignment,
+    BibleStudyMeetingRole, coworker-role, capability, or serving rows.
+    """
+    active_primary = ChurchStructureMembership.current_primary_for_user(
+        membership.user,
+    )
+    if active_primary:
+        return False
+
+    membership.status = ChurchStructureMembership.STATUS_ACTIVE
+    membership.is_primary = True
+    if not membership.membership_type:
+        membership.membership_type = ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
+    if not membership.start_date:
+        membership.start_date = timezone.localdate()
+    membership.approved_by = approved_by
+    membership.approved_at = timezone.now()
+    membership.save()
+    return True
+
+
+def reject_membership_request(membership):
+    """Shared rejection semantics for a ``requested`` ChurchStructureMembership.
+
+    Marks the row rejected and never primary. The row is retained (no
+    hard-delete) and the user account is untouched. Shared by the staff review
+    workflow and the delegated My Units surface (GROUP-MEMBERSHIP-REQUEST.1B).
+    """
+    membership.status = ChurchStructureMembership.STATUS_REJECTED
+    membership.is_primary = False
+    membership.save()
+
+
 @user_passes_test(can_manage_church_memberships)
 def staff_membership_request_detail(request, membership_id):
     membership = get_requested_membership_or_404(membership_id)
@@ -2864,30 +3031,14 @@ def staff_membership_request_approve(request, membership_id):
         return redirect("staff_membership_request_detail", membership_id=membership_id)
 
     membership = get_requested_membership_or_404(membership_id)
-    active_primary = ChurchStructureMembership.current_primary_for_user(
-        membership.user,
-    )
 
-    if active_primary:
+    if not approve_membership_request(membership, approved_by=request.user):
         messages.error(
             request,
             "Approval blocked: this user already has an active future primary membership.",
         )
         return redirect("staff_membership_request_detail", membership_id=membership.id)
 
-    membership.status = ChurchStructureMembership.STATUS_ACTIVE
-    membership.is_primary = True
-    if not membership.membership_type:
-        membership.membership_type = ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
-    if not membership.start_date:
-        membership.start_date = timezone.localdate()
-    membership.approved_by = request.user
-    membership.approved_at = timezone.now()
-    membership.save()
-
-    # CS-RETIRE.1A: the approved ChurchStructureMembership is the source of truth
-    # for belonging. The legacy Profile.small_group field was removed in
-    # PROFILE-SG-FIELD-RETIRE.1A, so there is no legacy profile group to mirror.
     messages.success(
         request,
         (
@@ -2904,9 +3055,7 @@ def staff_membership_request_reject(request, membership_id):
         return redirect("staff_membership_request_detail", membership_id=membership_id)
 
     membership = get_requested_membership_or_404(membership_id)
-    membership.status = ChurchStructureMembership.STATUS_REJECTED
-    membership.is_primary = False
-    membership.save()
+    reject_membership_request(membership)
 
     messages.success(request, "Group request declined.")
     return redirect("staff_membership_request_list")

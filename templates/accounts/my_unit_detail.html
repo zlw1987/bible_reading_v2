@@ -158,8 +158,11 @@
 
 {# GROUP-MEMBERSHIP-MANAGE.1A: small-group member (belonging) management. #}
 {# Small-group units only. Changes only church-structure belonging; it never #}
-{# grants serving, coworker roles, or permissions. Pending group requests are #}
-{# read-only here — approval stays in the staff membership-request workflow. #}
+{# grants serving, coworker roles, or permissions. GROUP-MEMBERSHIP-REQUEST.1B: #}
+{# pending requests for this small group can be approved/rejected here by #}
+{# authorized delegated managers; the staff/global review queue remains #}
+{# available separately. Approval/rejection never grants serving, coworker #}
+{# roles, or permissions. #}
 {% if member_manage_enabled %}
 <section class="card">
     <h2 class="card-title">{% if language == "zh" %}组员管理{% else %}Group Members{% endif %}</h2>
@@ -196,24 +199,43 @@
     {% endif %}
 
     {% if pending_member_requests %}
+    {# GROUP-MEMBERSHIP-REQUEST.1B: delegated approve/reject for THIS small #}
+    {# group's pending requests. Same shared semantics as the staff review #}
+    {# workflow; approval changes belonging only, never serving or roles. #}
     <h3>{% if language == "zh" %}待审核申请{% else %}Pending Requests{% endif %}</h3>
     <ul class="staff-count-list">
         {% for membership in pending_member_requests %}
         <li>
             {{ membership.user.get_full_name|default:membership.user.username }} ({{ membership.user.username }})
             <span class="status status-warning">{% if language == "zh" %}待审核{% else %}Pending request{% endif %}</span>
+            <form method="post"
+                  action="{% url 'approve_my_unit_member_request' membership.id %}"
+                  class="inline-action-form">
+                {% csrf_token %}
+                <button type="submit">
+                    {% if language == "zh" %}批准{% else %}Approve{% endif %}
+                </button>
+            </form>
+            <form method="post"
+                  action="{% url 'reject_my_unit_member_request' membership.id %}"
+                  class="inline-action-form">
+                {% csrf_token %}
+                <button type="submit" class="button-danger">
+                    {% if language == "zh" %}拒绝{% else %}Reject{% endif %}
+                </button>
+            </form>
         </li>
         {% endfor %}
     </ul>
     <p class="muted">
         {% if language == "zh" %}
-        待审核申请需经现有的申请审核流程处理，不能在此页面直接添加。
+        批准只更改小组归属，不会授予服事、同工角色或权限。
         {% else %}
-        Pending requests are handled through the existing request review flow and cannot be added directly here.
+        Approving changes group belonging only; it does not grant serving, coworker roles, or permissions.
         {% endif %}
         {% if can_review_membership_requests %}
         <a href="{% url 'staff_membership_request_list' %}">
-            {% if language == "zh" %}前往审核{% else %}Review requests{% endif %}
+            {% if language == "zh" %}前往教会申请审核{% else %}Staff review queue{% endif %}
         </a>
         {% endif %}
     </p>

@@ -48,6 +48,16 @@ urlpatterns = [
         name="end_my_unit_member",
     ),
     path(
+        "my-units/member-requests/<int:membership_id>/approve/",
+        views.approve_my_unit_member_request,
+        name="approve_my_unit_member_request",
+    ),
+    path(
+        "my-units/member-requests/<int:membership_id>/reject/",
+        views.reject_my_unit_member_request,
+        name="reject_my_unit_member_request",
+    ),
+    path(
         "my-units/<int:unit_id>/member-records/add/",
         views.add_my_unit_member_record,
         name="add_my_unit_member_record",

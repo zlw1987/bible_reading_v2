@@ -3,9 +3,11 @@
 These helpers answer "which structure units may this user manage" for the
 ``/my-units/`` surface. They are themselves read-only (they never create, end,
 or mutate any row), but they gate write surfaces: the delegated coworker
-add/end views, and — via :func:`can_manage_unit_members` — the
-GROUP-MEMBERSHIP-MANAGE.1A small-group belonging (``ChurchStructureMembership``)
-add/end surface. They are deliberately narrow:
+add/end views, and — via :func:`can_manage_unit_members` — delegated
+small-group belonging (``ChurchStructureMembership``) management, covering both
+the GROUP-MEMBERSHIP-MANAGE.1A add/end surface and the
+GROUP-MEMBERSHIP-REQUEST.1B pending-request approve/reject surface. They are
+deliberately narrow:
 
 - Management is granted only by staff/superuser status or an explicit active
   ``lead`` coworker role assignment on the unit itself or an ancestor

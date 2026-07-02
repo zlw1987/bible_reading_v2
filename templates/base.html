@@ -26,34 +26,12 @@
                 {% if user.is_authenticated %}
                 <a class="nav-link{% if active_nav == 'today' %} active{% endif %}"
                    href="{% url 'home' %}">{{ ui.today }}</a>
-                {% if "reading" in enabled_modules %}
-                <a class="nav-link{% if active_nav == 'reading' %} active{% endif %}"
-                   href="{% url 'my_plans' %}">{{ ui.my_plans }}</a>
-                {% endif %}
-                {% if "studies" in enabled_modules %}
-                <a class="nav-link{% if active_nav == 'bible_study' %} active{% endif %}"
-                   href="{% url 'study_session_list' %}">
-                    {% if language == "zh" %}查经{% else %}Bible Study{% endif %}
+                {% for nav_entry in enabled_primary_nav_entries %}
+                <a class="nav-link{% if active_nav == nav_entry.active_nav %} active{% endif %}"
+                   href="{% url nav_entry.url_name %}">
+                    {% if language == "zh" %}{{ nav_entry.label_zh }}{% else %}{{ nav_entry.label_en }}{% endif %}
                 </a>
-                {% endif %}
-                {% if "prayers" in enabled_modules %}
-                <a class="nav-link{% if active_nav == 'prayer' %} active{% endif %}"
-                   href="{% url 'prayer_list' %}">
-                    {% if language == "zh" %}代祷{% else %}Prayer{% endif %}
-                </a>
-                {% endif %}
-                {% if "events" in enabled_modules %}
-                <a class="nav-link{% if active_nav == 'events' %} active{% endif %}"
-                   href="{% url 'service_event_list' %}">
-                    {% if language == "zh" %}教会聚会{% else %}Church Gatherings{% endif %}
-                </a>
-                {% endif %}
-                {% if "ministry" in enabled_modules %}
-                <a class="nav-link{% if active_nav == 'my_serving' %} active{% endif %}"
-                   href="{% url 'my_serving' %}">
-                    {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
-                </a>
-                {% endif %}
+                {% endfor %}
                 <div class="nav-account-group">
                 {% if user.is_staff %}
                 <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">

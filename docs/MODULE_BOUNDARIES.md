@@ -2,7 +2,7 @@
 
 Status: canonical current-state module boundary, updated through
 `MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, `MODULAR-CORE.2B`,
-`MODULAR-CORE.3A`, and `MODULAR-CORE.3B` (July 2026).
+`MODULAR-CORE.3A`, `MODULAR-CORE.3B`, and `MODULAR-CORE.4A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -51,7 +51,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (through MODULAR-CORE.3B)
+## Registry and feature gates (through MODULAR-CORE.4A)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -76,7 +76,9 @@ Registered in `core/module_registry.py`, enabled via
   `requires_structure_core`.
 * Templates get `enabled_modules` (a frozenset of keys) from
   `core.context_processors.module_context`, used as
-  `{% if "prayers" in enabled_modules %}`.
+  `{% if "prayers" in enabled_modules %}`. The same context processor exposes
+  `enabled_primary_nav_entries`: enabled modules' ordered route, bilingual
+  label, and active-state metadata from the registry (`MODULAR-CORE.4A`).
 * `MODULAR-CORE.2B` strengthens content-level regression coverage for disabled
   module surfaces. Tests cover the primary nav, Today reading/prayer/study/event
   and ministry surfaces, the profile My Serving card, the valid
@@ -104,10 +106,16 @@ Registered in `core/module_registry.py`, enabled via
   (`ministry.today_provider.get_week_serving_notes`) and is read by the
   events provider, returning an empty mapping when ministry is disabled.
   No context key, template, visibility, or serving semantics changed.
+* `MODULAR-CORE.4A` makes the ordinary authenticated-user module links in
+  `templates/base.html` registry-driven. Each nav-contributing module supplies
+  its route, bilingual labels, active-state key, and display order through
+  module metadata. Today remains an always-available Core link. The account
+  dropdown and the hard-coded staff dropdown are unchanged and are not
+  module-gated.
 
 ### What disabling a module does today
 
-* Hides its primary nav link in `templates/base.html`.
+* Omits its registry-contributed primary nav link from `templates/base.html`.
 * Skips its Today provider (`core.today_providers.build_today_context` does
   not call disabled modules' providers and keeps their registered safe
   defaults) so no card, query, or crash comes from the disabled module, and
@@ -133,10 +141,11 @@ Registered in `core/module_registry.py`, enabled via
 ## Boundary rules for future work
 
 1. **Modules depend on Core, not on each other.** Avoid new direct
-   cross-module imports. Existing cross-module reads (Today aggregation in
-   `reading.views.home`; ministry reading `events` / studies serving roles)
-   are declared in the registry's `depends_on` / dependency notes and
-   should not grow silently.
+   cross-module imports. Today provider bodies live in module-owned provider
+   files, while `reading.views` is only their explicit registration site.
+   Existing cross-module reads (including ministry reading `events` / studies
+   serving roles) are declared in the registry's `depends_on` / dependency
+   notes and should not grow silently.
 2. **Today is provider/registry-driven (`MODULAR-CORE.3A` + `3B`).**
    Per-module Today providers are registered against their module key in
    `core/today_providers.py`, and the home view aggregates enabled
@@ -145,9 +154,9 @@ Registered in `core/module_registry.py`, enabled via
    coupling is deliberate and small: `reading.views` stays the explicit
    registration site, and the events provider reads the ministry-owned
    serving-note helper (module-gated inside ministry).
-3. **Nav should become registry-driven.** `base.html` currently hard-codes
-   links behind `enabled_modules` checks; the target is nav entries
-   contributed by module metadata.
+3. **Primary module nav is registry-driven (`MODULAR-CORE.4A`).** Enabled
+   ordinary-user module links come from each module's registry metadata.
+   Today stays Core; account and staff dropdowns remain separately hard-coded.
 4. **Setup/readiness checks should become module-owned and aggregated.**
    `accounts.trial_setup_readiness` currently imports events / ministry /
    studies directly; the target is per-module checks aggregated by a core
@@ -165,9 +174,6 @@ Registered in `core/module_registry.py`, enabled via
 
 ## Follow-ups (not yet done)
 
-* Registry-driven nav construction (rule 3). (Moving the Today provider
-  bodies out of `reading.views` into their module apps landed in
-  `MODULAR-CORE.3B`.)
 * Module-owned setup/readiness checks (rule 4).
 * Optional: gating staff menu sections and staff overview cards by module.
 * Optional: middleware/route-level gating for disabled module URLs, if a

@@ -1,3 +1,4 @@
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -14,6 +15,7 @@ from .module_registry import (
     CAPABILITY_TODAY,
     get_enabled_module_keys,
     get_enabled_modules,
+    get_enabled_primary_nav_entries,
     get_module,
     get_registered_module_keys,
     get_registered_modules,
@@ -84,6 +86,46 @@ class ModuleRegistryTests(SimpleTestCase):
         for module in get_registered_modules():
             self.assertTrue(module.label_en, module.key)
             self.assertTrue(module.label_zh, module.key)
+
+    def test_primary_nav_metadata_preserves_current_links_and_order(self):
+        self.assertEqual(
+            tuple(
+                (
+                    entry.url_name,
+                    entry.label_en,
+                    entry.label_zh,
+                    entry.active_nav,
+                )
+                for entry in get_enabled_primary_nav_entries()
+            ),
+            (
+                ("my_plans", "Reading", "读经", "reading"),
+                (
+                    "study_session_list",
+                    "Bible Study",
+                    "查经",
+                    "bible_study",
+                ),
+                ("prayer_list", "Prayer", "代祷", "prayer"),
+                (
+                    "service_event_list",
+                    "Church Gatherings",
+                    "教会聚会",
+                    "events",
+                ),
+                ("my_serving", "My Serving", "我的服事", "my_serving"),
+            ),
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "prayers"])
+    def test_primary_nav_metadata_includes_enabled_modules_only(self):
+        self.assertEqual(
+            tuple(
+                entry.url_name
+                for entry in get_enabled_primary_nav_entries()
+            ),
+            ("my_plans", "prayer_list"),
+        )
 
     def test_default_setting_enables_all_registered_modules(self):
         # config.settings ships CMS_ENABLED_MODULES with every module on.
@@ -385,6 +427,39 @@ class ModuleGateNavTests(ModuleGateTestBase):
         for url_name in self.MODULE_NAV_URL_NAMES.values():
             self.assertIn(self.nav_href(url_name), content)
 
+    def test_primary_nav_renders_bilingual_registry_labels(self):
+        expected_labels = {
+            "en": {
+                "my_plans": "Reading",
+                "study_session_list": "Bible Study",
+                "prayer_list": "Prayer",
+                "service_event_list": "Church Gatherings",
+                "my_serving": "My Serving",
+            },
+            "zh": {
+                "my_plans": "读经",
+                "study_session_list": "查经",
+                "prayer_list": "代祷",
+                "service_event_list": "教会聚会",
+                "my_serving": "我的服事",
+            },
+        }
+        for language, labels in expected_labels.items():
+            with self.subTest(language=language):
+                session = self.client.session
+                session["language"] = language
+                session.save()
+                response = self.client.get(reverse("profile"))
+
+                self.assertEqual(response.status_code, 200)
+                content = response.content.decode()
+                for url_name, label in labels.items():
+                    self.assertRegex(
+                        content,
+                        r'href="%s">\s*%s\s*</a>'
+                        % (re.escape(reverse(url_name)), re.escape(label)),
+                    )
+
     def test_disabling_a_module_hides_its_nav_link_and_dependents(self):
         # Disabling a module hides its own nav link. Under MODULAR-CORE.2A a
         # module cannot be disabled while a dependent stays enabled, so the
@@ -408,12 +483,16 @@ class ModuleGateNavTests(ModuleGateTestBase):
                     else:
                         self.assertNotIn(self.nav_href(other_url), content)
 
-    @override_settings(CMS_ENABLED_MODULES=enabled_without("prayers"))
-    def test_disabled_module_direct_url_stays_reachable(self):
+    def test_disabled_module_direct_urls_stay_reachable(self):
         # MODULAR-CORE.1A gates surfaces only; existing routes are not
         # deleted or blocked by module enablement in this slice.
-        response = self.client.get(reverse("prayer_list"))
-        self.assertEqual(response.status_code, 200)
+        for module_key, url_name in self.MODULE_NAV_URL_NAMES.items():
+            with self.subTest(module=module_key):
+                with override_settings(
+                    CMS_ENABLED_MODULES=enabled_without_cascade(module_key)
+                ):
+                    response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
 
 
 class ModuleGateHomeTests(ModuleGateTestBase):

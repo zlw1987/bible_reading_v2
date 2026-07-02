@@ -20,6 +20,7 @@ modules — see ``docs/MODULE_BOUNDARIES.md``.
 """
 
 from dataclasses import dataclass
+from typing import Optional
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -43,6 +44,17 @@ KNOWN_CAPABILITIES = frozenset(
 
 
 @dataclass(frozen=True)
+class PrimaryNavEntry:
+    """One ordinary authenticated-user nav link contributed by a module."""
+
+    url_name: str
+    label_en: str
+    label_zh: str
+    active_nav: str
+    order: int
+
+
+@dataclass(frozen=True)
 class CmsModule:
     """Static metadata for one CMS module. Not a Django model."""
 
@@ -55,6 +67,7 @@ class CmsModule:
     # CAPABILITY_REQUIRES_STRUCTURE_CORE, not listed here.
     depends_on: tuple = ()
     dependency_notes: str = ""
+    primary_nav: Optional[PrimaryNavEntry] = None
 
 
 _REGISTERED_MODULES = (
@@ -64,6 +77,13 @@ _REGISTERED_MODULES = (
         label_zh="每日读经",
         capabilities=frozenset(
             {CAPABILITY_NAV, CAPABILITY_TODAY, CAPABILITY_REQUIRES_STRUCTURE_CORE}
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="my_plans",
+            label_en="Reading",
+            label_zh="读经",
+            active_nav="reading",
+            order=10,
         ),
         dependency_notes=(
             "Group progress and reflection visibility read structure "
@@ -77,6 +97,13 @@ _REGISTERED_MODULES = (
         label_zh="代祷",
         capabilities=frozenset(
             {CAPABILITY_NAV, CAPABILITY_REQUIRES_STRUCTURE_CORE}
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="prayer_list",
+            label_en="Prayer",
+            label_zh="代祷",
+            active_nav="prayer",
+            order=30,
         ),
         dependency_notes=(
             "Group visibility uses PrayerRequest.structure_unit_at_post "
@@ -94,6 +121,13 @@ _REGISTERED_MODULES = (
                 CAPABILITY_SETUP_CHECKS,
                 CAPABILITY_REQUIRES_STRUCTURE_CORE,
             }
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="study_session_list",
+            label_en="Bible Study",
+            label_zh="查经",
+            active_nav="bible_study",
+            order=20,
         ),
         dependency_notes=(
             "V2 visibility/generation uses structure audience rows "
@@ -114,6 +148,13 @@ _REGISTERED_MODULES = (
                 CAPABILITY_REQUIRES_STRUCTURE_CORE,
             }
         ),
+        primary_nav=PrimaryNavEntry(
+            url_name="service_event_list",
+            label_en="Church Gatherings",
+            label_zh="教会聚会",
+            active_nav="events",
+            order=40,
+        ),
         dependency_notes=(
             "Visibility uses ServiceEventAudienceScope rows plus active "
             "primary ChurchStructureMembership; zero-row events fail closed."
@@ -130,6 +171,13 @@ _REGISTERED_MODULES = (
                 CAPABILITY_SETUP_CHECKS,
                 CAPABILITY_REQUIRES_STRUCTURE_CORE,
             }
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="my_serving",
+            label_en="My Serving",
+            label_zh="我的服事",
+            active_nav="my_serving",
+            order=50,
         ),
         depends_on=("events",),
         dependency_notes=(
@@ -228,6 +276,16 @@ def get_enabled_modules():
     return tuple(
         module for module in _REGISTERED_MODULES if module.key in enabled_keys
     )
+
+
+def get_enabled_primary_nav_entries():
+    """Enabled modules' ordinary primary-nav metadata, in display order."""
+    entries = (
+        module.primary_nav
+        for module in get_enabled_modules()
+        if module.primary_nav is not None
+    )
+    return tuple(sorted(entries, key=lambda entry: entry.order))
 
 
 def is_module_enabled(key):

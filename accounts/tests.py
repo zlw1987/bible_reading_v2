@@ -713,7 +713,9 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "Church Gatherings")
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Team Assignments")
-        self.assertContains(response, "Lighting Pilot Import")
+        # The Lighting Pilot Import is retired from the discoverable staff
+        # menu; its route remains available but is not linked here.
+        self.assertNotContains(response, "Lighting Pilot Import")
         self.assertContains(response, "Church Structure")
         self.assertContains(response, "Church Structure Setup & Review")
         self.assertContains(response, reverse("staff_structure_map"))
@@ -874,7 +876,8 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "教会聚会")
         self.assertContains(response, "事工团队")
         self.assertContains(response, "服事排班")
-        self.assertContains(response, "灯光试点导入")
+        # 灯光试点导入已从可发现的同工菜单中退役；路由仍在，但不再链接。
+        self.assertNotContains(response, "灯光试点导入")
         self.assertContains(response, "教会结构")
         self.assertContains(response, "教会结构设置与检查")
         self.assertContains(response, reverse("staff_structure_map"))
@@ -950,9 +953,14 @@ class AccountProfileTests(TestCase):
         self.client.login(username="levin", password="OldPass123!")
 
         response = self.client.get(reverse("profile"))
+        content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assert_active_nav_href(response, "profile")
+        # Profile now lives in the account dropdown, so the dropdown summary
+        # carries the active state instead of a standalone nav link.
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
+        self.assertIn('href="%s"' % reverse("profile"), content)
 
     def test_staff_management_page_marks_staff_nav_active(self):
         self.set_language("en")

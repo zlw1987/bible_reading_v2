@@ -75,6 +75,7 @@
         </form>
     </div>
 
+    {% if "ministry" in enabled_modules %}
     <div class="card">
         <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h2>
 
@@ -90,6 +91,7 @@
             {% if language == "zh" %}我的服事{% else %}My Serving{% endif %}
         </a>
     </div>
+    {% endif %}
 
     <div class="card">
         <h2 class="card-title">{{ ui.change_password }}</h2>

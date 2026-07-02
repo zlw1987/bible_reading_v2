@@ -129,6 +129,7 @@
 {% endif %}
 
 {# --- Zone 2: Today's Reading ------------------------------------------ #}
+{% if "reading" in enabled_modules %}
 <h2 class="dashboard-section-title">
     {% if language == "zh" %}今日读经{% else %}Today's Reading{% endif %}
 </h2>
@@ -345,6 +346,7 @@
     {% endif %}
 </p>
 {% endif %}
+{% endif %}
 
 {% if today_gatherings %}
 <div class="card">
@@ -496,6 +498,7 @@
 </h2>
 
 <div class="grid dashboard-actions-grid">
+    {% if "studies" in enabled_modules %}
     <div class="card dashboard-action-card">
         <h3 class="card-title">{% if language == "zh" %}查经{% else %}Bible Study{% endif %}</h3>
         <p class="muted">
@@ -509,7 +512,9 @@
             {% if language == "zh" %}打开查经{% else %}Open Bible Study{% endif %}
         </a>
     </div>
+    {% endif %}
 
+    {% if "prayers" in enabled_modules %}
     <div class="card dashboard-action-card">
         <h3 class="card-title">{% if language == "zh" %}代祷{% else %}Prayer{% endif %}</h3>
         <p class="muted">
@@ -523,7 +528,9 @@
             {% if language == "zh" %}打开代祷墙{% else %}Open Prayer Wall{% endif %}
         </a>
     </div>
+    {% endif %}
 
+    {% if "ministry" in enabled_modules %}
     <div class="card dashboard-action-card">
         <h3 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h3>
         <p class="muted">
@@ -537,6 +544,7 @@
             {% if language == "zh" %}打开我的服事{% else %}Open My Serving{% endif %}
         </a>
     </div>
+    {% endif %}
 </div>
 
 {% endblock %}

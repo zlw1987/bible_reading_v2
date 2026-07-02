@@ -42,9 +42,22 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "core",
     "accounts.apps.AccountsConfig",
     "reading",
     "comments",
+    "prayers",
+    "studies",
+    "events",
+    "ministry",
+]
+
+# MODULAR-CORE.1A: central CMS module enablement. Keys must match
+# core.module_registry registrations. This gates module surfaces (nav,
+# Today cards); it does not unload apps, models, or URLs. Default: all
+# current modules enabled (current behavior).
+CMS_ENABLED_MODULES = [
+    "reading",
     "prayers",
     "studies",
     "events",
@@ -75,6 +88,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 "accounts.context_processors.language_context",
+                "core.context_processors.module_context",
             ],
         },
     },

@@ -1038,17 +1038,23 @@ def home(request):
             week_end,
         )
 
+    serving_summary = None
+    leader_summary = None
+    if is_module_enabled("ministry"):
+        serving_summary = get_today_serving_summary(request.user)
+        leader_summary = get_today_leader_summary(
+            request.user,
+            language=get_user_language(request),
+        )
+
     return render(
         request,
         "reading/home.html",
         {
             "today_items": today_items,
             "ended_plan_count": ended_plan_count,
-            "serving_summary": get_today_serving_summary(request.user),
-            "leader_summary": get_today_leader_summary(
-                request.user,
-                language=get_user_language(request),
-            ),
+            "serving_summary": serving_summary,
+            "leader_summary": leader_summary,
             "today_gatherings": today_gatherings,
             "show_all_today_gatherings_link": show_all_today_gatherings_link,
             "today_study_meetings": today_study_meetings,

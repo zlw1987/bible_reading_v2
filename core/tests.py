@@ -1,7 +1,11 @@
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .module_registry import (
     CAPABILITY_NAV,
@@ -267,6 +271,126 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         self.assertNotIn("还没有进行中的读经计划", content)
         self.assertNotIn(self.nav_href("my_plans"), content)
 
+    @override_settings(CMS_ENABLED_MODULES=enabled_without("prayers"))
+    def test_home_with_prayers_disabled_hides_prayer_surfaces(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # The same stable URL covers both the primary nav and the Today action
+        # card; neither surface should remain.
+        self.assertNotIn(self.nav_href("prayer_list"), content)
+        self.assertNotIn("Open Prayer Wall", content)
+        # Unrelated action cards remain available.
+        self.assertIn(self.nav_href("study_session_list"), content)
+        self.assertIn(self.nav_href("my_serving"), content)
+
+    @override_settings(CMS_ENABLED_MODULES=enabled_without("studies"))
+    def test_home_with_studies_disabled_hides_bible_study_surfaces(self):
+        series = SimpleNamespace(get_title=lambda language: "Leaked Study Series")
+        lesson = SimpleNamespace(
+            series=series,
+            get_title=lambda language: "Leaked Study Lesson",
+        )
+        meeting = SimpleNamespace(
+            id=202,
+            lesson=lesson,
+            meeting_datetime=timezone.now(),
+        )
+        meeting_rows = [{"meeting": meeting, "roles": []}]
+
+        with (
+            patch(
+                "reading.views.get_v2_landing_context",
+                return_value={"show_no_small_group": False},
+            ) as landing_context,
+            patch(
+                "reading.views.get_study_meeting_rows_for_window",
+                return_value=meeting_rows,
+            ) as meeting_rows_for_window,
+        ):
+            response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        landing_context.assert_not_called()
+        meeting_rows_for_window.assert_not_called()
+        content = response.content.decode()
+        self.assertNotIn(self.nav_href("study_session_list"), content)
+        self.assertNotIn(
+            'href="%s"' % reverse("bible_study_meeting_detail", args=[meeting.id]),
+            content,
+        )
+        self.assertNotIn("Open Bible Study", content)
+        self.assertNotIn("Today's Bible study", content)
+        self.assertNotIn("Small group Bible study", content)
+        self.assertNotIn("Leaked Study Lesson", content)
+
+    @override_settings(CMS_ENABLED_MODULES=enabled_without_cascade("events"))
+    def test_home_with_events_disabled_hides_events_and_ministry_surfaces(self):
+        event = SimpleNamespace(
+            id=101,
+            start_datetime=timezone.now(),
+            get_title=lambda language: "Leaked Church Gathering",
+        )
+        gathering_rows = [{"event": event, "serving_note": None}]
+
+        with patch(
+            "reading.views.get_gathering_rows_for_window",
+            return_value=(gathering_rows, True),
+        ) as gathering_rows_for_window:
+            response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        gathering_rows_for_window.assert_not_called()
+        content = response.content.decode()
+        self.assertNotIn(self.nav_href("service_event_list"), content)
+        self.assertNotIn(
+            'href="%s"' % reverse("service_event_detail", args=[event.id]),
+            content,
+        )
+        self.assertNotIn("Today's Church Gatherings", content)
+        self.assertNotIn("Church Gatherings this week", content)
+        self.assertNotIn("Leaked Church Gathering", content)
+        # MODULAR-CORE.2A requires ministry to be disabled with events.
+        self.assertNotIn(self.nav_href("my_serving"), content)
+        self.assertNotIn("Open My Serving", content)
+
+    @override_settings(CMS_ENABLED_MODULES=enabled_without("ministry"))
+    def test_home_with_ministry_disabled_hides_serving_surfaces(self):
+        with (
+            patch(
+                "reading.views.get_today_serving_summary",
+                return_value={
+                    "is_pending": True,
+                    "pending_count": 1,
+                    "items": [],
+                },
+            ) as serving_summary,
+            patch(
+                "reading.views.get_today_leader_summary",
+                return_value={"count": 1, "items": []},
+            ) as leader_summary,
+        ):
+            response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        serving_summary.assert_not_called()
+        leader_summary.assert_not_called()
+        content = response.content.decode()
+        self.assertNotIn(self.nav_href("my_serving"), content)
+        self.assertNotIn("Needs your attention", content)
+        self.assertNotIn("Leader Needs Attention", content)
+        self.assertNotIn("Open My Serving", content)
+
+    @override_settings(CMS_ENABLED_MODULES=enabled_without("ministry"))
+    def test_profile_with_ministry_disabled_hides_my_serving_card(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn(self.nav_href("my_serving"), content)
+        self.assertNotIn("Review your upcoming ministry serving assignments", content)
+
     def test_home_renders_with_each_module_disabled(self):
         # enabled_without_cascade keeps the disabled set dependency-valid
         # (disabling events also disables its dependent ministry).
@@ -281,4 +405,19 @@ class ModuleGateHomeTests(ModuleGateTestBase):
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_home_renders_with_all_modules_disabled(self):
         response = self.client.get(reverse("home"))
+
         self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("dashboard-action-card", content)
+        self.assertNotIn("Today's Reading", content)
+        self.assertNotIn("Today's Church Gatherings", content)
+        self.assertNotIn("Today's Bible study", content)
+        self.assertNotIn("Leader Needs Attention", content)
+        for url_name in (
+            "my_plans",
+            "prayer_list",
+            "study_session_list",
+            "service_event_list",
+            "my_serving",
+        ):
+            self.assertNotIn(self.nav_href(url_name), content)

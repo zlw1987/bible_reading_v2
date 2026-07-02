@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.3A` and `RELEASE-HYGIENE.0A` (July 2026).
+`MODULAR-CORE.3B` and `RELEASE-HYGIENE.0A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -46,7 +46,9 @@ migration-safety instruction source.
   aggregation/cards/actions, and the profile My Serving card where applicable
   are hidden. Today context is aggregated through per-module providers
   (`core/today_providers.py`, `MODULAR-CORE.3A`): enabled modules' registered
-  providers are called and disabled modules keep safe default context. This
+  providers are called and disabled modules keep safe default context. The
+  provider bodies live in each module's `today_provider` module
+  (`MODULAR-CORE.3B`), registered explicitly from `reading.views`. This
   is not app unloading or route-level hard-off; direct URLs, staff menu
   entries, staff overview, and setup checks keep their existing behavior.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded

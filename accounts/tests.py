@@ -83,10 +83,10 @@ from ministry.models import (
     TeamAssignmentMember,
     TeamMembership,
 )
+from ministry.today_provider import get_today_serving_summary
 from ministry.views import my_serving_assignments
 from prayers.models import PrayerReport, PrayerRequest
 from reading.models import ReadingPlan, ReadingPlanDay
-from reading.views import get_today_serving_summary
 from studies.models import (
     BibleStudyLesson,
     BibleStudyMeeting,

@@ -7,10 +7,12 @@ registers one Today provider against its registered module key, and the
 home view asks :func:`build_today_context` for the merged context.
 
 Like the module registry, this is deliberately explicit and small — not a
-plugin framework. There is no app auto-discovery: providers are registered
-by plain module-level calls (currently all from ``reading.views``, which
-already owns the Today helpers; moving provider bodies into their module
-apps is a follow-up). Aggregation is a surface gate only: a disabled
+plugin framework. There is no app auto-discovery: provider bodies live in
+their owning modules' ``today_provider`` modules (MODULAR-CORE.3B), and
+``reading.views`` — the home route's module — calls each module's
+``register()`` explicitly, in a fixed order, when it is imported (so the
+registry is always populated before ``home()`` builds context).
+Aggregation is a surface gate only: a disabled
 module's provider is simply not called, and its declared safe defaults
 (empty lists / ``None``) are used so ``reading/home.html`` renders without
 that module's card, query, or crash. Enablement and dependency validation

@@ -489,11 +489,11 @@ class ModuleGateHomeTests(ModuleGateTestBase):
 
         with (
             patch(
-                "reading.views.get_v2_landing_context",
+                "studies.today_provider.get_v2_landing_context",
                 return_value={"show_no_small_group": False},
             ) as landing_context,
             patch(
-                "reading.views.get_study_meeting_rows_for_window",
+                "studies.today_provider.get_study_meeting_rows_for_window",
                 return_value=meeting_rows,
             ) as meeting_rows_for_window,
         ):
@@ -523,7 +523,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         gathering_rows = [{"event": event, "serving_note": None}]
 
         with patch(
-            "reading.views.get_gathering_rows_for_window",
+            "events.today_provider.get_gathering_rows_for_window",
             return_value=(gathering_rows, True),
         ) as gathering_rows_for_window:
             response = self.client.get(reverse("home"))
@@ -547,7 +547,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
     def test_home_with_ministry_disabled_hides_serving_surfaces(self):
         with (
             patch(
-                "reading.views.get_today_serving_summary",
+                "ministry.today_provider.get_today_serving_summary",
                 return_value={
                     "is_pending": True,
                     "pending_count": 1,
@@ -555,7 +555,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
                 },
             ) as serving_summary,
             patch(
-                "reading.views.get_today_leader_summary",
+                "ministry.today_provider.get_today_leader_summary",
                 return_value={"count": 1, "items": []},
             ) as leader_summary,
         ):

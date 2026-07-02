@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.6A` and `RELEASE-HYGIENE.0A` (July 2026).
+`MODULAR-CORE.6B` and `RELEASE-HYGIENE.0A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -43,7 +43,9 @@ migration-safety instruction source.
   Unknown keys and unmet dependencies raise `ImproperlyConfigured`;
   `ministry` requires `events`.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
-  dropdown links, their Today aggregation/cards/actions, and the profile My
+  dropdown links, module-owned Staff Overview cards/counts/links
+  (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
+  reachable), their Today aggregation/cards/actions, and the profile My
   Serving card where applicable are hidden. Today context is aggregated
   through per-module providers
   (`core/today_providers.py`, `MODULAR-CORE.3A`): enabled modules' registered

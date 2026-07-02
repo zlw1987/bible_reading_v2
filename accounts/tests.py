@@ -3532,6 +3532,197 @@ class StaffOverviewTests(TestCase):
         self.assertContains(response, "目前没有可由现有资料看出的事工设置提醒指标")
         self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
 
+    # MODULAR-CORE.6B: Staff Overview module surface gates. The overview route
+    # itself stays Core and always reachable for staff; only module-owned
+    # cards/counts/links are gated by CMS_ENABLED_MODULES. Reflection moderation
+    # and the Moderation Queue stay Core/support (mirroring MODULAR-CORE.6A,
+    # since `comments` is a reading support app, not a registered module).
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "events", "ministry"]
+    )
+    def test_staff_overview_hides_bible_study_card_when_studies_disabled(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        # Bible Study card/counts/links hidden.
+        self.assertNotContains(response, "Draft schedules")
+        self.assertNotContains(response, "Upcoming meetings")
+        self.assertNotContains(response, reverse("bible_study_schedule_manage_list"))
+        self.assertNotContains(response, reverse("bible_study_lesson_manage_list"))
+        self.assertNotContains(response, reverse("bible_study_meeting_manage_list"))
+        # Studies counts not computed while disabled.
+        self.assertEqual(response.context["draft_schedules"], 0)
+        self.assertEqual(response.context["upcoming_meetings"], 0)
+        # Core/staff and other-module surfaces remain.
+        self.assertContains(response, reverse("staff_membership_request_list"))
+        self.assertContains(response, reverse("staff_user_list"))
+        self.assertContains(response, reverse("staff_structure_map"))
+        self.assertContains(response, reverse("staff_moderation_queue"))
+        self.assertContains(response, "Upcoming service events")
+        self.assertContains(response, reverse("service_event_list"))
+        self.assertContains(response, reverse("staff_prayer_reports"))
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "prayers", "studies"])
+    def test_staff_overview_hides_events_and_ministry_when_events_disabled(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        # Whole Ministry Operations card (events + ministry) hidden.
+        self.assertNotContains(response, "Ministry Operations")
+        self.assertNotContains(response, "Upcoming service events")
+        self.assertNotContains(response, "Upcoming team assignments")
+        self.assertNotContains(response, "Ministry ops health flags")
+        self.assertNotContains(response, reverse("service_event_list"))
+        self.assertNotContains(response, reverse("ministry_team_list"))
+        self.assertNotContains(response, reverse("team_assignment_list"))
+        # Module counts not computed while disabled.
+        self.assertEqual(response.context["upcoming_service_events"], 0)
+        self.assertEqual(response.context["upcoming_assignments"], 0)
+        self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
+        # Core/staff and still-enabled module surfaces remain.
+        self.assertContains(response, reverse("staff_membership_request_list"))
+        self.assertContains(response, reverse("staff_user_list"))
+        self.assertContains(response, reverse("staff_structure_map"))
+        self.assertContains(response, reverse("bible_study_schedule_manage_list"))
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events"]
+    )
+    def test_staff_overview_hides_ministry_but_keeps_events_when_ministry_disabled(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        # Ministry surfaces hidden.
+        self.assertNotContains(response, "Upcoming team assignments")
+        self.assertNotContains(response, "Unconfirmed assignments")
+        self.assertNotContains(response, "Ministry ops health flags")
+        self.assertNotContains(response, reverse("ministry_team_list"))
+        self.assertNotContains(response, reverse("team_assignment_list"))
+        self.assertEqual(response.context["upcoming_assignments"], 0)
+        self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
+        # Church Gatherings (events) surfaces remain in the same card.
+        self.assertContains(response, "Ministry Operations")
+        self.assertContains(response, "Upcoming service events")
+        self.assertContains(response, reverse("service_event_list"))
+        self.assertEqual(response.context["upcoming_service_events"], 1)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "studies", "events", "ministry"]
+    )
+    def test_staff_overview_hides_prayer_surfaces_when_prayers_disabled(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        # Prayer report / hidden prayer surfaces hidden.
+        self.assertNotContains(response, "Open prayer reports")
+        self.assertNotContains(response, "Hidden prayers")
+        self.assertNotContains(response, reverse("staff_prayer_reports"))
+        self.assertEqual(response.context["open_prayer_reports"], 0)
+        self.assertEqual(response.context["hidden_prayers"], 0)
+        # Reflection moderation stays Core/support and visible.
+        self.assertContains(response, "Open reflection reports")
+        self.assertContains(response, "Reflection Reports")
+        self.assertContains(response, reverse("staff_reflection_reports"))
+        self.assertContains(response, reverse("staff_moderation_queue"))
+        # Reflection counts still computed as Core/support.
+        self.assertEqual(response.context["open_reflection_reports"], 1)
+        self.assertEqual(response.context["hidden_reflections"], 1)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["prayers", "studies", "events", "ministry"]
+    )
+    def test_staff_overview_reflection_reports_stay_core_when_reading_disabled(self):
+        # The Staff Overview has no reading-plan management card (Reading Plan
+        # Admin lives only in the staff dropdown, gated in MODULAR-CORE.6A), so
+        # disabling `reading` removes no overview card. Reflection Reports stay
+        # Core/support and visible, matching the MODULAR-CORE.6A decision.
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reflection Reports")
+        self.assertContains(response, reverse("staff_reflection_reports"))
+        self.assertContains(response, "Open reflection reports")
+        # Reading disablement removes the nav Reading Plan Admin link only.
+        self.assertNotContains(response, "Reading Plan Admin")
+        # Other module cards remain.
+        self.assertContains(response, reverse("bible_study_schedule_manage_list"))
+        self.assertContains(response, "Upcoming service events")
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_staff_overview_all_modules_disabled_keeps_core_dashboard(self):
+        self.create_dashboard_data()
+        self.set_language("en")
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_overview"))
+
+        self.assertEqual(response.status_code, 200)
+        # Core/staff/structure/user-management surfaces remain.
+        self.assertContains(response, "Staff Overview")
+        self.assertContains(response, "Membership Requests")
+        self.assertContains(response, reverse("staff_membership_request_list"))
+        self.assertContains(response, "User Admin")
+        self.assertContains(response, reverse("staff_user_list"))
+        self.assertContains(response, "Church Structure Setup & Review")
+        self.assertContains(response, reverse("staff_structure_map"))
+        self.assertContains(response, reverse("staff_moderation_queue"))
+        self.assertContains(response, "Reflection Reports")
+        self.assertContains(response, reverse("staff_reflection_reports"))
+        self.assertContains(response, reverse("admin:index"))
+        # All module-owned overview surfaces absent.
+        self.assertNotContains(response, "Draft schedules")
+        self.assertNotContains(response, reverse("bible_study_schedule_manage_list"))
+        self.assertNotContains(response, "Ministry Operations")
+        self.assertNotContains(response, "Upcoming service events")
+        self.assertNotContains(response, reverse("service_event_list"))
+        self.assertNotContains(response, reverse("ministry_team_list"))
+        self.assertNotContains(response, "Open prayer reports")
+        self.assertNotContains(response, reverse("staff_prayer_reports"))
+        # Guarded module counts stay at safe defaults.
+        self.assertEqual(response.context["draft_schedules"], 0)
+        self.assertEqual(response.context["upcoming_service_events"], 0)
+        self.assertEqual(response.context["upcoming_assignments"], 0)
+        self.assertEqual(response.context["open_prayer_reports"], 0)
+        self.assertEqual(response.context["ministry_ops_warning_indicator_count"], 0)
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_staff_overview_module_urls_remain_reachable_when_disabled(self):
+        # Surface gating is discoverability only: existing module routes stay
+        # reachable under their own permissions even with every module disabled.
+        self.client.login(username="overview_staff", password="StaffPass123!")
+
+        for url_name in (
+            "bible_study_schedule_manage_list",
+            "service_event_list",
+            "ministry_team_list",
+            "team_assignment_list",
+            "staff_prayer_reports",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+
 
 class StaffStructureMapTests(TestCase):
     def setUp(self):

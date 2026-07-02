@@ -1,9 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, `MODULAR-CORE.2B`,
-`MODULAR-CORE.3A`, `MODULAR-CORE.3B`, `MODULAR-CORE.4A`, and
-updated through `MODULAR-CORE.6A`
+`MODULAR-CORE.6B` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -52,7 +50,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (through MODULAR-CORE.6A)
+## Registry and feature gates (through MODULAR-CORE.6B)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -149,6 +147,29 @@ Registered in `core/module_registry.py`, enabled via
   user/review links, and Django Admin remain always visible to staff. This
   changes discoverability only; staff overview content, setup routes/checks,
   direct URLs, admin routes, and permissions are unchanged.
+* `MODULAR-CORE.6B` applies module surface gates to the Staff Overview
+  (`/staff/`) content — its module-owned cards, counts, and workflow links —
+  in `accounts.views.staff_overview` and
+  `templates/accounts/staff/overview.html`. The Bible Study card follows
+  `studies`; the prayer moderation counts and the Prayer Reports link follow
+  `prayers`; the Ministry Operations card follows `events` or `ministry` (the
+  service-events count/link follow `events`; the team-assignment counts,
+  ministry ops health flags, and the Ministry Teams / Ministry Structure /
+  Team Assignments links follow `ministry`). The view now computes each
+  module's (sometimes expensive) counts only when that module is enabled and
+  keeps safe zero defaults otherwise, so a disabled module contributes no query
+  and no empty card. The Staff Overview route itself stays Core and always
+  reachable for staff; the Membership Requests card, the reflection moderation
+  counts, the Moderation Queue and Reflection Reports links, and the Users and
+  Admin card (User Admin, Church Structure Setup & Review, Django Admin) stay
+  Core/staff and always render. Two ambiguous surfaces were resolved to mirror
+  `MODULAR-CORE.6A`: Reflection Reports / reflection moderation counts stay
+  Core/support (visible regardless of `reading`) because `comments` is a
+  reading support app, not a registered module, and the Moderation Queue stays
+  Core/support and always visible. The Staff Overview has no reading-plan
+  management card (Reading Plan Admin lives only in the staff dropdown), so
+  disabling `reading` removes no overview card. Direct module URLs, setup/admin
+  routes, permissions, and route-level access are unchanged.
 
 ### What disabling a module does today
 
@@ -156,6 +177,11 @@ Registered in `core/module_registry.py`, enabled via
 * Omits its module-owned staff dropdown links from `templates/base.html`
   (`MODULAR-CORE.6A`) while leaving the staff dropdown itself and its Core
   links available.
+* Hides its module-owned Staff Overview cards, counts, and workflow links
+  (`MODULAR-CORE.6B`) and skips computing their counts, while the Staff
+  Overview route stays reachable and its Core/staff cards (Membership
+  Requests, reflection moderation, Moderation Queue, Users and Admin) stay
+  visible.
 * Skips its Today provider (`core.today_providers.build_today_context` does
   not call disabled modules' providers and keeps their registered safe
   defaults) so no card, query, or crash comes from the disabled module, and
@@ -177,8 +203,10 @@ Registered in `core/module_registry.py`, enabled via
 * It does not unload the app, its models, admin registrations, or URLs.
   Direct URLs of a disabled module remain reachable and are protected only
   by their existing per-view permission/visibility rules.
-* It does not gate the staff overview (`/staff/`) sections or the
-  setup/readiness *route*. The
+* It does not gate the staff overview (`/staff/`) *route* or the
+  setup/readiness *route*. `MODULAR-CORE.6B` gates only the overview's
+  module-owned *content* (cards/counts/links); the `/staff/` route itself
+  stays reachable with its Core/staff dashboard. Likewise the
   `audit_trial_setup_readiness` command and any setup route stay reachable;
   `MODULAR-CORE.5A` only makes that command's module-specific *check sections*
   run per module enablement, and Core / audience checks always run.
@@ -236,6 +264,5 @@ Registered in `core/module_registry.py`, enabled via
   is ever wanted. Today it stays a Core, always-run provider so fail-closed
   zero-audience blockers surface regardless of module enablement
   (`MODULAR-CORE.5A`).
-* Optional: gating staff overview cards by module.
 * Optional: middleware/route-level gating for disabled module URLs, if a
   church-facing deployment ever needs hard-off modules.

@@ -45,6 +45,7 @@
         </a>
     </section>
 
+    {% if "studies" in enabled_modules %}
     <section class="card staff-overview-card">
         <div>
             <h2 class="card-title">
@@ -71,6 +72,7 @@
             </a>
         </div>
     </section>
+    {% endif %}
 
     <section class="card staff-overview-card">
         <div>
@@ -78,8 +80,10 @@
                 {% if language == "zh" %}内容审核{% else %}Moderation{% endif %}
             </h2>
             <ul class="staff-count-list">
+                {% if "prayers" in enabled_modules %}
                 <li>{% if language == "zh" %}待处理代祷举报{% else %}Open prayer reports{% endif %}: <strong>{{ open_prayer_reports }}</strong></li>
                 <li>{% if language == "zh" %}已隐藏代祷{% else %}Hidden prayers{% endif %}: <strong>{{ hidden_prayers }}</strong></li>
+                {% endif %}
                 <li>{% if language == "zh" %}待处理默想举报{% else %}Open reflection reports{% endif %}: <strong>{{ open_reflection_reports }}</strong></li>
                 <li>{% if language == "zh" %}已隐藏默想{% else %}Hidden reflections{% endif %}: <strong>{{ hidden_reflections }}</strong></li>
             </ul>
@@ -88,26 +92,34 @@
             <a class="button" href="{% url 'staff_moderation_queue' %}">
                 {% if language == "zh" %}审核队列{% else %}Moderation Queue{% endif %}
             </a>
+            {% if "prayers" in enabled_modules %}
             <a class="button-secondary button" href="{% url 'staff_prayer_reports' %}">
                 {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
             </a>
+            {% endif %}
             <a class="button-secondary button" href="{% url 'staff_reflection_reports' %}">
                 {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
             </a>
         </div>
     </section>
 
+    {% if "events" in enabled_modules or "ministry" in enabled_modules %}
     <section class="card staff-overview-card">
         <div>
             <h2 class="card-title">
                 {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}
             </h2>
             <ul class="staff-count-list">
+                {% if "events" in enabled_modules %}
                 <li>{% if language == "zh" %}将来聚会事件{% else %}Upcoming service events{% endif %}: <strong>{{ upcoming_service_events }}</strong></li>
+                {% endif %}
+                {% if "ministry" in enabled_modules %}
                 <li>{% if language == "zh" %}将来服事排班{% else %}Upcoming team assignments{% endif %}: <strong>{{ upcoming_assignments }}</strong></li>
                 <li>{% if language == "zh" %}未确认服事排班{% else %}Unconfirmed assignments{% endif %}: <strong>{{ unconfirmed_assignments }}</strong></li>
                 <li>{% if language == "zh" %}未安排的需要团队{% else %}Unassigned required teams{% endif %}: <strong>{{ upcoming_required_team_gaps }}</strong></li>
+                {% endif %}
             </ul>
+            {% if "ministry" in enabled_modules %}
             <h3 class="staff-subtitle">{{ ui.ministry_ops_health }}</h3>
             {% if ministry_ops_warning_indicator_count %}
             <ul class="staff-count-list">
@@ -122,11 +134,15 @@
             {% else %}
             <p class="muted">{{ ui.no_ministry_ops_issues }}</p>
             {% endif %}
+            {% endif %}
         </div>
         <div class="actions">
+            {% if "events" in enabled_modules %}
             <a class="button" href="{% url 'service_event_list' %}">
                 {% if language == "zh" %}聚会事件{% else %}Service Events{% endif %}
             </a>
+            {% endif %}
+            {% if "ministry" in enabled_modules %}
             <a class="button-secondary button" href="{% url 'ministry_team_list' %}">
                 {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
             </a>
@@ -136,8 +152,10 @@
             <a class="button-secondary button" href="{% url 'team_assignment_list' %}?tab=needs_confirmation">
                 {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
             </a>
+            {% endif %}
         </div>
     </section>
+    {% endif %}
 
     <section class="card staff-overview-card">
         <div>

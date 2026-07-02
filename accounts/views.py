@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
+from core.module_registry import get_enabled_module_keys
 
 from .forms import (
     ChurchStructureUnitChildForm,
@@ -76,143 +77,178 @@ def staff_overview(request):
     now = timezone.now()
     today = timezone.localdate()
 
+    # MODULAR-CORE.6B: Staff Overview stays a Core staff dashboard, but its
+    # module-owned cards/counts/links are surface-gated by module enablement.
+    # We only run a module's (sometimes expensive) counts when it is enabled;
+    # disabled modules keep safe zero defaults and their template blocks are
+    # hidden. Membership Requests, the reflection moderation counts, and the
+    # users/admin surfaces stay Core/support and always render.
+    enabled_modules = get_enabled_module_keys()
+
     pending_membership_requests = ChurchStructureMembership.objects.filter(
         status=ChurchStructureMembership.STATUS_REQUESTED,
     ).count()
 
-    draft_schedules = BibleStudySeries.objects.filter(
-        status=BibleStudySeries.STATUS_DRAFT,
-    ).count()
-    upcoming_schedules = BibleStudySeries.objects.filter(
-        start_date__gte=today,
-    ).exclude(
-        status=BibleStudySeries.STATUS_CANCELLED,
-    ).count()
-    draft_guides = BibleStudyLesson.objects.filter(
-        status=BibleStudyLesson.STATUS_DRAFT,
-    ).count()
-    upcoming_guides = BibleStudyLesson.objects.filter(
-        lesson_date__gte=today,
-    ).exclude(
-        status=BibleStudyLesson.STATUS_CANCELLED,
-    ).count()
-    draft_meetings = BibleStudyMeeting.objects.filter(
-        status=BibleStudyMeeting.STATUS_DRAFT,
-    ).count()
-    upcoming_meetings = BibleStudyMeeting.objects.filter(
-        meeting_datetime__gte=now,
-    ).exclude(
-        status=BibleStudyMeeting.STATUS_CANCELLED,
-    ).count()
+    draft_schedules = 0
+    upcoming_schedules = 0
+    draft_guides = 0
+    upcoming_guides = 0
+    draft_meetings = 0
+    upcoming_meetings = 0
+    if "studies" in enabled_modules:
+        draft_schedules = BibleStudySeries.objects.filter(
+            status=BibleStudySeries.STATUS_DRAFT,
+        ).count()
+        upcoming_schedules = BibleStudySeries.objects.filter(
+            start_date__gte=today,
+        ).exclude(
+            status=BibleStudySeries.STATUS_CANCELLED,
+        ).count()
+        draft_guides = BibleStudyLesson.objects.filter(
+            status=BibleStudyLesson.STATUS_DRAFT,
+        ).count()
+        upcoming_guides = BibleStudyLesson.objects.filter(
+            lesson_date__gte=today,
+        ).exclude(
+            status=BibleStudyLesson.STATUS_CANCELLED,
+        ).count()
+        draft_meetings = BibleStudyMeeting.objects.filter(
+            status=BibleStudyMeeting.STATUS_DRAFT,
+        ).count()
+        upcoming_meetings = BibleStudyMeeting.objects.filter(
+            meeting_datetime__gte=now,
+        ).exclude(
+            status=BibleStudyMeeting.STATUS_CANCELLED,
+        ).count()
 
-    open_prayer_reports = PrayerReport.objects.filter(
-        status=PrayerReport.STATUS_OPEN,
-    ).count()
-    hidden_prayers = PrayerRequest.objects.filter(is_hidden=True).count()
+    open_prayer_reports = 0
+    hidden_prayers = 0
+    if "prayers" in enabled_modules:
+        open_prayer_reports = PrayerReport.objects.filter(
+            status=PrayerReport.STATUS_OPEN,
+        ).count()
+        hidden_prayers = PrayerRequest.objects.filter(is_hidden=True).count()
+
+    # Reflection moderation is a Core/support surface: `comments` is a reading
+    # support app, not an independently registered module, so it mirrors the
+    # MODULAR-CORE.6A choice of keeping Reflection Reports always visible.
     open_reflection_reports = ReflectionReport.objects.filter(
         status=ReflectionReport.STATUS_OPEN,
     ).count()
     hidden_reflections = ReflectionComment.objects.filter(is_hidden=True).count()
 
-    upcoming_service_events = ServiceEvent.objects.filter(
-        start_datetime__gte=now,
-    ).exclude(
-        status__in=[
-            ServiceEvent.STATUS_DRAFT,
-            ServiceEvent.STATUS_CANCELLED,
-        ],
-    ).count()
-
-    upcoming_assignments = TeamAssignment.objects.filter(
-        service_event__start_datetime__gte=now,
-    ).exclude(
-        status__in=[
-            TeamAssignment.STATUS_CANCELLED,
-            TeamAssignment.STATUS_COMPLETED,
-        ],
-    ).count()
-    upcoming_assignment_queryset = TeamAssignment.objects.filter(
-        service_event__start_datetime__gte=now,
-    ).exclude(
-        status__in=[
-            TeamAssignment.STATUS_CANCELLED,
-            TeamAssignment.STATUS_COMPLETED,
-        ],
-    )
-    unconfirmed_assignments = TeamAssignment.objects.filter(
-        service_event__start_datetime__gte=now,
-        assignment_members__membership__is_active=True,
-        assignment_members__confirmed_at__isnull=True,
-    ).exclude(
-        status__in=[
-            TeamAssignment.STATUS_CANCELLED,
-            TeamAssignment.STATUS_COMPLETED,
-        ],
-    ).distinct().count()
-    active_ministry_teams = MinistryTeam.objects.filter(is_active=True)
-    inactive_ministry_teams = MinistryTeam.objects.filter(is_active=False).count()
-    teams_missing_playbook = active_ministry_teams.filter(playbook_link="").count()
-    display_name_only_members = TeamMembership.objects.filter(
-        is_active=True,
-        user__isnull=True,
-    ).count()
-    teams_without_active_members = (
-        active_ministry_teams
-        .annotate(
-            active_member_count=Count(
-                "memberships",
-                filter=Q(memberships__is_active=True),
-                distinct=True,
-            )
-        )
-        .filter(active_member_count=0)
-        .count()
-    )
-    upcoming_assignments_without_active_members = (
-        upcoming_assignment_queryset
-        .annotate(
-            active_member_count=Count(
-                "assignment_members",
-                filter=Q(assignment_members__membership__is_active=True),
-                distinct=True,
-            )
-        )
-        .filter(active_member_count=0)
-        .count()
-    )
-    upcoming_assignments_with_inactive_team = upcoming_assignment_queryset.filter(
-        ministry_team__is_active=False,
-    ).count()
-    upcoming_events_with_required_teams = list(
-        events_with_coverage_queryset()
-        .filter(start_datetime__gte=now, required_team_links__isnull=False)
-        .exclude(
+    upcoming_service_events = 0
+    if "events" in enabled_modules:
+        upcoming_service_events = ServiceEvent.objects.filter(
+            start_datetime__gte=now,
+        ).exclude(
             status__in=[
                 ServiceEvent.STATUS_DRAFT,
                 ServiceEvent.STATUS_CANCELLED,
             ],
+        ).count()
+
+    upcoming_assignments = 0
+    unconfirmed_assignments = 0
+    inactive_ministry_teams = 0
+    teams_missing_playbook = 0
+    display_name_only_members = 0
+    teams_without_active_members = 0
+    upcoming_assignments_without_active_members = 0
+    upcoming_assignments_with_inactive_team = 0
+    upcoming_required_team_gaps = 0
+    ministry_ops_warning_indicator_count = 0
+    if "ministry" in enabled_modules:
+        upcoming_assignments = TeamAssignment.objects.filter(
+            service_event__start_datetime__gte=now,
+        ).exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ],
+        ).count()
+        upcoming_assignment_queryset = TeamAssignment.objects.filter(
+            service_event__start_datetime__gte=now,
+        ).exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ],
         )
-        .distinct()
-    )
-    upcoming_required_team_gaps = count_upcoming_required_team_gaps(
-        upcoming_events_with_required_teams,
-        list(
-            assignment_coverage_queryset().filter(
-                id__in=upcoming_assignment_queryset.values("id"),
+        unconfirmed_assignments = TeamAssignment.objects.filter(
+            service_event__start_datetime__gte=now,
+            assignment_members__membership__is_active=True,
+            assignment_members__confirmed_at__isnull=True,
+        ).exclude(
+            status__in=[
+                TeamAssignment.STATUS_CANCELLED,
+                TeamAssignment.STATUS_COMPLETED,
+            ],
+        ).distinct().count()
+        active_ministry_teams = MinistryTeam.objects.filter(is_active=True)
+        inactive_ministry_teams = MinistryTeam.objects.filter(is_active=False).count()
+        teams_missing_playbook = active_ministry_teams.filter(playbook_link="").count()
+        display_name_only_members = TeamMembership.objects.filter(
+            is_active=True,
+            user__isnull=True,
+        ).count()
+        teams_without_active_members = (
+            active_ministry_teams
+            .annotate(
+                active_member_count=Count(
+                    "memberships",
+                    filter=Q(memberships__is_active=True),
+                    distinct=True,
+                )
             )
-        ),
-    )
-    ministry_ops_warning_indicator_count = sum(
-        [
-            inactive_ministry_teams,
-            teams_missing_playbook,
-            display_name_only_members,
-            teams_without_active_members,
-            upcoming_assignments_without_active_members,
-            upcoming_assignments_with_inactive_team,
-            upcoming_required_team_gaps,
-        ]
-    )
+            .filter(active_member_count=0)
+            .count()
+        )
+        upcoming_assignments_without_active_members = (
+            upcoming_assignment_queryset
+            .annotate(
+                active_member_count=Count(
+                    "assignment_members",
+                    filter=Q(assignment_members__membership__is_active=True),
+                    distinct=True,
+                )
+            )
+            .filter(active_member_count=0)
+            .count()
+        )
+        upcoming_assignments_with_inactive_team = upcoming_assignment_queryset.filter(
+            ministry_team__is_active=False,
+        ).count()
+        upcoming_events_with_required_teams = list(
+            events_with_coverage_queryset()
+            .filter(start_datetime__gte=now, required_team_links__isnull=False)
+            .exclude(
+                status__in=[
+                    ServiceEvent.STATUS_DRAFT,
+                    ServiceEvent.STATUS_CANCELLED,
+                ],
+            )
+            .distinct()
+        )
+        upcoming_required_team_gaps = count_upcoming_required_team_gaps(
+            upcoming_events_with_required_teams,
+            list(
+                assignment_coverage_queryset().filter(
+                    id__in=upcoming_assignment_queryset.values("id"),
+                )
+            ),
+        )
+        ministry_ops_warning_indicator_count = sum(
+            [
+                inactive_ministry_teams,
+                teams_missing_playbook,
+                display_name_only_members,
+                teams_without_active_members,
+                upcoming_assignments_without_active_members,
+                upcoming_assignments_with_inactive_team,
+                upcoming_required_team_gaps,
+            ]
+        )
 
     return render(
         request,

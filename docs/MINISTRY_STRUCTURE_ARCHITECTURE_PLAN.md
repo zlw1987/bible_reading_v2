@@ -433,6 +433,10 @@ Two separate structures coexist. They may *display* nested, but they are
 - ServiceEvent audience visibility
 - Bible Study audience visibility
 - My Units delegated church-structure coworker management
+- My Units delegated small-group belonging management: authorized small-group /
+  ancestor leads and staff may add eligible unassigned users, end membership,
+  and approve/reject pending requests; membership still grants no ministry role,
+  serving assignment, or permission
 - unit member / care records
 
 `MinistryTeam` / ministry structure is for:

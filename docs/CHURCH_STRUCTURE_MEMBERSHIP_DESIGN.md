@@ -13,6 +13,17 @@
 > context only. My Serving and serving assignments remain explicit-assignment
 > driven; membership never implies serving.
 
+> **Delegated-management checkpoint:** `GROUP-MEMBERSHIP-MANAGE.1A` and
+> `GROUP-MEMBERSHIP-REQUEST.1B` are complete and QA-passed. My Units now lets
+> authorized small-group/ancestor leads and staff add eligible unassigned users,
+> end active small-group membership, and approve/reject pending requests for
+> managed small groups. The global staff request queue remains available.
+> "Unassigned" means no current/future active primary membership and no pending
+> request, not a fake structure unit. Active-primary conflicts are blocked and
+> full one-click transfer remains deferred. Belonging never grants serving,
+> coworker roles, permissions, TeamAssignment / My Serving, or Bible Study
+> serving.
+
 ## 1. Purpose
 
 `ChurchStructureUnit` represents the flexible church structure tree.
@@ -423,6 +434,8 @@ Recommended sequence:
 - CS-H.8: integrated membership request flow checkpoint. Completed.
 - CS-H.9: membership request UX hardening. Completed.
 - CS-H.10: CMS hardening checkpoint. Completed.
+- GROUP-MEMBERSHIP-MANAGE.1A: delegated small-group member add/end in My Units. Completed and QA-passed.
+- GROUP-MEMBERSHIP-REQUEST.1B: delegated pending-request approve/reject for managed small groups. Completed and QA-passed; global staff review remains available.
 - Historical/superseded later step: consumer migration from `Profile.small_group` to membership. Approved migrated consumers have since moved, and `Profile.small_group` was removed.
 
 Do not implement new audience filtering or additional consumer migration without a separate plan. Historical/superseded: this section previously warned not to migrate reading progress, legacy `BibleStudySession`, ServiceEvent legacy fallback, My Serving, or other consumers from `Profile.small_group` until explicitly authorized. Later approved slices migrated/retired those applicable consumers; My Serving remains assignment-based and is not inferred from membership.
@@ -434,7 +447,7 @@ Historical/resolved decisions:
 - Active-primary enforcement and helper behavior were implemented in the approved membership slices.
 - Approved membership no longer syncs `Profile.small_group`; the sync was retired and the field removed.
 - Approval capability and staff/superuser override rules were implemented in the membership request workflow.
-- Transfer handling remains a product/workflow topic, not a reason to treat `Profile.small_group` as current.
+- Direct add blocks existing active-primary membership conflicts; full one-click transfer remains a deferred product/workflow topic, not a reason to treat `Profile.small_group` as current.
 - Request routing uses the approved requested-unit flow unless a future product slice expands it.
 - Membership history display remains a product UX topic.
 - The first consumer migrations from `Profile.small_group` have already happened; current docs should follow the per-consumer current-state sections.

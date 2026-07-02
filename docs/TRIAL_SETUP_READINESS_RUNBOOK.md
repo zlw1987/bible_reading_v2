@@ -20,6 +20,25 @@ are there setup gaps that would break the trial or quietly hide content?*
   has no high-confidence trial blockers at audit time; it does not certify
   deployment, security, scale, or correctness.
 
+## Delegated belonging readiness checkpoint
+
+`GROUP-MEMBERSHIP-MANAGE.1A` and `GROUP-MEMBERSHIP-REQUEST.1B` are complete and
+QA-passed. My Units now gives authorized small-group/ancestor leads and staff a
+small-group belonging workflow: add a user only when there is no current/future
+active primary membership and no pending request, end an active membership, and
+approve/reject a pending requested row for a managed small group. The global
+staff membership-request queue remains available.
+
+"Unassigned" describes a user with no blocking active primary membership and no
+pending request; it is not a `ChurchStructureUnit`, and setup must not create a
+fake Unassigned group. Existing active-primary conflicts fail closed; a full
+one-click transfer workflow remains deferred. Membership management changes
+belonging/visibility context only and never grants serving, coworker roles,
+permissions, TeamAssignment / My Serving, or Bible Study serving. This closes
+the earlier limited-trial gap where small-group leaders had no easy way to
+maintain group belonging. The audit below remains a read-only data snapshot; it
+does not mutate membership rows or certify deployment.
+
 ## How to run
 
 ```powershell

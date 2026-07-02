@@ -8,6 +8,16 @@ This is docs-only. It does not change code, models, migrations, views, forms, te
 
 Historical/superseded for this CS-H.7 planning slice: runtime still used `MinistryContext`, `District`, `SmallGroup`, and `Profile.small_group`, and no runtime consumer used `ChurchStructureMembership`. Current approved migrated consumers use active primary `ChurchStructureMembership`, `Profile.small_group` was removed, and the legacy structure object rows/tables and mappings were retired/removed by later row/table-retirement slices.
 
+Current follow-up: GROUP-MEMBERSHIP-MANAGE.1A and
+GROUP-MEMBERSHIP-REQUEST.1B are complete and QA-passed. My Units now lets
+authorized small-group/ancestor leads and staff add eligible unassigned users,
+end active membership, and approve/reject pending requests for the exact managed
+small group, reusing the staff approval/rejection semantics. The global staff
+queue remains available. No fake Unassigned unit is created; active-primary
+conflicts are blocked and full one-click transfer remains deferred. These
+belonging actions infer no serving, coworker role, permission, TeamAssignment /
+My Serving, or Bible Study serving.
+
 ## 2. Implementation Slices
 
 Recommended small phases:

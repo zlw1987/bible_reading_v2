@@ -14,6 +14,16 @@
 > `docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md` and
 > `docs/LEGACY_STRUCTURE_RETIREMENT_EXECUTION_PLAN.md`.
 
+> **Current belonging-management update:** `GROUP-MEMBERSHIP-MANAGE.1A` and
+> `GROUP-MEMBERSHIP-REQUEST.1B` are complete and QA-passed. My Units now provides
+> delegated small-group member add/end and pending-request approve/reject for
+> authorized small-group/ancestor leads and staff. The global staff request queue
+> remains available. "Unassigned" is the absence of a blocking active primary
+> membership and pending request, not a fake structure unit. Existing
+> active-primary conflicts are blocked; full one-click transfer remains
+> deferred. Membership remains belonging only and grants no serving, coworker
+> role, permission, TeamAssignment / My Serving, or Bible Study serving.
+
 ## 1. Purpose
 
 CS-H.2 added `ChurchStructureUnit` as a model-only flexible tree foundation. CS-H.2A hardened that tree with indirect cycle validation and safe ancestor/path helpers. CS-H.3B adds nullable mapping fields from legacy structure models to `ChurchStructureUnit`. CS-H.3C adds an idempotent management command for seeding and mapping current structure data into that tree. CS-H.3D records that GoDaddy production/staging seeding completed successfully and the second dry-run was clean. CS-H.3E records that the remaining `Santa Clara 3` data QA item was resolved/closed. CS-H.4 records the `ChurchStructureMembership` design. CS-H.5A adds the model-only `ChurchStructureMembership` foundation. CS-H.5B hardens membership helpers and validation. CS-H.5C adds an explicit dry-run/apply backfill command from `Profile.small_group`. CS-H.5D records user-attested GoDaddy production/staging backfill verification. CS-H.5E improves Django Admin clarity for legacy structure models versus future foundation models. CS-H.6 records the signup requested-unit flow design. CS-H.7 records the admin approval workflow design. CS-H.8 records the integrated request-flow checkpoint across signup, Profile, staff approval, and transition `Profile.small_group` sync. CS-H.9 records membership request UX hardening as complete. CS-H.10 records the CMS hardening checkpoint.
@@ -324,7 +334,7 @@ Recommendation:
 - Do not let requested unit become active membership without approval.
 - See `docs/CHURCH_STRUCTURE_SIGNUP_REQUEST_FLOW_DESIGN.md` for the CS-H.6 signup request design.
 
-## 10. Admin Approval Workflow
+## 10. Membership Review Workflows
 
 Historical staff workflow plan:
 - Staff sees pending requested assignments.
@@ -337,7 +347,19 @@ Historical staff workflow plan:
 
 This workflow was later implemented and then the legacy sync portion was retired.
 
-The workflow should be simple enough for non-technical staff: review request, choose official group/unit, approve, or mark for clarification.
+Current workflow:
+- The global staff/capability-gated request list/detail and approve/reject actions remain available.
+- My Units also shows pending requested rows for the exact managed small-group unit.
+- Authorized staff/superusers and active `lead` role holders on that unit or an ancestor can approve or reject those rows.
+- Approval reuses the staff workflow semantics and is blocked when the user already has an active primary membership; rejection retains the row as rejected.
+- The same My Units section can add a user only when no current/future active membership or pending request exists, and can end an active membership without deleting the row or user.
+- No fake Unassigned unit is created. Full one-click transfer, bulk import, and notifications remain deferred.
+- These actions change belonging only; they infer no serving, coworker role, permission, TeamAssignment / My Serving, or Bible Study serving.
+
+The historical workflow goal was to be simple enough for non-technical staff:
+review request, choose official group/unit, approve, or mark for clarification.
+The delegated My Units workflow closes the additional trial-readiness gap for
+small-group leaders while preserving the global staff queue.
 
 See `docs/CHURCH_STRUCTURE_MEMBERSHIP_APPROVAL_WORKFLOW_DESIGN.md` for the CS-H.7 approval workflow design.
 
@@ -424,6 +446,8 @@ Recommended phases:
 - CS-H.8: integrated membership request flow checkpoint. Completed.
 - CS-H.9: membership request UX hardening. Completed.
 - CS-H.10: CMS hardening checkpoint. Completed.
+- GROUP-MEMBERSHIP-MANAGE.1A: delegated small-group member add/end in My Units. Completed and QA-passed.
+- GROUP-MEMBERSHIP-REQUEST.1B: delegated pending-request approve/reject in My Units. Completed and QA-passed; global staff review remains available.
 - Historical/superseded later step: migrate selected consumers from `Profile.small_group` to membership. The approved consumer migrations and field removals have since completed for the current migrated surfaces.
 
 Historical rule: no hard cutover should happen early. Current state reflects the later approved cutover/removal slices, not an early unapproved cutover.

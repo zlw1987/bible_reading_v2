@@ -20,16 +20,22 @@ Audited context:
 - `docs/POST_PILOT_BACKLOG_TRIAGE.md`
 - `docs/UI_UX_GUARDRAILS.md`
 
-## 2. Product Boundary Summary
+## 2. Historical Product Boundary Summary
 
-These boundaries must stay intact for any future wording cleanup:
+These were the boundaries when this wording audit was written. The active
+runtime statements in this list are preserved as historical audit context;
+current architecture belongs in the current-state docs named above.
 
 - `ChurchStructureMembership` is not a runtime visibility source.
 - Ordinary user visibility still mainly uses `Profile.small_group` and legacy mapping behavior.
 - ServiceEvent audience rows govern ordinary-user visibility only when `ServiceEventAudienceScope` rows exist; ServiceEvents with zero audience rows still use legacy fallback fields.
 - Bible Study Schedule selected structure units resolve to legacy `SmallGroup` rows for meeting generation; ordinary visibility still uses `Profile.small_group`.
 - Broad structure unit lifecycle edit is not approved.
-- Membership roster management is not approved.
+- Historical at this audit point: membership roster management was not approved.
+  Current narrow state: GROUP-MEMBERSHIP-MANAGE.1A and
+  GROUP-MEMBERSHIP-REQUEST.1B are complete and QA-passed for small-group My Units
+  add/end and pending-request approve/reject. Broad transfer/bulk/history tooling
+  remains deferred.
 - Community Activities is not part of this audit.
 
 ## 3. Wording Inventory

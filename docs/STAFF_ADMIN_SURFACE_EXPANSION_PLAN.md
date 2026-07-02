@@ -14,13 +14,16 @@ This plan does not implement dashboard UI, queues, permissions, migrations, cons
 
 Current state:
 - Signup and Profile can create pending `ChurchStructureMembership(status=requested)` records.
-- Staff request review, request detail, and approve/reject actions exist.
+- Global staff request review, request detail, and approve/reject actions exist.
+- GROUP-MEMBERSHIP-MANAGE.1A and GROUP-MEMBERSHIP-REQUEST.1B are complete and QA-passed: My Units lets authorized small-group/ancestor leads and staff add eligible unassigned users, end active small-group membership, and approve/reject pending requests for a managed small group.
+- "Unassigned" means no current/future active primary membership and no pending request; it is not a fake `ChurchStructureUnit`. Existing active-primary conflicts are blocked and full one-click transfer remains deferred.
 - Membership approval no longer syncs to `Profile.small_group` in normal app flow; the active primary `ChurchStructureMembership` is the confirmed group source.
 - Requested, rejected, cancelled, and ended memberships do not grant visibility, permissions, serving assignments, audience eligibility, or runtime access.
+- Membership management never grants serving, coworker roles, permissions, TeamAssignment / My Serving, or Bible Study serving.
 
 Gaps:
-- Staff workflow remains narrow and task-specific.
-- Needs-clarification handling, transfer history, richer filters, and operational status views remain future.
+- Staff and delegated workflows remain narrow and task-specific.
+- Needs-clarification handling, one-click transfer/history, bulk import, richer filters, and operational status views remain future.
 - Historical/superseded wording note: staff once needed side-by-side labels for "current runtime small group" and "future foundation membership." Current labels should distinguish confirmed membership, selected audience rows, and legacy mapping rows.
 
 ### Reading Plans and Guides

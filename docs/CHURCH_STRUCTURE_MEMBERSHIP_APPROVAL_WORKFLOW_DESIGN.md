@@ -7,6 +7,14 @@
 > `District`, and `MinistryContext` are removed from current models. Statements
 > below that say runtime still uses those legacy objects are historical
 > bridge-period context only.
+>
+> `GROUP-MEMBERSHIP-REQUEST.1B` later extended the implemented workflow to My
+> Units: authorized small-group/ancestor leads and staff can approve/reject
+> pending requests for managed small groups, while the global staff queue
+> remains available. Approval blocks active-primary conflicts; rejection retains
+> the row. Together with GROUP-MEMBERSHIP-MANAGE.1A add/end, this is belonging
+> only and never grants serving, coworker roles, permissions, TeamAssignment /
+> My Serving, or Bible Study serving. Both slices are complete and QA-passed.
 
 ## 1. Purpose
 

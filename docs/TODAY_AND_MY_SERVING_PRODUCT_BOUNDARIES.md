@@ -58,6 +58,16 @@ Visibility is not serving assignment.
 - `TeamAssignment` / My Serving must not be inferred from `ChurchStructureMembership`.
 - Ordinary members can see meetings and gatherings without serving in them.
 
+Small-group belonging management belongs in My Units, not Today or My Serving.
+`GROUP-MEMBERSHIP-MANAGE.1A` and `GROUP-MEMBERSHIP-REQUEST.1B` are complete and
+QA-passed: authorized small-group/ancestor leads and staff can add eligible
+unassigned users, end active membership, and approve/reject pending requests for
+managed small groups. Here, "unassigned" means no current/future active primary
+membership and no pending request; it is not a fake structure unit. Existing
+active-primary conflicts remain blocked and one-click transfer is deferred.
+These belonging actions never create serving, coworker roles, permissions,
+TeamAssignment / My Serving items, or Bible Study serving roles.
+
 Only explicit user assignment rows can show as "my serving."
 
 For Bible Study V2 roles, Today may show a compact agenda role note and, while

@@ -163,25 +163,63 @@ def get_module(key):
         )
 
 
-def get_enabled_module_keys():
-    """Enabled module keys as a frozenset, validated against the registry.
+def validate_enabled_modules(enabled_keys=None):
+    """Validate a set of enabled module keys and return it as a frozenset.
 
-    Reads ``settings.CMS_ENABLED_MODULES`` on every call so test-time
-    ``override_settings`` works. Absent setting means all registered
-    modules are enabled (current behavior preserved).
+    Two invariants are enforced, both raising ``ImproperlyConfigured``:
+
+    * Every key must be a registered module (catches typos / removed keys).
+    * Every enabled module's declared ``depends_on`` modules must also be
+      enabled (turns the registry's dependency metadata into a real
+      invariant). Structure-core dependence is expressed via
+      ``CAPABILITY_REQUIRES_STRUCTURE_CORE``, not ``depends_on``, and is
+      not gateable, so it is intentionally not checked here.
+
+    ``enabled_keys=None`` means "all registered modules", which is always
+    valid (a module's dependencies are registered modules, so enabling
+    everything cannot violate a dependency).
     """
-    configured = getattr(settings, "CMS_ENABLED_MODULES", None)
-    if configured is None:
+    if enabled_keys is None:
         return frozenset(_MODULES_BY_KEY)
 
-    unknown = sorted(set(configured) - set(_MODULES_BY_KEY))
+    enabled = frozenset(enabled_keys)
+
+    unknown = sorted(enabled - set(_MODULES_BY_KEY))
     if unknown:
         raise ImproperlyConfigured(
             "CMS_ENABLED_MODULES contains unregistered module keys: "
             f"{', '.join(unknown)}. Registered keys: "
             f"{', '.join(_MODULES_BY_KEY)}"
         )
-    return frozenset(configured)
+
+    missing_dependencies = []
+    for key in sorted(enabled):
+        for dependency in _MODULES_BY_KEY[key].depends_on:
+            if dependency not in enabled:
+                missing_dependencies.append(
+                    f"module {key!r} requires {dependency!r} to be enabled"
+                )
+    if missing_dependencies:
+        raise ImproperlyConfigured(
+            "CMS_ENABLED_MODULES has unmet module dependencies: "
+            f"{'; '.join(missing_dependencies)}."
+        )
+
+    return enabled
+
+
+def get_enabled_module_keys():
+    """Enabled module keys as a frozenset, validated against the registry.
+
+    Reads ``settings.CMS_ENABLED_MODULES`` on every call so test-time
+    ``override_settings`` works. Absent/None setting means all registered
+    modules are enabled (current behavior preserved). Unknown keys and
+    unmet ``depends_on`` dependencies both raise ``ImproperlyConfigured``.
+    """
+    configured = getattr(settings, "CMS_ENABLED_MODULES", None)
+    if configured is None:
+        return validate_enabled_modules(None)
+    return validate_enabled_modules(configured)
 
 
 def get_enabled_modules():

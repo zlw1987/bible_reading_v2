@@ -54,6 +54,16 @@ Registered in `core/module_registry.py`, enabled via
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
   Unregistered keys in the setting raise `ImproperlyConfigured`.
+* Dependency metadata is enforced (`MODULAR-CORE.2A`). A module's declared
+  `depends_on` modules must also be enabled; otherwise reading the enabled
+  set raises `ImproperlyConfigured`. Example: `ministry` depends on
+  `events`, so `CMS_ENABLED_MODULES=["ministry"]` is rejected. Validation
+  runs whenever the enabled set is read (`get_enabled_module_keys()` /
+  `validate_enabled_modules()`), so it also fires under test
+  `override_settings`. Enforcement is still a surface gate only: it does
+  not unload apps, models, or URLs, and it is not route-level hard-off.
+  Absent/None setting stays "all enabled" and empty `[]` stays valid (no
+  enabled module can violate a dependency).
 * API (`core.module_registry`): `get_registered_modules()`,
   `get_registered_module_keys()`, `get_module(key)`,
   `get_enabled_modules()`, `get_enabled_module_keys()`,

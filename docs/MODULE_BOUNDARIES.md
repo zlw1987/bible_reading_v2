@@ -1,7 +1,8 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, and `MODULAR-CORE.2B` (July 2026).
+`MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, `MODULAR-CORE.2B`, and
+`MODULAR-CORE.3A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -50,7 +51,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (through MODULAR-CORE.2B)
+## Registry and feature gates (through MODULAR-CORE.3A)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -80,15 +81,28 @@ Registered in `core/module_registry.py`, enabled via
   module surfaces. Tests cover the primary nav, Today reading/prayer/study/event
   and ministry surfaces, the profile My Serving card, the valid
   events-plus-ministry dependency shutdown, and the all-disabled home state.
+* `MODULAR-CORE.3A` adds the provider-based Today aggregation foundation
+  (`core/today_providers.py`). Each module with Today context registers one
+  provider against its module key (`register_today_provider`) together with
+  the safe default values for the context keys it owns; the home view calls
+  `build_today_context(request)`, which calls providers for enabled modules
+  only and keeps the registered defaults for disabled ones. Context keys are
+  exclusive per provider, provider output is validated against its declared
+  keys, and reading the enabled set keeps `MODULAR-CORE.2A` dependency
+  validation in force. Registration is explicit (no app auto-discovery); the
+  reading / events / studies / ministry provider bodies currently live in
+  `reading.views` next to the Today helpers they reuse. Prayer contributes
+  only the static Today action card (template-gated), so it has no provider.
 
 ### What disabling a module does today
 
 * Hides its primary nav link in `templates/base.html`.
-* Skips its aggregation on Today (`reading.views.home`) so no card, query,
-  or crash comes from the disabled module, and hides its "Where to go next"
-  card. Ministry gating also hides the Today action-center serving summary,
-  the Leader Needs Attention card, per-gathering serving notes, and the
-  profile page's My Serving card.
+* Skips its Today provider (`core.today_providers.build_today_context` does
+  not call disabled modules' providers and keeps their registered safe
+  defaults) so no card, query, or crash comes from the disabled module, and
+  hides its "Where to go next" card. Ministry gating also hides the Today
+  action-center serving summary, the Leader Needs Attention card,
+  per-gathering serving notes, and the profile page's My Serving card.
 * Requires a dependency-valid configuration. Disabling `events` also requires
   disabling `ministry`; keeping `ministry` enabled without `events` is rejected
   rather than silently producing a partial serving surface.
@@ -111,11 +125,13 @@ Registered in `core/module_registry.py`, enabled via
    `reading.views.home`; ministry reading `events` / studies serving roles)
    are declared in the registry's `depends_on` / dependency notes and
    should not grow silently.
-2. **Today should become provider/registry-driven.** Today currently lives
-   in the reading app and imports other modules directly. The target shape
-   is per-module Today providers registered against the module key, with
-   the home view aggregating enabled providers. `MODULAR-CORE.1A` only
-   added safe per-module guards.
+2. **Today is provider/registry-driven (`MODULAR-CORE.3A`).** Per-module
+   Today providers are registered against their module key in
+   `core/today_providers.py`, and the home view aggregates enabled
+   providers through `build_today_context`. The provider bodies still live
+   in `reading.views` (they reuse its Today helpers, and `reading.views`
+   still imports events/studies/ministry at module load); moving them into
+   their module apps is the remaining follow-up.
 3. **Nav should become registry-driven.** `base.html` currently hard-codes
    links behind `enabled_modules` checks; the target is nav entries
    contributed by module metadata.
@@ -134,9 +150,11 @@ Registered in `core/module_registry.py`, enabled via
    explicitly approved. New modules must register here first, with an
    explicit migration slice.
 
-## Follow-ups (not in MODULAR-CORE.1A)
+## Follow-ups (not yet done)
 
-* Provider-based Today aggregation (rule 2).
+* Moving the Today provider bodies out of `reading.views` into their module
+  apps, reducing `reading.views`' import-time coupling (rule 2 — the
+  provider registry/aggregation itself landed in `MODULAR-CORE.3A`).
 * Registry-driven nav construction (rule 3).
 * Module-owned setup/readiness checks (rule 4).
 * Optional: gating staff menu sections and staff overview cards by module.

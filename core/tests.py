@@ -7,6 +7,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from . import today_providers
 from .module_registry import (
     CAPABILITY_NAV,
     CAPABILITY_SETUP_CHECKS,
@@ -20,10 +21,31 @@ from .module_registry import (
     module_has_capability,
     validate_enabled_modules,
 )
+from .today_providers import (
+    build_today_context,
+    get_registered_today_provider_keys,
+    register_today_provider,
+)
 
 User = get_user_model()
 
 ALL_MODULE_KEYS = ("reading", "prayers", "studies", "events", "ministry")
+
+# MODULAR-CORE.3A: the full default Today context shape contributed by the
+# registered providers (reading / events / studies / ministry).
+TODAY_CONTEXT_KEYS = (
+    "today_items",
+    "ended_plan_count",
+    "today_gatherings",
+    "show_all_today_gatherings_link",
+    "week_gatherings",
+    "show_all_gatherings_link",
+    "study_meeting_context",
+    "today_study_meetings",
+    "week_study_meetings",
+    "serving_summary",
+    "leader_summary",
+)
 
 
 def enabled_without(*excluded):
@@ -161,6 +183,162 @@ class ModuleRegistryTests(SimpleTestCase):
     def test_validate_enabled_modules_unknown_key_raises(self):
         with self.assertRaises(ImproperlyConfigured):
             validate_enabled_modules(["reading", "checklist"])
+
+
+class TodayProviderRegistryTests(SimpleTestCase):
+    """MODULAR-CORE.3A: the Today provider registry and aggregator."""
+
+    def isolated_registry(self, initial=None):
+        """Run a test against an empty (or seeded) provider registry so the
+        real reading/events/studies/ministry registrations from
+        ``reading.views`` are untouched."""
+        return patch.dict(today_providers._TODAY_PROVIDERS, initial or {}, clear=True)
+
+    def test_register_unregistered_module_key_raises(self):
+        with self.isolated_registry():
+            with self.assertRaises(KeyError):
+                register_today_provider(
+                    "checklist",
+                    lambda request: {},
+                    defaults={"checklist_items": []},
+                )
+
+    def test_duplicate_registration_raises(self):
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                lambda request: {},
+                defaults={"today_items": []},
+            )
+            with self.assertRaises(ValueError):
+                register_today_provider(
+                    "reading",
+                    lambda request: {},
+                    defaults={"other_key": None},
+                )
+
+    def test_empty_defaults_raise(self):
+        with self.isolated_registry():
+            with self.assertRaises(ValueError):
+                register_today_provider(
+                    "reading",
+                    lambda request: {},
+                    defaults={},
+                )
+
+    def test_overlapping_context_keys_across_providers_raise(self):
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                lambda request: {},
+                defaults={"today_items": []},
+            )
+            with self.assertRaises(ValueError) as ctx:
+                register_today_provider(
+                    "prayers",
+                    lambda request: {},
+                    defaults={"today_items": []},
+                )
+            self.assertIn("today_items", str(ctx.exception))
+
+    @override_settings(CMS_ENABLED_MODULES=["prayers"])
+    def test_disabled_module_provider_not_called_and_defaults_kept(self):
+        calls = []
+
+        def reading_provider(request):
+            calls.append(request)
+            return {"today_items": ["leaked"], "ended_plan_count": 9}
+
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                reading_provider,
+                defaults={"today_items": [], "ended_plan_count": 0},
+            )
+            context = build_today_context(request=None)
+
+        self.assertEqual(calls, [])
+        self.assertEqual(
+            context, {"today_items": [], "ended_plan_count": 0}
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "prayers"])
+    def test_enabled_provider_output_merges_over_defaults(self):
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                lambda request: {"today_items": ["item"]},
+                defaults={"today_items": [], "ended_plan_count": 0},
+            )
+            register_today_provider(
+                "studies",
+                lambda request: {"study_meeting_context": {"x": 1}},
+                defaults={"study_meeting_context": {}},
+            )
+            context = build_today_context(request=None)
+
+        # The enabled provider's values win; its undeclared-by-return keys
+        # and the disabled provider's keys keep their safe defaults.
+        self.assertEqual(
+            context,
+            {
+                "today_items": ["item"],
+                "ended_plan_count": 0,
+                "study_meeting_context": {},
+            },
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=["reading"])
+    def test_provider_returning_undeclared_key_raises(self):
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                lambda request: {"surprise_key": True},
+                defaults={"today_items": []},
+            )
+            with self.assertRaises(ValueError) as ctx:
+                build_today_context(request=None)
+            self.assertIn("surprise_key", str(ctx.exception))
+
+    @override_settings(CMS_ENABLED_MODULES=["prayers"])
+    def test_default_values_are_copied_per_request(self):
+        with self.isolated_registry():
+            register_today_provider(
+                "reading",
+                lambda request: {},
+                defaults={"today_items": [], "study_meeting_context": {}},
+            )
+            first = build_today_context(request=None)
+            first["today_items"].append("mutated")
+            first["study_meeting_context"]["mutated"] = True
+            second = build_today_context(request=None)
+
+        self.assertEqual(second["today_items"], [])
+        self.assertEqual(second["study_meeting_context"], {})
+
+    @override_settings(CMS_ENABLED_MODULES=["ministry"])
+    def test_invalid_dependency_configuration_raises_through_aggregation(self):
+        # ministry-without-events must fail the same way everywhere the
+        # enabled set is read (MODULAR-CORE.2A); aggregation is no exception
+        # and must not silently render a partial Today.
+        with self.isolated_registry():
+            with self.assertRaises(ImproperlyConfigured):
+                build_today_context(request=None)
+
+    def test_real_today_providers_cover_expected_modules_and_keys(self):
+        # Importing reading.views registers the real providers (it is already
+        # imported through the URLConf in normal runs; import explicitly so
+        # this test does not depend on ordering).
+        import reading.views  # noqa: F401
+
+        self.assertEqual(
+            get_registered_today_provider_keys(),
+            ("reading", "events", "studies", "ministry"),
+        )
+        declared_keys = set()
+        for provider in today_providers._TODAY_PROVIDERS.values():
+            declared_keys.update(provider.defaults)
+        self.assertEqual(declared_keys, set(TODAY_CONTEXT_KEYS))
 
 
 class ModuleGateTestBase(TestCase):
@@ -401,6 +579,34 @@ class ModuleGateHomeTests(ModuleGateTestBase):
                 ):
                     response = self.client.get(reverse("home"))
                 self.assertEqual(response.status_code, 200)
+
+    def test_home_context_has_all_today_keys_when_all_enabled(self):
+        # MODULAR-CORE.3A: provider aggregation must keep the full default
+        # context shape home() used to build inline.
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        for key in TODAY_CONTEXT_KEYS:
+            self.assertIn(key, response.context, key)
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_home_context_keeps_safe_defaults_with_all_modules_disabled(self):
+        # Disabled providers contribute their registered safe defaults, so
+        # the template never sees a missing key or a leaked query result.
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["today_items"], [])
+        self.assertEqual(response.context["ended_plan_count"], 0)
+        self.assertEqual(response.context["today_gatherings"], [])
+        self.assertFalse(response.context["show_all_today_gatherings_link"])
+        self.assertEqual(response.context["week_gatherings"], [])
+        self.assertFalse(response.context["show_all_gatherings_link"])
+        self.assertEqual(response.context["study_meeting_context"], {})
+        self.assertEqual(response.context["today_study_meetings"], [])
+        self.assertEqual(response.context["week_study_meetings"], [])
+        self.assertIsNone(response.context["serving_summary"])
+        self.assertIsNone(response.context["leader_summary"])
 
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_home_renders_with_all_modules_disabled(self):

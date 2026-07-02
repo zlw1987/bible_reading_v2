@@ -12,6 +12,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from accounts.language import get_user_language
 from core.module_registry import is_module_enabled
+from core.today_providers import build_today_context, register_today_provider
 from accounts.permissions import (
     CAP_PUBLISH_READING_GUIDES,
     get_accessible_progress_groups,
@@ -892,19 +893,23 @@ def get_today_leader_summary(user, *, language="en"):
     }
 
 
-@login_required
-def home(request):
-    # MODULAR-CORE.1A: Today aggregates surfaces from several CMS modules.
-    # Each module's aggregation is skipped when the module is disabled in
-    # CMS_ENABLED_MODULES; the template already hides sections whose context
-    # values are empty/None, so disabled modules simply contribute nothing.
-    enrollments = ()
-    if is_module_enabled("reading"):
-        enrollments = (
-            PlanEnrollment.objects.filter(user=request.user)
-            .select_related("active_plan", "active_plan__plan")
-            .order_by("-joined_at")
-        )
+# MODULAR-CORE.3A: Today context is aggregated through per-module providers
+# registered in core.today_providers. Each provider below owns one module's
+# slice of the home context and is called only when its module is enabled in
+# CMS_ENABLED_MODULES; the registered defaults keep every context key present
+# (empty/None) when a module is off, so the template renders without that
+# module's card, query, or crash. The provider bodies stay in this file for
+# now because they reuse the Today helpers above; moving them into their
+# module apps is a follow-up, not part of this slice.
+
+
+def reading_today_provider(request):
+    """Today's Reading: the user's own plan enrollments and check-ins."""
+    enrollments = (
+        PlanEnrollment.objects.filter(user=request.user)
+        .select_related("active_plan", "active_plan__plan")
+        .order_by("-joined_at")
+    )
 
     today_items = []
     ended_plan_count = 0
@@ -988,82 +993,124 @@ def home(request):
             }
         )
 
+    return {
+        "today_items": today_items,
+        "ended_plan_count": ended_plan_count,
+    }
+
+
+def events_today_provider(request):
+    """Today / This Week Church Gatherings (audience-visible, with the
+    per-gathering serving note from get_week_serving_notes, which stays empty
+    when ministry is disabled)."""
     today_start, tomorrow_start, week_end = get_today_week_windows()
 
-    today_gatherings = []
-    week_gatherings = []
-    show_all_today_gatherings_link = False
-    show_all_gatherings_link = False
-    if is_module_enabled("events"):
-        today_gatherings, show_all_today_gatherings_link = get_gathering_rows_for_window(
+    today_gatherings, show_all_today_gatherings_link = get_gathering_rows_for_window(
+        request.user,
+        today_start,
+        tomorrow_start,
+    )
+    week_gatherings, show_all_gatherings_link = get_gathering_rows_for_window(
+        request.user,
+        tomorrow_start,
+        week_end,
+    )
+
+    # Today de-duplication: a Church Gathering already shown in today's bucket
+    # should not appear again in the This Week bucket. get_gatherings_for_window()
+    # intentionally uses overlap-window semantics for long events, so do the
+    # final presentation-level de-dupe here.
+    today_gathering_event_ids = {
+        row["event"].id
+        for row in today_gatherings
+    }
+    week_gatherings = [
+        row
+        for row in week_gatherings
+        if row["event"].id not in today_gathering_event_ids
+    ]
+    if not week_gatherings:
+        show_all_gatherings_link = False
+
+    return {
+        "today_gatherings": today_gatherings,
+        "show_all_today_gatherings_link": show_all_today_gatherings_link,
+        "week_gatherings": week_gatherings,
+        "show_all_gatherings_link": show_all_gatherings_link,
+    }
+
+
+def studies_today_provider(request):
+    """Bible Study V2 landing context plus Today / This Week visible meetings
+    (audience rows + membership; meeting visibility is not serving)."""
+    today_start, tomorrow_start, week_end = get_today_week_windows()
+
+    return {
+        "study_meeting_context": get_v2_landing_context(request.user),
+        "today_study_meetings": get_study_meeting_rows_for_window(
             request.user,
             today_start,
             tomorrow_start,
-        )
-        week_gatherings, show_all_gatherings_link = get_gathering_rows_for_window(
+        ),
+        "week_study_meetings": get_study_meeting_rows_for_window(
             request.user,
             tomorrow_start,
             week_end,
-        )
+        ),
+    }
 
-        # Today de-duplication: a Church Gathering already shown in today's bucket
-        # should not appear again in the This Week bucket. get_gatherings_for_window()
-        # intentionally uses overlap-window semantics for long events, so do the
-        # final presentation-level de-dupe here.
-        today_gathering_event_ids = {
-            row["event"].id
-            for row in today_gatherings
-        }
-        week_gatherings = [
-            row
-            for row in week_gatherings
-            if row["event"].id not in today_gathering_event_ids
-        ]
-        if not week_gatherings:
-            show_all_gatherings_link = False
 
-    study_meeting_context = {}
-    today_study_meetings = []
-    week_study_meetings = []
-    if is_module_enabled("studies"):
-        study_meeting_context = get_v2_landing_context(request.user)
-        today_study_meetings = get_study_meeting_rows_for_window(
-            request.user,
-            today_start,
-            tomorrow_start,
-        )
-        week_study_meetings = get_study_meeting_rows_for_window(
-            request.user,
-            tomorrow_start,
-            week_end,
-        )
+def ministry_today_provider(request):
+    """Action-center serving summary and manager-only Leader Needs Attention.
 
-    serving_summary = None
-    leader_summary = None
-    if is_module_enabled("ministry"):
-        serving_summary = get_today_serving_summary(request.user)
-        leader_summary = get_today_leader_summary(
+    Personal serving stays explicit (TeamAssignmentMember / linked-user
+    BibleStudyMeetingRole.user); belonging and audience visibility never count.
+    """
+    return {
+        "serving_summary": get_today_serving_summary(request.user),
+        "leader_summary": get_today_leader_summary(
             request.user,
             language=get_user_language(request),
-        )
+        ),
+    }
 
-    return render(
-        request,
-        "reading/home.html",
-        {
-            "today_items": today_items,
-            "ended_plan_count": ended_plan_count,
-            "serving_summary": serving_summary,
-            "leader_summary": leader_summary,
-            "today_gatherings": today_gatherings,
-            "show_all_today_gatherings_link": show_all_today_gatherings_link,
-            "today_study_meetings": today_study_meetings,
-            "week_gatherings": week_gatherings,
-            "show_all_gatherings_link": show_all_gatherings_link,
-            "week_study_meetings": week_study_meetings,
-            "study_meeting_context": study_meeting_context,
-        },
-    )
+
+register_today_provider(
+    "reading",
+    reading_today_provider,
+    defaults={"today_items": [], "ended_plan_count": 0},
+)
+register_today_provider(
+    "events",
+    events_today_provider,
+    defaults={
+        "today_gatherings": [],
+        "show_all_today_gatherings_link": False,
+        "week_gatherings": [],
+        "show_all_gatherings_link": False,
+    },
+)
+register_today_provider(
+    "studies",
+    studies_today_provider,
+    defaults={
+        "study_meeting_context": {},
+        "today_study_meetings": [],
+        "week_study_meetings": [],
+    },
+)
+register_today_provider(
+    "ministry",
+    ministry_today_provider,
+    defaults={"serving_summary": None, "leader_summary": None},
+)
+
+
+@login_required
+def home(request):
+    # MODULAR-CORE.3A: Today asks the enabled modules' registered providers
+    # for their context instead of coordinating every module inline.
+    return render(request, "reading/home.html", build_today_context(request))
 
 
 @login_required

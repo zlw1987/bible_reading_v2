@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.2B` and `RELEASE-HYGIENE.0A` (July 2026).
+`MODULAR-CORE.3A` and `RELEASE-HYGIENE.0A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -44,9 +44,11 @@ migration-safety instruction source.
   `ministry` requires `events`.
 - Disabled modules are surface-gated: primary navigation, their Today
   aggregation/cards/actions, and the profile My Serving card where applicable
-  are hidden. This is not app unloading or route-level hard-off; direct URLs,
-  staff menu entries, staff overview, and setup checks keep their existing
-  behavior.
+  are hidden. Today context is aggregated through per-module providers
+  (`core/today_providers.py`, `MODULAR-CORE.3A`): enabled modules' registered
+  providers are called and disabled modules keep safe default context. This
+  is not app unloading or route-level hard-off; direct URLs, staff menu
+  entries, staff overview, and setup checks keep their existing behavior.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded
   ignore rules for local secrets/databases/backups/logs/audit output, and
   removed committed local audit artifacts. It did not build an external release
@@ -85,6 +87,7 @@ historical evidence rather than current test instructions.
 
 Community Events/Activities and Checklist remain deferred. References in
 planning documents do not mean either product has been built or approved for
-implementation. Do not use this documentation cleanup as authorization to
-create them, refactor Today into providers, gate staff/setup routes, or extract
-apps into packages.
+implementation. Do not use this documentation as authorization to create
+them, gate staff/setup routes, or extract apps into packages. (Provider-based
+Today aggregation, previously listed here, was delivered as an explicitly
+approved slice in `MODULAR-CORE.3A`.)

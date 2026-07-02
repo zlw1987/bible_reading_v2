@@ -18,6 +18,43 @@ media/
 .env
 *.log
 .DS_Store
+
+# Local agent and browser-QA artifacts
+.agents/
+.playwright-mcp/
+screenshots/
+playwright-report/
+test-results/
+test-output/
+.pytest_cache/
+.coverage
+htmlcov/
+*.screenshot.png
+*.test-output.txt
+
+# Local audit output
+audit-output/
+*_local.txt
+*_dry_run*.txt
+
+# Local database backups and sidecar files
+backups/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.db.bak
+*.db.backup
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite.bak
+*.sqlite.backup
+*.sqlite3-shm
+*.sqlite3-wal
+*.sqlite3.bak
+*.sqlite3.backup
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

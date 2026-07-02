@@ -1,6 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
-Status: current as of `MODULAR-CORE.1A` (July 2026).
+Status: canonical current-state module boundary, updated through
+`MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, and `MODULAR-CORE.2B` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -49,7 +50,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (MODULAR-CORE.1A)
+## Registry and feature gates (through MODULAR-CORE.2B)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -75,6 +76,10 @@ Registered in `core/module_registry.py`, enabled via
 * Templates get `enabled_modules` (a frozenset of keys) from
   `core.context_processors.module_context`, used as
   `{% if "prayers" in enabled_modules %}`.
+* `MODULAR-CORE.2B` strengthens content-level regression coverage for disabled
+  module surfaces. Tests cover the primary nav, Today reading/prayer/study/event
+  and ministry surfaces, the profile My Serving card, the valid
+  events-plus-ministry dependency shutdown, and the all-disabled home state.
 
 ### What disabling a module does today
 
@@ -84,6 +89,9 @@ Registered in `core/module_registry.py`, enabled via
   card. Ministry gating also hides the Today action-center serving summary,
   the Leader Needs Attention card, per-gathering serving notes, and the
   profile page's My Serving card.
+* Requires a dependency-valid configuration. Disabling `events` also requires
+  disabling `ministry`; keeping `ministry` enabled without `events` is rejected
+  rather than silently producing a partial serving surface.
 
 ### What disabling a module does NOT do (known limitations)
 

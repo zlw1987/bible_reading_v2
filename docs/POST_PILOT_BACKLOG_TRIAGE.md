@@ -1,5 +1,11 @@
 # Post-Pilot Backlog Triage
 
+> **Historical backlog ledger:** this file preserves post-pilot sequencing and
+> completion history. Its "Current Baseline" and future-tense entries are dated
+> to their original checkpoints and are not the canonical current roadmap. Use
+> `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md` for current product status and
+> `docs/README.md` for documentation routing.
+
 ## 1. Current Baseline
 
 - Current validated baseline: `v0.9-pilot-rc1`.

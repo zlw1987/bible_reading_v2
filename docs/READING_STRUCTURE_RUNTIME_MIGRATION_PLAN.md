@@ -1,14 +1,22 @@
 # Reading / Reflection / Progress Structure-Runtime Migration Plan (READING-STRUCT.1)
 
+> **Historical completion record:** this migration is no longer pending.
+> Current Reading group progress and Reflection group read/write paths use
+> structure snapshots and active primary `ChurchStructureMembership`.
+> `Profile.small_group`, `ReflectionComment.small_group_at_post`, and the legacy
+> `SmallGroup` table are removed, along with their retired backfill/shadow
+> tooling. Statements below about remaining legacy reads, mirrors, commands, or
+> production apply work describe the rollout stage at which they were written.
+
 ## 0. Purpose and status
 
-This is a **focused, current** companion to the broader
+This is a **focused historical** companion to the broader
 `docs/READING_PROGRESS_REFLECTION_PRIVACY_MIGRATION_PLAN.md` (the CS-CORE.4A
 design plan) and the cross-module
-`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`. Those remain the authoritative
-design / invariants / rollback documents. This doc tracks only the **remaining
+`docs/CHURCH_STRUCTURE_CORE_MIGRATION_PLAN.md`. Those remain historical
+design / invariants / rollback records. This doc tracked the **then-remaining
 runtime legacy small-group dependencies** in Reading / Reflection / Progress and
-the audit that measures readiness to retire them.
+the audit that measured readiness to retire them.
 
 Status: **READING-STRUCT.1A (audit) + 1B (snapshot backfill) + 1C (reflection
 visibility row-first, verified) + 1D (group progress membership-core default) +

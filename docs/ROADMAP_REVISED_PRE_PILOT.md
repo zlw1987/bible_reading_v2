@@ -1,5 +1,10 @@
 # Roadmap Revised Pre-Pilot
 
+> **Historical pre-pilot roadmap:** this sequencing document predates the
+> completed pilot, Church Structure retirement, modular-core foundation, and
+> release-hygiene work. It is retained for planning history only. Use
+> `docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md` for the current roadmap.
+
 ## 1. Purpose
 
 This revised phased roadmap reflects the new priority order before Lighting Pilot validation and before any Checklist V1 work.

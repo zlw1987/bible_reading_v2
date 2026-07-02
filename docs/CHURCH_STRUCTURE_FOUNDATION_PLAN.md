@@ -1,5 +1,9 @@
 # Church Structure Foundation Plan
 
+Status: canonical current-state Church Structure architecture, with historical
+bridge-era planning retained and labeled below. For documentation routing, see
+`docs/README.md`.
+
 ## 1. Purpose
 
 Church Structure Foundation began as a future foundational module for representing

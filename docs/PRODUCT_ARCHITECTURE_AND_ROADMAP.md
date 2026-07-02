@@ -1,5 +1,8 @@
 # Product Architecture and Roadmap
 
+Status: canonical current-state product architecture and roadmap, updated
+through `MODULAR-CORE.2B` and `RELEASE-HYGIENE.0A` (July 2026).
+
 ## 1. Project Identity
 
 This project is a lightweight church spiritual life and ministry workflow system.
@@ -75,7 +78,16 @@ Current architecture snapshot: Church Structure is canonical locally; legacy str
 
 Ministry scheduling requirements from real pilot feedback are recorded in `docs/MINISTRY_SCHEDULING_REQUIREMENTS_PLAN.md`. MO-S.2 is complete: `ServiceEvent` now has required MinistryTeams through explicit `ServiceEventRequiredTeam` rows. MO-S.3 is complete as read-only coverage display comparing those required teams against `TeamAssignment` and `TeamAssignmentMember` data. MO-S.4 is complete as a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`. MO-S.4A scheduling semantic cleanup is complete after manual QA. MO-S.5A is complete: `ServiceEvent.rotation_anchor_team` is an optional scheduling hint only. MO-S.5B is complete: the team schedule workspace can prefill editable anchor-based or team-history copy-forward suggestions and writes only on explicit save. `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; after `MINISTRY-ROLE-SOURCE.1C`, holders of an active lead/coordinator `MinistryTeamRoleAssignment` on a team can schedule that team's assignments (this authority no longer comes from `TeamMembership.role`); staff, superusers, and global assignment managers can schedule any team; ordinary members, membership-`role`-only leads/coordinators without a matching role assignment, and `can_lead`-only members cannot schedule; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the schedule defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display now uses `host_language_unit` and the audience-derived structure fallback, not the retired `ministry_context` FK.
 
-`MODULAR-CORE.1A` (implemented, July 2026) added the lightweight modular CMS foundation: a central module registry (`core/module_registry.py`) registering the `reading`, `prayers`, `studies`, `events`, and `ministry` modules with bilingual labels, capability metadata, and dependency notes; a central `CMS_ENABLED_MODULES` setting (default: all current modules enabled, preserving current behavior); feature-gate helpers (`is_module_enabled`, `get_enabled_modules`, `module_has_capability`); an `enabled_modules` template context; module gating of the primary nav links in `base.html`; and safe per-module guards in the Today/home aggregation so a disabled module contributes no nav link, Today card, or crash. Disabling a module hides surfaces only — it does not unload apps, models, admin, or URLs, and it does not yet gate the staff menu or setup checks. It is not a plugin framework; Community Events and Checklist remain deferred until after this foundation. Boundary rules and follow-ups (provider-driven Today, registry-driven nav, module-owned setup checks) are in `docs/MODULE_BOUNDARIES.md`.
+`MODULAR-CORE.1A + FU1` (implemented, July 2026) added the lightweight modular CMS foundation: a central module registry (`core/module_registry.py`) registering the `reading`, `prayers`, `studies`, `events`, and `ministry` modules with bilingual labels, capability metadata, and dependency notes; a central `CMS_ENABLED_MODULES` setting (default: all current modules enabled, preserving current behavior); feature-gate helpers (`is_module_enabled`, `get_enabled_modules`, `module_has_capability`); an `enabled_modules` template context; module gating of the primary nav links in `base.html`; and safe per-module guards in the Today/home aggregation. `MODULAR-CORE.2A` enforces declared dependencies: unknown keys or an enabled module with a missing dependency raise `ImproperlyConfigured`; specifically, `ministry` requires `events`. `MODULAR-CORE.2B` strengthens content-level tests for disabled-module nav, Today/action cards, ministry summaries, the profile My Serving card, dependency-valid event/ministry shutdown, and the all-disabled home state. Disabling a module remains a surface gate only — it does not unload apps, models, admin, or URLs, and it does not gate direct routes, the staff menu, staff overview, or setup checks. It is not a plugin framework; Community Events and Checklist remain deferred. Boundary rules and follow-ups (provider-driven Today, registry-driven nav, module-owned setup checks) are in `docs/MODULE_BOUNDARIES.md`.
+
+`RELEASE-HYGIENE.0A` is complete. The GoDaddy administrator bootstrap helper no
+longer contains or prints default credentials, fails closed on unsafe password
+or existing-user cases unless explicitly overridden, and supports protected
+environment configuration for non-interactive use. Repository ignore rules now
+cover local secrets, databases/backups, logs, audit output, and agent/browser
+artifacts, and committed local ServiceEvent audit outputs were removed. This
+milestone did not create an external release archive; the future allowlist-based
+release boundary is documented in `docs/DEPLOYMENT_SECURITY.md`.
 
 ## 3. Module Boundaries
 
@@ -187,7 +199,9 @@ Does not include:
 - Worship flow management
 - Replacement for BibleStudyMeeting or CommunityActivity
 
-Future planning may add CM/EM participating ministry context support, but CM and EM should be modeled as ministry contexts rather than MinistryTeam records.
+Future planning may add CM/EM participating structure context, but it should use
+appropriate `ChurchStructureUnit` rows rather than `MinistryTeam` records or a
+revived legacy `MinistryContext` model.
 
 ### F. Ministry Operations
 

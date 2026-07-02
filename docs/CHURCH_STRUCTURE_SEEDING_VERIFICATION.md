@@ -1,5 +1,13 @@
 # Church Structure Seeding Verification
 
+> **Historical operational evidence:** this document records the CS-H.3C
+> bridge-era seed/map run. The legacy source rows and mapping bridge were later
+> retired; current structure is `ChurchStructureUnit`, current belonging for
+> approved migrated consumers is active primary `ChurchStructureMembership`,
+> and the legacy `SmallGroup` / `District` / `MinistryContext` tables and
+> `Profile.small_group` are removed. Do not rerun this historical bridge command
+> as current setup guidance.
+
 ## 1. Purpose
 
 This document records the GoDaddy production/staging execution result for CS-H.3C.
@@ -8,7 +16,9 @@ The goal was to safely seed and map existing `MinistryContext`, `District`, and 
 
 The command is a dry-run/apply operational step. It is not an automatic migration, does not run during app startup, and does not switch runtime behavior to `ChurchStructureUnit`.
 
-Current runtime behavior remains unchanged.
+At the time of this seeding run, runtime behavior remained unchanged. That
+bridge-era statement is historical; the later consumer migrations and legacy
+retirement are complete.
 
 ## 2. Baseline
 

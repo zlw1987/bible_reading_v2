@@ -1,5 +1,15 @@
 # Bible Study V2 Implementation Strategy
 
+> **Historical/superseded implementation plan:** this document records the
+> pre-V2 and migration-era design. Bible Study V2 is now the active path through
+> `BibleStudySeries`, `BibleStudyLesson`, and `BibleStudyMeeting`, with
+> structure-native audience rows, `generation_key`, `anchor_unit`, and active
+> primary membership. V1 `BibleStudySession`, `BibleStudyGuide`, and V1-only
+> `BibleStudyWorshipSong` schema are removed. Do not treat the "current
+> implementation inventory" below as current code guidance; see
+> `docs/BIBLE_STUDY_STRUCTURE_NATIVE_MIGRATION_PLAN.md` and
+> `docs/LEGACY_BIBLE_STUDY_SESSION_RETIREMENT_DECISION.md`.
+
 ## 1. Purpose
 
 This document records a concrete Bible Study V2 implementation and migration strategy based on the current `studies` app.

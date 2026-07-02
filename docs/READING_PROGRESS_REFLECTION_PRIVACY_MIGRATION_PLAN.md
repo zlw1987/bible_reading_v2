@@ -1,5 +1,13 @@
 # CS-CORE.4A Reading, Group Progress, and Reflection Privacy Migration Plan
 
+> **Historical/superseded migration plan:** the runtime switches and later
+> mirror retirement are complete. Current group progress and Reflection group
+> visibility/write paths use structure-native scope/snapshots plus active
+> primary membership. `Profile.small_group`,
+> `ReflectionComment.small_group_at_post`, and the legacy structure tables are
+> removed. The present-tense legacy behavior below is the CS-CORE.4A-era
+> baseline, not current runtime guidance.
+
 ## 1. Purpose and Status
 
 This is a **docs-only, plan-only** migration plan (CS-CORE.4A) for the remaining

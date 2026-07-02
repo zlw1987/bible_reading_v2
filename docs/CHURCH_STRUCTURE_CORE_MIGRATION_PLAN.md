@@ -1,6 +1,16 @@
 # Church Structure Core Migration Plan (CS-CORE)
 
-## 1. Purpose and Status
+> **Historical execution record:** the Church Structure core migration and
+> legacy structure retirement are complete for the current codebase.
+> `ChurchStructureUnit` and active primary `ChurchStructureMembership` are the
+> current structure/belonging foundation for approved migrated consumers;
+> `Profile.small_group` and the legacy `SmallGroup` / `District` /
+> `MinistryContext` models/tables are removed. Read
+> `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for current architecture. All
+> "current," "remaining," and future-tense statements below describe the
+> milestone at which that section was written, not today's pending work.
+
+## 1. Historical Purpose and Status
 
 CS-CORE.0A is the docs-only architecture decision record (ADR) and staged migration plan for promoting Church Structure from a transitional foundation to the core model of the CMS.
 

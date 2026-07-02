@@ -1,5 +1,13 @@
 # Deployment Security and Release Boundary
 
+Status: canonical deployment-security and release-hygiene guidance, current
+through `RELEASE-HYGIENE.0A` (July 2026).
+
+`RELEASE-HYGIENE.0A` secured the administrator bootstrap helper, expanded
+repository ignore coverage for local secrets/databases/backups/logs/audit and
+agent artifacts, and removed previously committed local ServiceEvent audit
+outputs. It did not create an external release archive.
+
 ## Safe administrator bootstrap
 
 `run_create_admin_godaddy.py` is a deployment helper, not a source of default

@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.5A` and `RELEASE-HYGIENE.0A` (July 2026).
+`MODULAR-CORE.6A` and `RELEASE-HYGIENE.0A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -42,9 +42,10 @@ migration-safety instruction source.
   `ministry`. `CMS_ENABLED_MODULES` defaults to all registered modules.
   Unknown keys and unmet dependencies raise `ImproperlyConfigured`;
   `ministry` requires `events`.
-- Disabled modules are surface-gated: primary navigation, their Today
-  aggregation/cards/actions, and the profile My Serving card where applicable
-  are hidden. Today context is aggregated through per-module providers
+- Disabled modules are surface-gated: primary navigation, module-owned staff
+  dropdown links, their Today aggregation/cards/actions, and the profile My
+  Serving card where applicable are hidden. Today context is aggregated
+  through per-module providers
   (`core/today_providers.py`, `MODULAR-CORE.3A`): enabled modules' registered
   providers are called and disabled modules keep safe default context. The
   provider bodies live in each module's `today_provider` module
@@ -55,8 +56,8 @@ migration-safety instruction source.
   Structure / permission-admin and the always-run audience-visibility section
   stay Core — aggregated for enabled modules only, registered explicitly from
   `accounts.trial_setup_readiness`. This is not app unloading or route-level
-  hard-off; direct URLs, staff menu entries, staff overview, and the setup
-  checks route keep their existing behavior.
+  hard-off; direct URLs, staff overview, setup routes/checks, and admin routes
+  keep their existing behavior.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded
   ignore rules for local secrets/databases/backups/logs/audit output, and
   removed committed local audit artifacts. It did not build an external release

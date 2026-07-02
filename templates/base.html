@@ -44,12 +44,17 @@
                             {% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
                         </a>
 
+                        {% if "reading" in enabled_modules or "studies" in enabled_modules %}
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
                         </span>
+                        {% endif %}
+                        {% if "reading" in enabled_modules %}
                         <a href="{% url 'staff_reading_plan_list' %}">
                             {% if language == "zh" %}读经计划管理{% else %}Reading Plan Admin{% endif %}
                         </a>
+                        {% endif %}
+                        {% if "studies" in enabled_modules %}
                         <a href="{% url 'bible_study_schedule_manage_list' %}">
                             {% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}
                         </a>
@@ -59,19 +64,26 @@
                         <a href="{% url 'bible_study_meeting_manage_list' %}">
                             {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
                         </a>
+                        {% endif %}
 
+                        {% if "events" in enabled_modules or "ministry" in enabled_modules %}
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}
                         </span>
+                        {% endif %}
+                        {% if "events" in enabled_modules %}
                         <a href="{% url 'service_event_list' %}">
                             {% if language == "zh" %}教会聚会{% else %}Church Gatherings{% endif %}
                         </a>
+                        {% endif %}
+                        {% if "ministry" in enabled_modules %}
                         <a href="{% url 'ministry_team_list' %}">
                             {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
                         </a>
                         <a href="{% url 'team_assignment_list' %}">
                             {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
                         </a>
+                        {% endif %}
 
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}结构设置{% else %}Structure Setup{% endif %}
@@ -98,9 +110,11 @@
                         <a href="{% url 'staff_reflection_reports' %}">
                             {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
                         </a>
+                        {% if "prayers" in enabled_modules %}
                         <a href="{% url 'staff_prayer_reports' %}">
                             {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
                         </a>
+                        {% endif %}
                         <a href="{% url 'admin:index' %}">
                             {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
                         </a>

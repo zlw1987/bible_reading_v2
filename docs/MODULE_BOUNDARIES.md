@@ -3,7 +3,7 @@
 Status: canonical current-state module boundary, updated through
 `MODULAR-CORE.1A + FU1`, `MODULAR-CORE.2A`, `MODULAR-CORE.2B`,
 `MODULAR-CORE.3A`, `MODULAR-CORE.3B`, `MODULAR-CORE.4A`, and
-`MODULAR-CORE.5A` (July 2026).
+updated through `MODULAR-CORE.6A`
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -52,7 +52,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-## Registry and feature gates (through MODULAR-CORE.5A)
+## Registry and feature gates (through MODULAR-CORE.6A)
 
 * `settings.CMS_ENABLED_MODULES` is the single enablement source. Default
   ships with all current modules enabled, preserving current behavior.
@@ -139,10 +139,23 @@ Registered in `core/module_registry.py`, enabled via
     readiness provider yet; its trial-blocker checks live in this shared Core
     section. A future slice may split it into events- and studies-owned
     providers if module-gated audience readiness is ever wanted.
+* `MODULAR-CORE.6A` applies module surface gates to the hard-coded staff
+  dropdown in `templates/base.html`. Reading Plan Admin follows `reading`;
+  the three Bible Study management links follow `studies`; Church Gatherings
+  follows `events`; Ministry Teams and Team Assignments follow `ministry`; and
+  Prayer Reports follows `prayers`. Reflection Reports remains visible because
+  `comments` is a reading support app rather than an independently registered
+  module. Staff Overview, Church Structure Setup & Review, Ministry Structure,
+  user/review links, and Django Admin remain always visible to staff. This
+  changes discoverability only; staff overview content, setup routes/checks,
+  direct URLs, admin routes, and permissions are unchanged.
 
 ### What disabling a module does today
 
 * Omits its registry-contributed primary nav link from `templates/base.html`.
+* Omits its module-owned staff dropdown links from `templates/base.html`
+  (`MODULAR-CORE.6A`) while leaving the staff dropdown itself and its Core
+  links available.
 * Skips its Today provider (`core.today_providers.build_today_context` does
   not call disabled modules' providers and keeps their registered safe
   defaults) so no card, query, or crash comes from the disabled module, and
@@ -164,8 +177,8 @@ Registered in `core/module_registry.py`, enabled via
 * It does not unload the app, its models, admin registrations, or URLs.
   Direct URLs of a disabled module remain reachable and are protected only
   by their existing per-view permission/visibility rules.
-* It does not gate the staff dropdown menu entries, the staff overview
-  (`/staff/`) sections, or the setup/readiness *route*. The
+* It does not gate the staff overview (`/staff/`) sections or the
+  setup/readiness *route*. The
   `audit_trial_setup_readiness` command and any setup route stay reachable;
   `MODULAR-CORE.5A` only makes that command's module-specific *check sections*
   run per module enablement, and Core / audience checks always run.
@@ -192,7 +205,9 @@ Registered in `core/module_registry.py`, enabled via
    serving-note helper (module-gated inside ministry).
 3. **Primary module nav is registry-driven (`MODULAR-CORE.4A`).** Enabled
    ordinary-user module links come from each module's registry metadata.
-   Today stays Core; account and staff dropdowns remain separately hard-coded.
+   Today stays Core; the account and staff dropdowns remain separately
+   hard-coded. The staff dropdown's module-owned links are individually
+   guarded by the enabled-module set (`MODULAR-CORE.6A`).
 4. **Setup/readiness checks are provider/registry-driven (`MODULAR-CORE.5A`).**
    Module-specific checks register readiness providers against
    `core.setup_readiness` and are aggregated by `build_readiness_sections` for
@@ -221,6 +236,6 @@ Registered in `core/module_registry.py`, enabled via
   is ever wanted. Today it stays a Core, always-run provider so fail-closed
   zero-audience blockers surface regardless of module enablement
   (`MODULAR-CORE.5A`).
-* Optional: gating staff menu sections and staff overview cards by module.
+* Optional: gating staff overview cards by module.
 * Optional: middleware/route-level gating for disabled module URLs, if a
   church-facing deployment ever needs hard-off modules.

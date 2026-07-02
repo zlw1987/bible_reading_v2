@@ -8,7 +8,7 @@ from django.contrib.messages import get_messages
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.management import call_command, CommandError
 from django.db import connection, IntegrityError, transaction
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -730,6 +730,101 @@ class AccountProfileTests(TestCase):
             content.index("Staff Overview"),
             content.index("Content Management"),
         )
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["prayers", "studies", "events", "ministry"]
+    )
+    def test_staff_menu_hides_reading_link_when_reading_disabled(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Reading Plan Admin")
+        self.assertContains(response, "Bible Study Schedules")
+        self.assertContains(response, "Staff Overview")
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "events", "ministry"]
+    )
+    def test_staff_menu_hides_study_links_when_studies_disabled(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Bible Study Schedules")
+        self.assertNotContains(response, "Weekly Bible Study Guides")
+        self.assertNotContains(response, "Small Group Meetings")
+        self.assertContains(response, "Reading Plan Admin")
+        self.assertContains(response, "Church Gatherings")
+        self.assertContains(response, "Ministry Teams")
+        self.assertContains(response, "Prayer Reports")
+        self.assertContains(response, "Staff Overview")
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "prayers", "studies"])
+    def test_staff_menu_hides_events_and_ministry_links_when_events_disabled(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Church Gatherings")
+        self.assertNotContains(response, "Ministry Teams")
+        self.assertNotContains(response, "Team Assignments")
+        self.assertContains(response, "Reading Plan Admin")
+        self.assertContains(response, "Bible Study Schedules")
+        self.assertContains(response, "Staff Overview")
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events"]
+    )
+    def test_staff_menu_hides_ministry_links_but_keeps_events_link(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Church Gatherings")
+        self.assertNotContains(response, "Ministry Teams")
+        self.assertNotContains(response, "Team Assignments")
+        self.assertContains(response, "Staff Overview")
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "studies", "events", "ministry"]
+    )
+    def test_staff_menu_hides_prayer_reports_when_prayers_disabled(self):
+        self.set_language("en")
+        self.client.login(username="staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Prayer Reports")
+        self.assertContains(response, "Reflection Reports")
+        self.assertContains(response, "Staff Overview")
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_disabled_module_staff_urls_remain_reachable(self):
+        self.client.login(username="staff", password="StaffPass123!")
+
+        for url_name in (
+            "staff_reading_plan_list",
+            "bible_study_schedule_manage_list",
+            "bible_study_lesson_manage_list",
+            "bible_study_meeting_manage_list",
+            "service_event_list",
+            "ministry_team_list",
+            "team_assignment_list",
+            "staff_prayer_reports",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
 
     def test_mobile_staff_menu_css_uses_viewport_overlay_height(self):
         css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"

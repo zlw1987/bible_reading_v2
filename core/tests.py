@@ -203,6 +203,16 @@ class TodayProviderRegistryTests(SimpleTestCase):
                     defaults={"checklist_items": []},
                 )
 
+    def test_non_callable_provider_raises(self):
+        with self.isolated_registry():
+            with self.assertRaises(ValueError) as ctx:
+                register_today_provider(
+                    "reading",
+                    object(),  # not callable
+                    defaults={"today_items": []},
+                )
+            self.assertIn("callable", str(ctx.exception))
+
     def test_duplicate_registration_raises(self):
         with self.isolated_registry():
             register_today_provider(

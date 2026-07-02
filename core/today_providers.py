@@ -25,8 +25,12 @@ and ``ChurchStructureMembership`` (belonging) never implies serving.
 """
 
 from dataclasses import dataclass
+from typing import Any, Callable, Mapping
 
 from core.module_registry import get_enabled_module_keys, get_module
+
+# ``provide(request) -> mapping`` of context keys restricted to ``defaults``.
+TodayProviderCallable = Callable[[Any], Mapping[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -34,12 +38,12 @@ class TodayProvider:
     """One module's registered Today contribution."""
 
     module_key: str
-    # Callable ``provide(request) -> dict``; called only when the module is
+    # Callable ``provide(request) -> mapping``; called only when the module is
     # enabled, with keys restricted to ``defaults``.
-    provide: object
+    provide: TodayProviderCallable
     # Safe per-key fallback values (empty/None) used when the module is
     # disabled, so templates never see a missing key.
-    defaults: dict
+    defaults: Mapping[str, Any]
 
 
 # module_key -> TodayProvider, in registration order (dicts preserve it).
@@ -53,10 +57,16 @@ def register_today_provider(module_key, provide, *, defaults):
     the safe value used when the module is disabled. Keys are exclusive
     across providers so no module can silently overwrite another module's
     Today context. Unregistered module keys raise ``KeyError`` (same typo
-    protection as ``is_module_enabled``); duplicate or overlapping
-    registrations raise ``ValueError``.
+    protection as ``is_module_enabled``); a non-callable ``provide`` and
+    duplicate or overlapping registrations raise ``ValueError``.
     """
     get_module(module_key)  # raises KeyError on unregistered keys
+
+    if not callable(provide):
+        raise ValueError(
+            f"Today provider for module {module_key!r} must be callable, got "
+            f"{type(provide).__name__}."
+        )
 
     if module_key in _TODAY_PROVIDERS:
         raise ValueError(

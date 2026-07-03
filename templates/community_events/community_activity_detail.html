@@ -49,13 +49,18 @@
     </p>
     <p>{{ activity.review_note|linebreaksbr }}</p>
     {% endif %}
+    {% endif %}
+
     {% if can_edit %}
     <p>
         <a class="button" href="{% url 'community_activity_edit' activity.id %}">
-            {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
+            {% if activity.status == "changes_requested" %}
+                {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
+            {% else %}
+                {% if language == "zh" %}修改活动{% else %}Edit activity{% endif %}
+            {% endif %}
         </a>
     </p>
-    {% endif %}
     {% endif %}
 
     <p>

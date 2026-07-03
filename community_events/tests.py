@@ -1220,6 +1220,17 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.add_audience(activity, self.parent)
         return activity
 
+    def pending_activity(self, **overrides):
+        data = {
+            "title_en": "Pending Review Picnic",
+            "status": CommunityActivity.STATUS_PENDING_REVIEW,
+            "created_by": self.member,
+        }
+        data.update(overrides)
+        activity = self.create_activity(**data)
+        self.add_audience(activity, self.parent)
+        return activity
+
     def resubmit_data(self, activity, **overrides):
         data = {
             "title": activity.title,
@@ -1263,6 +1274,19 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.assertIn(activity, response.context["submitted_activities"])
         self.assertNotIn(activity, response.context["activities"])
 
+    def test_pending_review_shows_edit_link_on_list_and_detail(self):
+        activity = self.pending_activity()
+        self.login(self.member)
+
+        list_response = self.client.get(reverse("community_activity_list"))
+        detail_response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(list_response, self.edit_url(activity))
+        self.assertContains(detail_response, self.edit_url(activity))
+        self.assertContains(detail_response, "Edit activity")
+
     def test_other_scope_member_cannot_see_changes_requested_activity(self):
         in_scope_member = self.create_member("edit_in_scope", self.child)
         activity = self.changes_requested_activity(
@@ -1290,12 +1314,23 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Resubmit for review")
 
-    def test_creator_cannot_edit_pending_published_cancelled(self):
+    def test_creator_can_open_edit_form_for_own_pending_review(self):
+        activity = self.pending_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.edit_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Edit activity")
+        self.assertContains(response, "Save changes")
+
+    def test_creator_cannot_edit_draft_published_cancelled_completed(self):
         self.login(self.member)
         for status in (
-            CommunityActivity.STATUS_PENDING_REVIEW,
+            CommunityActivity.STATUS_DRAFT,
             CommunityActivity.STATUS_PUBLISHED,
             CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
         ):
             with self.subTest(status=status):
                 activity = self.create_activity(
@@ -1305,13 +1340,30 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
                 response = self.client.get(self.edit_url(activity))
                 self.assertEqual(response.status_code, 404)
 
-    def test_creator_cannot_edit_other_users_activity(self):
-        activity = self.changes_requested_activity(created_by=self.other_member)
+    def test_other_user_cannot_edit_pending_review_activity(self):
+        activity = self.pending_activity(created_by=self.other_member)
         self.login(self.member)
 
         response = self.client.get(self.edit_url(activity))
 
         self.assertEqual(response.status_code, 404)
+
+    def test_creator_can_edit_pending_review_and_status_remains_pending(self):
+        activity = self.pending_activity()
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, description="Fixed before review"),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+        self.assertEqual(activity.description, "Fixed before review")
 
     def test_resubmit_sets_status_back_to_pending_review(self):
         activity = self.changes_requested_activity()
@@ -1348,6 +1400,26 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
                 )
             ),
             [self.sibling.id],
+        )
+
+    def test_selected_scope_user_cannot_see_pending_activity_after_edit(self):
+        activity = self.pending_activity()
+        self.login(self.member)
+        self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, audience_units=[self.sibling.id]),
+        )
+
+        self.login(self.other_member)
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 404)
+        self.assertNotContains(list_response, "Pending Review Picnic")
+        self.assertFalse(
+            visible_community_activities_for(self.other_member)
+            .filter(id=activity.id)
+            .exists()
         )
 
     def test_resubmit_with_invalid_scope_keeps_changes_requested(self):
@@ -1398,6 +1470,16 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
 
     def test_resubmit_creates_no_serving_state(self):
         activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        self.client.post(self.edit_url(activity), self.resubmit_data(activity))
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_pending_review_edit_creates_no_serving_state(self):
+        activity = self.pending_activity()
         self.login(self.member)
 
         self.client.post(self.edit_url(activity), self.resubmit_data(activity))

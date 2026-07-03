@@ -155,14 +155,14 @@ def community_activity_detail(request, activity_id):
 
 @login_required
 def community_activity_edit(request, activity_id):
-    """Let a creator edit and resubmit their own changes-requested activity.
+    """Let a creator edit their own activity while it awaits publication.
 
     Only the creator may edit, and only while the activity is in
-    ``changes_requested``. A valid resubmit updates the activity fields,
-    replaces the audience rows with the newly selected valid scope units, and
-    moves the activity back to ``pending_review`` in a single transaction. The
-    prior staff ``review_note`` is preserved for context; the creator cannot
-    publish.
+    ``pending_review`` or ``changes_requested``. A valid save updates the
+    activity fields, replaces the audience rows with the newly selected valid
+    scope units, and leaves or moves the activity to ``pending_review`` in a
+    single transaction. Any prior staff ``review_note`` is preserved for
+    context; the creator cannot publish.
     """
     activity = get_object_or_404(CommunityActivity, id=activity_id)
     if not activity.can_be_edited_by(request.user):
@@ -211,6 +211,10 @@ def community_activity_edit(request, activity_id):
         {
             "form": form,
             "is_edit": True,
+            "is_changes_requested": (
+                activity.status
+                == CommunityActivity.STATUS_CHANGES_REQUESTED
+            ),
             "activity": activity,
             "review_note": activity.review_note,
         },

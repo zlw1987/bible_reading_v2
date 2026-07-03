@@ -133,18 +133,22 @@ class CommunityActivity(models.Model):
         ).exists()
 
     def can_be_edited_by(self, user):
-        """Return whether ``user`` may edit and resubmit this activity.
+        """Return whether ``user`` may edit this submitted activity.
 
         Only the creator may edit their own activity, and only while it is in
-        ``changes_requested``. Pending-review, published, cancelled, and
-        completed activities are not creator-editable; staff editing stays in
-        Django admin or the review surface.
+        ``pending_review`` or ``changes_requested``. Draft, published,
+        cancelled, and completed activities are not creator-editable; staff
+        editing stays in Django admin or the review surface.
         """
         return bool(
             self.pk
             and getattr(user, "is_authenticated", False)
             and self.created_by_id == getattr(user, "id", None)
-            and self.status == self.STATUS_CHANGES_REQUESTED
+            and self.status
+            in (
+                self.STATUS_PENDING_REVIEW,
+                self.STATUS_CHANGES_REQUESTED,
+            )
         )
 
     def is_signup_open(self, at=None):

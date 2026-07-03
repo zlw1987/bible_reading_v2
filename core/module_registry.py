@@ -161,6 +161,18 @@ _REGISTERED_MODULES = (
         ),
     ),
     CmsModule(
+        key="community_events",
+        label_en="Community Activities",
+        label_zh="活动",
+        capabilities=frozenset({CAPABILITY_REQUIRES_STRUCTURE_CORE}),
+        dependency_notes=(
+            "Independent community/fellowship activities. Ordinary visibility "
+            "uses CommunityActivityAudienceScope rows plus active primary "
+            "ChurchStructureMembership; zero-row activities fail closed. "
+            "Audience visibility and belonging never imply serving."
+        ),
+    ),
+    CmsModule(
         key="ministry",
         label_en="Ministry Serving",
         label_zh="事工服事",

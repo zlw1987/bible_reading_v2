@@ -11,6 +11,7 @@ from django.utils import timezone
 from . import setup_readiness, today_providers
 from .module_registry import (
     CAPABILITY_NAV,
+    CAPABILITY_REQUIRES_STRUCTURE_CORE,
     CAPABILITY_SETUP_CHECKS,
     CAPABILITY_TODAY,
     get_enabled_module_keys,
@@ -37,7 +38,14 @@ from .today_providers import (
 
 User = get_user_model()
 
-ALL_MODULE_KEYS = ("reading", "prayers", "studies", "events", "ministry")
+ALL_MODULE_KEYS = (
+    "reading",
+    "prayers",
+    "studies",
+    "events",
+    "community_events",
+    "ministry",
+)
 
 # MODULAR-CORE.3A: the full default Today context shape contributed by the
 # registered providers (reading / events / studies / ministry).
@@ -162,20 +170,59 @@ class ModuleRegistryTests(SimpleTestCase):
 
     def test_unregistered_key_lookups_raise(self):
         with self.assertRaises(KeyError):
-            get_module("community_events")
+            get_module("checklist")
         with self.assertRaises(KeyError):
-            is_module_enabled("community_events")
+            is_module_enabled("checklist")
 
     def test_module_capabilities_metadata(self):
-        for key in ALL_MODULE_KEYS:
+        for key in ("reading", "prayers", "studies", "events", "ministry"):
             self.assertTrue(module_has_capability(key, CAPABILITY_NAV), key)
+        self.assertFalse(module_has_capability("community_events", CAPABILITY_NAV))
         self.assertTrue(module_has_capability("reading", CAPABILITY_TODAY))
         self.assertFalse(module_has_capability("prayers", CAPABILITY_TODAY))
+        self.assertFalse(module_has_capability("community_events", CAPABILITY_TODAY))
         for key in ("studies", "events", "ministry"):
             self.assertTrue(module_has_capability(key, CAPABILITY_SETUP_CHECKS), key)
         self.assertFalse(module_has_capability("reading", CAPABILITY_SETUP_CHECKS))
+        self.assertFalse(
+            module_has_capability("community_events", CAPABILITY_SETUP_CHECKS)
+        )
+        self.assertTrue(
+            module_has_capability(
+                "community_events",
+                CAPABILITY_REQUIRES_STRUCTURE_CORE,
+            )
+        )
         with self.assertRaises(KeyError):
             module_has_capability("reading", "not_a_capability")
+
+    @override_settings(CMS_ENABLED_MODULES=["community_events"])
+    def test_community_events_is_valid_without_module_dependencies(self):
+        self.assertEqual(
+            get_enabled_module_keys(),
+            frozenset({"community_events"}),
+        )
+        module = get_module("community_events")
+        self.assertEqual(module.label_en, "Community Activities")
+        self.assertEqual(module.label_zh, "活动")
+        self.assertEqual(module.depends_on, ())
+        self.assertIsNone(module.primary_nav)
+
+    @override_settings(
+        CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events", "ministry"]
+    )
+    def test_disabled_community_events_contributes_no_nav_or_today_surface(self):
+        self.assertNotIn(
+            "community_events",
+            {
+                entry.active_nav
+                for entry in get_enabled_primary_nav_entries()
+            },
+        )
+        self.assertNotIn(
+            "community_events",
+            get_registered_today_provider_keys(),
+        )
 
     def test_ministry_declares_events_dependency(self):
         self.assertIn("events", get_module("ministry").depends_on)

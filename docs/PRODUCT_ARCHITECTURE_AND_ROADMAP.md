@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `MODULAR-CORE.6B` and `RELEASE-HYGIENE.0A` (July 2026).
+through `COMMUNITY-EVENTS.1A` (July 2026).
 
 ## 1. Project Identity
 
@@ -102,10 +102,11 @@ The lightweight modular CMS foundation is implemented through
 Module disablement is a discoverability/surface gate, not app unloading or
 route-level hard-off. Direct module URLs, apps, models, admin registrations,
 permissions, setup routes, and the setup/readiness command retain their
-existing behavior. Community Events/Activities is now eligible for a
-separately approved implementation slice after this modular-core foundation,
-but it is not implemented or approved by this checkpoint. Checklist remains
-deferred. See `docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
+existing behavior. `COMMUNITY-EVENTS.1A` builds on this foundation with an
+independent registered app, models, admin, and visibility helper while adding
+no shared user surface. Signup and member-facing Community Activities work
+still requires separately approved slices. Checklist remains deferred. See
+`docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
 
 `RELEASE-HYGIENE.0A` is complete. The GoDaddy administrator bootstrap helper no
 longer contains or prints default credentials, fails closed on unsafe password
@@ -625,18 +626,21 @@ runtime guidance; use Section 2 and the canonical documents in
 - CS-MAP.2 read-only Staff Structure Map + Mapping Health completed at `/staff/structure/`: permission-protected read-only staff page rendering the active `ChurchStructureUnit` hierarchy with bilingual names, hierarchical node-level expand/collapse, descendant-inclusive covered-member counts, and setup-readiness indicators including direct active primary memberships on parent units. Historical/superseded: at CS-MAP.2 time this page still showed mapping context from active legacy rows; those legacy structure rows/tables were later retired. No write actions, no member rosters, no runtime visibility changes.
 - SE-AS.5 is complete as the bounded staff selector/display implementation; SE-AS.6C apply/backfill, SE-AS.7A write-path guard, and SE-RETIRE.1B zero-row fallback retirement later completed as separate slices. Community Activities, CS-MAP.3, CS-SETUP.1, and field-level legacy cleanup are not pulled forward by SE-AS.5 completion.
 - CS-MAP.3 optional setup readiness checklist remains optional and unapproved. CS-SETUP.1 limited structure setup/edit UI is not approved; it is gated on CS-MAP.2 evidence plus a separate design doc (unit↔legacy sync, edit permissions, effect on stored audience rows). CS-SETUP.1A is complete as a docs-only risk/design pass in `docs/CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md` Section 13: it records the risk analysis and design contract and splits CS-SETUP.1 into separately approvable CS-SETUP.1B (label/sort-order only), 1C (mapping review/edit), 1D (create/move/deactivate), and 1E (membership/belonging) sub-milestones; none of 1B–1E is approved and no runtime/schema behavior changed.
-- Community Activities should reuse the same `ChurchStructureUnit`
-  audience-scope foundation through its own app-specific join model.
-  `COMMUNITY-EVENTS-READINESS.0A` confirms that the modular foundation is ready
-  for a separately approved implementation slice; Community Activities is not
-  implemented or approved by this docs checkpoint.
+- `COMMUNITY-EVENTS.1A` adds the independent `community_events` module,
+  `CommunityActivity`, and its app-specific
+  `CommunityActivityAudienceScope`. Ordinary visibility requires a published
+  activity plus an audience row matching the user's active primary membership
+  unit or an ancestor; zero rows fail closed. The slice adds Django admin but
+  no member routes/templates, signup, primary nav, Today, My Serving, or
+  `ServiceEvent` relationship.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
 - ServiceEvent legacy scope field retirement is complete (SE-FIELD-RETIRE.1A);
   only immutable historical migrations/docs should still name those fields.
-- A separately approved Community Activities V1 using an app-specific
-  `ChurchStructureUnit` audience-scope join model.
+- Separately approved Community Activities member-facing/signup/approval
+  slices building on the implemented app-specific `ChurchStructureUnit`
+  audience-scope foundation.
 - Checklist V1 remains deferred.
 
 ## 7. Explicit Non-Goals
@@ -755,7 +759,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. Community Activities is ready to be considered as a separately approved post-modular-core implementation, but is not implemented or approved by `COMMUNITY-EVENTS-READINESS.0A`; notifications, attendance, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` now provides the independent Community Activities model/admin/visibility foundation; signup, approval, member-facing surfaces, notifications, attendance, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
 
 Not next:
 - Lighting Team-specific model
@@ -765,8 +769,8 @@ Not next:
 - Swap requests
 - Reminder automation
 - Checklist engine
-- Community Activities without a separately approved audience/operations
-  implementation slice
+- Further Community Activities signup, approval, or user-surface work without
+  a separately approved implementation slice
 - Role-aware Bible Study editing permissions before schedule/scope alignment
 - Full historical import
 - Sensitive contact import

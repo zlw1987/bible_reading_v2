@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`MODULAR-CORE.6B` and `RELEASE-HYGIENE.0A` (July 2026).
+`COMMUNITY-EVENTS.1A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -14,6 +14,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 |---|---|---|
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
+| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation and explicitly deferred signup and member-facing surfaces. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -38,10 +39,16 @@ migration-safety instruction source.
 - ServiceEvent ordinary visibility uses `ServiceEventAudienceScope` rows
   matched through active primary membership. Zero-row events fail closed for
   ordinary users.
-- The module registry contains `reading`, `prayers`, `studies`, `events`, and
-  `ministry`. `CMS_ENABLED_MODULES` defaults to all registered modules.
-  Unknown keys and unmet dependencies raise `ImproperlyConfigured`;
-  `ministry` requires `events`.
+- The module registry contains `reading`, `prayers`, `studies`, `events`,
+  `community_events`, and `ministry`. `CMS_ENABLED_MODULES` defaults to all
+  registered modules. Unknown keys and unmet dependencies raise
+  `ImproperlyConfigured`; `ministry` requires `events`.
+- `COMMUNITY-EVENTS.1A` adds the independent `community_events` app,
+  `CommunityActivity`, `CommunityActivityAudienceScope`, Django admin, and
+  published/activity-audience visibility through active primary membership.
+  Zero-row activities fail closed for ordinary users. The module has no
+  primary navigation, Today provider, My Serving contribution, signup UI, or
+  `ServiceEvent` relationship.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
   dropdown links, module-owned Staff Overview cards/counts/links
   (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
@@ -98,9 +105,13 @@ historical evidence rather than current test instructions.
 
 ## Deferred Product Plans
 
-Community Events/Activities is ready to be considered after modular core, with
-the current docs-only checkpoint recorded in
-[`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md); it is not
-implemented or approved for implementation yet. Checklist remains deferred.
-Do not use planning documentation as authorization to create either product,
-gate staff/setup routes, or extract apps into packages.
+Community Events/Activities has an implemented `COMMUNITY-EVENTS.1A`
+foundation: the `community_events` app, `CommunityActivity`,
+`CommunityActivityAudienceScope`, Django admin, registry entry, and
+structure-native visibility helper. Signup, approval workflow, member-facing
+routes/templates, ordinary primary navigation, Today integration, My Serving
+integration, and any `ServiceEvent` relationship remain deferred and require
+separately approved implementation slices. Checklist remains deferred.
+
+Do not use planning documentation as authorization to add signup, shared user
+surfaces, route hard-off gates, staff/setup extraction, or package extraction.

@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "prayers",
     "studies",
     "events",
+    "community_events.apps.CommunityEventsConfig",
     "ministry",
 ]
 
@@ -61,6 +62,7 @@ CMS_ENABLED_MODULES = [
     "prayers",
     "studies",
     "events",
+    "community_events",
     "ministry",
 ]
 

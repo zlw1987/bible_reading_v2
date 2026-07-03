@@ -1,16 +1,17 @@
 # Community Activities V1 Plan
 
-Status: current planning/readiness document as of
-`COMMUNITY-EVENTS-READINESS.0A` (July 2026). The Church Structure migration and
-modular CMS foundation through `MODULAR-CORE.6B` are complete enough for
-Community Events/Activities to be considered as a separately approved next
-implementation. This docs-only checkpoint does not approve or implement the
-module; names, routes, permissions, models, migrations, and delivery slices
-still require explicit approval.
+Status: current plan updated through `COMMUNITY-EVENTS.1A` (July 2026).
+The independent `community_events` app foundation is implemented and
+registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
+`community_events/0001_initial`, structure-native visibility, and Django admin
+exist.
+Signup, approval, member-facing routes/templates, primary navigation, Today,
+My Serving, and any `ServiceEvent` relationship remain deferred.
 
 ## 1. Purpose
 
-Community Activities is a future module for member/community/fellowship activities with signup.
+Community Activities is an independent module foundation for future
+member/community/fellowship activity signup.
 
 The project remains a lightweight church spiritual life and ministry workflow system. Community Activities should not turn the project into a full church ERP.
 
@@ -56,14 +57,14 @@ An optional future relationship to ServiceEvent may be considered later for larg
 
 Do not create a separate SpecialEvent model in V1.
 
-## 4. Possible V1 Models
+## 4. Models
 
-This section documents a possible future model direction only. It is not
-implementation approval.
+`COMMUNITY-EVENTS.1A` implements the first two models below. `ActivitySignup`
+remains a future model and is not approved by the foundation slice.
 
 ### CommunityActivity
 
-Suggested fields:
+Implemented fields:
 - title
 - title_en
 - description
@@ -73,26 +74,25 @@ Suggested fields:
 - end_datetime
 - location
 - location_en
-- capacity optional
-- signup_deadline optional
 - status:
   - draft
-  - pending_approval
   - published
   - cancelled
   - completed
-- requires_approval
 - created_by
-- approved_by
-- approved_at
+- created_at
+- updated_at
+
+Capacity, signup deadlines, approval fields, and approval workflow are not
+part of `COMMUNITY-EVENTS.1A`.
 
 ### CommunityActivityAudienceScope
 
-The final implementation direction is an app-specific audience join model,
-following the current structure-native pattern rather than any legacy
-`scope_type`, `MinistryContext`, `District`, or `SmallGroup` fields.
+This is an app-specific audience join model following the current
+structure-native pattern rather than any legacy `scope_type`,
+`MinistryContext`, `District`, or `SmallGroup` fields.
 
-Suggested fields:
+Implemented fields:
 
 - `activity`: FK to `CommunityActivity`;
 - `structure_unit`: FK to `ChurchStructureUnit`;
@@ -104,8 +104,8 @@ selected structure subtrees. The implementation must not recreate legacy
 audience-segment tables or depend on retired legacy structure models.
 
 ServiceEvent and Bible Study V2 already use app-specific structure audience
-rows. Community Activities should reuse the same architectural pattern while
-owning its own model and visibility query; it is not implemented now. See
+rows. Community Activities reuses the architectural pattern while owning its
+own model and visibility query. See
 `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 ### ActivitySignup
@@ -123,7 +123,7 @@ Suggested fields:
 
 ## 5. Scope and Visibility Rules
 
-Ordinary-user visibility should be structure-native:
+Ordinary-user visibility is structure-native:
 
 - resolve the user's active primary `ChurchStructureMembership`;
 - an activity matches when that membership's `structure_unit` is the selected
@@ -146,8 +146,9 @@ Examples use canonical structure units, not legacy model types:
   whole-church/root-row policy.
 
 Users outside every selected structure subtree must not see the activity or
-sign up for it. Staff/manager bypass behavior, if any, must be specified in the
-approved implementation rather than inferred here.
+sign up for it. `COMMUNITY-EVENTS.1A` gives authenticated staff and superusers
+the minimal management/visibility bypass. It does not invent a leader or
+structure-role permission.
 
 The UI and queries should avoid exposing private membership data. An activity
 list should answer "can this user see this activity?" rather than showing
@@ -246,29 +247,20 @@ No:
 
 ## 10. Roadmap Position
 
-The prerequisites named by the earlier plan are now satisfied: Bible Study V2
-is the active path, Church Structure is canonical and structure-native, and
-the modular CMS foundation is implemented through `MODULAR-CORE.6B`.
-Community Events/Activities may therefore be proposed as a separate next
-module.
+`COMMUNITY-EVENTS.1A` completes the independently registered model/admin
+foundation and its structure-native visibility rule. It intentionally adds no
+member-facing surface or signup behavior.
 
-Implementation still requires a separately approved, bounded slice covering at
-least:
+Later work still requires separately approved, bounded slices for:
 
-- the final product/module name and registry key;
-- registry capabilities and any declared dependencies;
-- models and migrations, including an app-specific
-  `CommunityActivityAudienceScope` selecting `ChurchStructureUnit`;
-- active-primary-membership descendant matching and zero-row fail-closed
-  coverage;
-- permissions, signup lifecycle, staff surfaces, and bilingual copy;
+- `ActivitySignup` and its lifecycle;
+- member-facing list/detail/signup routes and bilingual templates;
+- activity creation and approval permissions/workflow;
 - any primary-nav, staff-dropdown, Staff Overview, setup/readiness, or Today
-  provider contributions;
-- explicit regression tests proving that visibility/signup/belonging do not
-  create serving or My Serving items.
+  contribution;
+- capacity, waitlist, reminders, payments, or calendar behavior.
 
-`COMMUNITY-EVENTS-READINESS.0A` changes documentation only. Community
-Events/Activities is not implemented, registered, migrated, or enabled by this
-checkpoint.
+No later slice may infer serving from activity visibility, signup, or
+membership, and no link to `ServiceEvent` is implied by this foundation.
 
 Checklist V1 remains deferred and should not be revived because of Community Activities.

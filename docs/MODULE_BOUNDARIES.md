@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`MODULAR-CORE.6B` (July 2026).
+`COMMUNITY-EVENTS.1A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -48,7 +48,13 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent 1A model/admin foundation. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. No ordinary nav, Today, My Serving, signup, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
+
+`community_events` currently declares only `requires_structure_core`. It has
+no registered-module dependencies and contributes no shared user surface in
+`COMMUNITY-EVENTS.1A`; enablement therefore registers/configures the module
+without adding an ordinary navigation or Today entry.
 
 ## Registry and feature gates (through MODULAR-CORE.6B)
 
@@ -256,12 +262,12 @@ Registered in `core/module_registry.py`, enabled via
 6. **Membership is not serving.** `ChurchStructureMembership` is belonging.
    Serving remains explicit (`TeamAssignmentMember`, linked-user
    `BibleStudyMeetingRole`).
-7. **New modules require explicit approval.** The modular foundation is now in
-   place through `MODULAR-CORE.6B`, so Community Events/Activities may be
-   considered next, but `COMMUNITY-EVENTS-READINESS.0A` is docs-only and does
-   not approve or implement it. Checklist remains deferred. A new module must
-   receive a separately approved implementation slice and register here as
-   part of that work, with explicit model/migration scope.
+7. **New modules require explicit approval.** `COMMUNITY-EVENTS.1A` is the
+   approved independent foundation for Community Events/Activities and
+   registers it here with explicit model/migration/visibility scope. Signup,
+   member routes/templates, shared user-surface contributions, and Checklist
+   remain deferred. Any further module or Community Activities expansion
+   requires its own approved slice.
 
 ## Follow-ups (not yet done)
 

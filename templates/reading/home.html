@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load event_extras %}
+{% load community_event_extras %}
 {% load datetime_extras %}
 {% load ministry_extras %}
 {% load reading_extras %}
@@ -125,6 +126,43 @@
     <a class="button button-secondary" href="{% url 'my_serving' %}">
         {% if language == "zh" %}打开我的服事{% else %}Open My Serving{% endif %}
     </a>
+</div>
+{% endif %}
+
+{# --- Personally relevant Community Activities (never serving) --------- #}
+{% if community_activity_creator_attention_items or community_activity_today_items %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}活动{% else %}Activities{% endif %}</h2>
+    <div class="dashboard-week-list">
+        {% for activity in community_activity_creator_attention_items %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'community_activity_detail' activity.id %}">
+                    {{ activity|activity_title:language }}
+                </a>
+            </p>
+            {% if activity.status == "changes_requested" %}
+            <p><span class="status status-warning">{% if language == "zh" %}需要修改{% else %}Changes requested{% endif %}</span></p>
+            <a class="button button-secondary" href="{% url 'community_activity_edit' activity.id %}">
+                {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
+            </a>
+            {% elif activity.status == "pending_review" %}
+            <p><span class="status">{% if language == "zh" %}等待审核{% else %}Pending review{% endif %}</span></p>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% for activity in community_activity_today_items %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'community_activity_detail' activity.id %}">
+                    {{ activity|activity_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ activity.start_datetime|member_datetime:language }}</p>
+            <p><span class="status status-good">{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</span></p>
+        </div>
+        {% endfor %}
+    </div>
 </div>
 {% endif %}
 
@@ -480,7 +518,26 @@
 </div>
 {% endif %}
 
-{% if not week_gatherings and not week_study_meetings and not study_meeting_context.show_no_small_group %}
+{% if community_activity_this_week_items %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}活动{% else %}Activities{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for activity in community_activity_this_week_items %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'community_activity_detail' activity.id %}">
+                    {{ activity|activity_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ activity.start_datetime|member_datetime:language }}</p>
+            <p><span class="status status-good">{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</span></p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if not week_gatherings and not week_study_meetings and not community_activity_this_week_items and not study_meeting_context.show_no_small_group %}
 <div class="card">
     <p class="muted">
         {% if language == "zh" %}

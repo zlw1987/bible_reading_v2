@@ -1,3 +1,6 @@
+from datetime import datetime
+from unittest.mock import patch
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -15,6 +18,7 @@ from .models import (
     CommunityActivityAudienceScope,
     CommunityActivitySubmissionBlock,
 )
+from .today_provider import TODAY_DEFAULTS as COMMUNITY_ACTIVITY_TODAY_DEFAULTS
 from .visibility import visible_community_activities_for
 
 User = get_user_model()
@@ -1431,6 +1435,278 @@ class CommunityActivityReviewNavTests(CommunityActivityWebTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(self.review_nav_href(), response.content.decode())
+
+
+class CommunityActivityTodayTests(CommunityActivityWebTestBase):
+    """COMMUNITY-EVENTS.1E-A personally relevant Today integration."""
+
+    def setUp(self):
+        super().setUp()
+        self.today = timezone.make_aware(datetime(2030, 1, 7, 10, 0))
+
+    def get_home(self, user=None, language="en"):
+        self.login(user or self.member, language=language)
+        with (
+            patch(
+                "community_events.today_provider.current_time",
+                return_value=self.today,
+            ),
+            patch(
+                "core.today_windows.timezone.localdate",
+                return_value=self.today.date(),
+            ),
+        ):
+            return self.client.get(reverse("home"))
+
+    def signed_up_activity(self, *, starts_at, user=None, **overrides):
+        activity = self.create_activity(
+            start_datetime=starts_at,
+            **overrides,
+        )
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=user or self.member,
+            status=ActivitySignup.STATUS_SIGNED_UP,
+        )
+        return activity
+
+    def test_today_shows_signed_up_published_activity_happening_today(self):
+        activity = self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(hours=2),
+            title_en="Today Signed Activity",
+        )
+
+        response = self.get_home()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Activities")
+        self.assertContains(response, "Today Signed Activity")
+        self.assertContains(response, "You’re signed up")
+        self.assertIn(
+            activity,
+            response.context["community_activity_today_items"],
+        )
+        self.assertNotIn(
+            activity,
+            response.context["community_activity_this_week_items"],
+        )
+
+    def test_later_signed_up_activity_appears_only_in_this_week(self):
+        activity = self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(days=2),
+            title_en="Later This Week Activity",
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "This Week")
+        self.assertContains(response, "Later This Week Activity")
+        self.assertNotIn(
+            activity,
+            response.context["community_activity_today_items"],
+        )
+        self.assertIn(
+            activity,
+            response.context["community_activity_this_week_items"],
+        )
+
+    def test_visible_published_activity_without_signup_is_not_on_today(self):
+        activity = self.create_activity(
+            title_en="Visible But Not Signed Up",
+            start_datetime=self.today + timezone.timedelta(hours=2),
+        )
+        self.add_audience(activity, self.parent)
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Visible But Not Signed Up")
+        self.assertEqual(response.context["community_activity_today_items"], [])
+
+    def test_cancelled_signup_hidden_and_nonmatching_or_nonpublished_hidden(self):
+        cancelled_signup = self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(hours=1),
+            title_en="Cancelled Signup Hidden",
+        )
+        cancelled_signup.signups.update(status=ActivitySignup.STATUS_CANCELLED)
+
+        nonmatching = self.create_activity(
+            title_en="Other Scope Signed Hidden",
+            start_datetime=self.today + timezone.timedelta(hours=2),
+        )
+        self.add_audience(nonmatching, self.sibling)
+        ActivitySignup.objects.create(activity=nonmatching, user=self.member)
+
+        pending = self.create_activity(
+            title_en="Pending Signed Hidden",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            start_datetime=self.today + timezone.timedelta(hours=3),
+        )
+        self.add_audience(pending, self.parent)
+        ActivitySignup.objects.create(activity=pending, user=self.member)
+
+        response = self.get_home()
+
+        for title in (
+            "Cancelled Signup Hidden",
+            "Other Scope Signed Hidden",
+            "Pending Signed Hidden",
+        ):
+            self.assertNotContains(response, title)
+        self.assertEqual(response.context["community_activity_today_items"], [])
+
+    def test_selected_scope_user_does_not_see_other_creators_review_rows(self):
+        for status, title in (
+            (
+                CommunityActivity.STATUS_PENDING_REVIEW,
+                "Other Creator Pending Hidden",
+            ),
+            (
+                CommunityActivity.STATUS_CHANGES_REQUESTED,
+                "Other Creator Changes Hidden",
+            ),
+        ):
+            activity = self.create_activity(
+                title_en=title,
+                status=status,
+                created_by=self.other_member,
+            )
+            self.add_audience(activity, self.parent)
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Other Creator Pending Hidden")
+        self.assertNotContains(response, "Other Creator Changes Hidden")
+        self.assertEqual(
+            response.context["community_activity_creator_attention_items"],
+            [],
+        )
+
+    def test_creator_changes_requested_shows_attention_and_edit_link(self):
+        activity = self.create_activity(
+            title_en="Creator Changes Activity",
+            status=CommunityActivity.STATUS_CHANGES_REQUESTED,
+            created_by=self.member,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Creator Changes Activity")
+        self.assertContains(response, "Changes requested")
+        self.assertContains(
+            response,
+            reverse("community_activity_edit", args=[activity.id]),
+        )
+        self.assertIn(
+            activity,
+            response.context["community_activity_creator_attention_items"],
+        )
+
+    def test_creator_pending_review_is_a_status_only_reminder(self):
+        activity = self.create_activity(
+            title_en="Creator Pending Activity",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+
+        response = self.get_home()
+
+        self.assertContains(response, "Creator Pending Activity")
+        self.assertContains(response, "Pending review")
+        self.assertNotContains(
+            response,
+            reverse("community_activity_edit", args=[activity.id]),
+        )
+
+    def test_today_activity_copy_renders_in_chinese(self):
+        self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(hours=2),
+            title="今日已报名活动",
+        )
+        self.create_activity(
+            title="需要修改的活动",
+            status=CommunityActivity.STATUS_CHANGES_REQUESTED,
+            created_by=self.member,
+        )
+
+        response = self.get_home(language="zh")
+
+        self.assertContains(response, "活动")
+        self.assertContains(response, "你已报名")
+        self.assertContains(response, "需要修改")
+
+    def test_published_creator_activity_requires_active_signup(self):
+        unsigned = self.create_activity(
+            title_en="Creator Published Unsigned",
+            status=CommunityActivity.STATUS_PUBLISHED,
+            created_by=self.member,
+            start_datetime=self.today + timezone.timedelta(hours=1),
+        )
+        self.add_audience(unsigned, self.parent)
+        signed = self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(hours=2),
+            title_en="Creator Published Signed",
+            created_by=self.member,
+        )
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Creator Published Unsigned")
+        self.assertContains(response, "Creator Published Signed")
+        self.assertNotIn(
+            unsigned,
+            response.context["community_activity_creator_attention_items"],
+        )
+        self.assertIn(
+            signed,
+            response.context["community_activity_today_items"],
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=_WITHOUT_COMMUNITY_EVENTS)
+    def test_disabled_module_keeps_empty_defaults_and_skips_provider_queries(self):
+        with patch(
+            "community_events.today_provider.visible_community_activities_for",
+        ) as visible_activities:
+            response = self.get_home()
+
+        visible_activities.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["community_activity_today_items"], [])
+        self.assertEqual(
+            response.context["community_activity_this_week_items"],
+            [],
+        )
+        self.assertEqual(
+            response.context["community_activity_creator_attention_items"],
+            [],
+        )
+        self.assertNotContains(response, "Activities")
+
+    def test_today_integration_creates_no_serving_or_service_event_state(self):
+        self.signed_up_activity(
+            starts_at=self.today + timezone.timedelta(hours=2),
+        )
+
+        response = self.get_home()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertNotIn(
+            "service_event",
+            {field.name for field in CommunityActivity._meta.get_fields()},
+        )
+        self.assertTrue(
+            set(COMMUNITY_ACTIVITY_TODAY_DEFAULTS).isdisjoint(
+                {
+                    "serving_summary",
+                    "leader_summary",
+                    "my_serving_items",
+                    "serving_action_items",
+                }
+            )
+        )
 
 
 class ActivitySignupTests(CommunityActivityWebTestBase):

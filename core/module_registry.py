@@ -165,7 +165,11 @@ _REGISTERED_MODULES = (
         label_en="Community Activities",
         label_zh="活动",
         capabilities=frozenset(
-            {CAPABILITY_NAV, CAPABILITY_REQUIRES_STRUCTURE_CORE}
+            {
+                CAPABILITY_NAV,
+                CAPABILITY_TODAY,
+                CAPABILITY_REQUIRES_STRUCTURE_CORE,
+            }
         ),
         primary_nav=PrimaryNavEntry(
             url_name="community_activity_list",
@@ -178,7 +182,9 @@ _REGISTERED_MODULES = (
             "Independent community/fellowship activities. Ordinary visibility "
             "uses CommunityActivityAudienceScope rows plus active primary "
             "ChurchStructureMembership; zero-row activities fail closed. "
-            "Audience visibility and belonging never imply serving."
+            "Today shows only active signups on upcoming published visible "
+            "activities plus creator review reminders. Audience visibility, "
+            "signup, and belonging never imply serving."
         ),
     ),
     CmsModule(

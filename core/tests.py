@@ -48,7 +48,8 @@ ALL_MODULE_KEYS = (
 )
 
 # MODULAR-CORE.3A: the full default Today context shape contributed by the
-# registered providers (reading / events / studies / ministry).
+# registered providers (reading / events / studies / community_events /
+# ministry).
 TODAY_CONTEXT_KEYS = (
     "today_items",
     "ended_plan_count",
@@ -59,6 +60,9 @@ TODAY_CONTEXT_KEYS = (
     "study_meeting_context",
     "today_study_meetings",
     "week_study_meetings",
+    "community_activity_today_items",
+    "community_activity_this_week_items",
+    "community_activity_creator_attention_items",
     "serving_summary",
     "leader_summary",
 )
@@ -192,7 +196,7 @@ class ModuleRegistryTests(SimpleTestCase):
             self.assertTrue(module_has_capability(key, CAPABILITY_NAV), key)
         self.assertTrue(module_has_capability("reading", CAPABILITY_TODAY))
         self.assertFalse(module_has_capability("prayers", CAPABILITY_TODAY))
-        self.assertFalse(module_has_capability("community_events", CAPABILITY_TODAY))
+        self.assertTrue(module_has_capability("community_events", CAPABILITY_TODAY))
         for key in ("studies", "events", "ministry"):
             self.assertTrue(module_has_capability(key, CAPABILITY_SETUP_CHECKS), key)
         self.assertFalse(module_has_capability("reading", CAPABILITY_SETUP_CHECKS))
@@ -227,7 +231,7 @@ class ModuleRegistryTests(SimpleTestCase):
     @override_settings(
         CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events", "ministry"]
     )
-    def test_disabled_community_events_contributes_no_nav_or_today_surface(self):
+    def test_disabled_community_events_contributes_no_nav_surface(self):
         self.assertNotIn(
             "community_events",
             {
@@ -235,7 +239,7 @@ class ModuleRegistryTests(SimpleTestCase):
                 for entry in get_enabled_primary_nav_entries()
             },
         )
-        self.assertNotIn(
+        self.assertIn(
             "community_events",
             get_registered_today_provider_keys(),
         )
@@ -454,7 +458,7 @@ class TodayProviderRegistryTests(SimpleTestCase):
 
         self.assertEqual(
             get_registered_today_provider_keys(),
-            ("reading", "events", "studies", "ministry"),
+            ("reading", "events", "studies", "community_events", "ministry"),
         )
         declared_keys = set()
         for provider in today_providers._TODAY_PROVIDERS.values():
@@ -918,6 +922,15 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         self.assertEqual(response.context["study_meeting_context"], {})
         self.assertEqual(response.context["today_study_meetings"], [])
         self.assertEqual(response.context["week_study_meetings"], [])
+        self.assertEqual(response.context["community_activity_today_items"], [])
+        self.assertEqual(
+            response.context["community_activity_this_week_items"],
+            [],
+        )
+        self.assertEqual(
+            response.context["community_activity_creator_attention_items"],
+            [],
+        )
         self.assertIsNone(response.context["serving_summary"])
         self.assertIsNone(response.context["leader_summary"])
 

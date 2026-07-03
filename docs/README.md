@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`COMMUNITY-EVENTS.1D-B` (July 2026).
+`COMMUNITY-EVENTS.1E-A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -14,7 +14,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 |---|---|---|
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
-| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail/nav, 1C signup/cancel, 1D-A member submission + admin publish gate, 1D-A-FU1 member-selected Activity Scope, and 1D-B lightweight staff review inbox + request-changes loop; larger approval dashboard, Today, and My Serving remain deferred. |
+| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail/nav, 1C signup/cancel, 1D-A member submission + admin publish gate, 1D-A-FU1 member-selected Activity Scope, 1D-B lightweight staff review inbox + request-changes loop, and 1E-A minimal Today integration for active signups and creator review reminders; broader Today discovery, My Serving, and larger operations remain deferred. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -85,6 +85,15 @@ migration-safety instruction source.
   and returns the activity to `pending_review`. A module-gated staff-dropdown
   "Activity Review" / "活动审核" link was added. No Staff Overview counts, Today,
   My Serving, notifications, or `ServiceEvent` link was added.
+- `COMMUNITY-EVENTS.1E-A` adds the module-owned minimal Today provider and
+  card. It shows only upcoming published visible activities backed by the
+  current user's active signup, separated into Today and This Week, plus the
+  creator's own `changes_requested` edit reminder and `pending_review` status
+  reminder. Disabling `community_events` skips the provider and its
+  activity/signup queries. This is attendance intent and review status only:
+  no My Serving or serving action-center context, Staff Overview,
+  setup/readiness, capacity/waitlist, notification, serving record, or
+  `ServiceEvent` relationship is added.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
   dropdown links, module-owned Staff Overview cards/counts/links
   (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
@@ -152,10 +161,12 @@ the `COMMUNITY-EVENTS.1C` minimal signup/cancel lifecycle and
 `COMMUNITY-EVENTS.1D-A-FU1` member-selected Activity Scope saved as audience
 rows, and the `COMMUNITY-EVENTS.1D-B` lightweight staff review inbox +
 request-changes loop (staff publish/request-changes/cancel and creator edit +
-resubmit). A larger approval dashboard, capacity/waitlist, Today
-integration, My Serving integration, Staff Overview, setup/readiness provider,
-notifications, and any `ServiceEvent` relationship remain deferred and require
-separately approved implementation slices. Checklist remains deferred.
+resubmit), followed by the `COMMUNITY-EVENTS.1E-A` minimal Today provider for
+active signups and creator review reminders. A larger approval dashboard,
+broader Today browse/discovery, capacity/waitlist, My Serving integration,
+Staff Overview, setup/readiness provider, notifications, and any
+`ServiceEvent` relationship remain deferred and require separately approved
+implementation slices. Checklist remains deferred.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

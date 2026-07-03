@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1D-B` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1E-A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -56,9 +56,26 @@ changes-requested activities, and signup stays limited to published upcoming
 activities. A staff-dropdown "Activity Review" / "活动审核" link appears only when
 the `community_events` module is enabled.
 
-A full approval dashboard beyond this inbox, capacity/waitlist, Today, My
-Serving, any `ServiceEvent` relationship, Staff Overview, setup/readiness
-provider, and notifications remain deferred.
+A full approval dashboard beyond this inbox, capacity/waitlist, My Serving,
+any `ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
+notifications remain deferred.
+
+`COMMUNITY-EVENTS.1E-A` adds the minimal module-owned Today contribution.
+Today shows only upcoming published activities for which the current user has
+an active `signed_up` attendance-intent row and which remain visible through
+the normal activity visibility helper. Signed-up activities are separated into
+Today and This Week using the shared Today date windows. A separate creator
+reminder shows the current user's own `changes_requested` submissions with an
+edit/resubmit link and their own `pending_review` submissions as calm
+status-only reminders. Visible activities without an active signup do not
+appear. Published creator activities do not appear merely because the user
+created them. The provider is skipped, with empty context defaults, when the
+module is disabled.
+
+This Today card is ordinary activity agenda/review status, never serving. My
+Serving, the serving action center, Staff Overview, setup/readiness,
+capacity/waitlist, notifications, and any `ServiceEvent` relationship remain
+deferred.
 
 ## 1. Purpose
 
@@ -367,9 +384,10 @@ Chinese:
 
 This is a future navigation consideration only.
 
-An approved later Today integration may contribute visible Community Activity
-items as ordinary agenda. It must not place signups or visible activities in
-the Today serving action center, create My Serving items, or infer serving.
+`COMMUNITY-EVENTS.1E-A` contributes only active-signup upcoming published
+activities and creator-owned review reminders to Today. It does not turn Today
+into an activity browse page, place signups or visible activities in the Today
+serving action center, create My Serving items, or infer serving.
 
 ## 9. Non-Goals for V1
 
@@ -429,10 +447,19 @@ publish/request-changes/cancel actions, a creator edit + resubmit path for
 It adds no Staff Overview counts, Today, My Serving, setup/readiness,
 notifications, or `ServiceEvent` link.
 
+`COMMUNITY-EVENTS.1E-A` completes the minimal Today integration. Its
+module-owned provider contributes three narrow context lists: active-signup
+published visible activities happening today, active-signup published visible
+activities later in the shared This Week window, and creator-owned
+`changes_requested` / `pending_review` reminders. The module gate skips the
+provider and its activity/signup queries when disabled. No serving context,
+record, or relationship is added.
+
 Later work still requires separately approved, bounded slices for:
 
 - a larger approval dashboard or leader approval;
-- any Staff Overview, setup/readiness, or Today contribution;
+- any Staff Overview or setup/readiness contribution;
+- any broader Today browse/discovery surface;
 - capacity, waitlist, reminders, payments, notifications, or calendar behavior.
 
 No later slice may infer serving from activity visibility, signup, or

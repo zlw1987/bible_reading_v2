@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS.1D-B` (July 2026).
+`COMMUNITY-EVENTS.1E-A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -48,11 +48,12 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
-| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, member submission, and a lightweight staff review inbox + request-changes loop. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Eligible members submit pending-review activities with required member-selected Activity Scope rows; a staff/superuser-only inbox (`/activities/review/`) publishes, requests changes, or cancels, and creators may edit + resubmit `changes_requested` activities. Signup is attendance intent, not serving. No larger approval dashboard, Today, My Serving, capacity/waitlist, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, member submission, a lightweight staff review inbox + request-changes loop, and a minimal Today provider for active signups plus creator review reminders. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Signup is attendance intent, not serving. No larger approval dashboard, My Serving, serving action-center contribution, capacity/waitlist, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-`community_events` declares `contributes_nav` and `requires_structure_core`. It
-has no registered-module dependencies. `COMMUNITY-EVENTS.1B` adds its ordinary
+`community_events` declares `contributes_nav`, `contributes_today`, and
+`requires_structure_core`. It has no registered-module dependencies.
+`COMMUNITY-EVENTS.1B` adds its ordinary
 primary-nav entry (gated by module enablement) and the member-facing
 browse/detail routes. `COMMUNITY-EVENTS.1C` adds app-owned `ActivitySignup`
 rows and POST-only signup/cancel routes without adding Today, My Serving,
@@ -75,6 +76,13 @@ changes-requested activities. Staff/superusers may still adjust audience in
 Django admin. As with every module,
 enablement gates surfaces only: the `/activities/` routes stay reachable under
 their own login/visibility rules even when the module is disabled.
+`COMMUNITY-EVENTS.1E-A` adds a module-owned Today provider for personally
+relevant activity data only: upcoming published visible activities backed by
+the current user's active signup, separated into Today and This Week, plus the
+creator's own `changes_requested` and `pending_review` reminders. Disabled
+module aggregation uses empty defaults and does not call the provider, so no
+Community Activity or signup query runs. This adds no My Serving or serving
+action-center key and creates no serving or ServiceEvent relationship.
 
 ## Registry and feature gates (through MODULAR-CORE.6B)
 
@@ -119,7 +127,7 @@ their own login/visibility rules even when the module is disabled.
   validation in force. Registration is explicit (no app auto-discovery).
   Prayer contributes only the static Today action card (template-gated), so
   it has no provider.
-* `MODULAR-CORE.3B` moves the Today provider bodies into their owning
+* `MODULAR-CORE.3B` moves the original Today provider bodies into their owning
   modules: `reading/today_provider.py`, `events/today_provider.py`,
   `studies/today_provider.py`, and `ministry/today_provider.py`, with the
   shared Today/This Week date-window helper in `core/today_windows.py`.
@@ -130,7 +138,10 @@ their own login/visibility rules even when the module is disabled.
   `home()` request. The per-gathering serving note stays ministry-owned
   (`ministry.today_provider.get_week_serving_notes`) and is read by the
   events provider, returning an empty mapping when ministry is disabled.
-  No context key, template, visibility, or serving semantics changed.
+  No context key, template, visibility, or serving semantics changed in that
+  extraction. `COMMUNITY-EVENTS.1E-A` later adds
+  `community_events/today_provider.py` and registers it at the same explicit
+  site.
 * `MODULAR-CORE.4A` makes the ordinary authenticated-user module links in
   `templates/base.html` registry-driven. Each nav-contributing module supplies
   its route, bilingual labels, active-state key, and display order through
@@ -294,9 +305,11 @@ their own login/visibility rules even when the module is disabled.
    authoritative. `COMMUNITY-EVENTS.1D-B` adds the approved lightweight staff
    review inbox + request-changes loop (staff publish/request-changes/cancel
    and creator edit + resubmit) while keeping staff publication authoritative.
-   A larger approval dashboard, capacity/waitlist, Today, My Serving, Staff
-   Overview, setup/readiness, notifications, any `ServiceEvent` link, and
-   Checklist remain deferred.
+   `COMMUNITY-EVENTS.1E-A` adds the approved minimal Today provider for active
+   signups on upcoming published visible activities plus creator review
+   reminders. A larger approval dashboard, broader Today browse/discovery,
+   capacity/waitlist, My Serving, Staff Overview, setup/readiness,
+   notifications, any `ServiceEvent` link, and Checklist remain deferred.
    Any further module or Community Activities expansion requires its own
    approved slice.
 

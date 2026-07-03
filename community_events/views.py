@@ -93,15 +93,17 @@ def community_activity_create(request):
             language=language,
         )
         if form.is_valid():
+            audience_units = list(form.cleaned_data["audience_units"])
             with transaction.atomic():
                 activity = form.save(commit=False)
                 activity.status = CommunityActivity.STATUS_PENDING_REVIEW
                 activity.created_by = request.user
                 activity.save()
-                CommunityActivityAudienceScope.objects.create(
-                    activity=activity,
-                    structure_unit=membership_unit,
-                )
+                for unit in audience_units:
+                    CommunityActivityAudienceScope.objects.create(
+                        activity=activity,
+                        structure_unit=unit,
+                    )
             return redirect(
                 "community_activity_detail",
                 activity_id=activity.id,

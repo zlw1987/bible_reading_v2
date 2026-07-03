@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1D-A` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1D-A-FU1` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -27,16 +27,21 @@ published upcoming activity. It is attendance intent, never serving.
 gate. An ordinary authenticated user with an active primary
 `ChurchStructureMembership` may submit at `/activities/new/` unless an active
 `CommunityActivitySubmissionBlock` exists for that user. The submitted
-activity starts `pending_review`, records the submitter in `created_by`, and
-atomically receives exactly one audience row for the submitter's primary
-membership unit. The member may write a non-authoritative
-`requested_audience_note`, but cannot select audience units or publish.
-Creators can see their own pending submissions; other ordinary users cannot.
+activity starts `pending_review` and records the submitter in `created_by`.
+
+`COMMUNITY-EVENTS.1D-A-FU1` replaces the note-only scope request with a
+required `ChurchStructureUnit` Activity Scope picker. Members may select active
+units, including the root/whole-church unit, language-ministry units, district
+units, small-group units, or multiple non-overlapping units. Creation
+atomically saves those selections as `CommunityActivityAudienceScope` rows.
+The optional `requested_audience_note` remains review context and does not
+control visibility. Creators can see their own pending submissions; other
+ordinary users cannot, including users inside the selected scope.
 Staff/superusers use Django admin to adjust audience rows and publish.
 
-A full approval dashboard, ordinary-user audience picker, creator editing,
-capacity/waitlist, Today, My Serving, any `ServiceEvent` relationship, Staff
-Overview, and a setup/readiness provider remain deferred.
+A full approval dashboard, creator editing, capacity/waitlist, Today, My
+Serving, any `ServiceEvent` relationship, Staff Overview, and a setup/readiness
+provider remain deferred.
 
 ## 1. Purpose
 
@@ -210,10 +215,11 @@ deletes the row.
 `COMMUNITY-EVENTS.1D-A` does not change the published audience helper:
 pending-review activities remain absent from ordinary public results.
 The creator gets a narrow object-level exception to view their own submission
-and status. Staff/superusers retain the existing management bypass. Member
-submission resolves the creator's active primary membership and creates its
-audience row in the same transaction as the activity, so the normal create
-path cannot leave a zero-row submitted activity.
+and status. Staff/superusers retain the existing management bypass.
+`COMMUNITY-EVENTS.1D-A-FU1` validates the submitted Activity Scope and creates
+all selected audience rows in the same transaction as the activity, so the
+normal create path cannot leave a zero-row submitted activity. The rows affect
+ordinary visibility only after staff publish.
 
 The UI and queries should avoid exposing private membership data. An activity
 list should answer "can this user see this activity?" rather than showing
@@ -229,8 +235,9 @@ Regular member:
 - can sign up or cancel their own signup
 - with an active primary membership and no active submission block, can submit
   an activity for review
+- must select one or more valid active, non-overlapping Activity Scope units
 - can view their own pending/cancelled/published submissions
-- cannot select arbitrary audience units or publish
+- cannot publish
 
 Authorized structure-unit leader:
 - may create or manage activity for an authorized unit only if a future
@@ -247,22 +254,26 @@ Avoid a complex role hierarchy in V1.
 
 ## 7. Approval Direction
 
-The implemented `COMMUNITY-EVENTS.1D-A` policy is deliberately small:
+The implemented `COMMUNITY-EVENTS.1D-A` plus `1D-A-FU1` policy is deliberately
+small:
 
 - every member-created activity starts `pending_review`;
-- its automatic initial audience is exactly the creator's active primary
-  membership unit;
-- `requested_audience_note` may ask for a broader audience, but has no runtime
-  visibility effect;
+- the member must select at least one valid active Activity Scope unit;
+- root plus another unit and ancestor/descendant overlaps are rejected;
+- selected units are saved as app-owned audience rows in the activity creation
+  transaction;
+- `requested_audience_note` may explain the selection or request an adjustment,
+  but has no runtime visibility effect;
 - staff/superusers review the activity in Django admin, edit audience rows if
   appropriate, and explicitly publish;
-- ordinary users cannot publish or choose whole-church/arbitrary audience.
+- ordinary users cannot publish, and selected-scope members cannot see or sign
+  up for the activity before publication.
 
 A dedicated review dashboard or leader approval workflow remains deferred.
 
 ## 8. UI Direction
 
-Implemented through `COMMUNITY-EVENTS.1D-A`:
+Implemented through `COMMUNITY-EVENTS.1D-A-FU1`:
 - `/activities/` - browse activities visible to the current user (upcoming
   published rows; staff/superuser keep the helper's management bypass), with a
   small signed-up indicator for the current user
@@ -270,7 +281,7 @@ Implemented through `COMMUNITY-EVENTS.1D-A`:
 - `/activities/<id>/signup/` - POST-only signup/reactivation action
 - `/activities/<id>/cancel-signup/` - POST-only cancellation action
 - `/activities/new/` - active-primary members submit an activity for staff
-  review
+  review with a required Activity Scope picker and optional scope note
 - `/activities/` also links to submission and shows the current creator's own
   submitted activity statuses
 
@@ -351,14 +362,17 @@ activities, and adds no serving or shared-surface integration.
 
 `COMMUNITY-EVENTS.1D-A` completes the bounded member submission + admin publish
 gate. It adds pending review, a requested-audience note, a one-row-per-user
-submission block control, creator-only pending visibility, and transactional
-creation of the creator-primary-unit audience row. Staff review, audience
-adjustment, and publishing remain in Django admin.
+submission block control, and creator-only pending visibility.
+
+`COMMUNITY-EVENTS.1D-A-FU1` completes member-selected Activity Scope for that
+submission flow. It requires at least one active, non-overlapping structure
+unit and transactionally creates the selected audience rows. Staff review,
+audience adjustment, and publishing remain in Django admin; selected audience
+rows do not expose pending activities.
 
 Later work still requires separately approved, bounded slices for:
 
-- a full approval dashboard, creator editing, leader approval, or ordinary-user
-  audience selection;
+- a full approval dashboard, creator editing, or leader approval;
 - any staff-dropdown, Staff Overview, setup/readiness, or Today contribution;
 - capacity, waitlist, reminders, payments, or calendar behavior.
 

@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`COMMUNITY-EVENTS.1D-A` (July 2026).
+`COMMUNITY-EVENTS.1D-A-FU1` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -14,7 +14,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 |---|---|---|
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
-| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail/nav, 1C signup/cancel, and 1D-A member submission + admin publish gate; full approval dashboard, Today, and My Serving remain deferred. |
+| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail/nav, 1C signup/cancel, 1D-A member submission + admin publish gate, and 1D-A-FU1 member-selected Activity Scope; full approval dashboard, Today, and My Serving remain deferred. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -63,12 +63,16 @@ migration-safety instruction source.
 - `COMMUNITY-EVENTS.1D-A` adds `/activities/new/` for ordinary authenticated
   users with an active primary membership who are not actively blocked by
   `CommunityActivitySubmissionBlock`. Submissions start `pending_review`,
-  record the creator, and atomically receive exactly one audience row for the
-  creator's primary membership unit. The optional requested-audience note does
-  not affect visibility. Creators can see their own pending submissions;
-  other ordinary users cannot. Staff/superusers adjust audience rows and
-  publish through Django admin. No ordinary-user audience picker, full review
-  dashboard, or shared-surface integration was added.
+  record the creator, and remain hidden from other ordinary users until
+  publication.
+- `COMMUNITY-EVENTS.1D-A-FU1` replaces the submission page's note-only scope
+  request with a required `ChurchStructureUnit` Activity Scope picker.
+  Selected active, non-overlapping units are saved atomically as
+  `CommunityActivityAudienceScope` rows; the renamed optional scope note stays
+  staff review context. Staff/superusers may adjust the rows and publish in
+  Django admin. The creator can see the pending submission, but the selected
+  audience cannot see or sign up for it until staff publish. No full review
+  dashboard or shared-surface integration was added.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
   dropdown links, module-owned Staff Overview cards/counts/links
   (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
@@ -132,12 +136,12 @@ structure-native visibility helper) plus the `COMMUNITY-EVENTS.1B`
 member-facing browse/detail entrance (`community_activity_list` /
 `community_activity_detail`) and ordinary "Activities" primary-nav entry, plus
 the `COMMUNITY-EVENTS.1C` minimal signup/cancel lifecycle and
-`COMMUNITY-EVENTS.1D-A` member submission + admin publish gate. A full approval
-dashboard, ordinary-user arbitrary audience picker, creator editing,
-capacity/waitlist, Today integration, My Serving integration, Staff Overview,
-setup/readiness provider, and any `ServiceEvent` relationship remain deferred
-and require separately approved implementation slices. Checklist remains
-deferred.
+`COMMUNITY-EVENTS.1D-A` member submission + admin publish gate, followed by
+`COMMUNITY-EVENTS.1D-A-FU1` member-selected Activity Scope saved as audience
+rows. A full approval dashboard, creator editing, capacity/waitlist, Today
+integration, My Serving integration, Staff Overview, setup/readiness provider,
+and any `ServiceEvent` relationship remain deferred and require separately
+approved implementation slices. Checklist remains deferred.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

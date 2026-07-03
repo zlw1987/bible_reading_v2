@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS.1D-A` (July 2026).
+`COMMUNITY-EVENTS.1D-A-FU1` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -48,7 +48,7 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
-| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, and member submission + admin publish gate. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Eligible members submit pending-review activities with one automatic primary-unit audience row; staff publish in Django admin. Signup is attendance intent, not serving. No full approval dashboard, ordinary-user audience picker, Today, My Serving, capacity/waitlist, Staff Overview, setup/readiness, or `ServiceEvent` link. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, and member submission + admin publish gate. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Eligible members submit pending-review activities with required member-selected Activity Scope rows; staff may adjust scope and publish in Django admin. Signup is attendance intent, not serving. No full approval dashboard, Today, My Serving, capacity/waitlist, Staff Overview, setup/readiness, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 `community_events` declares `contributes_nav` and `requires_structure_core`. It
@@ -58,11 +58,13 @@ browse/detail routes. `COMMUNITY-EVENTS.1C` adds app-owned `ActivitySignup`
 rows and POST-only signup/cancel routes without adding Today, My Serving,
 setup/readiness, Staff Overview, or serving integration.
 `COMMUNITY-EVENTS.1D-A` adds `/activities/new/`: an active-primary member who
-is not actively blocked may submit a pending-review activity. Creation
-atomically adds exactly one audience row for the creator's primary membership
-unit; a requested-audience note is review context only. Creators may see their
-own pending submissions, while public ordinary visibility stays
-published-only. Staff/superusers adjust audience and publish in Django admin.
+is not actively blocked may submit a pending-review activity.
+`COMMUNITY-EVENTS.1D-A-FU1` makes Activity Scope a required
+`ChurchStructureUnit` picker and atomically saves the member's selected active,
+non-overlapping units as audience rows. The optional scope note is review
+context only. Creators may see their own pending submissions, while public
+ordinary visibility stays published-only even for users inside the selected
+scope. Staff/superusers adjust audience and publish in Django admin.
 As with every module,
 enablement gates surfaces only: the `/activities/` routes stay reachable under
 their own login/visibility rules even when the module is disabled.
@@ -280,10 +282,11 @@ their own login/visibility rules even when the module is disabled.
    "Activities" primary-nav entry. `COMMUNITY-EVENTS.1C` adds the approved
    minimal signup/cancel lifecycle as attendance intent only.
    `COMMUNITY-EVENTS.1D-A` adds the approved member submission + admin publish
-   gate with creator-primary-unit audience and blocklist control. A full
-   approval dashboard, ordinary-user arbitrary audience picker, creator
-   editing, capacity/waitlist, Today, My Serving, Staff Overview,
-   setup/readiness, any `ServiceEvent` link, and Checklist remain deferred.
+   gate with blocklist control, and `COMMUNITY-EVENTS.1D-A-FU1` adds required
+   member-selected Activity Scope rows while keeping staff publication
+   authoritative. A full approval dashboard, creator editing,
+   capacity/waitlist, Today, My Serving, Staff Overview, setup/readiness, any
+   `ServiceEvent` link, and Checklist remain deferred.
    Any further module or Community Activities expansion requires its own
    approved slice.
 

@@ -18,9 +18,9 @@
     </h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
-        提交后活动会进入同工审核，不会立即公开。初始参加范围是你目前所属的主要群体。
+        提交后活动会先由同工审核，再决定是否发布。你选择的活动范围在同工发布前不会公开；这不是正式教会聚会的发布流程。
         {% else %}
-        Your activity will be reviewed by staff before publication. Its initial audience is your current primary church group.
+        Your activity will be reviewed by staff before publication. The activity scope you select is not public until staff publish it; this does not create an official church gathering.
         {% endif %}
     </p>
 </div>
@@ -32,7 +32,11 @@
     {% for field in form %}
     <div class="form-row" data-field="{{ field.name }}">
         {{ field.label_tag }}
-        {{ field }}
+        {% if field.name == "audience_units" %}
+            {% include "shared/_church_structure_unit_audience_picker.html" with field=field options=form.audience_unit_options language=language %}
+        {% else %}
+            {{ field }}
+        {% endif %}
         {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
         {{ field.errors }}
     </div>

@@ -61,16 +61,15 @@ any `ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
 notifications remain deferred.
 
 `COMMUNITY-EVENTS.1E-A` adds the minimal module-owned Today contribution.
-Today shows only upcoming published activities for which the current user has
-an active `signed_up` attendance-intent row and which remain visible through
-the normal activity visibility helper. Signed-up activities are separated into
-Today and This Week using the shared Today date windows. A separate creator
-reminder shows the current user's own `changes_requested` submissions with an
-edit/resubmit link and their own `pending_review` submissions as calm
-status-only reminders. Visible activities without an active signup do not
-appear. Published creator activities do not appear merely because the user
-created them. The provider is skipped, with empty context defaults, when the
-module is disabled.
+Today shows only published visible activities happening today for which the
+current user has an active `signed_up` attendance-intent row. A separate
+creator reminder shows only the current user's own `changes_requested`
+submissions with an edit/resubmit link. Later-this-week signups and
+`pending_review` submissions stay on the owning Activities surfaces rather
+than Today. Visible activities without an active signup do not appear.
+Published creator activities do not appear merely because the user created
+them. The provider is skipped, with empty context defaults, when the module is
+disabled.
 
 This Today card is ordinary activity agenda/review status, never serving. My
 Serving, the serving action center, Staff Overview, setup/readiness,
@@ -384,10 +383,11 @@ Chinese:
 
 This is a future navigation consideration only.
 
-`COMMUNITY-EVENTS.1E-A` contributes only active-signup upcoming published
-activities and creator-owned review reminders to Today. It does not turn Today
-into an activity browse page, place signups or visible activities in the Today
-serving action center, create My Serving items, or infer serving.
+`COMMUNITY-EVENTS.1E-A` contributes only active-signup published visible
+activities happening today and creator-owned `changes_requested` reminders to
+Today. It does not show later-this-week signups or `pending_review` status,
+turn Today into an activity browse page, place signups or visible activities
+in the Today serving action center, create My Serving items, or infer serving.
 
 ## 9. Non-Goals for V1
 
@@ -448,12 +448,12 @@ It adds no Staff Overview counts, Today, My Serving, setup/readiness,
 notifications, or `ServiceEvent` link.
 
 `COMMUNITY-EVENTS.1E-A` completes the minimal Today integration. Its
-module-owned provider contributes three narrow context lists: active-signup
-published visible activities happening today, active-signup published visible
-activities later in the shared This Week window, and creator-owned
-`changes_requested` / `pending_review` reminders. The module gate skips the
-provider and its activity/signup queries when disabled. No serving context,
-record, or relationship is added.
+module-owned provider renders active-signup published visible activities
+happening today and creator-owned `changes_requested` reminders. The retained
+This Week context key stays an empty compatibility default; later-this-week
+signups and `pending_review` submissions are not rendered. The module gate
+skips the provider and its activity/signup queries when disabled. No serving
+context, record, or relationship is added.
 
 Later work still requires separately approved, bounded slices for:
 

@@ -182,9 +182,9 @@ _REGISTERED_MODULES = (
             "Independent community/fellowship activities. Ordinary visibility "
             "uses CommunityActivityAudienceScope rows plus active primary "
             "ChurchStructureMembership; zero-row activities fail closed. "
-            "Today shows only active signups on upcoming published visible "
-            "activities plus creator review reminders. Audience visibility, "
-            "signup, and belonging never imply serving."
+            "Today shows only active signups on published visible activities "
+            "happening today plus creator changes-requested reminders. "
+            "Audience visibility, signup, and belonging never imply serving."
         ),
     ),
     CmsModule(

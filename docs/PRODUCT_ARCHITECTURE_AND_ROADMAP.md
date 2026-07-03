@@ -53,10 +53,11 @@ workspace for team and Bible Study confirmation. Audience visibility,
 `MinistryTeamRoleAssignment` alone never become personal serving.
 
 `COMMUNITY-EVENTS.1E-A` adds the minimal Community Activities Today provider.
-It contributes only active-signup upcoming published visible activities,
-bucketed into Today and This Week, plus creator-owned `changes_requested` and
-`pending_review` reminders. It adds no My Serving or serving action-center
-item, no serving record, and no `ServiceEvent` relationship.
+It contributes only active-signup published visible activities happening
+today, plus creator-owned `changes_requested` reminders. Later-this-week
+signups and `pending_review` submissions stay off Today. It adds no My Serving
+or serving action-center item, no serving record, and no `ServiceEvent`
+relationship.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -132,7 +133,7 @@ adds the `changes_requested` status and `review_note` / `reviewed_by` /
 `reviewed_at` fields and a module-gated staff-dropdown review link, without
 Staff Overview counts, Today, My Serving, notifications, or a `ServiceEvent`
 link. `COMMUNITY-EVENTS.1E-A` later adds only the minimal module-owned Today
-provider for active signups and creator review reminders. A larger approval
+provider for same-day active signups and creator-requested changes. A larger approval
 dashboard, broader Today browse/discovery, capacity/waitlist, My Serving, Staff
 Overview, setup/readiness, and any `ServiceEvent` relationship still require
 separately approved slices. Checklist remains deferred. See
@@ -696,9 +697,9 @@ runtime guidance; use Section 2 and the canonical documents in
   relationship, and never makes pending-review or changes-requested activities
   visible to selected-scope ordinary users.
 - `COMMUNITY-EVENTS.1E-A` adds the module-owned minimal Today provider. It
-  shows active-signup upcoming published visible activities in Today / This
-  Week buckets and creator-owned `changes_requested` / `pending_review`
-  reminders only. Module disablement skips the provider and its queries. It
+  shows active-signup published visible activities happening today and
+  creator-owned `changes_requested` reminders only. Later-this-week signups
+  and `pending_review` submissions are not rendered. Module disablement skips the provider and its queries. It
   adds no My Serving or serving action-center context, serving record, Staff
   Overview, setup/readiness, notification, capacity/waitlist, or
   `ServiceEvent` relationship.

@@ -17,6 +17,9 @@ Today may show:
 - completed reading as a small confirmation state;
 - visible church gatherings today and this week;
 - visible Bible Study V2 meetings today and this week;
+- a low-noise Activity reminders card for signed-up published visible
+  activities happening today and creator-owned `changes_requested`
+  submissions only;
 - a personal action-center item for an unconfirmed `TeamAssignmentMember` or
   linked-user `BibleStudyMeetingRole`;
 - compact serving notes only when backed by those explicit assignment/role

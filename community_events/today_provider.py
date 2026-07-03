@@ -1,8 +1,8 @@
 """Community Activities Today provider (COMMUNITY-EVENTS.1E-A).
 
 Owns the small, personally relevant Community Activities contribution to
-Today: upcoming published activities the current user has actively signed up
-for, plus creator-owned submissions that are awaiting review or need changes.
+Today: published visible activities happening today that the current user has
+actively signed up for, plus creator-owned submissions that need changes.
 
 Activity signup is attendance intent only. This provider does not contribute
 to the serving action center, My Serving, TeamAssignment, Bible Study roles,
@@ -41,9 +41,9 @@ def get_signed_up_activities_for_window(user, start_datetime, end_datetime, now)
 
 
 def community_activity_today_provider(request):
-    """Personally relevant Community Activities for Today / This Week."""
+    """Low-noise Community Activity reminders for Today."""
     now = current_time()
-    today_start, tomorrow_start, week_end = get_today_week_windows()
+    today_start, tomorrow_start, _week_end = get_today_week_windows()
 
     return {
         "community_activity_today_items": get_signed_up_activities_for_window(
@@ -52,21 +52,15 @@ def community_activity_today_provider(request):
             tomorrow_start,
             now,
         ),
-        "community_activity_this_week_items": get_signed_up_activities_for_window(
-            request.user,
-            tomorrow_start,
-            week_end,
-            now,
-        ),
+        # Keep the declared key as a safe compatibility default, but do not
+        # populate or render later-this-week activities on the low-noise Today
+        # surface. The full activity list remains the main entrance.
+        "community_activity_this_week_items": [],
         "community_activity_creator_attention_items": list(
             CommunityActivity.objects.filter(
                 created_by=request.user,
-                status__in=(
-                    CommunityActivity.STATUS_CHANGES_REQUESTED,
-                    CommunityActivity.STATUS_PENDING_REVIEW,
-                ),
+                status=CommunityActivity.STATUS_CHANGES_REQUESTED,
             ).order_by(
-                "status",
                 "-updated_at",
                 "-id",
             )

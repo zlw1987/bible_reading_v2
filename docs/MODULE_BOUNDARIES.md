@@ -48,7 +48,7 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
-| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, member submission, a lightweight staff review inbox + request-changes loop, and a minimal Today provider for active signups plus creator review reminders. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Signup is attendance intent, not serving. No larger approval dashboard, My Serving, serving action-center contribution, capacity/waitlist, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, minimal signup/cancel, member submission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Signup is attendance intent, not serving. No larger approval dashboard, My Serving, serving action-center contribution, capacity/waitlist, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
@@ -77,12 +77,13 @@ Django admin. As with every module,
 enablement gates surfaces only: the `/activities/` routes stay reachable under
 their own login/visibility rules even when the module is disabled.
 `COMMUNITY-EVENTS.1E-A` adds a module-owned Today provider for personally
-relevant activity data only: upcoming published visible activities backed by
-the current user's active signup, separated into Today and This Week, plus the
-creator's own `changes_requested` and `pending_review` reminders. Disabled
-module aggregation uses empty defaults and does not call the provider, so no
-Community Activity or signup query runs. This adds no My Serving or serving
-action-center key and creates no serving or ServiceEvent relationship.
+relevant activity data only: published visible activities happening today
+backed by the current user's active signup, plus the creator's own
+`changes_requested` reminders. Later-this-week signups and `pending_review`
+submissions are not rendered on Today. Disabled module aggregation uses empty
+defaults and does not call the provider, so no Community Activity or signup
+query runs. This adds no My Serving or serving action-center key and creates no
+serving or ServiceEvent relationship.
 
 ## Registry and feature gates (through MODULAR-CORE.6B)
 
@@ -306,8 +307,8 @@ action-center key and creates no serving or ServiceEvent relationship.
    review inbox + request-changes loop (staff publish/request-changes/cancel
    and creator edit + resubmit) while keeping staff publication authoritative.
    `COMMUNITY-EVENTS.1E-A` adds the approved minimal Today provider for active
-   signups on upcoming published visible activities plus creator review
-   reminders. A larger approval dashboard, broader Today browse/discovery,
+   signups on published visible activities happening today plus creator
+   `changes_requested` reminders. A larger approval dashboard, broader Today browse/discovery,
    capacity/waitlist, My Serving, Staff Overview, setup/readiness,
    notifications, any `ServiceEvent` link, and Checklist remain deferred.
    Any further module or Community Activities expansion requires its own

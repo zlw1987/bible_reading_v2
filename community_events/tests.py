@@ -1480,7 +1480,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
         response = self.get_home()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Activities")
+        self.assertContains(response, "Activity reminders")
         self.assertContains(response, "Today Signed Activity")
         self.assertContains(response, "You’re signed up")
         self.assertIn(
@@ -1492,7 +1492,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
             response.context["community_activity_this_week_items"],
         )
 
-    def test_later_signed_up_activity_appears_only_in_this_week(self):
+    def test_later_signed_up_activity_is_not_rendered_on_today(self):
         activity = self.signed_up_activity(
             starts_at=self.today + timezone.timedelta(days=2),
             title_en="Later This Week Activity",
@@ -1500,16 +1500,12 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
 
         response = self.get_home()
 
-        self.assertContains(response, "This Week")
-        self.assertContains(response, "Later This Week Activity")
+        self.assertNotContains(response, "Later This Week Activity")
         self.assertNotIn(
             activity,
             response.context["community_activity_today_items"],
         )
-        self.assertIn(
-            activity,
-            response.context["community_activity_this_week_items"],
-        )
+        self.assertEqual(response.context["community_activity_this_week_items"], [])
 
     def test_visible_published_activity_without_signup_is_not_on_today(self):
         activity = self.create_activity(
@@ -1602,7 +1598,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
             response.context["community_activity_creator_attention_items"],
         )
 
-    def test_creator_pending_review_is_a_status_only_reminder(self):
+    def test_creator_pending_review_is_not_rendered_on_today(self):
         activity = self.create_activity(
             title_en="Creator Pending Activity",
             status=CommunityActivity.STATUS_PENDING_REVIEW,
@@ -1611,11 +1607,10 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
 
         response = self.get_home()
 
-        self.assertContains(response, "Creator Pending Activity")
-        self.assertContains(response, "Pending review")
-        self.assertNotContains(
-            response,
-            reverse("community_activity_edit", args=[activity.id]),
+        self.assertNotContains(response, "Creator Pending Activity")
+        self.assertNotIn(
+            activity,
+            response.context["community_activity_creator_attention_items"],
         )
 
     def test_today_activity_copy_renders_in_chinese(self):
@@ -1631,7 +1626,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
 
         response = self.get_home(language="zh")
 
-        self.assertContains(response, "活动")
+        self.assertContains(response, "活动提醒")
         self.assertContains(response, "你已报名")
         self.assertContains(response, "需要修改")
 
@@ -1680,7 +1675,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
             response.context["community_activity_creator_attention_items"],
             [],
         )
-        self.assertNotContains(response, "Activities")
+        self.assertNotContains(response, "Activity reminders")
 
     def test_today_integration_creates_no_serving_or_service_event_state(self):
         self.signed_up_activity(

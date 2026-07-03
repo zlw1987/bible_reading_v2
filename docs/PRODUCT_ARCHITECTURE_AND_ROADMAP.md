@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS.1C` (July 2026).
+through `COMMUNITY-EVENTS.1D-A` (July 2026).
 
 ## 1. Project Identity
 
@@ -110,7 +110,13 @@ adds the independent member-facing browse/detail entrance
 `COMMUNITY-EVENTS.1C` adds the one-row-per-user/activity `ActivitySignup`
 lifecycle and POST-only signup/cancel actions for visible published upcoming
 activities. Signup remains attendance intent and creates no serving state.
-Approval, capacity/waitlist, Today, My Serving, Staff Overview,
+`COMMUNITY-EVENTS.1D-A` adds the bounded member submission + admin publish
+gate: active-primary members who are not actively blocked may create
+pending-review activities, each with one automatic creator-primary-unit
+audience row; the requested-audience note is staff review context only.
+Creators may see their own pending rows, and staff/superusers adjust audience
+and publish in Django admin. A full approval dashboard, ordinary-user audience
+picker, creator editing, capacity/waitlist, Today, My Serving, Staff Overview,
 setup/readiness, and any `ServiceEvent` relationship still require separately
 approved slices. Checklist remains deferred. See `docs/MODULE_BOUNDARIES.md`
 for the canonical boundary details.
@@ -653,6 +659,12 @@ runtime guidance; use Section 2 and the canonical documents in
   including staff. It adds no approval, capacity/waitlist, Today, My Serving,
   Staff Overview, setup/readiness, serving records, or `ServiceEvent`
   relationship.
+- `COMMUNITY-EVENTS.1D-A` adds member submission at `/activities/new/` plus
+  the Django-admin publish gate. Eligible members create `pending_review`
+  activities with exactly one automatic audience row for their active primary
+  membership unit; active submission blocks deny creation, and the optional
+  requested-audience note never controls visibility. Creators may see their
+  pending submissions, but other ordinary users cannot.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
@@ -779,7 +791,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, and `1C` adds minimal signup/cancel. Approval, activity creation/management, capacity/waitlist, notifications, attendance/check-in, shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, and `1D-A` adds member submission plus the Django-admin publish gate. A full approval dashboard, ordinary-user arbitrary audience selection, creator editing, capacity/waitlist, notifications, attendance/check-in, shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
 
 Not next:
 - Lighting Team-specific model

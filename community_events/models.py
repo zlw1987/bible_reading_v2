@@ -8,12 +8,14 @@ from accounts.models import ChurchStructureUnit
 
 class CommunityActivity(models.Model):
     STATUS_DRAFT = "draft"
+    STATUS_PENDING_REVIEW = "pending_review"
     STATUS_PUBLISHED = "published"
     STATUS_CANCELLED = "cancelled"
     STATUS_COMPLETED = "completed"
 
     STATUS_CHOICES = [
         (STATUS_DRAFT, "Draft"),
+        (STATUS_PENDING_REVIEW, "Pending review"),
         (STATUS_PUBLISHED, "Published"),
         (STATUS_CANCELLED, "Cancelled"),
         (STATUS_COMPLETED, "Completed"),
@@ -28,6 +30,7 @@ class CommunityActivity(models.Model):
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")
     location_en = models.CharField(max_length=180, blank=True, default="")
+    requested_audience_note = models.TextField(blank=True, default="")
     status = models.CharField(
         max_length=32,
         choices=STATUS_CHOICES,
@@ -106,6 +109,9 @@ class CommunityActivity(models.Model):
             return False
 
         if self.can_be_managed_by(user):
+            return True
+
+        if self.created_by_id == getattr(user, "id", None):
             return True
 
         from .visibility import visible_community_activities_for
@@ -266,3 +272,37 @@ class ActivitySignup(models.Model):
     @property
     def is_active(self):
         return self.status == self.STATUS_SIGNED_UP
+
+
+class CommunityActivitySubmissionBlock(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="community_activity_submission_blocks",
+    )
+    is_active = models.BooleanField(default=True)
+    reason = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_community_activity_submission_blocks",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_active", "user__username"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user"],
+                name="unique_community_activity_submission_block_user",
+            )
+        ]
+        verbose_name = "Community Activity Submission Block"
+        verbose_name_plural = "Community Activity Submission Blocks"
+
+    def __str__(self):
+        state = "active" if self.is_active else "inactive"
+        return f"{self.user} — {state}"

@@ -13,6 +13,7 @@ from .models import (
     ActivitySignup,
     CommunityActivity,
     CommunityActivityAudienceScope,
+    CommunityActivitySubmissionBlock,
 )
 from .visibility import visible_community_activities_for
 
@@ -149,6 +150,7 @@ class CommunityActivityFoundationTests(TestCase):
     def test_only_published_activities_are_visible_to_ordinary_users(self):
         for status in (
             CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_PENDING_REVIEW,
             CommunityActivity.STATUS_CANCELLED,
             CommunityActivity.STATUS_COMPLETED,
         ):
@@ -232,6 +234,8 @@ class CommunityActivityFoundationTests(TestCase):
 
     def test_admin_registers_activity_with_audience_inline(self):
         self.assertTrue(admin.site.is_registered(CommunityActivity))
+        self.assertTrue(admin.site.is_registered(ActivitySignup))
+        self.assertTrue(admin.site.is_registered(CommunityActivitySubmissionBlock))
 
 
 # Enabled-module set with community_events removed. It has no dependents and no
@@ -377,6 +381,7 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
     def test_list_hides_draft_cancelled_completed_from_ordinary_user(self):
         for status in (
             CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_PENDING_REVIEW,
             CommunityActivity.STATUS_CANCELLED,
             CommunityActivity.STATUS_COMPLETED,
         ):
@@ -390,7 +395,7 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
         response = self.client.get(self.list_url)
 
         self.assertEqual(response.status_code, 200)
-        for status in ("draft", "cancelled", "completed"):
+        for status in ("draft", "pending_review", "cancelled", "completed"):
             self.assertNotContains(response, f"Hidden {status}")
 
     def test_list_hides_past_activity(self):
@@ -539,6 +544,184 @@ class CommunityActivityNavTests(CommunityActivityWebTestBase):
                 self.assertEqual(response.status_code, 200)
 
 
+class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
+    @property
+    def create_url(self):
+        return reverse("community_activity_create")
+
+    def detail_url(self, activity):
+        return reverse("community_activity_detail", args=[activity.id])
+
+    def submission_data(self, **overrides):
+        data = {
+            "title": "成员野餐",
+            "title_en": "Member Picnic",
+            "description": "一起吃饭",
+            "description_en": "Share a meal together",
+            "organizer": "Community Member",
+            "start_datetime": timezone.localtime(self.start_datetime).strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "end_datetime": "",
+            "location": "公园",
+            "location_en": "Park",
+            "requested_audience_note": "I hope this can include North District.",
+        }
+        data.update(overrides)
+        return data
+
+    def test_active_primary_member_can_open_create_page(self):
+        self.login(self.member)
+
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Submit for review")
+        self.assertContains(response, 'name="requested_audience_note"')
+        for excluded_field in ("status", "created_by", "audience_units"):
+            self.assertNotContains(response, f'name="{excluded_field}"')
+
+    def test_unauthenticated_user_is_redirected_to_login(self):
+        response = self.client.get(self.create_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_user_without_active_primary_membership_cannot_submit(self):
+        self.login(self.no_membership)
+
+        get_response = self.client.get(self.create_url)
+        post_response = self.client.post(
+            self.create_url,
+            self.submission_data(),
+        )
+
+        self.assertEqual(get_response.status_code, 403)
+        self.assertEqual(post_response.status_code, 403)
+        self.assertEqual(CommunityActivity.objects.count(), 0)
+
+    def test_active_blocked_user_cannot_submit(self):
+        CommunityActivitySubmissionBlock.objects.create(
+            user=self.member,
+            reason="Staff review required before future submissions.",
+            created_by=self.staff,
+        )
+        self.login(self.member)
+
+        get_response = self.client.get(self.create_url)
+        post_response = self.client.post(
+            self.create_url,
+            self.submission_data(),
+        )
+
+        self.assertEqual(get_response.status_code, 403)
+        self.assertEqual(post_response.status_code, 403)
+        self.assertEqual(CommunityActivity.objects.count(), 0)
+
+    def test_valid_submission_is_pending_creator_owned_and_has_one_audience_row(self):
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+        self.assertEqual(activity.created_by, self.member)
+        self.assertEqual(
+            activity.requested_audience_note,
+            "I hope this can include North District.",
+        )
+        self.assertEqual(activity.audience_scope_links.count(), 1)
+        self.assertEqual(
+            activity.audience_scope_links.get().structure_unit,
+            self.parent,
+        )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_creator_can_see_pending_detail_and_submission_status(self):
+        activity = self.create_activity(
+            title_en="Pending Picnic",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Pending review")
+        self.assertContains(detail_response, "awaiting staff review")
+        self.assertContains(list_response, "Your submitted activities")
+        self.assertContains(list_response, "Pending Picnic")
+
+    def test_other_member_cannot_see_pending_activity(self):
+        activity = self.create_activity(
+            title_en="Private Pending Picnic",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.other_member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 404)
+        self.assertNotContains(list_response, "Private Pending Picnic")
+        self.assertFalse(
+            visible_community_activities_for(self.other_member)
+            .filter(id=activity.id)
+            .exists()
+        )
+
+    def test_staff_can_see_pending_activity(self):
+        activity = self.create_activity(
+            title_en="Staff Review Picnic",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.staff)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(list_response, "Staff Review Picnic")
+
+    def test_pending_activity_has_no_signup_action_and_signup_post_is_denied(self):
+        activity = self.create_activity(
+            title_en="Pending Signup Picnic",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        signup_response = self.client.post(
+            reverse("community_activity_signup", args=[activity.id])
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotContains(
+            detail_response,
+            reverse("community_activity_signup", args=[activity.id]),
+        )
+        self.assertEqual(signup_response.status_code, 404)
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+
 class ActivitySignupTests(CommunityActivityWebTestBase):
     def signup_url(self, activity):
         return reverse("community_activity_signup", args=[activity.id])
@@ -621,6 +804,7 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
 
         for status in (
             CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_PENDING_REVIEW,
             CommunityActivity.STATUS_CANCELLED,
             CommunityActivity.STATUS_COMPLETED,
         ):

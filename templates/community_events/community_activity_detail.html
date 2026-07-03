@@ -21,8 +21,18 @@
 </div>
 
 <div class="card">
-    {% if can_manage %}
+    {% if can_manage or is_creator %}
     <p class="muted">{{ activity|activity_status_label:language }}</p>
+    {% endif %}
+
+    {% if is_creator and activity.status == "pending_review" %}
+    <p>
+        {% if language == "zh" %}
+        你的活动已提交，正在等待同工审核。审核后才能向参加范围内的成员发布。
+        {% else %}
+        Your activity was submitted and is awaiting staff review. It will be shared with its approved audience only after publication.
+        {% endif %}
+    </p>
     {% endif %}
 
     <p>

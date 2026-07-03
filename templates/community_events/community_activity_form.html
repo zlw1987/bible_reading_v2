@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'community_activity_list' %}">
+        ← {% if language == "zh" %}返回活动{% else %}Back to Activities{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        提交后活动会进入同工审核，不会立即公开。初始参加范围是你目前所属的主要群体。
+        {% else %}
+        Your activity will be reviewed by staff before publication. Its initial audience is your current primary church group.
+        {% endif %}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    <div class="form-row" data-field="{{ field.name }}">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}提交审核{% else %}Submit for review{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'community_activity_list' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

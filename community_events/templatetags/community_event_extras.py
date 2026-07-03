@@ -29,12 +29,14 @@ def activity_status_label(activity, language):
     labels = {
         "zh": {
             "draft": "草稿",
+            "pending_review": "待审核",
             "published": "已发布",
             "cancelled": "已取消",
             "completed": "已结束",
         },
         "en": {
             "draft": "Draft",
+            "pending_review": "Pending review",
             "published": "Published",
             "cancelled": "Cancelled",
             "completed": "Completed",

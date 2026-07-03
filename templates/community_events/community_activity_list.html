@@ -13,7 +13,30 @@
     <p class="page-subtitle">
         {% if language == "zh" %}这里显示与你的小组或教会群体相关的社群活动。{% else %}Community activities shared with your group or church community.{% endif %}
     </p>
+    {% if can_submit %}
+    <p>
+        <a class="button" href="{% url 'community_activity_create' %}">
+            {% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}
+        </a>
+    </p>
+    {% endif %}
 </div>
+
+{% if submitted_activities %}
+<section>
+    <h2>{% if language == "zh" %}你提交的活动{% else %}Your submitted activities{% endif %}</h2>
+    <div class="card">
+        {% for activity in submitted_activities %}
+        <p>
+            <a href="{% url 'community_activity_detail' activity.id %}">
+                {{ activity|activity_title:language }}
+            </a>
+            <span class="muted">— {{ activity|activity_status_label:language }}</span>
+        </p>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 {% if activities %}
 <div class="grid grid-2">

@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1C` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1D-A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -23,9 +23,20 @@ cancellation sets `cancelled`, and signing up again reactivates it to
 `signed_up`. Signup is allowed only for authenticated users who can see a
 published upcoming activity. It is attendance intent, never serving.
 
-Approval workflow, creation/management UI, capacity/waitlist, Today, My
-Serving, any `ServiceEvent` relationship, Staff Overview, and a setup/readiness
-provider remain deferred.
+`COMMUNITY-EVENTS.1D-A` adds the bounded member submission + admin publish
+gate. An ordinary authenticated user with an active primary
+`ChurchStructureMembership` may submit at `/activities/new/` unless an active
+`CommunityActivitySubmissionBlock` exists for that user. The submitted
+activity starts `pending_review`, records the submitter in `created_by`, and
+atomically receives exactly one audience row for the submitter's primary
+membership unit. The member may write a non-authoritative
+`requested_audience_note`, but cannot select audience units or publish.
+Creators can see their own pending submissions; other ordinary users cannot.
+Staff/superusers use Django admin to adjust audience rows and publish.
+
+A full approval dashboard, ordinary-user audience picker, creator editing,
+capacity/waitlist, Today, My Serving, any `ServiceEvent` relationship, Staff
+Overview, and a setup/readiness provider remain deferred.
 
 ## 1. Purpose
 
@@ -80,6 +91,8 @@ Do not create a separate SpecialEvent model in V1.
 
 `COMMUNITY-EVENTS.1A` implements the first two models below.
 `COMMUNITY-EVENTS.1C` implements `ActivitySignup`.
+`COMMUNITY-EVENTS.1D-A` extends `CommunityActivity` and adds the submission
+block model.
 
 ### CommunityActivity
 
@@ -95,15 +108,18 @@ Implemented fields:
 - location_en
 - status:
   - draft
+  - pending_review
   - published
   - cancelled
   - completed
+- requested_audience_note (optional; staff review context only, never runtime
+  visibility)
 - created_by
 - created_at
 - updated_at
 
-Capacity, signup deadlines, approval fields, and approval workflow are not
-part of `COMMUNITY-EVENTS.1A`.
+Capacity, signup deadlines, and a full approval workflow/dashboard remain
+outside the current model.
 
 ### CommunityActivityAudienceScope
 
@@ -142,6 +158,20 @@ There is one row per activity/user. Cancelling preserves that row, and a later
 signup reactivates it. Waitlist, notes, capacity enforcement, approval, and
 attendance/check-in are not part of `COMMUNITY-EVENTS.1C`.
 
+### CommunityActivitySubmissionBlock
+
+Implemented in `COMMUNITY-EVENTS.1D-A`:
+
+- user
+- is_active
+- reason
+- created_by
+- created_at
+- updated_at
+
+There is at most one block row per user. Only an active row prevents member
+submission; staff manage these rows in Django admin.
+
 ## 5. Scope and Visibility Rules
 
 Ordinary-user visibility is structure-native:
@@ -177,6 +207,14 @@ nonmatching, and zero-audience activities fail closed for ordinary users.
 Cancellation updates an existing visible user's lifecycle row; it never
 deletes the row.
 
+`COMMUNITY-EVENTS.1D-A` does not change the published audience helper:
+pending-review activities remain absent from ordinary public results.
+The creator gets a narrow object-level exception to view their own submission
+and status. Staff/superusers retain the existing management bypass. Member
+submission resolves the creator's active primary membership and creates its
+audience row in the same transaction as the activity, so the normal create
+path cannot leave a zero-row submitted activity.
+
 The UI and queries should avoid exposing private membership data. An activity
 list should answer "can this user see this activity?" rather than showing
 internal membership lists. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for
@@ -189,7 +227,10 @@ Keep permissions simple.
 Regular member:
 - can view published activities within scope
 - can sign up or cancel their own signup
-- may create an activity only if future policy allows, likely pending approval
+- with an active primary membership and no active submission block, can submit
+  an activity for review
+- can view their own pending/cancelled/published submissions
+- cannot select arbitrary audience units or publish
 
 Authorized structure-unit leader:
 - may create or manage activity for an authorized unit only if a future
@@ -206,26 +247,34 @@ Avoid a complex role hierarchy in V1.
 
 ## 7. Approval Direction
 
-Broader-scope activities should require approval.
+The implemented `COMMUNITY-EVENTS.1D-A` policy is deliberately small:
 
-Possible V1 policy:
-- activity for one narrowly authorized structure unit may publish directly
-- regular member-created activity goes pending approval
-- multi-unit, broad-subtree, or whole-church/root-row activities require staff
-  or explicitly authorized leader approval
+- every member-created activity starts `pending_review`;
+- its automatic initial audience is exactly the creator's active primary
+  membership unit;
+- `requested_audience_note` may ask for a broader audience, but has no runtime
+  visibility effect;
+- staff/superusers review the activity in Django admin, edit audience rows if
+  appropriate, and explicitly publish;
+- ordinary users cannot publish or choose whole-church/arbitrary audience.
+
+A dedicated review dashboard or leader approval workflow remains deferred.
 
 ## 8. UI Direction
 
-Implemented in `COMMUNITY-EVENTS.1B` and `COMMUNITY-EVENTS.1C`:
+Implemented through `COMMUNITY-EVENTS.1D-A`:
 - `/activities/` - browse activities visible to the current user (upcoming
   published rows; staff/superuser keep the helper's management bypass), with a
   small signed-up indicator for the current user
 - `/activities/<id>/` - detail page with stateful signup/cancel controls
 - `/activities/<id>/signup/` - POST-only signup/reactivation action
 - `/activities/<id>/cancel-signup/` - POST-only cancellation action
+- `/activities/new/` - active-primary members submit an activity for staff
+  review
+- `/activities/` also links to submission and shows the current creator's own
+  submitted activity statuses
 
 Possible future pages:
-- `/activities/new/` - create activity
 - `/activities/manage/` - staff/leader management view
 
 `COMMUNITY-EVENTS.1B` adds the ordinary "Activities" / "活动" primary-nav entry
@@ -300,9 +349,16 @@ member-facing signup/cancel actions. It keeps one row per activity/user,
 reactivates cancelled rows, restricts new signup to visible published upcoming
 activities, and adds no serving or shared-surface integration.
 
+`COMMUNITY-EVENTS.1D-A` completes the bounded member submission + admin publish
+gate. It adds pending review, a requested-audience note, a one-row-per-user
+submission block control, creator-only pending visibility, and transactional
+creation of the creator-primary-unit audience row. Staff review, audience
+adjustment, and publishing remain in Django admin.
+
 Later work still requires separately approved, bounded slices for:
 
-- activity creation/approval workflow and staff management UI;
+- a full approval dashboard, creator editing, leader approval, or ordinary-user
+  audience selection;
 - any staff-dropdown, Staff Overview, setup/readiness, or Today contribution;
 - capacity, waitlist, reminders, payments, or calendar behavior.
 

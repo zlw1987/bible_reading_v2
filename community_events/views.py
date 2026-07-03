@@ -35,8 +35,8 @@ def community_activity_list(request):
     or one of its ancestors; zero-row activities fail closed. Staff and
     superusers keep the helper's intentionally narrow management bypass, so
     they may also see draft/cancelled/completed rows here. The list may show
-    the current user's signup state and own submitted activities but
-    contributes no Today or My Serving surface.
+    the current user's signup state and own submissions that still need
+    workflow attention, but contributes no Today or My Serving surface.
     """
     now = timezone.now()
     activities = (
@@ -55,6 +55,11 @@ def community_activity_list(request):
     )
     submitted_activities = CommunityActivity.objects.filter(
         created_by=request.user,
+        status__in=(
+            CommunityActivity.STATUS_PENDING_REVIEW,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+            CommunityActivity.STATUS_CANCELLED,
+        ),
     ).order_by("-created_at", "-id")
     can_submit = (
         (membership_unit := get_user_primary_membership_unit(request.user))

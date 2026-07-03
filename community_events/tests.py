@@ -359,6 +359,77 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
         self.assertContains(response, "Fellowship Picnic")
         self.assertContains(response, self.detail_url(activity))
 
+    def test_creator_published_activity_appears_once_in_visible_list_only(self):
+        activity = self.create_activity(created_by=self.member)
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Fellowship Picnic", count=1)
+        self.assertIn(activity, response.context["activities"])
+        self.assertNotIn(activity, response.context["submitted_activities"])
+        self.assertNotContains(response, "Your activity submissions")
+
+    def test_creator_pending_activity_appears_in_submissions_not_visible_list(self):
+        activity = self.create_activity(
+            title_en="Pending Creator Picnic",
+            status=CommunityActivity.STATUS_PENDING_REVIEW,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your activity submissions")
+        self.assertContains(response, "Pending Creator Picnic", count=1)
+        self.assertIn(activity, response.context["submitted_activities"])
+        self.assertNotIn(activity, response.context["activities"])
+
+    def test_submissions_only_include_workflow_attention_statuses(self):
+        activities_by_status = {
+            status: self.create_activity(
+                title_en=f"Creator {status}",
+                status=status,
+                created_by=self.member,
+            )
+            for status in (
+                CommunityActivity.STATUS_DRAFT,
+                CommunityActivity.STATUS_PENDING_REVIEW,
+                CommunityActivity.STATUS_CHANGES_REQUESTED,
+                CommunityActivity.STATUS_PUBLISHED,
+                CommunityActivity.STATUS_CANCELLED,
+                CommunityActivity.STATUS_COMPLETED,
+            )
+        }
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            set(response.context["submitted_activities"]),
+            {
+                activities_by_status[CommunityActivity.STATUS_PENDING_REVIEW],
+                activities_by_status[CommunityActivity.STATUS_CHANGES_REQUESTED],
+                activities_by_status[CommunityActivity.STATUS_CANCELLED],
+            },
+        )
+
+    def test_published_activity_remains_visible_to_in_scope_member(self):
+        activity = self.create_activity(title_en="Visible Published Picnic")
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Visible Published Picnic", count=1)
+        self.assertIn(activity, response.context["activities"])
+
     def test_list_hides_nonmatching_activity(self):
         activity = self.create_activity()
         self.add_audience(activity, self.parent)
@@ -774,7 +845,7 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Pending review")
         self.assertContains(detail_response, "awaiting staff review")
-        self.assertContains(list_response, "Your submitted activities")
+        self.assertContains(list_response, "Your activity submissions")
         self.assertContains(list_response, "Pending Picnic")
 
     def test_other_member_inside_selected_scope_cannot_see_pending_activity(self):
@@ -1174,6 +1245,19 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.assertContains(response, "Changes requested")
         self.assertContains(response, "Please pick a different scope.")
         self.assertContains(response, self.edit_url(activity))
+
+    def test_changes_requested_appears_in_submissions_with_resubmit_link(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your activity submissions")
+        self.assertContains(response, "Changes Requested Picnic", count=1)
+        self.assertContains(response, self.edit_url(activity))
+        self.assertIn(activity, response.context["submitted_activities"])
+        self.assertNotIn(activity, response.context["activities"])
 
     def test_other_scope_member_cannot_see_changes_requested_activity(self):
         in_scope_member = self.create_member("edit_in_scope", self.child)

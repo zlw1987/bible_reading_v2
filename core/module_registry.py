@@ -164,7 +164,16 @@ _REGISTERED_MODULES = (
         key="community_events",
         label_en="Community Activities",
         label_zh="活动",
-        capabilities=frozenset({CAPABILITY_REQUIRES_STRUCTURE_CORE}),
+        capabilities=frozenset(
+            {CAPABILITY_NAV, CAPABILITY_REQUIRES_STRUCTURE_CORE}
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="community_activity_list",
+            label_en="Activities",
+            label_zh="活动",
+            active_nav="community_events",
+            order=45,
+        ),
         dependency_notes=(
             "Independent community/fellowship activities. Ordinary visibility "
             "uses CommunityActivityAudienceScope rows plus active primary "

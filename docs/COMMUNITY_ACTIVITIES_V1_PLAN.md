@@ -1,12 +1,24 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1A` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1B` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
 exist.
-Signup, approval, member-facing routes/templates, primary navigation, Today,
-My Serving, and any `ServiceEvent` relationship remain deferred.
+
+`COMMUNITY-EVENTS.1B` adds an independent member-facing browse/detail entrance
+(`/activities/` and `/activities/<id>/`, route names `community_activity_list`
+and `community_activity_detail`) and an ordinary primary-nav entry (English
+"Activities" / Chinese "活动", `active_nav="community_events"`, ordered after
+Church Gatherings and before My Serving). The list shows visible upcoming
+published activities through the existing structure-native visibility helper;
+the detail view denies with 404 when `can_be_seen_by` is false. Nav visibility
+is gated by module enablement; the routes themselves have no route-level
+hard-off and stay governed by their login/visibility rules.
+
+Signup (`ActivitySignup`, RSVP/join/cancel), approval workflow, Today, My
+Serving, any `ServiceEvent` relationship, Staff Overview, and a setup/readiness
+provider remain deferred.
 
 ## 1. Purpose
 
@@ -188,13 +200,22 @@ Possible V1 policy:
 
 ## 8. UI Direction
 
+Implemented in `COMMUNITY-EVENTS.1B`:
+- `/activities/` - browse activities visible to the current user (upcoming
+  published rows; staff/superuser keep the helper's management bypass)
+- `/activities/<id>/` - read-only detail page (no signup/cancel control; states
+  "Signup is not available yet.")
+
 Possible future pages:
-- `/activities/` - list activities visible to the current user
-- `/activities/<id>/` - detail page with signup/cancel
+- `/activities/<id>/` signup/cancel controls once `ActivitySignup` exists
 - `/activities/new/` - create activity
 - `/activities/manage/` - staff/leader management view
 
-Do not add Activities to the top navigation yet.
+`COMMUNITY-EVENTS.1B` adds the ordinary "Activities" / "活动" primary-nav entry
+(placed after Church Gatherings, before My Serving), gated by module
+enablement. The wording, empty state, and detail copy stay low-noise: these are
+unofficial community/fellowship activities, not Church Gatherings, and
+visibility never implies attendance, signup, or serving.
 
 Future possible user navigation:
 
@@ -247,17 +268,21 @@ No:
 
 ## 10. Roadmap Position
 
-`COMMUNITY-EVENTS.1A` completes the independently registered model/admin
-foundation and its structure-native visibility rule. It intentionally adds no
-member-facing surface or signup behavior.
+`COMMUNITY-EVENTS.1A` completed the independently registered model/admin
+foundation and its structure-native visibility rule, with no member-facing
+surface.
+
+`COMMUNITY-EVENTS.1B` completes the independent member-facing browse/detail
+entrance (`community_activity_list` / `community_activity_detail`) and the
+ordinary "Activities" / "活动" primary-nav entry gated by module enablement. It
+adds no signup, approval, Today, My Serving, `ServiceEvent` relationship, Staff
+Overview, or setup/readiness provider.
 
 Later work still requires separately approved, bounded slices for:
 
 - `ActivitySignup` and its lifecycle;
-- member-facing list/detail/signup routes and bilingual templates;
-- activity creation and approval permissions/workflow;
-- any primary-nav, staff-dropdown, Staff Overview, setup/readiness, or Today
-  contribution;
+- member-facing signup/cancel controls and activity creation/approval workflow;
+- any staff-dropdown, Staff Overview, setup/readiness, or Today contribution;
 - capacity, waitlist, reminders, payments, or calendar behavior.
 
 No later slice may infer serving from activity visibility, signup, or

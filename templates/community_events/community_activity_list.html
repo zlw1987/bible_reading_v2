@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load community_event_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}活动{% else %}Activities{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}活动{% else %}Activities{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}这里显示与你的小组或教会群体相关的社群活动。报名功能尚未开放。{% else %}Community activities shared with your group or church community. Signup is not available yet.{% endif %}
+    </p>
+</div>
+
+{% if activities %}
+<div class="grid grid-2">
+    {% for activity in activities %}
+    <div class="card">
+        <h2 class="card-title">
+            <a href="{% url 'community_activity_detail' activity.id %}">
+                {{ activity|activity_title:language }}
+            </a>
+        </h2>
+        {% if can_manage %}
+        <p class="muted">{{ activity|activity_status_label:language }}</p>
+        {% endif %}
+        <p>
+            <strong>{% if language == "zh" %}时间{% else %}When{% endif %}:</strong>
+            {{ activity.start_datetime|member_datetime:language }}
+        </p>
+        {% with location=activity|activity_location:language %}
+        {% if location %}
+        <p>
+            <strong>{% if language == "zh" %}地点{% else %}Where{% endif %}:</strong>
+            {{ location }}
+        </p>
+        {% endif %}
+        {% endwith %}
+        {% if activity.organizer %}
+        <p>
+            <strong>{% if language == "zh" %}发起{% else %}Organized by{% endif %}:</strong>
+            {{ activity.organizer }}
+        </p>
+        {% endif %}
+        <p class="event-card-actions">
+            <a class="button button-secondary" href="{% url 'community_activity_detail' activity.id %}">
+                {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+            </a>
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}目前没有与你相关的社群活动。{% else %}There are no community activities shared with you right now.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

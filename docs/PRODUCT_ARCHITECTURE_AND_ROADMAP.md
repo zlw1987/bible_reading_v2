@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS.1A` (July 2026).
+through `COMMUNITY-EVENTS.1B` (July 2026).
 
 ## 1. Project Identity
 
@@ -103,10 +103,14 @@ Module disablement is a discoverability/surface gate, not app unloading or
 route-level hard-off. Direct module URLs, apps, models, admin registrations,
 permissions, setup routes, and the setup/readiness command retain their
 existing behavior. `COMMUNITY-EVENTS.1A` builds on this foundation with an
-independent registered app, models, admin, and visibility helper while adding
-no shared user surface. Signup and member-facing Community Activities work
-still requires separately approved slices. Checklist remains deferred. See
-`docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
+independent registered app, models, admin, and visibility helper. `COMMUNITY-EVENTS.1B`
+adds the independent member-facing browse/detail entrance
+(`community_activity_list` / `community_activity_detail`) and the ordinary
+"Activities" primary-nav entry (gated by module enablement, no route hard-off).
+Signup, approval, Today, My Serving, Staff Overview, setup/readiness, and any
+`ServiceEvent` relationship still require separately approved slices. Checklist
+remains deferred. See `docs/MODULE_BOUNDARIES.md` for the canonical boundary
+details.
 
 `RELEASE-HYGIENE.0A` is complete. The GoDaddy administrator bootstrap helper no
 longer contains or prints default credentials, fails closed on unsafe password
@@ -632,6 +636,15 @@ runtime guidance; use Section 2 and the canonical documents in
   activity plus an audience row matching the user's active primary membership
   unit or an ancestor; zero rows fail closed. The slice adds Django admin but
   no member routes/templates, signup, primary nav, Today, My Serving, or
+  `ServiceEvent` relationship.
+- `COMMUNITY-EVENTS.1B` adds the independent member-facing browse/detail
+  entrance (`community_activity_list` at `/activities/` and
+  `community_activity_detail` at `/activities/<id>/`) plus the ordinary
+  "Activities" / "活动" primary-nav entry (after Church Gatherings, before My
+  Serving), gated by module enablement with no route hard-off. The list uses
+  the structure-native visibility helper for upcoming published activities; the
+  detail view denies with 404 when `can_be_seen_by` is false. Still no signup,
+  approval, Today, My Serving, Staff Overview, setup/readiness, or
   `ServiceEvent` relationship.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.

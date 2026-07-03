@@ -60,6 +60,14 @@ EVENT_NAV_URLS = {
     "service_event_detail",
 }
 
+# Member-facing community activity browse/detail pages. These read-only pages
+# are accessible to ordinary members (subject to per-activity visibility), so
+# they highlight the primary "community_events" nav.
+COMMUNITY_ACTIVITY_NAV_URLS = {
+    "community_activity_list",
+    "community_activity_detail",
+}
+
 STAFF_NAV_URLS = {
     "staff_reading_plan_list",
     "staff_reading_plan_header",
@@ -124,6 +132,8 @@ def get_active_nav(request):
 
     if url_name in EVENT_NAV_URLS:
         return "events"
+    if url_name in COMMUNITY_ACTIVITY_NAV_URLS:
+        return "community_events"
     if url_name in STAFF_NAV_URLS:
         return "staff"
     if url_name == "home":

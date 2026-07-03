@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load community_event_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {{ activity|activity_title:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'community_activity_list' %}">
+        ← {% if language == "zh" %}返回活动{% else %}Back to Activities{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ activity|activity_title:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}社群活动{% else %}Community activity{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    {% if can_manage %}
+    <p class="muted">{{ activity|activity_status_label:language }}</p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
+        {{ activity.start_datetime|member_datetime:language }}
+    </p>
+
+    {% if activity.end_datetime %}
+    <p>
+        <strong>{% if language == "zh" %}结束时间{% else %}End Time{% endif %}:</strong>
+        {{ activity.end_datetime|member_datetime:language }}
+    </p>
+    {% endif %}
+
+    {% with location=activity|activity_location:language %}
+    {% if location %}
+    <p>
+        <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
+        {{ location }}
+    </p>
+    {% endif %}
+    {% endwith %}
+
+    {% if activity.organizer %}
+    <p>
+        <strong>{% if language == "zh" %}发起{% else %}Organized by{% endif %}:</strong>
+        {{ activity.organizer }}
+    </p>
+    {% endif %}
+
+    {% if activity|activity_description:language %}
+    <p>{{ activity|activity_description:language|linebreaksbr }}</p>
+    {% endif %}
+
+    <p class="muted">
+        {% if language == "zh" %}报名功能尚未开放。{% else %}Signup is not available yet.{% endif %}
+    </p>
+</div>
+{% endblock %}

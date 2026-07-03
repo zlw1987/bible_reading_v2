@@ -1,7 +1,8 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit
@@ -227,3 +228,309 @@ class CommunityActivityFoundationTests(TestCase):
 
     def test_admin_registers_activity_with_audience_inline(self):
         self.assertTrue(admin.site.is_registered(CommunityActivity))
+
+
+# Enabled-module set with community_events removed. It has no dependents and no
+# module dependencies, so dropping it alone stays dependency-valid.
+_WITHOUT_COMMUNITY_EVENTS = [
+    "reading",
+    "prayers",
+    "studies",
+    "events",
+    "ministry",
+]
+
+
+class CommunityActivityWebTestBase(TestCase):
+    """Shared structure/members/activity fixtures for the 1B browse entrance."""
+
+    def setUp(self):
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+        self.parent = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North",
+        )
+        self.child = ChurchStructureUnit.objects.create(
+            parent=self.parent,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="NORTH-1",
+            name="North 1",
+        )
+        self.sibling = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="SOUTH-1",
+            name="South 1",
+        )
+        self.member = self.create_member("browse_member", self.parent)
+        self.other_member = self.create_member("browse_other", self.sibling)
+        self.no_membership = User.objects.create_user(
+            username="browse_no_membership",
+            password="testpass123",
+        )
+        self.staff = User.objects.create_user(
+            username="browse_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.start_datetime = timezone.now() + timezone.timedelta(days=7)
+
+    def create_member(self, username, unit, **membership_overrides):
+        user = User.objects.create_user(username=username, password="testpass123")
+        membership_data = {
+            "user": user,
+            "unit": unit,
+            "status": ChurchStructureMembership.STATUS_ACTIVE,
+            "is_primary": True,
+            "start_date": timezone.localdate() - timezone.timedelta(days=1),
+        }
+        membership_data.update(membership_overrides)
+        ChurchStructureMembership.objects.create(**membership_data)
+        return user
+
+    def create_activity(self, **overrides):
+        data = {
+            "title": "社区活动",
+            "title_en": "Fellowship Picnic",
+            "description": "一起相聚",
+            "description_en": "Gather together",
+            "organizer": "Fellowship Team",
+            "start_datetime": self.start_datetime,
+            "location": "Fellowship Hall",
+            "location_en": "Fellowship Hall",
+            "status": CommunityActivity.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return CommunityActivity.objects.create(**data)
+
+    def add_audience(self, activity, unit):
+        return CommunityActivityAudienceScope.objects.create(
+            activity=activity,
+            structure_unit=unit,
+        )
+
+    def login(self, user, language="en"):
+        self.client.force_login(user)
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+
+class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
+    @property
+    def list_url(self):
+        return reverse("community_activity_list")
+
+    def detail_url(self, activity):
+        return reverse("community_activity_detail", args=[activity.id])
+
+    def test_list_requires_authenticated_user(self):
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_list_loads_for_authenticated_user(self):
+        self.login(self.member)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_list_shows_matching_visible_published_activity(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Fellowship Picnic")
+        self.assertContains(response, self.detail_url(activity))
+
+    def test_list_hides_nonmatching_activity(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.other_member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Fellowship Picnic")
+
+    def test_list_hides_zero_audience_activity_from_ordinary_user(self):
+        self.create_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Fellowship Picnic")
+
+    def test_list_hides_draft_cancelled_completed_from_ordinary_user(self):
+        for status in (
+            CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
+        ):
+            activity = self.create_activity(
+                title_en=f"Hidden {status}",
+                status=status,
+            )
+            self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        for status in ("draft", "cancelled", "completed"):
+            self.assertNotContains(response, f"Hidden {status}")
+
+    def test_list_hides_past_activity(self):
+        activity = self.create_activity(
+            title_en="Past Picnic",
+            start_datetime=timezone.now() - timezone.timedelta(days=1),
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Past Picnic")
+
+    def test_list_contributes_no_today_or_my_serving_surface(self):
+        self.login(self.member)
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        # The browse entrance is independent: it must not pull in Today or
+        # My Serving context keys.
+        for leaked_key in (
+            "today_items",
+            "today_gatherings",
+            "serving_summary",
+            "leader_summary",
+        ):
+            self.assertNotIn(leaked_key, response.context)
+
+    def test_list_shows_no_signup_affordance(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        for signup_word in ("RSVP", "Join now", "Sign up for", "Register for"):
+            self.assertNotIn(signup_word, content)
+
+    def test_detail_shows_matching_visible_activity(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Fellowship Picnic")
+        # Detail states signup is not open yet and offers no signup control.
+        self.assertContains(response, "Signup is not available yet.")
+
+    def test_detail_denies_nonmatching_activity_with_404(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.other_member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_detail_denies_zero_audience_activity_with_404(self):
+        activity = self.create_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_staff_can_browse_and_open_draft_activity(self):
+        activity = self.create_activity(
+            title_en="Draft Retreat",
+            status=CommunityActivity.STATUS_DRAFT,
+        )
+        self.login(self.staff)
+
+        list_response = self.client.get(self.list_url)
+        detail_response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertContains(list_response, "Draft Retreat")
+        self.assertEqual(detail_response.status_code, 200)
+
+    @override_settings(CMS_ENABLED_MODULES=_WITHOUT_COMMUNITY_EVENTS)
+    def test_direct_list_route_is_not_route_hard_off_when_module_disabled(self):
+        # MODULAR-CORE gating hides surfaces only. The list route stays
+        # reachable under its own login/visibility rules even when the module
+        # is disabled; an ordinary user simply sees the calm empty state.
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Fellowship Picnic")
+
+
+class CommunityActivityNavTests(CommunityActivityWebTestBase):
+    def nav_href(self, url_name):
+        return 'href="%s"' % reverse(url_name)
+
+    def test_activities_nav_link_appears_when_module_enabled(self):
+        self.login(self.member, language="en")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(self.nav_href("community_activity_list"), content)
+        self.assertIn("Activities", content)
+
+    def test_activities_nav_link_renders_chinese_label(self):
+        self.login(self.member, language="zh")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(self.nav_href("community_activity_list"), content)
+        self.assertIn("活动", content)
+
+    @override_settings(CMS_ENABLED_MODULES=_WITHOUT_COMMUNITY_EVENTS)
+    def test_activities_nav_link_hidden_when_module_disabled(self):
+        self.login(self.member, language="en")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn(self.nav_href("community_activity_list"), content)
+        # Unrelated primary nav (home) still renders.
+        self.assertIn(self.nav_href("home"), content)
+
+    def test_list_page_marks_community_events_nav_active(self):
+        self.login(self.member, language="en")
+        response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_nav"], "community_events")
+
+    @override_settings(CMS_ENABLED_MODULES=_WITHOUT_COMMUNITY_EVENTS)
+    def test_disabling_community_events_does_not_crash_home_or_profile(self):
+        self.login(self.member, language="en")
+        for url_name in ("home", "profile"):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)

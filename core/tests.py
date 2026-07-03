@@ -127,6 +127,12 @@ class ModuleRegistryTests(SimpleTestCase):
                     "教会聚会",
                     "events",
                 ),
+                (
+                    "community_activity_list",
+                    "Activities",
+                    "活动",
+                    "community_events",
+                ),
                 ("my_serving", "My Serving", "我的服事", "my_serving"),
             ),
         )
@@ -175,9 +181,15 @@ class ModuleRegistryTests(SimpleTestCase):
             is_module_enabled("checklist")
 
     def test_module_capabilities_metadata(self):
-        for key in ("reading", "prayers", "studies", "events", "ministry"):
+        for key in (
+            "reading",
+            "prayers",
+            "studies",
+            "events",
+            "community_events",
+            "ministry",
+        ):
             self.assertTrue(module_has_capability(key, CAPABILITY_NAV), key)
-        self.assertFalse(module_has_capability("community_events", CAPABILITY_NAV))
         self.assertTrue(module_has_capability("reading", CAPABILITY_TODAY))
         self.assertFalse(module_has_capability("prayers", CAPABILITY_TODAY))
         self.assertFalse(module_has_capability("community_events", CAPABILITY_TODAY))
@@ -206,7 +218,11 @@ class ModuleRegistryTests(SimpleTestCase):
         self.assertEqual(module.label_en, "Community Activities")
         self.assertEqual(module.label_zh, "活动")
         self.assertEqual(module.depends_on, ())
-        self.assertIsNone(module.primary_nav)
+        # COMMUNITY-EVENTS.1B adds an ordinary primary-nav entry, but the
+        # module still carries no gateable module dependency.
+        self.assertIsNotNone(module.primary_nav)
+        self.assertEqual(module.primary_nav.url_name, "community_activity_list")
+        self.assertEqual(module.primary_nav.active_nav, "community_events")
 
     @override_settings(
         CMS_ENABLED_MODULES=["reading", "prayers", "studies", "events", "ministry"]

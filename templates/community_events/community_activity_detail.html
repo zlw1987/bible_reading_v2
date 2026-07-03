@@ -35,6 +35,29 @@
     </p>
     {% endif %}
 
+    {% if is_creator and activity.status == "changes_requested" %}
+    <p>
+        {% if language == "zh" %}
+        同工请你修改这个活动后再重新提交。
+        {% else %}
+        Staff have asked you to make changes to this activity before resubmitting it.
+        {% endif %}
+    </p>
+    {% if activity.review_note %}
+    <p>
+        <strong>{% if language == "zh" %}同工审核意见{% else %}Staff review note{% endif %}:</strong>
+    </p>
+    <p>{{ activity.review_note|linebreaksbr }}</p>
+    {% endif %}
+    {% if can_edit %}
+    <p>
+        <a class="button" href="{% url 'community_activity_edit' activity.id %}">
+            {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
+        </a>
+    </p>
+    {% endif %}
+    {% endif %}
+
     <p>
         <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
         {{ activity.start_datetime|member_datetime:language }}

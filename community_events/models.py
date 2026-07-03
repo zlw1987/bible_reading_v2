@@ -9,6 +9,7 @@ from accounts.models import ChurchStructureUnit
 class CommunityActivity(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_PENDING_REVIEW = "pending_review"
+    STATUS_CHANGES_REQUESTED = "changes_requested"
     STATUS_PUBLISHED = "published"
     STATUS_CANCELLED = "cancelled"
     STATUS_COMPLETED = "completed"
@@ -16,6 +17,7 @@ class CommunityActivity(models.Model):
     STATUS_CHOICES = [
         (STATUS_DRAFT, "Draft"),
         (STATUS_PENDING_REVIEW, "Pending review"),
+        (STATUS_CHANGES_REQUESTED, "Changes requested"),
         (STATUS_PUBLISHED, "Published"),
         (STATUS_CANCELLED, "Cancelled"),
         (STATUS_COMPLETED, "Completed"),
@@ -36,6 +38,15 @@ class CommunityActivity(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_DRAFT,
     )
+    review_note = models.TextField(blank=True, default="")
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_community_activities",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -120,6 +131,21 @@ class CommunityActivity(models.Model):
             user,
             queryset=type(self).objects.filter(pk=self.pk),
         ).exists()
+
+    def can_be_edited_by(self, user):
+        """Return whether ``user`` may edit and resubmit this activity.
+
+        Only the creator may edit their own activity, and only while it is in
+        ``changes_requested``. Pending-review, published, cancelled, and
+        completed activities are not creator-editable; staff editing stays in
+        Django admin or the review surface.
+        """
+        return bool(
+            self.pk
+            and getattr(user, "is_authenticated", False)
+            and self.created_by_id == getattr(user, "id", None)
+            and self.status == self.STATUS_CHANGES_REQUESTED
+        )
 
     def is_signup_open(self, at=None):
         """Return whether this activity accepts member attendance intent."""

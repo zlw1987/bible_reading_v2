@@ -14,9 +14,39 @@ urlpatterns = [
         name="community_activity_create",
     ),
     path(
+        "activities/review/",
+        views.community_activity_review_list,
+        name="community_activity_review_list",
+    ),
+    path(
         "activities/<int:activity_id>/",
         views.community_activity_detail,
         name="community_activity_detail",
+    ),
+    path(
+        "activities/<int:activity_id>/edit/",
+        views.community_activity_edit,
+        name="community_activity_edit",
+    ),
+    path(
+        "activities/<int:activity_id>/review/",
+        views.community_activity_review_detail,
+        name="community_activity_review_detail",
+    ),
+    path(
+        "activities/<int:activity_id>/review/publish/",
+        views.community_activity_review_publish,
+        name="community_activity_review_publish",
+    ),
+    path(
+        "activities/<int:activity_id>/review/request-changes/",
+        views.community_activity_review_request_changes,
+        name="community_activity_review_request_changes",
+    ),
+    path(
+        "activities/<int:activity_id>/review/cancel/",
+        views.community_activity_review_cancel,
+        name="community_activity_review_cancel",
     ),
     path(
         "activities/<int:activity_id>/signup/",

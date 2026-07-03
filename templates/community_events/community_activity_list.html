@@ -32,6 +32,11 @@
                 {{ activity|activity_title:language }}
             </a>
             <span class="muted">— {{ activity|activity_status_label:language }}</span>
+            {% if activity.status == "changes_requested" %}
+            <a href="{% url 'community_activity_edit' activity.id %}">
+                {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
+            </a>
+            {% endif %}
         </p>
         {% endfor %}
     </div>

@@ -34,8 +34,9 @@ class CommunityActivityAdmin(admin.ModelAdmin):
         "location",
         "location_en",
         "requested_audience_note",
+        "review_note",
     )
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("reviewed_by", "reviewed_at", "created_at", "updated_at")
     ordering = ("-start_datetime",)
 
 

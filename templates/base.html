@@ -107,6 +107,11 @@
                         <a href="{% url 'staff_moderation_queue' %}">
                             {{ ui.moderation_queue }}
                         </a>
+                        {% if "community_events" in enabled_modules %}
+                        <a href="{% url 'community_activity_review_list' %}">
+                            {% if language == "zh" %}活动审核{% else %}Activity Review{% endif %}
+                        </a>
+                        {% endif %}
                         <a href="{% url 'staff_reflection_reports' %}">
                             {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
                         </a>

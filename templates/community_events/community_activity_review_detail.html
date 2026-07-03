@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% load community_event_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}审核{% else %}Review{% endif %}: {{ activity|activity_title:language }}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'community_activity_review_list' %}">
+        ← {% if language == "zh" %}返回活动审核{% else %}Back to Activity Review{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ activity|activity_title:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}社群活动审核{% else %}Community activity review{% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <p class="muted">
+        <strong>{% if language == "zh" %}状态{% else %}Status{% endif %}:</strong>
+        {{ activity|activity_status_label:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}提交人{% else %}Submitted by{% endif %}:</strong>
+        {% if activity.created_by %}{{ activity.created_by.username }}{% else %}—{% endif %}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}开始时间{% else %}Start Time{% endif %}:</strong>
+        {{ activity.start_datetime|member_datetime:language }}
+    </p>
+    {% if activity.end_datetime %}
+    <p>
+        <strong>{% if language == "zh" %}结束时间{% else %}End Time{% endif %}:</strong>
+        {{ activity.end_datetime|member_datetime:language }}
+    </p>
+    {% endif %}
+    {% with location=activity|activity_location:language %}
+    {% if location %}
+    <p>
+        <strong>{% if language == "zh" %}地点{% else %}Location{% endif %}:</strong>
+        {{ location }}
+    </p>
+    {% endif %}
+    {% endwith %}
+    {% if activity.organizer %}
+    <p>
+        <strong>{% if language == "zh" %}发起{% else %}Organized by{% endif %}:</strong>
+        {{ activity.organizer }}
+    </p>
+    {% endif %}
+    {% if activity|activity_description:language %}
+    <p>{{ activity|activity_description:language|linebreaksbr }}</p>
+    {% endif %}
+
+    <p>
+        <strong>{% if language == "zh" %}活动范围{% else %}Activity scope{% endif %}:</strong>
+        {% if scope_labels %}
+            {% for label in scope_labels %}{{ label }}{% if not forloop.last %}; {% endif %}{% endfor %}
+        {% else %}
+            <span class="muted">{% if language == "zh" %}无{% else %}None{% endif %}</span>
+        {% endif %}
+    </p>
+    {% if activity.requested_audience_note %}
+    <p>
+        <strong>{% if language == "zh" %}范围说明{% else %}Scope note{% endif %}:</strong>
+        {{ activity.requested_audience_note|linebreaksbr }}
+    </p>
+    {% endif %}
+    {% if activity.review_note %}
+    <p>
+        <strong>{% if language == "zh" %}上次审核意见{% else %}Current review note{% endif %}:</strong>
+        {{ activity.review_note|linebreaksbr }}
+    </p>
+    {% endif %}
+</div>
+
+{% if can_take_review_action %}
+<div class="card">
+    <h2>{% if language == "zh" %}审核操作{% else %}Review actions{% endif %}</h2>
+
+    <form method="post" action="{% url 'community_activity_review_publish' activity.id %}" class="inline-form">
+        {% csrf_token %}
+        <button class="button" type="submit">
+            {% if language == "zh" %}发布{% else %}Publish{% endif %}
+        </button>
+    </form>
+
+    <hr>
+
+    {% if can_request_changes %}
+    <form method="post" action="{% url 'community_activity_review_request_changes' activity.id %}">
+        {% csrf_token %}
+        <p>
+            <label for="request-changes-note">
+                {% if language == "zh" %}需要修改说明（必填）{% else %}Requested changes note (required){% endif %}
+            </label>
+        </p>
+        {% if review_note_error %}
+        <p class="message">
+            {% if language == "zh" %}请填写需要修改的说明。{% else %}Please provide a note explaining the requested changes.{% endif %}
+        </p>
+        {% endif %}
+        <textarea id="request-changes-note" name="review_note" rows="3"></textarea>
+        <p>
+            <button class="button button-secondary" type="submit">
+                {% if language == "zh" %}退回修改{% else %}Request changes{% endif %}
+            </button>
+        </p>
+    </form>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}此活动已退回修改，发起人可以修改后重新提交。{% else %}Changes have already been requested. The creator can edit and resubmit this activity.{% endif %}
+    </p>
+    {% endif %}
+
+    <hr>
+
+    <form method="post" action="{% url 'community_activity_review_cancel' activity.id %}">
+        {% csrf_token %}
+        <p>
+            <label for="cancel-note">
+                {% if language == "zh" %}取消说明（可选）{% else %}Cancellation note (optional){% endif %}
+            </label>
+        </p>
+        <textarea id="cancel-note" name="review_note" rows="2"></textarea>
+        <p>
+            <button class="button button-secondary" type="submit">
+                {% if language == "zh" %}取消 / 拒绝{% else %}Cancel / reject{% endif %}
+            </button>
+        </p>
+    </form>
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}这个活动目前不在待审核状态。{% else %}This activity is no longer awaiting review.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

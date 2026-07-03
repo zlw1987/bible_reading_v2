@@ -1,20 +1,26 @@
 {% extends "base.html" %}
 
 {% block title %}
-    {% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}
+    {% if is_edit %}{% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}{% else %}{% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}{% endif %}
     | {{ ui.site_title }}
 {% endblock %}
 
 {% block content %}
 <p>
+    {% if is_edit %}
+    <a href="{% url 'community_activity_detail' activity.id %}">
+        ← {% if language == "zh" %}返回活动详情{% else %}Back to activity{% endif %}
+    </a>
+    {% else %}
     <a href="{% url 'community_activity_list' %}">
         ← {% if language == "zh" %}返回活动{% else %}Back to Activities{% endif %}
     </a>
+    {% endif %}
 </p>
 
 <div class="page-header">
     <h1 class="page-title">
-        {% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}
+        {% if is_edit %}{% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}{% else %}{% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}{% endif %}
     </h1>
     <p class="page-subtitle">
         {% if language == "zh" %}
@@ -24,6 +30,15 @@
         {% endif %}
     </p>
 </div>
+
+{% if is_edit and review_note %}
+<div class="card">
+    <p>
+        <strong>{% if language == "zh" %}同工审核意见{% else %}Staff review note{% endif %}:</strong>
+    </p>
+    <p>{{ review_note|linebreaksbr }}</p>
+</div>
+{% endif %}
 
 <form method="post" class="card">
     {% csrf_token %}
@@ -44,11 +59,17 @@
 
     <div class="actions">
         <button type="submit">
-            {% if language == "zh" %}提交审核{% else %}Submit for review{% endif %}
+            {% if is_edit %}{% if language == "zh" %}重新提交审核{% else %}Resubmit for review{% endif %}{% else %}{% if language == "zh" %}提交审核{% else %}Submit for review{% endif %}{% endif %}
         </button>
+        {% if is_edit %}
+        <a class="button button-secondary" href="{% url 'community_activity_detail' activity.id %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+        {% else %}
         <a class="button button-secondary" href="{% url 'community_activity_list' %}">
             {% if language == "zh" %}取消{% else %}Cancel{% endif %}
         </a>
+        {% endif %}
     </div>
 </form>
 {% endblock %}

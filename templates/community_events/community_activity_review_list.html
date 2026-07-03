@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load community_event_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}活动审核{% else %}Activity Review{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}活动审核{% else %}Activity Review{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        待审核和需要修改的社群活动提交。审核后才会向选定范围内的成员发布。
+        {% else %}
+        Community activity submissions awaiting a review decision. Activities are shared with their selected scope only after publication.
+        {% endif %}
+    </p>
+</div>
+
+{% if review_items %}
+<div class="grid">
+    {% for item in review_items %}
+    {% with activity=item.activity %}
+    <div class="card">
+        <h2 class="card-title">
+            <a href="{% url 'community_activity_review_detail' activity.id %}">
+                {{ activity|activity_title:language }}
+            </a>
+        </h2>
+        <p class="muted">{{ activity|activity_status_label:language }}</p>
+        <p>
+            <strong>{% if language == "zh" %}提交人{% else %}Submitted by{% endif %}:</strong>
+            {% if activity.created_by %}{{ activity.created_by.username }}{% else %}—{% endif %}
+        </p>
+        <p>
+            <strong>{% if language == "zh" %}时间{% else %}When{% endif %}:</strong>
+            {{ activity.start_datetime|member_datetime:language }}
+        </p>
+        <p>
+            <strong>{% if language == "zh" %}活动范围{% else %}Activity scope{% endif %}:</strong>
+            {% if item.scope_labels %}
+                {% for label in item.scope_labels %}{{ label }}{% if not forloop.last %}; {% endif %}{% endfor %}
+            {% else %}
+                <span class="muted">{% if language == "zh" %}无{% else %}None{% endif %}</span>
+            {% endif %}
+        </p>
+        {% if activity.requested_audience_note %}
+        <p>
+            <strong>{% if language == "zh" %}范围说明{% else %}Scope note{% endif %}:</strong>
+            {{ activity.requested_audience_note|linebreaksbr }}
+        </p>
+        {% endif %}
+        {% if activity.review_note %}
+        <p>
+            <strong>{% if language == "zh" %}审核意见{% else %}Review note{% endif %}:</strong>
+            {{ activity.review_note|linebreaksbr }}
+        </p>
+        {% endif %}
+        <p class="event-card-actions">
+            <a class="button button-secondary" href="{% url 'community_activity_review_detail' activity.id %}">
+                {% if language == "zh" %}审核{% else %}Review{% endif %}
+            </a>
+        </p>
+    </div>
+    {% endwith %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}目前没有需要审核的社群活动。{% else %}There are no community activities awaiting review right now.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

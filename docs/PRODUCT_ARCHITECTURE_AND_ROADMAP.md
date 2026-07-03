@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS.1D-A-FU1` (July 2026).
+through `COMMUNITY-EVENTS.1D-B` (July 2026).
 
 ## 1. Project Identity
 
@@ -117,11 +117,18 @@ member-selected `ChurchStructureUnit` Activity Scope picker; selected active,
 non-overlapping units are saved as audience rows, while the optional scope note
 remains staff review context only. Creators may see their own pending rows, and
 staff/superusers adjust audience and publish in Django admin. Selected-scope
-members gain no pending visibility or signup access. A full approval dashboard,
-creator editing, capacity/waitlist, Today, My Serving, Staff Overview,
-setup/readiness, and any `ServiceEvent` relationship still require separately
-approved slices. Checklist remains deferred. See `docs/MODULE_BOUNDARIES.md`
-for the canonical boundary details.
+members gain no pending visibility or signup access. `COMMUNITY-EVENTS.1D-B`
+adds a lightweight staff review inbox and request-changes loop: a
+staff/superuser-only inbox (`/activities/review/`) and POST-only publish /
+request-changes / cancel-reject actions, plus a creator edit + resubmit path
+for `changes_requested` activities that returns them to `pending_review`. It
+adds the `changes_requested` status and `review_note` / `reviewed_by` /
+`reviewed_at` fields and a module-gated staff-dropdown review link, without
+Staff Overview counts, Today, My Serving, notifications, or a `ServiceEvent`
+link. A larger approval dashboard, capacity/waitlist, Today, My Serving, Staff
+Overview, setup/readiness, and any `ServiceEvent` relationship still require
+separately approved slices. Checklist remains deferred. See
+`docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
 
 `RELEASE-HYGIENE.0A` is complete. The GoDaddy administrator bootstrap helper no
 longer contains or prints default credentials, fails closed on unsafe password
@@ -669,6 +676,17 @@ runtime guidance; use Section 2 and the canonical documents in
   in the same transaction. The optional Activity Scope note never controls
   visibility. Creators may see pending submissions, but selected-scope ordinary
   users cannot see them before staff publication.
+- `COMMUNITY-EVENTS.1D-B` adds a lightweight staff review inbox and
+  request-changes loop. It adds the `changes_requested` status and
+  `review_note` / `reviewed_by` / `reviewed_at` fields, a staff/superuser-only
+  inbox at `/activities/review/`, POST-only publish / request-changes (note
+  required) / cancel-reject actions on `/activities/<id>/review/`, and a
+  creator edit + resubmit path at `/activities/<id>/edit/` that transactionally
+  replaces audience rows and returns the activity to `pending_review`. A
+  module-gated staff-dropdown review link was added. It adds no Staff Overview
+  counts, Today, My Serving, notifications, serving records, or `ServiceEvent`
+  relationship, and never makes pending-review or changes-requested activities
+  visible to selected-scope ordinary users.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.

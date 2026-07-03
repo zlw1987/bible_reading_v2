@@ -843,6 +843,512 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         self.assertEqual(ActivitySignup.objects.count(), 0)
 
 
+class CommunityActivityReviewInboxTests(CommunityActivityWebTestBase):
+    @property
+    def review_list_url(self):
+        return reverse("community_activity_review_list")
+
+    def review_detail_url(self, activity):
+        return reverse("community_activity_review_detail", args=[activity.id])
+
+    def publish_url(self, activity):
+        return reverse("community_activity_review_publish", args=[activity.id])
+
+    def request_changes_url(self, activity):
+        return reverse(
+            "community_activity_review_request_changes",
+            args=[activity.id],
+        )
+
+    def cancel_url(self, activity):
+        return reverse("community_activity_review_cancel", args=[activity.id])
+
+    def detail_url(self, activity):
+        return reverse("community_activity_detail", args=[activity.id])
+
+    def pending_activity(self, **overrides):
+        data = {
+            "title_en": "Pending Review Picnic",
+            "status": CommunityActivity.STATUS_PENDING_REVIEW,
+            "created_by": self.member,
+        }
+        data.update(overrides)
+        activity = self.create_activity(**data)
+        self.add_audience(activity, self.parent)
+        return activity
+
+    def test_staff_can_open_review_inbox(self):
+        self.login(self.staff)
+        response = self.client.get(self.review_list_url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_open_review_inbox(self):
+        superuser = User.objects.create_superuser(
+            username="review_superuser",
+            password="testpass123",
+            email="review-superuser@example.com",
+        )
+        self.login(superuser)
+        response = self.client.get(self.review_list_url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_ordinary_user_cannot_open_review_inbox(self):
+        self.login(self.member)
+        response = self.client.get(self.review_list_url)
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_review_inbox_shows_pending_and_changes_requested(self):
+        pending = self.pending_activity(title_en="Inbox Pending")
+        changes = self.pending_activity(
+            title_en="Inbox Changes",
+            status=CommunityActivity.STATUS_CHANGES_REQUESTED,
+            review_note="Please adjust the time.",
+        )
+        self.login(self.staff)
+
+        response = self.client.get(self.review_list_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Inbox Pending")
+        self.assertContains(response, "Inbox Changes")
+        self.assertContains(response, self.review_detail_url(pending))
+        self.assertContains(response, self.review_detail_url(changes))
+
+    def test_review_inbox_excludes_published_and_draft(self):
+        self.create_activity(
+            title_en="Published Hidden From Inbox",
+            status=CommunityActivity.STATUS_PUBLISHED,
+        )
+        self.create_activity(
+            title_en="Draft Hidden From Inbox",
+            status=CommunityActivity.STATUS_DRAFT,
+        )
+        self.login(self.staff)
+
+        response = self.client.get(self.review_list_url)
+
+        self.assertNotContains(response, "Published Hidden From Inbox")
+        self.assertNotContains(response, "Draft Hidden From Inbox")
+
+    def test_review_detail_shows_actions_for_pending_review(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+
+        response = self.client.get(self.review_detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Review actions")
+        self.assertContains(response, self.publish_url(activity))
+        self.assertContains(response, self.request_changes_url(activity))
+        self.assertContains(response, self.cancel_url(activity))
+        self.assertNotContains(response, "no longer awaiting review")
+        self.assertNotContains(response, "Changes have already been requested")
+
+    def test_review_detail_shows_actions_for_changes_requested(self):
+        activity = self.pending_activity(
+            status=CommunityActivity.STATUS_CHANGES_REQUESTED,
+            review_note="Please adjust.",
+        )
+        self.login(self.staff)
+
+        response = self.client.get(self.review_detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        # Publish and Cancel stay available for changes_requested; the
+        # request-changes form is hidden because changes were already asked
+        # for and the activity is waiting for the creator to resubmit.
+        self.assertContains(response, "Review actions")
+        self.assertContains(response, self.publish_url(activity))
+        self.assertContains(response, self.cancel_url(activity))
+        self.assertNotContains(response, self.request_changes_url(activity))
+        self.assertContains(response, "Changes have already been requested")
+
+    def test_review_detail_hides_actions_after_publish(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+        self.client.post(self.publish_url(activity))
+
+        response = self.client.get(self.review_detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Review actions")
+        self.assertNotContains(response, self.publish_url(activity))
+        self.assertNotContains(response, self.request_changes_url(activity))
+        self.assertNotContains(response, self.cancel_url(activity))
+        self.assertContains(response, "no longer awaiting review")
+
+    def test_review_detail_hides_actions_after_cancel(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+        self.client.post(self.cancel_url(activity))
+
+        response = self.client.get(self.review_detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Review actions")
+        self.assertNotContains(response, self.publish_url(activity))
+        self.assertNotContains(response, self.request_changes_url(activity))
+        self.assertNotContains(response, self.cancel_url(activity))
+        self.assertContains(response, "no longer awaiting review")
+
+    def test_staff_can_publish_pending_activity(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+
+        response = self.client.post(self.publish_url(activity))
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PUBLISHED)
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertIsNotNone(activity.reviewed_at)
+
+    def test_published_activity_visible_to_selected_scope_member(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+        self.client.post(self.publish_url(activity))
+
+        self.login(self.member)
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            visible_community_activities_for(self.member)
+            .filter(id=activity.id)
+            .exists()
+        )
+
+    def test_staff_can_request_changes_with_review_note(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+
+        response = self.client.post(
+            self.request_changes_url(activity),
+            {"review_note": "Please shorten the description."},
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+        )
+        self.assertEqual(
+            activity.review_note,
+            "Please shorten the description.",
+        )
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertIsNotNone(activity.reviewed_at)
+
+    def test_request_changes_without_note_fails_and_keeps_status(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+
+        response = self.client.post(
+            self.request_changes_url(activity),
+            {"review_note": "   "},
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("error=note", response.url)
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+        self.assertEqual(activity.review_note, "")
+
+    def test_staff_can_cancel_pending_or_changes_requested(self):
+        for status in (
+            CommunityActivity.STATUS_PENDING_REVIEW,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+        ):
+            with self.subTest(status=status):
+                activity = self.pending_activity(status=status)
+                self.login(self.staff)
+
+                response = self.client.post(self.cancel_url(activity))
+
+                activity.refresh_from_db()
+                self.assertRedirects(response, self.review_detail_url(activity))
+                self.assertEqual(
+                    activity.status,
+                    CommunityActivity.STATUS_CANCELLED,
+                )
+                self.assertEqual(activity.reviewed_by, self.staff)
+
+    def test_cancelled_activity_hidden_and_not_signup_able(self):
+        # A non-creator member in the selected parent scope must not see or
+        # sign up for the activity once it is cancelled.
+        viewer = self.create_member("cancel_scope_viewer", self.child)
+        activity = self.pending_activity(created_by=self.member)
+        self.login(self.staff)
+        self.client.post(self.cancel_url(activity))
+
+        self.login(viewer)
+        detail_response = self.client.get(self.detail_url(activity))
+        signup_response = self.client.post(
+            reverse("community_activity_signup", args=[activity.id])
+        )
+
+        self.assertEqual(detail_response.status_code, 404)
+        self.assertEqual(signup_response.status_code, 404)
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_review_actions_reject_get_and_ordinary_user(self):
+        activity = self.pending_activity()
+
+        self.login(self.staff)
+        get_response = self.client.get(self.publish_url(activity))
+        self.assertEqual(get_response.status_code, 405)
+
+        self.login(self.member)
+        post_response = self.client.post(self.publish_url(activity))
+        activity.refresh_from_db()
+        self.assertNotEqual(post_response.status_code, 200)
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+
+    def test_review_lifecycle_creates_no_serving_state(self):
+        activity = self.pending_activity()
+        self.login(self.staff)
+
+        self.client.post(
+            self.request_changes_url(activity),
+            {"review_note": "tweak"},
+        )
+        self.client.post(self.publish_url(activity))
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+
+class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
+    def edit_url(self, activity):
+        return reverse("community_activity_edit", args=[activity.id])
+
+    def detail_url(self, activity):
+        return reverse("community_activity_detail", args=[activity.id])
+
+    def changes_requested_activity(self, **overrides):
+        data = {
+            "title_en": "Changes Requested Picnic",
+            "status": CommunityActivity.STATUS_CHANGES_REQUESTED,
+            "created_by": self.member,
+            "review_note": "Please pick a different scope.",
+        }
+        data.update(overrides)
+        activity = self.create_activity(**data)
+        self.add_audience(activity, self.parent)
+        return activity
+
+    def resubmit_data(self, activity, **overrides):
+        data = {
+            "title": activity.title,
+            "title_en": activity.title_en,
+            "description": activity.description or "Updated details",
+            "description_en": activity.description_en,
+            "organizer": activity.organizer,
+            "start_datetime": timezone.localtime(
+                activity.start_datetime
+            ).strftime("%Y-%m-%dT%H:%M"),
+            "end_datetime": "",
+            "location": activity.location,
+            "location_en": activity.location_en,
+            "audience_units": [self.parent.id],
+            "requested_audience_note": activity.requested_audience_note,
+        }
+        data.update(overrides)
+        return data
+
+    def test_creator_can_see_changes_requested_detail_and_note(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Changes requested")
+        self.assertContains(response, "Please pick a different scope.")
+        self.assertContains(response, self.edit_url(activity))
+
+    def test_other_scope_member_cannot_see_changes_requested_activity(self):
+        in_scope_member = self.create_member("edit_in_scope", self.child)
+        activity = self.changes_requested_activity(
+            title_en="Hidden Changes Requested",
+        )
+        self.login(in_scope_member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 404)
+        self.assertNotContains(list_response, "Hidden Changes Requested")
+        self.assertFalse(
+            visible_community_activities_for(in_scope_member)
+            .filter(id=activity.id)
+            .exists()
+        )
+
+    def test_creator_can_open_edit_form_for_own_changes_requested(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.edit_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Resubmit for review")
+
+    def test_creator_cannot_edit_pending_published_cancelled(self):
+        self.login(self.member)
+        for status in (
+            CommunityActivity.STATUS_PENDING_REVIEW,
+            CommunityActivity.STATUS_PUBLISHED,
+            CommunityActivity.STATUS_CANCELLED,
+        ):
+            with self.subTest(status=status):
+                activity = self.create_activity(
+                    status=status,
+                    created_by=self.member,
+                )
+                response = self.client.get(self.edit_url(activity))
+                self.assertEqual(response.status_code, 404)
+
+    def test_creator_cannot_edit_other_users_activity(self):
+        activity = self.changes_requested_activity(created_by=self.other_member)
+        self.login(self.member)
+
+        response = self.client.get(self.edit_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_resubmit_sets_status_back_to_pending_review(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, description="Rewritten description"),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+        self.assertEqual(activity.description, "Rewritten description")
+
+    def test_resubmit_replaces_audience_rows_transactionally(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, audience_units=[self.sibling.id]),
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.sibling.id],
+        )
+
+    def test_resubmit_with_invalid_scope_keeps_changes_requested(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                audience_units=[self.parent.id, self.child.id],
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("audience_units", response.context["form"].errors)
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+        )
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.parent.id],
+        )
+
+    def test_changes_requested_has_no_signup_and_denies_signup_post(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        signup_response = self.client.post(
+            reverse("community_activity_signup", args=[activity.id])
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotContains(
+            detail_response,
+            reverse("community_activity_signup", args=[activity.id]),
+        )
+        self.assertEqual(signup_response.status_code, 404)
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_resubmit_creates_no_serving_state(self):
+        activity = self.changes_requested_activity()
+        self.login(self.member)
+
+        self.client.post(self.edit_url(activity), self.resubmit_data(activity))
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+
+class CommunityActivityReviewNavTests(CommunityActivityWebTestBase):
+    def review_nav_href(self):
+        return 'href="%s"' % reverse("community_activity_review_list")
+
+    def test_staff_dropdown_shows_review_link_when_module_enabled(self):
+        self.login(self.staff, language="en")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(self.review_nav_href(), content)
+        self.assertIn("Activity Review", content)
+
+    @override_settings(CMS_ENABLED_MODULES=_WITHOUT_COMMUNITY_EVENTS)
+    def test_staff_dropdown_hides_review_link_when_module_disabled(self):
+        self.login(self.staff, language="en")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn(self.review_nav_href(), content)
+
+    def test_ordinary_user_has_no_review_link(self):
+        self.login(self.member, language="en")
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.review_nav_href(), response.content.decode())
+
+
 class ActivitySignupTests(CommunityActivityWebTestBase):
     def signup_url(self, activity):
         return reverse("community_activity_signup", args=[activity.id])

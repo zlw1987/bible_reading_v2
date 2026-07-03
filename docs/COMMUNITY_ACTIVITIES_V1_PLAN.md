@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1D-A-FU1` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1D-B` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -39,9 +39,26 @@ control visibility. Creators can see their own pending submissions; other
 ordinary users cannot, including users inside the selected scope.
 Staff/superusers use Django admin to adjust audience rows and publish.
 
-A full approval dashboard, creator editing, capacity/waitlist, Today, My
-Serving, any `ServiceEvent` relationship, Staff Overview, and a setup/readiness
-provider remain deferred.
+`COMMUNITY-EVENTS.1D-B` adds a lightweight staff review inbox and a minimal
+request-changes loop. It adds a `changes_requested` status and the review
+metadata fields `review_note`, `reviewed_by`, and `reviewed_at`
+(migration `community_events/0004`). A staff/superuser-only inbox at
+`/activities/review/` lists pending-review and changes-requested submissions
+newest first, and `/activities/<id>/review/` offers POST-only publish, request
+changes (requires a non-empty note), and cancel/reject actions that record the
+reviewer and time without deleting the activity or its audience rows. When
+staff request changes, the creator may edit and resubmit their own
+`changes_requested` activity at `/activities/<id>/edit/`, which transactionally
+replaces the audience rows with the newly selected valid scope units and moves
+the activity back to `pending_review`; the prior review note is preserved for
+context. Ordinary selected-scope users still cannot see pending-review or
+changes-requested activities, and signup stays limited to published upcoming
+activities. A staff-dropdown "Activity Review" / "活动审核" link appears only when
+the `community_events` module is enabled.
+
+A full approval dashboard beyond this inbox, capacity/waitlist, Today, My
+Serving, any `ServiceEvent` relationship, Staff Overview, setup/readiness
+provider, and notifications remain deferred.
 
 ## 1. Purpose
 
@@ -114,17 +131,22 @@ Implemented fields:
 - status:
   - draft
   - pending_review
+  - changes_requested
   - published
   - cancelled
   - completed
 - requested_audience_note (optional; staff review context only, never runtime
   visibility)
+- review_note (optional; staff explanation attached when requesting changes or
+  cancelling, shown to the creator on their own `changes_requested` activity)
+- reviewed_by (staff/superuser who last took a review action; `SET_NULL`)
+- reviewed_at (timestamp of the last review action)
 - created_by
 - created_at
 - updated_at
 
-Capacity, signup deadlines, and a full approval workflow/dashboard remain
-outside the current model.
+Capacity, signup deadlines, and a full approval workflow/dashboard beyond the
+`COMMUNITY-EVENTS.1D-B` inbox remain outside the current model.
 
 ### CommunityActivityAudienceScope
 
@@ -236,7 +258,9 @@ Regular member:
 - with an active primary membership and no active submission block, can submit
   an activity for review
 - must select one or more valid active, non-overlapping Activity Scope units
-- can view their own pending/cancelled/published submissions
+- can view their own pending/changes-requested/cancelled/published submissions
+- when staff request changes, can edit and resubmit their own
+  `changes_requested` activity, which returns it to `pending_review`
 - cannot publish
 
 Authorized structure-unit leader:
@@ -264,12 +288,30 @@ small:
   transaction;
 - `requested_audience_note` may explain the selection or request an adjustment,
   but has no runtime visibility effect;
-- staff/superusers review the activity in Django admin, edit audience rows if
-  appropriate, and explicitly publish;
 - ordinary users cannot publish, and selected-scope members cannot see or sign
   up for the activity before publication.
 
-A dedicated review dashboard or leader approval workflow remains deferred.
+`COMMUNITY-EVENTS.1D-B` adds a lightweight staff-facing review loop on top of
+that policy:
+
+- a staff/superuser-only inbox at `/activities/review/` lists pending-review
+  and changes-requested submissions newest first with creator, start time,
+  status, selected scope labels, and any scope/review note;
+- the staff review detail at `/activities/<id>/review/` offers POST-only
+  publish, request changes, and cancel/reject actions;
+- publish is allowed from `pending_review` or `changes_requested`; request
+  changes is allowed from `pending_review` and requires a non-empty
+  `review_note`; cancel/reject is allowed from either review status with an
+  optional note;
+- every action records `reviewed_by` and `reviewed_at` and never deletes the
+  activity or its audience rows;
+- when staff request changes, the creator may edit and resubmit their own
+  `changes_requested` activity, transactionally replacing the audience rows and
+  returning it to `pending_review`;
+- staff may still adjust audience rows in Django admin.
+
+A larger review dashboard, leader approval workflow, and notifications remain
+deferred.
 
 ## 8. UI Direction
 
@@ -285,8 +327,17 @@ Implemented through `COMMUNITY-EVENTS.1D-A-FU1`:
 - `/activities/` also links to submission and shows the current creator's own
   submitted activity statuses
 
+Implemented through `COMMUNITY-EVENTS.1D-B`:
+- `/activities/review/` - staff/superuser-only review inbox of pending-review
+  and changes-requested submissions
+- `/activities/<id>/review/` - staff/superuser-only review detail with
+  POST-only publish / request-changes / cancel-reject actions
+- `/activities/<id>/edit/` - creator-only edit + resubmit for their own
+  `changes_requested` activity
+- a staff-dropdown "Activity Review" / "活动审核" link gated by module enablement
+
 Possible future pages:
-- `/activities/manage/` - staff/leader management view
+- `/activities/manage/` - broader staff/leader management view
 
 `COMMUNITY-EVENTS.1B` adds the ordinary "Activities" / "活动" primary-nav entry
 (placed after Church Gatherings, before My Serving), gated by module
@@ -370,11 +421,19 @@ unit and transactionally creates the selected audience rows. Staff review,
 audience adjustment, and publishing remain in Django admin; selected audience
 rows do not expose pending activities.
 
+`COMMUNITY-EVENTS.1D-B` completes the lightweight staff review inbox and
+request-changes loop. It adds the `changes_requested` status and review
+metadata fields, a staff-only inbox and review detail with POST-only
+publish/request-changes/cancel actions, a creator edit + resubmit path for
+`changes_requested` activities, and a module-gated staff-dropdown review link.
+It adds no Staff Overview counts, Today, My Serving, setup/readiness,
+notifications, or `ServiceEvent` link.
+
 Later work still requires separately approved, bounded slices for:
 
-- a full approval dashboard, creator editing, or leader approval;
-- any staff-dropdown, Staff Overview, setup/readiness, or Today contribution;
-- capacity, waitlist, reminders, payments, or calendar behavior.
+- a larger approval dashboard or leader approval;
+- any Staff Overview, setup/readiness, or Today contribution;
+- capacity, waitlist, reminders, payments, notifications, or calendar behavior.
 
 No later slice may infer serving from activity visibility, signup, or
 membership, and no link to `ServiceEvent` is implied by this foundation.

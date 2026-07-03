@@ -11,7 +11,7 @@
 <div class="page-header">
     <h1 class="page-title">{% if language == "zh" %}活动{% else %}Activities{% endif %}</h1>
     <p class="page-subtitle">
-        {% if language == "zh" %}这里显示与你的小组或教会群体相关的社群活动。报名功能尚未开放。{% else %}Community activities shared with your group or church community. Signup is not available yet.{% endif %}
+        {% if language == "zh" %}这里显示与你的小组或教会群体相关的社群活动。{% else %}Community activities shared with your group or church community.{% endif %}
     </p>
 </div>
 
@@ -26,6 +26,9 @@
         </h2>
         {% if can_manage %}
         <p class="muted">{{ activity|activity_status_label:language }}</p>
+        {% endif %}
+        {% if activity.is_signed_up %}
+        <p><strong>{% if language == "zh" %}已报名{% else %}Signed up{% endif %}</strong></p>
         {% endif %}
         <p>
             <strong>{% if language == "zh" %}时间{% else %}When{% endif %}:</strong>

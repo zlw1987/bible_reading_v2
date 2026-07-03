@@ -9,7 +9,11 @@ from accounts.models import ChurchStructureMembership, ChurchStructureUnit
 from ministry.models import TeamAssignment, TeamAssignmentMember
 from studies.models import BibleStudyMeetingRole
 
-from .models import CommunityActivity, CommunityActivityAudienceScope
+from .models import (
+    ActivitySignup,
+    CommunityActivity,
+    CommunityActivityAudienceScope,
+)
 from .visibility import visible_community_activities_for
 
 User = get_user_model()
@@ -438,8 +442,7 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Fellowship Picnic")
-        # Detail states signup is not open yet and offers no signup control.
-        self.assertContains(response, "Signup is not available yet.")
+        self.assertContains(response, "Sign up")
 
     def test_detail_denies_nonmatching_activity_with_404(self):
         activity = self.create_activity()
@@ -534,3 +537,167 @@ class CommunityActivityNavTests(CommunityActivityWebTestBase):
             with self.subTest(url_name=url_name):
                 response = self.client.get(reverse(url_name))
                 self.assertEqual(response.status_code, 200)
+
+
+class ActivitySignupTests(CommunityActivityWebTestBase):
+    def signup_url(self, activity):
+        return reverse("community_activity_signup", args=[activity.id])
+
+    def cancel_url(self, activity):
+        return reverse("community_activity_cancel_signup", args=[activity.id])
+
+    def detail_url(self, activity):
+        return reverse("community_activity_detail", args=[activity.id])
+
+    def test_signup_requires_authenticated_user(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_visible_member_can_sign_up_once(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        first_response = self.client.post(self.signup_url(activity))
+        second_response = self.client.post(self.signup_url(activity))
+
+        self.assertRedirects(first_response, self.detail_url(activity))
+        self.assertRedirects(second_response, self.detail_url(activity))
+        signup = ActivitySignup.objects.get(
+            activity=activity,
+            user=self.member,
+        )
+        self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
+        self.assertEqual(ActivitySignup.objects.count(), 1)
+        self.assertTrue(signup.is_active)
+        self.assertEqual(activity.active_signup_count(), 1)
+
+    def test_signed_up_member_can_cancel_and_reactivate_same_row(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        original_id = signup.id
+        self.login(self.member)
+
+        cancel_response = self.client.post(self.cancel_url(activity))
+        signup.refresh_from_db()
+
+        self.assertRedirects(cancel_response, self.detail_url(activity))
+        self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+        self.assertEqual(activity.active_signup_count(), 0)
+
+        signup_response = self.client.post(self.signup_url(activity))
+        signup.refresh_from_db()
+
+        self.assertRedirects(signup_response, self.detail_url(activity))
+        self.assertEqual(signup.id, original_id)
+        self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
+        self.assertEqual(ActivitySignup.objects.count(), 1)
+
+    def test_signup_denies_nonmatching_and_zero_audience_activities(self):
+        nonmatching = self.create_activity(title_en="Other group activity")
+        self.add_audience(nonmatching, self.sibling)
+        zero_audience = self.create_activity(title_en="No audience activity")
+        self.login(self.member)
+
+        for activity in (nonmatching, zero_audience):
+            with self.subTest(activity=activity.title_en):
+                response = self.client.post(self.signup_url(activity))
+                self.assertEqual(response.status_code, 404)
+
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_signup_denies_nonpublished_activities_even_for_staff(self):
+        self.login(self.staff)
+
+        for status in (
+            CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
+        ):
+            with self.subTest(status=status):
+                activity = self.create_activity(status=status)
+                response = self.client.post(self.signup_url(activity))
+                self.assertEqual(response.status_code, 404)
+
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_signup_denies_past_activity(self):
+        activity = self.create_activity(
+            start_datetime=timezone.now() - timezone.timedelta(minutes=1),
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(ActivitySignup.objects.count(), 0)
+
+    def test_detail_shows_signup_and_signed_up_states(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        available_response = self.client.get(self.detail_url(activity))
+
+        self.assertContains(available_response, "Sign up")
+        self.assertContains(available_response, self.signup_url(activity))
+        self.assertNotContains(available_response, "Cancel signup")
+
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        signed_up_response = self.client.get(self.detail_url(activity))
+
+        self.assertContains(signed_up_response, "You’re signed up")
+        self.assertContains(signed_up_response, "Cancel signup")
+        self.assertContains(signed_up_response, self.cancel_url(activity))
+
+    def test_list_marks_signed_up_activity(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Signed up")
+
+    def test_signup_lifecycle_does_not_create_serving_or_shared_surface_state(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        self.client.post(self.signup_url(activity))
+        detail_response = self.client.get(self.detail_url(activity))
+        self.client.post(self.cancel_url(activity))
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        for leaked_key in (
+            "today_items",
+            "today_gatherings",
+            "serving_summary",
+            "leader_summary",
+        ):
+            self.assertNotIn(leaked_key, detail_response.context)
+        self.assertNotIn(
+            "service_event",
+            {field.name for field in ActivitySignup._meta.get_fields()},
+        )

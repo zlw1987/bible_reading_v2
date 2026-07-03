@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1B` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1C` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -16,7 +16,14 @@ the detail view denies with 404 when `can_be_seen_by` is false. Nav visibility
 is gated by module enablement; the routes themselves have no route-level
 hard-off and stay governed by their login/visibility rules.
 
-Signup (`ActivitySignup`, RSVP/join/cancel), approval workflow, Today, My
+`COMMUNITY-EVENTS.1C` adds `ActivitySignup` in migration
+`community_events/0002_activitysignup`, plus minimal member-facing POST actions
+to sign up and cancel. Each activity/user pair keeps one lifecycle row:
+cancellation sets `cancelled`, and signing up again reactivates it to
+`signed_up`. Signup is allowed only for authenticated users who can see a
+published upcoming activity. It is attendance intent, never serving.
+
+Approval workflow, creation/management UI, capacity/waitlist, Today, My
 Serving, any `ServiceEvent` relationship, Staff Overview, and a setup/readiness
 provider remain deferred.
 
@@ -71,8 +78,8 @@ Do not create a separate SpecialEvent model in V1.
 
 ## 4. Models
 
-`COMMUNITY-EVENTS.1A` implements the first two models below. `ActivitySignup`
-remains a future model and is not approved by the foundation slice.
+`COMMUNITY-EVENTS.1A` implements the first two models below.
+`COMMUNITY-EVENTS.1C` implements `ActivitySignup`.
 
 ### CommunityActivity
 
@@ -122,16 +129,18 @@ own model and visibility query. See
 
 ### ActivitySignup
 
-Suggested fields:
+Implemented fields:
 - activity
 - user
 - status:
   - signed_up
   - cancelled
-  - waitlisted optional/future
-- note optional
 - created_at
 - updated_at
+
+There is one row per activity/user. Cancelling preserves that row, and a later
+signup reactivates it. Waitlist, notes, capacity enforcement, approval, and
+attendance/check-in are not part of `COMMUNITY-EVENTS.1C`.
 
 ## 5. Scope and Visibility Rules
 
@@ -162,6 +171,12 @@ sign up for it. `COMMUNITY-EVENTS.1A` gives authenticated staff and superusers
 the minimal management/visibility bypass. It does not invent a leader or
 structure-role permission.
 
+`COMMUNITY-EVENTS.1C` permits signup only when the activity is published and
+its start time is in the future, including for staff/superusers. Hidden,
+nonmatching, and zero-audience activities fail closed for ordinary users.
+Cancellation updates an existing visible user's lifecycle row; it never
+deletes the row.
+
 The UI and queries should avoid exposing private membership data. An activity
 list should answer "can this user see this activity?" rather than showing
 internal membership lists. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for
@@ -185,6 +200,7 @@ Staff:
 - can create and manage all activities
 - can approve, publish, and cancel activities
 - can create churchwide activities
+- uses the same published-upcoming rule for personal signup actions
 
 Avoid a complex role hierarchy in V1.
 
@@ -200,14 +216,15 @@ Possible V1 policy:
 
 ## 8. UI Direction
 
-Implemented in `COMMUNITY-EVENTS.1B`:
+Implemented in `COMMUNITY-EVENTS.1B` and `COMMUNITY-EVENTS.1C`:
 - `/activities/` - browse activities visible to the current user (upcoming
-  published rows; staff/superuser keep the helper's management bypass)
-- `/activities/<id>/` - read-only detail page (no signup/cancel control; states
-  "Signup is not available yet.")
+  published rows; staff/superuser keep the helper's management bypass), with a
+  small signed-up indicator for the current user
+- `/activities/<id>/` - detail page with stateful signup/cancel controls
+- `/activities/<id>/signup/` - POST-only signup/reactivation action
+- `/activities/<id>/cancel-signup/` - POST-only cancellation action
 
 Possible future pages:
-- `/activities/<id>/` signup/cancel controls once `ActivitySignup` exists
 - `/activities/new/` - create activity
 - `/activities/manage/` - staff/leader management view
 
@@ -275,13 +292,17 @@ surface.
 `COMMUNITY-EVENTS.1B` completes the independent member-facing browse/detail
 entrance (`community_activity_list` / `community_activity_detail`) and the
 ordinary "Activities" / "活动" primary-nav entry gated by module enablement. It
-adds no signup, approval, Today, My Serving, `ServiceEvent` relationship, Staff
+adds no approval, Today, My Serving, `ServiceEvent` relationship, Staff
 Overview, or setup/readiness provider.
+
+`COMMUNITY-EVENTS.1C` completes the minimal `ActivitySignup` lifecycle and
+member-facing signup/cancel actions. It keeps one row per activity/user,
+reactivates cancelled rows, restricts new signup to visible published upcoming
+activities, and adds no serving or shared-surface integration.
 
 Later work still requires separately approved, bounded slices for:
 
-- `ActivitySignup` and its lifecycle;
-- member-facing signup/cancel controls and activity creation/approval workflow;
+- activity creation/approval workflow and staff management UI;
 - any staff-dropdown, Staff Overview, setup/readiness, or Today contribution;
 - capacity, waitlist, reminders, payments, or calendar behavior.
 

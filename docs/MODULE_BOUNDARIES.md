@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS.1B` (July 2026).
+`COMMUNITY-EVENTS.1C` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -48,16 +48,17 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
-| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail entrance (`community_activity_list` / `community_activity_detail`) added in 1B. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Contributes an ordinary "Activities" / "活动" primary-nav entry (after Church Gatherings, before My Serving). No Today, My Serving, signup, Staff Overview, setup/readiness, or `ServiceEvent` link. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail entrance and minimal member signup/cancel lifecycle. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Contributes an ordinary "Activities" / "活动" primary-nav entry (after Church Gatherings, before My Serving). Signup is attendance intent, not serving. No Today, My Serving, approval, capacity/waitlist, Staff Overview, setup/readiness, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 `community_events` declares `contributes_nav` and `requires_structure_core`. It
 has no registered-module dependencies. `COMMUNITY-EVENTS.1B` adds its ordinary
 primary-nav entry (gated by module enablement) and the member-facing
-browse/detail routes; it still contributes no Today, setup/readiness, or Staff
-Overview surface. As with every module, enablement gates surfaces only: the
-`/activities/` routes stay reachable under their own login/visibility rules
-even when the module is disabled.
+browse/detail routes. `COMMUNITY-EVENTS.1C` adds app-owned `ActivitySignup`
+rows and POST-only signup/cancel routes without adding Today, My Serving,
+setup/readiness, Staff Overview, or serving integration. As with every module,
+enablement gates surfaces only: the `/activities/` routes stay reachable under
+their own login/visibility rules even when the module is disabled.
 
 ## Registry and feature gates (through MODULAR-CORE.6B)
 
@@ -269,10 +270,11 @@ even when the module is disabled.
    approved independent foundation for Community Events/Activities, registered
    here with explicit model/migration/visibility scope. `COMMUNITY-EVENTS.1B`
    adds the approved member-facing browse/detail entrance and the ordinary
-   "Activities" primary-nav entry. Signup, approval, Today, My Serving, Staff
-   Overview, setup/readiness, any `ServiceEvent` link, and Checklist remain
-   deferred. Any further module or Community Activities expansion requires its
-   own approved slice.
+   "Activities" primary-nav entry. `COMMUNITY-EVENTS.1C` adds the approved
+   minimal signup/cancel lifecycle as attendance intent only. Approval,
+   capacity/waitlist, Today, My Serving, Staff Overview, setup/readiness, any
+   `ServiceEvent` link, and Checklist remain deferred. Any further module or
+   Community Activities expansion requires its own approved slice.
 
 ## Follow-ups (not yet done)
 

@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`COMMUNITY-EVENTS.1B` (July 2026).
+`COMMUNITY-EVENTS.1C` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -14,7 +14,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 |---|---|---|
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
-| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, the 1B member-facing browse/detail entrance and Activities nav, and explicitly deferred signup, approval, Today, and My Serving surfaces. |
+| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail entrance and Activities nav, and 1C minimal member signup/cancel lifecycle; approval, Today, and My Serving remain deferred. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -53,9 +53,13 @@ migration-safety instruction source.
   "Activities" / "活动" primary-nav entry (after Church Gatherings, before My
   Serving), gated by module enablement. The list shows visible upcoming
   published activities via the structure-native helper; detail denies with 404
-  when hidden. The module still has no Today provider, My Serving contribution,
-  signup UI, approval workflow, Staff Overview card, setup/readiness provider,
-  or `ServiceEvent` relationship, and the routes have no module hard-off.
+  when hidden, and the routes have no module hard-off.
+- `COMMUNITY-EVENTS.1C` adds `ActivitySignup` and authenticated POST-only
+  signup/cancel actions for visible, published, upcoming activities. One row
+  per activity/user is retained across cancellation and reactivation; signup
+  is attendance intent only and creates no serving records. Approval, capacity,
+  waitlist, Today, My Serving, Staff Overview, setup/readiness, and any
+  `ServiceEvent` relationship remain deferred.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
   dropdown links, module-owned Staff Overview cards/counts/links
   (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
@@ -117,11 +121,13 @@ foundation (the `community_events` app, `CommunityActivity`,
 `CommunityActivityAudienceScope`, Django admin, registry entry, and
 structure-native visibility helper) plus the `COMMUNITY-EVENTS.1B`
 member-facing browse/detail entrance (`community_activity_list` /
-`community_activity_detail`) and ordinary "Activities" primary-nav entry.
-Signup, approval workflow, Today integration, My Serving integration, Staff
-Overview, setup/readiness provider, and any `ServiceEvent` relationship remain
-deferred and require separately approved implementation slices. Checklist
-remains deferred.
+`community_activity_detail`) and ordinary "Activities" primary-nav entry, plus
+the `COMMUNITY-EVENTS.1C` minimal signup/cancel lifecycle. Approval workflow,
+capacity/waitlist, Today integration, My Serving integration, Staff Overview,
+setup/readiness provider, and any `ServiceEvent` relationship remain deferred
+and require separately approved implementation slices. Checklist remains
+deferred.
 
-Do not use planning documentation as authorization to add signup, shared user
-surfaces, route hard-off gates, staff/setup extraction, or package extraction.
+Do not use planning documentation as authorization to expand signup beyond the
+implemented lifecycle, add shared user surfaces, route hard-off gates,
+staff/setup extraction, or package extraction.

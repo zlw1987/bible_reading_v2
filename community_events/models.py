@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
 
@@ -114,6 +115,24 @@ class CommunityActivity(models.Model):
             queryset=type(self).objects.filter(pk=self.pk),
         ).exists()
 
+    def is_signup_open(self, at=None):
+        """Return whether this activity accepts member attendance intent."""
+        at = at or timezone.now()
+        return (
+            self.status == self.STATUS_PUBLISHED
+            and self.start_datetime > at
+        )
+
+    def signup_for(self, user):
+        if not self.pk or not getattr(user, "is_authenticated", False):
+            return None
+        return self.signups.filter(user=user).first()
+
+    def active_signup_count(self):
+        return self.signups.filter(
+            status=ActivitySignup.STATUS_SIGNED_UP,
+        ).count()
+
 
 class CommunityActivityAudienceScope(models.Model):
     activity = models.ForeignKey(
@@ -199,3 +218,51 @@ class CommunityActivityAudienceScope(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class ActivitySignup(models.Model):
+    STATUS_SIGNED_UP = "signed_up"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_SIGNED_UP, "Signed up"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    activity = models.ForeignKey(
+        CommunityActivity,
+        on_delete=models.CASCADE,
+        related_name="signups",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="community_activity_signups",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_SIGNED_UP,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["activity__start_datetime", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["activity", "user"],
+                name="unique_activity_signup_user",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["activity", "status"]),
+            models.Index(fields=["user", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} — {self.activity} ({self.get_status_display()})"
+
+    @property
+    def is_active(self):
+        return self.status == self.STATUS_SIGNED_UP

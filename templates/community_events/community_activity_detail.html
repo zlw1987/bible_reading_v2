@@ -57,8 +57,25 @@
     <p>{{ activity|activity_description:language|linebreaksbr }}</p>
     {% endif %}
 
+    {% if is_signed_up %}
+    <p><strong>{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</strong></p>
+    <form method="post" action="{% url 'community_activity_cancel_signup' activity.id %}">
+        {% csrf_token %}
+        <button class="button button-secondary" type="submit">
+            {% if language == "zh" %}取消报名{% else %}Cancel signup{% endif %}
+        </button>
+    </form>
+    {% elif can_signup %}
+    <form method="post" action="{% url 'community_activity_signup' activity.id %}">
+        {% csrf_token %}
+        <button class="button" type="submit">
+            {% if language == "zh" %}报名参加{% else %}Sign up{% endif %}
+        </button>
+    </form>
+    {% else %}
     <p class="muted">
-        {% if language == "zh" %}报名功能尚未开放。{% else %}Signup is not available yet.{% endif %}
+        {% if language == "zh" %}此活动目前不开放报名。{% else %}Signup is not available for this activity.{% endif %}
     </p>
+    {% endif %}
 </div>
 {% endblock %}

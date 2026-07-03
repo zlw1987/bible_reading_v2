@@ -13,4 +13,14 @@ urlpatterns = [
         views.community_activity_detail,
         name="community_activity_detail",
     ),
+    path(
+        "activities/<int:activity_id>/signup/",
+        views.community_activity_signup,
+        name="community_activity_signup",
+    ),
+    path(
+        "activities/<int:activity_id>/cancel-signup/",
+        views.community_activity_cancel_signup,
+        name="community_activity_cancel_signup",
+    ),
 ]

@@ -108,9 +108,10 @@ Registered in `core/module_registry.py`, enabled via
 * `MODULAR-CORE.4A` makes the ordinary authenticated-user module links in
   `templates/base.html` registry-driven. Each nav-contributing module supplies
   its route, bilingual labels, active-state key, and display order through
-  module metadata. Today remains an always-available Core link. The account
-  dropdown and the hard-coded staff dropdown are unchanged and are not
-  module-gated.
+  module metadata. Today remains an always-available Core link. At the `4A`
+  milestone, the account dropdown and hard-coded staff dropdown were
+  unchanged; `MODULAR-CORE.6A` later gated the staff dropdown's module-owned
+  links while leaving its Core/staff links available.
 * `MODULAR-CORE.5A` adds the module-owned setup/readiness check foundation
   (`core/setup_readiness.py`). Each readiness contribution registers a provider
   under a unique name against `core.setup_readiness`; Core providers
@@ -145,8 +146,11 @@ Registered in `core/module_registry.py`, enabled via
   `comments` is a reading support app rather than an independently registered
   module. Staff Overview, Church Structure Setup & Review, Ministry Structure,
   user/review links, and Django Admin remain always visible to staff. This
-  changes discoverability only; staff overview content, setup routes/checks,
-  direct URLs, admin routes, and permissions are unchanged.
+  changes staff-dropdown discoverability only; setup routes/checks, direct
+  URLs, admin routes, and permissions are unchanged. At the `6A` milestone,
+  Staff Overview content was unchanged; `MODULAR-CORE.6B` later gated its
+  module-owned cards/counts/links while preserving the route and Core/staff
+  content.
 * `MODULAR-CORE.6B` applies module surface gates to the Staff Overview
   (`/staff/`) content — its module-owned cards, counts, and workflow links —
   in `accounts.views.staff_overview` and
@@ -252,10 +256,12 @@ Registered in `core/module_registry.py`, enabled via
 6. **Membership is not serving.** `ChurchStructureMembership` is belonging.
    Serving remains explicit (`TeamAssignmentMember`, linked-user
    `BibleStudyMeetingRole`).
-7. **Deferred modules stay deferred.** Community Events and Checklist are
-   not to be built until this foundation is in place and their slices are
-   explicitly approved. New modules must register here first, with an
-   explicit migration slice.
+7. **New modules require explicit approval.** The modular foundation is now in
+   place through `MODULAR-CORE.6B`, so Community Events/Activities may be
+   considered next, but `COMMUNITY-EVENTS-READINESS.0A` is docs-only and does
+   not approve or implement it. Checklist remains deferred. A new module must
+   receive a separately approved implementation slice and register here as
+   part of that work, with explicit model/migration scope.
 
 ## Follow-ups (not yet done)
 

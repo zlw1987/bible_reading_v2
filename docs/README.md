@@ -58,8 +58,10 @@ migration-safety instruction source.
   Structure / permission-admin and the always-run audience-visibility section
   stay Core — aggregated for enabled modules only, registered explicitly from
   `accounts.trial_setup_readiness`. This is not app unloading or route-level
-  hard-off; direct URLs, staff overview, setup routes/checks, and admin routes
-  keep their existing behavior.
+  hard-off; direct URLs, the Staff Overview and setup routes, the
+  setup/readiness command, and admin routes keep their existing access
+  behavior. Only the module-owned overview content and readiness sections
+  described above are surface-gated.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded
   ignore rules for local secrets/databases/backups/logs/audit output, and
   removed committed local audit artifacts. It did not build an external release
@@ -96,9 +98,9 @@ historical evidence rather than current test instructions.
 
 ## Deferred Product Plans
 
-Community Events/Activities and Checklist remain deferred. References in
-planning documents do not mean either product has been built or approved for
-implementation. Do not use this documentation as authorization to create
-them, gate staff/setup routes, or extract apps into packages. (Provider-based
-Today aggregation, previously listed here, was delivered as an explicitly
-approved slice in `MODULAR-CORE.3A`.)
+Community Events/Activities is ready to be considered after modular core, with
+the current docs-only checkpoint recorded in
+[`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md); it is not
+implemented or approved for implementation yet. Checklist remains deferred.
+Do not use planning documentation as authorization to create either product,
+gate staff/setup routes, or extract apps into packages.

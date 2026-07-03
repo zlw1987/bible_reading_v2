@@ -1,5 +1,12 @@
 # Pilot Release Candidate Readiness
 
+Status: historical pilot-era checklist. It preserves the release assumptions
+and QA scope from that pilot and is not canonical current-state architecture.
+Legacy structure/model statements below are historical, not live runtime
+guidance. Use `docs/README.md`,
+`docs/PRODUCT_ARCHITECTURE_AND_ROADMAP.md`, and
+`docs/MODULE_BOUNDARIES.md` for current truth.
+
 ## 1. Release Candidate Scope
 
 This pilot release candidate covers the current lightweight Church Life / spiritual workflow system. It supports daily spiritual practice, small-group Bible Study flow, prayer, serving visibility, and basic staff/ministry operations.

@@ -1,5 +1,13 @@
 # Community Activities V1 Plan
 
+Status: current planning/readiness document as of
+`COMMUNITY-EVENTS-READINESS.0A` (July 2026). The Church Structure migration and
+modular CMS foundation through `MODULAR-CORE.6B` are complete enough for
+Community Events/Activities to be considered as a separately approved next
+implementation. This docs-only checkpoint does not approve or implement the
+module; names, routes, permissions, models, migrations, and delivery slices
+still require explicit approval.
+
 ## 1. Purpose
 
 Community Activities is a future module for member/community/fellowship activities with signup.
@@ -32,6 +40,12 @@ Rule of thumb:
 - If the main question is "who wants to attend/signup?", use CommunityActivity + ActivitySignup.
 - "Special event" is not one model by itself. Choose ServiceEvent, CommunityActivity, or both later based on the main product question.
 
+Community Events/Activities does not create `TeamAssignment`,
+`TeamAssignmentMember`, `BibleStudyMeetingRole`, or My Serving items. Signup,
+audience visibility, and `ChurchStructureMembership` express attendance intent
+or belonging, never serving. Serving exists only through an explicit
+`TeamAssignmentMember` or linked-user `BibleStudyMeetingRole.user`.
+
 ## 3. Relationship to ServiceEvent
 
 ServiceEvent remains the official church gathering, operations, and ministry assignment anchor.
@@ -44,7 +58,8 @@ Do not create a separate SpecialEvent model in V1.
 
 ## 4. Possible V1 Models
 
-This section documents a possible future model direction only. Do not implement as part of current pre-pilot work.
+This section documents a possible future model direction only. It is not
+implementation approval.
 
 ### CommunityActivity
 
@@ -71,22 +86,27 @@ Suggested fields:
 - approved_by
 - approved_at
 
-### CommunityActivityAudience (early concept, superseded)
+### CommunityActivityAudienceScope
 
-This legacy-only audience segment model is an early concept and is superseded by the DOCS-AS.1 shared audience-scope direction. Future Community Activities should use a `ChurchStructureUnit`-based audience-scope design through an app-specific join model (for example `CommunityActivityAudienceScope` selecting `ChurchStructureUnit` rows) rather than inventing a separate legacy-only `CommunityActivityAudience` segment system. The fields below are retained only to document the original early concept.
+The final implementation direction is an app-specific audience join model,
+following the current structure-native pattern rather than any legacy
+`scope_type`, `MinistryContext`, `District`, or `SmallGroup` fields.
 
-Original early-concept fields (superseded):
-- activity
-- audience_type:
-  - whole_church
-  - ministry_context
-  - district
-  - small_group
-- ministry_context nullable
-- district nullable
-- small_group nullable
+Suggested fields:
 
-Bible Study Schedule audience scope is the first narrow runtime consumer for `ChurchStructureUnit`, now implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A); ServiceEvent / Church Gatherings and Community Activities should reuse the same foundation later and remain deferred (Community Activities is not implemented now). See `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
+- `activity`: FK to `CommunityActivity`;
+- `structure_unit`: FK to `ChurchStructureUnit`;
+- normal audit/timestamp fields only if the approved implementation needs
+  them.
+
+Each row selects one `ChurchStructureUnit`. Multiple rows express a union of
+selected structure subtrees. The implementation must not recreate legacy
+audience-segment tables or depend on retired legacy structure models.
+
+ServiceEvent and Bible Study V2 already use app-specific structure audience
+rows. Community Activities should reuse the same architectural pattern while
+owning its own model and visibility query; it is not implemented now. See
+`docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`.
 
 ### ActivitySignup
 
@@ -103,53 +123,36 @@ Suggested fields:
 
 ## 5. Scope and Visibility Rules
 
-The simple single `scope_type` model is not enough for real scenarios.
+Ordinary-user visibility should be structure-native:
 
-Real scenarios:
-- entire EM plus several CM small groups
-- EM plus one CM district
-- several CM small groups
-- whole church
-- selected districts
-- selected groups across ministries
+- resolve the user's active primary `ChurchStructureMembership`;
+- an activity matches when that membership's `structure_unit` is the selected
+  `ChurchStructureUnit` or one of its descendants;
+- any matching `CommunityActivityAudienceScope` row is sufficient;
+- zero audience rows fail closed for ordinary users.
 
-Expected visibility:
-- whole_church: visible to all logged-in church users.
-- ministry_context: visible to members in that ministry context, such as EM or CM.
-- district: visible to members in that district.
-- small_group: visible to members in that small group.
+There is no implicit `whole_church` audience type. If a future product slice
+needs whole-church visibility, it must explicitly approve and test a policy
+such as selecting the canonical root unit. It must not make zero rows mean
+whole church.
 
-A user can see/signup if any audience segment matches the user:
-- whole church
-- user's ministry context
-- user's district
-- user's small group
+Examples use canonical structure units, not legacy model types:
 
-Examples:
+- select one language-ministry unit to include memberships on that unit and
+  all descendant units;
+- select several group units to include only those selected subtrees;
+- select units from different branches to form a mixed audience;
+- select the canonical root unit only under an explicitly approved
+  whole-church/root-row policy.
 
-Entire EM + CM Rainbow 1 + CM Rainbow 4:
-- audience segment: ministry_context = EM
-- audience segment: small_group = Rainbow 1
-- audience segment: small_group = Rainbow 4
+Users outside every selected structure subtree must not see the activity or
+sign up for it. Staff/manager bypass behavior, if any, must be specified in the
+approved implementation rather than inferred here.
 
-EM + CM District 1:
-- audience segment: ministry_context = EM
-- audience segment: district = CM District 1
-
-CM selected small groups:
-- audience segment: small_group = Rainbow 1
-- audience segment: small_group = Rainbow 4
-
-Whole church:
-- audience segment: whole_church
-
-Users outside all matching audience segments should not see the activity or sign up for it.
-
-The UI and queries should avoid exposing private group membership unnecessarily. For example, an activity list should answer "can this user see this activity?" rather than showing internal membership lists.
-
-Future planning may need `MinistryContext` and `District.ministry_context`; see `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`.
-
-For longer-term flexible hierarchy and arbitrary audience units, see `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`. Community Activities V1 should not require the flexible tree immediately, but advanced mixed audience segments should wait for or align with that foundation.
+The UI and queries should avoid exposing private membership data. An activity
+list should answer "can this user see this activity?" rather than showing
+internal membership lists. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for
+the canonical hierarchy and belonging foundation.
 
 ## 6. Permission Direction
 
@@ -160,11 +163,10 @@ Regular member:
 - can sign up or cancel their own signup
 - may create an activity only if future policy allows, likely pending approval
 
-Small group leader:
-- can create and manage own small-group activity
-
-District leader:
-- can create and manage district activity
+Authorized structure-unit leader:
+- may create or manage activity for an authorized unit only if a future
+  implementation explicitly maps existing capability/role rules to that
+  action
 
 Staff:
 - can create and manage all activities
@@ -178,9 +180,10 @@ Avoid a complex role hierarchy in V1.
 Broader-scope activities should require approval.
 
 Possible V1 policy:
-- single-small-group activity by a small group leader can publish directly
+- activity for one narrowly authorized structure unit may publish directly
 - regular member-created activity goes pending approval
-- selected groups, selected districts, ministry-context, and whole-church activities require staff or authorized leader approval
+- multi-unit, broad-subtree, or whole-church/root-row activities require staff
+  or explicitly authorized leader approval
 
 ## 8. UI Direction
 
@@ -214,6 +217,10 @@ Chinese:
 
 This is a future navigation consideration only.
 
+An approved later Today integration may contribute visible Community Activity
+items as ordinary agenda. It must not place signups or visible activities in
+the Today serving action center, create My Serving items, or infer serving.
+
 ## 9. Non-Goals for V1
 
 No:
@@ -231,19 +238,37 @@ No:
 - automatic scheduling
 - ministry assignment checklist
 - ServiceEvent replacement
+- TeamAssignment or My Serving integration
+- serving inferred from signup, audience visibility, or membership
 - SpecialEvent model
 - fake Combined Ministry record
 - forcing CommunityActivity into ServiceEvent
 
 ## 10. Roadmap Position
 
-Community Activities V1 should be planned as a separate future module after:
-- Bible Study V2 direction is resolved
-- Lighting Pilot preflight validation is complete
-- Church Structure Foundation is planned enough to support mixed CM/EM, district, small-group, and future arbitrary unit audiences
+The prerequisites named by the earlier plan are now satisfied: Bible Study V2
+is the active path, Church Structure is canonical and structure-native, and
+the modular CMS foundation is implemented through `MODULAR-CORE.6B`.
+Community Events/Activities may therefore be proposed as a separate next
+module.
 
-Per DOCS-AS.1, Community Activities audience scope should reuse the shared `ChurchStructureUnit` audience-scope foundation (its own app-specific join model selecting `ChurchStructureUnit` rows), following Bible Study Schedule — the first narrow runtime consumer, now implemented (BS-AS.1 / BS-AS.2 / BS-AS.2A) — and alongside ServiceEvent / Church Gatherings. It should not introduce a separate legacy-only audience segment system as the final direction. Community Activities is not implemented now and requires a separately approved plan before implementation.
+Implementation still requires a separately approved, bounded slice covering at
+least:
 
-It should not change the current pre-pilot priority order.
+- the final product/module name and registry key;
+- registry capabilities and any declared dependencies;
+- models and migrations, including an app-specific
+  `CommunityActivityAudienceScope` selecting `ChurchStructureUnit`;
+- active-primary-membership descendant matching and zero-row fail-closed
+  coverage;
+- permissions, signup lifecycle, staff surfaces, and bilingual copy;
+- any primary-nav, staff-dropdown, Staff Overview, setup/readiness, or Today
+  provider contributions;
+- explicit regression tests proving that visibility/signup/belonging do not
+  create serving or My Serving items.
+
+`COMMUNITY-EVENTS-READINESS.0A` changes documentation only. Community
+Events/Activities is not implemented, registered, migrated, or enabled by this
+checkpoint.
 
 Checklist V1 remains deferred and should not be revived because of Community Activities.

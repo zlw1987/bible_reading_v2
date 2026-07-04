@@ -657,7 +657,7 @@ class AnnouncementStaffWorkflowTests(TestCase):
             "title_en": "Staff announcement",
             "body": "公告正文。",
             "body_en": "Announcement body.",
-            "priority": Announcement.PRIORITY_IMPORTANT,
+            "priority": "on",
             "publish_start": self.dt_value(self.now),
             "publish_end": self.dt_value(
                 self.now + timezone.timedelta(days=2)
@@ -687,10 +687,10 @@ class AnnouncementStaffWorkflowTests(TestCase):
             )
         return announcement
 
-    def login(self, user):
+    def login(self, user, language="en"):
         self.client.force_login(user)
         session = self.client.session
-        session["language"] = "en"
+        session["language"] = language
         session.save()
 
     def management_routes(self, announcement):
@@ -778,6 +778,19 @@ class AnnouncementStaffWorkflowTests(TestCase):
         self.assertIsNone(announcement.published_by)
         self.assertIsNone(announcement.published_at)
 
+    def test_create_with_important_unchecked_saves_normal_priority(self):
+        self.login(self.staff)
+        data = self.form_data(title_en="Normal checkbox announcement")
+        data.pop("priority")
+
+        response = self.client.post(reverse("create_announcement"), data)
+
+        self.assertEqual(response.status_code, 302)
+        announcement = Announcement.objects.get(
+            title_en="Normal checkbox announcement"
+        )
+        self.assertEqual(announcement.priority, Announcement.PRIORITY_NORMAL)
+
     def test_edit_updates_fields_and_replaces_audience_without_publishing(self):
         announcement = self.create_announcement([self.parent])
         self.login(self.staff)
@@ -789,7 +802,7 @@ class AnnouncementStaffWorkflowTests(TestCase):
                 title_en="Updated announcement",
                 body="更新正文。",
                 body_en="Updated body.",
-                priority=Announcement.PRIORITY_IMPORTANT,
+                priority="on",
                 audience_units=[str(self.sibling.id)],
             ),
         )
@@ -810,6 +823,51 @@ class AnnouncementStaffWorkflowTests(TestCase):
             ),
             [self.sibling.id],
         )
+
+    def test_edit_from_important_to_normal_with_unchecked_checkbox(self):
+        announcement = self.create_announcement(
+            [self.parent],
+            priority=Announcement.PRIORITY_IMPORTANT,
+        )
+        self.login(self.staff)
+        data = self.form_data(title_en="Now normal")
+        data.pop("priority")
+
+        response = self.client.post(
+            reverse("edit_announcement", args=[announcement.id]),
+            data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        announcement.refresh_from_db()
+        self.assertEqual(announcement.priority, Announcement.PRIORITY_NORMAL)
+
+    def test_priority_and_audience_help_are_bilingual_and_picker_is_unchanged(self):
+        expected_copy = {
+            "en": (
+                "Important announcements may appear on users’ Today page when "
+                "they are published, active, and visible to that user.",
+                "Audience controls who can see this announcement. Important "
+                "does not bypass audience visibility.",
+            ),
+            "zh": (
+                "重要公告在发布、生效、且用户可见时，可能显示在用户的「今日」页面。",
+                "适用范围决定哪些用户可以看到这条公告；重要公告不会绕过适用范围。",
+            ),
+        }
+        for language, (priority_help, audience_help) in expected_copy.items():
+            with self.subTest(language=language):
+                self.login(self.staff, language=language)
+                response = self.client.get(reverse("create_announcement"))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, priority_help)
+                self.assertContains(response, audience_help)
+                self.assertContains(response, 'type="checkbox"')
+                self.assertContains(response, 'name="priority"')
+                self.assertNotContains(response, '<select name="priority"')
+                self.assertContains(response, "data-audience-picker")
+                self.assertContains(response, 'name="audience_units"')
 
     def test_edit_fields_and_audience_replacement_are_atomic(self):
         announcement = self.create_announcement([self.parent])

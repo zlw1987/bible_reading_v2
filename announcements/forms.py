@@ -16,14 +16,20 @@ FORM_TEXT = {
         "title_en": "English title (optional)",
         "body": "Body",
         "body_en": "English body (optional)",
-        "priority": "Priority",
+        "priority": "Important",
+        "priority_help": (
+            "Important announcements may appear on users’ Today page when "
+            "they are published, active, and visible to that user."
+        ),
         "publish_start": "Publish start",
         "publish_end": "Publish end (optional)",
         "audience_units": "Audience scope",
         "audience_help": (
             "Choose the active church structure units whose members may see "
             "this announcement after it is published. A draft may be saved "
-            "without an audience, but publishing requires one."
+            "without an audience, but publishing requires one. Audience "
+            "controls who can see this announcement. Important does not "
+            "bypass audience visibility."
         ),
         "root_overlap": "Whole Church cannot be combined with other units.",
         "ancestor_overlap": (
@@ -35,13 +41,17 @@ FORM_TEXT = {
         "title_en": "英文标题（可选）",
         "body": "正文",
         "body_en": "英文正文（可选）",
-        "priority": "优先级",
+        "priority": "重要",
+        "priority_help": (
+            "重要公告在发布、生效、且用户可见时，可能显示在用户的「今日」页面。"
+        ),
         "publish_start": "开始显示时间",
         "publish_end": "结束显示时间（可选）",
         "audience_units": "适用范围",
         "audience_help": (
             "请选择公告发布后可查看它的教会结构单元。草稿可以暂时不选择范围，"
-            "但发布前必须至少选择一个有效范围。"
+            "但发布前必须至少选择一个有效范围。适用范围决定哪些用户可以看到"
+            "这条公告；重要公告不会绕过适用范围。"
         ),
         "root_overlap": "全教会不能与其他单元同时选择。",
         "ancestor_overlap": "不要同时选择一个单元及其上级或下级单元。",
@@ -99,6 +109,14 @@ class AnnouncementForm(forms.ModelForm):
         self.language = language
         super().__init__(*args, **kwargs)
         text = FORM_TEXT.get(language, FORM_TEXT["en"])
+        self.fields["priority"] = forms.BooleanField(
+            required=False,
+            initial=(
+                self.instance.priority == Announcement.PRIORITY_IMPORTANT
+            ),
+            label=text["priority"],
+            help_text=text["priority_help"],
+        )
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
             language=language,
             queryset=order_units_by_sibling_key(
@@ -133,6 +151,11 @@ class AnnouncementForm(forms.ModelForm):
                 self.fields[field_name].label = label
         self.fields["publish_start"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["publish_end"].input_formats = ["%Y-%m-%dT%H:%M"]
+
+    def clean_priority(self):
+        if self.cleaned_data["priority"]:
+            return Announcement.PRIORITY_IMPORTANT
+        return Announcement.PRIORITY_NORMAL
 
     def clean(self):
         cleaned_data = super().clean()

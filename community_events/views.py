@@ -62,6 +62,7 @@ def community_activity_list(request):
     submitted_activities = CommunityActivity.objects.filter(
         created_by=request.user,
         status__in=(
+            CommunityActivity.STATUS_DRAFT,
             CommunityActivity.STATUS_PENDING_REVIEW,
             CommunityActivity.STATUS_CHANGES_REQUESTED,
             CommunityActivity.STATUS_CANCELLED,
@@ -90,7 +91,7 @@ def community_activity_list(request):
 
 @login_required
 def community_activity_create(request):
-    """Let an eligible member propose an activity for staff review."""
+    """Let an eligible member save a draft or propose an activity for review."""
     membership_unit = get_user_primary_membership_unit(request.user)
     is_blocked = CommunityActivitySubmissionBlock.objects.filter(
         user=request.user,
@@ -111,7 +112,11 @@ def community_activity_create(request):
             co_organizers = list(form.cleaned_data["co_organizer_users"])
             with transaction.atomic():
                 activity = form.save(commit=False)
-                activity.status = CommunityActivity.STATUS_PENDING_REVIEW
+                activity.status = (
+                    CommunityActivity.STATUS_DRAFT
+                    if request.POST.get("workflow_action") == "save_draft"
+                    else CommunityActivity.STATUS_PENDING_REVIEW
+                )
                 activity.created_by = request.user
                 activity.save()
                 for unit in audience_units:
@@ -187,12 +192,14 @@ def community_activity_edit(request, activity_id):
     """Let an approved collaborator edit while an activity awaits publication.
 
     The creator or a linked co-organizer may edit only while the activity is
-    in ``pending_review`` or ``changes_requested``. A valid save updates the
-    activity fields, replaces the audience rows with the newly selected valid
-    scope units, and leaves or moves the activity to ``pending_review`` in a
-    single transaction. Only the primary creator may replace co-organizer
-    links. Any prior staff ``review_note`` is preserved for context; neither
-    collaborator can publish.
+    in ``draft``, ``pending_review``, or ``changes_requested``. A valid save
+    updates the activity fields and replaces the audience rows with the newly
+    selected valid scope units in one transaction. Draft stays draft only for
+    an explicit Save draft action; the primary creator may explicitly submit
+    it for review. Pending-review saves stay pending, and changes-requested
+    saves return to pending review. Only the primary creator may replace
+    co-organizer links. Any prior staff ``review_note`` is preserved for
+    context; neither collaborator can publish.
     """
     activity = get_object_or_404(CommunityActivity, id=activity_id)
     if not activity.can_be_edited_by(request.user):
@@ -200,6 +207,14 @@ def community_activity_edit(request, activity_id):
 
     language = get_user_language(request)
     can_manage_co_organizers = activity.created_by_id == request.user.id
+    is_draft = activity.status == CommunityActivity.STATUS_DRAFT
+    if (
+        request.method == "POST"
+        and is_draft
+        and not can_manage_co_organizers
+        and request.POST.get("workflow_action") != "save_draft"
+    ):
+        raise Http404("Community activity draft cannot be submitted.")
     if request.method == "POST":
         form = CommunityActivitySubmissionForm(
             request.POST,
@@ -217,7 +232,12 @@ def community_activity_edit(request, activity_id):
             )
             with transaction.atomic():
                 activity = form.save(commit=False)
-                activity.status = CommunityActivity.STATUS_PENDING_REVIEW
+                activity.status = (
+                    CommunityActivity.STATUS_DRAFT
+                    if is_draft
+                    and request.POST.get("workflow_action") == "save_draft"
+                    else CommunityActivity.STATUS_PENDING_REVIEW
+                )
                 activity.save()
                 activity.audience_scope_links.all().delete()
                 for unit in audience_units:
@@ -271,6 +291,7 @@ def community_activity_edit(request, activity_id):
                 activity.status
                 == CommunityActivity.STATUS_CHANGES_REQUESTED
             ),
+            "is_draft": is_draft,
             "activity": activity,
             "review_note": activity.review_note,
             "can_manage_co_organizers": can_manage_co_organizers,

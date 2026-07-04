@@ -1,7 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1F-B` and
-`COMMUNITY-EVENTS.1G-A` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1H-A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -82,8 +81,9 @@ changing primary ownership. `CommunityActivity.created_by` remains the
 accountable creator, while `CommunityActivity.organizer` remains public display
 copy only and grants no permission. The primary creator may select active users
 through an authenticated search picker and update that list. Linked
-co-organizers may view and edit only while an activity is `pending_review` or
-`changes_requested`; they cannot change the co-organizer list, publish,
+co-organizers initially gained view/edit access while an activity is
+`pending_review` or `changes_requested`; `COMMUNITY-EVENTS.1H-A` extends that
+bounded access to drafts. They cannot change the co-organizer list, publish,
 request changes, cancel/reject, or enter the staff review inbox. This
 permission creates no serving assignment, My Serving item, Bible Study role,
 Today serving action, or `ServiceEvent` relationship.
@@ -96,6 +96,17 @@ existing lifecycle row, and a full activity fails closed for a new or
 cancelled signup. An already-active signup stays idempotent. This is
 attendance-intent management only, not serving. Waitlist, attendee list,
 notifications, check-in, and signup deadlines remain deferred.
+
+`COMMUNITY-EVENTS.1H-A` adds the member-facing draft workflow. Eligible
+members may save the complete, validated create form as `draft` or submit it
+directly as `pending_review`. Drafts still require Activity Scope and all
+existing required fields; audience rows, capacity, and co-organizer links save
+in the same transaction. Only the primary creator, linked co-organizers, and
+staff/superusers may see a draft. The creator manages co-organizers and may
+submit the draft for review; linked co-organizers may edit details and Activity
+Scope but cannot change the co-organizer list or submit the draft. Drafts stay
+outside the staff review inbox, selected-scope visibility, signup, Today, My
+Serving, and every serving or `ServiceEvent` workflow.
 
 ## 1. Purpose
 
@@ -302,6 +313,12 @@ all selected audience rows in the same transaction as the activity, so the
 normal create path cannot leave a zero-row submitted activity. The rows affect
 ordinary visibility only after staff publish.
 
+`COMMUNITY-EVENTS.1H-A` adds the creator-owned draft exception. Drafts are
+visible only to their primary creator, linked co-organizers, and the existing
+staff/superuser management bypass. Selected-scope ordinary users receive no
+draft visibility, and audience rows still have no ordinary visibility effect
+until publication. Drafts cannot be signed up for.
+
 The UI and queries should avoid exposing private membership data. An activity
 list should answer "can this user see this activity?" rather than showing
 internal membership lists. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md` for
@@ -315,20 +332,23 @@ Regular member:
 - can view published activities within scope
 - can sign up or cancel their own signup
 - with an active primary membership and no active submission block, can submit
-  an activity for review
+  an activity for review or save it as a draft
 - must select one or more valid active, non-overlapping Activity Scope units
+- can view and continue editing their own drafts
 - can view their own pending/changes-requested/cancelled/published submissions
+- can submit their own draft for staff review
 - when staff request changes, can edit and resubmit their own
   `changes_requested` activity, which returns it to `pending_review`
 - cannot publish
 
 Linked co-organizer:
-- can view and edit the linked activity only while it is `pending_review` or
-  `changes_requested`
+- can view and edit the linked activity only while it is `draft`,
+  `pending_review`, or `changes_requested`
 - can edit activity details and Activity Scope; saving a
   `changes_requested` activity returns it to `pending_review`
+- can save a linked draft as draft, but cannot submit it for review
 - cannot change the co-organizer list (primary creator only)
-- cannot edit draft, published, cancelled, or completed activities
+- cannot edit published, cancelled, or completed activities
 - cannot publish, request changes, cancel/reject, or access the staff review
   inbox
 - gains no staff capability, serving assignment, My Serving item, or role
@@ -351,7 +371,8 @@ Avoid a complex role hierarchy in V1.
 The implemented `COMMUNITY-EVENTS.1D-A` plus `1D-A-FU1` policy is deliberately
 small:
 
-- every member-created activity starts `pending_review`;
+- every member-created activity is explicitly saved as `draft` or submitted
+  as `pending_review`;
 - the member must select at least one valid active Activity Scope unit;
 - root plus another unit and ancestor/descendant overlaps are rejected;
 - selected units are saved as app-owned audience rows in the activity creation
@@ -360,6 +381,14 @@ small:
   but has no runtime visibility effect;
 - ordinary users cannot publish, and selected-scope members cannot see or sign
   up for the activity before publication.
+
+`COMMUNITY-EVENTS.1H-A` keeps drafts outside review:
+
+- Save draft keeps the activity in `draft`;
+- only the primary creator may submit a draft, moving it to `pending_review`;
+- draft rows never appear in the review inbox;
+- editing `pending_review` keeps it pending, while saving
+  `changes_requested` returns it to pending review as before.
 
 `COMMUNITY-EVENTS.1D-B` adds a lightweight staff-facing review loop on top of
 that policy:
@@ -393,9 +422,11 @@ Implemented through `COMMUNITY-EVENTS.1D-A-FU1`:
 - `/activities/<id>/signup/` - POST-only signup/reactivation action
 - `/activities/<id>/cancel-signup/` - POST-only cancellation action
 - `/activities/new/` - active-primary members submit an activity for staff
-  review with a required Activity Scope picker and optional scope note
+  review or save it as a draft, with a required Activity Scope picker and
+  optional scope note
 - `/activities/` also links to submission and shows the current creator's own
-  submitted activity statuses
+  draft/submitted activity statuses; drafts use "Draft" / "草稿" and
+  "Continue editing" / "继续编辑"
 
 Implemented through `COMMUNITY-EVENTS.1D-B`:
 - `/activities/review/` - staff/superuser-only review inbox of pending-review
@@ -403,8 +434,8 @@ Implemented through `COMMUNITY-EVENTS.1D-B`:
 - `/activities/<id>/review/` - staff/superuser-only review detail with
   POST-only publish / request-changes / cancel-reject actions
 - `/activities/<id>/edit/` - primary creator or linked co-organizer edit for
-  `pending_review` / `changes_requested`; only the primary creator may change
-  co-organizer links
+  `draft` / `pending_review` / `changes_requested`; only the primary creator
+  may change co-organizer links or submit a draft for review
 - a staff-dropdown "Activity Review" / "活动审核" link gated by module enablement
 
 Implemented through `COMMUNITY-EVENTS.1G-A`:
@@ -478,7 +509,6 @@ No:
 - SpecialEvent model
 - fake Combined Ministry record
 - forcing CommunityActivity into ServiceEvent
-- draft workflow
 - co-organizer-derived serving or staff authority
 
 ## 10. Roadmap Position
@@ -530,9 +560,10 @@ context, record, or relationship is added.
 permission and active-user search picker. `created_by` remains primary owner;
 `organizer` remains display-only. Only the primary creator manages links, and
 linked users may edit only pending-review or changes-requested activities. The
-slice adds no draft workflow, capacity/waitlist, staff review authority, My
-Serving or serving action-center contribution, notification, or
-`ServiceEvent` relationship.
+slice itself added no draft workflow, capacity/waitlist, staff review
+authority, My Serving or serving action-center contribution, notification, or
+`ServiceEvent` relationship; `COMMUNITY-EVENTS.1H-A` later extends the same
+bounded edit permission to drafts.
 
 `COMMUNITY-EVENTS.1F-B` completes the optional participant limit. Blank/null
 means unlimited; a positive integer caps active `signed_up` rows. Creators and
@@ -542,6 +573,14 @@ Django admin. Full activities reject new/reactivated signups without creating
 or changing signup state; already-active signup posts remain idempotent.
 Capacity affects attendance intent only and creates no serving or
 `ServiceEvent` state.
+
+`COMMUNITY-EVENTS.1H-A` completes the bounded member-facing draft workflow.
+Eligible creators may save a complete validated draft, keep editing it,
+manage its co-organizers, and submit it for review. Linked co-organizers may
+view and edit a draft but cannot manage links or submit it. Drafts remain
+private to those collaborators and staff/superusers, require Activity Scope,
+and create no review-inbox item, signup, Today item, My Serving item, serving
+record, or `ServiceEvent` relationship.
 
 Later work still requires separately approved, bounded slices for:
 

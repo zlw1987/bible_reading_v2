@@ -134,6 +134,7 @@ class CommunityActivity(models.Model):
         if (
             self.status
             in (
+                self.STATUS_DRAFT,
                 self.STATUS_PENDING_REVIEW,
                 self.STATUS_CHANGES_REQUESTED,
             )
@@ -159,18 +160,20 @@ class CommunityActivity(models.Model):
         )
 
     def can_be_edited_by(self, user):
-        """Return whether ``user`` may edit this submitted activity.
+        """Return whether ``user`` may edit this pre-publication activity.
 
         The creator or an explicitly linked co-organizer may edit only while
-        the activity is in ``pending_review`` or ``changes_requested``. Draft,
-        published, cancelled, and completed activities are not editable through
-        this member surface; staff editing stays in Django admin or review.
+        the activity is in ``draft``, ``pending_review``, or
+        ``changes_requested``. Published, cancelled, and completed activities
+        are not editable through this member surface; staff editing stays in
+        Django admin or review.
         """
         return bool(
             self.pk
             and getattr(user, "is_authenticated", False)
             and self.status
             in (
+                self.STATUS_DRAFT,
                 self.STATUS_PENDING_REVIEW,
                 self.STATUS_CHANGES_REQUESTED,
             )

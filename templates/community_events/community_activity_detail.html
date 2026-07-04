@@ -25,6 +25,16 @@
     <p class="muted">{{ activity|activity_status_label:language }}</p>
     {% endif %}
 
+    {% if activity.status == "draft" %}
+    <p>
+        {% if language == "zh" %}
+        此活动还是草稿，尚未提交审核。
+        {% else %}
+        This activity is a draft. It has not been submitted for review.
+        {% endif %}
+    </p>
+    {% endif %}
+
     {% if is_submission_collaborator and activity.status == "pending_review" %}
     <p>
         {% if language == "zh" %}
@@ -54,7 +64,9 @@
     {% if can_edit %}
     <p>
         <a class="button" href="{% url 'community_activity_edit' activity.id %}">
-            {% if activity.status == "changes_requested" %}
+            {% if activity.status == "draft" %}
+                {% if language == "zh" %}继续编辑{% else %}Continue editing{% endif %}
+            {% elif activity.status == "changes_requested" %}
                 {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
             {% else %}
                 {% if language == "zh" %}修改活动{% else %}Edit activity{% endif %}
@@ -104,6 +116,7 @@
     <p>{{ activity|activity_description:language|linebreaksbr }}</p>
     {% endif %}
 
+    {% if activity.status == "published" %}
     <p>
         <strong>{% if language == "zh" %}已报名：{% else %}Signed up:{% endif %}</strong>
         {% if activity.is_capacity_limited %}
@@ -136,6 +149,7 @@
     <p class="muted">
         {% if language == "zh" %}此活动目前不开放报名。{% else %}Signup is not available for this activity.{% endif %}
     </p>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

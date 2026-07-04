@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS.1F-B` and `COMMUNITY-EVENTS.1G-A` (July 2026).
+`COMMUNITY-EVENTS.1H-A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -48,7 +48,7 @@ Registered in `core/module_registry.py`, enabled via
 | `prayers`  | `prayers`  | Prayer / 代祷                           | Visibility via `structure_unit_at_post` + membership. |
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
-| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Published visibility uses app-owned audience rows + active primary membership; zero rows fail closed. Signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
+| `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
@@ -88,9 +88,11 @@ serving or ServiceEvent relationship.
 and an authenticated active-user search picker. `created_by` stays the primary
 owner/accountable submitter, while `organizer` stays public display copy only
 and grants no permission. Linked co-organizers may view and edit only
-`pending_review` or `changes_requested` activities; only the primary creator
-may change the linked-user list. Co-organizers receive no staff review actions
-or inbox access. The picker exposes only id, display name, username, and active
+`pending_review` or `changes_requested` activities at the 1G-A milestone;
+`COMMUNITY-EVENTS.1H-A` later extends that bounded access to drafts while only
+the primary creator may change the linked-user list or submit a draft.
+Co-organizers receive no staff review actions or inbox access. The picker
+exposes only id, display name, username, and active
 primary membership path (or no-active-group), never email, phone, address, or
 sensitive profile fields. This permission does not create serving, My Serving,
 Bible Study role, Today serving action, or `ServiceEvent` state.
@@ -101,6 +103,15 @@ new/reactivated signup, while an already-active signup remains idempotent.
 Capacity is editable through the existing bounded collaborator edit states and
 through Django admin. It affects attendance intent only and adds no waitlist,
 attendee list, notification, check-in, serving, or `ServiceEvent` state.
+`COMMUNITY-EVENTS.1H-A` adds the member-facing draft preparation state without
+adding partial/incomplete drafts. Eligible creators may save a complete valid
+form as draft, transactionally including Activity Scope, capacity, and
+co-organizers, then continue editing or submit it as `pending_review`.
+Linked co-organizers may see and edit draft details and Activity Scope but
+cannot change co-organizers or submit the draft. Drafts are invisible to
+selected-scope ordinary users, excluded from the staff review inbox, cannot be
+signed up for, and contribute nothing to Today, My Serving, serving state,
+notifications, or `ServiceEvent`.
 
 ## Registry and feature gates (through MODULAR-CORE.6B)
 
@@ -327,9 +338,10 @@ attendee list, notification, check-in, serving, or `ServiceEvent` state.
    signups on published visible activities happening today plus creator
    `changes_requested` reminders. `COMMUNITY-EVENTS.1G-A` adds approved
    user-linked co-organizers with creator-controlled selection and bounded
-   pending-review / changes-requested editing. `COMMUNITY-EVENTS.1F-B` adds
-   approved optional capacity enforcement for active signups only. A larger
-   approval dashboard,
+   pre-publication editing. `COMMUNITY-EVENTS.1F-B` adds approved optional
+   capacity enforcement for active signups only. `COMMUNITY-EVENTS.1H-A` adds
+   approved complete validated drafts, with creator-owned submission and no
+   review/signup/shared-surface/serving effect. A larger approval dashboard,
    broader Today browse/discovery,
    waitlist, attendee list, check-in, My Serving, Staff Overview, setup/readiness,
    notifications, any `ServiceEvent` link, and Checklist remain deferred.

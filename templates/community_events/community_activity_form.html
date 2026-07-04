@@ -23,10 +23,18 @@
         {% if is_changes_requested %}{% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}{% elif is_edit %}{% if language == "zh" %}修改活动{% else %}Edit activity{% endif %}{% else %}{% if language == "zh" %}提交活动{% else %}Submit activity{% endif %}{% endif %}
     </h1>
     <p class="page-subtitle">
+        {% if is_draft or not is_edit %}
+        {% if language == "zh" %}
+        你可以先保存草稿，准备好后再提交审核。草稿和待审核活动都不会向所选范围公开；这不是正式教会聚会的发布流程。
+        {% else %}
+        You can save a draft while preparing, then submit it for staff review. Draft and review-stage activity scopes are not public; this does not create an official church gathering.
+        {% endif %}
+        {% else %}
         {% if language == "zh" %}
         提交后活动会先由同工审核，再决定是否发布。你选择的活动范围在同工发布前不会公开；这不是正式教会聚会的发布流程。
         {% else %}
         Your activity will be reviewed by staff before publication. The activity scope you select is not public until staff publish it; this does not create an official church gathering.
+        {% endif %}
         {% endif %}
     </p>
 </div>
@@ -87,9 +95,20 @@
     {% endfor %}
 
     <div class="actions">
-        <button type="submit">
+        {% if is_draft or not is_edit %}
+        <button type="submit" name="workflow_action" value="save_draft">
+            {% if language == "zh" %}保存草稿{% else %}Save draft{% endif %}
+        </button>
+        {% if can_manage_co_organizers or not is_edit %}
+        <button type="submit" name="workflow_action" value="submit_for_review">
+            {% if language == "zh" %}提交审核{% else %}Submit for review{% endif %}
+        </button>
+        {% endif %}
+        {% else %}
+        <button type="submit" name="workflow_action" value="submit_for_review">
             {% if is_changes_requested %}{% if language == "zh" %}重新提交审核{% else %}Resubmit for review{% endif %}{% elif is_edit %}{% if language == "zh" %}保存修改{% else %}Save changes{% endif %}{% else %}{% if language == "zh" %}提交审核{% else %}Submit for review{% endif %}{% endif %}
         </button>
+        {% endif %}
         {% if is_edit %}
         <a class="button button-secondary" href="{% url 'community_activity_detail' activity.id %}">
             {% if language == "zh" %}取消{% else %}Cancel{% endif %}

@@ -115,10 +115,10 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 widget=forms.MultipleHiddenInput,
                 help_text=(
                     "Selected co-organizers may help edit while the activity "
-                    "is pending review or changes are requested. Only the "
-                    "primary creator can change this list."
+                    "is a draft, pending review, or changes are requested. "
+                    "Only the primary creator can change this list."
                     if language != "zh"
-                    else "所选共同发起人可在活动待审核或需要修改时参与编辑；只有主要发起人可以更改此名单。"
+                    else "所选共同发起人可在活动为草稿、待审核或需要修改时参与编辑；只有主要发起人可以更改此名单。"
                 ),
             )
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(

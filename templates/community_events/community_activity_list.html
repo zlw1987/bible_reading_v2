@@ -32,7 +32,11 @@
                 {{ activity|activity_title:language }}
             </a>
             <span class="muted">— {{ activity|activity_status_label:language }}</span>
-            {% if activity.status == "pending_review" %}
+            {% if activity.status == "draft" %}
+            <a href="{% url 'community_activity_edit' activity.id %}">
+                {% if language == "zh" %}继续编辑{% else %}Continue editing{% endif %}
+            </a>
+            {% elif activity.status == "pending_review" %}
             <a href="{% url 'community_activity_edit' activity.id %}">
                 {% if language == "zh" %}修改活动{% else %}Edit activity{% endif %}
             </a>

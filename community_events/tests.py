@@ -436,7 +436,7 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
         self.assertIn(activity, response.context["submitted_activities"])
         self.assertNotIn(activity, response.context["activities"])
 
-    def test_submissions_only_include_workflow_attention_statuses(self):
+    def test_submissions_include_creator_drafts_and_workflow_attention_statuses(self):
         activities_by_status = {
             status: self.create_activity(
                 title_en=f"Creator {status}",
@@ -460,6 +460,7 @@ class CommunityActivityBrowseTests(CommunityActivityWebTestBase):
         self.assertEqual(
             set(response.context["submitted_activities"]),
             {
+                activities_by_status[CommunityActivity.STATUS_DRAFT],
                 activities_by_status[CommunityActivity.STATUS_PENDING_REVIEW],
                 activities_by_status[CommunityActivity.STATUS_CHANGES_REQUESTED],
                 activities_by_status[CommunityActivity.STATUS_CANCELLED],
@@ -738,6 +739,14 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
                 self.assertContains(response, co_organizer_label)
                 self.assertContains(response, capacity_label)
                 self.assertContains(response, capacity_help)
+                self.assertContains(
+                    response,
+                    "保存草稿" if language == "zh" else "Save draft",
+                )
+                self.assertContains(
+                    response,
+                    "提交审核" if language == "zh" else "Submit for review",
+                )
                 self.assertNotContains(response, "期望参加范围")
                 self.assertContains(response, 'name="audience_units"')
                 self.assertContains(response, 'name="requested_audience_note"')
@@ -827,7 +836,10 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
 
         response = self.client.post(
             self.create_url,
-            self.submission_data(audience_units=[self.child.id]),
+            self.submission_data(
+                audience_units=[self.child.id],
+                workflow_action="submit_for_review",
+            ),
         )
 
         activity = CommunityActivity.objects.get(title_en="Member Picnic")
@@ -849,6 +861,44 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_save_draft_saves_scope_capacity_and_co_organizers_transactionally(self):
+        co_organizer = self.create_member("draft_co_organizer", self.child)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(
+                title_en="Draft Member Picnic",
+                audience_units=[self.sibling.id],
+                capacity_limit="18",
+                co_organizer_users=[co_organizer.id],
+                workflow_action="save_draft",
+            ),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Draft Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_DRAFT)
+        self.assertEqual(activity.created_by, self.member)
+        self.assertEqual(activity.capacity_limit, 18)
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.sibling.id],
+        )
+        self.assertEqual(
+            list(activity.co_organizer_links.values_list("user_id", flat=True)),
+            [co_organizer.id],
+        )
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
 
     def test_create_with_co_organizer_saves_link_transactionally(self):
         co_organizer = self.create_member("create_co_organizer", self.child)
@@ -964,7 +1014,10 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
 
         response = self.client.post(
             self.create_url,
-            self.submission_data(audience_units=[]),
+            self.submission_data(
+                audience_units=[],
+                workflow_action="save_draft",
+            ),
         )
 
         self.assertEqual(response.status_code, 200)
@@ -1034,6 +1087,77 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         self.assertContains(detail_response, "awaiting staff review")
         self.assertContains(list_response, "Your activity submissions")
         self.assertContains(list_response, "Pending Picnic")
+
+    def test_creator_sees_draft_detail_and_list_continue_editing_link(self):
+        activity = self.create_activity(
+            title_en="Creator Draft Picnic",
+            status=CommunityActivity.STATUS_DRAFT,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        self.login(self.member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        list_response = self.client.get(reverse("community_activity_list"))
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Draft")
+        self.assertContains(
+            detail_response,
+            "This activity is a draft. It has not been submitted for review.",
+        )
+        self.assertContains(detail_response, "Continue editing")
+        self.assertContains(list_response, "Your activity submissions")
+        self.assertContains(list_response, "Creator Draft Picnic", count=1)
+        self.assertContains(list_response, "Continue editing")
+        self.assertIn(activity, list_response.context["submitted_activities"])
+        self.assertNotIn(activity, list_response.context["activities"])
+
+    def test_selected_scope_and_unrelated_users_cannot_view_draft(self):
+        in_scope_member = self.create_member("draft_in_scope", self.child)
+        activity = self.create_activity(
+            title_en="Private Draft Picnic",
+            status=CommunityActivity.STATUS_DRAFT,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+
+        for user in (in_scope_member, self.other_member):
+            with self.subTest(username=user.username):
+                self.login(user)
+                detail_response = self.client.get(self.detail_url(activity))
+                edit_response = self.client.get(
+                    reverse("community_activity_edit", args=[activity.id])
+                )
+                self.assertEqual(detail_response.status_code, 404)
+                self.assertEqual(edit_response.status_code, 404)
+
+    def test_draft_has_no_signup_action_and_signup_post_is_denied(self):
+        activity = self.create_activity(
+            title_en="Draft Signup Picnic",
+            status=CommunityActivity.STATUS_DRAFT,
+            created_by=self.member,
+        )
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(activity=activity, user=self.member)
+        self.login(self.member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        signup_response = self.client.post(
+            reverse("community_activity_signup", args=[activity.id])
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotContains(
+            detail_response,
+            reverse("community_activity_signup", args=[activity.id]),
+        )
+        self.assertNotContains(
+            detail_response,
+            reverse("community_activity_cancel_signup", args=[activity.id]),
+        )
+        self.assertEqual(signup_response.status_code, 404)
+        self.assertEqual(ActivitySignup.objects.count(), 1)
 
     def test_other_member_inside_selected_scope_cannot_see_pending_activity(self):
         in_scope_member = self.create_member("pending_in_scope", self.child)
@@ -1506,6 +1630,17 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.add_audience(activity, self.parent)
         return activity
 
+    def draft_activity(self, **overrides):
+        data = {
+            "title_en": "Draft Picnic",
+            "status": CommunityActivity.STATUS_DRAFT,
+            "created_by": self.member,
+        }
+        data.update(overrides)
+        activity = self.create_activity(**data)
+        self.add_audience(activity, self.parent)
+        return activity
+
     def resubmit_data(self, activity, **overrides):
         data = {
             "title": activity.title,
@@ -1607,10 +1742,19 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.assertContains(response, "Edit activity")
         self.assertContains(response, "Save changes")
 
-    def test_creator_cannot_edit_draft_published_cancelled_completed(self):
+    def test_creator_can_open_draft_edit_form_with_both_workflow_actions(self):
+        activity = self.draft_activity()
+        self.login(self.member)
+
+        response = self.client.get(self.edit_url(activity))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Save draft")
+        self.assertContains(response, "Submit for review")
+
+    def test_creator_cannot_edit_published_cancelled_completed(self):
         self.login(self.member)
         for status in (
-            CommunityActivity.STATUS_DRAFT,
             CommunityActivity.STATUS_PUBLISHED,
             CommunityActivity.STATUS_CANCELLED,
             CommunityActivity.STATUS_COMPLETED,
@@ -1622,6 +1766,52 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
                 )
                 response = self.client.get(self.edit_url(activity))
                 self.assertEqual(response.status_code, 404)
+
+    def test_creator_can_edit_draft_and_keep_it_draft(self):
+        activity = self.draft_activity(capacity_limit=10)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                description="Draft details updated",
+                capacity_limit="20",
+                audience_units=[self.sibling.id],
+                workflow_action="save_draft",
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_DRAFT)
+        self.assertEqual(activity.description, "Draft details updated")
+        self.assertEqual(activity.capacity_limit, 20)
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.sibling.id],
+        )
+
+    def test_creator_can_submit_existing_draft_for_review(self):
+        activity = self.draft_activity()
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                workflow_action="submit_for_review",
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PENDING_REVIEW)
 
     def test_other_user_cannot_edit_pending_review_activity(self):
         activity = self.pending_activity(created_by=self.other_member)
@@ -1713,6 +1903,51 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             [self.sibling.id],
         )
 
+    def test_co_organizer_can_view_and_edit_linked_draft_but_not_submit_it(self):
+        activity = self.draft_activity()
+        self.add_co_organizer(activity)
+        self.login(self.other_member)
+
+        detail_response = self.client.get(self.detail_url(activity))
+        edit_response = self.client.get(self.edit_url(activity))
+        save_response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                description="Draft updated by co-organizer",
+                audience_units=[self.sibling.id],
+                workflow_action="save_draft",
+            ),
+        )
+        submit_response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                workflow_action="submit_for_review",
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "Continue editing")
+        self.assertEqual(edit_response.status_code, 200)
+        self.assertContains(edit_response, "Save draft")
+        self.assertNotContains(edit_response, "Submit for review")
+        self.assertNotContains(edit_response, 'name="co_organizer_users"')
+        self.assertRedirects(save_response, self.detail_url(activity))
+        self.assertEqual(submit_response.status_code, 404)
+        self.assertEqual(activity.status, CommunityActivity.STATUS_DRAFT)
+        self.assertEqual(activity.description, "Draft updated by co-organizer")
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.sibling.id],
+        )
+
     def test_co_organizer_can_update_capacity_while_changes_requested(self):
         activity = self.changes_requested_activity(capacity_limit=10)
         self.add_co_organizer(activity)
@@ -1745,7 +1980,6 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
     def test_co_organizer_cannot_edit_disallowed_statuses(self):
         self.login(self.other_member)
         for status in (
-            CommunityActivity.STATUS_DRAFT,
             CommunityActivity.STATUS_PUBLISHED,
             CommunityActivity.STATUS_CANCELLED,
             CommunityActivity.STATUS_COMPLETED,
@@ -1784,6 +2018,31 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             self.resubmit_data(
                 activity,
                 co_organizer_users=[attempted_replacement.id],
+            ),
+        )
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            list(activity.co_organizer_links.values_list("user_id", flat=True)),
+            [linked_editor.id],
+        )
+
+    def test_co_organizer_cannot_change_co_organizer_list_on_draft(self):
+        activity = self.draft_activity()
+        linked_editor = self.create_member("draft_linked_editor", self.child)
+        attempted_replacement = self.create_member(
+            "draft_attempted_replacement",
+            self.sibling,
+        )
+        self.add_co_organizer(activity, linked_editor)
+        self.login(linked_editor)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                co_organizer_users=[attempted_replacement.id],
+                workflow_action="save_draft",
             ),
         )
 
@@ -1945,6 +2204,23 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+
+    def test_draft_edit_creates_no_serving_or_service_event_state(self):
+        activity = self.draft_activity()
+        self.login(self.member)
+
+        self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                workflow_action="save_draft",
+            ),
+        )
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
 
 
 class CommunityActivityReviewNavTests(CommunityActivityWebTestBase):
@@ -2151,6 +2427,37 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
         self.assertNotIn(
             activity,
             response.context["community_activity_creator_attention_items"],
+        )
+
+    def test_creator_draft_is_not_rendered_on_today_or_serving_context(self):
+        activity = self.create_activity(
+            title_en="Creator Draft Hidden From Today",
+            status=CommunityActivity.STATUS_DRAFT,
+            created_by=self.member,
+            start_datetime=self.today + timezone.timedelta(hours=1),
+        )
+        self.add_audience(activity, self.parent)
+
+        response = self.get_home()
+
+        self.assertNotContains(response, "Creator Draft Hidden From Today")
+        self.assertNotIn(
+            activity,
+            response.context["community_activity_today_items"],
+        )
+        self.assertNotIn(
+            activity,
+            response.context["community_activity_creator_attention_items"],
+        )
+        self.assertTrue(
+            set(COMMUNITY_ACTIVITY_TODAY_DEFAULTS).isdisjoint(
+                {
+                    "serving_summary",
+                    "leader_summary",
+                    "my_serving_items",
+                    "serving_action_items",
+                }
+            )
         )
 
     def test_today_activity_copy_renders_in_chinese(self):

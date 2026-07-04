@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
+`COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -347,9 +347,12 @@ notifications, or `ServiceEvent`.
    capacity enforcement for active signups only. `COMMUNITY-EVENTS.1H-A` adds
    approved complete validated drafts, with creator-owned submission and no
    review/signup/shared-surface/serving effect.
-   `COMMUNITY-EVENTS-STABILIZATION.1A` freezes V1 for manual lifecycle QA before
-   a limited trial. Community Activities remains secondary and independent:
-   not official Church Gatherings, My Serving, `ServiceEvent`, or serving.
+   `COMMUNITY-EVENTS-STABILIZATION.1A` froze V1 for manual lifecycle QA, and
+   `COMMUNITY-EVENTS-STABILIZATION.1B` records that manual QA passed by user
+   confirmation. A limited trial is acceptable under the existing
+   stabilization boundary. Community Activities remains secondary and
+   independent: not official Church Gatherings, My Serving, `ServiceEvent`, or
+   serving.
    Waitlist, attendee list, check-in, notifications, comments, payments,
    calendar integration, broader Today browse/discovery, Staff Overview cards,
    setup/readiness, any `ServiceEvent` relationship, My Serving integration,

@@ -1,7 +1,7 @@
 # Community Activities V1 Plan
 
 Status: current plan and stabilization checkpoint updated through
-`COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
+`COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -608,10 +608,14 @@ Checklist V1 remains deferred and should not be revived because of Community Act
 
 ## 11. V1 Manual QA Checklist
 
-Run this checkpoint before inviting a limited trial. Use separate accounts for
-the primary creator, a linked co-organizer, an ordinary in-scope member, an
-ordinary out-of-scope member, and staff. This checklist documents the required
-manual QA; it does not claim that QA has already passed.
+QA closure (`COMMUNITY-EVENTS-STABILIZATION.1B`): Manual QA passed by user
+confirmation. The pass covered draft/collaboration, review lifecycle,
+visibility, signup/capacity, Today, My Serving, and non-serving boundaries.
+Limited trial is acceptable under the existing stabilization boundary.
+
+The checklist is retained below as historical QA evidence. It was exercised
+with separate accounts for the primary creator, a linked co-organizer, an
+ordinary in-scope member, an ordinary out-of-scope member, and staff.
 
 ### Draft and collaboration
 
@@ -668,10 +672,10 @@ manual QA; it does not claim that QA has already passed.
 
 ## 12. V1 Stabilization Boundary
 
-Community Activities V1 is feature-complete enough for a limited trial after
-the manual QA checklist above passes. Until trial feedback produces a
-separately approved slice, stabilize the implemented lifecycle rather than
-adding features.
+Community Activities V1 manual QA passed by user confirmation, and a limited
+trial is acceptable under this stabilization boundary. Until trial feedback
+produces a separately approved slice, stabilize the implemented lifecycle
+rather than adding features.
 
 Do not add a waitlist, attendee list, check-in, notifications, comments,
 payments, calendar integration, broader Today browse/discovery, Staff Overview

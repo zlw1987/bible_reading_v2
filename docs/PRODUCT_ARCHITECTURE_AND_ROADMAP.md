@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
+through `COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
 
 ## 1. Project Identity
 
@@ -81,10 +81,11 @@ not signup-eligible, and absent from Today, My Serving, serving state, and
 `ServiceEvent`.
 
 `COMMUNITY-EVENTS-STABILIZATION.1A` records the full V1 manual QA checkpoint
-in `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`. Community Activities V1 is
-feature-complete enough for a limited trial after that checklist passes; this
-is not a claim that manual QA has already passed. New operations, shared
-surfaces, or cross-module integrations require separate approval.
+in `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`, and
+`COMMUNITY-EVENTS-STABILIZATION.1B` records that manual QA passed by user
+confirmation. A limited trial is acceptable under the existing stabilization
+boundary. New operations, shared surfaces, or cross-module integrations
+require separate approval.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -164,12 +165,13 @@ provider for same-day active signups and creator-requested changes.
 `COMMUNITY-EVENTS.1F-A` adds primary-creator editing while an activity remains
 `pending_review`; `1F-B` adds optional capacity; `1G-A` adds bounded
 user-linked co-organizers; and `1H-A` adds complete validated member drafts.
-`COMMUNITY-EVENTS-STABILIZATION.1A` moves the implemented lifecycle to manual
-QA before a limited trial. Waitlist, attendee list, check-in, notifications,
-comments, payments, calendar integration, broader Today browse/discovery,
-Staff Overview cards, setup/readiness, any `ServiceEvent` relationship, My
-Serving integration, and the separate Checklist product require separately
-approved slices. See
+`COMMUNITY-EVENTS-STABILIZATION.1A` moved the implemented lifecycle to manual
+QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass. A
+limited trial is acceptable under the existing stabilization boundary.
+Waitlist, attendee list, check-in, notifications, comments, payments, calendar
+integration, broader Today browse/discovery, Staff Overview cards,
+setup/readiness, any `ServiceEvent` relationship, My Serving integration, and
+the separate Checklist product require separately approved slices. See
 `docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
 
 `RELEASE-HYGIENE.0A` is complete. The GoDaddy administrator bootstrap helper no
@@ -752,8 +754,9 @@ runtime guidance; use Section 2 and the canonical documents in
   it. Drafts are hidden from selected-scope ordinary users, signup, the review
   inbox, Today, My Serving, serving state, and `ServiceEvent`.
 - `COMMUNITY-EVENTS-STABILIZATION.1A` moves V1 to manual QA and stabilization.
-  It is feature-complete enough for a limited trial after the documented
-  lifecycle checklist passes. It adds no runtime behavior.
+  `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed manual QA pass,
+  and a limited trial is acceptable under the existing stabilization boundary.
+  Both checkpoints add no runtime behavior.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
@@ -882,7 +885,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moves this V1 lifecycle to manual QA before a limited trial. Waitlist, notifications, comments, payments, calendar integration, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this V1 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass; a limited trial is acceptable under the existing stabilization boundary. Waitlist, notifications, comments, payments, calendar integration, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
 
 Not next:
 - Lighting Team-specific model

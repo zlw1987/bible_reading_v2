@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
+the limited trial readiness closure (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -18,7 +18,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
-| Trial setup operations | [`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) | Current read-only setup audit and operator review flow. |
+| Trial setup operations | [`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) | Current read-only setup audit, operator review flow, and latest limited-trial readiness closure. |
 
 When these documents conflict with an older plan, use the canonical document
 and current code/migrations. `AGENTS.md` remains the standing agent workflow and
@@ -167,8 +167,12 @@ submission with Activity Scope, staff review/request-changes, pending-review
 creator editing, low-noise Today reminders, optional capacity, and bounded
 user-linked co-organizers. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this
 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the
-user-confirmed pass. A limited trial is acceptable under the existing
-stabilization boundary.
+user-confirmed pass. The latest setup-readiness audit reports 0 blockers and
+19 documented setup/data warnings, so the project is usable for a limited trial
+under the existing stabilization boundary. This is not a production deployment
+claim. See
+[`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) for the
+recorded audit command, warning breakdown, verification, and migration status.
 
 Community Activities remains a secondary independent module, not official
 Church Gatherings, My Serving, `ServiceEvent`, or serving. Waitlist, attendee

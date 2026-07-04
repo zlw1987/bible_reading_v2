@@ -672,10 +672,14 @@ ordinary in-scope member, an ordinary out-of-scope member, and staff.
 
 ## 12. V1 Stabilization Boundary
 
-Community Activities V1 manual QA passed by user confirmation, and a limited
-trial is acceptable under this stabilization boundary. Until trial feedback
-produces a separately approved slice, stabilize the implemented lifecycle
-rather than adding features.
+Community Activities V1 manual/browser QA passed by user confirmation. The
+latest project setup-readiness audit reports 0 blockers and 19 documented
+setup/data warnings, so the project is usable for a limited trial under this
+stabilization boundary. This is not a production deployment claim. The closure
+evidence also records `community_events` migrations through `0006` as applied
+and `migrate --plan` with no planned operations. Until trial feedback produces
+a separately approved slice, stabilize the implemented lifecycle rather than
+adding features.
 
 Do not add a waitlist, attendee list, check-in, notifications, comments,
 payments, calendar integration, broader Today browse/discovery, Staff Overview

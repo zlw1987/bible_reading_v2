@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
+through the limited trial readiness closure (July 2026).
 
 ## 1. Project Identity
 
@@ -83,9 +83,11 @@ not signup-eligible, and absent from Today, My Serving, serving state, and
 `COMMUNITY-EVENTS-STABILIZATION.1A` records the full V1 manual QA checkpoint
 in `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`, and
 `COMMUNITY-EVENTS-STABILIZATION.1B` records that manual QA passed by user
-confirmation. A limited trial is acceptable under the existing stabilization
-boundary. New operations, shared surfaces, or cross-module integrations
-require separate approval.
+confirmation. The latest setup-readiness audit reports 0 blockers and 19
+documented setup/data warnings, so the project is usable for a limited trial
+under the existing stabilization boundary. This is not a production deployment
+claim. New operations, shared surfaces, or cross-module integrations require
+separate approval.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -755,8 +757,10 @@ runtime guidance; use Section 2 and the canonical documents in
   inbox, Today, My Serving, serving state, and `ServiceEvent`.
 - `COMMUNITY-EVENTS-STABILIZATION.1A` moves V1 to manual QA and stabilization.
   `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed manual QA pass,
-  and a limited trial is acceptable under the existing stabilization boundary.
-  Both checkpoints add no runtime behavior.
+  and the latest setup-readiness audit records 0 blockers and 19 warnings.
+  The project is usable for a limited trial under the existing stabilization
+  boundary, not certified for production deployment. These checkpoints add no
+  runtime behavior.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
@@ -853,14 +857,12 @@ For feature tasks:
 
 ## 11. Next Recommended Work
 
-Current direction (after `MINISTRY-ROLE-SOURCE.1E-A`, `TODAY-AGENDA.1A`, and
-`MY-SERVING-BS.1B`): move to setup/trial readiness and run the focused manual-QA
-checkpoint in `docs/TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`. Next product
-work should be driven by that demo evidence or real user feedback, not by more
-legacy cleanup. Do not open another legacy-field deletion slice unless a
-production blocker or audit warning appears; retirement of
-`TeamMembership.role` / `can_lead` is optional later work, not the current
-priority.
+Current direction: the limited trial readiness closure is complete, with
+Community Activities V1 QA-passed by user confirmation and the setup-readiness
+audit reporting 0 blockers plus 19 warnings. Run the limited trial within the
+documented caveats, and let real trial feedback drive any separately approved
+follow-up. Do not reopen legacy Church Structure cleanup or add Community
+Activities features merely because the trial is starting.
 
 Short next-candidate list:
 
@@ -869,7 +871,7 @@ Short next-candidate list:
 - My Serving polish only when users report concrete confusion;
 - no broad refactors.
 
-Pre-user-trial readiness tooling: SETUP-READINESS.1A is implemented and provides `audit_trial_setup_readiness`, a single **read-only** management command that summarizes setup/data readiness across the core modules (Church Structure / membership, Ministry Teams, TeamAssignment / My Serving, Bible Study serving, audience visibility, permission/admin) as blockers / warnings / info before inviting real users to a trial. It mutates nothing, has no `--apply`, infers no serving from membership/visibility, and is **not** a production-deployment claim. The ministry-structure portion delegates to `ministry.structure_readiness.run_audit`. See `docs/TRIAL_SETUP_READINESS_RUNBOOK.md`.
+Pre-user-trial readiness tooling: SETUP-READINESS.1A is implemented and provides `audit_trial_setup_readiness`, a single **read-only** management command that summarizes setup/data readiness across the core modules (Church Structure / membership, Ministry Teams, TeamAssignment / My Serving, Bible Study serving, audience visibility, permission/admin) as blockers / warnings / info before inviting real users to a trial. It mutates nothing, has no `--apply`, infers no serving from membership/visibility, and is **not** a production-deployment claim. The ministry-structure portion delegates to `ministry.structure_readiness.run_audit`. The latest recorded run (`--verbose --limit 20 --fail-on-blockers`) reported 0 blockers and 19 warnings: 2 active non-staff users without active primary membership, 6 assignable teams without a role profile, 3 teams missing a required active Lead, 4 assignable teams without active members, and 4 upcoming required-team coverage gaps. Community Activities V1 manual/browser QA passed by user confirmation; `community_events` migrations through `0006` are applied and `migrate --plan` reports no planned operations. See `docs/TRIAL_SETUP_READINESS_RUNBOOK.md`.
 
 Ministry role source-of-truth alignment: MINISTRY-ROLE-SOURCE.1A is a **docs + read-only audit** slice that locks the long-term boundary between `TeamMembership` (membership / candidate pool) and `MinistryTeamRoleAssignment` (the single source of truth for long-term ministry roles and the team-management permission source), with `TeamAssignmentMember` staying event-specific serving and `TeamMembership.role` / `can_lead` kept as transitional/legacy compatibility fields only. It adds `audit_ministry_role_source_alignment` (logic in `ministry/role_source_alignment.py`), a **read-only** command (no `--apply`) that reports drift between the legacy membership roles and the ministry role assignments as blockers / warnings / info. 1A itself changed no permission, mutated no data, switched no source of truth, ran no backfill, and added no migration. MINISTRY-ROLE-SOURCE.1B is implemented as `backfill_ministry_role_assignments_from_memberships` (logic in `ministry/role_source_backfill.py`), a **dry-run-by-default** one-way backfill (membership `lead`/`coordinator` → `MinistryTeamRoleAssignment`) that writes only under explicit `--apply`, changes no permission by running, mutates no `TeamMembership`, never backfills from `can_lead`, and reports team-level manager disagreements as conflicts rather than auto-resolving them (`--apply` not run without explicit approval). **MINISTRY-ROLE-SOURCE.1C is implemented:** `can_manage_ministry_team`, `manageable_assignment_teams`, and related team-management / team-scheduling checks now read active `MinistryTeamRoleAssignment` rows (role_type code in {`lead`, `coordinator`}) for the exact team, not `TeamMembership.role`. After 1C, `TeamMembership.role` is legacy compatibility data and grants no runtime team-management permission; `TeamMembership.can_lead` remains deprecated/reserved and grants none; staff / superuser / global capability behavior is unchanged; the slice is exact-team only and changes no model or migration. **MINISTRY-ROLE-SOURCE.1D is implemented:** the manage-members UI no longer presents `TeamMembership.role` / `can_lead` as a leadership/permission control — `TeamMembershipForm` dropped `role` (normal creates default to `member`; existing legacy `role` preserved untouched on edit) and never included `can_lead`, and the members list shows canonical long-term roles from active `MinistryTeamRoleAssignment` rows only, linking staff to structure setup. **MINISTRY-ROLE-SOURCE.1E-A is implemented** as the dry-run-by-default `cleanup_team_membership_can_lead_flags` command (logic in `ministry/can_lead_cleanup.py`) that clears deprecated `can_lead=True` flags (active + inactive rows, `--team-id` scope) under explicit `--apply`, only setting `can_lead` `True` → `False` and never touching `role`, membership rows, role assignments, or permissions. Later legacy field retirement remains optional and is not the current priority. See `docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md`.
 

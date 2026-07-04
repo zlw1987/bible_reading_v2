@@ -20,6 +20,41 @@ are there setup gaps that would break the trial or quietly hide content?*
   has no high-confidence trial blockers at audit time; it does not certify
   deployment, security, scale, or correctness.
 
+## Limited trial readiness closure (July 2026)
+
+Community Activities V1 is QA-passed by user confirmation, and the latest
+setup-readiness audit reports **0 blockers** and **19 warnings**. The project is
+usable for a limited trial with the documented setup/data warnings below. This
+is not a production deployment claim.
+
+The recorded audit command was:
+
+```powershell
+python manage.py audit_trial_setup_readiness --verbose --limit 20 --fail-on-blockers
+```
+
+Recorded result:
+
+- recommendation: `USABLE FOR A LIMITED TRIAL` — no blockers, but review the
+  warnings because setup gaps may degrade the trial experience;
+- 2 active non-staff users have no active primary membership;
+- 6 assignable ministry teams have no role profile;
+- 3 teams are missing a required active Lead;
+- 4 assignable teams have no active members;
+- 4 upcoming required-team coverage gaps remain.
+
+The Community Activities QA pass covered draft/collaboration, review lifecycle,
+visibility, signup/cancel/capacity, low-noise Today reminders, no My Serving
+contamination, no serving records or `ServiceEvent` relationship, and the
+limited-trial browser smoke path. `python manage.py check`,
+`python manage.py makemigrations --check --dry-run`, and `git diff --check`
+also passed. `community_events` migrations through `0006` are applied, and
+`migrate --plan` reported no planned operations.
+
+This closure authorizes no new Community Activities features or integrations.
+The module remains independent from `ServiceEvent` and My Serving; membership
+or audience visibility never implies serving.
+
 ## Delegated belonging readiness checkpoint
 
 `GROUP-MEMBERSHIP-MANAGE.1A` and `GROUP-MEMBERSHIP-REQUEST.1B` are complete and

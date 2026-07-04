@@ -1,8 +1,9 @@
 # Official Announcements V1 Plan
 
 Status: canonical product and implementation plan (July 2026).
-`ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1C` are implemented;
-`ANNOUNCEMENTS.1D`–`1E` remain unapproved and not started.
+`ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1C` and the separately approved
+`ANNOUNCEMENTS.1D-SLIM` are implemented; `ANNOUNCEMENTS.1E` remains unapproved
+and not started.
 
 ## 1. Purpose and product boundary
 
@@ -104,12 +105,13 @@ POST-only publish/archive transitions. V1 does not add an approval workflow:
 the authorized staff publisher is the publisher.
 
 Today remains a low-noise agenda/dashboard, not an announcement feed.
-`ANNOUNCEMENTS.1D` may add only a compact reminder containing at most two
-visible, active, `important` announcements, ordered by newest
-`publish_start`. It shows title plus a link to the owning detail page, not full
-bodies, history, normal-priority items, or an infinite/latest-announcements
-feed. Disabled-module aggregation returns safe empty context and does not query
-announcements.
+`ANNOUNCEMENTS.1D-SLIM` adds only a compact reminder containing at most one
+visible, active, `important` announcement, selected by newest `publish_start`
+with deterministic creation/id tie-breakers. It shows the localized title as
+a link to the owning detail page, not full bodies, excerpts, history,
+normal-priority items, or an infinite/latest-announcements feed.
+Disabled-module aggregation returns a safe `None` default, does not call the
+provider, and does not query announcements.
 
 Announcements never contribute to My Serving, the serving action center,
 Leader Needs Attention, or Staff Overview.
@@ -220,11 +222,16 @@ Targeted expectations:
 - run focused staff workflow tests plus the standard Django, migration, and
   diff checks.
 
-### ANNOUNCEMENTS.1D — Today low-noise provider
+### ANNOUNCEMENTS.1D-SLIM — Today low-noise provider
 
-Add the module-owned Today provider and compact card exactly within Section 4:
-important only, visible and active only, maximum two, title/link only, and no
-serving/action-center semantics.
+Status: implemented (July 2026).
+
+The module-owned Today provider and compact card stay exactly within Section 4:
+important only, visible and active only through the member/public visibility
+helper, maximum one, localized title/detail link only, and no serving or
+action-center semantics. Registration uses the existing explicit Today
+provider site. Disabled-module aggregation keeps the safe empty default and
+skips the provider query.
 
 Targeted expectations:
 
@@ -232,8 +239,8 @@ Targeted expectations:
 - tests prove normal-priority, draft, archived, expired, future, zero-audience,
   and nonmatching announcements are absent;
 - ordering/cap tests prove important-first semantics are unnecessary because
-  normal items are excluded, newest `publish_start` wins, and no more than two
-  rows are returned;
+  normal items are excluded, newest `publish_start` wins, and no more than one
+  row is returned;
 - disabled-module tests prove safe empty defaults and no provider query;
 - Today boundary tests prove no My Serving, serving action-center, Leader Needs
   Attention, or Community Activities behavior changes;
@@ -249,7 +256,7 @@ Targeted expectations:
 
 - manual QA covers staff create/edit/publish/archive; ordinary matching and
   nonmatching users; scheduled/expired visibility; bilingual list/detail; nav
-  enablement; and the two-item important-only Today reminder;
+  enablement; and the one-item important-only Today reminder;
 - rerun focused announcement, registry, navigation, and Today tests;
 - run `manage.py check`, `makemigrations --check --dry-run`, and
   `git diff --check`;
@@ -293,5 +300,8 @@ Community Activities, `ServiceEvent`, My Serving, or serving behavior.
 `ANNOUNCEMENTS.1C` later received explicit approval and added the bounded
 staff/superuser management list, create/edit forms, and POST-only
 publish/archive workflow described above, without a migration or cross-module
-state. Each remaining `ANNOUNCEMENTS.1D`–`1E` slice requires separate approval
-and should proceed in order unless a separately approved re-plan says otherwise.
+state. `ANNOUNCEMENTS.1D-SLIM` later received separate approval and added only
+the module-owned, module-gated Today provider and one-item localized
+title/detail-link card described above, without a model change, migration,
+feed, Staff Overview integration, or serving/cross-module state.
+`ANNOUNCEMENTS.1E` remains separately gated.

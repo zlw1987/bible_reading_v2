@@ -50,7 +50,7 @@ ALL_MODULE_KEYS = (
 
 # MODULAR-CORE.3A: the full default Today context shape contributed by the
 # registered providers (reading / events / studies / community_events /
-# ministry).
+# announcements / ministry).
 TODAY_CONTEXT_KEYS = (
     "today_items",
     "ended_plan_count",
@@ -64,6 +64,7 @@ TODAY_CONTEXT_KEYS = (
     "community_activity_today_items",
     "community_activity_this_week_items",
     "community_activity_creator_attention_items",
+    "announcement_today_item",
     "serving_summary",
     "leader_summary",
 )
@@ -274,7 +275,7 @@ class ModuleRegistryTests(SimpleTestCase):
         self.assertEqual(module.depends_on, ())
         self.assertEqual(module.primary_nav.url_name, "announcement_list")
         self.assertEqual(module.primary_nav.active_nav, "announcements")
-        self.assertNotIn(
+        self.assertIn(
             "announcements",
             get_registered_today_provider_keys(),
         )
@@ -490,7 +491,14 @@ class TodayProviderRegistryTests(SimpleTestCase):
 
         self.assertEqual(
             get_registered_today_provider_keys(),
-            ("reading", "events", "studies", "community_events", "ministry"),
+            (
+                "reading",
+                "events",
+                "studies",
+                "community_events",
+                "announcements",
+                "ministry",
+            ),
         )
         declared_keys = set()
         for provider in today_providers._TODAY_PROVIDERS.values():
@@ -966,6 +974,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
             response.context["community_activity_creator_attention_items"],
             [],
         )
+        self.assertIsNone(response.context["announcement_today_item"])
         self.assertIsNone(response.context["serving_summary"])
         self.assertIsNone(response.context["leader_summary"])
 
@@ -979,6 +988,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         self.assertNotIn("Today's Reading", content)
         self.assertNotIn("Today's Church Gatherings", content)
         self.assertNotIn("Today's Bible study", content)
+        self.assertNotIn("Important announcement", content)
         self.assertNotIn("Leader Needs Attention", content)
         for url_name in (
             "my_plans",

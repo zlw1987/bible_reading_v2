@@ -17,6 +17,7 @@ from studies.models import BibleStudyMeeting, BibleStudyMeetingRole
 
 from .forms import AnnouncementForm
 from .models import Announcement, AnnouncementAudienceScope
+from .today_provider import TODAY_DEFAULTS as ANNOUNCEMENT_TODAY_DEFAULTS
 from .visibility import (
     member_visible_announcements_for,
     visible_announcements_for,
@@ -583,6 +584,264 @@ class AnnouncementMemberSurfaceTests(TestCase):
         self.assertEqual(ServiceEvent.objects.count(), before["service_events"])
 
 
+class AnnouncementTodayTests(TestCase):
+    password = "TodayPass123!"
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH-TODAY",
+            name="今日全教会",
+            name_en="Today Whole Church",
+        )
+        self.member_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="TODAY-1",
+            name="今日一组",
+            name_en="Today Group",
+        )
+        self.other_unit = ChurchStructureUnit.objects.create(
+            parent=self.root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="TODAY-2",
+            name="今日二组",
+            name_en="Other Today Group",
+        )
+        self.member = User.objects.create_user(
+            username="announcement_today_member",
+            password=self.password,
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.member,
+            unit=self.member_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(self.now) - timezone.timedelta(days=1),
+        )
+
+    def create_announcement(self, audience_unit=None, **overrides):
+        data = {
+            "title": "重要公告标题",
+            "title_en": "Important announcement title",
+            "body": "不应显示的公告正文。",
+            "body_en": "Announcement body must not appear on Today.",
+            "status": Announcement.STATUS_PUBLISHED,
+            "priority": Announcement.PRIORITY_IMPORTANT,
+            "publish_start": self.now - timezone.timedelta(hours=1),
+        }
+        data.update(overrides)
+        announcement = Announcement.objects.create(**data)
+        if audience_unit is not None:
+            AnnouncementAudienceScope.objects.create(
+                announcement=announcement,
+                structure_unit=audience_unit,
+            )
+        return announcement
+
+    def get_home(self, language="en"):
+        self.client.force_login(self.member)
+        session = self.client.session
+        session["language"] = language
+        session.save()
+        with patch(
+            "announcements.today_provider.current_time",
+            return_value=self.now,
+        ):
+            return self.client.get(reverse("home"))
+
+    def test_visible_active_important_announcement_appears_on_today(self):
+        announcement = self.create_announcement(self.root)
+
+        response = self.get_home()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["announcement_today_item"],
+            announcement,
+        )
+        self.assertContains(response, "Important announcement")
+        self.assertContains(response, announcement.title_en)
+        self.assertContains(
+            response,
+            reverse("announcement_detail", args=[announcement.id]),
+        )
+
+    def test_only_newest_publish_start_appears(self):
+        older = self.create_announcement(
+            self.root,
+            title_en="Older important announcement",
+            publish_start=self.now - timezone.timedelta(hours=2),
+        )
+        newer = self.create_announcement(
+            self.root,
+            title_en="Newest important announcement",
+            publish_start=self.now - timezone.timedelta(minutes=10),
+        )
+
+        response = self.get_home()
+
+        self.assertEqual(response.context["announcement_today_item"], newer)
+        self.assertContains(response, newer.title_en)
+        self.assertNotContains(response, older.title_en)
+
+    def test_normal_priority_announcement_does_not_appear(self):
+        announcement = self.create_announcement(
+            self.root,
+            priority=Announcement.PRIORITY_NORMAL,
+        )
+
+        response = self.get_home()
+
+        self.assertIsNone(response.context["announcement_today_item"])
+        self.assertNotContains(response, announcement.title_en)
+
+    def test_hidden_lifecycle_and_publish_windows_do_not_appear(self):
+        hidden = [
+            self.create_announcement(
+                self.root,
+                title_en="Hidden draft announcement",
+                status=Announcement.STATUS_DRAFT,
+            ),
+            self.create_announcement(
+                self.root,
+                title_en="Hidden archived announcement",
+                status=Announcement.STATUS_ARCHIVED,
+            ),
+            self.create_announcement(
+                self.root,
+                title_en="Hidden future announcement",
+                publish_start=self.now + timezone.timedelta(minutes=1),
+            ),
+            self.create_announcement(
+                self.root,
+                title_en="Hidden expired announcement",
+                publish_start=self.now - timezone.timedelta(hours=2),
+                publish_end=self.now - timezone.timedelta(minutes=1),
+            ),
+        ]
+
+        response = self.get_home()
+
+        self.assertIsNone(response.context["announcement_today_item"])
+        for announcement in hidden:
+            self.assertNotContains(response, announcement.title_en)
+
+    def test_important_does_not_bypass_zero_or_nonmatching_audience(self):
+        zero_audience = self.create_announcement(
+            title_en="Hidden zero-audience important announcement",
+        )
+        nonmatching = self.create_announcement(
+            self.other_unit,
+            title_en="Hidden nonmatching important announcement",
+        )
+
+        response = self.get_home()
+
+        self.assertIsNone(response.context["announcement_today_item"])
+        self.assertNotContains(response, zero_audience.title_en)
+        self.assertNotContains(response, nonmatching.title_en)
+
+    def test_card_is_bilingual_title_link_only_without_body_or_excerpt(self):
+        announcement = self.create_announcement(
+            self.root,
+            title="中文重要公告",
+            title_en="English important announcement",
+            body="绝不能显示的中文正文。",
+            body_en="Unique body text that must never render.",
+        )
+
+        english_response = self.get_home(language="en")
+        self.assertContains(english_response, "Important announcement")
+        self.assertContains(english_response, announcement.title_en)
+        self.assertNotContains(english_response, announcement.body_en)
+        self.assertNotContains(english_response, announcement.body)
+
+        chinese_response = self.get_home(language="zh")
+        self.assertContains(chinese_response, "重要公告")
+        self.assertContains(chinese_response, announcement.title)
+        self.assertNotContains(chinese_response, announcement.body)
+        self.assertNotContains(chinese_response, announcement.body_en)
+
+    @override_settings(CMS_ENABLED_MODULES=MODULES_WITHOUT_ANNOUNCEMENTS)
+    def test_disabled_module_keeps_safe_default_and_skips_query(self):
+        with patch(
+            "announcements.today_provider.member_visible_announcements_for"
+        ) as visible_announcements:
+            response = self.get_home()
+
+        visible_announcements.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["announcement_today_item"])
+        self.assertNotContains(response, "Important announcement")
+
+    def test_today_read_creates_no_cross_module_or_serving_state(self):
+        announcement = self.create_announcement(self.root)
+        before = {
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+            "bible_study_meetings": BibleStudyMeeting.objects.count(),
+            "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+            "community_activities": CommunityActivity.objects.count(),
+            "activity_signups": ActivitySignup.objects.count(),
+            "service_events": ServiceEvent.objects.count(),
+        }
+
+        response = self.get_home()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["announcement_today_item"],
+            announcement,
+        )
+        self.assertIsNone(response.context["serving_summary"])
+        self.assertIsNone(response.context["leader_summary"])
+        self.assertEqual(TeamAssignment.objects.count(), before["team_assignments"])
+        self.assertEqual(
+            TeamAssignmentMember.objects.count(),
+            before["team_assignment_members"],
+        )
+        self.assertEqual(
+            BibleStudyMeeting.objects.count(),
+            before["bible_study_meetings"],
+        )
+        self.assertEqual(
+            BibleStudyMeetingRole.objects.count(),
+            before["bible_study_roles"],
+        )
+        self.assertEqual(
+            CommunityActivity.objects.count(),
+            before["community_activities"],
+        )
+        self.assertEqual(
+            ActivitySignup.objects.count(),
+            before["activity_signups"],
+        )
+        self.assertEqual(ServiceEvent.objects.count(), before["service_events"])
+        self.assertTrue(
+            set(ANNOUNCEMENT_TODAY_DEFAULTS).isdisjoint(
+                {
+                    "serving_summary",
+                    "leader_summary",
+                    "my_serving_items",
+                    "serving_action_items",
+                }
+            )
+        )
+        self.assertNotContains(response, "Leader Needs Attention")
+        announcement_fields = {
+            field.name for field in Announcement._meta.get_fields()
+        }
+        for field_name in (
+            "service_event",
+            "team_assignment",
+            "signup",
+            "attendance",
+        ):
+            self.assertNotIn(field_name, announcement_fields)
+
+
 class AnnouncementStaffWorkflowTests(TestCase):
     password = "StaffWorkflowPass123!"
 
@@ -1076,7 +1335,7 @@ class AnnouncementStaffWorkflowTests(TestCase):
             before["activity_signups"],
         )
         self.assertEqual(ServiceEvent.objects.count(), before["service_events"])
-        self.assertNotIn(
+        self.assertIn(
             "announcements",
             get_registered_today_provider_keys(),
         )

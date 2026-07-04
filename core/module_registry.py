@@ -209,8 +209,8 @@ _REGISTERED_MODULES = (
             "Official staff-authored communication. Member visibility uses "
             "AnnouncementAudienceScope rows plus active primary "
             "ChurchStructureMembership; zero-row announcements fail closed. "
-            "Today capability is reserved for ANNOUNCEMENTS.1D; no provider "
-            "or Today output is registered in ANNOUNCEMENTS.1B."
+            "ANNOUNCEMENTS.1D-SLIM contributes at most one visible active "
+            "important announcement to Today as a title/detail link only."
         ),
     ),
     CmsModule(

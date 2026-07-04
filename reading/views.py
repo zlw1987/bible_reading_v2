@@ -10,8 +10,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-import events.today_provider
+import announcements.today_provider
 import community_events.today_provider
+import events.today_provider
 import ministry.today_provider
 import reading.today_provider
 import studies.today_provider
@@ -571,7 +572,8 @@ def delete_reading_guide_post(request, guide_id):
 
 
 # MODULAR-CORE.3B: the Today provider bodies live in their owning modules
-# (reading/events/studies/community_events/ministry ``today_provider`` modules).
+# (reading/events/studies/community_events/announcements/ministry
+# ``today_provider`` modules).
 # This is the single explicit registration site — no app auto-discovery — kept
 # in the home route's module so the registry is populated in a fixed,
 # deterministic order whenever the URLConf imports reading.views, before any
@@ -581,6 +583,7 @@ reading.today_provider.register()
 events.today_provider.register()
 studies.today_provider.register()
 community_events.today_provider.register()
+announcements.today_provider.register()
 ministry.today_provider.register()
 
 

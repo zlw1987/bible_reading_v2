@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load announcement_extras %}
 {% load event_extras %}
 {% load community_event_extras %}
 {% load datetime_extras %}
@@ -159,6 +160,18 @@
         </div>
         {% endfor %}
     </div>
+</div>
+{% endif %}
+
+{# --- One low-noise Official Announcement reminder (never serving) ----- #}
+{% if announcement_today_item %}
+<div class="card">
+    <h2 class="card-title">{% if language == "zh" %}重要公告{% else %}Important announcement{% endif %}</h2>
+    <p>
+        <a href="{% url 'announcement_detail' announcement_today_item.id %}">
+            {{ announcement_today_item|announcement_title:language }}
+        </a>
+    </p>
 </div>
 {% endif %}
 

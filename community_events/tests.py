@@ -219,6 +219,24 @@ class CommunityActivityFoundationTests(TestCase):
                 end_datetime=self.start_datetime - timezone.timedelta(hours=1)
             )
 
+    def test_capacity_limit_is_unlimited_or_positive(self):
+        unlimited = self.create_activity(title="Unlimited", capacity_limit=None)
+        limited = self.create_activity(title="Limited", capacity_limit=2)
+
+        self.assertFalse(unlimited.is_capacity_limited())
+        self.assertIsNone(unlimited.remaining_capacity())
+        self.assertFalse(unlimited.is_full())
+        self.assertTrue(limited.is_capacity_limited())
+        self.assertEqual(limited.remaining_capacity(), 2)
+        self.assertFalse(limited.is_full())
+        for invalid_capacity in (0, -1):
+            with self.subTest(capacity_limit=invalid_capacity):
+                with self.assertRaises(ValidationError):
+                    self.create_activity(
+                        title=f"Invalid {invalid_capacity}",
+                        capacity_limit=invalid_capacity,
+                    )
+
     def test_audience_scope_requires_unique_active_nonoverlapping_units(self):
         activity = self.create_activity()
         self.add_audience(activity, self.parent)
@@ -665,6 +683,7 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
             "end_datetime": "",
             "location": "公园",
             "location_en": "Park",
+            "capacity_limit": "",
             "audience_units": [self.parent.id],
             "requested_audience_note": "I hope this can include North District.",
         }
@@ -679,6 +698,8 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
             organizer_label,
             organizer_help,
             co_organizer_label,
+            capacity_label,
+            capacity_help,
         ) in (
             (
                 "en",
@@ -690,6 +711,8 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
                 "permission. To let specific users help edit, choose "
                 "co-organizers below.",
                 "Co-organizers who can edit (optional)",
+                "Participant limit",
+                "Leave blank for No limit, or enter the Maximum participants.",
             ),
             (
                 "zh",
@@ -698,6 +721,8 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
                 "公开显示的主办方/团队（可选）",
                 "这里只用于公开显示，例如 Rainbow 1 小组、青年团契、某某家庭；不会授予修改权限。若要让具体用户一起修改，请在下方选择共同发起人。",
                 "共同发起人（可参与修改，可选）",
+                "参加人数限制",
+                "留空表示不限制人数；如需限制，请填写最多参加人数。",
             ),
         ):
             with self.subTest(language=language):
@@ -711,11 +736,54 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
                 self.assertContains(response, organizer_label)
                 self.assertContains(response, organizer_help)
                 self.assertContains(response, co_organizer_label)
+                self.assertContains(response, capacity_label)
+                self.assertContains(response, capacity_help)
                 self.assertNotContains(response, "期望参加范围")
                 self.assertContains(response, 'name="audience_units"')
                 self.assertContains(response, 'name="requested_audience_note"')
                 for excluded_field in ("status", "created_by"):
                     self.assertNotContains(response, f'name="{excluded_field}"')
+
+    def test_blank_capacity_saves_as_unlimited(self):
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(capacity_limit=""),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertIsNone(activity.capacity_limit)
+
+    def test_positive_capacity_saves(self):
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(capacity_limit="12"),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.capacity_limit, 12)
+
+    def test_zero_and_negative_capacity_are_rejected(self):
+        self.login(self.member)
+
+        for capacity_limit in ("0", "-1"):
+            with self.subTest(capacity_limit=capacity_limit):
+                response = self.client.post(
+                    self.create_url,
+                    self.submission_data(capacity_limit=capacity_limit),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(
+                    "capacity_limit",
+                    response.context["form"].errors,
+                )
+                self.assertEqual(CommunityActivity.objects.count(), 0)
 
     def test_unauthenticated_user_is_redirected_to_login(self):
         response = self.client.get(self.create_url)
@@ -1451,6 +1519,7 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             "end_datetime": "",
             "location": activity.location,
             "location_en": activity.location_en,
+            "capacity_limit": activity.capacity_limit or "",
             "audience_units": [self.parent.id],
             "requested_audience_note": activity.requested_audience_note,
         }
@@ -1579,6 +1648,19 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         )
         self.assertEqual(activity.description, "Fixed before review")
 
+    def test_creator_can_update_capacity_while_pending_review(self):
+        activity = self.pending_activity(capacity_limit=None)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, capacity_limit="24"),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.capacity_limit, 24)
+
     def test_creator_can_update_co_organizers(self):
         activity = self.pending_activity()
         original = self.create_member("original_co_organizer", self.child)
@@ -1630,6 +1712,20 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             ),
             [self.sibling.id],
         )
+
+    def test_co_organizer_can_update_capacity_while_changes_requested(self):
+        activity = self.changes_requested_activity(capacity_limit=10)
+        self.add_co_organizer(activity)
+        self.login(self.other_member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, capacity_limit="15"),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.capacity_limit, 15)
 
     def test_co_organizer_changes_requested_save_returns_to_pending(self):
         activity = self.changes_requested_activity()
@@ -2188,7 +2284,7 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertEqual(activity.active_signup_count(), 1)
 
     def test_signed_up_member_can_cancel_and_reactivate_same_row(self):
-        activity = self.create_activity()
+        activity = self.create_activity(capacity_limit=1)
         self.add_audience(activity, self.parent)
         signup = ActivitySignup.objects.create(
             activity=activity,
@@ -2211,6 +2307,100 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertEqual(signup.id, original_id)
         self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
         self.assertEqual(ActivitySignup.objects.count(), 1)
+
+    def test_signup_is_allowed_below_capacity(self):
+        activity = self.create_activity(capacity_limit=2)
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.other_member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.active_signup_count(), 2)
+        self.assertTrue(
+            ActivitySignup.objects.filter(
+                activity=activity,
+                user=self.member,
+                status=ActivitySignup.STATUS_SIGNED_UP,
+            ).exists()
+        )
+
+    def test_signup_is_denied_at_capacity(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.other_member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            ActivitySignup.objects.filter(
+                activity=activity,
+                user=self.member,
+            ).exists()
+        )
+
+    def test_cancelled_signup_does_not_count_toward_capacity(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.other_member,
+            status=ActivitySignup.STATUS_CANCELLED,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.active_signup_count(), 1)
+
+    def test_cancelled_signup_is_not_reactivated_at_capacity(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+            status=ActivitySignup.STATUS_CANCELLED,
+        )
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.other_member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+
+    def test_repeated_signup_is_idempotent_when_own_signup_fills_capacity(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+
+        self.assertRedirects(response, self.detail_url(activity))
+        signup.refresh_from_db()
+        self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
+        self.assertEqual(
+            ActivitySignup.objects.filter(activity=activity).count(),
+            1,
+        )
 
     def test_signup_denies_nonmatching_and_zero_audience_activities(self):
         nonmatching = self.create_activity(title_en="Other group activity")
@@ -2274,6 +2464,66 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertContains(signed_up_response, "Cancel signup")
         self.assertContains(signed_up_response, self.cancel_url(activity))
 
+    def test_detail_shows_unlimited_and_limited_signup_counts(self):
+        unlimited = self.create_activity(title_en="Unlimited Picnic")
+        limited = self.create_activity(
+            title_en="Limited Picnic",
+            capacity_limit=2,
+        )
+        for activity in (unlimited, limited):
+            self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=unlimited,
+            user=self.other_member,
+        )
+        ActivitySignup.objects.create(
+            activity=limited,
+            user=self.other_member,
+        )
+        self.login(self.member)
+
+        unlimited_response = self.client.get(self.detail_url(unlimited))
+        limited_response = self.client.get(self.detail_url(limited))
+
+        self.assertContains(unlimited_response, "Signed up:")
+        self.assertContains(unlimited_response, "1 · No limit")
+        self.assertContains(limited_response, "Signed up:")
+        self.assertContains(limited_response, "1 / 2")
+
+        self.login(self.member, language="zh")
+        zh_response = self.client.get(self.detail_url(unlimited))
+        self.assertContains(zh_response, "已报名：")
+        self.assertContains(zh_response, "1 · 不限人数")
+
+    def test_full_activity_hides_signup_and_shows_full_message(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.other_member,
+        )
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertContains(response, "This activity is full.")
+        self.assertNotContains(response, self.signup_url(activity))
+
+    def test_signed_up_user_keeps_signed_up_state_when_activity_is_full(self):
+        activity = self.create_activity(capacity_limit=1)
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertContains(response, "You’re signed up")
+        self.assertContains(response, "Cancel signup")
+        self.assertNotContains(response, "This activity is full.")
+
     def test_list_marks_signed_up_activity(self):
         activity = self.create_activity()
         self.add_audience(activity, self.parent)
@@ -2300,6 +2550,7 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
         for leaked_key in (
             "today_items",
             "today_gatherings",

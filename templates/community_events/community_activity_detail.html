@@ -104,6 +104,15 @@
     <p>{{ activity|activity_description:language|linebreaksbr }}</p>
     {% endif %}
 
+    <p>
+        <strong>{% if language == "zh" %}已报名：{% else %}Signed up:{% endif %}</strong>
+        {% if activity.is_capacity_limited %}
+            {{ signup_count }} / {{ activity.capacity_limit }}
+        {% else %}
+            {{ signup_count }} · {% if language == "zh" %}不限人数{% else %}No limit{% endif %}
+        {% endif %}
+    </p>
+
     {% if is_signed_up %}
     <p><strong>{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</strong></p>
     <form method="post" action="{% url 'community_activity_cancel_signup' activity.id %}">
@@ -112,6 +121,10 @@
             {% if language == "zh" %}取消报名{% else %}Cancel signup{% endif %}
         </button>
     </form>
+    {% elif is_full %}
+    <p class="muted">
+        {% if language == "zh" %}此活动名额已满。{% else %}This activity is full.{% endif %}
+    </p>
     {% elif can_signup %}
     <form method="post" action="{% url 'community_activity_signup' activity.id %}">
         {% csrf_token %}

@@ -1,6 +1,7 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1G-A` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1F-B` and
+`COMMUNITY-EVENTS.1G-A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -56,8 +57,8 @@ changes-requested activities, and signup stays limited to published upcoming
 activities. A staff-dropdown "Activity Review" / "活动审核" link appears only when
 the `community_events` module is enabled.
 
-A full approval dashboard beyond this inbox, capacity/waitlist, My Serving,
-any `ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
+A full approval dashboard beyond this inbox, waitlist, My Serving, any
+`ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
 notifications remain deferred.
 
 `COMMUNITY-EVENTS.1E-A` adds the minimal module-owned Today contribution.
@@ -73,7 +74,7 @@ disabled.
 
 This Today card is ordinary activity agenda/review status, never serving. My
 Serving, the serving action center, Staff Overview, setup/readiness,
-capacity/waitlist, notifications, and any `ServiceEvent` relationship remain
+waitlist, notifications, and any `ServiceEvent` relationship remain
 deferred.
 
 `COMMUNITY-EVENTS.1G-A` adds optional user-linked co-organizers without
@@ -86,6 +87,15 @@ co-organizers may view and edit only while an activity is `pending_review` or
 request changes, cancel/reject, or enter the staff review inbox. This
 permission creates no serving assignment, My Serving item, Bible Study role,
 Today serving action, or `ServiceEvent` relationship.
+
+`COMMUNITY-EVENTS.1F-B` adds optional signup capacity. A null
+`CommunityActivity.capacity_limit` means no limit; a positive integer is the
+maximum number of active `signed_up` rows. Cancelled rows do not count.
+Signup checks serialize on the activity row, reactivation preserves the
+existing lifecycle row, and a full activity fails closed for a new or
+cancelled signup. An already-active signup stays idempotent. This is
+attendance-intent management only, not serving. Waitlist, attendee list,
+notifications, check-in, and signup deadlines remain deferred.
 
 ## 1. Purpose
 
@@ -142,6 +152,7 @@ Do not create a separate SpecialEvent model in V1.
 `COMMUNITY-EVENTS.1C` implements `ActivitySignup`.
 `COMMUNITY-EVENTS.1D-A` extends `CommunityActivity` and adds the submission
 block model.
+`COMMUNITY-EVENTS.1F-B` adds optional signup capacity to `CommunityActivity`.
 
 ### CommunityActivity
 
@@ -155,6 +166,8 @@ Implemented fields:
 - end_datetime
 - location
 - location_en
+- capacity_limit (optional; null means unlimited, a positive integer is the
+  maximum number of active signups)
 - status:
   - draft
   - pending_review
@@ -176,7 +189,7 @@ The `organizer` field is public display copy only. It does not identify a user,
 grant permission, or replace `created_by` as the primary owner/accountable
 submitter.
 
-Capacity, signup deadlines, and a full approval workflow/dashboard beyond the
+Signup deadlines and a full approval workflow/dashboard beyond the
 `COMMUNITY-EVENTS.1D-B` inbox remain outside the current model.
 
 ### CommunityActivityAudienceScope
@@ -213,8 +226,9 @@ Implemented fields:
 - updated_at
 
 There is one row per activity/user. Cancelling preserves that row, and a later
-signup reactivates it. Waitlist, notes, capacity enforcement, approval, and
-attendance/check-in are not part of `COMMUNITY-EVENTS.1C`.
+signup reactivates it. `COMMUNITY-EVENTS.1F-B` later adds capacity enforcement
+using only active `signed_up` rows. Waitlist, notes, approval, and
+attendance/check-in are not part of the current lifecycle.
 
 ### CommunityActivitySubmissionBlock
 
@@ -520,12 +534,22 @@ slice adds no draft workflow, capacity/waitlist, staff review authority, My
 Serving or serving action-center contribution, notification, or
 `ServiceEvent` relationship.
 
+`COMMUNITY-EVENTS.1F-B` completes the optional participant limit. Blank/null
+means unlimited; a positive integer caps active `signed_up` rows. Creators and
+co-organizers edit it only through the existing `pending_review` /
+`changes_requested` member edit path, while staff may inspect or edit it in
+Django admin. Full activities reject new/reactivated signups without creating
+or changing signup state; already-active signup posts remain idempotent.
+Capacity affects attendance intent only and creates no serving or
+`ServiceEvent` state.
+
 Later work still requires separately approved, bounded slices for:
 
 - a larger approval dashboard or leader approval;
 - any Staff Overview or setup/readiness contribution;
 - any broader Today browse/discovery surface;
-- capacity, waitlist, reminders, payments, notifications, or calendar behavior.
+- waitlist, attendee list, check-in, reminders, payments, notifications,
+  signup deadlines, or calendar behavior.
 
 No later slice may infer serving from activity visibility, signup, or
 membership, and no link to `ServiceEvent` is implied by this foundation.

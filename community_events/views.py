@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -51,7 +51,11 @@ def community_activity_list(request):
                     user=request.user,
                     status=ActivitySignup.STATUS_SIGNED_UP,
                 )
-            )
+            ),
+            signup_count=Count(
+                "signups",
+                filter=Q(signups__status=ActivitySignup.STATUS_SIGNED_UP),
+            ),
         )
         .order_by("start_datetime", "id")
     )
@@ -151,6 +155,8 @@ def community_activity_detail(request, activity_id):
     if not activity.can_be_seen_by(request.user):
         raise Http404("Community activity not available.")
     signup = activity.signup_for(request.user)
+    signup_count = activity.active_signup_count()
+    is_full = activity.is_full(active_signup_count=signup_count)
     is_creator = activity.created_by_id == request.user.id
     is_co_organizer = activity.is_co_organizer(request.user)
     return render(
@@ -163,7 +169,11 @@ def community_activity_detail(request, activity_id):
             "is_co_organizer": is_co_organizer,
             "is_submission_collaborator": is_creator or is_co_organizer,
             "can_edit": activity.can_be_edited_by(request.user),
-            "can_signup": activity.is_signup_open(),
+            "can_signup": activity.is_signup_open(
+                active_signup_count=signup_count,
+            ),
+            "signup_count": signup_count,
+            "is_full": is_full,
             "is_signed_up": bool(signup and signup.is_active),
             "co_organizers": activity.co_organizer_links.select_related(
                 "user"
@@ -349,14 +359,37 @@ def _visible_activity_or_404(user, activity_id):
 def community_activity_signup(request, activity_id):
     """Create or reactivate the current user's attendance intent."""
     activity = _visible_activity_or_404(request.user, activity_id)
-    if not activity.is_signup_open():
-        raise Http404("Community activity signup not available.")
+    with transaction.atomic():
+        activity = CommunityActivity.objects.select_for_update().get(
+            pk=activity.pk,
+        )
+        if (
+            activity.status != CommunityActivity.STATUS_PUBLISHED
+            or activity.start_datetime <= timezone.now()
+        ):
+            raise Http404("Community activity signup not available.")
 
-    ActivitySignup.objects.update_or_create(
-        activity=activity,
-        user=request.user,
-        defaults={"status": ActivitySignup.STATUS_SIGNED_UP},
-    )
+        signup = (
+            ActivitySignup.objects.select_for_update()
+            .filter(activity=activity, user=request.user)
+            .first()
+        )
+        if signup and signup.is_active:
+            return redirect(
+                "community_activity_detail",
+                activity_id=activity.id,
+            )
+        if activity.is_full():
+            raise Http404("Community activity signup not available.")
+
+        if signup:
+            signup.status = ActivitySignup.STATUS_SIGNED_UP
+            signup.save(update_fields=["status", "updated_at"])
+        else:
+            ActivitySignup.objects.create(
+                activity=activity,
+                user=request.user,
+            )
     return redirect("community_activity_detail", activity_id=activity.id)
 
 

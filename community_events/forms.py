@@ -44,6 +44,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             "end_datetime",
             "location",
             "location_en",
+            "capacity_limit",
             "requested_audience_note",
         ]
         widgets = {
@@ -58,6 +59,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 attrs={"type": "datetime-local"},
                 format="%Y-%m-%dT%H:%M",
             ),
+            "capacity_limit": forms.NumberInput(attrs={"min": 1}),
         }
 
     def __init__(
@@ -84,6 +86,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "end_datetime": "End time (optional)",
                 "location": "Location (optional)",
                 "location_en": "English location (optional)",
+                "capacity_limit": "Participant limit",
                 "audience_units": "Activity scope",
                 "requested_audience_note": "Activity scope note (optional)",
             },
@@ -98,6 +101,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "end_datetime": "结束时间（可选）",
                 "location": "地点（可选）",
                 "location_en": "英文地点（可选）",
+                "capacity_limit": "参加人数限制",
                 "audience_units": "活动范围",
                 "requested_audience_note": "活动范围说明（可选）",
             },
@@ -145,6 +149,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "end_datetime",
                 "location",
                 "location_en",
+                "capacity_limit",
                 "audience_units",
                 "requested_audience_note",
             ]
@@ -160,6 +165,11 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             "To let specific users help edit, choose co-organizers below."
             if language != "zh"
             else "这里只用于公开显示，例如 Rainbow 1 小组、青年团契、某某家庭；不会授予修改权限。若要让具体用户一起修改，请在下方选择共同发起人。"
+        )
+        self.fields["capacity_limit"].help_text = (
+            "Leave blank for No limit, or enter the Maximum participants."
+            if language != "zh"
+            else "留空表示不限制人数；如需限制，请填写最多参加人数。"
         )
         self.fields["requested_audience_note"].help_text = (
             "You may explain why you chose this scope or note any scope adjustment "

@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `COMMUNITY-EVENTS.1E-A` (July 2026).
+through `COMMUNITY-EVENTS.1F-B` and `COMMUNITY-EVENTS.1G-A` (July 2026).
 
 ## 1. Project Identity
 
@@ -58,6 +58,14 @@ today, plus creator-owned `changes_requested` reminders. Later-this-week
 signups and `pending_review` submissions stay off Today. It adds no My Serving
 or serving action-center item, no serving record, and no `ServiceEvent`
 relationship.
+
+`COMMUNITY-EVENTS.1F-B` adds an optional participant limit to Community
+Activities. Null means unlimited; a positive integer caps active signup rows.
+Full activities fail closed for new/reactivated signups, cancelled rows do not
+count, and already-active signup posts remain idempotent. Capacity is
+attendance-intent management only; it creates no serving or `ServiceEvent`
+state. Waitlist, attendee list, notifications, check-in, and signup deadlines
+remain deferred.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -134,7 +142,7 @@ adds the `changes_requested` status and `review_note` / `reviewed_by` /
 Staff Overview counts, Today, My Serving, notifications, or a `ServiceEvent`
 link. `COMMUNITY-EVENTS.1E-A` later adds only the minimal module-owned Today
 provider for same-day active signups and creator-requested changes. A larger approval
-dashboard, broader Today browse/discovery, capacity/waitlist, My Serving, Staff
+dashboard, broader Today browse/discovery, waitlist, My Serving, Staff
 Overview, setup/readiness, and any `ServiceEvent` relationship still require
 separately approved slices. Checklist remains deferred. See
 `docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
@@ -703,13 +711,19 @@ runtime guidance; use Section 2 and the canonical documents in
   adds no My Serving or serving action-center context, serving record, Staff
   Overview, setup/readiness, notification, capacity/waitlist, or
   `ServiceEvent` relationship.
+- `COMMUNITY-EVENTS.1F-B` adds nullable `capacity_limit` to
+  `CommunityActivity`, the shared create/edit field, active-signup counts on
+  list/detail, and a serialized full-capacity guard on signup/reactivation.
+  Null means unlimited and a positive integer is the maximum active
+  `signed_up` count. It adds no waitlist, attendee list, check-in,
+  notification, serving state, or `ServiceEvent` relationship.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
 - ServiceEvent legacy scope field retirement is complete (SE-FIELD-RETIRE.1A);
   only immutable historical migrations/docs should still name those fields.
 - Separately approved Community Activities creation/approval, staff-management,
-  capacity/waitlist, shared-surface, or integration slices building on the
+  waitlist, shared-surface, or integration slices building on the
   implemented audience and minimal signup foundations.
 - Checklist V1 remains deferred.
 
@@ -829,7 +843,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, and `1E-A` adds the minimal Today provider for active signups and creator review reminders. A full approval dashboard, capacity/waitlist, notifications, attendance/check-in, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-B` adds optional active-signup capacity, and `1G-A` adds bounded linked co-organizers. A full approval dashboard, waitlist, notifications, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned.
 
 Not next:
 - Lighting Team-specific model

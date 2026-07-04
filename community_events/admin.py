@@ -32,6 +32,7 @@ class CommunityActivityAdmin(admin.ModelAdmin):
         "title",
         "start_datetime",
         "status",
+        "capacity_limit",
         "organizer",
         "created_by",
     )

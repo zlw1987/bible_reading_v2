@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -32,6 +33,11 @@ class CommunityActivity(models.Model):
     end_datetime = models.DateTimeField(null=True, blank=True)
     location = models.CharField(max_length=180, blank=True, default="")
     location_en = models.CharField(max_length=180, blank=True, default="")
+    capacity_limit = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+    )
     requested_audience_note = models.TextField(blank=True, default="")
     status = models.CharField(
         max_length=32,
@@ -174,12 +180,29 @@ class CommunityActivity(models.Model):
             )
         )
 
-    def is_signup_open(self, at=None):
+    def is_capacity_limited(self):
+        return self.capacity_limit is not None
+
+    def remaining_capacity(self, active_signup_count=None):
+        if not self.is_capacity_limited():
+            return None
+        if active_signup_count is None:
+            active_signup_count = self.active_signup_count()
+        return max(self.capacity_limit - active_signup_count, 0)
+
+    def is_full(self, active_signup_count=None):
+        remaining = self.remaining_capacity(
+            active_signup_count=active_signup_count,
+        )
+        return remaining == 0 if remaining is not None else False
+
+    def is_signup_open(self, at=None, active_signup_count=None):
         """Return whether this activity accepts member attendance intent."""
         at = at or timezone.now()
         return (
             self.status == self.STATUS_PUBLISHED
             and self.start_datetime > at
+            and not self.is_full(active_signup_count=active_signup_count)
         )
 
     def signup_for(self, user):

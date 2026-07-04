@@ -80,6 +80,13 @@
             {{ activity.organizer }}
         </p>
         {% endif %}
+        <p class="muted">
+            {% if activity.is_capacity_limited %}
+                {% if language == "zh" %}已报名 {{ activity.signup_count }} / {{ activity.capacity_limit }}{% else %}{{ activity.signup_count }} / {{ activity.capacity_limit }} signed up{% endif %}
+            {% else %}
+                {% if language == "zh" %}已报名 {{ activity.signup_count }} 人 · 不限人数{% else %}{{ activity.signup_count }} signed up · No limit{% endif %}
+            {% endif %}
+        </p>
         <p class="event-card-actions">
             <a class="button button-secondary" href="{% url 'community_activity_detail' activity.id %}">
                 {% if language == "zh" %}查看详情{% else %}View details{% endif %}

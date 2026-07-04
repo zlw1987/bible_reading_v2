@@ -1,8 +1,8 @@
 # Official Announcements V1 Plan
 
 Status: canonical product and implementation plan (July 2026).
-`ANNOUNCEMENTS.1A` is implemented; `ANNOUNCEMENTS.1B`–`1E` remain unapproved
-and not started.
+`ANNOUNCEMENTS.1A` and `ANNOUNCEMENTS.1B` are implemented;
+`ANNOUNCEMENTS.1C`–`1E` remain unapproved and not started.
 
 ## 1. Purpose and product boundary
 
@@ -166,10 +166,21 @@ Targeted expectations:
 
 ### ANNOUNCEMENTS.1B — Registry, navigation, member list/detail
 
+Status: implemented (July 2026).
+
 Register module key `announcements` with navigation, Today, and structure-core
 capability metadata; add the module-gated ordinary primary-nav entry and
 member-facing list/detail routes. Both member pages use the 1A visibility
 helper. Do not add staff workflow pages or Today output yet.
+
+The implemented member routes use a separate public/member visibility helper,
+so staff and superusers do not carry the 1A management-inspection bypass into
+the ordinary list or detail page. The routes therefore require published
+status, an active publish window, and a matching active primary structure
+membership for every viewer. Module disablement hides the ordinary nav entry
+but does not hard-disable direct URLs. The registry reserves
+`contributes_today` capability metadata for 1D; 1B registers no Today provider
+and produces no Today output.
 
 Targeted expectations:
 
@@ -264,9 +275,13 @@ docs slice, not authorization to implement or broaden Announcements V1.
 ## 8. Approval boundary
 
 This document originally approved planning only. `ANNOUNCEMENTS.1A` later
-received explicit approval and added only the independent app, models, initial
+received explicit approval and added the independent app, models, initial
 migration, Django admin, model validation, bilingual accessors, focused tests,
-and structure-native visibility helper. It did not add templates, URLs, CSS,
-registry entries, navigation, member/staff workflow pages, Today integration,
-or data changes. Each remaining slice requires separate approval and should
+and structure-native visibility helper. `ANNOUNCEMENTS.1B` later received
+explicit approval and added only registry/default enablement, the bilingual
+module-gated ordinary nav entry, and authenticated member list/detail routes
+using public/member visibility. It created no migration or data change and
+added no staff workflow, Today provider/output, Staff Overview, notification,
+Community Activities, `ServiceEvent`, My Serving, or serving behavior. Each
+remaining `ANNOUNCEMENTS.1C`–`1E` slice requires separate approval and should
 proceed in order unless a separately approved re-plan says otherwise.

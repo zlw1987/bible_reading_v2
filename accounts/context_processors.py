@@ -68,6 +68,11 @@ COMMUNITY_ACTIVITY_NAV_URLS = {
     "community_activity_detail",
 }
 
+ANNOUNCEMENT_NAV_URLS = {
+    "announcement_list",
+    "announcement_detail",
+}
+
 STAFF_NAV_URLS = {
     "staff_reading_plan_list",
     "staff_reading_plan_header",
@@ -134,6 +139,8 @@ def get_active_nav(request):
         return "events"
     if url_name in COMMUNITY_ACTIVITY_NAV_URLS:
         return "community_events"
+    if url_name in ANNOUNCEMENT_NAV_URLS:
+        return "announcements"
     if url_name in STAFF_NAV_URLS:
         return "staff"
     if url_name == "home":

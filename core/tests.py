@@ -44,6 +44,7 @@ ALL_MODULE_KEYS = (
     "studies",
     "events",
     "community_events",
+    "announcements",
     "ministry",
 )
 
@@ -137,6 +138,12 @@ class ModuleRegistryTests(SimpleTestCase):
                     "活动",
                     "community_events",
                 ),
+                (
+                    "announcement_list",
+                    "Announcements",
+                    "公告",
+                    "announcements",
+                ),
                 ("my_serving", "My Serving", "我的服事", "my_serving"),
             ),
         )
@@ -191,12 +198,14 @@ class ModuleRegistryTests(SimpleTestCase):
             "studies",
             "events",
             "community_events",
+            "announcements",
             "ministry",
         ):
             self.assertTrue(module_has_capability(key, CAPABILITY_NAV), key)
         self.assertTrue(module_has_capability("reading", CAPABILITY_TODAY))
         self.assertFalse(module_has_capability("prayers", CAPABILITY_TODAY))
         self.assertTrue(module_has_capability("community_events", CAPABILITY_TODAY))
+        self.assertTrue(module_has_capability("announcements", CAPABILITY_TODAY))
         for key in ("studies", "events", "ministry"):
             self.assertTrue(module_has_capability(key, CAPABILITY_SETUP_CHECKS), key)
         self.assertFalse(module_has_capability("reading", CAPABILITY_SETUP_CHECKS))
@@ -206,6 +215,12 @@ class ModuleRegistryTests(SimpleTestCase):
         self.assertTrue(
             module_has_capability(
                 "community_events",
+                CAPABILITY_REQUIRES_STRUCTURE_CORE,
+            )
+        )
+        self.assertTrue(
+            module_has_capability(
+                "announcements",
                 CAPABILITY_REQUIRES_STRUCTURE_CORE,
             )
         )
@@ -246,6 +261,23 @@ class ModuleRegistryTests(SimpleTestCase):
 
     def test_ministry_declares_events_dependency(self):
         self.assertIn("events", get_module("ministry").depends_on)
+
+    @override_settings(CMS_ENABLED_MODULES=["announcements"])
+    def test_announcements_is_valid_without_module_dependencies(self):
+        self.assertEqual(
+            get_enabled_module_keys(),
+            frozenset({"announcements"}),
+        )
+        module = get_module("announcements")
+        self.assertEqual(module.label_en, "Announcements")
+        self.assertEqual(module.label_zh, "公告")
+        self.assertEqual(module.depends_on, ())
+        self.assertEqual(module.primary_nav.url_name, "announcement_list")
+        self.assertEqual(module.primary_nav.active_nav, "announcements")
+        self.assertNotIn(
+            "announcements",
+            get_registered_today_provider_keys(),
+        )
 
     def test_default_setting_dependencies_satisfied(self):
         # config.settings ships every module enabled; ministry's events
@@ -643,6 +675,7 @@ class ModuleGateNavTests(ModuleGateTestBase):
         "studies": "study_session_list",
         "prayers": "prayer_list",
         "events": "service_event_list",
+        "announcements": "announcement_list",
         "ministry": "my_serving",
     }
 
@@ -662,6 +695,7 @@ class ModuleGateNavTests(ModuleGateTestBase):
                 "study_session_list": "Bible Study",
                 "prayer_list": "Prayer",
                 "service_event_list": "Church Gatherings",
+                "announcement_list": "Announcements",
                 "my_serving": "My Serving",
             },
             "zh": {
@@ -669,6 +703,7 @@ class ModuleGateNavTests(ModuleGateTestBase):
                 "study_session_list": "查经",
                 "prayer_list": "代祷",
                 "service_event_list": "教会聚会",
+                "announcement_list": "公告",
                 "my_serving": "我的服事",
             },
         }

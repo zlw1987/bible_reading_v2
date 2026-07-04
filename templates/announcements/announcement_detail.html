@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load announcement_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {{ announcement|announcement_title:language }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'announcement_list' %}">
+        ← {% if language == "zh" %}返回公告{% else %}Back to Announcements{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{{ announcement|announcement_title:language }}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}教会官方公告{% else %}Official church announcement{% endif %}
+    </p>
+</div>
+
+<article class="card">
+    {% if announcement.priority == "important" %}
+    <p>
+        <span class="status status-warning">
+            {% if language == "zh" %}重要{% else %}Important{% endif %}
+        </span>
+    </p>
+    {% endif %}
+
+    <p class="muted">
+        {% if language == "zh" %}发布于{% else %}Published{% endif %}
+        {{ announcement.publish_start|member_datetime:language }}
+        {% if announcement.publish_end %}
+            · {% if language == "zh" %}显示至{% else %}Visible until{% endif %}
+            {{ announcement.publish_end|member_datetime:language }}
+        {% endif %}
+    </p>
+
+    <div>{{ announcement|announcement_body:language|linebreaks }}</div>
+</article>
+{% endblock %}

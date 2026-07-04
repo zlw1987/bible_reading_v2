@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load announcement_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}公告{% else %}Announcements{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}公告{% else %}Announcements{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}查看与你所属教会群体相关的官方通知。{% else %}Official church updates shared with your church community.{% endif %}
+    </p>
+</div>
+
+{% if announcements %}
+<div class="grid grid-2">
+    {% for announcement in announcements %}
+    <article class="card event-card">
+        <h2 class="card-title">
+            <a href="{% url 'announcement_detail' announcement.id %}">
+                {{ announcement|announcement_title:language }}
+            </a>
+        </h2>
+        {% if announcement.priority == "important" %}
+        <p>
+            <span class="status status-warning">
+                {% if language == "zh" %}重要{% else %}Important{% endif %}
+            </span>
+        </p>
+        {% endif %}
+        <p class="muted">
+            {% if language == "zh" %}发布于{% else %}Published{% endif %}
+            {{ announcement.publish_start|member_datetime:language }}
+            {% if announcement.publish_end %}
+                · {% if language == "zh" %}显示至{% else %}Visible until{% endif %}
+                {{ announcement.publish_end|member_datetime:language }}
+            {% endif %}
+        </p>
+        <p class="muted event-card-desc">
+            {{ announcement|announcement_body:language|striptags|truncatewords:30 }}
+        </p>
+        <p class="event-card-actions">
+            <a class="button button-secondary" href="{% url 'announcement_detail' announcement.id %}">
+                {% if language == "zh" %}查看详情{% else %}View details{% endif %}
+            </a>
+        </p>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}目前没有与你相关的公告。{% else %}There are no announcements shared with you right now.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

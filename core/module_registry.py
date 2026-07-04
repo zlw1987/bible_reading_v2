@@ -188,6 +188,32 @@ _REGISTERED_MODULES = (
         ),
     ),
     CmsModule(
+        key="announcements",
+        label_en="Announcements",
+        label_zh="公告",
+        capabilities=frozenset(
+            {
+                CAPABILITY_NAV,
+                CAPABILITY_TODAY,
+                CAPABILITY_REQUIRES_STRUCTURE_CORE,
+            }
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="announcement_list",
+            label_en="Announcements",
+            label_zh="公告",
+            active_nav="announcements",
+            order=47,
+        ),
+        dependency_notes=(
+            "Official staff-authored communication. Member visibility uses "
+            "AnnouncementAudienceScope rows plus active primary "
+            "ChurchStructureMembership; zero-row announcements fail closed. "
+            "Today capability is reserved for ANNOUNCEMENTS.1D; no provider "
+            "or Today output is registered in ANNOUNCEMENTS.1B."
+        ),
+    ),
+    CmsModule(
         key="ministry",
         label_en="Ministry Serving",
         label_zh="事工服事",

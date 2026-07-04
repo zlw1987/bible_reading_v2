@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `ANNOUNCEMENTS.1A` (July 2026).
+through `ANNOUNCEMENTS.1B` (July 2026).
 
 ## 1. Project Identity
 
@@ -92,11 +92,13 @@ separate approval.
 Official Announcements V1 is bounded in
 `docs/ANNOUNCEMENTS_V1_PLAN.md`. `ANNOUNCEMENTS.1A` implements the independent
 `announcements` app, models/admin, and structure-native published-window
-visibility foundation. It is not registered as a CMS module and has no member
-list/detail, navigation, staff workflow pages, or Today integration; those
-later slices remain separately gated. It remains separate from Community
-Activities, `ServiceEvent`, notifications, Staff Overview, My Serving, and all
-serving state.
+visibility foundation. `ANNOUNCEMENTS.1B` registers and enables the module by
+default and adds its module-gated bilingual ordinary nav plus authenticated
+member list/detail. Those member routes enforce published active-window
+audience visibility for every viewer, including staff. Staff workflow pages
+and Today provider/output remain separately gated. It remains separate from
+Community Activities, `ServiceEvent`, notifications, Staff Overview, My
+Serving, and all serving state.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -359,8 +361,8 @@ Future CMS scope may include:
 - Bible Study / small group attendance.
 - Notifications through email, SMS, WeChat, and app notifications.
 - Pastor/staff Official Announcements V1 is now bounded in
-  `docs/ANNOUNCEMENTS_V1_PLAN.md`; only the `ANNOUNCEMENTS.1A`
-  model/admin/visibility foundation is implemented.
+  `docs/ANNOUNCEMENTS_V1_PLAN.md`; `ANNOUNCEMENTS.1A` model/admin/visibility
+  and `ANNOUNCEMENTS.1B` registry/navigation/member surfaces are implemented.
 - Group leader dashboard.
 - Children, family, couples, and newcomer care workflows.
 - Activities signup, check-in, and capacity management.
@@ -784,8 +786,8 @@ runtime guidance; use Section 2 and the canonical documents in
   integration.
 - Checklist V1 remains deferred.
 - Official Announcements implementation is split into
-  `ANNOUNCEMENTS.1A`–`1E`; only 1A is implemented and it does not authorize
-  any later runtime slice.
+  `ANNOUNCEMENTS.1A`–`1E`; 1A and 1B are implemented, and they do not
+  authorize any later runtime slice.
 
 ## 7. Explicit Non-Goals
 
@@ -874,10 +876,11 @@ For feature tasks:
 Current direction: the limited trial readiness closure is complete, with
 Community Activities V1 QA-passed by user confirmation and the setup-readiness
 audit reporting 0 blockers plus 19 warnings. Before starting the limited trial,
-the product owner has approved and implemented `ANNOUNCEMENTS.1A`; 1B–1E still
-require separate approval and implementation before the planned bilingual
-staff setup guide can document the shipped announcements setup flow. The 1A
-foundation does not authorize those runtime slices or the guide. Do not reopen
+the product owner has approved and implemented `ANNOUNCEMENTS.1A` and
+`ANNOUNCEMENTS.1B`; 1C–1E still require separate approval and implementation
+before the planned bilingual staff setup guide can document the shipped
+announcements setup flow. The 1A/1B foundation and member surfaces do not
+authorize those later runtime slices or the guide. Do not reopen
 legacy Church Structure cleanup or add Community Activities features merely
 because the trial is starting.
 

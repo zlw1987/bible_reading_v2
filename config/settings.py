@@ -64,6 +64,7 @@ CMS_ENABLED_MODULES = [
     "studies",
     "events",
     "community_events",
+    "announcements",
     "ministry",
 ]
 

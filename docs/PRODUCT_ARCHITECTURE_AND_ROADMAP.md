@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `ANNOUNCEMENTS.1D-SLIM` (July 2026).
+through `ANNOUNCEMENTS.1E` docs/QA closure (July 2026).
 
 ## 1. Project Identity
 
@@ -104,7 +104,11 @@ announcement appears as a localized title/detail link, and disabled-module
 aggregation skips its query. This is a reminder, not a feed. It remains
 separate from
 Community Activities, `ServiceEvent`, notifications, Staff Overview, My
-Serving, and all serving state.
+Serving, and all serving state. `ANNOUNCEMENTS.1E` adds docs/QA closure only:
+the manual checklist is prepared but has not been run or passed. After an
+actual recorded pass, Announcements V1 may be considered ready for limited
+trial use under the existing trial boundary; this is not a production-readiness
+claim. The bilingual staff setup guide remains a later docs slice.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -794,8 +798,9 @@ runtime guidance; use Section 2 and the canonical documents in
   integration.
 - Checklist V1 remains deferred.
 - Official Announcements implementation is split into
-  `ANNOUNCEMENTS.1A`–`1E`; 1A through 1C and the separately approved
-  `1D-SLIM` are implemented. They do not authorize 1E or broader runtime work.
+  `ANNOUNCEMENTS.1A`–`1E`; 1A through `1D-SLIM` implement the bounded runtime,
+  and 1E implements docs/QA closure only. Its manual checklist remains
+  unchecked, and it authorizes no broader runtime work.
 
 ## 7. Explicit Non-Goals
 
@@ -887,19 +892,21 @@ audit reporting 0 blockers plus 19 warnings. Before starting the limited trial,
 the product owner has approved and implemented `ANNOUNCEMENTS.1A` and
 `ANNOUNCEMENTS.1B`, followed by the bounded `ANNOUNCEMENTS.1C` staff
 create/edit/publish/archive workflow and the one-item
-`ANNOUNCEMENTS.1D-SLIM` Today reminder. `ANNOUNCEMENTS.1E` still requires
-separate approval and implementation before the planned bilingual staff setup
-guide can document the shipped announcements setup flow. The implemented
-1A–1D-SLIM surfaces do not authorize 1E or the guide. Do not reopen
+`ANNOUNCEMENTS.1D-SLIM` Today reminder. `ANNOUNCEMENTS.1E` now provides
+docs/QA closure only; its manual checklist has not been run or passed. After a
+recorded pass, Announcements V1 may be considered ready for limited trial use
+under the existing trial boundary, without claiming production readiness. A
+later docs slice may then create the bilingual staff setup guide from shipped
+behavior. Do not reopen
 legacy Church Structure cleanup or add Community Activities features merely
 because the trial is starting.
 
 Short next-candidate list:
 
-- separately approve and implement `ANNOUNCEMENTS.1E` as bounded in
+- run and record the bounded `ANNOUNCEMENTS.1E` manual-QA checklist in
   `docs/ANNOUNCEMENTS_V1_PLAN.md`;
-- after Announcements QA closure, write the bilingual staff setup guide from
-  shipped behavior;
+- after the actual Announcements manual-QA pass, create the bilingual staff
+  setup guide in a separate docs slice from shipped behavior;
 - Church Structure + Ministry + Bible Study setup/trial-readiness review;
 - manual-QA polish based on a real demo;
 - My Serving polish only when users report concrete confusion;

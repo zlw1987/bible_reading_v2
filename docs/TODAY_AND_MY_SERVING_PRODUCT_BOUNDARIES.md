@@ -4,8 +4,9 @@ Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A boundaries, updated through
 TODAY-AGENDA.1A and MY-SERVING-BS.1B. DOCS-QA-CHECKPOINT.1A records the current
 manual-QA checkpoint below; the checklist is not a claim that this round of
 manual QA has already been run. `ANNOUNCEMENTS.1D-SLIM` implements the
-separately approved minimal Official Announcements Today boundary; it does not
-claim the later `ANNOUNCEMENTS.1E` QA closure.
+separately approved minimal Official Announcements Today boundary.
+`ANNOUNCEMENTS.1E` adds docs/QA closure only; its Announcement checklist remains
+unrun and unchecked, and no Today runtime behavior changes in that slice.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 

@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "studies",
     "events",
     "community_events.apps.CommunityEventsConfig",
+    "announcements.apps.AnnouncementsConfig",
     "ministry",
 ]
 

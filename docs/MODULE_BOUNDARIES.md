@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
-Status: canonical current-state module boundary, updated through the docs-only
-Official Announcements V1 plan (July 2026).
+Status: canonical current-state module boundary, updated through
+`ANNOUNCEMENTS.1A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -51,14 +51,14 @@ Registered in `core/module_registry.py`, enabled via
 | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
-Official Announcements is planned but is not a registered or implemented module
-yet. [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) reserves the future
-independent app and registry key `announcements`, staff-managed publication,
-app-owned `ChurchStructureUnit` audience rows, active-primary-membership
-visibility, zero-row fail-closed behavior, member list/detail, and a capped
-important-only Today reminder. It adds no Community Activities, `ServiceEvent`,
-notification, Staff Overview, My Serving, or serving behavior. Each
-`ANNOUNCEMENTS.1A`–`1E` implementation slice requires separate approval.
+Official Announcements now has the independent `announcements` app,
+`Announcement` / `AnnouncementAudienceScope` models, Django admin, and the
+`ANNOUNCEMENTS.1A` structure-native visibility helper. The app is not a
+registered CMS module yet: registry metadata, member list/detail, navigation,
+staff workflow pages, and the capped important-only Today reminder remain
+deferred. It adds no Community Activities, `ServiceEvent`, notification, Staff
+Overview, My Serving, or serving behavior. Each remaining
+`ANNOUNCEMENTS.1B`–`1E` implementation slice requires separate approval.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.
@@ -367,11 +367,12 @@ notifications, or `ServiceEvent`.
    setup/readiness, any `ServiceEvent` relationship, My Serving integration,
    and Checklist remain deferred. Any further expansion requires its own
    approved slice.
-   Official Announcements V1 is approved for planning only in
-   `docs/ANNOUNCEMENTS_V1_PLAN.md`. It remains unimplemented and unregistered;
-   the plan is not authority to start `ANNOUNCEMENTS.1A` or any later runtime
-   slice. Its future audience membership is visibility only and must never
-   imply staff authority or serving.
+   Official Announcements V1 is bounded in
+   `docs/ANNOUNCEMENTS_V1_PLAN.md`. `ANNOUNCEMENTS.1A` implements its
+   app/model/admin/visibility foundation, but it remains unregistered and has
+   no member, staff-workflow, navigation, or Today surface. The 1A completion
+   is not authority to start later runtime slices. Audience membership is
+   visibility only and must never imply staff authority or serving.
 
 ## Follow-ups (not yet done)
 

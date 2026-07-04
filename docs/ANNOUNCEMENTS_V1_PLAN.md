@@ -1,7 +1,8 @@
 # Official Announcements V1 Plan
 
-Status: canonical docs-only product and implementation plan (July 2026).
-Planning is approved; runtime implementation is not yet approved or started.
+Status: canonical product and implementation plan (July 2026).
+`ANNOUNCEMENTS.1A` is implemented; `ANNOUNCEMENTS.1B`–`1E` remain unapproved
+and not started.
 
 ## 1. Purpose and product boundary
 
@@ -262,8 +263,10 @@ docs slice, not authorization to implement or broaden Announcements V1.
 
 ## 8. Approval boundary
 
-This document approves planning only. No runtime code, models, migrations,
-templates, URLs, CSS, tests, settings, registry entries, or data are changed by
-this plan. Start `ANNOUNCEMENTS.1A` only after explicit implementation approval,
-then complete the slices in order unless a separately approved re-plan says
-otherwise.
+This document originally approved planning only. `ANNOUNCEMENTS.1A` later
+received explicit approval and added only the independent app, models, initial
+migration, Django admin, model validation, bilingual accessors, focused tests,
+and structure-native visibility helper. It did not add templates, URLs, CSS,
+registry entries, navigation, member/staff workflow pages, Today integration,
+or data changes. Each remaining slice requires separate approval and should
+proceed in order unless a separately approved re-plan says otherwise.

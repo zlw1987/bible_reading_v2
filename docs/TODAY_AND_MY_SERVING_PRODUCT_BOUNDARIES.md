@@ -5,8 +5,13 @@ TODAY-AGENDA.1A and MY-SERVING-BS.1B. DOCS-QA-CHECKPOINT.1A records the current
 manual-QA checkpoint below; the checklist is not a claim that this round of
 manual QA has already been run. `ANNOUNCEMENTS.1D-SLIM` implements the
 separately approved minimal Official Announcements Today boundary.
-`ANNOUNCEMENTS.1E` adds docs/QA closure only; its Announcement checklist remains
-unrun and unchecked, and no Today runtime behavior changes in that slice.
+`ANNOUNCEMENTS.1E` adds docs/QA closure only, and
+`ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed manual-QA pass. That pass
+covered the max-one Important title/link reminder, normal-announcement
+exclusion, audience enforcement for Important items, disabled-module Today
+surface gate, and the absence of serving/My Serving/attention/Staff Overview
+or other cross-module behavior. Neither docs slice changes Today runtime
+behavior, and the pass is not a production-readiness claim.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 

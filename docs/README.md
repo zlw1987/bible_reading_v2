@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through the
-`ANNOUNCEMENTS.1E` docs/QA closure (July 2026).
+`ANNOUNCEMENTS-QA-PASS.1A` manual-QA record (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -15,7 +15,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
 | Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Current implemented V1 lifecycle through 1H-A, including browse/detail, signup/cancel, member drafts and submission, Activity Scope, review/request-changes, pending-review creator editing, capacity, co-organizers, and low-noise Today reminders. It also records the user-confirmed V1 manual QA pass and owns the stabilization boundary; expansion requires separate approval. |
-| Official Announcements | [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) | Canonical bounded V1 plan and QA record. `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` implement the bounded app, member/staff surfaces, and one-item important-announcement Today reminder. `ANNOUNCEMENTS.1E` adds docs/QA closure only; its manual checklist remains unrun and unchecked. |
+| Official Announcements | [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) | Canonical bounded V1 plan and QA record. `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` implement the bounded app, member/staff surfaces, and one-item important-announcement Today reminder. `ANNOUNCEMENTS.1E` adds docs/QA closure only; `ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed manual-QA pass. Limited trial use is acceptable under the existing trial boundary; this is not a production-readiness claim. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -200,11 +200,13 @@ the module keeps a safe empty default and skips the announcement query.
 Announcements
 must remain distinct from Community Activities, `ServiceEvent`, notifications,
 Staff Overview, and serving/My Serving state. `ANNOUNCEMENTS.1E` adds docs/QA
-closure only; its checklist has not been manually run or passed. After an
-actual recorded pass, Announcements V1 may be considered ready for limited
-trial use under the existing trial boundary, without claiming production
-readiness. The bilingual staff setup guide remains a later, separate docs
-slice.
+closure only. `ANNOUNCEMENTS-QA-PASS.1A` records that the product owner
+manually ran the checklist and confirmed it passed across staff lifecycle,
+audience visibility, bilingual display, Today/module gates, and cross-module
+non-goals. Announcements V1 is acceptable for limited trial use under the
+existing trial boundary, without claiming production readiness. The bilingual
+staff setup guide may now be created from shipped behavior in a later, separate
+docs slice.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

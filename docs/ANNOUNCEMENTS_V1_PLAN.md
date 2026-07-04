@@ -2,8 +2,9 @@
 
 Status: canonical product and implementation plan (July 2026).
 `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` are implemented.
-`ANNOUNCEMENTS.1E` is a docs/QA closure slice only: the bounded manual-QA
-checklist is prepared below, but it has not been manually run or passed.
+`ANNOUNCEMENTS.1E` is a docs/QA closure slice only.
+`ANNOUNCEMENTS-QA-PASS.1A` records that the product owner manually ran the
+bounded checklist and confirmed it passed.
 
 ## 1. Purpose and product boundary
 
@@ -250,12 +251,14 @@ Targeted expectations:
 
 ### ANNOUNCEMENTS.1E — QA and docs closure
 
-Status: docs/QA closure implemented (July 2026); manual QA remains pending.
+Status: docs/QA closure implemented (July 2026); manual QA passed by user
+confirmation in `ANNOUNCEMENTS-QA-PASS.1A`.
 
 This slice aligns canonical docs with the implemented 1A through 1D-SLIM
 runtime and prepares the bounded bilingual staff/member lifecycle checklist.
-It adds no runtime feature and does not claim that manual QA passed, that
-Announcements V1 is ready for limited trial, or that it is production-ready.
+It adds no runtime feature. The later user-confirmed pass makes Announcements
+V1 acceptable for limited trial use under the existing trial boundary; it is
+not a production-readiness claim.
 
 Targeted expectations:
 
@@ -270,70 +273,70 @@ Targeted expectations:
 
 ## 7. ANNOUNCEMENTS.1E Manual QA
 
-QA status: not manually run in this closure slice. Every item remains unchecked
-until a person exercises it with suitable staff, matching-member, and
-nonmatching-member accounts. This checklist prepares QA evidence; it does not
-claim production readiness.
+QA closure (`ANNOUNCEMENTS-QA-PASS.1A`): Manual QA passed by product-owner
+confirmation. The pass covered every item below with suitable staff,
+matching-member, and nonmatching-member accounts. This is evidence for limited
+trial use under the existing trial boundary, not a production-readiness claim.
 
 ### Staff setup and lifecycle
 
-- [ ] With the `announcements` module enabled, staff can open Announcement
+- [x] With the `announcements` module enabled, staff can open Announcement
   Admin from the Staff dropdown.
-- [ ] Staff can create and save a draft announcement.
-- [ ] Staff can select Audience Scope with the existing
+- [x] Staff can create, save, and later edit a draft announcement.
+- [x] Staff can select Audience Scope with the existing
   `ChurchStructureUnit` picker.
-- [ ] Staff can save a normal announcement.
-- [ ] Staff can save an Important announcement.
-- [ ] The Important checkbox help text is visible and makes clear that the
+- [x] Staff can save a normal announcement.
+- [x] Staff can save an Important announcement.
+- [x] The Important checkbox help text is visible and makes clear that the
   item may appear on Today but never bypasses audience visibility.
-- [ ] Staff can publish a valid draft.
-- [ ] Publishing records the acting staff user in `published_by` and the
+- [x] Staff can publish a valid draft.
+- [x] Publishing records the acting staff user in `published_by` and the
   transition time in `published_at`.
-- [ ] A future `publish_start` remains hidden from ordinary member visibility
+- [x] A future `publish_start` remains hidden from ordinary member visibility
   until the active window begins.
-- [ ] Passing `publish_end` hides the announcement from ordinary member
+- [x] Passing `publish_end` hides the announcement from ordinary member
   visibility.
-- [ ] Staff can archive a published announcement.
-- [ ] Archiving hides the announcement from member list/detail, makes hidden
+- [x] Staff can archive a published announcement.
+- [x] Archiving hides the announcement from member list/detail, makes hidden
   member detail return 404, and preserves its audience rows.
 
 ### Member visibility and bilingual display
 
-- [ ] An ordinary matching member can see a published, active,
+- [x] An ordinary matching member can see a published, active,
   audience-visible announcement in list and detail.
-- [ ] An ordinary nonmatching member cannot see that announcement.
-- [ ] Direct access to any announcement hidden from the viewer returns 404.
-- [ ] Bilingual list/detail display and fallback work in the supported
+- [x] An ordinary nonmatching member cannot see that announcement.
+- [x] Direct access to any announcement hidden from the viewer returns 404.
+- [x] Bilingual list/detail display and fallback work in the supported
   language modes.
 
 ### Today and module surface gates
 
-- [ ] Today shows at most one Important, active, audience-visible announcement.
-- [ ] The Today card shows the localized title/detail link only, with no body
+- [x] Today shows at most one Important, active, audience-visible announcement.
+- [x] The Today card shows the localized title/detail link only, with no body
   or excerpt.
-- [ ] A normal-priority announcement does not appear on Today.
-- [ ] Important priority never bypasses audience visibility.
-- [ ] With the `announcements` module disabled, the ordinary nav entry, Staff
+- [x] A normal-priority announcement does not appear on Today.
+- [x] Important priority never bypasses audience visibility.
+- [x] With the `announcements` module disabled, the ordinary nav entry, Staff
   dropdown link, and Today card are hidden through the existing surface gates;
   this check does not assert route hard-off behavior.
 
 ### Product-boundary regression check
 
-- [ ] The exercised lifecycle creates no My Serving or serving action-center
+- [x] The exercised lifecycle creates no My Serving or serving action-center
   item, Leader Needs Attention item, Staff Overview card/count/link,
   `ServiceEvent` relationship, Community Activities behavior, signup,
   attendance, notification, or approval/request-changes workflow.
 
-After every applicable item is actually exercised and the result is recorded,
-Announcements V1 may be considered ready for limited trial use under the
-existing trial boundary. This remains a limited-trial statement, not a
+The product owner confirmed that every applicable item was exercised and
+passed. Announcements V1 is acceptable for limited trial use under the existing
+trial boundary. This remains a limited-trial statement, not a
 production-readiness claim.
 
 ## 8. Future bilingual staff setup guide
 
-Do not create `STAFF_SETUP_GUIDE.md` in `ANNOUNCEMENTS.1E`. After the manual QA
-checklist above is actually passed and recorded, a later docs slice may create
-the bilingual staff setup guide. It should include:
+Do not create `STAFF_SETUP_GUIDE.md` in `ANNOUNCEMENTS-QA-PASS.1A`. Because the
+manual QA pass is now recorded, a later separate docs slice may create the
+bilingual staff setup guide from shipped behavior. It should include:
 
 - the limited-trial prerequisite and the existing 0-blocker / 19-warning
   setup-readiness result, clearly labeled as not a production deployment claim;
@@ -373,5 +376,7 @@ feed, Staff Overview integration, or serving/cross-module state.
 `ANNOUNCEMENTS.1E` later received approval as docs/QA closure only. It added the
 unchecked manual-QA checklist and aligned canonical status wording without
 changing runtime behavior, models, migrations, Today behavior, or cross-module
-state. Manual QA still must be run and recorded before Announcements V1 may be
-considered ready for limited trial use under the existing trial boundary.
+state. `ANNOUNCEMENTS-QA-PASS.1A` later recorded the product owner's
+confirmation that the checklist passed, without adding runtime expectations or
+changing code. Announcements V1 is therefore acceptable for limited trial use
+under the existing trial boundary, not certified as production-ready.

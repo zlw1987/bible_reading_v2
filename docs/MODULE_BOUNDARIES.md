@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`ANNOUNCEMENTS.1E` docs/QA closure (July 2026).
+`ANNOUNCEMENTS-QA-PASS.1A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -73,10 +73,13 @@ does not call the provider or query announcements and renders no announcement
 card. It adds no Community Activities, `ServiceEvent`, notification, Staff
 Overview, My Serving, serving action-center, or serving behavior.
 `ANNOUNCEMENTS.1E` adds docs/QA closure only: its manual checklist is prepared
-but remains unrun and unchecked. After an actual recorded pass, Announcements
-V1 may be considered ready for limited trial use under the existing trial
+without changing runtime behavior. `ANNOUNCEMENTS-QA-PASS.1A` records that the
+product owner manually ran that checklist and confirmed it passed, including
+staff lifecycle/access, member visibility, bilingual display, Today and
+disabled-module surface gates, and the documented cross-module non-goals.
+Announcements V1 is acceptable for limited trial use under the existing trial
 boundary; production readiness is not claimed. The future bilingual staff
-setup guide remains a later docs slice.
+setup guide may now be created from shipped behavior in a separate docs slice.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.
@@ -396,8 +399,9 @@ notifications, or `ServiceEvent`.
    staff create/edit/publish/archive workflow. `ANNOUNCEMENTS.1D-SLIM`
    implements only the module-gated one-item important announcement Today
    reminder. `ANNOUNCEMENTS.1E` implements docs/QA closure only, with an
-   unchecked manual-QA checklist and no runtime expansion. It does not
-   authorize any broader feed.
+   initially unchecked manual-QA checklist and no runtime expansion.
+   `ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed pass. Neither slice
+   authorizes any broader feed.
    Audience membership is visibility only and must never imply staff authority
    or serving.
 

@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`ANNOUNCEMENTS-QA-PASS.1A` (July 2026).
+`STAFF-SETUP-GUIDE.1A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -78,8 +78,9 @@ product owner manually ran that checklist and confirmed it passed, including
 staff lifecycle/access, member visibility, bilingual display, Today and
 disabled-module surface gates, and the documented cross-module non-goals.
 Announcements V1 is acceptable for limited trial use under the existing trial
-boundary; production readiness is not claimed. The future bilingual staff
-setup guide may now be created from shipped behavior in a separate docs slice.
+boundary; production readiness is not claimed. `STAFF-SETUP-GUIDE.1A` now
+provides the staff/internal-only bilingual limited-trial guide in
+[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) from shipped behavior only.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.

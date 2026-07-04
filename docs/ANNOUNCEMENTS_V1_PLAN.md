@@ -5,6 +5,9 @@ Status: canonical product and implementation plan (July 2026).
 `ANNOUNCEMENTS.1E` is a docs/QA closure slice only.
 `ANNOUNCEMENTS-QA-PASS.1A` records that the product owner manually ran the
 bounded checklist and confirmed it passed.
+`STAFF-SETUP-GUIDE.1A` adds the staff/internal-only limited-trial guide from
+shipped behavior only; it adds no app route or member-facing surface and makes
+no production-readiness claim.
 
 ## 1. Purpose and product boundary
 
@@ -332,11 +335,11 @@ passed. Announcements V1 is acceptable for limited trial use under the existing
 trial boundary. This remains a limited-trial statement, not a
 production-readiness claim.
 
-## 8. Future bilingual staff setup guide
+## 8. Bilingual staff setup guide
 
-Do not create `STAFF_SETUP_GUIDE.md` in `ANNOUNCEMENTS-QA-PASS.1A`. Because the
-manual QA pass is now recorded, a later separate docs slice may create the
-bilingual staff setup guide from shipped behavior. It should include:
+`STAFF-SETUP-GUIDE.1A` creates the staff/internal-only bilingual guide at
+[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) from shipped behavior. It
+includes:
 
 - the limited-trial prerequisite and the existing 0-blocker / 19-warning
   setup-readiness result, clearly labeled as not a production deployment claim;
@@ -352,8 +355,10 @@ bilingual staff setup guide from shipped behavior. It should include:
 - the explicit separation from Community Activities, `ServiceEvent`,
   notifications, and all serving/My Serving workflows.
 
-The setup guide must describe shipped behavior only. Its creation is a later
-docs slice, not authorization to implement or broaden Announcements V1.
+The setup guide describes shipped behavior only. It is not an ordinary-member
+help page, adds no app route or user-facing surface, and does not authorize
+implementation or expansion of Announcements V1. If a future slice surfaces
+the guide inside the app, that route must be staff/superuser gated.
 
 ## 9. Approval boundary
 

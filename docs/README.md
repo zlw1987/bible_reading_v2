@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through the
-`ANNOUNCEMENTS-QA-PASS.1A` manual-QA record (July 2026).
+`STAFF-SETUP-GUIDE.1A` internal operations guide (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -20,6 +20,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
 | Trial setup operations | [`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) | Current read-only setup audit, operator review flow, and latest limited-trial readiness closure. |
+| Staff/internal limited-trial setup | [`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) | Bilingual staff/internal-only operations guide for shipped setup, audience, Today, My Serving, Announcements, Community Activities, and Bible Study V2 behavior. It is not an ordinary member help page or a production-readiness certification. |
 
 When these documents conflict with an older plan, use the canonical document
 and current code/migrations. `AGENTS.md` remains the standing agent workflow and
@@ -205,8 +206,9 @@ manually ran the checklist and confirmed it passed across staff lifecycle,
 audience visibility, bilingual display, Today/module gates, and cross-module
 non-goals. Announcements V1 is acceptable for limited trial use under the
 existing trial boundary, without claiming production readiness. The bilingual
-staff setup guide may now be created from shipped behavior in a later, separate
-docs slice.
+staff/internal-only setup guide is now available in
+[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md); it describes shipped behavior
+and does not add an app route or member-facing help surface.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

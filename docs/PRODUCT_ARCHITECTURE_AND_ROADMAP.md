@@ -1,7 +1,10 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `STAFF-SETUP-GUIDE.1A` (July 2026).
+through `STAFF-HELP-PAGE.1A`, which surfaces the `STAFF-SETUP-GUIDE.1A`
+staff/internal setup guide in-app as a staff/superuser-gated page (no
+member-facing help surface, no production-readiness claim, no
+model/migration/database write) (July 2026).
 
 ## 1. Project Identity
 
@@ -113,7 +116,12 @@ acceptable for limited trial use under the existing trial boundary; this is
 not a production-readiness claim. `STAFF-SETUP-GUIDE.1A` now provides the
 bilingual staff/internal-only limited-trial operations guide in
 `docs/STAFF_SETUP_GUIDE.md`; it describes shipped behavior only and adds no
-member-facing surface or app route.
+member-facing surface. `STAFF-HELP-PAGE.1A` surfaces that guide inside the app
+as a staff/superuser-gated page (`/staff/setup-guide/`, route name
+`staff_setup_guide`, linked from the Staff dropdown) under the same
+`staff_member_required` boundary as the other `/staff/` surfaces; it reads and
+displays the shipped guide text only and adds no member-facing help surface,
+model, migration, or database write.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 

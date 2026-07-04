@@ -128,6 +128,13 @@
                         <a href="{% url 'admin:index' %}">
                             {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
                         </a>
+
+                        <span class="nav-staff-menu-heading">
+                            {% if language == "zh" %}内部参考{% else %}Internal Reference{% endif %}
+                        </span>
+                        <a href="{% url 'staff_setup_guide' %}">
+                            {% if language == "zh" %}同工设置指南{% else %}Staff Setup Guide{% endif %}
+                        </a>
                     </div>
                 </details>
                 {% endif %}

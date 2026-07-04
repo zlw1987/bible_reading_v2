@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}同工设置指南{% else %}Staff Setup Guide{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}同工设置指南{% else %}Staff Setup Guide{% endif %}</h1>
+</section>
+
+<section class="notice-panel">
+    <strong>
+        {% if language == "zh" %}仅限同工／内部使用{% else %}Staff/internal use only{% endif %}
+    </strong>
+    <p>
+        {% if language == "zh" %}
+        仅限同工／内部使用。本指南只描述已交付的有限试运行行为，并不代表生产就绪认证。
+        {% else %}
+        Staff/internal use only. This guide describes shipped limited-trial behavior and is not a production-readiness certification.
+        {% endif %}
+    </p>
+</section>
+
+{% if guide_missing %}
+<section class="card">
+    <p>
+        {% if language == "zh" %}
+        暂时无法加载设置指南内容，请稍后重试或联系管理员。
+        {% else %}
+        The setup guide content is temporarily unavailable. Please try again later or contact an administrator.
+        {% endif %}
+    </p>
+</section>
+{% else %}
+<article class="card staff-setup-guide">
+    <pre class="staff-setup-guide-text">{{ guide_text }}</pre>
+</article>
+{% endif %}
+{% endblock %}

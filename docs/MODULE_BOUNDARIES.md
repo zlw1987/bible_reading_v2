@@ -1,7 +1,9 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`STAFF-SETUP-GUIDE.1A` (July 2026).
+`STAFF-HELP-PAGE.1A`, which surfaces the staff/internal setup guide in-app as a
+staff/superuser-gated Core/staff page (no member-facing help surface, no
+production-readiness claim, no model/migration/database write) (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -254,6 +256,14 @@ notifications, or `ServiceEvent`.
   Staff Overview content was unchanged; `MODULAR-CORE.6B` later gated its
   module-owned cards/counts/links while preserving the route and Core/staff
   content.
+* `STAFF-HELP-PAGE.1A` adds a Core/staff internal-reference surface: the Staff
+  Setup Guide page (`/staff/setup-guide/`, route name `staff_setup_guide`) and
+  its staff-dropdown link. It reads and displays `docs/STAFF_SETUP_GUIDE.md`
+  inside the site under the same `staff_member_required` boundary as the other
+  `/staff/` surfaces. It is a Core/staff internal help surface, not a
+  module-owned or ordinary-member nav surface, so it is always visible to staff
+  regardless of `CMS_ENABLED_MODULES` and adds no member-facing help surface,
+  model, migration, or database write.
 * `MODULAR-CORE.6B` applies module surface gates to the Staff Overview
   (`/staff/`) content — its module-owned cards, counts, and workflow links —
   in `accounts.views.staff_overview` and

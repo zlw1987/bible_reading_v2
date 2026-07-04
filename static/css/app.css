@@ -2689,3 +2689,15 @@ th {
     }
 }
 
+/* Staff Setup Guide (STAFF-HELP-PAGE.1A): render the shipped Markdown guide as
+   readable, wrapping monospace text. Content is escaped by the template. */
+.staff-setup-guide-text {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+}
+

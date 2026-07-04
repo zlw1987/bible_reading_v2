@@ -70,6 +70,11 @@ urlpatterns = [
 
     path("staff/", views.staff_overview, name="staff_overview"),
     path(
+        "staff/setup-guide/",
+        views.staff_setup_guide,
+        name="staff_setup_guide",
+    ),
+    path(
         "staff/structure/",
         views.staff_structure_map,
         name="staff_structure_map",

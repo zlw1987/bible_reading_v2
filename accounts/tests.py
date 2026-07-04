@@ -13449,3 +13449,156 @@ class ServingReadinessAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Faith Statement and baptism facts")
         self.assertContains(response, "computed on demand")
+
+
+class StaffSetupGuidePageTests(TestCase):
+    """STAFF-HELP-PAGE.1A: staff/superuser-only in-app setup-guide page."""
+
+    def setUp(self):
+        self.ordinary = User.objects.create_user(
+            username="guide_ordinary",
+            password="UserPass123!",
+        )
+        self.staff = User.objects.create_user(
+            username="guide_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.superuser = User.objects.create_superuser(
+            username="guide_super",
+            email="guide_super@example.com",
+            password="SuperPass123!",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_anonymous_user_redirected_to_login(self):
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_ordinary_authenticated_user_denied(self):
+        self.client.login(username="guide_ordinary", password="UserPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+
+    def test_staff_user_can_access(self):
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_can_access(self):
+        self.client.login(username="guide_super", password="SuperPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_page_marks_staff_nav_active(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
+
+    def test_page_shows_bilingual_title_and_internal_notice_en(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertContains(response, "Staff Setup Guide")
+        self.assertContains(
+            response,
+            "Staff/internal use only. This guide describes shipped "
+            "limited-trial behavior and is not a production-readiness "
+            "certification.",
+        )
+
+    def test_page_shows_internal_notice_zh(self):
+        self.set_language("zh")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertContains(response, "同工设置指南")
+        self.assertContains(
+            response,
+            "仅限同工／内部使用。本指南只描述已交付的有限试运行行为，"
+            "并不代表生产就绪认证。",
+        )
+
+    def test_page_includes_key_guide_content(self):
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertContains(response, "STAFF-ONLY / INTERNAL-ONLY")
+        self.assertContains(response, "仅限同工")
+
+    def test_response_is_html_not_attachment(self):
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Type"].startswith("text/html"))
+        self.assertNotIn("Content-Disposition", response)
+
+    def test_staff_dropdown_link_visible_to_staff(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("staff_setup_guide"))
+        self.assertContains(response, "Staff Setup Guide")
+
+    def test_staff_dropdown_link_visible_to_superuser(self):
+        self.set_language("en")
+        self.client.login(username="guide_super", password="SuperPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("staff_setup_guide"))
+        self.assertContains(response, "Staff Setup Guide")
+
+    def test_ordinary_primary_nav_does_not_expose_guide(self):
+        self.set_language("en")
+        self.client.login(username="guide_ordinary", password="UserPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertNotContains(response, reverse("staff_setup_guide"))
+        self.assertNotContains(response, "Staff Setup Guide")
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_guide_page_works_with_all_modules_disabled(self):
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "STAFF-ONLY / INTERNAL-ONLY")
+
+    @override_settings(CMS_ENABLED_MODULES=[])
+    def test_staff_dropdown_link_works_with_all_modules_disabled(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("staff_setup_guide"))

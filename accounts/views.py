@@ -1168,6 +1168,45 @@ def staff_structure_unit_enable(request, unit_id):
 
 
 @staff_member_required
+def staff_setup_guide(request):
+    """Staff/superuser-only in-app view of ``docs/STAFF_SETUP_GUIDE.md``.
+
+    STAFF-HELP-PAGE.1A. Read-only: reads the shipped staff/internal limited-trial
+    setup guide from disk and renders its text inside the normal site layout so
+    staff can read it without downloading a file. It adds no model, no DB write,
+    no new dependency, and no member-facing surface. Access uses the same
+    ``staff_member_required`` boundary as the rest of the ``/staff/`` surfaces, so
+    anonymous and ordinary authenticated users are redirected to the admin login
+    exactly like the other staff pages.
+
+    The Markdown is displayed as safely escaped text (Django auto-escapes the
+    template variable); it is never marked as safe HTML. A missing file degrades
+    to a bilingual notice without exposing any server path.
+    """
+    from pathlib import Path
+
+    from django.conf import settings
+
+    guide_path = Path(settings.BASE_DIR) / "docs" / "STAFF_SETUP_GUIDE.md"
+    guide_text = ""
+    guide_missing = False
+    try:
+        guide_text = guide_path.read_text(encoding="utf-8")
+    except OSError:
+        guide_missing = True
+
+    return render(
+        request,
+        "accounts/staff/setup_guide.html",
+        {
+            "active_nav": "staff",
+            "guide_text": guide_text,
+            "guide_missing": guide_missing,
+        },
+    )
+
+
+@staff_member_required
 def staff_moderation_queue(request):
     from comments.models import ReflectionComment, ReflectionReport
     from prayers.models import PrayerReport, PrayerRequest

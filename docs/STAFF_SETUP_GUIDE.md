@@ -10,6 +10,17 @@ that route must be explicitly staff/superuser gated.
 它不是生产就绪认证，也不是普通成员帮助页面。请勿向普通成员公开本文。若未来另行批准
 在应用内展示，相关路由必须明确限制为 staff/superuser 才可访问。
 
+`STAFF-HELP-PAGE.1A` surfaces this guide inside the app as a staff/superuser-gated
+page (`/staff/setup-guide/`, route name `staff_setup_guide`, linked from the Staff
+dropdown). It adds no member-facing help surface and no runtime behavior beyond
+reading and displaying this guide's shipped text; access uses the same
+`staff_member_required` boundary as the other `/staff/` surfaces.
+
+`STAFF-HELP-PAGE.1A` 已在应用内以 staff/superuser 限定页面展示本指南
+（`/staff/setup-guide/`，路由名 `staff_setup_guide`，从同工下拉菜单进入）。它不新增
+任何面向普通成员的帮助界面，除读取并显示本指南已交付文本外不新增运行时行为；访问沿用
+与其他 `/staff/` 界面一致的 `staff_member_required` 权限边界。
+
 ## 1. Purpose and operating boundary / 用途与操作边界
 
 **English**

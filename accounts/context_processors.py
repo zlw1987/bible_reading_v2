@@ -74,6 +74,11 @@ ANNOUNCEMENT_NAV_URLS = {
 }
 
 STAFF_NAV_URLS = {
+    "staff_announcement_list",
+    "create_announcement",
+    "edit_announcement",
+    "publish_announcement",
+    "archive_announcement",
     "staff_reading_plan_list",
     "staff_reading_plan_header",
     "staff_reading_plan_days",

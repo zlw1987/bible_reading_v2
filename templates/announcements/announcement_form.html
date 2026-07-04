@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_edit %}
+        {% if language == "zh" %}编辑公告{% else %}Edit Announcement{% endif %}
+    {% else %}
+        {% if language == "zh" %}新建公告{% else %}New Announcement{% endif %}
+    {% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'staff_announcement_list' %}">
+        ← {% if language == "zh" %}返回公告管理{% else %}Back to Announcement Admin{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if is_edit %}
+            {% if language == "zh" %}编辑公告{% else %}Edit Announcement{% endif %}
+        {% else %}
+            {% if language == "zh" %}新建公告草稿{% else %}New Announcement Draft{% endif %}
+        {% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+            保存不会发布公告；请在公告管理页明确执行发布。
+        {% else %}
+            Saving does not publish the announcement. Publishing is a separate action from the management list.
+        {% endif %}
+    </p>
+</div>
+
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    {% for field in form %}
+    {% if field.name != "audience_units" %}
+    <div class="form-row" data-field="{{ field.name }}">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+        {{ field.errors }}
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    {% with audience_field=form.audience_units %}
+    <div class="form-row" data-field="audience_units">
+        <label class="form-label">{{ audience_field.label }}</label>
+        {% if audience_field.help_text %}<p class="muted">{{ audience_field.help_text }}</p>{% endif %}
+        {% include "shared/_church_structure_unit_audience_picker.html" with field=audience_field options=form.audience_unit_options language=language %}
+        {{ audience_field.errors }}
+    </div>
+    {% endwith %}
+
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存{% else %}Save{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'staff_announcement_list' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endblock %}

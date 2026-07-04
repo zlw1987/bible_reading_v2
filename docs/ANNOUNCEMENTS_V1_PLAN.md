@@ -1,8 +1,8 @@
 # Official Announcements V1 Plan
 
 Status: canonical product and implementation plan (July 2026).
-`ANNOUNCEMENTS.1A` and `ANNOUNCEMENTS.1B` are implemented;
-`ANNOUNCEMENTS.1C`–`1E` remain unapproved and not started.
+`ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1C` are implemented;
+`ANNOUNCEMENTS.1D`–`1E` remain unapproved and not started.
 
 ## 1. Purpose and product boundary
 
@@ -195,10 +195,17 @@ Targeted expectations:
 
 ### ANNOUNCEMENTS.1C — Staff create/edit/publish/archive
 
-Add staff/superuser-only management pages and forms. Create/edit saves
-announcement fields and audience rows atomically. Publish and archive are
-POST-only explicit transitions; publish validates the time window and at least
-one active audience unit and records `published_by` / `published_at`.
+Implemented in July 2026. Staff/superuser-only management pages and forms show
+all lifecycle states and provide module-gated staff navigation. Create/edit
+saves announcement fields and audience rows atomically. Publish and archive
+are POST-only explicit transitions; publish validates the time window and at
+least one active audience unit and records `published_by` / `published_at`.
+Create always starts as draft, edit does not implicitly publish, overlapping
+audience units are rejected, duplicate selections are normalized, archived
+announcements cannot be republished, and archive preserves the announcement
+and its audience rows. Member-facing 1B visibility remains unchanged, and 1C
+adds no Today, Staff Overview, notification, event/activity, signup,
+attendance, approval, request-changes, My Serving, or serving state.
 
 Targeted expectations:
 
@@ -282,6 +289,9 @@ explicit approval and added only registry/default enablement, the bilingual
 module-gated ordinary nav entry, and authenticated member list/detail routes
 using public/member visibility. It created no migration or data change and
 added no staff workflow, Today provider/output, Staff Overview, notification,
-Community Activities, `ServiceEvent`, My Serving, or serving behavior. Each
-remaining `ANNOUNCEMENTS.1C`–`1E` slice requires separate approval and should
-proceed in order unless a separately approved re-plan says otherwise.
+Community Activities, `ServiceEvent`, My Serving, or serving behavior.
+`ANNOUNCEMENTS.1C` later received explicit approval and added the bounded
+staff/superuser management list, create/edit forms, and POST-only
+publish/archive workflow described above, without a migration or cross-module
+state. Each remaining `ANNOUNCEMENTS.1D`–`1E` slice requires separate approval
+and should proceed in order unless a separately approved re-plan says otherwise.

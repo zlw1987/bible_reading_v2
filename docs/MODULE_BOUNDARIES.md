@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`ANNOUNCEMENTS.1B` (July 2026).
+`ANNOUNCEMENTS.1C` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -49,7 +49,7 @@ Registered in `core/module_registry.py`, enabled via
 | `studies`  | `studies`  | Bible Study / 查经 (V2)                 | Audience rows + membership; zero rows fail closed. |
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
-| `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated nav only in 1B; staff workflow and Today output remain deferred. |
+| `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated ordinary nav plus a module-gated staff management link; staff/superusers have bounded draft/create/edit/publish/archive management. Publish/archive are explicit POST actions. No Today output, Staff Overview, notification, event/activity, signup, attendance, approval/request-changes, My Serving, or serving behavior. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 Official Announcements now has the independent `announcements` app,
@@ -59,13 +59,16 @@ Official Announcements now has the independent `announcements` app,
 bilingual ordinary nav entry, and adds authenticated member list/detail routes.
 Those routes use public/member visibility even for staff and superusers, so
 draft, archived, future, expired, zero-audience, and nonmatching records remain
-hidden and hidden detail returns 404. The module declares `contributes_nav`,
+hidden and hidden detail returns 404. `ANNOUNCEMENTS.1C` adds the bounded
+staff/superuser management list, atomic draft create/edit with active
+structure-unit audience rows, and POST-only publish/archive actions. Publishing
+requires a valid window and at least one active audience row; archiving preserves
+the record and audience rows. The module declares `contributes_nav`,
 `contributes_today`, and `requires_structure_core`; the Today capability is
-reserved metadata only until 1D, with no provider or Today output in 1B. Staff
-workflow pages remain deferred to 1C. It adds no Community Activities,
-`ServiceEvent`, notification, Staff Overview, My Serving, or serving behavior.
-Each remaining `ANNOUNCEMENTS.1C`–`1E` implementation slice requires separate
-approval.
+reserved metadata only until 1D, with no provider or Today output through 1C.
+It adds no Community Activities, `ServiceEvent`, notification, Staff Overview,
+My Serving, or serving behavior. Each remaining `ANNOUNCEMENTS.1D`–`1E`
+implementation slice requires separate approval.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.
@@ -378,8 +381,9 @@ notifications, or `ServiceEvent`.
    `docs/ANNOUNCEMENTS_V1_PLAN.md`. `ANNOUNCEMENTS.1A` implements its
    app/model/admin/visibility foundation, and `ANNOUNCEMENTS.1B` implements
    registry/default enablement, module-gated bilingual navigation, and
-   authenticated member list/detail. It still has no staff workflow or Today
-   provider/output. The 1B completion is not authority to start later slices.
+   authenticated member list/detail. `ANNOUNCEMENTS.1C` implements the bounded
+   staff create/edit/publish/archive workflow. It still has no Today
+   provider/output. The 1C completion is not authority to start later slices.
    Audience membership is visibility only and must never imply staff authority
    or serving.
 

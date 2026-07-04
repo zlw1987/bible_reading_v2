@@ -3,7 +3,7 @@
 Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A boundaries, updated through
 TODAY-AGENDA.1A and MY-SERVING-BS.1B. DOCS-QA-CHECKPOINT.1A records the current
 manual-QA checkpoint below; the checklist is not a claim that this round of
-manual QA has already been run. `ANNOUNCEMENTS.1B` adds no Today runtime
+manual QA has already been run. `ANNOUNCEMENTS.1B` and `ANNOUNCEMENTS.1C` add no Today runtime
 behavior; the separately gated `ANNOUNCEMENTS.1D` remains only a future Today
 boundary.
 

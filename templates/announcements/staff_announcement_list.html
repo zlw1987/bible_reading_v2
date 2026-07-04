@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% load announcement_extras %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}公告管理{% else %}Announcement Admin{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">{% if language == "zh" %}公告管理{% else %}Announcement Admin{% endif %}</h1>
+        <p class="page-subtitle">
+            {% if language == "zh" %}
+                管理官方公告的草稿、发布和归档状态。
+            {% else %}
+                Manage draft, published, and archived official announcements.
+            {% endif %}
+        </p>
+    </div>
+    <a class="button" href="{% url 'create_announcement' %}">
+        {% if language == "zh" %}新建公告{% else %}New Announcement{% endif %}
+    </a>
+</div>
+
+{% if announcement_items %}
+<div class="grid grid-2">
+    {% for item in announcement_items %}
+    {% with announcement=item.announcement %}
+    <article class="card event-card">
+        <h2 class="card-title">{{ announcement|announcement_title:language }}</h2>
+        <p>
+            {% if announcement.status == "published" %}
+            <span class="status status-good">{% if language == "zh" %}已发布{% else %}Published{% endif %}</span>
+            {% elif announcement.status == "archived" %}
+            <span class="status">{% if language == "zh" %}已归档{% else %}Archived{% endif %}</span>
+            {% else %}
+            <span class="status status-warning">{% if language == "zh" %}草稿{% else %}Draft{% endif %}</span>
+            {% endif %}
+            {% if announcement.priority == "important" %}
+            <span class="status status-warning">{% if language == "zh" %}重要{% else %}Important{% endif %}</span>
+            {% else %}
+            <span class="status">{% if language == "zh" %}普通{% else %}Normal{% endif %}</span>
+            {% endif %}
+        </p>
+        <p class="muted">
+            {% if language == "zh" %}开始{% else %}Starts{% endif %}
+            {{ announcement.publish_start|member_datetime:language }}
+            {% if announcement.publish_end %}
+                · {% if language == "zh" %}结束{% else %}Ends{% endif %}
+                {{ announcement.publish_end|member_datetime:language }}
+            {% endif %}
+        </p>
+        <p class="muted">
+            {% if language == "zh" %}适用范围{% else %}Audience{% endif %}:
+            {% if item.audience_labels %}
+                {{ item.audience_labels|join:", " }}
+            {% else %}
+                {% if language == "zh" %}尚未选择{% else %}None selected{% endif %}
+            {% endif %}
+        </p>
+        <div class="actions">
+            <a class="button button-secondary" href="{% url 'edit_announcement' announcement.id %}">
+                {% if language == "zh" %}编辑{% else %}Edit{% endif %}
+            </a>
+            {% if announcement.status == "draft" %}
+            <form method="post" action="{% url 'publish_announcement' announcement.id %}">
+                {% csrf_token %}
+                <button type="submit">{% if language == "zh" %}发布{% else %}Publish{% endif %}</button>
+            </form>
+            {% endif %}
+            {% if announcement.status != "archived" %}
+            <form method="post" action="{% url 'archive_announcement' announcement.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button button-secondary">
+                    {% if language == "zh" %}归档{% else %}Archive{% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endwith %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}尚未建立公告。{% else %}No announcements have been created yet.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

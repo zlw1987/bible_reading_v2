@@ -44,7 +44,7 @@
                             {% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
                         </a>
 
-                        {% if "reading" in enabled_modules or "studies" in enabled_modules %}
+                        {% if "reading" in enabled_modules or "studies" in enabled_modules or "announcements" in enabled_modules %}
                         <span class="nav-staff-menu-heading">
                             {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
                         </span>
@@ -63,6 +63,11 @@
                         </a>
                         <a href="{% url 'bible_study_meeting_manage_list' %}">
                             {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
+                        </a>
+                        {% endif %}
+                        {% if "announcements" in enabled_modules %}
+                        <a href="{% url 'staff_announcement_list' %}">
+                            {% if language == "zh" %}公告管理{% else %}Announcement Admin{% endif %}
                         </a>
                         {% endif %}
 

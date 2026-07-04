@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`COMMUNITY-EVENTS.1E-A` (July 2026).
+`COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -14,7 +14,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 |---|---|---|
 | Product architecture and roadmap | [`PRODUCT_ARCHITECTURE_AND_ROADMAP.md`](PRODUCT_ARCHITECTURE_AND_ROADMAP.md) | Current product shape, implemented foundations, and deliberately deferred work. |
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
-| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Implemented 1A model/admin/visibility foundation, 1B browse/detail/nav, 1C signup/cancel, 1D-A member submission + admin publish gate, 1D-A-FU1 member-selected Activity Scope, 1D-B lightweight staff review inbox + request-changes loop, and 1E-A low-noise Today reminders for signed-up activities happening today and creator-requested changes; broader Today discovery, My Serving, and larger operations remain deferred. |
+| Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Current implemented V1 lifecycle through 1H-A, including browse/detail, signup/cancel, member drafts and submission, Activity Scope, review/request-changes, pending-review creator editing, capacity, co-organizers, and low-noise Today reminders. It also owns the V1 manual QA checklist and stabilization boundary; expansion requires separate approval. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -95,6 +95,16 @@ migration-safety instruction source.
   no My Serving or serving action-center context, Staff Overview,
   setup/readiness, capacity/waitlist, notification, serving record, or
   `ServiceEvent` relationship is added.
+- `COMMUNITY-EVENTS.1F-A`, `1F-B`, `1G-A`, and `1H-A` complete the bounded V1
+  lifecycle: the primary creator may edit while an activity stays
+  `pending_review`; optional capacity supports unlimited and capped active
+  signups; active user-linked co-organizers receive bounded pre-publication
+  editing; and eligible members may save and continue complete validated
+  drafts. These features create no serving or `ServiceEvent` state.
+- `COMMUNITY-EVENTS-STABILIZATION.1A` documents the full manual lifecycle QA
+  checkpoint. V1 is feature-complete enough for a limited trial after that
+  checklist passes; the documentation does not claim that manual QA has
+  already passed.
 - Disabled modules are surface-gated: primary navigation, module-owned staff
   dropdown links, module-owned Staff Overview cards/counts/links
   (`MODULAR-CORE.6B`, the `/staff/` route and its Core/staff cards stay
@@ -149,25 +159,22 @@ QA checklists tied to retired schema, especially
 [`BIBLE_STUDY_V1_QA_CHECKLIST.md`](BIBLE_STUDY_V1_QA_CHECKLIST.md), are
 historical evidence rather than current test instructions.
 
-## Deferred Product Plans
+## Current Stabilization and Deferred Product Plans
 
-Community Events/Activities has an implemented `COMMUNITY-EVENTS.1A`
-foundation (the `community_events` app, `CommunityActivity`,
-`CommunityActivityAudienceScope`, Django admin, registry entry, and
-structure-native visibility helper) plus the `COMMUNITY-EVENTS.1B`
-member-facing browse/detail entrance (`community_activity_list` /
-`community_activity_detail`) and ordinary "Activities" primary-nav entry, plus
-the `COMMUNITY-EVENTS.1C` minimal signup/cancel lifecycle and
-`COMMUNITY-EVENTS.1D-A` member submission + admin publish gate, followed by
-`COMMUNITY-EVENTS.1D-A-FU1` member-selected Activity Scope saved as audience
-rows, and the `COMMUNITY-EVENTS.1D-B` lightweight staff review inbox +
-request-changes loop (staff publish/request-changes/cancel and creator edit +
-resubmit), followed by the `COMMUNITY-EVENTS.1E-A` low-noise Today provider for
-same-day active signups and creator-requested changes. A larger approval dashboard,
-broader Today browse/discovery, capacity/waitlist, My Serving integration,
-Staff Overview, setup/readiness provider, notifications, and any
-`ServiceEvent` relationship remain deferred and require separately approved
-implementation slices. Checklist remains deferred.
+Community Events/Activities V1 is implemented through `1H-A`: independent
+model/admin/visibility, browse/detail/nav, signup/cancel, member drafts and
+submission with Activity Scope, staff review/request-changes, pending-review
+creator editing, low-noise Today reminders, optional capacity, and bounded
+user-linked co-organizers. `COMMUNITY-EVENTS-STABILIZATION.1A` moves this
+lifecycle to manual QA; V1 is feature-complete enough for a limited trial after
+the checklist in `COMMUNITY_ACTIVITIES_V1_PLAN.md` passes.
+
+Community Activities remains a secondary independent module, not official
+Church Gatherings, My Serving, `ServiceEvent`, or serving. Waitlist, attendee
+list, check-in, notifications, comments, payments, calendar integration,
+broader Today browse/discovery, Staff Overview cards, setup/readiness, any
+`ServiceEvent` relationship, My Serving integration, and the separate
+Checklist product remain deferred and require separately approved slices.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

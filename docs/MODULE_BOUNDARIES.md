@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`COMMUNITY-EVENTS.1H-A` (July 2026).
+`COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -76,6 +76,9 @@ changes-requested activities. Staff/superusers may still adjust audience in
 Django admin. As with every module,
 enablement gates surfaces only: the `/activities/` routes stay reachable under
 their own login/visibility rules even when the module is disabled.
+`COMMUNITY-EVENTS.1F-A` allows the primary creator to edit an activity while it
+is `pending_review`; saving keeps it pending and does not widen ordinary
+visibility or staff review authority.
 `COMMUNITY-EVENTS.1E-A` adds a module-owned Today provider for personally
 relevant activity data only: published visible activities happening today
 backed by the current user's active signup, plus the creator's own
@@ -334,6 +337,8 @@ notifications, or `ServiceEvent`.
    authoritative. `COMMUNITY-EVENTS.1D-B` adds the approved lightweight staff
    review inbox + request-changes loop (staff publish/request-changes/cancel
    and creator edit + resubmit) while keeping staff publication authoritative.
+   `COMMUNITY-EVENTS.1F-A` adds primary-creator editing while an activity stays
+   `pending_review`.
    `COMMUNITY-EVENTS.1E-A` adds the approved minimal Today provider for active
    signups on published visible activities happening today plus creator
    `changes_requested` reminders. `COMMUNITY-EVENTS.1G-A` adds approved
@@ -341,11 +346,14 @@ notifications, or `ServiceEvent`.
    pre-publication editing. `COMMUNITY-EVENTS.1F-B` adds approved optional
    capacity enforcement for active signups only. `COMMUNITY-EVENTS.1H-A` adds
    approved complete validated drafts, with creator-owned submission and no
-   review/signup/shared-surface/serving effect. A larger approval dashboard,
-   broader Today browse/discovery,
-   waitlist, attendee list, check-in, My Serving, Staff Overview, setup/readiness,
-   notifications, any `ServiceEvent` link, and Checklist remain deferred.
-   Any further module or Community Activities expansion requires its own
+   review/signup/shared-surface/serving effect.
+   `COMMUNITY-EVENTS-STABILIZATION.1A` freezes V1 for manual lifecycle QA before
+   a limited trial. Community Activities remains secondary and independent:
+   not official Church Gatherings, My Serving, `ServiceEvent`, or serving.
+   Waitlist, attendee list, check-in, notifications, comments, payments,
+   calendar integration, broader Today browse/discovery, Staff Overview cards,
+   setup/readiness, any `ServiceEvent` relationship, My Serving integration,
+   and Checklist remain deferred. Any further expansion requires its own
    approved slice.
 
 ## Follow-ups (not yet done)

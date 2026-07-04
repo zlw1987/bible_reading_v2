@@ -1,6 +1,7 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1H-A` (July 2026).
+Status: current plan and stabilization checkpoint updated through
+`COMMUNITY-EVENTS-STABILIZATION.1A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -75,6 +76,12 @@ This Today card is ordinary activity agenda/review status, never serving. My
 Serving, the serving action center, Staff Overview, setup/readiness,
 waitlist, notifications, and any `ServiceEvent` relationship remain
 deferred.
+
+`COMMUNITY-EVENTS.1F-A` allows the primary creator to edit their own
+`pending_review` activity without taking it out of review. Saving keeps the
+activity `pending_review`; ordinary selected-scope users still cannot see it.
+This changes no staff review authority, audience visibility, signup, serving,
+My Serving, Today serving action, or `ServiceEvent` relationship.
 
 `COMMUNITY-EVENTS.1G-A` adds optional user-linked co-organizers without
 changing primary ownership. `CommunityActivity.created_by` remains the
@@ -548,6 +555,10 @@ co-organizers without granting review authority.
 It adds no Staff Overview counts, Today, My Serving, setup/readiness,
 notifications, or `ServiceEvent` link.
 
+`COMMUNITY-EVENTS.1F-A` completes primary-creator editing while an activity is
+`pending_review`. A successful save keeps the activity in review and does not
+make it visible to selected-scope ordinary users.
+
 `COMMUNITY-EVENTS.1E-A` completes the minimal Today integration. Its
 module-owned provider renders active-signup published visible activities
 happening today and creator-owned `changes_requested` reminders. The retained
@@ -594,3 +605,79 @@ No later slice may infer serving from activity visibility, signup, or
 membership, and no link to `ServiceEvent` is implied by this foundation.
 
 Checklist V1 remains deferred and should not be revived because of Community Activities.
+
+## 11. V1 Manual QA Checklist
+
+Run this checkpoint before inviting a limited trial. Use separate accounts for
+the primary creator, a linked co-organizer, an ordinary in-scope member, an
+ordinary out-of-scope member, and staff. This checklist documents the required
+manual QA; it does not claim that QA has already passed.
+
+### Draft and collaboration
+
+- [ ] As the primary creator, create and save a complete valid `draft`, then
+  return later and continue editing it.
+- [ ] Add and remove active user-linked co-organizers through the search
+  picker; confirm only the primary creator can manage that list.
+- [ ] As a linked co-organizer, open and edit the draft details and Activity
+  Scope, but confirm there is no way to submit it for review or manage
+  co-organizers.
+- [ ] As the selected-scope ordinary user, confirm the draft is not visible.
+
+### Review lifecycle
+
+- [ ] As the primary creator, submit the draft for review and confirm it moves
+  to `pending_review`.
+- [ ] While it is `pending_review`, edit it as the primary creator and confirm
+  it remains `pending_review`.
+- [ ] As the selected-scope ordinary user, confirm `pending_review` and
+  `changes_requested` activities are not visible.
+- [ ] As staff, confirm the review inbox shows `pending_review` and
+  `changes_requested` activities, but not drafts.
+- [ ] Request changes as staff; confirm a non-empty review note is required.
+- [ ] As the creator, confirm the `changes_requested` activity and review note
+  are visible, edit it, and resubmit it to `pending_review`.
+- [ ] Publish as staff.
+
+### Published visibility, signup, and capacity
+
+- [ ] As an in-scope member, confirm the published activity is visible. As an
+  out-of-scope member, confirm it is not visible.
+- [ ] Sign up, cancel, and sign up again; confirm cancellation retains the row
+  and the later signup reactivates it.
+- [ ] For an unlimited activity, confirm multiple eligible members can sign up
+  without a capacity block.
+- [ ] For a limited-capacity activity, fill the final slot and confirm a new
+  signup is blocked when full.
+- [ ] Cancel an existing signup, confirm that slot becomes available, and
+  confirm the cancelled row can be reactivated while capacity is available.
+- [ ] Post signup again for an already-active signup and confirm it is
+  idempotent: no duplicate row and no erroneous full-capacity failure.
+
+### Shared-surface and product boundaries
+
+- [ ] On Today, confirm Community Activities shows only an active signup for a
+  published visible activity happening today and the creator's own
+  `changes_requested` reminder. Confirm later activities, cancelled signups,
+  unsigned visible activities, drafts, and `pending_review` activities do not
+  appear.
+- [ ] Confirm My Serving shows no Community Activities item.
+- [ ] Confirm the lifecycle creates no `TeamAssignment`,
+  `TeamAssignmentMember`, `BibleStudyMeetingRole`, or `ServiceEvent`
+  relationship. Activity signup remains attendance intent, not serving.
+
+## 12. V1 Stabilization Boundary
+
+Community Activities V1 is feature-complete enough for a limited trial after
+the manual QA checklist above passes. Until trial feedback produces a
+separately approved slice, stabilize the implemented lifecycle rather than
+adding features.
+
+Do not add a waitlist, attendee list, check-in, notifications, comments,
+payments, calendar integration, broader Today browse/discovery, Staff Overview
+cards, a setup/readiness provider, a `ServiceEvent` relationship, or My Serving
+integration without separate approval.
+
+Community Activities remains a secondary independent module. It is not
+official Church Gatherings, not My Serving, not `ServiceEvent`, and not a
+serving workflow.

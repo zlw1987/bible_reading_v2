@@ -1,13 +1,14 @@
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Exists, OuterRef
-from django.http import Http404
+from django.db.models import Exists, OuterRef, Q
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from accounts.language import get_user_language
 from accounts.structure_selectors import get_user_primary_membership_unit
@@ -17,6 +18,7 @@ from .models import (
     ActivitySignup,
     CommunityActivity,
     CommunityActivityAudienceScope,
+    CommunityActivityCoOrganizer,
     CommunityActivitySubmissionBlock,
 )
 from .visibility import (
@@ -98,9 +100,11 @@ def community_activity_create(request):
         form = CommunityActivitySubmissionForm(
             request.POST,
             language=language,
+            acting_user=request.user,
         )
         if form.is_valid():
             audience_units = list(form.cleaned_data["audience_units"])
+            co_organizers = list(form.cleaned_data["co_organizer_users"])
             with transaction.atomic():
                 activity = form.save(commit=False)
                 activity.status = CommunityActivity.STATUS_PENDING_REVIEW
@@ -111,12 +115,21 @@ def community_activity_create(request):
                         activity=activity,
                         structure_unit=unit,
                     )
+                for user in co_organizers:
+                    CommunityActivityCoOrganizer.objects.create(
+                        activity=activity,
+                        user=user,
+                        added_by=request.user,
+                    )
             return redirect(
                 "community_activity_detail",
                 activity_id=activity.id,
             )
     else:
-        form = CommunityActivitySubmissionForm(language=language)
+        form = CommunityActivitySubmissionForm(
+            language=language,
+            acting_user=request.user,
+        )
 
     return render(
         request,
@@ -139,6 +152,7 @@ def community_activity_detail(request, activity_id):
         raise Http404("Community activity not available.")
     signup = activity.signup_for(request.user)
     is_creator = activity.created_by_id == request.user.id
+    is_co_organizer = activity.is_co_organizer(request.user)
     return render(
         request,
         "community_events/community_activity_detail.html",
@@ -146,37 +160,51 @@ def community_activity_detail(request, activity_id):
             "activity": activity,
             "can_manage": activity.can_be_managed_by(request.user),
             "is_creator": is_creator,
+            "is_co_organizer": is_co_organizer,
+            "is_submission_collaborator": is_creator or is_co_organizer,
             "can_edit": activity.can_be_edited_by(request.user),
             "can_signup": activity.is_signup_open(),
             "is_signed_up": bool(signup and signup.is_active),
+            "co_organizers": activity.co_organizer_links.select_related(
+                "user"
+            ).order_by("user__first_name", "user__last_name", "user__username"),
         },
     )
 
 
 @login_required
 def community_activity_edit(request, activity_id):
-    """Let a creator edit their own activity while it awaits publication.
+    """Let an approved collaborator edit while an activity awaits publication.
 
-    Only the creator may edit, and only while the activity is in
-    ``pending_review`` or ``changes_requested``. A valid save updates the
+    The creator or a linked co-organizer may edit only while the activity is
+    in ``pending_review`` or ``changes_requested``. A valid save updates the
     activity fields, replaces the audience rows with the newly selected valid
     scope units, and leaves or moves the activity to ``pending_review`` in a
-    single transaction. Any prior staff ``review_note`` is preserved for
-    context; the creator cannot publish.
+    single transaction. Only the primary creator may replace co-organizer
+    links. Any prior staff ``review_note`` is preserved for context; neither
+    collaborator can publish.
     """
     activity = get_object_or_404(CommunityActivity, id=activity_id)
     if not activity.can_be_edited_by(request.user):
         raise Http404("Community activity is not editable.")
 
     language = get_user_language(request)
+    can_manage_co_organizers = activity.created_by_id == request.user.id
     if request.method == "POST":
         form = CommunityActivitySubmissionForm(
             request.POST,
             instance=activity,
             language=language,
+            acting_user=request.user,
+            include_co_organizers=can_manage_co_organizers,
         )
         if form.is_valid():
             audience_units = list(form.cleaned_data["audience_units"])
+            co_organizers = (
+                list(form.cleaned_data["co_organizer_users"])
+                if can_manage_co_organizers
+                else None
+            )
             with transaction.atomic():
                 activity = form.save(commit=False)
                 activity.status = CommunityActivity.STATUS_PENDING_REVIEW
@@ -187,6 +215,14 @@ def community_activity_edit(request, activity_id):
                         activity=activity,
                         structure_unit=unit,
                     )
+                if co_organizers is not None:
+                    activity.co_organizer_links.all().delete()
+                    for user in co_organizers:
+                        CommunityActivityCoOrganizer.objects.create(
+                            activity=activity,
+                            user=user,
+                            added_by=request.user,
+                        )
             return redirect(
                 "community_activity_detail",
                 activity_id=activity.id,
@@ -195,6 +231,8 @@ def community_activity_edit(request, activity_id):
         form = CommunityActivitySubmissionForm(
             instance=activity,
             language=language,
+            acting_user=request.user,
+            include_co_organizers=can_manage_co_organizers,
             initial={
                 "audience_units": list(
                     activity.audience_scope_links.values_list(
@@ -202,6 +240,14 @@ def community_activity_edit(request, activity_id):
                         flat=True,
                     )
                 ),
+                "co_organizer_users": list(
+                    activity.co_organizer_links.values_list(
+                        "user_id",
+                        flat=True,
+                    )
+                )
+                if can_manage_co_organizers
+                else [],
             },
         )
 
@@ -217,8 +263,78 @@ def community_activity_edit(request, activity_id):
             ),
             "activity": activity,
             "review_note": activity.review_note,
+            "can_manage_co_organizers": can_manage_co_organizers,
         },
     )
+
+
+def _can_search_activity_users(user, activity_id=None):
+    membership_unit = get_user_primary_membership_unit(user)
+    can_submit = (
+        membership_unit is not None
+        and membership_unit.is_active
+        and not CommunityActivitySubmissionBlock.objects.filter(
+            user=user,
+            is_active=True,
+        ).exists()
+    )
+    if can_submit:
+        return True
+    if not activity_id:
+        return False
+    activity = CommunityActivity.objects.filter(id=activity_id).first()
+    return bool(
+        activity
+        and activity.created_by_id == user.id
+        and activity.can_be_edited_by(user)
+    )
+
+
+@login_required
+@require_GET
+def community_activity_user_search(request):
+    """Return minimal active-user data for the co-organizer picker."""
+    activity_id = request.GET.get("activity_id")
+    if not _can_search_activity_users(request.user, activity_id=activity_id):
+        raise PermissionDenied("Community activity user search is not available.")
+
+    query = (request.GET.get("q") or "").strip()
+    if len(query) < 2:
+        return JsonResponse({"results": []})
+
+    users = (
+        get_user_model()
+        .objects.filter(is_active=True)
+        .exclude(id=request.user.id)
+        .filter(
+            Q(username__icontains=query)
+            | Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+        )
+        .order_by("first_name", "last_name", "username", "id")[:20]
+    )
+    language = get_user_language(request)
+    results = []
+    for user in users:
+        membership_unit = get_user_primary_membership_unit(user)
+        results.append(
+            {
+                "id": user.id,
+                "display_name": user.get_full_name().strip()
+                or user.get_username(),
+                "username": user.get_username(),
+                "group_label": (
+                    membership_unit.path_label(language)
+                    if membership_unit is not None
+                    else (
+                        "暂无小组归属"
+                        if language == "zh"
+                        else "No active group"
+                    )
+                ),
+            }
+        )
+    return JsonResponse({"results": results})
 
 
 def _visible_activity_or_404(user, activity_id):

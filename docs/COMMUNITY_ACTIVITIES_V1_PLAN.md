@@ -1,6 +1,6 @@
 # Community Activities V1 Plan
 
-Status: current plan updated through `COMMUNITY-EVENTS.1E-A` (July 2026).
+Status: current plan updated through `COMMUNITY-EVENTS.1G-A` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -75,6 +75,17 @@ This Today card is ordinary activity agenda/review status, never serving. My
 Serving, the serving action center, Staff Overview, setup/readiness,
 capacity/waitlist, notifications, and any `ServiceEvent` relationship remain
 deferred.
+
+`COMMUNITY-EVENTS.1G-A` adds optional user-linked co-organizers without
+changing primary ownership. `CommunityActivity.created_by` remains the
+accountable creator, while `CommunityActivity.organizer` remains public display
+copy only and grants no permission. The primary creator may select active users
+through an authenticated search picker and update that list. Linked
+co-organizers may view and edit only while an activity is `pending_review` or
+`changes_requested`; they cannot change the co-organizer list, publish,
+request changes, cancel/reject, or enter the staff review inbox. This
+permission creates no serving assignment, My Serving item, Bible Study role,
+Today serving action, or `ServiceEvent` relationship.
 
 ## 1. Purpose
 
@@ -161,6 +172,10 @@ Implemented fields:
 - created_at
 - updated_at
 
+The `organizer` field is public display copy only. It does not identify a user,
+grant permission, or replace `created_by` as the primary owner/accountable
+submitter.
+
 Capacity, signup deadlines, and a full approval workflow/dashboard beyond the
 `COMMUNITY-EVENTS.1D-B` inbox remain outside the current model.
 
@@ -214,6 +229,20 @@ Implemented in `COMMUNITY-EVENTS.1D-A`:
 
 There is at most one block row per user. Only an active row prevents member
 submission; staff manage these rows in Django admin.
+
+### CommunityActivityCoOrganizer
+
+Implemented in `COMMUNITY-EVENTS.1G-A`:
+
+- activity
+- user (active user selected through the co-organizer picker)
+- added_by
+- created_at
+
+Each `(activity, user)` pair is unique. The primary creator cannot also be a
+co-organizer. These links grant only the bounded pre-publication edit
+permission described below; they are not attendance, belonging, staff
+capability, or serving records.
 
 ## 5. Scope and Visibility Rules
 
@@ -278,6 +307,17 @@ Regular member:
 - when staff request changes, can edit and resubmit their own
   `changes_requested` activity, which returns it to `pending_review`
 - cannot publish
+
+Linked co-organizer:
+- can view and edit the linked activity only while it is `pending_review` or
+  `changes_requested`
+- can edit activity details and Activity Scope; saving a
+  `changes_requested` activity returns it to `pending_review`
+- cannot change the co-organizer list (primary creator only)
+- cannot edit draft, published, cancelled, or completed activities
+- cannot publish, request changes, cancel/reject, or access the staff review
+  inbox
+- gains no staff capability, serving assignment, My Serving item, or role
 
 Authorized structure-unit leader:
 - may create or manage activity for an authorized unit only if a future
@@ -348,9 +388,22 @@ Implemented through `COMMUNITY-EVENTS.1D-B`:
   and changes-requested submissions
 - `/activities/<id>/review/` - staff/superuser-only review detail with
   POST-only publish / request-changes / cancel-reject actions
-- `/activities/<id>/edit/` - creator-only edit + resubmit for their own
-  `changes_requested` activity
+- `/activities/<id>/edit/` - primary creator or linked co-organizer edit for
+  `pending_review` / `changes_requested`; only the primary creator may change
+  co-organizer links
 - a staff-dropdown "Activity Review" / "活动审核" link gated by module enablement
+
+Implemented through `COMMUNITY-EVENTS.1G-A`:
+- the create/edit form includes an optional authenticated active-user search
+  picker for co-organizers
+- search requires at least two characters, returns at most 20 users, and
+  exposes only user id, display name, username, and active primary membership
+  path (or a no-active-group label); it exposes no email, phone, address, or
+  sensitive profile fields
+- selected users render as removable chips and submit as user ids; server-side
+  validation remains authoritative
+- activity detail may display linked co-organizer names separately from the
+  unchanged organizer display text
 
 Possible future pages:
 - `/activities/manage/` - broader staff/leader management view
@@ -411,6 +464,8 @@ No:
 - SpecialEvent model
 - fake Combined Ministry record
 - forcing CommunityActivity into ServiceEvent
+- draft workflow
+- co-organizer-derived serving or staff authority
 
 ## 10. Roadmap Position
 
@@ -442,8 +497,10 @@ rows do not expose pending activities.
 `COMMUNITY-EVENTS.1D-B` completes the lightweight staff review inbox and
 request-changes loop. It adds the `changes_requested` status and review
 metadata fields, a staff-only inbox and review detail with POST-only
-publish/request-changes/cancel actions, a creator edit + resubmit path for
-`changes_requested` activities, and a module-gated staff-dropdown review link.
+publish/request-changes/cancel actions, the initial creator edit + resubmit
+path for `changes_requested` activities, and a module-gated staff-dropdown
+review link. `COMMUNITY-EVENTS.1G-A` later extends that edit path to linked
+co-organizers without granting review authority.
 It adds no Staff Overview counts, Today, My Serving, setup/readiness,
 notifications, or `ServiceEvent` link.
 
@@ -454,6 +511,14 @@ This Week context key stays an empty compatibility default; later-this-week
 signups and `pending_review` submissions are not rendered. The module gate
 skips the provider and its activity/signup queries when disabled. No serving
 context, record, or relationship is added.
+
+`COMMUNITY-EVENTS.1G-A` completes the bounded linked co-organizer edit
+permission and active-user search picker. `created_by` remains primary owner;
+`organizer` remains display-only. Only the primary creator manages links, and
+linked users may edit only pending-review or changes-requested activities. The
+slice adds no draft workflow, capacity/waitlist, staff review authority, My
+Serving or serving action-center contribution, notification, or
+`ServiceEvent` relationship.
 
 Later work still requires separately approved, bounded slices for:
 

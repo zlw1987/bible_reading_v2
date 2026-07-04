@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ChurchStructureMembership, ChurchStructureUnit
+from events.models import ServiceEvent
 from ministry.models import TeamAssignment, TeamAssignmentMember
 from studies.models import BibleStudyMeetingRole
 
@@ -16,6 +17,7 @@ from .models import (
     ActivitySignup,
     CommunityActivity,
     CommunityActivityAudienceScope,
+    CommunityActivityCoOrganizer,
     CommunityActivitySubmissionBlock,
 )
 from .today_provider import TODAY_DEFAULTS as COMMUNITY_ACTIVITY_TODAY_DEFAULTS
@@ -238,8 +240,31 @@ class CommunityActivityFoundationTests(TestCase):
 
     def test_admin_registers_activity_with_audience_inline(self):
         self.assertTrue(admin.site.is_registered(CommunityActivity))
+        self.assertTrue(admin.site.is_registered(CommunityActivityCoOrganizer))
         self.assertTrue(admin.site.is_registered(ActivitySignup))
         self.assertTrue(admin.site.is_registered(CommunityActivitySubmissionBlock))
+
+    def test_co_organizer_link_rejects_creator_and_inactive_user(self):
+        activity = self.create_activity(created_by=self.direct_member)
+
+        with self.assertRaises(ValidationError):
+            CommunityActivityCoOrganizer.objects.create(
+                activity=activity,
+                user=self.direct_member,
+                added_by=self.direct_member,
+            )
+
+        inactive_user = User.objects.create_user(
+            username="inactive_co_organizer",
+            password="testpass123",
+            is_active=False,
+        )
+        with self.assertRaises(ValidationError):
+            CommunityActivityCoOrganizer.objects.create(
+                activity=activity,
+                user=inactive_user,
+                added_by=self.direct_member,
+            )
 
 
 # Enabled-module set with community_events removed. It has no dependents and no
@@ -730,6 +755,69 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
 
+    def test_create_with_co_organizer_saves_link_transactionally(self):
+        co_organizer = self.create_member("create_co_organizer", self.child)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(
+                co_organizer_users=[co_organizer.id],
+            ),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        link = CommunityActivityCoOrganizer.objects.get(activity=activity)
+        self.assertEqual(link.user, co_organizer)
+        self.assertEqual(link.added_by, self.member)
+
+    def test_creator_cannot_select_self_as_co_organizer(self):
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(
+                co_organizer_users=[self.member.id],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("co_organizer_users", response.context["form"].errors)
+        self.assertEqual(CommunityActivity.objects.count(), 0)
+        self.assertEqual(CommunityActivityCoOrganizer.objects.count(), 0)
+
+    def test_duplicate_co_organizer_ids_create_one_link(self):
+        co_organizer = self.create_member("duplicate_co_organizer", self.child)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.create_url,
+            self.submission_data(
+                co_organizer_users=[co_organizer.id, co_organizer.id],
+            ),
+        )
+
+        activity = CommunityActivity.objects.get(title_en="Member Picnic")
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.co_organizer_links.count(), 1)
+
+    def test_create_with_co_organizer_creates_no_serving_or_event_state(self):
+        co_organizer = self.create_member("boundary_co_organizer", self.child)
+        self.login(self.member)
+
+        self.client.post(
+            self.create_url,
+            self.submission_data(
+                co_organizer_users=[co_organizer.id],
+            ),
+        )
+
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+
     def test_valid_submission_can_select_whole_church_root(self):
         self.login(self.member)
 
@@ -916,6 +1004,98 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         )
         self.assertEqual(signup_response.status_code, 404)
         self.assertEqual(ActivitySignup.objects.count(), 0)
+
+
+class CommunityActivityUserSearchTests(CommunityActivityWebTestBase):
+    @property
+    def search_url(self):
+        return reverse("community_activity_user_search")
+
+    def test_user_search_requires_login(self):
+        response = self.client.get(self.search_url, {"q": "browse"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
+
+    def test_user_search_requires_two_characters(self):
+        self.login(self.member)
+
+        response = self.client.get(self.search_url, {"q": "a"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"results": []})
+
+    def test_user_search_returns_minimal_identity_and_membership_label(self):
+        target = self.create_member("picker_target", self.child)
+        target.first_name = "Alice"
+        target.last_name = "Organizer"
+        target.email = "private@example.com"
+        target.save()
+        self.login(self.member)
+
+        response = self.client.get(self.search_url, {"q": "Alice"})
+
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["results"][0]
+        self.assertEqual(
+            set(result),
+            {"id", "display_name", "username", "group_label"},
+        )
+        self.assertEqual(result["id"], target.id)
+        self.assertEqual(result["display_name"], "Alice Organizer")
+        self.assertEqual(result["username"], "picker_target")
+        self.assertIn("North", result["group_label"])
+        self.assertNotIn("email", result)
+        self.assertNotIn("phone", result)
+        self.assertNotIn("private@example.com", response.content.decode())
+
+    def test_user_search_marks_user_without_active_group(self):
+        self.login(self.member)
+
+        response = self.client.get(
+            self.search_url,
+            {"q": "browse_no_membership"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["results"][0]
+        self.assertEqual(result["group_label"], "No active group")
+
+    def test_user_search_limits_results_and_excludes_inactive_users(self):
+        for index in range(25):
+            user = User.objects.create_user(
+                username=f"picker_result_{index:02d}",
+            )
+            ChurchStructureMembership.objects.create(
+                user=user,
+                unit=self.child,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+                start_date=timezone.localdate() - timezone.timedelta(days=1),
+            )
+        User.objects.create_user(
+            username="picker_result_inactive",
+            password="testpass123",
+            is_active=False,
+        )
+        self.login(self.member)
+
+        response = self.client.get(self.search_url, {"q": "picker_result"})
+
+        results = response.json()["results"]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(results), 20)
+        self.assertNotIn(
+            "picker_result_inactive",
+            {result["username"] for result in results},
+        )
+
+    def test_user_without_submission_or_owner_access_cannot_search(self):
+        self.login(self.no_membership)
+
+        response = self.client.get(self.search_url, {"q": "browse"})
+
+        self.assertEqual(response.status_code, 403)
 
 
 class CommunityActivityReviewInboxTests(CommunityActivityWebTestBase):
@@ -1250,6 +1430,13 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         data.update(overrides)
         return data
 
+    def add_co_organizer(self, activity, user=None):
+        return CommunityActivityCoOrganizer.objects.create(
+            activity=activity,
+            user=user or self.other_member,
+            added_by=self.member,
+        )
+
     def test_creator_can_see_changes_requested_detail_and_note(self):
         activity = self.changes_requested_activity()
         self.login(self.member)
@@ -1364,6 +1551,154 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             CommunityActivity.STATUS_PENDING_REVIEW,
         )
         self.assertEqual(activity.description, "Fixed before review")
+
+    def test_creator_can_update_co_organizers(self):
+        activity = self.pending_activity()
+        original = self.create_member("original_co_organizer", self.child)
+        replacement = self.create_member("replacement_co_organizer", self.sibling)
+        self.add_co_organizer(activity, original)
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                co_organizer_users=[replacement.id],
+            ),
+        )
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            list(activity.co_organizer_links.values_list("user_id", flat=True)),
+            [replacement.id],
+        )
+
+    def test_co_organizer_can_open_and_save_pending_review(self):
+        activity = self.pending_activity()
+        self.add_co_organizer(activity)
+        self.login(self.other_member)
+
+        get_response = self.client.get(self.edit_url(activity))
+        post_response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                description="Updated by co-organizer",
+                audience_units=[self.sibling.id],
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(get_response.status_code, 200)
+        self.assertNotContains(get_response, 'name="co_organizer_users"')
+        self.assertRedirects(post_response, self.detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PENDING_REVIEW)
+        self.assertEqual(activity.description, "Updated by co-organizer")
+        self.assertEqual(
+            list(
+                activity.audience_scope_links.values_list(
+                    "structure_unit_id",
+                    flat=True,
+                )
+            ),
+            [self.sibling.id],
+        )
+
+    def test_co_organizer_changes_requested_save_returns_to_pending(self):
+        activity = self.changes_requested_activity()
+        self.add_co_organizer(activity)
+        self.login(self.other_member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(activity, description="Co-organizer revision"),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PENDING_REVIEW)
+        self.assertEqual(activity.description, "Co-organizer revision")
+
+    def test_co_organizer_cannot_edit_disallowed_statuses(self):
+        self.login(self.other_member)
+        for status in (
+            CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_PUBLISHED,
+            CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
+        ):
+            with self.subTest(status=status):
+                activity = self.create_activity(
+                    status=status,
+                    created_by=self.member,
+                )
+                self.add_co_organizer(activity)
+                response = self.client.get(self.edit_url(activity))
+                self.assertEqual(response.status_code, 404)
+
+    def test_unrelated_user_cannot_edit_co_organized_pending_activity(self):
+        activity = self.pending_activity()
+        co_organizer = self.create_member("linked_editor", self.child)
+        self.add_co_organizer(activity, co_organizer)
+        self.login(self.other_member)
+
+        response = self.client.get(self.edit_url(activity))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_co_organizer_cannot_change_co_organizer_list(self):
+        activity = self.pending_activity()
+        linked_editor = self.create_member("linked_only_editor", self.child)
+        attempted_replacement = self.create_member(
+            "attempted_replacement",
+            self.sibling,
+        )
+        self.add_co_organizer(activity, linked_editor)
+        self.login(linked_editor)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                co_organizer_users=[attempted_replacement.id],
+            ),
+        )
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            list(activity.co_organizer_links.values_list("user_id", flat=True)),
+            [linked_editor.id],
+        )
+
+    def test_co_organizer_cannot_access_review_or_take_review_actions(self):
+        activity = self.pending_activity()
+        self.add_co_organizer(activity)
+        self.login(self.other_member)
+
+        inbox_response = self.client.get(
+            reverse("community_activity_review_list")
+        )
+        action_responses = [
+            self.client.post(
+                reverse("community_activity_review_publish", args=[activity.id])
+            ),
+            self.client.post(
+                reverse(
+                    "community_activity_review_request_changes",
+                    args=[activity.id],
+                ),
+                {"review_note": "not allowed"},
+            ),
+            self.client.post(
+                reverse("community_activity_review_cancel", args=[activity.id])
+            ),
+        ]
+
+        activity.refresh_from_db()
+        self.assertNotEqual(inbox_response.status_code, 200)
+        for response in action_responses:
+            self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PENDING_REVIEW)
 
     def test_resubmit_sets_status_back_to_pending_review(self):
         activity = self.changes_requested_activity()

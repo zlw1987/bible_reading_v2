@@ -49,6 +49,35 @@
         {{ field.label_tag }}
         {% if field.name == "audience_units" %}
             {% include "shared/_church_structure_unit_audience_picker.html" with field=field options=form.audience_unit_options language=language %}
+        {% elif field.name == "co_organizer_users" %}
+            <div
+                id="co-organizer-picker"
+                data-search-url="{% url 'community_activity_user_search' %}"
+                data-activity-id="{% if activity %}{{ activity.id }}{% endif %}"
+            >
+                <div data-co-organizer-selected>
+                    {% for option in form.co_organizer_selected_options %}
+                    <span class="button button-secondary" data-co-organizer-chip data-user-id="{{ option.id }}">
+                        {{ option.display_name }}
+                        {% if option.display_name != option.username %}(@{{ option.username }}){% endif %}
+                        <button type="button" data-remove-co-organizer aria-label="{% if language == 'zh' %}移除共同发起人{% else %}Remove co-organizer{% endif %}">×</button>
+                    </span>
+                    {% endfor %}
+                </div>
+                <div data-co-organizer-hidden-inputs>{{ field }}</div>
+                <input
+                    type="search"
+                    data-co-organizer-search
+                    autocomplete="off"
+                    placeholder="{% if language == 'zh' %}输入至少 2 个字符搜索姓名或用户名{% else %}Type at least 2 characters to search by name or username{% endif %}"
+                >
+                <div data-co-organizer-results aria-live="polite"></div>
+                <noscript>
+                    <p class="muted">
+                        {% if language == "zh" %}添加共同发起人需要启用 JavaScript；已选择的人会保留。{% else %}JavaScript is required to add co-organizers; existing selections will be retained.{% endif %}
+                    </p>
+                </noscript>
+            </div>
         {% else %}
             {{ field }}
         {% endif %}
@@ -72,4 +101,125 @@
         {% endif %}
     </div>
 </form>
+
+{% if "co_organizer_users" in form.fields %}
+<script>
+(() => {
+    const picker = document.getElementById("co-organizer-picker");
+    if (!picker) return;
+
+    const searchInput = picker.querySelector("[data-co-organizer-search]");
+    const selectedContainer = picker.querySelector("[data-co-organizer-selected]");
+    const hiddenContainer = picker.querySelector("[data-co-organizer-hidden-inputs]");
+    const resultsContainer = picker.querySelector("[data-co-organizer-results]");
+    const selectedIds = new Set(
+        Array.from(picker.querySelectorAll("[data-co-organizer-chip]"))
+            .map((chip) => String(chip.dataset.userId))
+    );
+    let searchTimer = null;
+
+    function bindRemove(button) {
+        button.addEventListener("click", () => {
+            const chip = button.closest("[data-co-organizer-chip]");
+            const userId = String(chip.dataset.userId);
+            selectedIds.delete(userId);
+            chip.remove();
+            hiddenContainer
+                .querySelectorAll('input[name="co_organizer_users"]')
+                .forEach((input) => {
+                    if (String(input.value) === userId) input.remove();
+                });
+        });
+    }
+
+    picker.querySelectorAll("[data-remove-co-organizer]").forEach(bindRemove);
+
+    function addUser(user) {
+        const userId = String(user.id);
+        if (selectedIds.has(userId)) return;
+        selectedIds.add(userId);
+
+        const chip = document.createElement("span");
+        chip.className = "button button-secondary";
+        chip.dataset.coOrganizerChip = "";
+        chip.dataset.userId = userId;
+        chip.append(document.createTextNode(
+            user.display_name === user.username
+                ? user.display_name + " "
+                : user.display_name + " (@" + user.username + ") "
+        ));
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.dataset.removeCoOrganizer = "";
+        remove.setAttribute(
+            "aria-label",
+            "{% if language == 'zh' %}移除共同发起人{% else %}Remove co-organizer{% endif %}"
+        );
+        remove.textContent = "×";
+        chip.append(remove);
+        bindRemove(remove);
+        selectedContainer.append(chip);
+
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "co_organizer_users";
+        hidden.value = userId;
+        hiddenContainer.append(hidden);
+    }
+
+    function renderResults(results) {
+        resultsContainer.replaceChildren();
+        results
+            .filter((user) => !selectedIds.has(String(user.id)))
+            .forEach((user) => {
+                const row = document.createElement("p");
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "button button-secondary";
+                button.textContent =
+                    user.display_name +
+                    (user.display_name === user.username
+                        ? ""
+                        : " (@" + user.username + ")") +
+                    " — " +
+                    user.group_label;
+                button.addEventListener("click", () => {
+                    addUser(user);
+                    row.remove();
+                });
+                row.append(button);
+                resultsContainer.append(row);
+            });
+    }
+
+    searchInput.addEventListener("input", () => {
+        window.clearTimeout(searchTimer);
+        const query = searchInput.value.trim();
+        if (query.length < 2) {
+            resultsContainer.replaceChildren();
+            return;
+        }
+        searchTimer = window.setTimeout(async () => {
+            try {
+                const url = new URL(picker.dataset.searchUrl, window.location.origin);
+                url.searchParams.set("q", query);
+                if (picker.dataset.activityId) {
+                    url.searchParams.set("activity_id", picker.dataset.activityId);
+                }
+                const response = await fetch(url.toString(), {
+                    headers: {"Accept": "application/json"},
+                    credentials: "same-origin",
+                });
+                if (!response.ok) throw new Error("Search unavailable");
+                const payload = await response.json();
+                renderResults(payload.results || []);
+            } catch (error) {
+                resultsContainer.textContent =
+                    "{% if language == 'zh' %}目前无法搜索用户。{% else %}User search is not available right now.{% endif %}";
+            }
+        }, 200);
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

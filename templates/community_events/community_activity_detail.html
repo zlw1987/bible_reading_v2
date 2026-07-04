@@ -21,26 +21,26 @@
 </div>
 
 <div class="card">
-    {% if can_manage or is_creator %}
+    {% if can_manage or is_submission_collaborator %}
     <p class="muted">{{ activity|activity_status_label:language }}</p>
     {% endif %}
 
-    {% if is_creator and activity.status == "pending_review" %}
+    {% if is_submission_collaborator and activity.status == "pending_review" %}
     <p>
         {% if language == "zh" %}
-        你的活动已提交，正在等待同工审核。审核后才能向参加范围内的成员发布。
+        此活动已提交，正在等待同工审核。审核后才能向参加范围内的成员发布。
         {% else %}
-        Your activity was submitted and is awaiting staff review. It will be shared with its approved audience only after publication.
+        This activity was submitted and is awaiting staff review. It will be shared with its approved audience only after publication.
         {% endif %}
     </p>
     {% endif %}
 
-    {% if is_creator and activity.status == "changes_requested" %}
+    {% if is_submission_collaborator and activity.status == "changes_requested" %}
     <p>
         {% if language == "zh" %}
-        同工请你修改这个活动后再重新提交。
+        同工已要求修改这个活动后再重新提交。
         {% else %}
-        Staff have asked you to make changes to this activity before resubmitting it.
+        Staff have asked for changes to this activity before it is resubmitted.
         {% endif %}
     </p>
     {% if activity.review_note %}
@@ -88,6 +88,15 @@
     <p>
         <strong>{% if language == "zh" %}发起{% else %}Organized by{% endif %}:</strong>
         {{ activity.organizer }}
+    </p>
+    {% endif %}
+
+    {% if co_organizers %}
+    <p>
+        <strong>{% if language == "zh" %}共同发起人{% else %}Co-organizers{% endif %}:</strong>
+        {% for link in co_organizers %}
+            {{ link.user.get_full_name|default:link.user.username }}{% if not forloop.last %}, {% endif %}
+        {% endfor %}
     </p>
     {% endif %}
 

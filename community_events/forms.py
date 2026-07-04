@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 
 from accounts.models import ChurchStructureUnit
 from accounts.ordering import (
@@ -59,8 +60,17 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             ),
         }
 
-    def __init__(self, *args, language="en", **kwargs):
+    def __init__(
+        self,
+        *args,
+        language="en",
+        acting_user=None,
+        include_co_organizers=True,
+        **kwargs,
+    ):
         self.language = language
+        self.acting_user = acting_user
+        self.include_co_organizers = include_co_organizers
         super().__init__(*args, **kwargs)
         labels = {
             "en": {
@@ -69,6 +79,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "description": "Description",
                 "description_en": "English description (optional)",
                 "organizer": "Organizer (optional)",
+                "co_organizer_users": "Co-organizers (optional)",
                 "start_datetime": "Start time",
                 "end_datetime": "End time (optional)",
                 "location": "Location (optional)",
@@ -82,6 +93,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "description": "活动说明",
                 "description_en": "英文说明（可选）",
                 "organizer": "发起人或团队（可选）",
+                "co_organizer_users": "共同发起人（可选）",
                 "start_datetime": "开始时间",
                 "end_datetime": "结束时间（可选）",
                 "location": "地点（可选）",
@@ -91,6 +103,20 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             },
         }
         selected_labels = labels.get(language, labels["en"])
+        if include_co_organizers:
+            self.fields["co_organizer_users"] = forms.ModelMultipleChoiceField(
+                queryset=get_user_model().objects.filter(is_active=True),
+                required=False,
+                label=selected_labels["co_organizer_users"],
+                widget=forms.MultipleHiddenInput,
+                help_text=(
+                    "Linked co-organizers may edit this activity while it is "
+                    "awaiting publication. The organizer text above remains "
+                    "public display copy only."
+                    if language != "zh"
+                    else "关联的共同发起人可在活动发布前参与修改；上方的发起人文字仍只用于公开显示。"
+                ),
+            )
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
             language=language,
             queryset=order_units_by_sibling_key(
@@ -114,6 +140,7 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "description",
                 "description_en",
                 "organizer",
+                "co_organizer_users",
                 "start_datetime",
                 "end_datetime",
                 "location",
@@ -123,7 +150,8 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             ]
         )
         for field_name, label in selected_labels.items():
-            self.fields[field_name].label = label
+            if field_name in self.fields:
+                self.fields[field_name].label = label
 
         self.fields["description"].required = True
         self.fields["requested_audience_note"].help_text = (
@@ -133,6 +161,51 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
             if language != "zh"
             else "你可以在这里说明为什么选择这个范围，或希望同工审核时注意的范围调整。最终范围和发布决定由同工审核。"
         )
+
+    def clean_co_organizer_users(self):
+        users = self.cleaned_data.get("co_organizer_users")
+        if (
+            users is not None
+            and self.acting_user is not None
+            and users.filter(pk=self.acting_user.pk).exists()
+        ):
+            raise forms.ValidationError(
+                "You are already the primary creator and cannot also be "
+                "selected as a co-organizer."
+                if self.language != "zh"
+                else "你已经是主要发起人，不能再把自己选为共同发起人。"
+            )
+        return users
+
+    def co_organizer_selected_options(self):
+        if "co_organizer_users" not in self.fields:
+            return []
+        raw_values = self["co_organizer_users"].value() or []
+        selected_ids = []
+        for value in raw_values:
+            try:
+                user_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if user_id not in selected_ids:
+                selected_ids.append(user_id)
+        users = {
+            user.id: user
+            for user in get_user_model().objects.filter(
+                is_active=True,
+                id__in=selected_ids,
+            )
+        }
+        return [
+            {
+                "id": user_id,
+                "display_name": users[user_id].get_full_name().strip()
+                or users[user_id].get_username(),
+                "username": users[user_id].get_username(),
+            }
+            for user_id in selected_ids
+            if user_id in users
+        ]
 
     def clean(self):
         cleaned_data = super().clean()

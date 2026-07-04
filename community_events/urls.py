@@ -19,6 +19,11 @@ urlpatterns = [
         name="community_activity_review_list",
     ),
     path(
+        "activities/user-search/",
+        views.community_activity_user_search,
+        name="community_activity_user_search",
+    ),
+    path(
         "activities/<int:activity_id>/",
         views.community_activity_detail,
         name="community_activity_detail",

@@ -125,6 +125,16 @@ class CommunityActivity(models.Model):
         if self.created_by_id == getattr(user, "id", None):
             return True
 
+        if (
+            self.status
+            in (
+                self.STATUS_PENDING_REVIEW,
+                self.STATUS_CHANGES_REQUESTED,
+            )
+            and self.is_co_organizer(user)
+        ):
+            return True
+
         from .visibility import visible_community_activities_for
 
         return visible_community_activities_for(
@@ -132,22 +142,35 @@ class CommunityActivity(models.Model):
             queryset=type(self).objects.filter(pk=self.pk),
         ).exists()
 
+    def is_co_organizer(self, user):
+        """Return whether ``user`` is explicitly linked as a co-organizer."""
+        return bool(
+            self.pk
+            and getattr(user, "is_authenticated", False)
+            and self.co_organizer_links.filter(
+                user_id=getattr(user, "id", None)
+            ).exists()
+        )
+
     def can_be_edited_by(self, user):
         """Return whether ``user`` may edit this submitted activity.
 
-        Only the creator may edit their own activity, and only while it is in
-        ``pending_review`` or ``changes_requested``. Draft, published,
-        cancelled, and completed activities are not creator-editable; staff
-        editing stays in Django admin or the review surface.
+        The creator or an explicitly linked co-organizer may edit only while
+        the activity is in ``pending_review`` or ``changes_requested``. Draft,
+        published, cancelled, and completed activities are not editable through
+        this member surface; staff editing stays in Django admin or review.
         """
         return bool(
             self.pk
             and getattr(user, "is_authenticated", False)
-            and self.created_by_id == getattr(user, "id", None)
             and self.status
             in (
                 self.STATUS_PENDING_REVIEW,
                 self.STATUS_CHANGES_REQUESTED,
+            )
+            and (
+                self.created_by_id == getattr(user, "id", None)
+                or self.is_co_organizer(user)
             )
         )
 
@@ -248,6 +271,64 @@ class CommunityActivityAudienceScope(models.Model):
                         )
                         break
 
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+class CommunityActivityCoOrganizer(models.Model):
+    activity = models.ForeignKey(
+        CommunityActivity,
+        on_delete=models.CASCADE,
+        related_name="co_organizer_links",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="community_activity_co_organizer_links",
+    )
+    added_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="added_community_activity_co_organizer_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["activity__start_datetime", "user__username", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["activity", "user"],
+                name="unique_community_activity_co_organizer",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["activity"]),
+            models.Index(fields=["user"]),
+        ]
+        verbose_name = "Community Activity Co-organizer"
+        verbose_name_plural = "Community Activity Co-organizers"
+
+    def __str__(self):
+        return f"{self.user} — {self.activity}"
+
+    def clean(self):
+        errors = {}
+        if self.user_id and not self.user.is_active:
+            errors["user"] = "Co-organizers must be active users."
+        if (
+            self.activity_id
+            and self.user_id
+            and self.activity.created_by_id == self.user_id
+        ):
+            errors["user"] = (
+                "The primary creator cannot also be a co-organizer."
+            )
         if errors:
             raise ValidationError(errors)
 

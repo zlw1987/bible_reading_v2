@@ -671,10 +671,34 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
         data.update(overrides)
         return data
 
-    def test_create_page_shows_activity_scope_and_note_labels(self):
-        for language, scope_label, note_label in (
-            ("en", "Activity scope", "Activity scope note (optional)"),
-            ("zh", "活动范围", "活动范围说明（可选）"),
+    def test_create_page_shows_activity_scope_and_organizer_copy(self):
+        for (
+            language,
+            scope_label,
+            note_label,
+            organizer_label,
+            organizer_help,
+            co_organizer_label,
+        ) in (
+            (
+                "en",
+                "Activity scope",
+                "Activity scope note (optional)",
+                "Organizer display name (optional)",
+                "This is public display text only, such as Rainbow 1, Youth "
+                "Fellowship, or a family name. It does not grant edit "
+                "permission. To let specific users help edit, choose "
+                "co-organizers below.",
+                "Co-organizers who can edit (optional)",
+            ),
+            (
+                "zh",
+                "活动范围",
+                "活动范围说明（可选）",
+                "公开显示的主办方/团队（可选）",
+                "这里只用于公开显示，例如 Rainbow 1 小组、青年团契、某某家庭；不会授予修改权限。若要让具体用户一起修改，请在下方选择共同发起人。",
+                "共同发起人（可参与修改，可选）",
+            ),
         ):
             with self.subTest(language=language):
                 self.login(self.member, language=language)
@@ -684,6 +708,9 @@ class CommunityActivitySubmissionTests(CommunityActivityWebTestBase):
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, scope_label)
                 self.assertContains(response, note_label)
+                self.assertContains(response, organizer_label)
+                self.assertContains(response, organizer_help)
+                self.assertContains(response, co_organizer_label)
                 self.assertNotContains(response, "期望参加范围")
                 self.assertContains(response, 'name="audience_units"')
                 self.assertContains(response, 'name="requested_audience_note"')

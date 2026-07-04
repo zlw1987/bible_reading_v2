@@ -78,8 +78,8 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "title_en": "English title (optional)",
                 "description": "Description",
                 "description_en": "English description (optional)",
-                "organizer": "Organizer (optional)",
-                "co_organizer_users": "Co-organizers (optional)",
+                "organizer": "Organizer display name (optional)",
+                "co_organizer_users": "Co-organizers who can edit (optional)",
                 "start_datetime": "Start time",
                 "end_datetime": "End time (optional)",
                 "location": "Location (optional)",
@@ -92,8 +92,8 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 "title_en": "英文名称（可选）",
                 "description": "活动说明",
                 "description_en": "英文说明（可选）",
-                "organizer": "发起人或团队（可选）",
-                "co_organizer_users": "共同发起人（可选）",
+                "organizer": "公开显示的主办方/团队（可选）",
+                "co_organizer_users": "共同发起人（可参与修改，可选）",
                 "start_datetime": "开始时间",
                 "end_datetime": "结束时间（可选）",
                 "location": "地点（可选）",
@@ -110,11 +110,11 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 label=selected_labels["co_organizer_users"],
                 widget=forms.MultipleHiddenInput,
                 help_text=(
-                    "Linked co-organizers may edit this activity while it is "
-                    "awaiting publication. The organizer text above remains "
-                    "public display copy only."
+                    "Selected co-organizers may help edit while the activity "
+                    "is pending review or changes are requested. Only the "
+                    "primary creator can change this list."
                     if language != "zh"
-                    else "关联的共同发起人可在活动发布前参与修改；上方的发起人文字仍只用于公开显示。"
+                    else "所选共同发起人可在活动待审核或需要修改时参与编辑；只有主要发起人可以更改此名单。"
                 ),
             )
         self.fields["audience_units"] = ChurchStructureUnitMultipleChoiceField(
@@ -154,6 +154,13 @@ class CommunityActivitySubmissionForm(forms.ModelForm):
                 self.fields[field_name].label = label
 
         self.fields["description"].required = True
+        self.fields["organizer"].help_text = (
+            "This is public display text only, such as Rainbow 1, Youth "
+            "Fellowship, or a family name. It does not grant edit permission. "
+            "To let specific users help edit, choose co-organizers below."
+            if language != "zh"
+            else "这里只用于公开显示，例如 Rainbow 1 小组、青年团契、某某家庭；不会授予修改权限。若要让具体用户一起修改，请在下方选择共同发起人。"
+        )
         self.fields["requested_audience_note"].help_text = (
             "You may explain why you chose this scope or note any scope adjustment "
             "for staff review. Staff will make the final audience and publishing "

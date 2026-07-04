@@ -3,7 +3,8 @@
 Status: TODAY-SERVING.1B / MYSERVING-LEADER.1A boundaries, updated through
 TODAY-AGENDA.1A and MY-SERVING-BS.1B. DOCS-QA-CHECKPOINT.1A records the current
 manual-QA checkpoint below; the checklist is not a claim that this round of
-manual QA has already been run.
+manual QA has already been run. The docs-only Official Announcements V1 plan
+adds a future Today boundary but no runtime behavior.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 
@@ -28,6 +29,13 @@ Today may show:
   authority and near-term coverage gaps both exist.
 
 Today must not become a full serving management workspace. It should link to the owning module for management actions instead of duplicating those workflows.
+
+The planned `ANNOUNCEMENTS.1D` integration is narrower still: at most two
+visible, active, important official announcements, title/link only, with normal
+announcements left on the owning module list. It is a reminder, not a feed, and
+adds no serving action, My Serving state, Leader Needs Attention item, or staff
+authority. `ANNOUNCEMENTS.1D` is not implemented or approved by this boundary
+note; see `docs/ANNOUNCEMENTS_V1_PLAN.md`.
 
 ## My Serving
 

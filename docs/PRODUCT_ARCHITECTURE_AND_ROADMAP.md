@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through the limited trial readiness closure (July 2026).
+through the docs-only Official Announcements V1 plan (July 2026).
 
 ## 1. Project Identity
 
@@ -88,6 +88,15 @@ documented setup/data warnings, so the project is usable for a limited trial
 under the existing stabilization boundary. This is not a production deployment
 claim. New operations, shared surfaces, or cross-module integrations require
 separate approval.
+
+Official Announcements V1 is now bounded as a docs-only plan in
+`docs/ANNOUNCEMENTS_V1_PLAN.md`. The future independent `announcements` module
+is for staff-authored official communication with structure-native audience
+rows, published-window visibility, member list/detail, and an important-only
+two-item Today reminder. It is not implemented or registered, and planning does
+not authorize runtime work. It remains separate from Community Activities,
+`ServiceEvent`, notifications, Staff Overview, My Serving, and all serving
+state.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -349,7 +358,9 @@ Future CMS scope may include:
 - Prayer Wall continued refinement.
 - Bible Study / small group attendance.
 - Notifications through email, SMS, WeChat, and app notifications.
-- Pastor/staff announcements.
+- Pastor/staff Official Announcements V1 is now bounded in
+  `docs/ANNOUNCEMENTS_V1_PLAN.md`; implementation remains unapproved and not
+  started.
 - Group leader dashboard.
 - Children, family, couples, and newcomer care workflows.
 - Activities signup, check-in, and capacity management.
@@ -772,6 +783,9 @@ runtime guidance; use Section 2 and the canonical documents in
   Overview cards, setup/readiness, a `ServiceEvent` relationship, or My Serving
   integration.
 - Checklist V1 remains deferred.
+- Official Announcements implementation is split into
+  `ANNOUNCEMENTS.1A`–`1E`; this docs-only plan does not approve any runtime
+  slice.
 
 ## 7. Explicit Non-Goals
 
@@ -859,13 +873,20 @@ For feature tasks:
 
 Current direction: the limited trial readiness closure is complete, with
 Community Activities V1 QA-passed by user confirmation and the setup-readiness
-audit reporting 0 blockers plus 19 warnings. Run the limited trial within the
-documented caveats, and let real trial feedback drive any separately approved
-follow-up. Do not reopen legacy Church Structure cleanup or add Community
-Activities features merely because the trial is starting.
+audit reporting 0 blockers plus 19 warnings. Before starting the limited trial,
+the product owner intends to separately approve and implement
+`ANNOUNCEMENTS.1A`–`1E`, then create a bilingual staff setup guide that includes
+the shipped announcements setup flow. The current docs-only plan does not
+authorize those runtime slices or the guide. Do not reopen legacy Church
+Structure cleanup or add Community Activities features merely because the trial
+is starting.
 
 Short next-candidate list:
 
+- separately approve and implement the bounded Official Announcements V1
+  slices in `docs/ANNOUNCEMENTS_V1_PLAN.md`;
+- after Announcements QA closure, write the bilingual staff setup guide from
+  shipped behavior;
 - Church Structure + Ministry + Bible Study setup/trial-readiness review;
 - manual-QA polish based on a real demo;
 - My Serving polish only when users report concrete confusion;

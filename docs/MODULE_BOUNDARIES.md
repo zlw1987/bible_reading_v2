@@ -1,10 +1,10 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`STAFF-GUIDE-READABILITY.1A`, which splits the staff/internal setup guide into
-separate English and Chinese sources and renders the selected language as
-readable, escaped sections on the existing staff/superuser-gated Core/staff
-page (no member-facing help surface, no production-readiness claim, no
+`STAFF-GUIDE-CONTENT.1A`, which rewrites the separate English and Chinese guide
+sources as practical church-staff user guides while preserving the readable,
+escaped rendering and existing staff/superuser-gated Core/staff page (no
+member-facing help surface, no production-readiness claim, no
 model/migration/database write) (July 2026).
 
 This project is becoming a lightweight modular church management system.
@@ -83,14 +83,16 @@ staff lifecycle/access, member visibility, bilingual display, Today and
 disabled-module surface gates, and the documented cross-module non-goals.
 Announcements V1 is acceptable for limited trial use under the existing trial
 boundary; production readiness is not claimed. `STAFF-SETUP-GUIDE.1A` provides
-the staff/internal-only limited-trial guide foundation from shipped behavior,
+the staff/internal-only guide foundation from shipped behavior,
 and `STAFF-HELP-PAGE.1A` surfaces it as a staff/superuser-gated Core/staff
 internal reference page. `STAFF-GUIDE-READABILITY.1A` keeps
 [`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) as the canonical index pointing
 to separate [`STAFF_SETUP_GUIDE.en.md`](STAFF_SETUP_GUIDE.en.md) and
-[`STAFF_SETUP_GUIDE.zh.md`](STAFF_SETUP_GUIDE.zh.md) sources. It adds no
-ordinary/member-facing help surface, makes no production-readiness claim, and
-adds no model, migration, or database write.
+[`STAFF_SETUP_GUIDE.zh.md`](STAFF_SETUP_GUIDE.zh.md) sources.
+`STAFF-GUIDE-CONTENT.1A` rewrites those sources as practical church-staff user
+guides and leaves developer deployment/audit procedures in their separate
+runbook. It adds no ordinary/member-facing help surface, makes no
+production-readiness claim, and adds no model, migration, or database write.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.

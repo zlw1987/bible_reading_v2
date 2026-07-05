@@ -13527,15 +13527,30 @@ class StaffSetupGuidePageTests(TestCase):
 
         response = self.client.get(reverse("staff_setup_guide"))
 
-        self.assertContains(response, "Staff Setup Guide")
-        self.assertContains(response, "Purpose and operating boundary")
-        self.assertNotContains(response, "用途与操作边界")
+        self.assertContains(response, "Staff User Guide")
+        self.assertContains(response, "Church Structure")
+        self.assertContains(response, "Official Announcements")
+        self.assertContains(response, "Community Activities")
+        self.assertContains(response, "My Serving")
+        self.assertNotContains(response, "同工使用指南")
         self.assertContains(
             response,
-            "Staff/internal use only. This guide describes shipped "
-            "limited-trial behavior and is not a production-readiness "
+            "Staff/internal use only. This guide describes current "
+            "shipped behavior and is not a production-readiness "
             "certification.",
         )
+        for developer_term in (
+            "manage.py",
+            "makemigrations",
+            "showmigrations",
+            "migrate --plan",
+            "audit_trial_setup_readiness",
+            "smoke test",
+            "blocker",
+            "warning",
+            "ANNOUNCEMENTS-QA-PASS",
+        ):
+            self.assertNotContains(response, developer_term)
 
     def test_chinese_page_shows_only_chinese_guide(self):
         self.set_language("zh")
@@ -13543,32 +13558,43 @@ class StaffSetupGuidePageTests(TestCase):
 
         response = self.client.get(reverse("staff_setup_guide"))
 
-        self.assertContains(response, "同工设置指南")
-        self.assertContains(response, "用途与操作边界")
-        self.assertNotContains(response, "Purpose and operating boundary")
+        self.assertContains(response, "同工使用指南")
+        self.assertContains(response, "教会结构")
+        self.assertContains(response, "成员归属")
+        self.assertContains(response, "官方公告")
+        self.assertContains(response, "社区活动")
+        self.assertContains(response, "我的服事")
+        self.assertNotContains(response, "Staff User Guide")
         self.assertContains(
             response,
-            "仅限同工／内部使用。本指南只描述已交付的有限试运行行为，"
+            "仅限同工／内部使用。本指南只描述当前已经上线的功能，"
             "并不代表生产就绪认证。",
         )
+        for developer_term in (
+            "manage.py",
+            "makemigrations",
+            "showmigrations",
+            "migrate --plan",
+            "audit_trial_setup_readiness",
+            "smoke test",
+            "blocker",
+            "warning",
+            "ANNOUNCEMENTS-QA-PASS",
+        ):
+            self.assertNotContains(response, developer_term)
 
-    def test_guide_renders_structured_headings_lists_and_code(self):
+    def test_guide_renders_structured_headings_and_lists(self):
         self.set_language("en")
         self.client.login(username="guide_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
         content = response.content.decode()
 
-        self.assertContains(response, "<h2>1. Purpose and operating boundary</h2>", html=True)
-        self.assertNotContains(response, "# Staff Setup Guide")
+        self.assertContains(response, "<h2>1. What this system is for</h2>", html=True)
+        self.assertNotContains(response, "# Staff User Guide")
         self.assertNotIn('<pre class="staff-setup-guide-text">', content)
         self.assertIn(
-            "<li>Confirm at least one usable staff or superuser account "
-            "for trial operations.",
-            content,
-        )
-        self.assertIn(
-            '<pre class="staff-setup-guide-code"><code>python manage.py check',
+            "<li>daily Bible reading, check-in, and reflection;</li>",
             content,
         )
 
@@ -13594,7 +13620,11 @@ class StaffSetupGuidePageTests(TestCase):
         self.assertNotIn("<script>alert", content)
         self.assertIn("&lt;script&gt;", content)
         self.assertNotIn("<strong>code stays escaped</strong>", content)
-        self.assertIn("&lt;strong&gt;code stays escaped&lt;/strong&gt;", content)
+        self.assertIn(
+            '<pre class="staff-setup-guide-code"><code>'
+            "&lt;strong&gt;code stays escaped&lt;/strong&gt;</code></pre>",
+            content,
+        )
 
     def test_missing_language_guide_shows_bilingual_error_without_path(self):
         self.set_language("en")
@@ -13606,9 +13636,9 @@ class StaffSetupGuidePageTests(TestCase):
 
         self.assertContains(
             response,
-            "The setup guide content is temporarily unavailable.",
+            "The staff guide content is temporarily unavailable.",
         )
-        self.assertContains(response, "暂时无法加载设置指南内容")
+        self.assertContains(response, "暂时无法加载同工指南内容")
         self.assertNotContains(response, str(temporary_directory))
 
     def test_response_is_html_not_attachment(self):
@@ -13664,7 +13694,7 @@ class StaffSetupGuidePageTests(TestCase):
         response = self.client.get(reverse("staff_setup_guide"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Purpose and operating boundary")
+        self.assertContains(response, "What this system is for")
 
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_staff_dropdown_link_works_with_all_modules_disabled(self):

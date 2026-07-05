@@ -1,265 +1,196 @@
-# Staff Setup Guide
+# Staff User Guide
 
 Status: STAFF-ONLY / INTERNAL-ONLY.
 
-This limited-trial operations guide describes shipped behavior only. It is not
-a production-readiness certification or an ordinary-member help page. Do not
-expose it to ordinary members. The in-app page at `/staff/setup-guide/` uses
-the same staff/superuser-only access boundary as other `/staff/` surfaces.
+This guide helps church staff use the features currently available for church
+life, communication, activities, Bible Study, and serving coordination. It
+describes current shipped behavior only. It is not a production-readiness
+certification or an ordinary-member help page. Do not expose it to ordinary
+members.
 
-## 1. Purpose and operating boundary
+## 1. What this system is for
 
-Use this guide to prepare a small, supervised trial and verify the boundaries
-between belonging, audience visibility, agenda items, and serving. Record the
-target environment, operator, date, enabled modules, audit result, warnings
-reviewed, and smoke-test accounts. A recorded local result does not replace a
-fresh check against the exact trial environment.
+The system brings several focused church-life workflows into one place:
 
-Current context:
+- daily Bible reading, check-in, and reflection;
+- prayer requests;
+- Bible Study schedules, guides, and small-group meetings;
+- official Church Gatherings;
+- Official Announcements;
+- Community Activities;
+- ministry teams, serving assignments, and My Serving; and
+- Church Structure and member belonging.
 
-- Community Activities V1 manual QA passed by user confirmation.
-- Official Announcements V1 manual QA passed by user confirmation in
-  `ANNOUNCEMENTS-QA-PASS.1A`.
-- The latest recorded setup-readiness audit reported 0 blockers and 19
-  warnings. This supports limited-trial planning only. Review the warnings and
-  rerun the audit against the target database before inviting real users.
+This is not a complete church administration or enterprise system. Do not use
+it for finance, payroll, human resources, legal records, sensitive counseling
+notes, medical records, or child-security check-in.
 
-## 2. Deployment, migrations, and module enablement
+## 2. What to confirm before staff begin using it
 
-1. Confirm that the intended code revision and environment-specific settings
-   are deployed to the trial environment.
-2. Review migration state and planned operations. Apply migrations only
-   through the separately approved deployment procedure; this guide does not
-   authorize a data-changing command.
-3. Run the Django system check and confirm that model changes have no missing
-   migration.
-4. Review `CMS_ENABLED_MODULES` in the deployed settings. The shipped
-   registered keys are `reading`, `prayers`, `studies`, `events`,
-   `community_events`, `announcements`, and `ministry`; the default enables all
-   of them. Unknown keys fail configuration validation, and `ministry` requires
-   `events`.
-5. Confirm the intended navigation, Today contributions, staff links, and
-   module-owned Staff Overview/readiness content with both enabled and
-   deliberately disabled modules.
+- Make sure at least one usable staff or superuser account is available for
+  church administration.
+- Set up the Church Structure that staff actually use, such as the whole
+  church, language congregations, districts, small groups, or other units.
+- Give each participating ordinary member the correct active current primary
+  membership.
+- Whenever content should be visible only to part of the church, choose the
+  correct audience scope before publishing it.
+- Confirm that staff understand two essential boundaries: belonging is not
+  serving, and audience visibility is not a serving assignment.
+- If an expected Staff menu area is missing, contact the site administrator
+  before creating a workaround.
 
-Suggested read-only or no-write verification commands:
+## 3. Church Structure and member belonging
 
-```powershell
-python manage.py check
-python manage.py makemigrations --check --dry-run
-python manage.py showmigrations
-python manage.py migrate --plan
-python manage.py audit_trial_setup_readiness --verbose --limit 20 --fail-on-blockers
-```
+Church Structure answers “who belongs where.” It provides the context used by
+approved features when deciding which members may see scoped content.
 
-`audit_trial_setup_readiness` is read-only and has no `--apply` mode. `--limit`
-limits examples only, not the scan.
+- Use Staff > Structure Setup > Church Structure Setup & Review to inspect the
+  current structure and identify items that need attention.
+- Use Ministry Structure when you need the structure-oriented ministry view.
+- Authorized unit leaders may maintain members for units they manage through
+  the available unit-management pages.
+- Make sure a member has one correct active current primary membership. Resolve
+  duplicate or unclear primary belonging before relying on audience scope.
+- Do not create a fake “Unassigned” group. Unassigned is a member state, not a
+  Church Structure unit.
+- Changing membership changes belonging and visibility context only. It does
+  not create staff access, leadership authority, a ministry-team role, or a
+  serving assignment.
 
-Important limitation:
+## 4. Official Announcements
 
-Module disablement is surface-gated, not route hard-off. It hides registered
-navigation and selected module-owned surfaces/providers, but does not unload
-apps, models, admin registrations, or URLs. Direct routes retain their existing
-view-level permissions and visibility rules.
+Use Official Announcements for official communication written and managed by
+church staff.
 
-## 3. Accounts, Church Structure, and audience verification
+1. Open Staff > Content Management > Announcement Admin.
+2. Create a draft and enter the appropriate English and Chinese content.
+3. Choose the audience that should receive the announcement.
+4. Set the publication start and, when needed, an end time.
+5. Mark an announcement Important only when it should be considered for a
+   reminder on Today.
+6. Publish it when it is ready. Matching members can then see it during the
+   publication window.
+7. Archive it when it should no longer appear.
 
-- Confirm at least one usable staff or superuser account for trial operations.
-  Staff authority must come from the existing permission boundary, never from
-  `ChurchStructureMembership`.
-- Confirm the `ChurchStructureUnit` hierarchy reflects the intended active
-  church structure. Units used for audiences or memberships must be active.
-- Confirm each participating ordinary member has the intended active primary
-  `ChurchStructureMembership`. Resolve ambiguous multiple active primary rows
-  before the trial.
-- Do not create a fake `Unassigned` unit. “Unassigned” means that a user has no
-  blocking active primary membership and no pending membership request; it is
-  a state, not a `ChurchStructureUnit`.
-- Treat membership as belonging only. It may establish the member's structure
-  context for approved visibility consumers, but it grants no serving,
-  coworker role, staff capability, team assignment, or Bible Study role.
-- Treat every module-owned audience row as visibility configuration only.
-  Audience visibility is not assignment, attendance, approval, or serving.
-- For each scoped item, test with a matching ordinary member and a nonmatching
-  ordinary member. Selected ancestor units include qualifying descendant
-  memberships under the shipped structure-native matching rule; zero audience
-  rows fail closed for ordinary users.
+Future, expired, archived, and nonmatching announcements remain hidden from
+ordinary members. Important does not bypass audience scope. Do not use
+Announcements for signup, attendance, serving, event operations, or discussion.
 
-## 4. Official Announcements setup
+## 5. Community Activities
 
-Official Announcements is official staff-authored communication. Its management
-workflow is staff/superuser-only. It is not event management, signup, or
-serving.
+Use Community Activities for community, fellowship, or member-led activities
+that are not official Church Gatherings.
 
-1. Confirm `announcements` is enabled and the intended staff management and
-   authenticated-member navigation surfaces appear.
-2. As staff/superuser, create a draft with English and Chinese title/body
-   content. Check supported-language display and fallback.
-3. Choose one or more existing active `ChurchStructureUnit` rows with the
-   audience picker. Do not invent audience units for an announcement.
-4. Choose normal or check Important. Important makes an eligible item a
-   Today-reminder candidate; it never bypasses audience visibility.
-5. Set the publication window (`publish_start` and optional `publish_end`) and
-   save the draft. Verify that future and expired windows remain hidden from
-   ordinary members.
-6. Publish through the shipped staff action, then verify list and detail with a
-   matching ordinary member. Verify the nonmatching member cannot see the item
-   and receives 404 on direct hidden-detail access.
-7. Archive the announcement and confirm member list/detail visibility ends.
-   Archiving preserves its audience rows.
-8. For an active Important item, confirm Today shows at most one newest visible
-   Important reminder and only its localized title/detail link. Confirm a
-   normal announcement does not appear there.
+- Eligible members may prepare a draft and submit it for review.
+- Staff use Staff > Users and Review > Activity Review to publish, request
+  changes, or reject an item.
+- Activity Scope controls which members can see a published activity. The
+  review note does not control visibility.
+- The primary creator remains responsible for submission and co-organizer
+  management. Linked co-organizers may help edit only within the available
+  editing stages.
+- Signup records attendance intent only. A signup is not check-in, approval,
+  membership, or serving.
+- Activity reminders on Today are intentionally narrow and appear only in the
+  situations supported by the current workflow.
 
-Announcements does not add Staff Overview content, My Serving items, serving
-state, notifications, `ServiceEvent`, Community Activities, signup, attendance,
-or approval/request-changes behavior.
+Community Activities is separate from official Church Gatherings, My Serving,
+and ministry serving assignments. Do not use it to operate an official church
+event or schedule serving teams.
 
-## 5. Community Activities setup
+## 6. Bible Study schedules and small-group meetings
 
-Community Activities is an independent, secondary module for signup-oriented
-community and fellowship activities. It is not `ServiceEvent`, official Church
-Gatherings, My Serving, or a serving system.
+Use the current Bible Study pages to prepare schedules, weekly guides, and
+small-group meetings.
 
-1. Confirm `community_events` is enabled.
-2. As an eligible member with active primary membership, create a complete
-   draft or submit it for review. Activity Scope is required and saves
-   `CommunityActivityAudienceScope` rows using active `ChurchStructureUnit`
-   choices. The optional audience note is review context, not visibility.
-3. Confirm drafts remain visible only to the primary creator, linked
-   co-organizers, and staff/superusers. Only the primary creator manages
-   co-organizers and submits a draft; co-organizers may edit within the shipped
-   draft/pending-review/changes-requested boundary.
-4. As staff/superuser, use the shipped review inbox to publish, request changes
-   with a note, or cancel/reject. Verify creator edits/resubmission return a
-   `changes_requested` item to `pending_review`.
-5. After publication, verify Activity Scope visibility with matching and
-   nonmatching members.
-6. Test signup, cancel, and re-signup. For capped activities, verify the final
-   available slot and full-capacity refusal; cancellation frees capacity.
-   These rows express attendance intent only.
-7. On Today, confirm an activity appears only when the user has an active
-   signup for a published, visible activity happening today. Also confirm only
-   the creator's own `changes_requested` item creates the review reminder.
+- Open Staff > Content Management > Bible Study Schedules to manage schedules.
+- Use Weekly Bible Study Guides for lesson and guide content.
+- Use Small Group Meetings to manage the actual meetings members may see.
+- Choose the intended audience for schedules and meetings. A member can see a
+  scoped meeting only when their current belonging matches its audience.
+- A visible Bible Study meeting is an agenda item, not a serving assignment.
+- A personal Bible Study serving item is created only when a meeting role is
+  explicitly linked to that user. A display name by itself does not create
+  Today actions or My Serving work.
 
-Community Activities adds no My Serving item, `ServiceEvent`, Church Gathering,
-serving record, check-in, waitlist, notification, or Staff Overview content.
-Do not use it as the official church-gathering operations model.
+## 7. Church Gatherings
 
-## 6. Bible Study V2 setup
+Use Church Gatherings for official church events and gatherings.
 
-- Use the active `BibleStudySeries` + `BibleStudyMeeting` path. Do not revive
-  retired V1 `BibleStudySession` workflows.
-- Configure series and meeting audiences through module-owned audience rows
-  that target `ChurchStructureUnit`. Confirm generated or manually prepared
-  member-visible meetings have the intended audience rows; zero-row meetings
-  fail closed for ordinary users.
-- Verify a matching member can see the meeting and a nonmatching member cannot.
-  A visible meeting is agenda, not serving.
-- Create personal Bible Study serving only by linking
-  `BibleStudyMeetingRole.user` to the actual user. That explicit user-linked
-  role may appear in Today and My Serving and use the shipped confirmation
-  workflow.
-- A display-name-only meeting role is meeting-detail fallback only. It must not
-  create Today serving action or My Serving state and must never be matched to
-  a user by text.
+- Open Staff > Ministry Operations > Manage Church Gatherings.
+- Maintain the event title, date and time, location, meeting link, details, and
+  audience scope.
+- Add required ministry teams when the gathering needs particular teams.
+- Confirm that matching members can see the gathering and that the audience is
+  appropriate before relying on it for church communication.
+- Audience scope controls visibility only. It does not assign a team or a
+  person to serve.
 
-## 7. Ministry and My Serving setup
+Church Gatherings and Community Activities are separate workflows. Use Church
+Gatherings for official church-event operations and Community Activities for
+the secondary community/fellowship workflow.
 
-- `MinistryTeam` defines the ministry team context.
-- `TeamAssignment` schedules a team for a specific event, and
-  `TeamAssignmentMember` explicitly assigns a person. Only that explicit member
-  row creates team-serving state for the person.
-- My Serving is the dedicated personal serving and confirmation workspace. Use
-  it to verify pending, today, this-week, later, and management-linked serving
-  surfaces as applicable. My Serving is explicit-serving-only.
-- `ChurchStructureMembership` never creates a team assignment or My Serving
-  item.
-- Active, date-valid lead/coordinator `MinistryTeamRoleAssignment` rows grant
-  the shipped exact-team management responsibility. They may expose management
-  links or leader attention, but they are long-term responsibility—not personal
-  event serving—and must not appear as a personal serving assignment by
-  themselves.
-- Keep Bible Study serving separate: its explicit personal source is the
-  linked-user `BibleStudyMeetingRole.user`, not a `TeamAssignmentMember`.
+## 8. Ministry teams, serving assignments, and My Serving
 
-## 8. Today boundary
+Ministry teams define the teams that serve. Serving assignments connect those
+teams and their members to a specific Church Gathering.
 
-Today is the general, low-noise agenda and lightweight action surface. Depending
-on enabled modules and the current user's data, it may include:
+- Use Staff > Ministry Operations > Ministry Teams to maintain team context,
+  membership, and the available leadership settings.
+- Use Team Assignments to schedule a team for a particular gathering.
+- Add a person explicitly to the assignment when that person is expected to
+  serve. Belonging to a church unit never creates this assignment.
+- My Serving is the personal workspace where users see and confirm their
+  explicit serving assignments.
+- A long-term team lead or coordinator role gives management responsibility
+  within its supported scope. By itself, it is not a personal event-serving
+  assignment and should not appear as one.
+- Bible Study serving remains separate and comes from an explicitly linked
+  meeting role.
 
-- today's reading and check-in state;
-- visible Church Gatherings today and this week;
-- visible Bible Study V2 meetings today and this week;
-- the narrow Community Activities reminders described above;
-- at most one visible active Important Announcement reminder; and
-- personal action items or compact serving notes backed only by an explicit
-  `TeamAssignmentMember` or linked-user `BibleStudyMeetingRole.user`.
+## 9. Today
 
-Today is not a feed, a staff dashboard, or the full serving workspace. Full
-serving confirmation and management remain in My Serving or the owning module.
+Today is a low-noise agenda and action page. Depending on the user's data and
+the available church features, it may show:
 
-## 9. Limited-trial verification checklist
+- today's reading and check-in;
+- visible Church Gatherings today or this week;
+- visible Bible Study meetings today or this week;
+- at most one visible active Important Announcement reminder;
+- narrow Community Activity reminders; and
+- actions backed by explicit team or Bible Study serving assignments.
 
-Use separate accounts and record evidence without copying sensitive personal
-data into this document.
+Today is not a social feed, a staff dashboard, or the full serving workspace.
+Use the owning module pages for full management and My Serving for serving
+confirmation.
 
-### Platform and setup
+## 10. Do not use the system this way
 
-- [ ] `python manage.py check` passes.
-- [ ] `python manage.py makemigrations --check --dry-run` reports no missing
-  migrations.
-- [ ] `showmigrations` and `migrate --plan` match the target deployment plan;
-  any apply action is separately approved.
-- [ ] `CMS_ENABLED_MODULES` contains the intended dependency-valid set and its
-  surface gates were checked.
-- [ ] A fresh `audit_trial_setup_readiness --verbose --limit 20
-  --fail-on-blockers` result was reviewed.
-- [ ] Every warning has an owner, disposition, or accepted trial limitation.
-
-### Accounts and audience
-
-- [ ] Sample staff/superuser can reach the required management surfaces.
-- [ ] Sample matching member has the intended active primary membership and can
-  see scoped published content.
-- [ ] Sample nonmatching member cannot see that scoped content, including by
-  direct hidden-detail URL.
-
-### Product smoke tests
-
-- [ ] Announcement: draft, bilingual content, audience, Important, publish
-  window, publish/archive, matching/nonmatching visibility, and max-one Today
-  reminder pass.
-- [ ] Community Activity: draft/submission, review/request changes, published
-  scope visibility, signup/cancel/capacity, and narrow Today reminders pass.
-- [ ] Today/My Serving: visible gathering and meeting remain agenda only;
-  membership/audience alone creates no serving; explicit team and linked Bible
-  Study assignments appear in the correct serving surfaces; a
-  display-name-only Bible Study role does not.
-
-## 10. Known limitations and escalation
-
-- Disabled modules are surface-gated, not route hard-off.
-- Production readiness is not claimed. This guide does not certify deployment
-  security, backups, monitoring, scale, accessibility, or operational support.
-- Setup-readiness warnings must be reviewed before inviting real users, even
-  when blocker count is zero.
-- Target-environment migration and audit evidence must be recorded separately;
-  local evidence is not target-environment proof.
-- New integrations, broader shared surfaces, notifications, route hard-off,
-  automatic assignments, or cross-module behavior require a separate approved
-  slice.
-
-## 11. Do Not Do
-
-- Do not create serving from `ChurchStructureMembership`.
-- Do not treat audience visibility as assignment or serving.
-- Do not use Community Activities for official church-gathering operations.
-- Do not use Announcements for event management, signup, or serving.
-- Do not claim production readiness from this guide, a QA pass, or a
-  zero-blocker audit.
+- Do not treat member belonging as serving.
+- Do not treat audience scope as an assignment, attendance record, or serving
+  record.
+- Do not use Community Activities for official Church Gathering operations.
+- Do not use Announcements for signup or attendance.
+- Do not put sensitive counseling, medical, financial, legal, or child-safety
+  information into general notes or content fields.
+- Do not create fake Church Structure units to work around visibility.
+- Do not infer a staff role, leadership responsibility, or personal serving
+  assignment from a name or from visibility alone.
 - Do not expose this guide to ordinary members.
-- Do not infer staff authority, management responsibility, or a personal Bible
-  Study role from belonging, audience rows, or display text.
-- Do not implement a future integration or product expansion while following
-  this operations guide.
+
+## 11. Common Staff menu areas
+
+- Staff Overview: a starting point for current staff work and attention items.
+- Content Management: reading plans, Bible Study schedules and guides,
+  small-group meetings, and Official Announcements.
+- Ministry Operations: Church Gatherings, ministry teams, and team assignments.
+- Structure Setup: Church Structure review and Ministry Structure.
+- Users and Review: users, membership requests, moderation, activity review,
+  and available report queues.
+- Internal Reference: this Staff User Guide.
+
+Some menu areas appear only when the related church feature is available. If
+you cannot find an expected area, cannot correct a member's belonging, see
+unexpected visibility, or are unsure whether an item creates serving work,
+stop and contact the site administrator.

@@ -1,10 +1,10 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `STAFF-GUIDE-READABILITY.1A`, which splits the staff/internal setup
-guide into separate English and Chinese sources and renders the selected
-language as readable, escaped sections on the existing staff/superuser-gated
-page (no member-facing help surface, no production-readiness claim, no
+through `STAFF-GUIDE-CONTENT.1A`, which rewrites the separate English and
+Chinese sources as practical church-staff user guides while preserving the
+readable, escaped rendering and existing staff/superuser-gated page (no
+member-facing help surface, no production-readiness claim, no
 model/migration/database write) (July 2026).
 
 ## 1. Project Identity
@@ -115,16 +115,18 @@ lifecycle/access, audience visibility, bilingual display, Today and
 disabled-module surface gates, and cross-module non-goals. Announcements V1 is
 acceptable for limited trial use under the existing trial boundary; this is
 not a production-readiness claim. `STAFF-SETUP-GUIDE.1A` provides the
-staff/internal-only limited-trial guide foundation. `STAFF-HELP-PAGE.1A`
+staff/internal-only guide foundation. `STAFF-HELP-PAGE.1A`
 surfaces it in-app at `/staff/setup-guide/` (route name `staff_setup_guide`,
 linked from the Staff dropdown) under the same staff/superuser-only
 `staff_member_required` boundary as other `/staff/` surfaces.
 `STAFF-GUIDE-READABILITY.1A` keeps `docs/STAFF_SETUP_GUIDE.md` as the canonical
 index, splits the source content into `STAFF_SETUP_GUIDE.en.md` and
 `STAFF_SETUP_GUIDE.zh.md`, and renders the selected language as readable,
-escaped sections. These milestones add no ordinary/member-facing help surface,
-make no production-readiness claim, and add no model, migration, or database
-write.
+escaped sections. `STAFF-GUIDE-CONTENT.1A` rewrites those sources as practical
+church-staff user guides and removes developer deployment/audit instructions
+from the in-app content. These milestones add no ordinary/member-facing help
+surface, make no production-readiness claim, and add no model, migration, or
+database write.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -916,16 +918,17 @@ docs/QA closure only, and `ANNOUNCEMENTS-QA-PASS.1A` records the product
 owner's confirmation that the manual checklist passed. Announcements V1 is
 acceptable for limited trial use under the existing trial boundary, without
 claiming production readiness. `STAFF-GUIDE-READABILITY.1A` keeps the canonical
-staff/internal setup index in `docs/STAFF_SETUP_GUIDE.md` and moves the
-limited-trial flow into separate English and Chinese sources, all from shipped
-behavior only. Do not reopen
+staff/internal index in `docs/STAFF_SETUP_GUIDE.md` and moves the content into
+separate English and Chinese sources. `STAFF-GUIDE-CONTENT.1A` rewrites those
+sources as practical church-staff user guides from shipped behavior only; the
+separate trial-readiness runbook retains developer/operator validation. Do not reopen
 legacy Church Structure cleanup or add Community Activities features merely
 because the trial is starting.
 
 Short next-candidate list:
 
-- use the language-specific staff/internal setup guide for the limited-trial review and
-  record target-environment findings separately;
+- use the language-specific staff/internal user guide when orienting coworkers,
+  and record target-environment readiness separately in the runbook;
 - Church Structure + Ministry + Bible Study setup/trial-readiness review;
 - manual-QA polish based on a real demo;
 - My Serving polish only when users report concrete confusion;

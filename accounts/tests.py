@@ -710,7 +710,9 @@ class AccountProfileTests(TestCase):
             content.index("Small Group Meetings"),
         )
         self.assertContains(response, "Ministry Operations")
-        self.assertContains(response, "Church Gatherings")
+        # Staff dropdown uses the management-flavored label to separate the
+        # manage surface from the ordinary primary-nav module label.
+        self.assertContains(response, "Manage Church Gatherings")
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Team Assignments")
         # The Lighting Pilot Import is retired from the discoverable staff
@@ -759,7 +761,7 @@ class AccountProfileTests(TestCase):
         self.assertNotContains(response, "Weekly Bible Study Guides")
         self.assertNotContains(response, "Small Group Meetings")
         self.assertContains(response, "Reading Plan Admin")
-        self.assertContains(response, "Church Gatherings")
+        self.assertContains(response, "Manage Church Gatherings")
         self.assertContains(response, "Ministry Teams")
         self.assertContains(response, "Prayer Reports")
         self.assertContains(response, "Staff Overview")
@@ -772,7 +774,10 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("profile"))
 
         self.assertEqual(response.status_code, 200)
+        # Disabling events hides both the primary-nav label and the staff
+        # dropdown manage link (the latter is a superstring of the former).
         self.assertNotContains(response, "Church Gatherings")
+        self.assertNotContains(response, "Manage Church Gatherings")
         self.assertNotContains(response, "Ministry Teams")
         self.assertNotContains(response, "Team Assignments")
         self.assertContains(response, "Reading Plan Admin")
@@ -789,7 +794,7 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("profile"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Church Gatherings")
+        self.assertContains(response, "Manage Church Gatherings")
         self.assertNotContains(response, "Ministry Teams")
         self.assertNotContains(response, "Team Assignments")
         self.assertContains(response, "Staff Overview")
@@ -968,7 +973,8 @@ class AccountProfileTests(TestCase):
         self.assertLess(content.index("查经安排"), content.index("每周查经指引"))
         self.assertLess(content.index("每周查经指引"), content.index("小组查经聚会"))
         self.assertContains(response, "事工运作")
-        self.assertContains(response, "教会聚会")
+        # 同工下拉菜单使用带“管理”的标签，与普通主导航模块标签区分。
+        self.assertContains(response, "管理教会聚会")
         self.assertContains(response, "事工团队")
         self.assertContains(response, "服事排班")
         # 灯光试点导入已从可发现的同工菜单中退役；路由仍在，但不再链接。

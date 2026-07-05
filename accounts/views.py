@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.admin.views.decorators import staff_member_required
@@ -1169,29 +1172,22 @@ def staff_structure_unit_enable(request, unit_id):
 
 @staff_member_required
 def staff_setup_guide(request):
-    """Staff/superuser-only in-app view of ``docs/STAFF_SETUP_GUIDE.md``.
-
-    STAFF-HELP-PAGE.1A. Read-only: reads the shipped staff/internal limited-trial
-    setup guide from disk and renders its text inside the normal site layout so
-    staff can read it without downloading a file. It adds no model, no DB write,
-    no new dependency, and no member-facing surface. Access uses the same
-    ``staff_member_required`` boundary as the rest of the ``/staff/`` surfaces, so
-    anonymous and ordinary authenticated users are redirected to the admin login
-    exactly like the other staff pages.
-
-    The Markdown is displayed as safely escaped text (Django auto-escapes the
-    template variable); it is never marked as safe HTML. A missing file degrades
-    to a bilingual notice without exposing any server path.
-    """
-    from pathlib import Path
-
+    """Render the language-specific internal guide for staff/superusers only."""
     from django.conf import settings
 
-    guide_path = Path(settings.BASE_DIR) / "docs" / "STAFF_SETUP_GUIDE.md"
-    guide_text = ""
+    language = get_user_language(request)
+    guide_filename = (
+        "STAFF_SETUP_GUIDE.zh.md"
+        if language == "zh"
+        else "STAFF_SETUP_GUIDE.en.md"
+    )
+    guide_path = Path(settings.BASE_DIR) / "docs" / guide_filename
+    guide_blocks = []
     guide_missing = False
     try:
-        guide_text = guide_path.read_text(encoding="utf-8")
+        guide_blocks = _parse_staff_setup_guide_blocks(
+            guide_path.read_text(encoding="utf-8")
+        )
     except OSError:
         guide_missing = True
 
@@ -1200,10 +1196,124 @@ def staff_setup_guide(request):
         "accounts/staff/setup_guide.html",
         {
             "active_nav": "staff",
-            "guide_text": guide_text,
+            "guide_blocks": guide_blocks,
             "guide_missing": guide_missing,
         },
     )
+
+
+def _parse_staff_setup_guide_blocks(markdown_text):
+    """Parse the repo-shipped guide into escaped-by-template block data.
+
+    This intentionally supports only the guide's small Markdown subset. It
+    never returns HTML or marks source text safe, so headings, paragraphs, list
+    items, and fenced code remain subject to Django template auto-escaping.
+    """
+    blocks = []
+    paragraph_lines = []
+    list_type = None
+    list_items = []
+    code_lines = []
+    in_code_block = False
+
+    def flush_paragraph():
+        if paragraph_lines:
+            blocks.append(
+                {
+                    "type": "paragraph",
+                    "text": " ".join(paragraph_lines),
+                }
+            )
+            paragraph_lines.clear()
+
+    def flush_list():
+        nonlocal list_type
+        if list_type:
+            blocks.append(
+                {
+                    "type": list_type,
+                    "items": list_items.copy(),
+                }
+            )
+            list_type = None
+            list_items.clear()
+
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+
+        if in_code_block:
+            if stripped.startswith("```"):
+                blocks.append(
+                    {
+                        "type": "code",
+                        "text": "\n".join(code_lines),
+                    }
+                )
+                code_lines.clear()
+                in_code_block = False
+            else:
+                code_lines.append(line)
+            continue
+
+        if stripped.startswith("```"):
+            flush_paragraph()
+            flush_list()
+            in_code_block = True
+            continue
+
+        heading_match = re.match(r"^(#{1,3})\s+(.+?)\s*$", line)
+        if heading_match:
+            flush_paragraph()
+            flush_list()
+            blocks.append(
+                {
+                    "type": "heading",
+                    "level": len(heading_match.group(1)),
+                    "text": heading_match.group(2),
+                }
+            )
+            continue
+
+        bullet_match = re.match(r"^\s*[-*]\s+(.+?)\s*$", line)
+        numbered_match = re.match(r"^\s*\d+\.\s+(.+?)\s*$", line)
+        matched_list_type = (
+            "unordered_list"
+            if bullet_match
+            else "ordered_list"
+            if numbered_match
+            else None
+        )
+        if matched_list_type:
+            flush_paragraph()
+            if list_type and list_type != matched_list_type:
+                flush_list()
+            list_type = matched_list_type
+            match = bullet_match or numbered_match
+            list_items.append(match.group(1))
+            continue
+
+        if not stripped:
+            flush_paragraph()
+            flush_list()
+            continue
+
+        if list_type and line[:1].isspace():
+            list_items[-1] = f"{list_items[-1]} {stripped}"
+            continue
+
+        flush_list()
+        paragraph_lines.append(stripped)
+
+    if in_code_block:
+        blocks.append(
+            {
+                "type": "code",
+                "text": "\n".join(code_lines),
+            }
+        )
+    flush_paragraph()
+    flush_list()
+    return blocks
 
 
 @staff_member_required

@@ -1,9 +1,11 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`STAFF-HELP-PAGE.1A`, which surfaces the staff/internal setup guide in-app as a
-staff/superuser-gated Core/staff page (no member-facing help surface, no
-production-readiness claim, no model/migration/database write) (July 2026).
+`STAFF-GUIDE-READABILITY.1A`, which splits the staff/internal setup guide into
+separate English and Chinese sources and renders the selected language as
+readable, escaped sections on the existing staff/superuser-gated Core/staff
+page (no member-facing help surface, no production-readiness claim, no
+model/migration/database write) (July 2026).
 
 This project is becoming a lightweight modular church management system.
 Churches should eventually be able to enable only the modules they need, and
@@ -80,9 +82,15 @@ product owner manually ran that checklist and confirmed it passed, including
 staff lifecycle/access, member visibility, bilingual display, Today and
 disabled-module surface gates, and the documented cross-module non-goals.
 Announcements V1 is acceptable for limited trial use under the existing trial
-boundary; production readiness is not claimed. `STAFF-SETUP-GUIDE.1A` now
-provides the staff/internal-only bilingual limited-trial guide in
-[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) from shipped behavior only.
+boundary; production readiness is not claimed. `STAFF-SETUP-GUIDE.1A` provides
+the staff/internal-only limited-trial guide foundation from shipped behavior,
+and `STAFF-HELP-PAGE.1A` surfaces it as a staff/superuser-gated Core/staff
+internal reference page. `STAFF-GUIDE-READABILITY.1A` keeps
+[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) as the canonical index pointing
+to separate [`STAFF_SETUP_GUIDE.en.md`](STAFF_SETUP_GUIDE.en.md) and
+[`STAFF_SETUP_GUIDE.zh.md`](STAFF_SETUP_GUIDE.zh.md) sources. It adds no
+ordinary/member-facing help surface, makes no production-readiness claim, and
+adds no model, migration, or database write.
 
 `community_events` declares `contributes_nav`, `contributes_today`, and
 `requires_structure_core`. It has no registered-module dependencies.
@@ -258,9 +266,12 @@ notifications, or `ServiceEvent`.
   content.
 * `STAFF-HELP-PAGE.1A` adds a Core/staff internal-reference surface: the Staff
   Setup Guide page (`/staff/setup-guide/`, route name `staff_setup_guide`) and
-  its staff-dropdown link. It reads and displays `docs/STAFF_SETUP_GUIDE.md`
-  inside the site under the same `staff_member_required` boundary as the other
-  `/staff/` surfaces. It is a Core/staff internal help surface, not a
+  its staff-dropdown link. `STAFF-GUIDE-READABILITY.1A` keeps
+  `docs/STAFF_SETUP_GUIDE.md` as the canonical index, points it to
+  `STAFF_SETUP_GUIDE.en.md` and `STAFF_SETUP_GUIDE.zh.md`, and renders the
+  selected source according to the current language. The page remains under
+  the same `staff_member_required` boundary as the other `/staff/` surfaces. It
+  is a Core/staff internal help surface, not a
   module-owned or ordinary-member nav surface, so it is always visible to staff
   regardless of `CMS_ENABLED_MODULES` and adds no member-facing help surface,
   model, migration, or database write.

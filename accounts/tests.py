@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.contrib.messages import get_messages
@@ -13458,7 +13459,7 @@ class ServingReadinessAdminTests(TestCase):
 
 
 class StaffSetupGuidePageTests(TestCase):
-    """STAFF-HELP-PAGE.1A: staff/superuser-only in-app setup-guide page."""
+    """Staff-only, language-specific, safely rendered setup-guide page."""
 
     def setUp(self):
         self.ordinary = User.objects.create_user(
@@ -13520,13 +13521,15 @@ class StaffSetupGuidePageTests(TestCase):
         self.assertEqual(content.count('class="nav-link active"'), 1)
         self.assertIn('<summary class="nav-link active">', content)
 
-    def test_page_shows_bilingual_title_and_internal_notice_en(self):
+    def test_english_page_shows_only_english_guide(self):
         self.set_language("en")
         self.client.login(username="guide_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
 
         self.assertContains(response, "Staff Setup Guide")
+        self.assertContains(response, "Purpose and operating boundary")
+        self.assertNotContains(response, "用途与操作边界")
         self.assertContains(
             response,
             "Staff/internal use only. This guide describes shipped "
@@ -13534,26 +13537,79 @@ class StaffSetupGuidePageTests(TestCase):
             "certification.",
         )
 
-    def test_page_shows_internal_notice_zh(self):
+    def test_chinese_page_shows_only_chinese_guide(self):
         self.set_language("zh")
         self.client.login(username="guide_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
 
         self.assertContains(response, "同工设置指南")
+        self.assertContains(response, "用途与操作边界")
+        self.assertNotContains(response, "Purpose and operating boundary")
         self.assertContains(
             response,
             "仅限同工／内部使用。本指南只描述已交付的有限试运行行为，"
             "并不代表生产就绪认证。",
         )
 
-    def test_page_includes_key_guide_content(self):
+    def test_guide_renders_structured_headings_lists_and_code(self):
+        self.set_language("en")
         self.client.login(username="guide_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
+        content = response.content.decode()
 
-        self.assertContains(response, "STAFF-ONLY / INTERNAL-ONLY")
-        self.assertContains(response, "仅限同工")
+        self.assertContains(response, "<h2>1. Purpose and operating boundary</h2>", html=True)
+        self.assertNotContains(response, "# Staff Setup Guide")
+        self.assertNotIn('<pre class="staff-setup-guide-text">', content)
+        self.assertIn(
+            "<li>Confirm at least one usable staff or superuser account "
+            "for trial operations.",
+            content,
+        )
+        self.assertIn(
+            '<pre class="staff-setup-guide-code"><code>python manage.py check',
+            content,
+        )
+
+    def test_guide_source_html_is_escaped(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        with TemporaryDirectory() as temporary_directory:
+            docs_directory = Path(temporary_directory) / "docs"
+            docs_directory.mkdir()
+            (docs_directory / "STAFF_SETUP_GUIDE.en.md").write_text(
+                "# Test Guide\n\n"
+                "<script>alert('unsafe')</script>\n\n"
+                "```html\n"
+                "<strong>code stays escaped</strong>\n"
+                "```\n",
+                encoding="utf-8",
+            )
+            with self.settings(BASE_DIR=Path(temporary_directory)):
+                response = self.client.get(reverse("staff_setup_guide"))
+
+        content = response.content.decode()
+        self.assertNotIn("<script>alert", content)
+        self.assertIn("&lt;script&gt;", content)
+        self.assertNotIn("<strong>code stays escaped</strong>", content)
+        self.assertIn("&lt;strong&gt;code stays escaped&lt;/strong&gt;", content)
+
+    def test_missing_language_guide_shows_bilingual_error_without_path(self):
+        self.set_language("en")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        with TemporaryDirectory() as temporary_directory:
+            with self.settings(BASE_DIR=Path(temporary_directory)):
+                response = self.client.get(reverse("staff_setup_guide"))
+
+        self.assertContains(
+            response,
+            "The setup guide content is temporarily unavailable.",
+        )
+        self.assertContains(response, "暂时无法加载设置指南内容")
+        self.assertNotContains(response, str(temporary_directory))
 
     def test_response_is_html_not_attachment(self):
         self.client.login(username="guide_staff", password="StaffPass123!")
@@ -13582,6 +13638,15 @@ class StaffSetupGuidePageTests(TestCase):
         self.assertContains(response, reverse("staff_setup_guide"))
         self.assertContains(response, "Staff Setup Guide")
 
+    def test_staff_dropdown_link_keeps_chinese_label(self):
+        self.set_language("zh")
+        self.client.login(username="guide_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("staff_setup_guide"))
+        self.assertContains(response, "同工设置指南")
+
     def test_ordinary_primary_nav_does_not_expose_guide(self):
         self.set_language("en")
         self.client.login(username="guide_ordinary", password="UserPass123!")
@@ -13593,12 +13658,13 @@ class StaffSetupGuidePageTests(TestCase):
 
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_guide_page_works_with_all_modules_disabled(self):
+        self.set_language("en")
         self.client.login(username="guide_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "STAFF-ONLY / INTERNAL-ONLY")
+        self.assertContains(response, "Purpose and operating boundary")
 
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_staff_dropdown_link_works_with_all_modules_disabled(self):

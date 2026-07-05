@@ -25,16 +25,39 @@
 {% if guide_missing %}
 <section class="card">
     <p>
-        {% if language == "zh" %}
-        暂时无法加载设置指南内容，请稍后重试或联系管理员。
-        {% else %}
         The setup guide content is temporarily unavailable. Please try again later or contact an administrator.
-        {% endif %}
+        / 暂时无法加载设置指南内容，请稍后重试或联系管理员。
     </p>
 </section>
 {% else %}
 <article class="card staff-setup-guide">
-    <pre class="staff-setup-guide-text">{{ guide_text }}</pre>
+    {% for block in guide_blocks %}
+        {% if block.type == "heading" %}
+            {% if block.level == 1 %}
+            <h1>{{ block.text }}</h1>
+            {% elif block.level == 2 %}
+            <h2>{{ block.text }}</h2>
+            {% else %}
+            <h3>{{ block.text }}</h3>
+            {% endif %}
+        {% elif block.type == "unordered_list" %}
+        <ul>
+            {% for item in block.items %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ul>
+        {% elif block.type == "ordered_list" %}
+        <ol>
+            {% for item in block.items %}
+            <li>{{ item }}</li>
+            {% endfor %}
+        </ol>
+        {% elif block.type == "code" %}
+        <pre class="staff-setup-guide-code"><code>{{ block.text }}</code></pre>
+        {% else %}
+        <p>{{ block.text }}</p>
+        {% endif %}
+    {% endfor %}
 </article>
 {% endif %}
 {% endblock %}

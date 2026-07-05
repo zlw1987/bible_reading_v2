@@ -1,10 +1,11 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`STAFF-HELP-PAGE.1A`, which surfaces the `STAFF-SETUP-GUIDE.1A` internal
-operations guide in-app as a staff/superuser-gated page (no member-facing help
-surface, no production-readiness claim, no model/migration/database write)
-(July 2026).
+`STAFF-GUIDE-READABILITY.1A`, which splits the staff/internal setup guide into
+English and Chinese sources and renders the selected language as readable,
+escaped sections on the existing staff/superuser-gated in-app page (no
+member-facing help surface, no production-readiness claim, no
+model/migration/database write) (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -23,7 +24,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
 | Trial setup operations | [`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) | Current read-only setup audit, operator review flow, and latest limited-trial readiness closure. |
-| Staff/internal limited-trial setup | [`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) | Bilingual staff/internal-only operations guide for shipped setup, audience, Today, My Serving, Announcements, Community Activities, and Bible Study V2 behavior. It is not an ordinary member help page or a production-readiness certification. `STAFF-HELP-PAGE.1A` also surfaces it inside the app as a staff/superuser-gated page (`/staff/setup-guide/`) linked from the Staff dropdown. |
+| Staff/internal limited-trial setup | [`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) | Canonical index for the separate [English](STAFF_SETUP_GUIDE.en.md) and [Chinese](STAFF_SETUP_GUIDE.zh.md) staff/internal-only operations guides covering shipped setup, audience, Today, My Serving, Announcements, Community Activities, and Bible Study V2 behavior. This is not an ordinary-member help surface or a production-readiness certification. `/staff/setup-guide/` selects one language and remains staff/superuser-gated. |
 
 When these documents conflict with an older plan, use the canonical document
 and current code/migrations. `AGENTS.md` remains the standing agent workflow and
@@ -208,13 +209,14 @@ closure only. `ANNOUNCEMENTS-QA-PASS.1A` records that the product owner
 manually ran the checklist and confirmed it passed across staff lifecycle,
 audience visibility, bilingual display, Today/module gates, and cross-module
 non-goals. Announcements V1 is acceptable for limited trial use under the
-existing trial boundary, without claiming production readiness. The bilingual
-staff/internal-only setup guide is available in
-[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md); it describes shipped behavior
-and does not add a member-facing help surface. `STAFF-HELP-PAGE.1A` surfaces the
-same guide inside the app as a staff/superuser-gated page (`/staff/setup-guide/`,
-route name `staff_setup_guide`, linked from the Staff dropdown); it reads and
-displays the shipped guide text only and adds no member-facing surface.
+existing trial boundary, without claiming production readiness. The
+staff/internal-only setup guide index is
+[`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md), with separate
+[English](STAFF_SETUP_GUIDE.en.md) and [Chinese](STAFF_SETUP_GUIDE.zh.md)
+sources. `/staff/setup-guide/` (route name `staff_setup_guide`, linked from the
+Staff dropdown) selects the current language and renders readable, escaped
+guide sections under the existing staff/superuser gate. It adds no
+member-facing surface.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

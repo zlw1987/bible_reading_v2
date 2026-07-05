@@ -165,6 +165,14 @@ Today is not a social feed, a staff dashboard, or the full serving workspace.
 Use the owning module pages for full management and My Serving for serving
 confirmation.
 
+Planning note: `CHURCH-CALENDAR.0A` approves documentation for a future
+read-only member Church Calendar / 教会日历 that would show all
+audience-matching Church Gatherings, Bible Study meetings, active-window
+Announcements, and Community Activities in a selected date range. It is not
+implemented yet. It will remain separate from Today and from the Daily Reading
+active-plan calendar, and staff-management access will not widen what a user
+may see on the member calendar.
+
 ## 10. Do not use the system this way
 
 - Do not treat member belonging as serving.

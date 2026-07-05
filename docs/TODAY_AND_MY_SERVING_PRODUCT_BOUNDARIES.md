@@ -12,6 +12,8 @@ exclusion, audience enforcement for Important items, disabled-module Today
 surface gate, and the absence of serving/My Serving/attention/Staff Overview
 or other cross-module behavior. Neither docs slice changes Today runtime
 behavior, and the pass is not a production-readiness claim.
+`CHURCH-CALENDAR.0A` separately plans a future read-only member Church
+Calendar; it does not change Today in this slice.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 
@@ -45,6 +47,16 @@ Serving state, Leader Needs Attention item, or staff authority. Important
 priority never bypasses the shared member/public audience visibility rules;
 disabled-module aggregation returns an empty default without querying
 announcements.
+
+The separately planned Church Calendar / 教会日历 exists because Today must
+remain selective and low-noise rather than becoming a complete feed. A future
+calendar may aggregate all enabled-source, ordinary-member-visible Church
+Gatherings, Bible Study V2 meetings, active-window Official Announcements, and
+Community Activities across a selected date range. That calendar remains a
+separate route and provider system: it does not widen Today's caps, cards,
+actions, serving notes, manager summaries, or Community Activity reminder
+rules. `CHURCH-CALENDAR.0A` is documentation only; no calendar runtime exists
+yet.
 
 ## My Serving
 

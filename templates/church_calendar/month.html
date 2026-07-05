@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}日历{% else %}Calendar{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}教会日历{% else %}Church Calendar{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+            浏览与你所属教会群体相关的聚会、查经、活动与公告。
+        {% else %}
+            Browse gatherings, Bible studies, activities, and announcements shared with your church community.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card">
+    <div class="calendar-toolbar">
+        <a class="button button-secondary"
+           href="{% url 'church_calendar_month' %}?month={{ previous_month_param }}">
+            {% if language == "zh" %}上个月{% else %}Previous{% endif %}
+        </a>
+        <span class="calendar-current-month">
+            {{ month_start|date:"F Y" }}
+        </span>
+        <a class="button button-secondary"
+           href="{% url 'church_calendar_month' %}?month={{ next_month_param }}">
+            {% if language == "zh" %}下个月{% else %}Next{% endif %}
+        </a>
+        {% if not is_current_month %}
+        <a class="button button-secondary" href="{% url 'church_calendar_month' %}">
+            {% if language == "zh" %}回到本月{% else %}Today{% endif %}
+        </a>
+        {% endif %}
+    </div>
+
+    <ul class="calendar-legend">
+        {% for entry in type_legend %}
+        <li class="calendar-legend-item calendar-legend-{{ entry.item_type }}">
+            {% if language == "zh" %}{{ entry.label_zh }}{% else %}{{ entry.label_en }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+
+    <table class="calendar-grid">
+        <thead>
+            <tr>
+                {% if language == "zh" %}
+                <th>日</th><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th><th>六</th>
+                {% else %}
+                <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in calendar_weeks %}
+            <tr>
+                {% for cell in week %}
+                <td class="calendar-cell{% if not cell.in_month %} calendar-cell-muted{% endif %}{% if cell.is_today %} calendar-cell-today{% endif %}">
+                    <a class="calendar-cell-link"
+                       href="{% url 'church_calendar_day' cell.date.year cell.date.month cell.date.day %}">
+                        {{ cell.date.day }}
+                    </a>
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% if not has_items %}
+    <p class="muted calendar-empty-state">
+        {% if language == "zh" %}
+            本月暂时没有与你相关的日程。
+        {% else %}
+            There is nothing on your calendar for this month yet.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

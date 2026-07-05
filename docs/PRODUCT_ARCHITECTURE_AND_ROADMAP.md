@@ -1,10 +1,9 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, updated
-through `CHURCH-CALENDAR.0A`, which approves a docs-only plan for a separate,
-read-only member Church Calendar. No calendar app, registry key, routes,
-providers, templates, models, migrations, tests, navigation, or runtime
-behavior are implemented yet (July 2026).
+through `CHURCH-CALENDAR.1A-FU1`. `CHURCH-CALENDAR.1A` implements the
+model-free, read-only Church Calendar foundation; source integration, the final
+month/day UI, and tests/docs closure remain pending (July 2026).
 
 ## 1. Project Identity
 
@@ -128,18 +127,24 @@ surface, make no production-readiness claim, and add no model, migration, or
 database write.
 
 `CHURCH-CALENDAR.0A` approves the bounded implementation plan in
-`docs/CHURCH_CALENDAR_V1_PLAN.md`. The future Church Calendar / 教会日历 is a
-separate read-only member surface for all enabled-source items that match the
-viewer's ordinary current audience/belonging: Bible Study V2 meetings, Church
-Gatherings, active-window Official Announcements, and Community Activities.
-It exists because Today remains intentionally low-noise; it does not expand
-Today or reuse its caps and personal-action filters. The plan requires
-member-safe range adapters that do not inherit staff, manager, creator, or
-co-organizer visibility bypasses. It remains separate from the reading
-`active_plan_calendar` and excludes reading check-ins, serving inference,
-attendance/check-in, notifications, external-calendar sync,
-CommunityActivity-to-ServiceEvent merging, and staff-dashboard behavior.
-`CHURCH-CALENDAR.1A`–`1D` remain unimplemented and separately approvable.
+`docs/CHURCH_CALENDAR_V1_PLAN.md`; `CHURCH-CALENDAR.1A` implements its
+model-free read-only foundation. The independent `church_calendar` app is
+registered and default-enabled, with module-gated navigation, authenticated
+`/calendar/` and `/calendar/<year>/<month>/<day>/` member routes, basic
+month/day templates and safe empty states, local-date range helpers, and a
+normalized `CalendarItem` provider registry/aggregator contract.
+
+The registry intentionally has no real source providers. No `ServiceEvent`,
+`BibleStudyMeeting`, `Announcement`, `CommunityActivity`, or Reading data is
+queried, and the calendar does not yet show real source items. 1B must add the
+four member-safe source adapters without staff, manager, creator, or
+co-organizer visibility bypasses; 1C must complete the final month/day UI; and
+1D must complete focused tests, docs closure, and manual member-calendar QA.
+Calendar V1 is not complete or QA-passed. Today remains intentionally
+low-noise and unchanged. The calendar remains separate from the reading
+`active_plan_calendar` and excludes reading check-ins, My Serving changes,
+serving inference, attendance/check-in, notifications, external-calendar sync,
+CommunityActivity-to-ServiceEvent relationships, and staff-dashboard behavior.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -819,14 +824,15 @@ runtime guidance; use Section 2 and the canonical documents in
   The project is usable for a limited trial under the existing stabilization
   boundary, not certified for production deployment. These checkpoints add no
   runtime behavior.
-- `CHURCH-CALENDAR.0A` completes docs-only planning for an independent
-  read-only member Church Calendar at proposed `/calendar/` month and day
-  routes. Its four exact source types are `service_event`,
+- `CHURCH-CALENDAR.1A` implements the model-free foundation for an independent
+  read-only member Church Calendar at `/calendar/` month and day routes. Its
+  four planned source types are `service_event`,
   `bible_study_meeting`, `announcement`, and `community_activity`.
   Announcements are active-window communication rather than true events.
-  Range providers must enforce ordinary member visibility even for management
-  accounts, and disabled source modules must not be queried. The proposed
-  `CHURCH-CALENDAR.1A`–`1D` implementation slices are not started.
+  No real source provider is integrated or queried yet. Pending 1B providers
+  must enforce ordinary member visibility even for management accounts, and
+  disabled source modules must not be queried. The final UI (1C) and
+  tests/docs/manual-QA closure (1D) also remain pending.
 - Boundary: `ChurchStructureMembership` runtime visibility is consumer-specific. ServiceEvent structure-audience rows switched in CS-CORE.2B-A and zero-row events fail closed after SE-RETIRE.1B. Bible Study V2 audience-row visibility / Today / role-worship pickers use meeting audience rows plus active primary membership after BS-STRUCT.2A. Legacy `SmallGroup`, `District`, `MinistryContext`, `Profile.small_group`, and V1 `BibleStudySession` are removed from current models; historical docs and immutable migrations may still name them.
 - Later consumer migration only after phased planning.
 - Later role-aware editing permissions.
@@ -950,8 +956,9 @@ because the trial is starting.
 
 Short next-candidate list:
 
-- separately approve `CHURCH-CALENDAR.1A` only when implementation of the
-  read-only foundation is desired; the 0A plan itself changes no runtime;
+- separately approve `CHURCH-CALENDAR.1B` when real member-safe source-provider
+  integration is desired; 1A currently renders only the safe model-free
+  foundation;
 - use the language-specific staff/internal user guide when orienting coworkers,
   and record target-environment readiness separately in the runbook;
 - Church Structure + Ministry + Bible Study setup/trial-readiness review;
@@ -975,7 +982,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this V1 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass; a limited trial is acceptable under the existing stabilization boundary. Waitlist, notifications, comments, payments, a Community Activity-owned calendar workflow, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned. `CHURCH-CALENDAR.0A` separately plans a read-only cross-module member calendar; it does not change Community Activity lifecycle or relationships.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this V1 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass; a limited trial is acceptable under the existing stabilization boundary. Waitlist, notifications, comments, payments, a Community Activity-owned calendar workflow, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned. `CHURCH-CALENDAR.1A` implements only the model-free read-only cross-module calendar foundation; it does not yet query Community Activities and does not change their lifecycle or relationships.
 
 Not next:
 - Lighting Team-specific model

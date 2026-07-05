@@ -214,6 +214,30 @@ _REGISTERED_MODULES = (
         ),
     ),
     CmsModule(
+        key="church_calendar",
+        label_en="Calendar",
+        label_zh="日历",
+        capabilities=frozenset(
+            {CAPABILITY_NAV, CAPABILITY_REQUIRES_STRUCTURE_CORE}
+        ),
+        primary_nav=PrimaryNavEntry(
+            url_name="church_calendar_month",
+            label_en="Calendar",
+            label_zh="日历",
+            active_nav="church_calendar",
+            order=60,
+        ),
+        dependency_notes=(
+            "Independent read-only member calendar. Aggregates member-safe "
+            "range providers owned by the enabled events / studies / "
+            "announcements / community_events modules; disabled sources are "
+            "not called. It declares no hard module dependency and does not "
+            "contribute Today. Provider adapters must enforce ordinary current "
+            "audience/belonging visibility only — no staff/manager/creator/"
+            "co-organizer bypass."
+        ),
+    ),
+    CmsModule(
         key="ministry",
         label_en="Ministry Serving",
         label_zh="事工服事",

@@ -1,10 +1,9 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`CHURCH-CALENDAR.0A`, which approves a docs-only plan for a separate,
-read-only member Church Calendar without implementing routes, providers,
-templates, registry metadata, models, migrations, tests, or runtime behavior
-(July 2026).
+`CHURCH-CALENDAR.1A-FU1`. `CHURCH-CALENDAR.1A` implements the model-free,
+read-only Church Calendar foundation; real source providers, the final
+month/day UI, and tests/docs closure remain pending (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
 historical design, migration, and execution records. Historical documents are
@@ -19,7 +18,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
 | Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Current implemented V1 lifecycle through 1H-A, including browse/detail, signup/cancel, member drafts and submission, Activity Scope, review/request-changes, pending-review creator editing, capacity, co-organizers, and low-noise Today reminders. It also records the user-confirmed V1 manual QA pass and owns the stabilization boundary; expansion requires separate approval. |
 | Official Announcements | [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) | Canonical bounded V1 plan and QA record. `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` implement the bounded app, member/staff surfaces, and one-item important-announcement Today reminder. `ANNOUNCEMENTS.1E` adds docs/QA closure only; `ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed manual-QA pass. Limited trial use is acceptable under the existing trial boundary; this is not a production-readiness claim. |
-| Church Calendar | [`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md) | Approved docs-only V1 plan for a separate read-only member calendar aggregating member-safe Bible Study meetings, Church Gatherings, active-window Announcements, and Community Activities. `CHURCH-CALENDAR.1A`–`1D` remain unimplemented and require separate approval. |
+| Church Calendar | [`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md) | Canonical bounded V1 plan and current implementation boundary. `CHURCH-CALENDAR.1A` implements the model-free app, registry/nav foundation, authenticated month/day route shells, safe empty states, and provider contract. Real source/member-safe adapters (1B), final UI (1C), and tests/docs closure and QA (1D) remain pending. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -46,19 +45,24 @@ migration-safety instruction source.
   matched through active primary membership. Zero-row events fail closed for
   ordinary users.
 - The module registry contains `reading`, `prayers`, `studies`, `events`,
-  `community_events`, `announcements`, and `ministry`.
+  `community_events`, `announcements`, `church_calendar`, and `ministry`.
   `CMS_ENABLED_MODULES` defaults to all
   registered modules. Unknown keys and unmet dependencies raise
   `ImproperlyConfigured`; `ministry` requires `events`. The `announcements`
   module has no registered-module dependency; its member list/detail uses
   published active-window audience visibility even for staff, and zero audience
   rows fail closed.
-- `CHURCH-CALENDAR.0A` documents a future independent `church_calendar`
-  module and `/calendar/` member surface. Neither exists in the current
-  registry or runtime. The approved plan requires range-based source providers,
-  current-belonging member visibility even for staff accounts, and complete
-  separation from `active_plan_calendar`, reading check-ins, Today, serving,
-  attendance, notifications, external-calendar sync, and staff dashboards.
+- `CHURCH-CALENDAR.1A` adds the independent, default-enabled
+  `church_calendar` module, module-gated bilingual navigation, authenticated
+  read-only `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, basic
+  month/day templates and safe empty states, local-date range helpers, and the
+  model-free `CalendarItem` provider registry/aggregator foundation. No real
+  source provider or member-safe adapter is integrated yet, so the foundation
+  queries no `ServiceEvent`, `BibleStudyMeeting`, `Announcement`,
+  `CommunityActivity`, or Reading data and shows no real source items.
+  Separation from `active_plan_calendar`, reading check-ins, Today, My Serving,
+  serving, attendance, notifications, external-calendar sync, and staff
+  dashboards remains explicit.
 - `COMMUNITY-EVENTS.1A` adds the independent `community_events` app,
   `CommunityActivity`, `CommunityActivityAudienceScope`, Django admin, and
   published/activity-audience visibility through active primary membership.
@@ -196,10 +200,10 @@ list, check-in, notifications, comments, payments, calendar integration,
 broader Today browse/discovery, Staff Overview cards, setup/readiness, any
 `ServiceEvent` relationship, My Serving integration, and the separate
 Checklist product remain deferred and require separately approved slices.
-The separately approved `CHURCH-CALENDAR.0A` plan may later read published,
-member-visible Community Activities through a range adapter; it does not add a
-Community Activity calendar workflow, change signup, or create a
-`CommunityActivity`–`ServiceEvent` relationship.
+The `CHURCH-CALENDAR.1A` foundation does not query Community Activities.
+Pending 1B may add a member-safe range adapter for published, visible
+activities; neither slice adds a Community Activity calendar workflow, changes
+signup, or creates a `CommunityActivity`–`ServiceEvent` relationship.
 
 Official Announcements V1 is now bounded in
 [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) as an independent
@@ -229,15 +233,20 @@ deployment/audit instructions. `/staff/setup-guide/` (route name
 language and renders readable, escaped guide sections under the existing
 staff/superuser gate. It adds no member-facing surface.
 
-Church Calendar V1 is approved as planning only in
-[`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md). The proposed
-read-only `/calendar/` surface fills the discovery gap intentionally left by
-low-noise Today and would aggregate all enabled-source items that pass
-ordinary member visibility. It must use member-safe adapters rather than
-staff/manager/creator visibility overrides. It excludes the reading active-plan
-calendar and check-ins, serving inference, attendance/check-in, notifications,
-Google Calendar sync, Community Activity/ServiceEvent merging, staff dashboard
-behavior, and any Today change. `CHURCH-CALENDAR.1A`–`1D` are not implemented.
+Church Calendar V1 is bounded in
+[`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md).
+`CHURCH-CALENDAR.1A` implements the model-free read-only foundation: the app is
+registered and default-enabled, authenticated month/day routes and basic
+templates exist, safe empty states render, and a normalized range-provider
+registry/aggregator contract exists. The registry intentionally has no real
+source providers, so the calendar does not yet show actual events,
+announcements, activities, meetings, or Reading data. 1B member-safe source
+adapters, the final 1C month/day UI, and 1D tests/docs closure and manual QA
+remain pending. Calendar V1 is not complete or QA-passed. It continues to
+exclude the reading active-plan calendar and check-ins, serving inference,
+attendance/check-in, notifications, Google Calendar sync, Community
+Activity/ServiceEvent merging, staff dashboard behavior, and any Today or My
+Serving change.
 
 Do not use planning documentation as authorization to expand signup beyond the
 implemented lifecycle, add shared user surfaces, route hard-off gates,

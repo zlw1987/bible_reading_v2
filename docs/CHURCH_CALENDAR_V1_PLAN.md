@@ -1,9 +1,10 @@
 # Church Calendar V1 Plan
 
-Status: `CHURCH-CALENDAR.0A` approved docs-only implementation plan (July
-2026). No calendar app, registry key, route, provider, template, model,
-migration, test, navigation entry, or runtime behavior is implemented by this
-slice. Each implementation slice below requires separate approval.
+Status: `CHURCH-CALENDAR.0A` approved this bounded plan, and
+`CHURCH-CALENDAR.1A` implements the model-free read-only foundation (July
+2026). Real source providers/member-safe adapters (1B), the final month/day UI
+(1C), and tests/docs closure and manual QA (1D) remain pending. Calendar V1 is
+not complete or QA-passed.
 
 ## 1. Purpose and product boundary
 
@@ -247,10 +248,16 @@ Future implementation tests should prove:
 
 ### CHURCH-CALENDAR.1A — Read-only foundation
 
-Add the model-free `church_calendar` app, registry metadata, authenticated
-month/day route skeletons, safe empty states, bilingual taxonomy labels, and
-the normalized range-provider contract. Do not integrate source providers or
-build the final month/day presentation yet. No migration or data write.
+Complete. Adds the model-free `church_calendar` app, registry metadata and
+default enablement, module-gated bilingual navigation, authenticated month/day
+route skeletons, basic templates and safe empty states, local-date range
+helpers, bilingual taxonomy labels, and the normalized `CalendarItem`
+range-provider registry/aggregator contract. The registry intentionally has no
+real source providers: no `ServiceEvent`, `BibleStudyMeeting`, `Announcement`,
+`CommunityActivity`, or Reading data is queried. No model, migration, data
+write, Today or My Serving change, notification, serving, attendance/check-in,
+external-calendar sync, or CommunityActivity-to-ServiceEvent relationship was
+added.
 
 ### CHURCH-CALENDAR.1B — Provider/source integration
 
@@ -275,8 +282,10 @@ verified implemented behavior. This slice must not add new product scope.
 
 ## 11. Approval boundary
 
-`CHURCH-CALENDAR.0A` approves this plan only. It makes no runtime claim and
-does not authorize any `1A`–`1D` implementation without a separate task.
+`CHURCH-CALENDAR.0A` approved this plan only. `CHURCH-CALENDAR.1A` was
+separately approved and implements only the foundation described above. It
+does not authorize 1B source integration, 1C final UI, 1D closure/QA, or any
+excluded scope without a separate task.
 
 The following remain explicitly excluded from Calendar V1:
 

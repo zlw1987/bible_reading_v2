@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if language == "zh" %}日历{% else %}Calendar{% endif %}
+    {{ calendar_date|date:"Y-m-d" }} | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {{ calendar_date|date:"l, F j, Y" }}
+        {% if is_today %}
+        <span class="status status-info">
+            {% if language == "zh" %}今天{% else %}Today{% endif %}
+        </span>
+        {% endif %}
+    </h1>
+    <p class="page-subtitle">
+        <a href="{% url 'church_calendar_month' %}?month={{ month_param }}">
+            {% if language == "zh" %}返回月历{% else %}Back to month{% endif %}
+        </a>
+    </p>
+</div>
+
+<div class="card">
+    <ul class="calendar-legend">
+        {% for entry in type_legend %}
+        <li class="calendar-legend-item calendar-legend-{{ entry.item_type }}">
+            {% if language == "zh" %}{{ entry.label_zh }}{% else %}{{ entry.label_en }}{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+
+    {% if has_items %}
+    <ul class="calendar-day-items">
+        {% for item in calendar_items %}
+        <li class="calendar-day-item calendar-legend-{{ item.item_type }}">
+            <a href="{{ item.detail_url }}">{{ item.title }}</a>
+            {% if item.display_mode == "timed" %}
+                <span class="muted">{{ item.start|date:"H:i" }}</span>
+            {% else %}
+                <span class="muted">
+                    {% if language == "zh" %}公告{% else %}Announcement{% endif %}
+                </span>
+            {% endif %}
+            {% if item.location %}
+            <span class="muted">· {{ item.location }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted calendar-empty-state">
+        {% if language == "zh" %}
+            这一天暂时没有与你相关的日程。
+        {% else %}
+            There is nothing on your calendar for this day.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

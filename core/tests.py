@@ -45,6 +45,7 @@ ALL_MODULE_KEYS = (
     "events",
     "community_events",
     "announcements",
+    "church_calendar",
     "ministry",
 )
 
@@ -146,6 +147,12 @@ class ModuleRegistryTests(SimpleTestCase):
                     "announcements",
                 ),
                 ("my_serving", "My Serving", "我的服事", "my_serving"),
+                (
+                    "church_calendar_month",
+                    "Calendar",
+                    "日历",
+                    "church_calendar",
+                ),
             ),
         )
 

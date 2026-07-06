@@ -28,6 +28,7 @@ from community_events.calendar_provider import provide_community_activity_items
 from community_events.models import (
     CommunityActivity,
     CommunityActivityAudienceScope,
+    CommunityActivityCoOrganizer,
 )
 from events.calendar_provider import provide_service_event_items
 from events.models import ServiceEvent, ServiceEventAudienceScope
@@ -486,6 +487,32 @@ class CommunityActivityProviderTests(CalendarSourceProviderBase):
         for account in (self.staff_nonmatching, self.superuser_nonmatching):
             self.assertEqual(self._items(account), [], account.username)
         self.assertNotIn(activity.id, self._ids(self._items(self.member)))
+
+    def test_co_organizer_gets_no_bypass(self):
+        draft = self._activity(
+            unit=self.district,
+            status=CommunityActivity.STATUS_DRAFT,
+            created_by=self.member,
+        )
+        CommunityActivityCoOrganizer.objects.create(
+            activity=draft,
+            user=self.nonmatching_member,
+            added_by=self.member,
+        )
+        published = self._activity(
+            unit=self.district,
+            status=CommunityActivity.STATUS_PUBLISHED,
+            created_by=self.member,
+        )
+        CommunityActivityCoOrganizer.objects.create(
+            activity=published,
+            user=self.nonmatching_member,
+            added_by=self.member,
+        )
+
+        self.assertTrue(draft.is_co_organizer(self.nonmatching_member))
+        self.assertTrue(published.is_co_organizer(self.nonmatching_member))
+        self.assertEqual(self._items(self.nonmatching_member), [])
 
     def test_absent_and_ambiguous_membership_fail_closed(self):
         self._activity(unit=self.root)

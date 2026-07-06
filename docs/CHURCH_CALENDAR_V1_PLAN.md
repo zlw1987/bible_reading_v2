@@ -4,8 +4,9 @@ Status: `CHURCH-CALENDAR.0A` approved this bounded plan,
 `CHURCH-CALENDAR.1A` implemented the model-free read-only foundation,
 `CHURCH-CALENDAR.1B` added the four member-safe source range providers and
 their visibility adapters, and `CHURCH-CALENDAR.1C` implemented the final
-member-facing month grid and day detail UI (July 2026). Tests/docs closure and
-manual QA (1D) remain pending. Calendar V1 is not complete or QA-passed.
+member-facing month grid and day detail UI (July 2026).
+`CHURCH-CALENDAR.1D-A` prepared closure coverage/docs and the pending manual QA
+checklist. Manual QA remains pending, and Calendar V1 is not QA-passed.
 
 ## 1. Purpose and product boundary
 
@@ -308,12 +309,28 @@ and the grid stays usable on mobile. No edit/publish/review/assignment/
 attendance/staff-management control is rendered, and no Today, My Serving,
 serving, source model, migration, or data write was added.
 
+### CHURCH-CALENDAR.1D-A — Closure-prep tests/docs and QA checklist
+
+Prepared, not QA-passed. Reviewed existing route, provider, visibility,
+enablement, local-date, accessibility, read-only, and cross-product regression
+coverage against this plan; added only the missing focused co-organizer
+member-calendar bypass regression test. Created the initially unchecked manual
+QA checklist at
+[`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md) and
+updated current-state docs to record that 1A/1B/1C are implemented while manual
+QA remains pending. This closure-prep slice added no new product feature scope,
+model, migration, data write, provider visibility expansion, Today, My Serving,
+serving, signup, attendance/check-in, notification, external sync, staff
+dashboard, Reading active-plan calendar/check-in, route hard-off, broad UI
+redesign, or CommunityActivity-to-ServiceEvent relationship.
+
 ### CHURCH-CALENDAR.1D — Tests and docs closure
 
-Complete focused provider, visibility, route, enablement, local-date,
-accessibility, query-bound, and cross-product regression coverage; run manual
-member-calendar QA; and update current-state docs from “planned” to the
-verified implemented behavior. This slice must not add new product scope.
+Pending product-owner manual QA. Complete focused provider, visibility, route,
+enablement, local-date, accessibility, query-bound, and cross-product
+regression coverage; run manual member-calendar QA; and update current-state
+docs from "planned" to the verified implemented behavior. This slice must not
+add new product scope.
 
 ## 11. Approval boundary
 

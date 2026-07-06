@@ -6,9 +6,11 @@ controls, and they never widen visibility for staff, superuser, manager,
 creator, or co-organizer accounts: they rely entirely on the member-safe
 aggregator in :mod:`church_calendar.providers`.
 
-This slice ships the month/day shells and safe empty states. Real source
-provider integration and the final month/day presentation arrive in later
-approved slices.
+CHURCH-CALENDAR.1C renders the final member-facing month grid and day detail on
+top of the 1B source providers. Presentation-only arrangement (local-day
+bucketing, timed/announcement split, deterministic sorting) lives in
+:mod:`church_calendar.presentation`; these views never re-check visibility or
+widen the member-safe aggregator result.
 """
 
 from datetime import date
@@ -18,7 +20,7 @@ from django.http import Http404
 from django.shortcuts import render
 from django.utils import timezone
 
-from . import ranges
+from . import presentation, ranges
 from .providers import ITEM_TYPE_LABELS, ITEM_TYPE_ORDER, collect_calendar_items
 
 
@@ -50,18 +52,12 @@ def church_calendar_month(request):
     range_start, range_end = ranges.month_bounds(year, month)
     items = collect_calendar_items(request.user, range_start, range_end)
 
-    weeks = []
-    for week in ranges.month_grid(year, month):
-        weeks.append(
-            [
-                {
-                    "date": cell_date,
-                    "in_month": cell_date.month == month,
-                    "is_today": cell_date == today,
-                }
-                for cell_date in week
-            ]
-        )
+    weeks = presentation.build_month_weeks(
+        ranges.month_grid(year, month),
+        items,
+        month=month,
+        today=today,
+    )
 
     previous_year, previous_month = ranges.shift_month(year, month, -1)
     next_year, next_month = ranges.shift_month(year, month, 1)
@@ -92,6 +88,7 @@ def church_calendar_day(request, year, month, day):
 
     range_start, range_end = ranges.day_bounds(target_date)
     items = collect_calendar_items(request.user, range_start, range_end)
+    sections = presentation.build_day_sections(items)
 
     today = timezone.localdate()
     context = {
@@ -100,6 +97,8 @@ def church_calendar_day(request, year, month, day):
         "is_today": target_date == today,
         "calendar_items": items,
         "has_items": bool(items),
+        "timed_items": sections["timed"],
+        "announcement_items": sections["announcements"],
         "type_legend": _type_legend(),
         "month_param": f"{target_date.year:04d}-{target_date.month:02d}",
     }

@@ -2742,3 +2742,222 @@ th {
     color: var(--text);
 }
 
+/* ---- Church Calendar month/day UI (CHURCH-CALENDAR.1C) -------------------- */
+/* Namespaced with cc- so it never collides with the reading active-plan
+   calendar (.calendar-*). Type is conveyed by a coloured dot AND a text label /
+   legend, never colour alone. */
+
+.cc-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.cc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.cc-toolbar-label {
+    font-weight: 700;
+    font-size: 16px;
+    margin: 0 4px;
+}
+
+.cc-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+}
+
+.cc-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 13px;
+    background: var(--surface-soft);
+}
+
+.cc-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+    background: var(--muted);
+}
+
+.cc-type-service_event .cc-dot { background: #2b6cb0; }
+.cc-type-bible_study_meeting .cc-dot { background: #6b46c1; }
+.cc-type-community_activity .cc-dot { background: #2f855a; }
+.cc-type-announcement .cc-dot { background: #b7791f; }
+
+.cc-grid-scroll {
+    overflow-x: auto;
+}
+
+.cc-grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.cc-grid th {
+    text-align: left;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.cc-cell {
+    vertical-align: top;
+    width: 14.28%;
+    min-height: 96px;
+    height: 96px;
+    border: 1px solid var(--border);
+    padding: 6px;
+}
+
+.cc-cell-muted {
+    background: #fafafa;
+    opacity: 0.7;
+}
+
+.cc-cell-today {
+    outline: 2px solid var(--primary);
+    outline-offset: -2px;
+}
+
+.cc-cell-date {
+    display: inline-block;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    margin-bottom: 4px;
+}
+
+.cc-cell-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.cc-cell-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    line-height: 1.3;
+}
+
+.cc-cell-item-link {
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cc-more {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.cc-empty {
+    margin-top: 12px;
+}
+
+.cc-day-section {
+    margin-top: 20px;
+}
+
+.cc-day-heading {
+    font-size: 16px;
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.cc-day-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cc-day-item {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--surface-soft);
+}
+
+.cc-type-service_event.cc-day-item { border-left-color: #2b6cb0; }
+.cc-type-bible_study_meeting.cc-day-item { border-left-color: #6b46c1; }
+.cc-type-community_activity.cc-day-item { border-left-color: #2f855a; }
+.cc-type-announcement.cc-day-item { border-left-color: #b7791f; }
+
+.cc-item-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.cc-item-title {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.cc-item-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.cc-item-meta {
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.cc-item-loc {
+    margin-left: 4px;
+}
+
+@media (max-width: 640px) {
+    .cc-grid {
+        min-width: 560px;
+    }
+
+    .cc-cell {
+        min-height: 76px;
+        height: 76px;
+    }
+}
+

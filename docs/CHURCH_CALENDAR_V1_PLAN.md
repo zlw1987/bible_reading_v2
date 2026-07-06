@@ -1,11 +1,11 @@
 # Church Calendar V1 Plan
 
 Status: `CHURCH-CALENDAR.0A` approved this bounded plan,
-`CHURCH-CALENDAR.1A` implemented the model-free read-only foundation, and
+`CHURCH-CALENDAR.1A` implemented the model-free read-only foundation,
 `CHURCH-CALENDAR.1B` added the four member-safe source range providers and
-their visibility adapters (July 2026). The final month/day UI (1C) and
-tests/docs closure and manual QA (1D) remain pending. Calendar V1 is not
-complete or QA-passed.
+their visibility adapters, and `CHURCH-CALENDAR.1C` implemented the final
+member-facing month grid and day detail UI (July 2026). Tests/docs closure and
+manual QA (1D) remain pending. Calendar V1 is not complete or QA-passed.
 
 ## 1. Purpose and product boundary
 
@@ -287,9 +287,26 @@ delivers the full UI).
 
 ### CHURCH-CALENDAR.1C — Month/day UI
 
-Implement the bilingual responsive month grid, complete day detail,
-navigation, type legend, active-communication treatment, owning-detail links,
-and accessibility behavior. Keep the UI read-only and member-facing.
+Complete. Implements the bilingual responsive month grid and complete day
+detail on top of the 1B providers. The month view buckets member-safe items
+into local-date cells (half-open overlap, so a boundary-only following day is
+excluded), shows multi-day ServiceEvents / Community Activities on every
+overlapping day, keeps Bible Study meetings point-in-time, treats active-window
+announcements as active communication, highlights today, distinguishes
+out-of-month cells, and compacts crowded cells behind an explicit bilingual
+"more" link to the day detail (never silently dropping an item). The day view
+lists the complete uncapped set for one local date, splitting timed items
+(ServiceEvent / BibleStudyMeeting / CommunityActivity, sorted by local start
+then type/source) from active announcements (sorted by publish start then id),
+with localized title, type label, honest time/window text (no fabricated Bible
+Study duration, no invented open-ended announcement end), optional location,
+and owning member-facing detail links. Presentation-only arrangement lives in
+`church_calendar.presentation`; it never queries a source, re-checks
+visibility, or mutates a `CalendarItem`. Type is conveyed by a colored dot plus
+a text label / legend and per-cell screen-reader type text (not color alone),
+and the grid stays usable on mobile. No edit/publish/review/assignment/
+attendance/staff-management control is rendered, and no Today, My Serving,
+serving, source model, migration, or data write was added.
 
 ### CHURCH-CALENDAR.1D — Tests and docs closure
 

@@ -23,40 +23,96 @@
 </div>
 
 <div class="card">
-    <ul class="calendar-legend">
+    <ul class="cc-legend">
         {% for entry in type_legend %}
-        <li class="calendar-legend-item calendar-legend-{{ entry.item_type }}">
+        <li class="cc-legend-item cc-type-{{ entry.item_type }}">
+            <span class="cc-dot" aria-hidden="true"></span>
             {% if language == "zh" %}{{ entry.label_zh }}{% else %}{{ entry.label_en }}{% endif %}
         </li>
         {% endfor %}
     </ul>
 
-    {% if has_items %}
-    <ul class="calendar-day-items">
-        {% for item in calendar_items %}
-        <li class="calendar-day-item calendar-legend-{{ item.item_type }}">
-            <a href="{{ item.detail_url }}">{{ item.title }}</a>
-            {% if item.display_mode == "timed" %}
-                <span class="muted">{{ item.start|date:"H:i" }}</span>
-            {% else %}
-                <span class="muted">
-                    {% if language == "zh" %}公告{% else %}Announcement{% endif %}
-                </span>
-            {% endif %}
-            {% if item.location %}
-            <span class="muted">· {{ item.location }}</span>
-            {% endif %}
-        </li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p class="muted calendar-empty-state">
+    {% if not has_items %}
+    <p class="muted cc-empty">
         {% if language == "zh" %}
             这一天暂时没有与你相关的日程。
         {% else %}
             There is nothing on your calendar for this day.
         {% endif %}
     </p>
+    {% endif %}
+
+    {% if timed_items %}
+    <section class="cc-day-section" aria-labelledby="cc-timed-heading">
+        <h2 id="cc-timed-heading" class="cc-day-heading">
+            {% if language == "zh" %}日程{% else %}Timed items{% endif %}
+        </h2>
+        <ul class="cc-day-list">
+            {% for item in timed_items %}
+            <li class="cc-day-item cc-type-{{ item.item_type }}">
+                <div class="cc-item-head">
+                    <a class="cc-item-title" href="{{ item.detail_url }}">{{ item.title }}</a>
+                    <span class="cc-item-type">
+                        <span class="cc-dot" aria-hidden="true"></span>
+                        {% if language == "zh" %}{{ item.label_zh }}{% else %}{{ item.label_en }}{% endif %}
+                    </span>
+                </div>
+                <div class="cc-item-meta muted">
+                    {% if item.is_point_in_time %}
+                        <span>{{ item.start|time:"H:i" }}</span>
+                    {% elif item.same_local_day %}
+                        <span>{{ item.start|time:"H:i" }}&ndash;{{ item.end|time:"H:i" }}</span>
+                    {% else %}
+                        <span>
+                            {{ item.start|date:"n/j H:i" }}
+                            {% if language == "zh" %}至{% else %}&ndash;{% endif %}
+                            {{ item.end|date:"n/j H:i" }}
+                        </span>
+                    {% endif %}
+                    {% if item.location %}
+                    <span class="cc-item-loc">· {{ item.location }}</span>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+
+    {% if announcement_items %}
+    <section class="cc-day-section" aria-labelledby="cc-announce-heading">
+        <h2 id="cc-announce-heading" class="cc-day-heading">
+            {% if language == "zh" %}公告{% else %}Announcements{% endif %}
+        </h2>
+        <ul class="cc-day-list">
+            {% for item in announcement_items %}
+            <li class="cc-day-item cc-type-{{ item.item_type }}">
+                <div class="cc-item-head">
+                    <a class="cc-item-title" href="{{ item.detail_url }}">{{ item.title }}</a>
+                    <span class="cc-item-type">
+                        <span class="cc-dot" aria-hidden="true"></span>
+                        {% if language == "zh" %}{{ item.label_zh }}{% else %}{{ item.label_en }}{% endif %}
+                    </span>
+                </div>
+                <div class="cc-item-meta muted">
+                    {% if item.end %}
+                        {% if language == "zh" %}
+                            有效期 {{ item.start|date:"Y-m-d" }} 至 {{ item.end|date:"Y-m-d" }}
+                        {% else %}
+                            Active {{ item.start|date:"M j, Y" }} &ndash; {{ item.end|date:"M j, Y" }}
+                        {% endif %}
+                    {% else %}
+                        {% if language == "zh" %}
+                            {{ item.start|date:"Y-m-d" }} 起持续有效
+                        {% else %}
+                            Active from {{ item.start|date:"M j, Y" }} (ongoing)
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
     {% endif %}
 </div>
 {% endblock %}

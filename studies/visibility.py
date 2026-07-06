@@ -127,6 +127,50 @@ def get_membership_audience_candidate_unit_ids(user, target_date=None):
     ]
 
 
+def member_visible_meetings_for(user, target_date=None, queryset=None):
+    """Return V2 meetings ordinary-member-visible to ``user`` (no manager bypass).
+
+    Member-safe helper for the Church Calendar (CHURCH-CALENDAR.1B). Unlike
+    ``BibleStudyMeeting.can_be_seen_by``, it grants no staff / superuser /
+    Bible-Study-capability bypass: it applies the ordinary meeting / lesson /
+    series lifecycle gates (mirroring :func:`meeting_is_member_visible`) plus
+    ``BibleStudyMeetingAudienceScope`` matching through the viewer's current
+    single active primary ``ChurchStructureMembership``.
+
+    Fails closed for unauthenticated users, absent or ambiguous active primary
+    membership, and zero audience rows. ``target_date`` defaults to the current
+    local date (current belonging, never reconstructed historical membership).
+    Visibility is never serving; a related ServiceEvent is never consulted.
+    """
+    from .models import BibleStudyLesson, BibleStudyMeeting, BibleStudySeries
+
+    queryset = queryset if queryset is not None else BibleStudyMeeting.objects.all()
+
+    candidate_unit_ids = get_membership_audience_candidate_unit_ids(
+        user,
+        target_date=target_date,
+    )
+    if not candidate_unit_ids:
+        return queryset.none()
+
+    return queryset.filter(
+        status__in=[
+            BibleStudyMeeting.STATUS_PUBLISHED,
+            BibleStudyMeeting.STATUS_COMPLETED,
+        ],
+        lesson__status__in=[
+            BibleStudyLesson.STATUS_PUBLISHED,
+            BibleStudyLesson.STATUS_COMPLETED,
+        ],
+        lesson__series__is_active=True,
+        lesson__series__status__in=[
+            BibleStudySeries.STATUS_PUBLISHED,
+            BibleStudySeries.STATUS_COMPLETED,
+        ],
+        audience_scope_links__unit_id__in=candidate_unit_ids,
+    ).distinct()
+
+
 def filter_users_for_meeting_audience(users, meeting, target_date=None):
     """Filter a user queryset to a meeting's audience-row candidate members.
 

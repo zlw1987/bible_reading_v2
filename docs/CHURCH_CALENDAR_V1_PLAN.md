@@ -1,10 +1,11 @@
 # Church Calendar V1 Plan
 
-Status: `CHURCH-CALENDAR.0A` approved this bounded plan, and
-`CHURCH-CALENDAR.1A` implements the model-free read-only foundation (July
-2026). Real source providers/member-safe adapters (1B), the final month/day UI
-(1C), and tests/docs closure and manual QA (1D) remain pending. Calendar V1 is
-not complete or QA-passed.
+Status: `CHURCH-CALENDAR.0A` approved this bounded plan,
+`CHURCH-CALENDAR.1A` implemented the model-free read-only foundation, and
+`CHURCH-CALENDAR.1B` added the four member-safe source range providers and
+their visibility adapters (July 2026). The final month/day UI (1C) and
+tests/docs closure and manual QA (1D) remain pending. Calendar V1 is not
+complete or QA-passed.
 
 ## 1. Purpose and product boundary
 
@@ -261,11 +262,28 @@ added.
 
 ### CHURCH-CALENDAR.1B — Provider/source integration
 
-Add the four module-owned range providers and the required member-safe
-visibility helpers/adapters. Enforce source-module enablement and the
-management-bypass regression boundary. Return normalized items only; do not
-change source models, lifecycle workflows, Today, serving, signup, or
-attendance.
+Complete. Adds the four module-owned range providers
+(`events.calendar_provider`, `studies.calendar_provider`,
+`announcements.calendar_provider`, `community_events.calendar_provider`) and
+the required member-safe visibility helpers/adapters
+(`events.visibility.member_visible_service_events_for`,
+`studies.visibility.member_visible_meetings_for`, the reused
+`announcements.visibility.member_visible_announcements_for`, and
+`community_events.visibility.member_visible_community_activities_for`). The
+single explicit registration site is `church_calendar.registration`
+(invoked from `ChurchCalendarConfig.ready()`), wiring the providers in the
+deterministic order events → studies → announcements → community_events; there
+is no app auto-discovery and no source module imports another source module.
+Source-module enablement is enforced by the existing aggregator (disabled
+sources are not called and run no query, and staff status does not bypass
+disablement). Each adapter grants no staff/superuser/creator/co-organizer/
+capability bypass and fails closed for unauthenticated users, absent/ambiguous
+active primary membership, zero audience rows, and nonmatching audience.
+Returns normalized `CalendarItem` values only; no source model, migration,
+lifecycle workflow, Today, My Serving, serving, signup, attendance,
+notification, external sync, or CommunityActivity-to-ServiceEvent relationship
+was added. The final month/day presentation is still 1A's minimal skeleton (1C
+delivers the full UI).
 
 ### CHURCH-CALENDAR.1C — Month/day UI
 

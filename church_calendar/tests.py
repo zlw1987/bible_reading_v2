@@ -4,8 +4,11 @@ Covers route auth, month/day rendering and fail-safe parameter handling, the
 registry/nav surface gate, safe empty states, the absence of Reading
 active-plan calendar content, and the model-free range-provider contract —
 including the critical member-safe boundary that disabled sources are not
-called and that unauthenticated viewers fail closed. Real source providers are
-intentionally stubbed in this slice (CHURCH-CALENDAR.1B integrates them).
+called and that unauthenticated viewers fail closed. Injected stub providers
+keep the contract tests independent of the real registry.
+
+CHURCH-CALENDAR.1B integrated the four real source providers; their member-safe
+visibility and range behavior are covered in ``test_source_providers``.
 """
 
 from datetime import timedelta
@@ -332,18 +335,17 @@ class ChurchCalendarProviderContractTests(TestCase):
                 self.user, self.start, self.end, providers=[provider]
             )
 
-    def test_registry_registration_and_keys(self):
-        def stub(user, range_start, range_end):
-            return []
+    def test_real_source_providers_registered_in_deterministic_order(self):
+        # CHURCH-CALENDAR.1B registers all four source providers at app ready()
+        # in a fixed, deterministic order via the single registration site.
+        self.assertEqual(
+            get_registered_range_provider_keys(),
+            ("events", "studies", "announcements", "community_events"),
+        )
 
-        self.assertNotIn("events", get_registered_range_provider_keys())
-        register_range_provider("events", stub)
-        try:
-            self.assertIn("events", get_registered_range_provider_keys())
-            with self.assertRaises(ValueError):
-                register_range_provider("events", stub)  # duplicate
-        finally:
-            providers._RANGE_PROVIDERS.pop("events", None)
+    def test_duplicate_registration_of_a_real_source_rejected(self):
+        with self.assertRaises(ValueError):
+            register_range_provider("events", lambda u, s, e: [])
 
     def test_register_rejects_non_source_module(self):
         with self.assertRaises(ValueError):

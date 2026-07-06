@@ -1,11 +1,13 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`CHURCH-CALENDAR.1D-A`. `CHURCH-CALENDAR.1A` implements the model-free,
+`CHURCH-CALENDAR.2A`. `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation, `CHURCH-CALENDAR.1B` adds the four
 member-safe source range providers/adapters, `CHURCH-CALENDAR.1C` implements
-the member-facing month grid and day detail UI, and `CHURCH-CALENDAR.1D-A`
-prepared closure docs/checklist plus a missing focused regression test. Manual
+the member-facing month grid and day detail UI, `CHURCH-CALENDAR.1D-A`
+prepared closure docs/checklist plus a missing focused regression test, and
+`CHURCH-CALENDAR.2A` adds the `ministry`-owned read-only personal `my_serving`
+overlay of the viewer's own explicit team-assignment serving. Manual
 QA remains pending, and Calendar V1 is not QA-passed (July 2026).
 
 This project is becoming a lightweight modular church management system.
@@ -55,7 +57,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated ordinary nav plus a module-gated staff management link; staff/superusers have bounded draft/create/edit/publish/archive management. Publish/archive are explicit POST actions. Today contributes at most one visible active important announcement as a localized title/detail link only. No feed, Staff Overview, notification, event/activity, signup, attendance, approval/request-changes, My Serving, or serving behavior. |
-| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the unchecked manual QA checklist; manual QA remains pending and Calendar V1 is not QA-passed. Still no Today, My Serving, serving, attendance/check-in, notification, external-calendar sync, staff dashboard, model, migration, data write, or CommunityActivity-to-ServiceEvent relationship. |
+| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the unchecked manual QA checklist; manual QA remains pending and Calendar V1 is not QA-passed. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, linking to My Serving read-only). Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 Official Announcements now has the independent `announcements` app,
@@ -482,6 +484,18 @@ notifications, or `ServiceEvent`.
    [`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md)
    as an initially unchecked product-owner checklist. Manual QA remains
    pending, Calendar V1 is not QA-passed, and no new feature scope was added.
+   `CHURCH-CALENDAR.2A` adds the `ministry`-owned read-only personal
+   `my_serving` provider. It shows only the viewer's own explicit
+   `TeamAssignmentMember` serving, is registered at
+   `church_calendar.registration` after the four source providers, and is gated
+   by `ministry` enablement, so disabled `ministry` means no serving provider
+   call or query. Serving is never inferred from `ChurchStructureMembership`,
+   audience, visibility, staff/superuser/manager authority, or other users'
+   assignments. The item links to My Serving read-only and renders no
+   confirm/edit/manage/attendance/check-in action. 2A adds no Today or My
+   Serving behavior change, model, migration, data write, notification,
+   staff/team dashboard, or CommunityActivity-to-ServiceEvent relationship.
+   Bible Study linked-user serving roles remain a documented follow-up.
 
 ## Follow-ups (not yet done)
 

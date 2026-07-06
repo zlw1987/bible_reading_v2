@@ -6,7 +6,9 @@ Status: `CHURCH-CALENDAR.0A` approved this bounded plan,
 their visibility adapters, and `CHURCH-CALENDAR.1C` implemented the final
 member-facing month grid and day detail UI (July 2026).
 `CHURCH-CALENDAR.1D-A` prepared closure coverage/docs and the pending manual QA
-checklist. Manual QA remains pending, and Calendar V1 is not QA-passed.
+checklist. `CHURCH-CALENDAR.2A` adds the signed-in user's own explicit serving
+schedule as a read-only personal `my_serving` overlay (see Section 10). Manual
+QA remains pending, and Calendar V1 is not QA-passed.
 
 ## 1. Purpose and product boundary
 
@@ -41,8 +43,12 @@ Calendar V1 is not:
 - the existing Daily Reading active-plan calendar;
 - a reading-plan progress or check-in surface;
 - an event, announcement, activity, or meeting authoring surface;
-- a serving schedule or source of `TeamAssignment`,
-  `TeamAssignmentMember`, or `BibleStudyMeetingRole`;
+- a serving *management* surface or a source/writer of `TeamAssignment`,
+  `TeamAssignmentMember`, or `BibleStudyMeetingRole` rows. (`CHURCH-CALENDAR.2A`
+  adds a read-only personal `my_serving` overlay of the viewer's *own* explicit
+  `TeamAssignmentMember` serving, but it never creates, edits, confirms, or
+  otherwise mutates serving, and never infers serving from membership/audience;
+  see Section 10.);
 - an attendance, signup, check-in, or capacity-management surface;
 - a notification, reminder, email, or push system;
 - Google Calendar, iCal, or other external-calendar synchronization;
@@ -120,6 +126,7 @@ The exact V1 item types are:
 | `bible_study_meeting` | `BibleStudyMeeting` | Timed point anchored to the local date of `meeting_datetime`; V1 must not invent a duration. |
 | `announcement` | `Announcement` | Active-window communication, not a true event. Show it as active communication on each displayed day its currently visible publish window overlaps. |
 | `community_activity` | `CommunityActivity` | Timed item using `start_datetime` and `end_datetime` when present. A start-only activity belongs to its start date; a ranged activity appears on every overlapping local day. |
+| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. |
 
 Range overlap uses aware datetimes in the configured local timezone and
 half-open boundaries. Day grouping uses local dates, not UTC dates.
@@ -178,7 +185,7 @@ The month page is the overview and navigation surface:
 
 - render a conventional local-date month grid with previous/next month
   navigation and a Today shortcut;
-- distinguish the four item types with bilingual labels and accessible text,
+- distinguish the calendar item types with bilingual labels and accessible text,
   not color alone;
 - group timed items by day and show announcements as active communication;
 - keep every returned item discoverable—if a cell uses a visual compacting
@@ -242,8 +249,9 @@ Future implementation tests should prove:
 - disabled source providers are not called and perform no queries;
 - calendar disablement follows the documented surface gate;
 - every day-detail item is discoverable from the month view;
-- no Today, My Serving, serving, attendance, signup, notification, or reading
-  check-in state is created or changed; and
+- no Today behavior change, no My Serving behavior mutation, no serving
+  inference/mutation/action state, and no attendance, signup, notification,
+  reading check-in, or other action state is created or changed; and
 - query counts remain bounded across a month range.
 
 ## 10. Separately approvable implementation slices
@@ -323,6 +331,55 @@ model, migration, data write, provider visibility expansion, Today, My Serving,
 serving, signup, attendance/check-in, notification, external sync, staff
 dashboard, Reading active-plan calendar/check-in, route hard-off, broad UI
 redesign, or CommunityActivity-to-ServiceEvent relationship.
+
+### CHURCH-CALENDAR.2A — Personal serving overlay
+
+Implemented, not QA-passed. Adds the signed-in user's own explicit serving
+schedule to the calendar as a new read-only personal item type
+(`my_serving` / "My Serving" / "我的服事"). This is an approved expansion after
+1A/1B/1C/1D-A; it is not 1D QA closure, and manual QA remains pending.
+
+Ownership and boundary:
+
+- The provider is owned by the `ministry` module (`ministry.calendar_provider`)
+  and registered at the existing single explicit registration site
+  (`church_calendar.registration`) after the four source providers. Like every
+  provider it is gated by its own module's enablement: when `ministry` is
+  disabled the aggregator does not call it and runs no serving query, and staff
+  status never bypasses that gate. `ministry` already depends on `events`, so
+  the provider reads only `events` (a declared dependency) plus its own app and
+  imports no sibling source module.
+- Serving is **explicit**. An item is produced only from the viewer's own
+  `TeamAssignmentMember` rows, reusing the current My Serving selector
+  (`ministry.views.my_serving_assignments`, `tab="all"`): active membership on
+  an active team, the assignment not cancelled, and the ServiceEvent not
+  draft/cancelled. Serving is never inferred from `ChurchStructureMembership`
+  (belonging), audience scopes, event/meeting visibility, or
+  staff/superuser/manager authority, and only the viewer's own serving is shown.
+- The item is a **timed** item anchored to the ServiceEvent `start_datetime`
+  with the existing effective-end overlap rule, so a multi-day event appears on
+  every day it covers. `source_id` is the `TeamAssignmentMember` id (not the
+  event id), so serving two teams at one event yields two distinct items. It
+  links to the member-facing My Serving page (`reverse("my_serving")`), never to
+  an edit/manage/assignment/confirm URL, and the calendar renders no
+  confirm/decline/check-in/attendance/serving action.
+- UI: `my_serving` flows through the existing legend, month cells, and the day
+  "Timed items" section with its own bilingual type label and distinct dot /
+  border color; the "more" compaction behavior is unchanged.
+
+Bible Study linked-user serving roles (`BibleStudyMeetingRole.user`) remain a
+deliberate follow-up. Folding them into this `ministry`-keyed provider would
+query the `studies` source even when that module is disabled, which would break
+the one-provider-per-source-module enablement gate; keeping this slice to
+team-assignment serving preserves that clean boundary. A future slice may add
+Bible Study serving with its own `studies` enablement handling.
+
+Non-goals unchanged: no assignment creation/edit, no confirm/decline, no
+attendance/check-in, no signup/capacity, no notifications/reminders, no external
+calendar sync, no staff/team-coverage dashboard, no manager attention cards, no
+setup/readiness checks, no serving inference, no Today or My Serving behavior
+change, and no CommunityActivity-to-ServiceEvent relationship. No model,
+migration, or data write was added.
 
 ### CHURCH-CALENDAR.1D — Tests and docs closure
 

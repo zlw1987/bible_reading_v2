@@ -336,11 +336,12 @@ class ChurchCalendarProviderContractTests(TestCase):
             )
 
     def test_real_source_providers_registered_in_deterministic_order(self):
-        # CHURCH-CALENDAR.1B registers all four source providers at app ready()
-        # in a fixed, deterministic order via the single registration site.
+        # CHURCH-CALENDAR.1B registers the four source providers at app ready()
+        # in a fixed, deterministic order via the single registration site;
+        # CHURCH-CALENDAR.2A appends the ministry personal serving overlay.
         self.assertEqual(
             get_registered_range_provider_keys(),
-            ("events", "studies", "announcements", "community_events"),
+            ("events", "studies", "announcements", "community_events", "ministry"),
         )
 
     def test_duplicate_registration_of_a_real_source_rejected(self):

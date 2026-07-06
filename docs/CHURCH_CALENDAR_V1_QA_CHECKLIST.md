@@ -1,7 +1,8 @@
 # Church Calendar V1 Manual QA Checklist
 
 Status: prepared in `CHURCH-CALENDAR.1D-A` as an unchecked, pending product
-owner checklist. Manual QA has not passed yet. Calendar V1 remains limited
+owner checklist, and extended in `CHURCH-CALENDAR.2A` with the personal serving
+overlay checks below. Manual QA has not passed yet. Calendar V1 remains limited
 trial / not QA-passed until the product owner explicitly confirms this checklist
 was run and passed. This checklist adds no product scope.
 
@@ -30,6 +31,10 @@ of this QA pass.
   membership, and Community Activity co-organizer with nonmatching membership.
 - [ ] Test data includes visible and hidden examples for `ServiceEvent`,
   `BibleStudyMeeting`, `Announcement`, and `CommunityActivity`.
+- [ ] For the personal serving overlay (`CHURCH-CALENDAR.2A`): one account with
+  its own explicit `TeamAssignmentMember` serving row on an in-range,
+  non-cancelled ServiceEvent (via an active membership on an active team), and a
+  control account that only belongs / matches audience but has no serving row.
 - [ ] Each source has at least one zero-audience row to confirm fail-closed
   behavior.
 - [ ] Browser language or `?lang=en` / `?lang=zh` can be used to check both
@@ -93,6 +98,32 @@ of this QA pass.
 - [ ] Draft, pending-review, changes-requested, cancelled, completed,
   zero-audience, and nonmatching activities stay hidden.
 
+## Personal Serving Overlay Checks (CHURCH-CALENDAR.2A)
+
+- [ ] A user with an explicit own `TeamAssignmentMember` row sees a "My Serving"
+  / "我的服事" item on the month and day views for the linked ServiceEvent date.
+- [ ] The serving item links to the My Serving page and to no
+  edit/manage/assignment/confirm/attendance/check-in URL.
+- [ ] The serving item carries the bilingual "My Serving" / "我的服事" type label
+  and its own distinct dot/border color (type is text plus styling, not color
+  alone), and month cells keep the existing "more" compaction behavior.
+- [ ] Another user does not see that assignment.
+- [ ] A staff/superuser/manager account with no own serving row does not see
+  other people's serving items.
+- [ ] A user who only belongs / matches audience (no `TeamAssignmentMember` row)
+  sees no serving item — belonging/audience/visibility never create serving.
+- [ ] A cancelled assignment, a draft/cancelled ServiceEvent, and an inactive
+  membership produce no serving item.
+- [ ] A multi-day serving event appears on every overlapping local day; two
+  teams at one event appear as two distinct serving items.
+- [ ] Disabling `ministry` removes all serving items and runs no serving query;
+  staff status does not bypass this gate. (Disabling `events` also requires
+  disabling `ministry`.)
+- [ ] Bible Study linked-user serving roles are intentionally NOT shown yet
+  (documented follow-up); their absence is expected, not a defect.
+- [ ] The calendar renders no confirm/decline/check-in/attendance/edit/manage
+  serving action, and browsing changes no serving data.
+
 ## Date Semantics
 
 - [ ] Multi-day `ServiceEvent` rows appear on every local day they overlap.
@@ -116,6 +147,7 @@ of this QA pass.
 - [ ] Disabling `studies` removes Bible Study meeting calendar items.
 - [ ] Disabling `announcements` removes announcement calendar items.
 - [ ] Disabling `community_events` removes Community Activity calendar items.
+- [ ] Disabling `ministry` removes personal serving (`my_serving`) items.
 - [ ] Staff status does not bypass disabled-source behavior.
 - [ ] Enabling the calendar with no source modules shows a safe empty state.
 
@@ -145,8 +177,10 @@ of this QA pass.
 - [ ] Calendar does not show Reading active-plan days, check-ins, reflections,
   progress, or streak content.
 - [ ] Calendar does not add, change, or depend on Today cards or item caps.
-- [ ] Calendar does not add, change, or depend on My Serving.
-- [ ] Calendar does not infer serving from membership.
+- [ ] Calendar does not change My Serving behavior (it may link to the My
+  Serving page read-only, but adds/edits/confirms no serving there).
+- [ ] Calendar shows only the viewer's own explicit `TeamAssignmentMember`
+  serving and never infers serving from membership, audience, or visibility.
 - [ ] Calendar does not expose signup, capacity management, attendance, or
   check-in controls.
 - [ ] Calendar does not create notifications, reminders, email, push, Google

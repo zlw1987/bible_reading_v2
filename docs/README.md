@@ -1,11 +1,13 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`CHURCH-CALENDAR.1D-A`. `CHURCH-CALENDAR.1A` implements the model-free,
+`CHURCH-CALENDAR.2A`. `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation; `CHURCH-CALENDAR.1B` implements the four
 member-safe source providers/adapters; `CHURCH-CALENDAR.1C` implements the
-month/day UI; and `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a
-missing focused regression test. Manual QA remains pending, and Calendar V1 is
+month/day UI; `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a
+missing focused regression test; and `CHURCH-CALENDAR.2A` adds the
+`ministry`-owned read-only personal `my_serving` overlay of the viewer's own
+explicit team-assignment serving. Manual QA remains pending, and Calendar V1 is
 not QA-passed (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
@@ -21,7 +23,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Module boundaries | [`MODULE_BOUNDARIES.md`](MODULE_BOUNDARIES.md) | Core versus modules, registry keys, `CMS_ENABLED_MODULES`, dependencies, and present surface-gate limits. |
 | Community Activities | [`COMMUNITY_ACTIVITIES_V1_PLAN.md`](COMMUNITY_ACTIVITIES_V1_PLAN.md) | Current implemented V1 lifecycle through 1H-A, including browse/detail, signup/cancel, member drafts and submission, Activity Scope, review/request-changes, pending-review creator editing, capacity, co-organizers, and low-noise Today reminders. It also records the user-confirmed V1 manual QA pass and owns the stabilization boundary; expansion requires separate approval. |
 | Official Announcements | [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) | Canonical bounded V1 plan and QA record. `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` implement the bounded app, member/staff surfaces, and one-item important-announcement Today reminder. `ANNOUNCEMENTS.1E` adds docs/QA closure only; `ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed manual-QA pass. Limited trial use is acceptable under the existing trial boundary; this is not a production-readiness claim. |
-| Church Calendar | [`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md) | Canonical bounded V1 plan and current implementation boundary. `CHURCH-CALENDAR.1A` implements the model-free app, registry/nav foundation, authenticated month/day routes, safe empty states, and provider contract; `CHURCH-CALENDAR.1B` implements the four member-safe source providers/adapters; `CHURCH-CALENDAR.1C` implements the month/day UI; and `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a missing focused regression test. Manual QA remains pending, and Calendar V1 is not QA-passed. See [`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md). |
+| Church Calendar | [`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md) | Canonical bounded V1 plan and current implementation boundary. `CHURCH-CALENDAR.1A` implements the model-free app, registry/nav foundation, authenticated month/day routes, safe empty states, and provider contract; `CHURCH-CALENDAR.1B` implements the four member-safe source providers/adapters; `CHURCH-CALENDAR.1C` implements the month/day UI; `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a missing focused regression test; and `CHURCH-CALENDAR.2A` adds the `ministry`-owned read-only personal `my_serving` overlay of the viewer's own explicit `TeamAssignmentMember` serving (registered after the four sources, gated by `ministry` enablement, links to My Serving read-only, serving never inferred). Manual QA remains pending, and Calendar V1 is not QA-passed. See [`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md). |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
 | Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
@@ -66,10 +68,17 @@ migration-safety instruction source.
   staff/superuser/manager/creator/co-organizer bypass. `CHURCH-CALENDAR.1C`
   adds the responsive member-facing month grid and complete day detail UI.
   `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist and a missing focused
-  regression test; manual QA remains pending, and Calendar V1 is not
+  regression test. `CHURCH-CALENDAR.2A` adds a fifth provider: the
+  `ministry`-owned read-only personal `my_serving` overlay of the viewer's own
+  explicit `TeamAssignmentMember` serving (registered after the four sources,
+  gated by `ministry` enablement, timed to the linked ServiceEvent, links to My
+  Serving read-only). Serving stays explicit only — never inferred from
+  membership/audience/visibility or staff/manager authority — and the calendar
+  creates/edits/confirms no serving. Bible Study linked-user serving roles are a
+  documented follow-up. Manual QA remains pending, and Calendar V1 is not
   QA-passed. Separation from `active_plan_calendar`, reading check-ins, Today,
-  My Serving, serving, attendance, notifications, external-calendar sync, and
-  staff dashboards remains explicit.
+  and My Serving *behavior*, plus attendance, notifications, external-calendar
+  sync, and staff dashboards, remains explicit.
 - `COMMUNITY-EVENTS.1A` adds the independent `community_events` app,
   `CommunityActivity`, `CommunityActivityAudienceScope`, Django admin, and
   published/activity-audience visibility through active primary membership.

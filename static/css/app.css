@@ -2805,6 +2805,7 @@ th {
 .cc-type-service_event .cc-dot { background: #2b6cb0; }
 .cc-type-bible_study_meeting .cc-dot { background: #6b46c1; }
 .cc-type-community_activity .cc-dot { background: #2f855a; }
+.cc-type-my_serving .cc-dot { background: #c53030; }
 .cc-type-announcement .cc-dot { background: #b7791f; }
 
 .cc-grid-scroll {
@@ -2918,6 +2919,7 @@ th {
 .cc-type-service_event.cc-day-item { border-left-color: #2b6cb0; }
 .cc-type-bible_study_meeting.cc-day-item { border-left-color: #6b46c1; }
 .cc-type-community_activity.cc-day-item { border-left-color: #2f855a; }
+.cc-type-my_serving.cc-day-item { border-left-color: #c53030; }
 .cc-type-announcement.cc-day-item { border-left-color: #b7791f; }
 
 .cc-item-head {

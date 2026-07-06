@@ -32,6 +32,14 @@ unauthenticated viewers, skips providers of disabled source modules entirely,
 and validates each returned item's shape and ownership before the calendar
 sorts or groups it. A provider error surfaces (fails closed) rather than
 silently degrading to an unfiltered result.
+
+CHURCH-CALENDAR.2A adds a personal ``my_serving`` overlay owned by the
+``ministry`` module. Its visibility axis is *explicit personal serving*, not
+audience/belonging: an item exists only when the signed-in viewer has an
+explicit ``TeamAssignmentMember`` row (current My Serving semantics), and never
+from ``ChurchStructureMembership``, audience scopes, event/meeting visibility,
+or staff/manager authority. It is read-only "my serving schedule", not a team
+or staff scheduling dashboard, and it shows only the viewer's own serving.
 """
 
 from dataclasses import dataclass
@@ -48,6 +56,12 @@ ITEM_TYPE_SERVICE_EVENT = "service_event"
 ITEM_TYPE_BIBLE_STUDY_MEETING = "bible_study_meeting"
 ITEM_TYPE_ANNOUNCEMENT = "announcement"
 ITEM_TYPE_COMMUNITY_ACTIVITY = "community_activity"
+# CHURCH-CALENDAR.2A: the signed-in viewer's own explicit serving schedule. This
+# is a personal, read-only overlay ("my serving"), never a team/staff scheduling
+# dashboard. It comes only from explicit personal assignment rows
+# (``TeamAssignmentMember``) and is never inferred from membership, audience
+# scopes, or event/meeting visibility.
+ITEM_TYPE_MY_SERVING = "my_serving"
 
 VALID_ITEM_TYPES = frozenset(
     {
@@ -55,6 +69,7 @@ VALID_ITEM_TYPES = frozenset(
         ITEM_TYPE_BIBLE_STUDY_MEETING,
         ITEM_TYPE_ANNOUNCEMENT,
         ITEM_TYPE_COMMUNITY_ACTIVITY,
+        ITEM_TYPE_MY_SERVING,
     }
 )
 
@@ -64,6 +79,7 @@ ITEM_TYPE_LABELS = {
     ITEM_TYPE_SERVICE_EVENT: ("Church Gathering", "教会聚会"),
     ITEM_TYPE_BIBLE_STUDY_MEETING: ("Bible Study", "查经"),
     ITEM_TYPE_COMMUNITY_ACTIVITY: ("Activity", "活动"),
+    ITEM_TYPE_MY_SERVING: ("My Serving", "我的服事"),
     ITEM_TYPE_ANNOUNCEMENT: ("Announcement", "公告"),
 }
 
@@ -73,6 +89,7 @@ ITEM_TYPE_ORDER = (
     ITEM_TYPE_SERVICE_EVENT,
     ITEM_TYPE_BIBLE_STUDY_MEETING,
     ITEM_TYPE_COMMUNITY_ACTIVITY,
+    ITEM_TYPE_MY_SERVING,
     ITEM_TYPE_ANNOUNCEMENT,
 )
 
@@ -90,6 +107,10 @@ MODULE_ITEM_TYPES = {
     "studies": frozenset({ITEM_TYPE_BIBLE_STUDY_MEETING}),
     "announcements": frozenset({ITEM_TYPE_ANNOUNCEMENT}),
     "community_events": frozenset({ITEM_TYPE_COMMUNITY_ACTIVITY}),
+    # CHURCH-CALENDAR.2A: ministry owns the personal serving overlay. Serving is
+    # explicit (``TeamAssignmentMember``), so the ministry provider is the only
+    # source allowed to emit ``my_serving`` items.
+    "ministry": frozenset({ITEM_TYPE_MY_SERVING}),
 }
 
 

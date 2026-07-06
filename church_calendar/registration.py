@@ -5,7 +5,11 @@ site for ``core.today_providers``): exactly one place imports each source
 module's ``calendar_provider`` module and calls its ``register()`` in a fixed,
 deterministic order. There is no app auto-discovery, and the source modules
 never import one another — each source ``calendar_provider`` imports only its own
-app plus the ``church_calendar`` provider contract.
+app (plus, for ministry, its declared ``events`` dependency) and the
+``church_calendar`` provider contract.
+
+CHURCH-CALENDAR.2A adds the ``ministry`` personal serving overlay provider here;
+like every provider it is gated by its own module's enablement at request time.
 
 Registration is independent of module enablement: every provider is registered
 here, and :func:`church_calendar.providers.collect_calendar_items` skips the
@@ -14,12 +18,15 @@ is idempotent, so running this at app ``ready()`` is safe.
 """
 
 # Deterministic registration order: events, studies, announcements,
-# community_events.
+# community_events, then the CHURCH-CALENDAR.2A personal serving overlay
+# (ministry). Registration order does not imply enablement; the aggregator still
+# skips the ministry provider when the ministry module is disabled.
 _SOURCE_PROVIDER_MODULES = (
     "events.calendar_provider",
     "studies.calendar_provider",
     "announcements.calendar_provider",
     "community_events.calendar_provider",
+    "ministry.calendar_provider",
 )
 
 

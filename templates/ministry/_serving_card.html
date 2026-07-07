@@ -1,4 +1,5 @@
 {% load datetime_extras event_extras ministry_extras study_extras %}
+
 <article class="card serving-card" {% if serving_item.kind !="bible_study_role" %} id="serving-assignment-{{ serving_item.id }}" {% endif %}>
     {% if serving_item.kind == "bible_study_role" %}
     <div class="serving-card-head">

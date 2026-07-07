@@ -1,0 +1,271 @@
+diff --git a/church_calendar/test_serving_provider.py b/church_calendar/test_serving_provider.py
+index 5fcd2fe..c65b9a2 100644
+--- a/church_calendar/test_serving_provider.py
++++ b/church_calendar/test_serving_provider.py
+@@ -145,13 +145,7 @@ class ServingProviderTests(ServingProviderBase):
+         self.assertEqual(item.item_type, ITEM_TYPE_MY_SERVING)
+         self.assertIn("主日聚会", item.title)
+         self.assertIn("敬拜团", item.title)
+-        # CHURCH-CALENDAR.2A-FU2: the item deep-links to the viewer's own
+-        # specific serving assignment card, not the generic My Serving page.
+-        self.assertNotEqual(item.detail_url, reverse("my_serving"))
+-        self.assertEqual(
+-            item.detail_url,
+-            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
+-        )
++        self.assertEqual(item.detail_url, reverse("my_serving"))
+ 
+     def test_other_user_does_not_see_the_assignment(self):
+         self._serving(self.server)
+@@ -245,48 +239,6 @@ class ServingProviderTests(ServingProviderBase):
+         self._serving(self.server, event=self._event(start=self.now + timedelta(days=40)))
+         self.assertEqual(self._items(self.server), [])
+ 
+-    def test_detail_url_targets_the_specific_serving_anchor(self):
+-        member = self._serving(self.server)
+-        item = self._items(self.server)[0]
+-        self.assertEqual(
+-            item.detail_url,
+-            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
+-        )
+-
+-    def test_detail_url_is_not_an_edit_manage_or_action_url(self):
+-        member = self._serving(self.server)
+-        url = self._items(self.server)[0].detail_url
+-        # Anchor fallback: a read-only My Serving deep link, never a staff /
+-        # action route. The ServiceEvent detail is also deliberately not used
+-        # (serving does not grant event visibility).
+-        for banned in (
+-            "/edit/",
+-            "/review/",
+-            "/manage/",
+-            "/delete/",
+-            "/cancel/",
+-            "/confirm/",
+-            "/attendance",
+-            "/check-in",
+-            "/schedule/",
+-            reverse("service_event_detail", args=[member.assignment.service_event_id]),
+-        ):
+-            self.assertNotIn(banned, url)
+-
+-    def test_two_teams_same_event_yield_distinct_anchor_urls(self):
+-        event = self._event()
+-        second_team = MinistryTeam.objects.create(name="音响组", name_en="Audio")
+-        first = self._serving(self.server, event=event, team=self.team)
+-        second = self._serving(self.server, event=event, team=second_team)
+-        urls = {item.detail_url for item in self._items(self.server)}
+-        self.assertEqual(
+-            urls,
+-            {
+-                f"{reverse('my_serving')}?tab=all#serving-assignment-{first.id}",
+-                f"{reverse('my_serving')}?tab=all#serving-assignment-{second.id}",
+-            },
+-        )
+-
+     def test_no_data_mutation_when_collecting(self):
+         self._serving(self.server)
+         before = (
+@@ -387,7 +339,7 @@ class ServingUITests(ServingProviderBase):
+         self.assertContains(self._month(lang="zh"), "我的服事")
+ 
+     def test_day_renders_serving_item_read_only_with_member_link(self):
+-        member = self._serving(self.server, event=self._event(start=self._at(12, 19)))
++        self._serving(self.server, event=self._event(start=self._at(12, 19)))
+         response = self._day(12)
+         serving = [
+             item
+@@ -396,41 +348,10 @@ class ServingUITests(ServingProviderBase):
+         ]
+         self.assertEqual(len(serving), 1)
+         item = serving[0]
+-        expected_url = (
+-            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
+-        )
+-        self.assertEqual(item.detail_url, expected_url)
+-        # The rendered day link uses the specific anchored target, not the
+-        # bare My Serving URL as the href.
+-        self.assertContains(response, f'href="{expected_url}"')
++        self.assertEqual(item.detail_url, reverse("my_serving"))
++        self.assertContains(response, reverse("my_serving"))
+         self.assertContains(response, "19:00")
+ 
+-    def test_month_serving_link_uses_specific_anchor_target(self):
+-        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+-        expected_url = (
+-            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
+-        )
+-        cell = self._cell(self._month(), 12)
+-        presented = next(
+-            item for item in cell["items"] if item.source_id == member.id
+-        )
+-        self.assertEqual(presented.detail_url, expected_url)
+-        self.assertContains(self._month(), f'href="{expected_url}"')
+-
+-    def test_my_serving_page_renders_the_matching_anchor(self):
+-        # The deep-link target must actually exist on My Serving so the anchor
+-        # resolves. tab=all guarantees the card is present for past or upcoming.
+-        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+-        response = self.client.get(reverse("my_serving"), {"tab": "all"})
+-        self.assertContains(response, f'id="serving-assignment-{member.id}"')
+-
+-    def test_other_user_calendar_pages_have_no_serving_anchor(self):
+-        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+-        anchor = f"serving-assignment-{member.id}"
+-        self.client.force_login(self.other)
+-        for response in (self._month(), self._day(12)):
+-            self.assertNotContains(response, anchor)
+-
+     def test_no_serving_action_or_management_urls_render(self):
+         self._serving(self.server, event=self._event(start=self._at(12, 9)))
+         for response in (self._month(), self._day(12), self._month(lang="en")):
+diff --git a/docs/CHURCH_CALENDAR_V1_PLAN.md b/docs/CHURCH_CALENDAR_V1_PLAN.md
+index e66f8b4..64b3419 100644
+--- a/docs/CHURCH_CALENDAR_V1_PLAN.md
++++ b/docs/CHURCH_CALENDAR_V1_PLAN.md
+@@ -126,7 +126,7 @@ The exact V1 item types are:
+ | `bible_study_meeting` | `BibleStudyMeeting` | Timed point anchored to the local date of `meeting_datetime`; V1 must not invent a duration. |
+ | `announcement` | `Announcement` | Active-window communication, not a true event. Show it as active communication on each displayed day its currently visible publish window overlaps. |
+ | `community_activity` | `CommunityActivity` | Timed item using `start_datetime` and `end_datetime` when present. A start-only activity belongs to its start date; a ranged activity appears on every overlapping local day. |
+-| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. `CHURCH-CALENDAR.2A-FU2`: the item deep-links to the viewer's own specific My Serving assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), not the generic My Serving page and not the ServiceEvent detail (serving does not grant event visibility). |
++| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. |
+ 
+ Range overlap uses aware datetimes in the configured local timezone and
+ half-open boundaries. Day grouping uses local dates, not UTC dates.
+@@ -359,22 +359,10 @@ Ownership and boundary:
+ - The item is a **timed** item anchored to the ServiceEvent `start_datetime`
+   with the existing effective-end overlap rule, so a multi-day event appears on
+   every day it covers. `source_id` is the `TeamAssignmentMember` id (not the
+-  event id), so serving two teams at one event yields two distinct items.
+-  `CHURCH-CALENDAR.2A-FU2`: the calendar item remains read-only and deep-links to
+-  the viewer's *own* existing My Serving assignment card via a stable anchor
+-  (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), never to
+-  the generic My Serving page, an edit/manage/assignment/confirm URL, or the
+-  member-facing `ServiceEvent` detail. The ServiceEvent detail is deliberately
+-  not used: `ServiceEvent.can_be_seen_by` grants ordinary visibility from
+-  audience-scope membership / manager authority only, never from serving, so an
+-  assigned server outside the event's audience would be turned away and routing
+-  through it would couple serving to audience/event visibility. The anchor points
+-  at the existing My Serving card (`?tab=all` so it is present for past or
+-  upcoming); the calendar itself renders no
+-  confirm/decline/check-in/attendance/serving action, and any existing actions on
+-  the My Serving card (e.g. detail/confirm) remain governed by My Serving and are
+-  unchanged. FU2 adds only a stable anchor id and changes no My Serving view logic
+-  or behavior.
++  event id), so serving two teams at one event yields two distinct items. It
++  links to the member-facing My Serving page (`reverse("my_serving")`), never to
++  an edit/manage/assignment/confirm URL, and the calendar renders no
++  confirm/decline/check-in/attendance/serving action.
+ - UI: `my_serving` flows through the existing legend, month cells, and the day
+   "Timed items" section with its own bilingual type label and distinct dot /
+   border color; the "more" compaction behavior is unchanged.
+diff --git a/docs/CHURCH_CALENDAR_V1_QA_CHECKLIST.md b/docs/CHURCH_CALENDAR_V1_QA_CHECKLIST.md
+index 8acdf04..0e65f8d 100644
+--- a/docs/CHURCH_CALENDAR_V1_QA_CHECKLIST.md
++++ b/docs/CHURCH_CALENDAR_V1_QA_CHECKLIST.md
+@@ -102,12 +102,8 @@ of this QA pass.
+ 
+ - [ ] A user with an explicit own `TeamAssignmentMember` row sees a "My Serving"
+   / "我的服事" item on the month and day views for the linked ServiceEvent date.
+-- [ ] The serving item deep-links to the viewer's own specific My Serving
+-  assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`,
+-  CHURCH-CALENDAR.2A-FU2), and to no generic My Serving page, ServiceEvent
+-  detail, or edit/manage/assignment/confirm/attendance/check-in URL. Clicking it
+-  lands on that specific assignment card; the ServiceEvent detail is not used
+-  because serving does not grant event visibility.
++- [ ] The serving item links to the My Serving page and to no
++  edit/manage/assignment/confirm/attendance/check-in URL.
+ - [ ] The serving item carries the bilingual "My Serving" / "我的服事" type label
+   and its own distinct dot/border color (type is text plus styling, not color
+   alone), and month cells keep the existing "more" compaction behavior.
+@@ -181,11 +177,8 @@ of this QA pass.
+ - [ ] Calendar does not show Reading active-plan days, check-ins, reflections,
+   progress, or streak content.
+ - [ ] Calendar does not add, change, or depend on Today cards or item caps.
+-- [ ] Calendar does not change My Serving behavior (the calendar item remains
+-  read-only and deep-links to the existing My Serving assignment card via a stable
+-  anchor id; existing My Serving actions, if any, remain governed by My Serving
+-  and are unchanged, and the calendar adds/edits/confirms no serving and changes
+-  no My Serving view logic).
++- [ ] Calendar does not change My Serving behavior (it may link to the My
++  Serving page read-only, but adds/edits/confirms no serving there).
+ - [ ] Calendar shows only the viewer's own explicit `TeamAssignmentMember`
+   serving and never infers serving from membership, audience, or visibility.
+ - [ ] Calendar does not expose signup, capacity management, attendance, or
+diff --git a/docs/MODULE_BOUNDARIES.md b/docs/MODULE_BOUNDARIES.md
+index e59be49..e4dbc99 100644
+--- a/docs/MODULE_BOUNDARIES.md
++++ b/docs/MODULE_BOUNDARIES.md
+@@ -57,7 +57,7 @@ Registered in `core/module_registry.py`, enabled via
+ | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
+ | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
+ | `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated ordinary nav plus a module-gated staff management link; staff/superusers have bounded draft/create/edit/publish/archive management. Publish/archive are explicit POST actions. Today contributes at most one visible active important announcement as a localized title/detail link only. No feed, Staff Overview, notification, event/activity, signup, attendance, approval/request-changes, My Serving, or serving behavior. |
+-| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the unchecked manual QA checklist; manual QA remains pending and Calendar V1 is not QA-passed. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, deep-linking to the existing My Serving assignment card). Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
++| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the unchecked manual QA checklist; manual QA remains pending and Calendar V1 is not QA-passed. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, linking to My Serving read-only). Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
+ | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
+ 
+ Official Announcements now has the independent `announcements` app,
+@@ -491,19 +491,11 @@ notifications, or `ServiceEvent`.
+    by `ministry` enablement, so disabled `ministry` means no serving provider
+    call or query. Serving is never inferred from `ChurchStructureMembership`,
+    audience, visibility, staff/superuser/manager authority, or other users'
+-   assignments. `CHURCH-CALENDAR.2A-FU2`: the calendar item remains read-only and
+-   deep-links to the viewer's own existing My Serving assignment card via a stable
+-   anchor (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`),
+-   not the generic My Serving page and not the member-facing `ServiceEvent`
+-   detail — serving does not grant `ServiceEvent` visibility, so routing through
+-   the event detail would couple serving to audience/event visibility. The
+-   calendar renders no confirm/edit/manage/attendance/check-in action; existing
+-   My Serving actions, if any (e.g. detail/confirm), remain governed by My Serving
+-   and are unchanged. FU2 adds only a stable anchor id on the existing My Serving
+-   assignment card and changes no My Serving view logic or behavior (no Today or
+-   My Serving behavior change), no model, migration, data write, notification,
+-   staff/team dashboard, or CommunityActivity-to-ServiceEvent relationship. Bible
+-   Study linked-user serving roles remain a documented follow-up.
++   assignments. The item links to My Serving read-only and renders no
++   confirm/edit/manage/attendance/check-in action. 2A adds no Today or My
++   Serving behavior change, model, migration, data write, notification,
++   staff/team dashboard, or CommunityActivity-to-ServiceEvent relationship.
++   Bible Study linked-user serving roles remain a documented follow-up.
+ 
+ ## Follow-ups (not yet done)
+ 
+diff --git a/ministry/calendar_provider.py b/ministry/calendar_provider.py
+index eb43c00..9db78be 100644
+--- a/ministry/calendar_provider.py
++++ b/ministry/calendar_provider.py
+@@ -41,22 +41,8 @@ def _build_item(member):
+ 
+     ``source_id`` is the assignment-member row id (not the event id), so a viewer
+     serving two teams at the same ServiceEvent yields two distinct, non-colliding
+-    items.
+-
+-    The calendar item remains read-only and deep-links to the viewer's *own*
+-    existing My Serving assignment card via a stable
+-    ``#serving-assignment-<TeamAssignmentMember.id>`` anchor (with ``?tab=all`` so
+-    the card is present regardless of past/upcoming), never to an
+-    edit/manage/assignment/confirm URL. It deliberately does NOT link to the
+-    member-facing ``ServiceEvent`` detail: serving does not grant ServiceEvent
+-    visibility (``ServiceEvent.can_be_seen_by`` reads audience-scope membership /
+-    manager authority only), so an assigned server outside the event's audience
+-    would be turned away there, and routing through it would couple serving to
+-    audience/event visibility — a boundary this overlay must not cross. The
+-    calendar renders no confirm/edit/manage/attendance/check-in action; any
+-    existing actions on the My Serving card (e.g. detail/confirm) remain governed
+-    by My Serving and are unchanged. FU2 adds only a stable anchor id and changes
+-    no My Serving view logic or behavior.
++    items. The item links to My Serving — the safest member-facing serving
++    surface — never to an edit/manage/assignment URL.
+     """
+     assignment = member.assignment
+     event = assignment.service_event
+@@ -68,7 +54,7 @@ def _build_item(member):
+         start=event.start_datetime,
+         end=event.end_datetime or None,
+         location=event.location or "",
+-        detail_url=f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
++        detail_url=reverse("my_serving"),
+     )
+ 
+ 
+* Unmerged path templates/ministry/_serving_card.html

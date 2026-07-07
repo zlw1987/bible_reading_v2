@@ -102,8 +102,12 @@ of this QA pass.
 
 - [ ] A user with an explicit own `TeamAssignmentMember` row sees a "My Serving"
   / "我的服事" item on the month and day views for the linked ServiceEvent date.
-- [ ] The serving item links to the My Serving page and to no
-  edit/manage/assignment/confirm/attendance/check-in URL.
+- [ ] The serving item deep-links to the viewer's own specific My Serving
+  assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`,
+  CHURCH-CALENDAR.2A-FU2), and to no generic My Serving page, ServiceEvent
+  detail, or edit/manage/assignment/confirm/attendance/check-in URL. Clicking it
+  lands on that specific assignment card; the ServiceEvent detail is not used
+  because serving does not grant event visibility.
 - [ ] The serving item carries the bilingual "My Serving" / "我的服事" type label
   and its own distinct dot/border color (type is text plus styling, not color
   alone), and month cells keep the existing "more" compaction behavior.
@@ -177,8 +181,11 @@ of this QA pass.
 - [ ] Calendar does not show Reading active-plan days, check-ins, reflections,
   progress, or streak content.
 - [ ] Calendar does not add, change, or depend on Today cards or item caps.
-- [ ] Calendar does not change My Serving behavior (it may link to the My
-  Serving page read-only, but adds/edits/confirms no serving there).
+- [ ] Calendar does not change My Serving behavior (the calendar item remains
+  read-only and deep-links to the existing My Serving assignment card via a stable
+  anchor id; existing My Serving actions, if any, remain governed by My Serving
+  and are unchanged, and the calendar adds/edits/confirms no serving and changes
+  no My Serving view logic).
 - [ ] Calendar shows only the viewer's own explicit `TeamAssignmentMember`
   serving and never infers serving from membership, audience, or visibility.
 - [ ] Calendar does not expose signup, capacity management, attendance, or

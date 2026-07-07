@@ -145,7 +145,13 @@ class ServingProviderTests(ServingProviderBase):
         self.assertEqual(item.item_type, ITEM_TYPE_MY_SERVING)
         self.assertIn("主日聚会", item.title)
         self.assertIn("敬拜团", item.title)
-        self.assertEqual(item.detail_url, reverse("my_serving"))
+        # CHURCH-CALENDAR.2A-FU2: the item deep-links to the viewer's own
+        # specific serving assignment card, not the generic My Serving page.
+        self.assertNotEqual(item.detail_url, reverse("my_serving"))
+        self.assertEqual(
+            item.detail_url,
+            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
+        )
 
     def test_other_user_does_not_see_the_assignment(self):
         self._serving(self.server)
@@ -238,6 +244,48 @@ class ServingProviderTests(ServingProviderBase):
     def test_out_of_range_event_excluded(self):
         self._serving(self.server, event=self._event(start=self.now + timedelta(days=40)))
         self.assertEqual(self._items(self.server), [])
+
+    def test_detail_url_targets_the_specific_serving_anchor(self):
+        member = self._serving(self.server)
+        item = self._items(self.server)[0]
+        self.assertEqual(
+            item.detail_url,
+            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
+        )
+
+    def test_detail_url_is_not_an_edit_manage_or_action_url(self):
+        member = self._serving(self.server)
+        url = self._items(self.server)[0].detail_url
+        # Anchor fallback: a read-only My Serving deep link, never a staff /
+        # action route. The ServiceEvent detail is also deliberately not used
+        # (serving does not grant event visibility).
+        for banned in (
+            "/edit/",
+            "/review/",
+            "/manage/",
+            "/delete/",
+            "/cancel/",
+            "/confirm/",
+            "/attendance",
+            "/check-in",
+            "/schedule/",
+            reverse("service_event_detail", args=[member.assignment.service_event_id]),
+        ):
+            self.assertNotIn(banned, url)
+
+    def test_two_teams_same_event_yield_distinct_anchor_urls(self):
+        event = self._event()
+        second_team = MinistryTeam.objects.create(name="音响组", name_en="Audio")
+        first = self._serving(self.server, event=event, team=self.team)
+        second = self._serving(self.server, event=event, team=second_team)
+        urls = {item.detail_url for item in self._items(self.server)}
+        self.assertEqual(
+            urls,
+            {
+                f"{reverse('my_serving')}?tab=all#serving-assignment-{first.id}",
+                f"{reverse('my_serving')}?tab=all#serving-assignment-{second.id}",
+            },
+        )
 
     def test_no_data_mutation_when_collecting(self):
         self._serving(self.server)
@@ -339,7 +387,7 @@ class ServingUITests(ServingProviderBase):
         self.assertContains(self._month(lang="zh"), "我的服事")
 
     def test_day_renders_serving_item_read_only_with_member_link(self):
-        self._serving(self.server, event=self._event(start=self._at(12, 19)))
+        member = self._serving(self.server, event=self._event(start=self._at(12, 19)))
         response = self._day(12)
         serving = [
             item
@@ -348,9 +396,40 @@ class ServingUITests(ServingProviderBase):
         ]
         self.assertEqual(len(serving), 1)
         item = serving[0]
-        self.assertEqual(item.detail_url, reverse("my_serving"))
-        self.assertContains(response, reverse("my_serving"))
+        expected_url = (
+            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
+        )
+        self.assertEqual(item.detail_url, expected_url)
+        # The rendered day link uses the specific anchored target, not the
+        # bare My Serving URL as the href.
+        self.assertContains(response, f'href="{expected_url}"')
         self.assertContains(response, "19:00")
+
+    def test_month_serving_link_uses_specific_anchor_target(self):
+        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+        expected_url = (
+            f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
+        )
+        cell = self._cell(self._month(), 12)
+        presented = next(
+            item for item in cell["items"] if item.source_id == member.id
+        )
+        self.assertEqual(presented.detail_url, expected_url)
+        self.assertContains(self._month(), f'href="{expected_url}"')
+
+    def test_my_serving_page_renders_the_matching_anchor(self):
+        # The deep-link target must actually exist on My Serving so the anchor
+        # resolves. tab=all guarantees the card is present for past or upcoming.
+        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+        response = self.client.get(reverse("my_serving"), {"tab": "all"})
+        self.assertContains(response, f'id="serving-assignment-{member.id}"')
+
+    def test_other_user_calendar_pages_have_no_serving_anchor(self):
+        member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
+        anchor = f"serving-assignment-{member.id}"
+        self.client.force_login(self.other)
+        for response in (self._month(), self._day(12)):
+            self.assertNotContains(response, anchor)
 
     def test_no_serving_action_or_management_urls_render(self):
         self._serving(self.server, event=self._event(start=self._at(12, 9)))

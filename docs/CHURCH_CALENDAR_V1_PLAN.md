@@ -126,7 +126,7 @@ The exact V1 item types are:
 | `bible_study_meeting` | `BibleStudyMeeting` | Timed point anchored to the local date of `meeting_datetime`; V1 must not invent a duration. |
 | `announcement` | `Announcement` | Active-window communication, not a true event. Show it as active communication on each displayed day its currently visible publish window overlaps. |
 | `community_activity` | `CommunityActivity` | Timed item using `start_datetime` and `end_datetime` when present. A start-only activity belongs to its start date; a ranged activity appears on every overlapping local day. |
-| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. |
+| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. `CHURCH-CALENDAR.2A-FU2`: the item deep-links to the viewer's own specific My Serving assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), not the generic My Serving page and not the ServiceEvent detail (serving does not grant event visibility). |
 
 Range overlap uses aware datetimes in the configured local timezone and
 half-open boundaries. Day grouping uses local dates, not UTC dates.
@@ -359,10 +359,22 @@ Ownership and boundary:
 - The item is a **timed** item anchored to the ServiceEvent `start_datetime`
   with the existing effective-end overlap rule, so a multi-day event appears on
   every day it covers. `source_id` is the `TeamAssignmentMember` id (not the
-  event id), so serving two teams at one event yields two distinct items. It
-  links to the member-facing My Serving page (`reverse("my_serving")`), never to
-  an edit/manage/assignment/confirm URL, and the calendar renders no
-  confirm/decline/check-in/attendance/serving action.
+  event id), so serving two teams at one event yields two distinct items.
+  `CHURCH-CALENDAR.2A-FU2`: the calendar item remains read-only and deep-links to
+  the viewer's *own* existing My Serving assignment card via a stable anchor
+  (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), never to
+  the generic My Serving page, an edit/manage/assignment/confirm URL, or the
+  member-facing `ServiceEvent` detail. The ServiceEvent detail is deliberately
+  not used: `ServiceEvent.can_be_seen_by` grants ordinary visibility from
+  audience-scope membership / manager authority only, never from serving, so an
+  assigned server outside the event's audience would be turned away and routing
+  through it would couple serving to audience/event visibility. The anchor points
+  at the existing My Serving card (`?tab=all` so it is present for past or
+  upcoming); the calendar itself renders no
+  confirm/decline/check-in/attendance/serving action, and any existing actions on
+  the My Serving card (e.g. detail/confirm) remain governed by My Serving and are
+  unchanged. FU2 adds only a stable anchor id and changes no My Serving view logic
+  or behavior.
 - UI: `my_serving` flows through the existing legend, month cells, and the day
   "Timed items" section with its own bilingual type label and distinct dot /
   border color; the "more" compaction behavior is unchanged.

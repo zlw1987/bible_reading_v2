@@ -41,8 +41,22 @@ def _build_item(member):
 
     ``source_id`` is the assignment-member row id (not the event id), so a viewer
     serving two teams at the same ServiceEvent yields two distinct, non-colliding
-    items. The item links to My Serving — the safest member-facing serving
-    surface — never to an edit/manage/assignment URL.
+    items.
+
+    The calendar item remains read-only and deep-links to the viewer's *own*
+    existing My Serving assignment card via a stable
+    ``#serving-assignment-<TeamAssignmentMember.id>`` anchor (with ``?tab=all`` so
+    the card is present regardless of past/upcoming), never to an
+    edit/manage/assignment/confirm URL. It deliberately does NOT link to the
+    member-facing ``ServiceEvent`` detail: serving does not grant ServiceEvent
+    visibility (``ServiceEvent.can_be_seen_by`` reads audience-scope membership /
+    manager authority only), so an assigned server outside the event's audience
+    would be turned away there, and routing through it would couple serving to
+    audience/event visibility — a boundary this overlay must not cross. The
+    calendar renders no confirm/edit/manage/attendance/check-in action; any
+    existing actions on the My Serving card (e.g. detail/confirm) remain governed
+    by My Serving and are unchanged. FU2 adds only a stable anchor id and changes
+    no My Serving view logic or behavior.
     """
     assignment = member.assignment
     event = assignment.service_event
@@ -54,7 +68,7 @@ def _build_item(member):
         start=event.start_datetime,
         end=event.end_datetime or None,
         location=event.location or "",
-        detail_url=reverse("my_serving"),
+        detail_url=f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
     )
 
 

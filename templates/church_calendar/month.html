@@ -79,7 +79,7 @@
                             <li class="cc-cell-item cc-type-{{ it.item_type }}">
                                 <span class="cc-dot" aria-hidden="true"></span>
                                 <a class="cc-cell-item-link" href="{{ it.detail_url }}">
-                                    <span class="cc-sr-only">{% if language == "zh" %}{{ it.label_zh }}{% else %}{{ it.label_en }}{% endif %}：</span>{{ it.title }}
+                                    <span class="cc-sr-only">{% if language == "zh" %}{{ it.label_zh }}{% else %}{{ it.label_en }}{% endif %}：</span>{{ it.title }}{% if it.serving_count == 1 %} · {{ it.serving.0.role }}{% elif it.serving_count > 1 %} · {% if language == "zh" %}服事 {{ it.serving_count }}项{% else %}Serving ×{{ it.serving_count }}{% endif %}{% endif %}
                                 </a>
                             </li>
                             {% endfor %}

@@ -22,6 +22,7 @@ from .visibility import member_visible_service_events_for
 
 
 def _build_item(event):
+    detail_url = reverse("service_event_detail", args=[event.id])
     return CalendarItem(
         item_type=ITEM_TYPE_SERVICE_EVENT,
         source_id=event.id,
@@ -29,7 +30,15 @@ def _build_item(event):
         start=event.start_datetime,
         end=event.end_datetime or None,
         location=event.location or "",
-        detail_url=reverse("service_event_detail", args=[event.id]),
+        detail_url=detail_url,
+        # CHURCH-CALENDAR.2A-FU4: presentation-only grouping key so the calendar
+        # can collapse this base ServiceEvent row and the viewer's own
+        # ``my_serving`` rows for the same ServiceEvent into one occurrence.
+        # It encodes the ServiceEvent id (never a title/time string) and is not
+        # authorization: visibility is still the member-safe query above.
+        occurrence_key=f"service_event:{event.id}",
+        occurrence_title=event.get_title(),
+        occurrence_detail_url=detail_url,
     )
 
 

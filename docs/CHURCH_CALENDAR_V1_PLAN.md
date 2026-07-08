@@ -9,8 +9,12 @@ member-facing month grid and day detail UI (July 2026).
 checklist. `CHURCH-CALENDAR.2A` adds the signed-in user's own explicit serving
 schedule as a read-only personal `my_serving` overlay (see Section 10), followed
 by `CHURCH-CALENDAR.2A-FU2/FU3` and the My Serving serving-card template hotfix.
-`CHURCH-CALENDAR.1D-B` records the product-owner manual QA pass after
-deployment. Calendar V1 is QA-passed for limited trial/current-state use; this
+`CHURCH-CALENDAR.2A-FU4` implements presentation-only occurrence grouping: it groups the base
+`ServiceEvent` and the viewer's own serving rows for it into one presentation
+occurrence (see Section 10). `CHURCH-CALENDAR.1D-B` records the product-owner
+manual QA pass after deployment as the baseline Calendar V1 closure. Calendar V1
+is QA-passed for limited trial/current-state use at that baseline; FU4 grouping
+has focused automated tests but no product-owner manual regression pass yet. This
 is not a broad production-readiness claim.
 
 ## 1. Purpose and product boundary
@@ -129,7 +133,7 @@ The exact V1 item types are:
 | `bible_study_meeting` | `BibleStudyMeeting` | Timed point anchored to the local date of `meeting_datetime`; V1 must not invent a duration. |
 | `announcement` | `Announcement` | Active-window communication, not a true event. Show it as active communication on each displayed day its currently visible publish window overlaps. |
 | `community_activity` | `CommunityActivity` | Timed item using `start_datetime` and `end_datetime` when present. A start-only activity belongs to its start date; a ranged activity appears on every overlapping local day. |
-| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. `CHURCH-CALENDAR.2A-FU2`: the item deep-links to the viewer's own specific My Serving assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), not the generic My Serving page — the anchor targets that exact card and preserves current Calendar behavior. (Since `SERVING-EVENT-VISIBILITY.1A` an explicitly assigned server can view that specific `ServiceEvent` detail; whether to relink the calendar item there is deferred to `CHURCH-CALENDAR.2A-FU4`.) |
+| `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. `CHURCH-CALENDAR.2A-FU2`: the serving subitem deep-links to the viewer's own specific My Serving assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), not the generic My Serving page — the anchor targets that exact card and preserves current Calendar behavior. `CHURCH-CALENDAR.2A-FU4`: a `my_serving` row no longer renders as its own separate calendar row; it is grouped (via a shared `occurrence_key = "service_event:<id>"`) into the base `ServiceEvent` occurrence as a serving summary (month) / subitem (day), and the grouped occurrence header links to the member-facing `ServiceEvent` detail (read visibility granted by `SERVING-EVENT-VISIBILITY.1A`). |
 
 Range overlap uses aware datetimes in the configured local timezone and
 half-open boundaries. Day grouping uses local dates, not UTC dates.
@@ -376,19 +380,21 @@ Ownership and boundary:
   changes no My Serving view logic or behavior.
 - UI: `my_serving` flows through the existing legend, month cells, and the day
   "Timed items" section with its own bilingual type label and distinct dot /
-  border color; the "more" compaction behavior is unchanged.
+  border color; the "more" compaction behavior is unchanged. (Superseded by
+  `CHURCH-CALENDAR.2A-FU4`: a `my_serving` row is no longer a standalone calendar
+  row — it is grouped into its base `ServiceEvent` occurrence as a serving
+  summary / subitem. The legend still lists the My Serving type.)
 
 > Update (`SERVING-EVENT-VISIBILITY.1A`): an explicit `TeamAssignmentMember`
 > assignment now grants the assignee read-only visibility to *that specific*
 > `ServiceEvent` detail (never audience membership, never other events, never
 > management authority; ordinary member-safe calendar/list visibility stays
-> audience-only). This did **not** change the 2A calendar link — `my_serving`
-> items still deep-link to the My Serving assignment card, preserving current
-> Calendar behavior — but it removes the blocker for a future option to point them
-> at the event detail, and it resolves the FU4 grouping
-> "serving-without-base-visibility" case (the assignee can now open the grouped
-> occurrence's base `ServiceEvent` detail). Any such calendar-link/grouping change
-> is deferred to `CHURCH-CALENDAR.2A-FU4`.
+> audience-only). At the time it did not change the 2A calendar link, but it
+> removed the blocker for pointing the grouped occurrence at the event detail and
+> resolved the "serving-without-base-visibility" case. `CHURCH-CALENDAR.2A-FU4`
+> now relies on this: the grouped occurrence header links to the base
+> `ServiceEvent` detail (which the assignee can open), while serving subitems keep
+> deep-linking to the My Serving assignment card.
 
 Bible Study linked-user serving roles (`BibleStudyMeetingRole.user`) remain a
 deliberate follow-up. Folding them into this `ministry`-keyed provider would
@@ -403,6 +409,57 @@ calendar sync, no staff/team-coverage dashboard, no manager attention cards, no
 setup/readiness checks, no serving inference, no Today or My Serving behavior
 change, and no CommunityActivity-to-ServiceEvent relationship. No model,
 migration, or data write was added.
+
+### CHURCH-CALENDAR.2A-FU4 — Occurrence grouping
+
+Fixes the 2A UX duplication where one real ServiceEvent could appear several
+times on the calendar — once as the base `service_event` row plus one
+`my_serving` row per serving assignment (e.g. "Sunday Worship", "Sunday Worship ·
+Camera Team", "Sunday Worship · Lighting Team"). The same real occurrence now
+renders once, with the viewer's serving assignments attached as a summary
+(month) or subitems (day).
+
+Grouping is **presentation-only** and never authorization:
+
+- `CalendarItem` gains optional grouping metadata: `occurrence_key`,
+  `occurrence_role`, `occurrence_title`, `occurrence_detail_url`. Item identity
+  stays `(item_type, source_id)`; member-safe visibility is unchanged.
+- The `events` provider sets `occurrence_key = "service_event:<ServiceEvent.id>"`
+  on its base row; the `ministry` provider sets the same key on each `my_serving`
+  row for that event, plus `occurrence_role` = the serving team name and
+  `occurrence_title` / `occurrence_detail_url` = the base event title and
+  member-facing event detail URL.
+- Grouping keys on the underlying object identity (the ServiceEvent id), **never**
+  on title/time/location strings, so two unrelated events that merely share a
+  title/time are never merged. The key is deliberately generic so future keys
+  (e.g. `"bible_study_meeting:<id>"`) group the same way with no contract change.
+- The presentation layer collapses items sharing an `occurrence_key` into one
+  grouped occurrence. Month cell compaction / "more" counts grouped occurrences,
+  not raw duplicate items.
+
+Display and link behavior:
+
+- Month grid: the grouped row shows the base title; with one serving assignment
+  it appends `· <team>` (e.g. `Sunday Worship · Camera Team` / `主日崇拜 · 摄像团队`),
+  with two or more a concise summary `· Serving ×N` / `· 服事 N项`.
+- Day detail: one card shows the base event title/time/location/type, with the
+  viewer's serving assignments listed underneath as subitems.
+- The grouped occurrence header links to the member-facing `ServiceEvent` detail
+  (`service_event_detail`). This is safe because `SERVING-EVENT-VISIBILITY.1A`
+  grants an explicitly assigned server read-only visibility to *that specific*
+  event detail, so a serving-only occurrence (assigned server outside the
+  ordinary audience, base row absent) is reconstructed from the `my_serving`
+  row's `occurrence_title` / `occurrence_detail_url` and still opens. Serving
+  subitems keep deep-linking to the viewer's own read-only My Serving assignment
+  anchor. No confirm/edit/manage/assignment/attendance/check-in URL is rendered.
+
+Boundaries preserved: the base `service_event` provider stays audience-only
+(`events.visibility.member_visible_service_events_for`); serving stays explicit
+(`TeamAssignmentMember`) and is never inferred from membership/audience/
+visibility; other users and staff/superuser/manager authority never see the
+viewer's serving subitems; a non-assigned non-audience user still cannot see the
+occurrence; and `ServiceEvent.can_be_seen_by` behavior is unchanged. The calendar
+stays read-only. No model, migration, or data write was added.
 
 ### CHURCH-CALENDAR.1D-B — Product-owner QA closure
 

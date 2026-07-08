@@ -73,6 +73,20 @@
                     <span class="cc-item-loc">· {{ item.location }}</span>
                     {% endif %}
                 </div>
+                {% if item.serving %}
+                <div class="cc-serving">
+                    <p class="cc-serving-label muted">
+                        {% if language == "zh" %}我的服事{% else %}My serving{% endif %}
+                    </p>
+                    <ul class="cc-serving-list">
+                        {% for s in item.serving %}
+                        <li class="cc-serving-item">
+                            <a class="cc-serving-link" href="{{ s.detail_url }}">{{ s.role }}</a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>

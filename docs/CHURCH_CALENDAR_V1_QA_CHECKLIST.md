@@ -1,9 +1,12 @@
 # Church Calendar V1 Manual QA Checklist
 
 Status: product-owner manual QA passed in `CHURCH-CALENDAR.1D-B` after
-deployment. The pass covers the current Calendar V1 limited-trial state after
-`CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
+deployment. The recorded pass is the baseline that covers the Calendar V1
+limited-trial state after `CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
 `CHURCH-CALENDAR.2A-FU2/FU3`, and the My Serving serving-card template hotfix.
+`CHURCH-CALENDAR.2A-FU4` occurrence grouping is implemented with focused
+automated tests, and its manual regression checks below are prepared but remain
+pending product-owner confirmation (not covered by the 1D-B baseline pass).
 This is not a broad production readiness claim. This checklist adds no product
 scope.
 
@@ -19,11 +22,14 @@ command as part of this QA pass.
 - [x] Build / commit: deployed state including `CHURCH-CALENDAR.1A`, `1B`,
   `1C`, `1D-A`, `2A`, `CHURCH-CALENDAR.2A-FU2/FU3`, and the serving-card
   template syntax hotfix.
-- [x] Overall result: Pass for Calendar V1 limited-trial / product-owner QA.
+- [x] Overall result: Pass for the Calendar V1 baseline limited-trial /
+  product-owner QA (through `2A` / `FU2` / `FU3`).
 - [x] Notes: product owner confirmed the required deployed Calendar pass. The
   detailed matrix below remains useful for future regression reruns; this
   closure records the confirmed pass without expanding scope or claiming broad
-  production readiness.
+  production readiness. The `CHURCH-CALENDAR.2A-FU4` occurrence-grouping checks
+  are NOT part of this recorded baseline pass; they remain pending product-owner
+  manual regression confirmation.
 
 ## Product-Owner Confirmed Pass Items (CHURCH-CALENDAR.1D-B)
 
@@ -121,21 +127,15 @@ command as part of this QA pass.
 
 ## Personal Serving Overlay Checks (CHURCH-CALENDAR.2A)
 
-- [ ] A user with an explicit own `TeamAssignmentMember` row sees a "My Serving"
-  / "我的服事" item on the month and day views for the linked ServiceEvent date.
-- [ ] The serving item deep-links to the viewer's own specific My Serving
+- [ ] A user with an explicit own `TeamAssignmentMember` row sees their serving
+  for the linked ServiceEvent date on the month and day views. (Since
+  `CHURCH-CALENDAR.2A-FU4` this renders as part of the grouped ServiceEvent
+  occurrence, not a standalone `my_serving` row — see the FU4 checks below.)
+- [ ] The serving subitem deep-links to the viewer's own specific My Serving
   assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`,
-  CHURCH-CALENDAR.2A-FU2), and to no generic My Serving page, ServiceEvent
-  detail, or edit/manage/assignment/confirm/attendance/check-in URL. Clicking it
-  lands on that specific assignment card. The anchor still targets the viewer's
-  exact existing My Serving card and preserves current Calendar behavior; any
-  change to link the item at the ServiceEvent detail is deferred to
-  CHURCH-CALENDAR.2A-FU4. (Since SERVING-EVENT-VISIBILITY.1A an explicitly
-  assigned server can view that specific ServiceEvent detail, but this overlay's
-  link is unchanged.)
-- [ ] The serving item carries the bilingual "My Serving" / "我的服事" type label
-  and its own distinct dot/border color (type is text plus styling, not color
-  alone), and month cells keep the existing "more" compaction behavior.
+  CHURCH-CALENDAR.2A-FU2), and to no generic My Serving page or
+  edit/manage/assignment/confirm/attendance/check-in URL. Clicking it lands on
+  that specific assignment card.
 - [ ] Another user does not see that assignment.
 - [ ] A staff/superuser/manager account with no own serving row does not see
   other people's serving items.
@@ -143,8 +143,7 @@ command as part of this QA pass.
   sees no serving item — belonging/audience/visibility never create serving.
 - [ ] A cancelled assignment, a draft/cancelled ServiceEvent, and an inactive
   membership produce no serving item.
-- [ ] A multi-day serving event appears on every overlapping local day; two
-  teams at one event appear as two distinct serving items.
+- [ ] A multi-day serving event appears on every overlapping local day.
 - [ ] Disabling `ministry` removes all serving items and runs no serving query;
   staff status does not bypass this gate. (Disabling `events` also requires
   disabling `ministry`.)
@@ -152,6 +151,35 @@ command as part of this QA pass.
   (documented follow-up); their absence is expected, not a defect.
 - [ ] The calendar renders no confirm/decline/check-in/attendance/edit/manage
   serving action, and browsing changes no serving data.
+
+## Occurrence Grouping Checks (CHURCH-CALENDAR.2A-FU4)
+
+> Pending: these grouping regression checks are prepared and backed by focused
+> automated tests, but remain unchecked until the product owner runs and confirms
+> the manual regression pass. They are not part of the `CHURCH-CALENDAR.1D-B`
+> baseline pass recorded above.
+
+- [ ] A ServiceEvent for which the viewer both sees the base event (audience) and
+  has one or more own serving rows appears ONCE on the month grid (one grouped
+  occurrence), not once per serving assignment.
+- [ ] Month grid: with one serving assignment the row shows `<event> · <team>`
+  (e.g. `Sunday Worship · Camera Team` / `主日崇拜 · 摄像团队`); with two or more it
+  shows `<event> · Serving ×N` / `<event> · 服事 N项`.
+- [ ] Day detail: the same ServiceEvent shows one card with the base
+  title/time/location/type, and the viewer's serving assignments listed
+  underneath as subitems (each linking to its My Serving anchor).
+- [ ] The grouped occurrence header links to the member-facing `ServiceEvent`
+  detail (`/events/<id>/`), not an edit/manage/assignment/confirm/attendance/
+  check-in URL.
+- [ ] Month cell "more" compaction counts grouped occurrences, not raw duplicate
+  items (a base + two serving rows occupy ONE cell row).
+- [ ] An assigned server outside the ordinary audience still sees the grouped
+  occurrence (SERVING-EVENT-VISIBILITY.1A grants read visibility to that specific
+  ServiceEvent detail); a non-assigned non-audience user still sees nothing.
+- [ ] Two unrelated ServiceEvents sharing a title/time are NOT merged into one
+  occurrence (grouping keys on the event id, never on title/time strings).
+- [ ] Another user, and staff/superuser/manager authority, see the base event but
+  never the viewer's serving subitems.
 
 ## Date Semantics
 

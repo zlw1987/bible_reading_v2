@@ -36,6 +36,18 @@ from events.models import get_service_event_effective_end
 from .views import my_serving_assignments
 
 
+def _event_detail_url(event):
+    """Member-facing ServiceEvent detail URL for the grouped occurrence header.
+
+    This is read-only visibility only: SERVING-EVENT-VISIBILITY.1A grants an
+    explicitly assigned server read access to that specific ServiceEvent detail
+    (layered beside ``ServiceEvent.can_be_seen_by`` in the event detail view),
+    so a serving-only occurrence can safely surface the base event detail link.
+    It is never an edit/manage/assignment/confirm/attendance/check-in URL.
+    """
+    return reverse("service_event_detail", args=[event.id])
+
+
 def _build_item(member):
     """Build a ``my_serving`` item from one ``TeamAssignmentMember`` row.
 
@@ -49,17 +61,30 @@ def _build_item(member):
     the card is present regardless of past/upcoming), never to an
     edit/manage/assignment/confirm URL. The anchor targets the viewer's exact
     existing My Serving assignment card and preserves current Calendar behavior;
-    it is unchanged by ``SERVING-EVENT-VISIBILITY.1A``. That slice does now grant
-    an explicitly assigned server read-only visibility to the specific
-    ``ServiceEvent`` detail (via
-    ``ministry.permissions.user_has_explicit_serving_assignment_for_event``,
-    layered beside ``ServiceEvent.can_be_seen_by`` in the event detail view only),
-    so linking a ``my_serving`` item at the event detail would no longer turn the
-    server away. Whether to change the Calendar link/grouping to use the event
-    detail is deferred to ``CHURCH-CALENDAR.2A-FU4``; the ordinary member-safe
-    calendar ``service_event`` provider stays audience-only. The calendar renders
-    no confirm/edit/manage/attendance/check-in action; any existing actions on the
-    My Serving card (e.g. detail/confirm) remain governed by My Serving and are
+    it is unchanged by ``SERVING-EVENT-VISIBILITY.1A``.
+
+    CHURCH-CALENDAR.2A-FU4 adds presentation-only grouping metadata so the
+    calendar collapses this serving row into the same real occurrence as the
+    base ServiceEvent (and any sibling serving rows for the same event):
+
+    * ``occurrence_key`` = ``"service_event:<ServiceEvent.id>"`` — shared with
+      the ``events`` provider's base row so both refer to one occurrence. It
+      encodes the ServiceEvent id, never a title/time string, and is not
+      authorization.
+    * ``occurrence_role`` = the serving team name — marks this as a serving
+      *subitem* of the occurrence and supplies the concise per-team label.
+    * ``occurrence_title`` / ``occurrence_detail_url`` carry the base event
+      title and member-facing event detail link so the grouped occurrence header
+      still renders when the base ``service_event`` row is absent (an assigned
+      server outside the ordinary audience): the base provider stays
+      audience-only, while SERVING-EVENT-VISIBILITY.1A still grants that server
+      read-only visibility to the event detail.
+
+    The item's own ``detail_url`` stays the read-only My Serving assignment
+    anchor, so serving subitems keep deep-linking to the viewer's My Serving
+    card, never to an event edit/manage/confirm/attendance/check-in URL. The
+    calendar renders no confirm/edit/manage/attendance/check-in action; any
+    existing actions on the My Serving card remain governed by My Serving and are
     unchanged.
     """
     assignment = member.assignment
@@ -73,6 +98,10 @@ def _build_item(member):
         end=event.end_datetime or None,
         location=event.location or "",
         detail_url=f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}",
+        occurrence_key=f"service_event:{event.id}",
+        occurrence_role=team.get_name(),
+        occurrence_title=event.get_title(),
+        occurrence_detail_url=_event_detail_url(event),
     )
 
 

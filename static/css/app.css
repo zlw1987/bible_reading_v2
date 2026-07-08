@@ -2952,6 +2952,39 @@ th {
     margin-left: 4px;
 }
 
+/* CHURCH-CALENDAR.2A-FU4: the viewer's own serving assignments grouped under a
+   ServiceEvent occurrence card (read-only My Serving deep links). */
+.cc-serving {
+    margin-top: 8px;
+}
+
+.cc-serving-label {
+    font-size: 12px;
+    margin: 0 0 4px;
+}
+
+.cc-serving-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cc-serving-item {
+    font-size: 13px;
+}
+
+.cc-serving-link {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    text-decoration: none;
+    background: var(--surface);
+}
+
 @media (max-width: 640px) {
     .cc-grid {
         min-width: 560px;

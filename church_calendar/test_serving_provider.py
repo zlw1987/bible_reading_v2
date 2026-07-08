@@ -36,6 +36,7 @@ from ministry.models import (
 
 from .providers import (
     ITEM_TYPE_MY_SERVING,
+    ITEM_TYPE_SERVICE_EVENT,
     CalendarRangeProvider,
     collect_calendar_items,
 )
@@ -375,40 +376,51 @@ class ServingUITests(ServingProviderBase):
                     return cell
         return None
 
-    def test_month_cell_renders_serving_item_with_bilingual_label(self):
+    def test_month_cell_groups_serving_into_one_occurrence(self):
+        # CHURCH-CALENDAR.2A-FU4: the serving row is grouped into the base
+        # ServiceEvent occurrence rather than rendered as a separate my_serving
+        # row. This server is outside the ordinary audience, so the base
+        # ``service_event`` provider emits nothing; the occurrence is still shown
+        # from the viewer's own serving (SERVING-EVENT-VISIBILITY.1A).
         member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
         cell = self._cell(self._month(), 12)
         self.assertIn(member.id, {item.source_id for item in cell["items"]})
         presented = next(
             item for item in cell["items"] if item.source_id == member.id
         )
-        self.assertEqual(presented.item_type, ITEM_TYPE_MY_SERVING)
+        # The occurrence is typed by its base ServiceEvent, not my_serving.
+        self.assertEqual(presented.item_type, ITEM_TYPE_SERVICE_EVENT)
         self.assertFalse(presented.is_announcement)
-        # Bilingual type label available on the presented item + legend.
-        self.assertEqual((presented.label_en, presented.label_zh), ("My Serving", "我的服事"))
+        self.assertEqual(presented.serving_count, 1)
+        self.assertEqual(presented.serving[0].role, "敬拜团")
+        # A single-serving month row shows the team inline; the legend still
+        # carries the bilingual My Serving label.
+        self.assertContains(self._month(), "敬拜团")
         self.assertContains(self._month(lang="en"), "My Serving")
         self.assertContains(self._month(lang="zh"), "我的服事")
 
-    def test_day_renders_serving_item_read_only_with_member_link(self):
+    def test_day_renders_grouped_occurrence_with_serving_subitem(self):
         member = self._serving(self.server, event=self._event(start=self._at(12, 19)))
         response = self._day(12)
-        serving = [
+        occurrences = [
             item
             for item in response.context["timed_items"]
-            if item.item_type == ITEM_TYPE_MY_SERVING
+            if member.id in {s.source_id for s in item.serving}
         ]
-        self.assertEqual(len(serving), 1)
-        item = serving[0]
+        self.assertEqual(len(occurrences), 1)
+        occ = occurrences[0]
+        # One grouped occurrence, typed by the base ServiceEvent.
+        self.assertEqual(occ.item_type, ITEM_TYPE_SERVICE_EVENT)
+        self.assertEqual(occ.serving_count, 1)
         expected_url = (
             f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
         )
-        self.assertEqual(item.detail_url, expected_url)
-        # The rendered day link uses the specific anchored target, not the
-        # bare My Serving URL as the href.
+        # The serving subitem deep-links to the viewer's own My Serving anchor.
+        self.assertEqual(occ.serving[0].detail_url, expected_url)
         self.assertContains(response, f'href="{expected_url}"')
         self.assertContains(response, "19:00")
 
-    def test_month_serving_link_uses_specific_anchor_target(self):
+    def test_month_serving_subitem_carries_specific_anchor_target(self):
         member = self._serving(self.server, event=self._event(start=self._at(12, 9)))
         expected_url = (
             f"{reverse('my_serving')}?tab=all#serving-assignment-{member.id}"
@@ -417,8 +429,10 @@ class ServingUITests(ServingProviderBase):
         presented = next(
             item for item in cell["items"] if item.source_id == member.id
         )
-        self.assertEqual(presented.detail_url, expected_url)
-        self.assertContains(self._month(), f'href="{expected_url}"')
+        # The grouped month row links to the member-facing event detail; the
+        # exact My Serving anchor rides on the serving subitem (day detail).
+        self.assertNotEqual(presented.detail_url, expected_url)
+        self.assertEqual(presented.serving[0].detail_url, expected_url)
 
     def test_my_serving_page_renders_the_matching_anchor(self):
         # The deep-link target must actually exist on My Serving so the anchor

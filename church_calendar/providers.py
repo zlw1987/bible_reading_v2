@@ -138,6 +138,37 @@ class CalendarItem:
     end: Optional[datetime] = None
     # Optional localized location text.
     location: str = ""
+    # CHURCH-CALENDAR.2A-FU4 presentation-only grouping metadata. These fields
+    # are NEVER authorization: they only let the presentation layer collapse
+    # several real items that refer to the *same underlying occurrence* into one
+    # display row/card, without touching item identity or member-safe
+    # visibility. Item identity stays ``(item_type, source_id)``.
+    #
+    # ``occurrence_key`` is a stable, structured "<base_type>:<base_id>" key
+    # (e.g. ``"service_event:42"``) shared by every item that belongs to one
+    # real occurrence — the base ServiceEvent item and each of the viewer's own
+    # ``my_serving`` items for that same ServiceEvent. It must encode the
+    # underlying object identity, never a title/time/location string, so two
+    # unrelated occurrences that merely share a title/time are never grouped.
+    # Empty means "no grouping" (the item stands alone under its own identity).
+    # The key is deliberately generic so future keys (e.g.
+    # ``"bible_study_meeting:<id>"``) group the same way with no contract change.
+    occurrence_key: str = ""
+    # A non-empty ``occurrence_role`` marks this item as a *subitem* of its
+    # occurrence (e.g. the serving team/role name for a ``my_serving`` item)
+    # rather than the base occurrence row. Empty means this item is (or may act
+    # as) the base occurrence.
+    occurrence_role: str = ""
+    # The plain, base-occurrence title/detail URL, used to render the grouped
+    # occurrence header when the base item itself is not in the viewer's result
+    # (e.g. an explicitly assigned server outside the ordinary audience: the
+    # base ``service_event`` provider stays audience-only, so only the viewer's
+    # ``my_serving`` items are present, yet SERVING-EVENT-VISIBILITY.1A still
+    # grants that server read-only visibility to the ServiceEvent detail). A
+    # base item sets these to its own title/detail_url; both fall back to the
+    # item's own ``title`` / ``detail_url`` when blank.
+    occurrence_title: str = ""
+    occurrence_detail_url: str = ""
 
     @property
     def identity(self):

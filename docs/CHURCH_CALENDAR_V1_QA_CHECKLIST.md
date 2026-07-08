@@ -1,23 +1,44 @@
 # Church Calendar V1 Manual QA Checklist
 
-Status: prepared in `CHURCH-CALENDAR.1D-A` as an unchecked, pending product
-owner checklist, and extended in `CHURCH-CALENDAR.2A` with the personal serving
-overlay checks below. Manual QA has not passed yet. Calendar V1 remains limited
-trial / not QA-passed until the product owner explicitly confirms this checklist
-was run and passed. This checklist adds no product scope.
+Status: product-owner manual QA passed in `CHURCH-CALENDAR.1D-B` after
+deployment. The pass covers the current Calendar V1 limited-trial state after
+`CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
+`CHURCH-CALENDAR.2A-FU2/FU3`, and the My Serving serving-card template hotfix.
+This is not a broad production readiness claim. This checklist adds no product
+scope.
 
-Use this checklist in local or staging with test records only. Do not run data
-backfills, cleanup commands, notification jobs, or any `--apply` command as part
-of this QA pass.
+Use this checklist in local or staging with test records only for future reruns.
+Do not run data backfills, cleanup commands, notification jobs, or any `--apply`
+command as part of this QA pass.
 
 ## Result Summary
 
-- [ ] Environment:
-- [ ] Tester:
-- [ ] Date:
-- [ ] Build / commit:
-- [ ] Overall result: Pending / Pass / Fail
-- [ ] Notes:
+- [x] Environment: deployed app after the Calendar and My Serving hotfixes.
+- [x] Tester: product owner.
+- [x] Date: 2026-07-07.
+- [x] Build / commit: deployed state including `CHURCH-CALENDAR.1A`, `1B`,
+  `1C`, `1D-A`, `2A`, `CHURCH-CALENDAR.2A-FU2/FU3`, and the serving-card
+  template syntax hotfix.
+- [x] Overall result: Pass for Calendar V1 limited-trial / product-owner QA.
+- [x] Notes: product owner confirmed the required deployed Calendar pass. The
+  detailed matrix below remains useful for future regression reruns; this
+  closure records the confirmed pass without expanding scope or claiming broad
+  production readiness.
+
+## Product-Owner Confirmed Pass Items (CHURCH-CALENDAR.1D-B)
+
+- [x] `/calendar/` renders normally.
+- [x] Month calendar shows real items including Church Gatherings, Bible Study,
+  Community Activities, Announcements, and My Serving.
+- [x] Calendar day detail works.
+- [x] `my_serving` calendar items deep-link to
+  `/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`, targeting
+  the viewer's specific existing My Serving assignment card.
+- [x] `/my-serving/` works.
+- [x] `/my-serving/?tab=past` no longer returns 500.
+- [x] The leaked template comment text is gone.
+- [x] The serving-card template syntax hotfix is deployed.
+- [x] Calendar remains read-only; My Serving keeps its own existing behavior.
 
 ## Preconditions
 
@@ -200,7 +221,8 @@ of this QA pass.
 
 ## Sign-Off
 
-- [ ] Product owner confirms all required checks passed.
-- [ ] Any failed checks are recorded with reproduction steps.
-- [ ] Documentation is updated only after product owner confirmation if the
+- [x] Product owner confirms all required checks passed for the
+  `CHURCH-CALENDAR.1D-B` limited-trial Calendar QA closure.
+- [x] No failed checks were reported in the product-owner confirmation above.
+- [x] Documentation is updated only after product owner confirmation if the
   status changes from pending to passed.

@@ -5,10 +5,13 @@ Status: `CHURCH-CALENDAR.0A` approved this bounded plan,
 `CHURCH-CALENDAR.1B` added the four member-safe source range providers and
 their visibility adapters, and `CHURCH-CALENDAR.1C` implemented the final
 member-facing month grid and day detail UI (July 2026).
-`CHURCH-CALENDAR.1D-A` prepared closure coverage/docs and the pending manual QA
+`CHURCH-CALENDAR.1D-A` prepared closure coverage/docs and the manual QA
 checklist. `CHURCH-CALENDAR.2A` adds the signed-in user's own explicit serving
-schedule as a read-only personal `my_serving` overlay (see Section 10). Manual
-QA remains pending, and Calendar V1 is not QA-passed.
+schedule as a read-only personal `my_serving` overlay (see Section 10), followed
+by `CHURCH-CALENDAR.2A-FU2/FU3` and the My Serving serving-card template hotfix.
+`CHURCH-CALENDAR.1D-B` records the product-owner manual QA pass after
+deployment. Calendar V1 is QA-passed for limited trial/current-state use; this
+is not a broad production-readiness claim.
 
 ## 1. Purpose and product boundary
 
@@ -319,25 +322,26 @@ serving, source model, migration, or data write was added.
 
 ### CHURCH-CALENDAR.1D-A — Closure-prep tests/docs and QA checklist
 
-Prepared, not QA-passed. Reviewed existing route, provider, visibility,
-enablement, local-date, accessibility, read-only, and cross-product regression
-coverage against this plan; added only the missing focused co-organizer
-member-calendar bypass regression test. Created the initially unchecked manual
-QA checklist at
+Prepared. Reviewed existing route, provider, visibility, enablement, local-date,
+accessibility, read-only, and cross-product regression coverage against this
+plan; added only the missing focused co-organizer member-calendar bypass
+regression test. Created the initially unchecked manual QA checklist at
 [`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md) and
-updated current-state docs to record that 1A/1B/1C are implemented while manual
-QA remains pending. This closure-prep slice added no new product feature scope,
-model, migration, data write, provider visibility expansion, Today, My Serving,
-serving, signup, attendance/check-in, notification, external sync, staff
-dashboard, Reading active-plan calendar/check-in, route hard-off, broad UI
-redesign, or CommunityActivity-to-ServiceEvent relationship.
+updated current-state docs to record that 1A/1B/1C were implemented while
+manual QA still awaited product-owner confirmation. `CHURCH-CALENDAR.1D-B`
+later records that confirmation. This closure-prep slice added no new product
+feature scope, model, migration, data write, provider visibility expansion,
+Today, My Serving, serving, signup, attendance/check-in, notification, external
+sync, staff dashboard, Reading active-plan calendar/check-in, route hard-off,
+broad UI redesign, or CommunityActivity-to-ServiceEvent relationship.
 
 ### CHURCH-CALENDAR.2A — Personal serving overlay
 
-Implemented, not QA-passed. Adds the signed-in user's own explicit serving
-schedule to the calendar as a new read-only personal item type
+Implemented and included in the `CHURCH-CALENDAR.1D-B` product-owner QA pass.
+Adds the signed-in user's own explicit serving schedule to the calendar as a new
+read-only personal item type
 (`my_serving` / "My Serving" / "我的服事"). This is an approved expansion after
-1A/1B/1C/1D-A; it is not 1D QA closure, and manual QA remains pending.
+1A/1B/1C/1D-A; it is not itself 1D QA closure.
 
 Ownership and boundary:
 
@@ -393,13 +397,42 @@ setup/readiness checks, no serving inference, no Today or My Serving behavior
 change, and no CommunityActivity-to-ServiceEvent relationship. No model,
 migration, or data write was added.
 
+### CHURCH-CALENDAR.1D-B — Product-owner QA closure
+
+Complete docs-only closure. The product owner manually confirmed the deployed
+Calendar V1 current state after `CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
+`CHURCH-CALENDAR.2A-FU2/FU3`, and the My Serving serving-card template
+hotfix:
+
+- `/calendar/` renders normally and the month calendar shows real Church
+  Gatherings, Bible Study, Community Activities, Announcements, and My Serving
+  items.
+- Calendar day detail works.
+- `my_serving` calendar items still deep-link to the viewer's specific My
+  Serving assignment anchor
+  (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`).
+- `/my-serving/` works, `/my-serving/?tab=past` no longer returns 500, the
+  leaked template comment text is gone, and the serving-card template syntax
+  hotfix is deployed.
+- Calendar remains read-only, and My Serving keeps its own existing behavior.
+
+This closure updates documentation only. It adds no runtime behavior, model,
+migration, data write, provider visibility expansion, Today or My Serving
+behavior change, serving inference/action, attendance/check-in, notification,
+external sync, staff dashboard, Reading active-plan calendar/check-in, route
+hard-off, broad UI redesign, or CommunityActivity-to-ServiceEvent relationship.
+Calendar V1 is QA-passed for limited trial/current-state use; production
+readiness is not claimed.
+
 ### CHURCH-CALENDAR.1D — Tests and docs closure
 
-Pending product-owner manual QA. Complete focused provider, visibility, route,
+Complete through `CHURCH-CALENDAR.1D-B`. Focused provider, visibility, route,
 enablement, local-date, accessibility, query-bound, and cross-product
-regression coverage; run manual member-calendar QA; and update current-state
-docs from "planned" to the verified implemented behavior. This slice must not
-add new product scope.
+regression coverage exists for the implemented scope; the product-owner manual
+member-calendar QA pass is recorded in
+[`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md); and
+current-state docs now describe the verified implemented behavior. This slice
+added no new product scope.
 
 ## 11. Approval boundary
 

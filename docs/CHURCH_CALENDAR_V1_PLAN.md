@@ -17,11 +17,12 @@ overlay owned by `studies`, grouped under the same FU4 contract by
 `bible_study_meeting:<id>` (see Section 10); an explicit linked role additionally
 grants read-only visibility to that one meeting's detail (studies-owned mirror of
 SERVING-EVENT-VISIBILITY.1A). `CHURCH-CALENDAR.1D-B` records the product-owner
-manual QA pass after deployment as the baseline Calendar V1 closure. Calendar V1
-is QA-passed for limited trial/current-state use at that baseline; FU4 grouping
-has focused automated tests but no product-owner manual regression pass yet, and
-`CHURCH-CALENDAR.2B` Bible Study serving is likewise implemented with focused
-tests but pending product-owner manual QA. This
+manual QA pass after deployment as the baseline Calendar V1 closure.
+`CHURCH-CALENDAR.2B-QA-CLOSURE` records the product-owner manual QA pass for
+`CHURCH-CALENDAR.2B` Bible Study serving, which also confirmed
+`CHURCH-CALENDAR.2A-FU4` ServiceEvent serving grouping still works and My Serving
+behavior is unchanged. Calendar V1 is QA-passed for limited trial/current-state
+use at those closures. This
 is not a broad production-readiness claim.
 
 ## 1. Purpose and product boundary
@@ -460,8 +461,7 @@ Display and link behavior:
   event detail, so a serving-only occurrence (assigned server outside the
   ordinary audience, base row absent) is reconstructed from the `my_serving`
   row's `occurrence_title` / `occurrence_detail_url` and still opens. Serving
-  subitems keep deep-linking to the viewer's own read-only My Serving assignment
-  anchor. No confirm/edit/manage/assignment/attendance/check-in URL is rendered.
+  subitems keep deep-linking to the viewer's own existing My Serving assignment anchor. No confirm/edit/manage/assignment/attendance/check-in URL is rendered.
 
 Boundaries preserved: the base `service_event` provider stays audience-only
 (`events.visibility.member_visible_service_events_for`); serving stays explicit
@@ -473,9 +473,10 @@ stays read-only. No model, migration, or data write was added.
 
 ### CHURCH-CALENDAR.2B — Bible Study serving overlay
 
-Implemented; manual QA pending product-owner confirmation. Adds the signed-in
-user's own explicit Bible Study serving roles to the calendar as a new read-only
-personal item type (`bible_study_serving` / "Bible Study Serving" / "查经服事"),
+Implemented; product-owner manual QA passed (`CHURCH-CALENDAR.2B-QA-CLOSURE`).
+Adds the signed-in user's own explicit Bible Study serving roles to the calendar
+as a new read-only personal item type
+(`bible_study_serving` / "Bible Study Serving" / "查经服事"),
 grouped under the `CHURCH-CALENDAR.2A-FU4` occurrence contract. This completes the
 `CHURCH-CALENDAR.2A` documented follow-up for `BibleStudyMeetingRole.user`
 serving, adapted to FU4 grouping and to the SERVING-EVENT-VISIBILITY.1A serving-

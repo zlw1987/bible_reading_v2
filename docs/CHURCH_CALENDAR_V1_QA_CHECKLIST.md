@@ -4,15 +4,13 @@ Status: product-owner manual QA passed in `CHURCH-CALENDAR.1D-B` after
 deployment. The recorded pass is the baseline that covers the Calendar V1
 limited-trial state after `CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
 `CHURCH-CALENDAR.2A-FU2/FU3`, and the My Serving serving-card template hotfix.
-`CHURCH-CALENDAR.2A-FU4` occurrence grouping is implemented with focused
-automated tests, and its manual regression checks below are prepared but remain
-pending product-owner confirmation (not covered by the 1D-B baseline pass).
-`CHURCH-CALENDAR.2B` adds the `studies`-owned personal `bible_study_serving`
-overlay (grouped under the Bible Study meeting occurrence); it is likewise
-implemented with focused automated tests, and its manual QA is **pending**
-product-owner confirmation (see the Bible Study Serving Overlay Checks section
-below). This is not a broad production readiness claim. This checklist adds no
-product scope.
+`CHURCH-CALENDAR.2B-QA-CLOSURE` records a second product-owner manual QA pass for
+the `CHURCH-CALENDAR.2B` `studies`-owned personal `bible_study_serving` overlay
+(grouped under the Bible Study meeting occurrence). That pass also confirmed the
+`CHURCH-CALENDAR.2A-FU4` occurrence grouping — ServiceEvent serving grouping still
+works and My Serving behavior is unchanged — so both the FU4 grouping checks and
+the Bible Study serving checks below are marked passed. This is not a broad
+production readiness claim. This checklist adds no product scope.
 
 Use this checklist in local or staging with test records only for future reruns.
 Do not run data backfills, cleanup commands, notification jobs, or any `--apply`
@@ -32,8 +30,29 @@ command as part of this QA pass.
   detailed matrix below remains useful for future regression reruns; this
   closure records the confirmed pass without expanding scope or claiming broad
   production readiness. The `CHURCH-CALENDAR.2A-FU4` occurrence-grouping checks
-  are NOT part of this recorded baseline pass; they remain pending product-owner
-  manual regression confirmation.
+  were NOT part of this baseline pass; they were subsequently confirmed in
+  `CHURCH-CALENDAR.2B-QA-CLOSURE` (see below).
+
+## Result Summary — CHURCH-CALENDAR.2B-QA-CLOSURE
+
+- [x] Environment: deployed app after `CHURCH-CALENDAR.2B-ADAPT` was committed,
+  pushed, and deployed.
+- [x] Tester: product owner.
+- [x] Date: 2026-07-08.
+- [x] Build / commit: deployed state including `CHURCH-CALENDAR.2A-FU4` and
+  `CHURCH-CALENDAR.2B` (`studies`-owned `bible_study_serving`).
+- [x] Overall result: Pass for the `CHURCH-CALENDAR.2B` Bible Study serving
+  integration, including the `CHURCH-CALENDAR.2A-FU4` occurrence-grouping
+  regression.
+- [x] Notes: product owner confirmed a linked-user Bible Study role holder sees
+  the grouped serving occurrence; a visible-and-serving user sees one grouped
+  occurrence (no meeting + serving duplication); an out-of-audience linked-user
+  role holder can open that one meeting's detail for serving but cannot see other
+  meetings in that audience without ordinary visibility or an explicit role; the
+  Calendar shows no edit/manage/confirm/check-in/attendance/staff controls;
+  ServiceEvent serving grouping still works; and My Serving behavior is unchanged.
+  This closure records the confirmed pass without expanding scope or claiming
+  broad production readiness.
 
 ## Product-Owner Confirmed Pass Items (CHURCH-CALENDAR.1D-B)
 
@@ -160,71 +179,69 @@ command as part of this QA pass.
 
 ## Occurrence Grouping Checks (CHURCH-CALENDAR.2A-FU4)
 
-> Pending: these grouping regression checks are prepared and backed by focused
-> automated tests, but remain unchecked until the product owner runs and confirms
-> the manual regression pass. They are not part of the `CHURCH-CALENDAR.1D-B`
-> baseline pass recorded above.
+> Passed: product owner confirmed these grouping regression checks as part of
+> `CHURCH-CALENDAR.2B-QA-CLOSURE` (ServiceEvent serving grouping still works).
+> They were not part of the `CHURCH-CALENDAR.1D-B` baseline pass.
 
-- [ ] A ServiceEvent for which the viewer both sees the base event (audience) and
+- [x] A ServiceEvent for which the viewer both sees the base event (audience) and
   has one or more own serving rows appears ONCE on the month grid (one grouped
   occurrence), not once per serving assignment.
-- [ ] Month grid: with one serving assignment the row shows `<event> · <team>`
+- [x] Month grid: with one serving assignment the row shows `<event> · <team>`
   (e.g. `Sunday Worship · Camera Team` / `主日崇拜 · 摄像团队`); with two or more it
   shows `<event> · Serving ×N` / `<event> · 服事 N项`.
-- [ ] Day detail: the same ServiceEvent shows one card with the base
+- [x] Day detail: the same ServiceEvent shows one card with the base
   title/time/location/type, and the viewer's serving assignments listed
   underneath as subitems (each linking to its My Serving anchor).
-- [ ] The grouped occurrence header links to the member-facing `ServiceEvent`
+- [x] The grouped occurrence header links to the member-facing `ServiceEvent`
   detail (`/events/<id>/`), not an edit/manage/assignment/confirm/attendance/
   check-in URL.
-- [ ] Month cell "more" compaction counts grouped occurrences, not raw duplicate
+- [x] Month cell "more" compaction counts grouped occurrences, not raw duplicate
   items (a base + two serving rows occupy ONE cell row).
-- [ ] An assigned server outside the ordinary audience still sees the grouped
+- [x] An assigned server outside the ordinary audience still sees the grouped
   occurrence (SERVING-EVENT-VISIBILITY.1A grants read visibility to that specific
   ServiceEvent detail); a non-assigned non-audience user still sees nothing.
-- [ ] Two unrelated ServiceEvents sharing a title/time are NOT merged into one
+- [x] Two unrelated ServiceEvents sharing a title/time are NOT merged into one
   occurrence (grouping keys on the event id, never on title/time strings).
-- [ ] Another user, and staff/superuser/manager authority, see the base event but
+- [x] Another user, and staff/superuser/manager authority, see the base event but
   never the viewer's serving subitems.
 
-## Bible Study Serving Overlay Checks (CHURCH-CALENDAR.2B) — pending
+## Bible Study Serving Overlay Checks (CHURCH-CALENDAR.2B) — passed
 
-> Pending: these Bible Study serving checks are prepared and backed by focused
-> automated tests, but remain unchecked until the product owner runs and confirms
-> the manual regression pass. They are not part of the `CHURCH-CALENDAR.1D-B`
-> baseline pass. The `bible_study_serving` overlay is grouped with the Bible
-> Study meeting occurrence under the `CHURCH-CALENDAR.2A-FU4` contract
-> (`occurrence_key = bible_study_meeting:<id>`), so it is not a standalone row.
+> Passed: product owner confirmed these Bible Study serving checks in
+> `CHURCH-CALENDAR.2B-QA-CLOSURE`. The `bible_study_serving` overlay is grouped
+> with the Bible Study meeting occurrence under the `CHURCH-CALENDAR.2A-FU4`
+> contract (`occurrence_key = bible_study_meeting:<id>`), so it is not a
+> standalone row.
 
-- [ ] A user with an explicit own linked `BibleStudyMeetingRole` on an in-range
+- [x] A user with an explicit own linked `BibleStudyMeetingRole` on an in-range
   meeting sees the serving grouped into that meeting's occurrence on the month
   and day views for the meeting date (not a separate standalone row).
-- [ ] Month grid: one role shows `<lesson> · <role>` (e.g. `约翰十五章 · 查经带领`);
+- [x] Month grid: one role shows `<lesson> · <role>` (e.g. `约翰十五章 · 查经带领`);
   two or more roles on one meeting show `<lesson> · Serving ×N` / `<lesson> · 服事 N项`.
-- [ ] Day detail: one meeting card lists the viewer's Bible Study serving role(s)
+- [x] Day detail: one meeting card lists the viewer's Bible Study serving role(s)
   as subitem(s); multiple roles on one meeting do not duplicate the occurrence.
-- [ ] The grouped occurrence header links to the member-facing Bible Study meeting
+- [x] The grouped occurrence header links to the member-facing Bible Study meeting
   detail (`/studies/meetings/<id>/`), never an edit/manage/confirm/attendance/
   check-in/staff URL.
-- [ ] A user with an explicit linked role who is OUTSIDE the meeting's ordinary
+- [x] A user with an explicit linked role who is OUTSIDE the meeting's ordinary
   audience still sees that meeting occurrence for serving and can open exactly
   that meeting's detail (studies-owned mirror of SERVING-EVENT-VISIBILITY.1A);
   this does not add them to the audience and does not reveal any other meeting.
-- [ ] A user who only belongs / matches the meeting audience (no linked role)
+- [x] A user who only belongs / matches the meeting audience (no linked role)
   sees the meeting but no serving subitem — belonging/audience/meeting visibility
   never create serving.
-- [ ] A display-name-only (unlinked) role produces no personal serving item.
-- [ ] Another user, and a staff/superuser/Bible-Study-capability/manager account
+- [x] A display-name-only (unlinked) role produces no personal serving item.
+- [x] Another user, and a staff/superuser/Bible-Study-capability/manager account
   with no own role, see the meeting but never the viewer's serving subitems.
-- [ ] The ordinary `bible_study_meeting` calendar/list provider remains
+- [x] The ordinary `bible_study_meeting` calendar/list provider remains
   audience-only (a role never widens which meetings appear in the ordinary list).
-- [ ] A draft/cancelled meeting, draft lesson, and inactive/draft series produce
+- [x] A draft/cancelled meeting, draft lesson, and inactive/draft series produce
   no serving item and no serving-based detail read; an in-range completed meeting
   the viewer serves still appears.
-- [ ] Disabling `studies` removes both Bible Study meeting and Bible Study
+- [x] Disabling `studies` removes both Bible Study meeting and Bible Study
   serving items and runs no Bible Study calendar query, and grants no serving-
   based meeting-detail read; staff status does not bypass this gate.
-- [ ] The calendar renders no confirm/decline/check-in/attendance/edit/manage
+- [x] The calendar renders no confirm/decline/check-in/attendance/edit/manage
   Bible Study serving action, and browsing changes no serving data.
 
 ## Date Semantics
@@ -317,6 +334,10 @@ command as part of this QA pass.
 
 - [x] Product owner confirms all required checks passed for the
   `CHURCH-CALENDAR.1D-B` limited-trial Calendar QA closure.
+- [x] Product owner confirms all required `CHURCH-CALENDAR.2B` Bible Study
+  serving checks passed (`CHURCH-CALENDAR.2B-QA-CLOSURE`), including the
+  `CHURCH-CALENDAR.2A-FU4` occurrence-grouping regression and unchanged My
+  Serving behavior.
 - [x] No failed checks were reported in the product-owner confirmation above.
 - [x] Documentation is updated only after product owner confirmation if the
   status changes from pending to passed.

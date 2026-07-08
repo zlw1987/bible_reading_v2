@@ -7,7 +7,10 @@ from django.utils import timezone
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 from ministry.models import TeamAssignment
-from ministry.permissions import can_manage_team_assignments
+from ministry.permissions import (
+    can_manage_team_assignments,
+    user_has_explicit_serving_assignment_for_event,
+)
 from ministry.services.assignment_coverage import (
     assignment_coverage_queryset,
     build_assignment_coverage,
@@ -144,7 +147,14 @@ def service_event_detail(request, event_id):
         id=event_id,
     )
 
-    if not event.can_be_seen_by(request.user):
+    # SERVING-EVENT-VISIBILITY.1A: ordinary discovery stays audience-only via
+    # can_be_seen_by; an explicit team-serving assignment additionally grants
+    # read-only serving-context visibility to *this specific* event detail (never
+    # audience membership, never other events, never management authority).
+    if not (
+        event.can_be_seen_by(request.user)
+        or user_has_explicit_serving_assignment_for_event(request.user, event)
+    ):
         messages.error(
             request,
             event_ui_text(get_user_language(request), "not_available"),

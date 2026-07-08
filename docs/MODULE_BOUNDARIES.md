@@ -390,6 +390,33 @@ notifications, or `ServiceEvent`.
 6. **Membership is not serving.** `ChurchStructureMembership` is belonging.
    Serving remains explicit (`TeamAssignmentMember`, linked-user
    `BibleStudyMeetingRole`).
+   `SERVING-EVENT-VISIBILITY.1A`: an explicit `TeamAssignmentMember` serving
+   assignment grants the assigned user *read-only serving-context visibility to
+   that one specific `ServiceEvent` detail*, even when they are outside the
+   event's audience scope. This is a narrow read gate layered beside
+   `ServiceEvent.can_be_seen_by` in `events.views.service_event_detail` via the
+   ministry-owned helper
+   `ministry.permissions.user_has_explicit_serving_assignment_for_event`
+   (mirroring My Serving / calendar 2A semantics: own active membership on an
+   active team, non-cancelled assignment, non-draft/cancelled event; no
+   staff/manager bypass; returns `False` and runs no query when `ministry` is
+   disabled). It is **not** audience membership and **not** serving inference: it
+   never adds the user to the audience, never grants any other event, and grants
+   no manage/edit/coverage/attendance/check-in authority. Ordinary member-safe
+   browse/list/calendar visibility (`ServiceEvent.can_be_seen_by`,
+   `events.visibility.member_visible_service_events_for`, the calendar
+   `service_event` provider) stays audience-only and is unchanged. When a
+   scheduler assigns — or moves/reactivates an assignment so it would newly grant
+   a linked-user member read visibility to — an event whose *defined* audience
+   excludes that member, `TeamAssignmentForm` shows a non-blocking warning and
+   requires a non-persistent acknowledgement checkbox before saving (no model
+   field, no migration). `SERVING-EVENT-VISIBILITY.1A-FU1` re-checks *all* selected
+   members (not only newly added ones) on a new assignment, on an edit that
+   changes the `ServiceEvent`, and on reactivation from cancelled to active; a
+   plain notes/status edit on the same event only checks newly added members, a
+   cancelled submission is never nagged (it grants no visibility), and
+   zero-audience events are not nagged. No model, migration, data write, Today, or
+   My Serving behavior change.
 7. **New modules require explicit approval.** `COMMUNITY-EVENTS.1A` is the
    approved independent foundation for Community Events/Activities, registered
    here with explicit model/migration/visibility scope. `COMMUNITY-EVENTS.1B`
@@ -498,16 +525,22 @@ notifications, or `ServiceEvent`.
    assignments. `CHURCH-CALENDAR.2A-FU2`: the calendar item remains read-only and
    deep-links to the viewer's own existing My Serving assignment card via a stable
    anchor (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`),
-   not the generic My Serving page and not the member-facing `ServiceEvent`
-   detail — serving does not grant `ServiceEvent` visibility, so routing through
-   the event detail would couple serving to audience/event visibility. The
-   calendar renders no confirm/edit/manage/attendance/check-in action; existing
-   My Serving actions, if any (e.g. detail/confirm), remain governed by My Serving
-   and are unchanged. FU2 adds only a stable anchor id on the existing My Serving
-   assignment card and changes no My Serving view logic or behavior (no Today or
-   My Serving behavior change), no model, migration, data write, notification,
-   staff/team dashboard, or CommunityActivity-to-ServiceEvent relationship. Bible
-   Study linked-user serving roles remain a documented follow-up.
+   not the generic My Serving page. The anchor targets the viewer's exact existing
+   My Serving assignment card and preserves current Calendar behavior. Since
+   `SERVING-EVENT-VISIBILITY.1A`, an explicitly assigned server *can* now open the
+   specific `ServiceEvent` detail (read-only, via
+   `ministry.permissions.user_has_explicit_serving_assignment_for_event` layered
+   beside `ServiceEvent.can_be_seen_by` in the event detail view only), so linking
+   a `my_serving` item at the event detail would no longer turn the server away;
+   whether to change the Calendar link/grouping to use the event detail is deferred
+   to `CHURCH-CALENDAR.2A-FU4`, and the ordinary member-safe calendar
+   `service_event` provider stays audience-only. The calendar renders no
+   confirm/edit/manage/attendance/check-in action; existing My Serving actions, if
+   any (e.g. detail/confirm), remain governed by My Serving and are unchanged. The
+   FU2 anchor changes no My Serving view logic or behavior (no Today or My Serving
+   behavior change), no model, migration, data write, notification, staff/team
+   dashboard, or CommunityActivity-to-ServiceEvent relationship. Bible Study
+   linked-user serving roles remain a documented follow-up.
    `CHURCH-CALENDAR.1D-B` records product-owner manual QA passed after
    deployment for the current Calendar V1 state: `/calendar/` renders normally,
    the month view shows real Church Gatherings, Bible Study, Community

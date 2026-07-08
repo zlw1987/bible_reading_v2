@@ -127,8 +127,12 @@ command as part of this QA pass.
   assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`,
   CHURCH-CALENDAR.2A-FU2), and to no generic My Serving page, ServiceEvent
   detail, or edit/manage/assignment/confirm/attendance/check-in URL. Clicking it
-  lands on that specific assignment card; the ServiceEvent detail is not used
-  because serving does not grant event visibility.
+  lands on that specific assignment card. The anchor still targets the viewer's
+  exact existing My Serving card and preserves current Calendar behavior; any
+  change to link the item at the ServiceEvent detail is deferred to
+  CHURCH-CALENDAR.2A-FU4. (Since SERVING-EVENT-VISIBILITY.1A an explicitly
+  assigned server can view that specific ServiceEvent detail, but this overlay's
+  link is unchanged.)
 - [ ] The serving item carries the bilingual "My Serving" / "我的服事" type label
   and its own distinct dot/border color (type is text plus styling, not color
   alone), and month cells keep the existing "more" compaction behavior.
@@ -209,6 +213,14 @@ command as part of this QA pass.
   no My Serving view logic).
 - [ ] Calendar shows only the viewer's own explicit `TeamAssignmentMember`
   serving and never infers serving from membership, audience, or visibility.
+- [ ] (`SERVING-EVENT-VISIBILITY.1A`) An explicit team-serving assignment lets the
+  assignee open only that one `ServiceEvent` detail (read-only), not other events
+  in that audience, and grants no manage/edit/coverage/attendance/check-in. The
+  ordinary member-safe calendar/list ServiceEvent visibility stays audience-only
+  and is unchanged; a scheduler who assigns — or moves/reactivates an assignment
+  onto — an event whose defined audience excludes a linked-user member is warned
+  and must acknowledge before saving (`SERVING-EVENT-VISIBILITY.1A-FU1`; no data
+  field/migration added; cancelled and zero-audience saves are not nagged).
 - [ ] Calendar does not expose signup, capacity management, attendance, or
   check-in controls.
 - [ ] Calendar does not create notifications, reminders, email, push, Google

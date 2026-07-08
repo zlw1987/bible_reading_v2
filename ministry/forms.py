@@ -8,6 +8,7 @@ from accounts.ordering import (
     order_team_memberships_by_visible_identity,
     order_users_by_visible_identity,
 )
+from accounts.structure_selectors import user_matches_structure_audience
 from events.models import ServiceEvent
 
 from .models import (
@@ -129,6 +130,18 @@ ASSIGNMENT_FORM_TEXT = {
         "confirmation_note": "Confirmation",
         "confirmation_placeholder": "Optional confirmation note.",
         "confirmation_help": "Do not store private counseling, prayer, or sensitive personal information here.",
+        "audience_override_ack": "I understand and still want to assign this person.",
+        "audience_override_help": (
+            "Only needed when a selected member is outside this event's audience "
+            "scope. Assigning them grants read-only serving-context visibility to "
+            "this specific event; it does not add them to the audience."
+        ),
+        "audience_override_warning": (
+            "This person is not currently in this event's audience scope. If you "
+            "still assign them to serve, they will be able to view this specific "
+            "event through My Serving / Calendar / Event detail for serving "
+            "purposes."
+        ),
     },
     "zh": {
         "service_event": "聚会事件",
@@ -146,6 +159,15 @@ ASSIGNMENT_FORM_TEXT = {
         "confirmation_note": "确认",
         "confirmation_placeholder": "可选确认备注。",
         "confirmation_help": "不要在这里记录辅导、代祷或敏感私人信息。",
+        "audience_override_ack": "我明白，仍要安排这位同工服事。",
+        "audience_override_help": (
+            "仅当所选成员不在此聚会的适用范围内时才需要勾选。安排后，他将获得对"
+            "这场聚会详情的只读服事查看权限，但不会因此被加入适用范围。"
+        ),
+        "audience_override_warning": (
+            "这位同工目前不在此聚会的适用范围内。如果仍然安排他服事，他将可以通过"
+            "“我的服事 / 日历 / 聚会详情”查看这场聚会的必要信息，以便完成服事。"
+        ),
     },
 }
 
@@ -343,6 +365,11 @@ class TeamAssignmentForm(forms.ModelForm):
         required=False,
     )
     service_event = ServiceEventChoiceField(queryset=ServiceEvent.objects.none())
+    # SERVING-EVENT-VISIBILITY.1A: non-persistent scheduler acknowledgement for
+    # assigning a member outside the event's audience scope. Not a model field, so
+    # it is never stored; it only gates the save when an outside-audience member is
+    # newly added.
+    audience_override_ack = forms.BooleanField(required=False)
 
     class Meta:
         model = TeamAssignment
@@ -399,6 +426,11 @@ class TeamAssignmentForm(forms.ModelForm):
 
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
+
+        self.assignment_form_text = text
+        self.fields["audience_override_ack"].help_text = text[
+            "audience_override_help"
+        ]
 
         if manageable_teams is not None:
             # MINISTRY-STRUCTURE.1F: new assignments may only target assignable
@@ -535,6 +567,68 @@ class TeamAssignmentForm(forms.ModelForm):
                     "assigned_members",
                     "Assigned members must be active members of the selected team.",
                 )
+
+        # SERVING-EVENT-VISIBILITY.1A (+ FU1): warn + require an explicit
+        # acknowledgement when saving would grant a linked-user assigned member
+        # read-only serving-context visibility to an event whose *defined* audience
+        # scope excludes them. Assigning them never adds them to the audience; it
+        # only unlocks read access to that one event detail. Display-name-only
+        # (no linked user) members are skipped because there is no account to grant
+        # visibility to, and zero-audience events are not nagged (no defined
+        # audience to be "outside" of; the read grant still applies).
+        #
+        # FU1 widens *which* selected members are re-checked so an edit cannot
+        # silently grant visibility to a newly reachable event:
+        #   * new assignment                              -> check all selected
+        #   * existing assignment, ServiceEvent changed   -> check all selected
+        #   * existing assignment, reactivated (cancelled->active) -> check all
+        #   * otherwise (notes/status/same-event edit)     -> only newly added
+        # A submission whose status is cancelled grants no serving visibility, so
+        # the acknowledgement is skipped entirely.
+        if (
+            service_event
+            and assigned_members
+            and status != TeamAssignment.STATUS_CANCELLED
+        ):
+            audience_units = list(service_event.get_audience_scope_units())
+            if audience_units:
+                is_existing = bool(self.instance and self.instance.pk)
+                service_event_changed = (
+                    is_existing
+                    and self.instance.service_event_id != service_event.id
+                )
+                reactivated_from_cancelled = (
+                    is_existing
+                    and self.instance.status == TeamAssignment.STATUS_CANCELLED
+                )
+                check_all_selected = (
+                    not is_existing
+                    or service_event_changed
+                    or reactivated_from_cancelled
+                )
+                if check_all_selected:
+                    already_assigned_ids = set()
+                else:
+                    already_assigned_ids = set(
+                        self.instance.assigned_members.values_list("id", flat=True)
+                    )
+                outside_members = [
+                    membership
+                    for membership in assigned_members
+                    if membership.id not in already_assigned_ids
+                    and membership.user_id
+                    and not user_matches_structure_audience(
+                        membership.user, audience_units
+                    )
+                ]
+                if outside_members and not cleaned_data.get(
+                    "audience_override_ack"
+                ):
+                    self.outside_audience_members = outside_members
+                    self.add_error(
+                        "audience_override_ack",
+                        self.assignment_form_text["audience_override_warning"],
+                    )
 
         return cleaned_data
 

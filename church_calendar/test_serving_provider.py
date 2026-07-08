@@ -257,8 +257,11 @@ class ServingProviderTests(ServingProviderBase):
         member = self._serving(self.server)
         url = self._items(self.server)[0].detail_url
         # Anchor fallback: a read-only My Serving deep link, never a staff /
-        # action route. The ServiceEvent detail is also deliberately not used
-        # (serving does not grant event visibility).
+        # action route. Current Calendar behavior keeps the my_serving item on the
+        # My Serving anchor (not the ServiceEvent detail); any change to link at
+        # the event detail is deferred to CHURCH-CALENDAR.2A-FU4. (Since
+        # SERVING-EVENT-VISIBILITY.1A an explicitly assigned server may view that
+        # specific event detail, but this overlay's link is unchanged here.)
         for banned in (
             "/edit/",
             "/review/",

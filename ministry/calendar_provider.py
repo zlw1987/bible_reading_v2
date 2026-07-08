@@ -47,16 +47,20 @@ def _build_item(member):
     existing My Serving assignment card via a stable
     ``#serving-assignment-<TeamAssignmentMember.id>`` anchor (with ``?tab=all`` so
     the card is present regardless of past/upcoming), never to an
-    edit/manage/assignment/confirm URL. It deliberately does NOT link to the
-    member-facing ``ServiceEvent`` detail: serving does not grant ServiceEvent
-    visibility (``ServiceEvent.can_be_seen_by`` reads audience-scope membership /
-    manager authority only), so an assigned server outside the event's audience
-    would be turned away there, and routing through it would couple serving to
-    audience/event visibility — a boundary this overlay must not cross. The
-    calendar renders no confirm/edit/manage/attendance/check-in action; any
-    existing actions on the My Serving card (e.g. detail/confirm) remain governed
-    by My Serving and are unchanged. FU2 adds only a stable anchor id and changes
-    no My Serving view logic or behavior.
+    edit/manage/assignment/confirm URL. The anchor targets the viewer's exact
+    existing My Serving assignment card and preserves current Calendar behavior;
+    it is unchanged by ``SERVING-EVENT-VISIBILITY.1A``. That slice does now grant
+    an explicitly assigned server read-only visibility to the specific
+    ``ServiceEvent`` detail (via
+    ``ministry.permissions.user_has_explicit_serving_assignment_for_event``,
+    layered beside ``ServiceEvent.can_be_seen_by`` in the event detail view only),
+    so linking a ``my_serving`` item at the event detail would no longer turn the
+    server away. Whether to change the Calendar link/grouping to use the event
+    detail is deferred to ``CHURCH-CALENDAR.2A-FU4``; the ordinary member-safe
+    calendar ``service_event`` provider stays audience-only. The calendar renders
+    no confirm/edit/manage/attendance/check-in action; any existing actions on the
+    My Serving card (e.g. detail/confirm) remain governed by My Serving and are
+    unchanged.
     """
     assignment = member.assignment
     event = assignment.service_event

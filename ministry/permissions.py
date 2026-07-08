@@ -7,10 +7,13 @@ from accounts.permissions import (
     CAP_MANAGE_TEAM_ASSIGNMENTS,
     has_capability,
 )
+from core.module_registry import get_enabled_module_keys
 
 from .models import (
     MinistryTeamRoleAssignment,
     MinistryTeamRoleType,
+    TeamAssignment,
+    TeamAssignmentMember,
     TeamMembership,
 )
 
@@ -164,6 +167,49 @@ def can_view_team_assignment(user, assignment):
         membership__user=user,
         membership__is_active=True,
     ).exists()
+
+
+def user_has_explicit_serving_assignment_for_event(user, event):
+    """True when ``user`` has an active explicit ``TeamAssignmentMember`` serving
+    assignment for exactly this ``ServiceEvent``.
+
+    SERVING-EVENT-VISIBILITY.1A: the read-visibility grant predicate for a single
+    ServiceEvent detail. Serving is explicit only and mirrors the My Serving /
+    calendar 2A semantics: the signed-in user's own *active* team membership on an
+    *active* team, a non-cancelled assignment, and a non-draft/non-cancelled
+    ServiceEvent — scoped to this exact event. It never adds the user to the event
+    audience, never grants visibility to any other event, and applies no
+    staff/superuser/manager bypass (management visibility stays with
+    ``ServiceEvent.can_be_managed_by``). It is intended only as an additional
+    read gate for the event detail, layered beside ``ServiceEvent.can_be_seen_by``;
+    the ordinary member-safe calendar/list audience visibility is unchanged and
+    must not consult this helper.
+
+    Fails closed for anonymous users, a missing event, and draft/cancelled events.
+    When the ``ministry`` module is disabled it returns ``False`` and runs no
+    serving query, so a disabled ministry never grants serving-based visibility.
+    """
+    if event is None or not getattr(user, "is_authenticated", False):
+        return False
+
+    # Draft/cancelled events never become visible through serving.
+    if event.status in {event.STATUS_DRAFT, event.STATUS_CANCELLED}:
+        return False
+
+    # Disabled ministry grants no serving visibility and runs no serving query.
+    if "ministry" not in get_enabled_module_keys():
+        return False
+
+    return (
+        TeamAssignmentMember.objects.filter(
+            membership__user=user,
+            membership__is_active=True,
+            membership__team__is_active=True,
+            assignment__service_event=event,
+        )
+        .exclude(assignment__status=TeamAssignment.STATUS_CANCELLED)
+        .exists()
+    )
 
 
 def can_confirm_team_assignment(user, assignment):

@@ -1,7 +1,7 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`CHURCH-CALENDAR.2A-FU4`. `CHURCH-CALENDAR.1A` implements the model-free,
+`CHURCH-CALENDAR.2B`. `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation, `CHURCH-CALENDAR.1B` adds the four
 member-safe source range providers/adapters, `CHURCH-CALENDAR.1C` implements
 the member-facing month grid and day detail UI, `CHURCH-CALENDAR.1D-A`
@@ -14,12 +14,21 @@ serving rows for that same event into one presentation occurrence (shared
 grouping is presentation-only: the ordinary `service_event` calendar provider
 remains audience-only, an assigned server's read visibility to that specific
 event detail comes from `SERVING-EVENT-VISIBILITY.1A`, and no Today or My Serving
-behavior is mutated. After the
-serving deep-link follow-ups (`CHURCH-CALENDAR.2A-FU2/FU3`) and My Serving
+behavior is mutated. `CHURCH-CALENDAR.2B` adds the `studies`-owned read-only
+personal `bible_study_serving` overlay of the viewer's own explicit linked
+`BibleStudyMeetingRole` serving, grouped by `bible_study_meeting:<id>` under the
+same FU4 contract; the ordinary `bible_study_meeting` calendar/list provider
+remains audience-only, an explicit linked role additionally grants read-only
+visibility to exactly that one meeting's detail (`studies`-owned mirror of
+SERVING-EVENT-VISIBILITY.1A) with no audience-membership, management, or
+serving-inference expansion, and no Today or My Serving behavior is mutated. After
+the serving deep-link follow-ups (`CHURCH-CALENDAR.2A-FU2/FU3`) and My Serving
 serving-card template hotfix,
 `CHURCH-CALENDAR.1D-B` records product-owner manual QA passed for the baseline
 Calendar V1 limited-trial/current-state use; FU4 grouping has focused automated
-tests and prepared manual regression checks awaiting product-owner confirmation.
+tests and prepared manual regression checks awaiting product-owner confirmation,
+and `CHURCH-CALENDAR.2B` Bible Study serving is likewise implemented with focused
+tests but pending product-owner manual QA.
 This is not a broad production-readiness claim (July 2026).
 
 This project is becoming a lightweight modular church management system.
@@ -69,7 +78,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated ordinary nav plus a module-gated staff management link; staff/superusers have bounded draft/create/edit/publish/archive management. Publish/archive are explicit POST actions. Today contributes at most one visible active important announcement as a localized title/detail link only. No feed, Staff Overview, notification, event/activity, signup, attendance, approval/request-changes, My Serving, or serving behavior. |
-| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the manual QA checklist. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, deep-linking to the existing My Serving assignment card). `CHURCH-CALENDAR.2A-FU4` collapses the same real occurrence into one presentation row/card: the `events` and `ministry` providers share a presentation-only `occurrence_key = "service_event:<id>"`, so the base ServiceEvent and the viewer's own serving rows for it group into one occurrence (month serving summary / day subitems), with the grouped header linking to the member-facing ServiceEvent detail (read visibility from `SERVING-EVENT-VISIBILITY.1A`); grouping keys on the event id, never on title/time strings, is presentation-only, and never widens member-safe visibility. `CHURCH-CALENDAR.1D-B` records product-owner manual QA passed after deployment, including `/calendar/`, day detail, real calendar items, My Serving assignment-anchor deep links, `/my-serving/?tab=past` hotfix verification, and removal of leaked template comment text. Calendar is QA-passed for limited trial/current-state use, not broad production readiness. Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
+| `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the manual QA checklist. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, deep-linking to the existing My Serving assignment card). `CHURCH-CALENDAR.2A-FU4` collapses the same real occurrence into one presentation row/card: the `events` and `ministry` providers share a presentation-only `occurrence_key = "service_event:<id>"`, so the base ServiceEvent and the viewer's own serving rows for it group into one occurrence (month serving summary / day subitems), with the grouped header linking to the member-facing ServiceEvent detail (read visibility from `SERVING-EVENT-VISIBILITY.1A`); grouping keys on the event id, never on title/time strings, is presentation-only, and never widens member-safe visibility. `CHURCH-CALENDAR.2B` adds a `studies`-owned `bible_study_serving` overlay emitted by the existing single `studies` provider (so gated by `studies` enablement), grouped into the base meeting occurrence via `occurrence_key = "bible_study_meeting:<id>"`; the ordinary `bible_study_meeting` provider stays audience-only, an explicit linked `BibleStudyMeetingRole` additionally grants read-only visibility to exactly that one meeting's detail (studies-owned mirror of `SERVING-EVENT-VISIBILITY.1A`, no audience/management expansion), and manual QA is pending. `CHURCH-CALENDAR.1D-B` records product-owner manual QA passed after deployment, including `/calendar/`, day detail, real calendar items, My Serving assignment-anchor deep links, `/my-serving/?tab=past` hotfix verification, and removal of leaked template comment text. Calendar is QA-passed for limited trial/current-state use, not broad production readiness. Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
 Official Announcements now has the independent `announcements` app,
@@ -560,6 +569,39 @@ notifications, or `ServiceEvent`.
    read-only aggregation surface; existing My Serving actions remain governed by
    My Serving and are unchanged. This is a limited-trial/current-state QA pass,
    not a production-readiness claim.
+   `CHURCH-CALENDAR.2B` adds the `studies`-owned read-only personal
+   `bible_study_serving` provider items, completing the `CHURCH-CALENDAR.2A`
+   documented Bible Study serving follow-up and adapting it to FU4 grouping.
+   Because the registry accepts one provider per source module, the existing single
+   `studies.calendar_provider` callable was extended to return both ordinary
+   `bible_study_meeting` visibility items and the viewer's own
+   `bible_study_serving` items, so both stay gated by `studies` enablement
+   (disabled `studies` runs **no** Bible Study calendar query, meeting or serving,
+   and grants no serving-based meeting-detail read). `studies` imports no sibling
+   source module — it does not import `ministry`; the Bible Study serving semantics
+   live natively in `studies`. Serving is explicit only (linked
+   `BibleStudyMeetingRole.user` rows on published/completed meeting + lesson with
+   an active series) and is never inferred from `ChurchStructureMembership`,
+   audience scopes, Bible Study meeting visibility, staff/superuser/capability/
+   manager authority, or other users' roles; a display-name-only (unlinked) role
+   creates no personal item. The serving overlay is **not** gated on audience
+   visibility: an explicit role holder outside the meeting audience still sees
+   their own occurrence, and the studies-owned mirror of SERVING-EVENT-
+   VISIBILITY.1A (`user_has_explicit_bible_study_serving_role_for_meeting`,
+   layered beside `BibleStudyMeeting.can_be_seen_by` in the meeting detail view
+   only) grants read-only visibility to exactly that one meeting — never adding the
+   user to the audience, never revealing any other meeting, and never granting
+   manage/edit/role-management/attendance/check-in authority. The ordinary
+   `bible_study_meeting` calendar/list provider stays audience-only. The item is
+   point-in-time on `meeting_datetime` (no invented duration); one item is emitted
+   per role (`source_id` = `BibleStudyMeetingRole.id`, distinct `bible_study_serving`
+   type keeps identities collision-safe), and FU4 groups the meeting and its
+   serving rows into one occurrence via `occurrence_key = "bible_study_meeting:<id>"`
+   (month serving summary / day subitems, header linking to
+   `bible_study_meeting_detail`). No Today or My Serving behavior change, no model,
+   migration, data write, notification, staff dashboard, or
+   CommunityActivity-to-ServiceEvent relationship; the calendar stays read-only.
+   Manual QA for 2B is pending product-owner confirmation.
 
 ## Follow-ups (not yet done)
 

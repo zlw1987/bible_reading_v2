@@ -11,10 +11,17 @@ schedule as a read-only personal `my_serving` overlay (see Section 10), followed
 by `CHURCH-CALENDAR.2A-FU2/FU3` and the My Serving serving-card template hotfix.
 `CHURCH-CALENDAR.2A-FU4` implements presentation-only occurrence grouping: it groups the base
 `ServiceEvent` and the viewer's own serving rows for it into one presentation
-occurrence (see Section 10). `CHURCH-CALENDAR.1D-B` records the product-owner
+occurrence (see Section 10). `CHURCH-CALENDAR.2B` adds the signed-in user's own
+explicit Bible Study serving roles as a read-only personal `bible_study_serving`
+overlay owned by `studies`, grouped under the same FU4 contract by
+`bible_study_meeting:<id>` (see Section 10); an explicit linked role additionally
+grants read-only visibility to that one meeting's detail (studies-owned mirror of
+SERVING-EVENT-VISIBILITY.1A). `CHURCH-CALENDAR.1D-B` records the product-owner
 manual QA pass after deployment as the baseline Calendar V1 closure. Calendar V1
 is QA-passed for limited trial/current-state use at that baseline; FU4 grouping
-has focused automated tests but no product-owner manual regression pass yet. This
+has focused automated tests but no product-owner manual regression pass yet, and
+`CHURCH-CALENDAR.2B` Bible Study serving is likewise implemented with focused
+tests but pending product-owner manual QA. This
 is not a broad production-readiness claim.
 
 ## 1. Purpose and product boundary
@@ -53,8 +60,10 @@ Calendar V1 is not:
 - a serving *management* surface or a source/writer of `TeamAssignment`,
   `TeamAssignmentMember`, or `BibleStudyMeetingRole` rows. (`CHURCH-CALENDAR.2A`
   adds a read-only personal `my_serving` overlay of the viewer's *own* explicit
-  `TeamAssignmentMember` serving, but it never creates, edits, confirms, or
-  otherwise mutates serving, and never infers serving from membership/audience;
+  `TeamAssignmentMember` serving, and `CHURCH-CALENDAR.2B` adds a read-only
+  personal `bible_study_serving` overlay of the viewer's *own* explicit linked
+  `BibleStudyMeetingRole` serving, but neither ever creates, edits, confirms, or
+  otherwise mutates serving, and neither infers serving from membership/audience;
   see Section 10.);
 - an attendance, signup, check-in, or capacity-management surface;
 - a notification, reminder, email, or push system;
@@ -134,6 +143,7 @@ The exact V1 item types are:
 | `announcement` | `Announcement` | Active-window communication, not a true event. Show it as active communication on each displayed day its currently visible publish window overlaps. |
 | `community_activity` | `CommunityActivity` | Timed item using `start_datetime` and `end_datetime` when present. A start-only activity belongs to its start date; a ranged activity appears on every overlapping local day. |
 | `my_serving` | `TeamAssignmentMember` (via `ServiceEvent`) | `CHURCH-CALENDAR.2A` personal, read-only overlay of the *viewer's own* explicit team-assignment serving. Timed item anchored to the linked `ServiceEvent` `start_datetime` with the existing effective-end overlap rule (multi-day events appear on every overlapping day). Owned by the `ministry` module; serving is explicit only and never inferred from membership/audience/visibility. `CHURCH-CALENDAR.2A-FU2`: the serving subitem deep-links to the viewer's own specific My Serving assignment card (`/my-serving/?tab=all#serving-assignment-<TeamAssignmentMember.id>`), not the generic My Serving page — the anchor targets that exact card and preserves current Calendar behavior. `CHURCH-CALENDAR.2A-FU4`: a `my_serving` row no longer renders as its own separate calendar row; it is grouped (via a shared `occurrence_key = "service_event:<id>"`) into the base `ServiceEvent` occurrence as a serving summary (month) / subitem (day), and the grouped occurrence header links to the member-facing `ServiceEvent` detail (read visibility granted by `SERVING-EVENT-VISIBILITY.1A`). |
+| `bible_study_serving` | `BibleStudyMeetingRole` (via `BibleStudyMeeting`) | `CHURCH-CALENDAR.2B` personal, read-only overlay of the *viewer's own* explicit linked Bible Study serving roles. Timed point anchored to the local date of `meeting_datetime`, no invented duration (like `bible_study_meeting`). Owned by the `studies` module (emitted by the single `studies` calendar provider, so gated by `studies` enablement; `ministry` never queries `studies`). Serving is explicit only (linked `BibleStudyMeetingRole.user`) and never inferred from membership/audience/meeting visibility/staff authority. One item is emitted per role (`source_id` is the `BibleStudyMeetingRole.id`; the distinct `bible_study_serving` item type also prevents any `bible_study_meeting` identity collision). `CHURCH-CALENDAR.2A-FU4`: each `bible_study_serving` row is grouped (via a shared `occurrence_key = "bible_study_meeting:<id>"`) into the base `BibleStudyMeeting` occurrence as a serving summary (month) / subitem (day); the grouped occurrence header links to the member-facing `bible_study_meeting_detail`. Unlike the old parked design it is NOT gated on ordinary audience visibility: an explicit role holder outside the audience still sees their own occurrence, and the studies-owned mirror of SERVING-EVENT-VISIBILITY.1A (`user_has_explicit_bible_study_serving_role_for_meeting`) grants read-only detail visibility to exactly that one meeting. It never links to an edit/manage/confirm/attendance/staff URL, never adds the user to the audience, and the ordinary `bible_study_meeting` provider stays audience-only. |
 
 Range overlap uses aware datetimes in the configured local timezone and
 half-open boundaries. Day grouping uses local dates, not UTC dates.
@@ -396,12 +406,12 @@ Ownership and boundary:
 > `ServiceEvent` detail (which the assignee can open), while serving subitems keep
 > deep-linking to the My Serving assignment card.
 
-Bible Study linked-user serving roles (`BibleStudyMeetingRole.user`) remain a
-deliberate follow-up. Folding them into this `ministry`-keyed provider would
-query the `studies` source even when that module is disabled, which would break
-the one-provider-per-source-module enablement gate; keeping this slice to
-team-assignment serving preserves that clean boundary. A future slice may add
-Bible Study serving with its own `studies` enablement handling.
+Bible Study linked-user serving roles (`BibleStudyMeetingRole.user`) were left as
+a deliberate follow-up here because folding them into this `ministry`-keyed
+provider would query the `studies` source even when that module is disabled,
+which would break the one-provider-per-source-module enablement gate. That
+follow-up is now delivered by `CHURCH-CALENDAR.2B` below, owned and gated by
+`studies`.
 
 Non-goals unchanged: no assignment creation/edit, no confirm/decline, no
 attendance/check-in, no signup/capacity, no notifications/reminders, no external
@@ -460,6 +470,69 @@ visibility; other users and staff/superuser/manager authority never see the
 viewer's serving subitems; a non-assigned non-audience user still cannot see the
 occurrence; and `ServiceEvent.can_be_seen_by` behavior is unchanged. The calendar
 stays read-only. No model, migration, or data write was added.
+
+### CHURCH-CALENDAR.2B — Bible Study serving overlay
+
+Implemented; manual QA pending product-owner confirmation. Adds the signed-in
+user's own explicit Bible Study serving roles to the calendar as a new read-only
+personal item type (`bible_study_serving` / "Bible Study Serving" / "查经服事"),
+grouped under the `CHURCH-CALENDAR.2A-FU4` occurrence contract. This completes the
+`CHURCH-CALENDAR.2A` documented follow-up for `BibleStudyMeetingRole.user`
+serving, adapted to FU4 grouping and to the SERVING-EVENT-VISIBILITY.1A serving-
+detail-read boundary.
+
+Ownership and boundary:
+
+- The provider is owned by the `studies` module. Because the registry accepts one
+  provider per source module, the existing `studies.calendar_provider` was
+  extended: its single registered callable now returns both ordinary
+  `bible_study_meeting` visibility items and the viewer's own
+  `bible_study_serving` items. It is therefore gated by the `studies` source
+  module's enablement — when `studies` is disabled the aggregator does not call it
+  and runs **no** Bible Study calendar query (meeting or serving), and staff
+  status never bypasses that gate. `studies` imports no sibling source module; in
+  particular it does **not** import `ministry`, so the Bible Study serving
+  semantics live natively inside `studies`.
+- Serving is **explicit**. An item is produced only from the viewer's own linked
+  `BibleStudyMeetingRole.user` rows on a published/completed meeting whose lesson
+  is published/completed and whose series is active. Serving is never inferred from
+  `ChurchStructureMembership` (belonging), audience scopes, meeting visibility, or
+  staff/superuser/capability/manager authority, and only the viewer's own serving
+  is shown. A display-name-only (unlinked) role creates no personal item.
+- Unlike the ordinary meeting provider, the `bible_study_serving` overlay is
+  **not** gated on audience visibility: an explicit role holder outside the
+  meeting audience still receives their own serving occurrence, mirroring the
+  ServiceEvent `SERVING-EVENT-VISIBILITY.1A` end-state. The matching meeting-detail
+  read gate is the studies-owned
+  `studies.permissions.user_has_explicit_bible_study_serving_role_for_meeting`,
+  layered beside `BibleStudyMeeting.can_be_seen_by` in the
+  `bible_study_meeting_detail` view only. It grants read-only visibility to exactly
+  that one meeting, never adds the user to the audience, never reveals any other
+  meeting, and grants no manage/edit/role-management/attendance/check-in authority.
+  The ordinary `bible_study_meeting` calendar/list provider stays audience-only.
+- The item is a **timed** point-in-time item anchored to `meeting_datetime` with
+  no invented duration (like `bible_study_meeting`). One item is emitted per role;
+  `source_id` is the `BibleStudyMeetingRole.id`, and the distinct
+  `bible_study_serving` item type keeps its identity from ever colliding with the
+  meeting's `bible_study_meeting` item, sibling roles, or any `my_serving` item.
+- FU4 grouping: both the base `bible_study_meeting` item and each
+  `bible_study_serving` item carry the shared
+  `occurrence_key = "bible_study_meeting:<id>"`, so the presentation layer
+  collapses them into one occurrence — a serving summary on the month grid
+  (`<lesson> · <role>` for one role, `<lesson> · Serving ×N` / `· 服事 N项` for
+  several) and per-role subitems on the day card. The grouped occurrence header
+  links to the member-facing `bible_study_meeting_detail`; a serving-only
+  occurrence (role holder outside the audience, base row absent) is reconstructed
+  from the serving row's `occurrence_title` / `occurrence_detail_url` and still
+  opens via the read gate above. The legend still lists the `bible_study_serving`
+  type with its own bilingual label and dot / border color.
+
+Non-goals unchanged: no role creation/edit, no confirm/decline, no
+attendance/check-in, no signup/capacity, no notifications/reminders, no external
+calendar sync, no staff/team-coverage dashboard, no manager attention cards, no
+setup/readiness checks, no serving inference, no audience-membership change, no
+broad role management, and no Today or My Serving behavior change. No model,
+migration, or data write was added; the calendar remains read-only.
 
 ### CHURCH-CALENDAR.1D-B — Product-owner QA closure
 

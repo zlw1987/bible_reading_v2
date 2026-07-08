@@ -14,18 +14,25 @@ and their member-safe visibility adapters are integrated in
 CHURCH-CALENDAR.1B, not this slice; the registry is intentionally empty until
 then.
 
-MEMBER-SAFE VISIBILITY IS MANDATORY (plan section 6). A registered provider
-MUST return only items the signed-in viewer can see under their *ordinary
-current audience / belonging* visibility. Staff, superuser, manager, creator,
-and co-organizer accounts receive no management bypass on the member calendar.
-Providers therefore MUST NOT use manager-bypass helpers such as
+MEMBER-SAFE VISIBILITY IS MANDATORY (plan section 6). Ordinary source items
+(``service_event``, ``bible_study_meeting``, ``announcement``,
+``community_activity``) MUST be returned only when the signed-in viewer can see
+them under their *ordinary current audience / belonging* visibility. The personal
+serving overlays (``my_serving`` and ``bible_study_serving``) are the documented
+explicit-serving exceptions (see below): their axis is the viewer's OWN explicit
+serving, not audience/belonging. In every case staff, superuser, manager,
+creator, and co-organizer accounts receive no management bypass on the member
+calendar, and no provider may return another user's rows. Ordinary providers
+therefore MUST NOT use manager-bypass helpers such as
 ``get_visible_service_events``, ``ServiceEvent.can_be_seen_by``,
 ``can_manage_service_events``, ``BibleStudyMeeting.can_be_seen_by``,
 ``visible_announcements_for``, ``visible_community_activities_for``, or
 ``CommunityActivity.can_be_seen_by`` as the final calendar authority. They must
 apply the member-safe range adapters added in CHURCH-CALENDAR.1B, which fail
 closed for unauthenticated users, absent/ambiguous active primary membership,
-zero audience rows, and nonmatching audience.
+zero audience rows, and nonmatching audience. The personal serving overlays
+likewise never use staff/superuser/manager authority and return only the
+signed-in viewer's own explicit serving rows.
 
 The aggregator reinforces (never replaces) that contract: it fails closed for
 unauthenticated viewers, skips providers of disabled source modules entirely,
@@ -40,6 +47,17 @@ explicit ``TeamAssignmentMember`` row (current My Serving semantics), and never
 from ``ChurchStructureMembership``, audience scopes, event/meeting visibility,
 or staff/manager authority. It is read-only "my serving schedule", not a team
 or staff scheduling dashboard, and it shows only the viewer's own serving.
+
+CHURCH-CALENDAR.2B adds a second, ``studies``-owned personal serving type
+``bible_study_serving`` for the signed-in viewer's own explicit Bible Study
+meeting serving roles (``BibleStudyMeetingRole.user``). It is emitted by the
+existing ``studies`` calendar provider (one provider per source module), so it is
+gated by ``studies`` enablement and never queries ``studies`` from ``ministry``.
+Like ``my_serving`` it is explicit personal serving: an item exists only from the
+viewer's own linked ``BibleStudyMeetingRole`` rows under the 2B explicit Bible
+Study serving rules (published/completed meeting + lesson with an active series;
+it deliberately does not reuse the audience-gated My Serving Bible Study
+selector), and never from membership, audience scopes, or meeting visibility.
 """
 
 from dataclasses import dataclass
@@ -62,6 +80,13 @@ ITEM_TYPE_COMMUNITY_ACTIVITY = "community_activity"
 # (``TeamAssignmentMember``) and is never inferred from membership, audience
 # scopes, or event/meeting visibility.
 ITEM_TYPE_MY_SERVING = "my_serving"
+# CHURCH-CALENDAR.2B: the signed-in viewer's own explicit Bible Study serving
+# schedule. Like ``my_serving`` this is a personal, read-only overlay, never a
+# team/staff scheduling dashboard. It comes only from the viewer's own explicit
+# linked ``BibleStudyMeetingRole`` rows and is never inferred from membership,
+# audience scopes, or Bible Study meeting visibility. It is owned by ``studies``
+# (not ``ministry``), so it is gated by the ``studies`` source module.
+ITEM_TYPE_BIBLE_STUDY_SERVING = "bible_study_serving"
 
 VALID_ITEM_TYPES = frozenset(
     {
@@ -70,6 +95,7 @@ VALID_ITEM_TYPES = frozenset(
         ITEM_TYPE_ANNOUNCEMENT,
         ITEM_TYPE_COMMUNITY_ACTIVITY,
         ITEM_TYPE_MY_SERVING,
+        ITEM_TYPE_BIBLE_STUDY_SERVING,
     }
 )
 
@@ -80,6 +106,7 @@ ITEM_TYPE_LABELS = {
     ITEM_TYPE_BIBLE_STUDY_MEETING: ("Bible Study", "查经"),
     ITEM_TYPE_COMMUNITY_ACTIVITY: ("Activity", "活动"),
     ITEM_TYPE_MY_SERVING: ("My Serving", "我的服事"),
+    ITEM_TYPE_BIBLE_STUDY_SERVING: ("Bible Study Serving", "查经服事"),
     ITEM_TYPE_ANNOUNCEMENT: ("Announcement", "公告"),
 }
 
@@ -90,6 +117,7 @@ ITEM_TYPE_ORDER = (
     ITEM_TYPE_BIBLE_STUDY_MEETING,
     ITEM_TYPE_COMMUNITY_ACTIVITY,
     ITEM_TYPE_MY_SERVING,
+    ITEM_TYPE_BIBLE_STUDY_SERVING,
     ITEM_TYPE_ANNOUNCEMENT,
 )
 
@@ -104,7 +132,13 @@ VALID_DISPLAY_MODES = frozenset({DISPLAY_TIMED, DISPLAY_ACTIVE_WINDOW})
 # module can never emit another module's item type.
 MODULE_ITEM_TYPES = {
     "events": frozenset({ITEM_TYPE_SERVICE_EVENT}),
-    "studies": frozenset({ITEM_TYPE_BIBLE_STUDY_MEETING}),
+    # CHURCH-CALENDAR.2B: the single ``studies`` provider owns both ordinary
+    # Bible Study meeting visibility items and the viewer's own explicit Bible
+    # Study serving items (``bible_study_serving``). Both stay gated by the
+    # ``studies`` source module's enablement.
+    "studies": frozenset(
+        {ITEM_TYPE_BIBLE_STUDY_MEETING, ITEM_TYPE_BIBLE_STUDY_SERVING}
+    ),
     "announcements": frozenset({ITEM_TYPE_ANNOUNCEMENT}),
     "community_events": frozenset({ITEM_TYPE_COMMUNITY_ACTIVITY}),
     # CHURCH-CALENDAR.2A: ministry owns the personal serving overlay. Serving is

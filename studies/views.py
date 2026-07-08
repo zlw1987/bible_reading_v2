@@ -43,6 +43,9 @@ from .services import (
     resolve_normal_generation_targets,
     sync_normal_meeting_audience_scope_for_unit,
 )
+from .permissions import (
+    user_has_explicit_bible_study_serving_role_for_meeting,
+)
 from .visibility import (
     get_membership_audience_candidate_unit_ids,
 )
@@ -695,7 +698,17 @@ def bible_study_meeting_detail(request, meeting_id):
         id=meeting_id,
     )
 
-    if not meeting.can_be_seen_by(request.user):
+    # CHURCH-CALENDAR.2B: an explicit linked Bible Study serving role grants
+    # read-only visibility to exactly this meeting's detail (mirroring
+    # SERVING-EVENT-VISIBILITY.1A), layered beside the ordinary audience gate.
+    # It never adds the viewer to the audience, reveals no other meeting, and
+    # grants no management authority (management stays with can_manage below).
+    if not (
+        meeting.can_be_seen_by(request.user)
+        or user_has_explicit_bible_study_serving_role_for_meeting(
+            request.user, meeting
+        )
+    ):
         messages.error(
             request,
             study_ui_text(get_user_language(request), "not_available"),

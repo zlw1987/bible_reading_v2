@@ -1,7 +1,7 @@
 # Documentation Index
 
 Status: canonical documentation entry point, current through
-`CHURCH-CALENDAR.2A-FU4`. `CHURCH-CALENDAR.1A` implements the model-free,
+`CHURCH-CALENDAR.2B`. `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation; `CHURCH-CALENDAR.1B` implements the four
 member-safe source providers/adapters; `CHURCH-CALENDAR.1C` implements the
 month/day UI; `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a
@@ -10,13 +10,21 @@ missing focused regression test; and `CHURCH-CALENDAR.2A` adds the
 explicit team-assignment serving, with `CHURCH-CALENDAR.2A-FU4` grouping the base
 ServiceEvent and the viewer's own serving rows for it into one presentation
 occurrence (shared `occurrence_key`) so a served event is not duplicated on the
-calendar. After the serving deep-link follow-ups
+calendar. `CHURCH-CALENDAR.2B` adds the `studies`-owned read-only personal
+`bible_study_serving` overlay of the viewer's own explicit linked
+`BibleStudyMeetingRole` serving, grouped by `bible_study_meeting:<id>`; an
+explicit linked role additionally grants read-only visibility to that one
+meeting's detail (mirroring SERVING-EVENT-VISIBILITY.1A), while the ordinary
+`bible_study_meeting` calendar/list provider stays audience-only. After the
+serving deep-link follow-ups
 (`CHURCH-CALENDAR.2A-FU2/FU3`) and My Serving serving-card template hotfix,
 `CHURCH-CALENDAR.1D-B` records
 product-owner manual QA passed for the baseline Calendar V1
 limited-trial/current-state use. `CHURCH-CALENDAR.2A-FU4` grouping ships with
 focused automated tests and prepared manual regression checks; its product-owner
-manual regression confirmation is still pending. This is not a broad
+manual regression confirmation is still pending, and `CHURCH-CALENDAR.2B` Bible
+Study serving is likewise implemented with focused tests but pending product-owner
+manual QA. This is not a broad
 production-readiness claim (July 2026).
 
 Use this page to distinguish current architecture and operating guidance from
@@ -80,11 +88,21 @@ migration-safety instruction source.
   regression test. `CHURCH-CALENDAR.2A` adds a fifth provider: the
   `ministry`-owned read-only personal `my_serving` overlay of the viewer's own
   explicit `TeamAssignmentMember` serving (registered after the four sources,
-  gated by `ministry` enablement, timed to the linked ServiceEvent, links to My
-  Serving read-only). Serving stays explicit only — never inferred from
+  gated by `ministry` enablement, timed to the linked ServiceEvent, deep-links to
+  the existing My Serving assignment card; existing My Serving actions remain
+  governed by My Serving). Serving stays explicit only — never inferred from
   membership/audience/visibility or staff/manager authority — and the calendar
-  creates/edits/confirms no serving. Bible Study linked-user serving roles are a
-  documented follow-up. `CHURCH-CALENDAR.1D-B` records product-owner manual QA
+  creates/edits/confirms no serving. `CHURCH-CALENDAR.2B` completes the Bible
+  Study serving follow-up: the `studies`-owned personal `bible_study_serving`
+  overlay of the viewer's own explicit linked `BibleStudyMeetingRole` serving,
+  emitted by the existing single `studies` calendar provider (so gated by
+  `studies` enablement; disabled `studies` runs no Bible Study calendar query),
+  grouped under the FU4 `bible_study_meeting:<id>` occurrence. The ordinary
+  `bible_study_meeting` calendar/list provider stays audience-only; an explicit
+  linked role additionally grants read-only visibility to exactly that one
+  meeting's detail (studies-owned mirror of SERVING-EVENT-VISIBILITY.1A), never
+  adding the user to the audience or revealing any other meeting, and the grouped
+  occurrence links to the member-facing meeting detail (manual QA pending). `CHURCH-CALENDAR.1D-B` records product-owner manual QA
   passed after deployment for the current limited-trial state, including
   `/calendar/`, day detail, real source items, My Serving assignment-anchor
   deep links, `/my-serving/?tab=past` no longer returning 500, and the removed
@@ -288,6 +306,12 @@ deployed Calendar V1 pass:
 Bible Study, Community Activities, Announcements, and My Serving items,
 `/my-serving/?tab=past` no longer returns 500, leaked template comment text is
 gone, and Calendar remains read-only while My Serving keeps its own behavior.
+`CHURCH-CALENDAR.2B` then added the `studies`-owned personal
+`bible_study_serving` overlay of the viewer's own explicit linked
+`BibleStudyMeetingRole` serving by extending the single `studies` calendar
+provider to emit both meeting-visibility and serving items (gated by `studies`
+enablement, no cross-module import of `ministry`); its manual QA is pending
+product-owner confirmation.
 Calendar V1 is QA-passed for limited trial/current-state use, but this is not a
 production-readiness claim. It continues to exclude the reading active-plan
 calendar and check-ins, serving inference, attendance/check-in, notifications,

@@ -7,8 +7,12 @@ limited-trial state after `CHURCH-CALENDAR.1A`, `1B`, `1C`, `1D-A`, `2A`,
 `CHURCH-CALENDAR.2A-FU4` occurrence grouping is implemented with focused
 automated tests, and its manual regression checks below are prepared but remain
 pending product-owner confirmation (not covered by the 1D-B baseline pass).
-This is not a broad production readiness claim. This checklist adds no product
-scope.
+`CHURCH-CALENDAR.2B` adds the `studies`-owned personal `bible_study_serving`
+overlay (grouped under the Bible Study meeting occurrence); it is likewise
+implemented with focused automated tests, and its manual QA is **pending**
+product-owner confirmation (see the Bible Study Serving Overlay Checks section
+below). This is not a broad production readiness claim. This checklist adds no
+product scope.
 
 Use this checklist in local or staging with test records only for future reruns.
 Do not run data backfills, cleanup commands, notification jobs, or any `--apply`
@@ -62,6 +66,10 @@ command as part of this QA pass.
   its own explicit `TeamAssignmentMember` serving row on an in-range,
   non-cancelled ServiceEvent (via an active membership on an active team), and a
   control account that only belongs / matches audience but has no serving row.
+- [ ] For the Bible Study serving overlay (`CHURCH-CALENDAR.2B`): one account with
+  its own explicit linked `BibleStudyMeetingRole` on an in-range, member-visible
+  `BibleStudyMeeting`, a control account that only matches the meeting audience
+  but holds no role, and a display-name-only (unlinked) role example.
 - [ ] Each source has at least one zero-audience row to confirm fail-closed
   behavior.
 - [ ] Browser language or `?lang=en` / `?lang=zh` can be used to check both
@@ -147,8 +155,6 @@ command as part of this QA pass.
 - [ ] Disabling `ministry` removes all serving items and runs no serving query;
   staff status does not bypass this gate. (Disabling `events` also requires
   disabling `ministry`.)
-- [ ] Bible Study linked-user serving roles are intentionally NOT shown yet
-  (documented follow-up); their absence is expected, not a defect.
 - [ ] The calendar renders no confirm/decline/check-in/attendance/edit/manage
   serving action, and browsing changes no serving data.
 
@@ -181,6 +187,46 @@ command as part of this QA pass.
 - [ ] Another user, and staff/superuser/manager authority, see the base event but
   never the viewer's serving subitems.
 
+## Bible Study Serving Overlay Checks (CHURCH-CALENDAR.2B) — pending
+
+> Pending: these Bible Study serving checks are prepared and backed by focused
+> automated tests, but remain unchecked until the product owner runs and confirms
+> the manual regression pass. They are not part of the `CHURCH-CALENDAR.1D-B`
+> baseline pass. The `bible_study_serving` overlay is grouped with the Bible
+> Study meeting occurrence under the `CHURCH-CALENDAR.2A-FU4` contract
+> (`occurrence_key = bible_study_meeting:<id>`), so it is not a standalone row.
+
+- [ ] A user with an explicit own linked `BibleStudyMeetingRole` on an in-range
+  meeting sees the serving grouped into that meeting's occurrence on the month
+  and day views for the meeting date (not a separate standalone row).
+- [ ] Month grid: one role shows `<lesson> · <role>` (e.g. `约翰十五章 · 查经带领`);
+  two or more roles on one meeting show `<lesson> · Serving ×N` / `<lesson> · 服事 N项`.
+- [ ] Day detail: one meeting card lists the viewer's Bible Study serving role(s)
+  as subitem(s); multiple roles on one meeting do not duplicate the occurrence.
+- [ ] The grouped occurrence header links to the member-facing Bible Study meeting
+  detail (`/studies/meetings/<id>/`), never an edit/manage/confirm/attendance/
+  check-in/staff URL.
+- [ ] A user with an explicit linked role who is OUTSIDE the meeting's ordinary
+  audience still sees that meeting occurrence for serving and can open exactly
+  that meeting's detail (studies-owned mirror of SERVING-EVENT-VISIBILITY.1A);
+  this does not add them to the audience and does not reveal any other meeting.
+- [ ] A user who only belongs / matches the meeting audience (no linked role)
+  sees the meeting but no serving subitem — belonging/audience/meeting visibility
+  never create serving.
+- [ ] A display-name-only (unlinked) role produces no personal serving item.
+- [ ] Another user, and a staff/superuser/Bible-Study-capability/manager account
+  with no own role, see the meeting but never the viewer's serving subitems.
+- [ ] The ordinary `bible_study_meeting` calendar/list provider remains
+  audience-only (a role never widens which meetings appear in the ordinary list).
+- [ ] A draft/cancelled meeting, draft lesson, and inactive/draft series produce
+  no serving item and no serving-based detail read; an in-range completed meeting
+  the viewer serves still appears.
+- [ ] Disabling `studies` removes both Bible Study meeting and Bible Study
+  serving items and runs no Bible Study calendar query, and grants no serving-
+  based meeting-detail read; staff status does not bypass this gate.
+- [ ] The calendar renders no confirm/decline/check-in/attendance/edit/manage
+  Bible Study serving action, and browsing changes no serving data.
+
 ## Date Semantics
 
 - [ ] Multi-day `ServiceEvent` rows appear on every local day they overlap.
@@ -201,7 +247,8 @@ command as part of this QA pass.
 - [ ] Direct calendar URLs remain login-protected under the current
   surface-gate architecture; this is not a route hard-off.
 - [ ] Disabling `events` removes ServiceEvent calendar items.
-- [ ] Disabling `studies` removes Bible Study meeting calendar items.
+- [ ] Disabling `studies` removes Bible Study meeting AND Bible Study serving
+  (`bible_study_serving`) calendar items.
 - [ ] Disabling `announcements` removes announcement calendar items.
 - [ ] Disabling `community_events` removes Community Activity calendar items.
 - [ ] Disabling `ministry` removes personal serving (`my_serving`) items.
@@ -239,8 +286,9 @@ command as part of this QA pass.
   anchor id; existing My Serving actions, if any, remain governed by My Serving
   and are unchanged, and the calendar adds/edits/confirms no serving and changes
   no My Serving view logic).
-- [ ] Calendar shows only the viewer's own explicit `TeamAssignmentMember`
-  serving and never infers serving from membership, audience, or visibility.
+- [ ] Calendar shows only the viewer's own explicit serving
+  (`TeamAssignmentMember` and linked `BibleStudyMeetingRole`) and never infers
+  serving from membership, audience, or visibility.
 - [ ] (`SERVING-EVENT-VISIBILITY.1A`) An explicit team-serving assignment lets the
   assignee open only that one `ServiceEvent` detail (read-only), not other events
   in that audience, and grants no manage/edit/coverage/attendance/check-in. The
@@ -249,6 +297,12 @@ command as part of this QA pass.
   onto — an event whose defined audience excludes a linked-user member is warned
   and must acknowledge before saving (`SERVING-EVENT-VISIBILITY.1A-FU1`; no data
   field/migration added; cancelled and zero-audience saves are not nagged).
+- [ ] (`CHURCH-CALENDAR.2B`) An explicit linked `BibleStudyMeetingRole` lets the
+  assignee open only that one Bible Study meeting detail (read-only), not other
+  meetings in that audience, and grants no manage/edit/role-management/attendance/
+  check-in. The ordinary member-safe `bible_study_meeting` calendar/list
+  visibility stays audience-only and is unchanged (studies-owned mirror of
+  SERVING-EVENT-VISIBILITY.1A; no data field/migration added).
 - [ ] Calendar does not expose signup, capacity management, attendance, or
   check-in controls.
 - [ ] Calendar does not create notifications, reminders, email, push, Google

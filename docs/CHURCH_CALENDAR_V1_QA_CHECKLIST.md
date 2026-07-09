@@ -313,7 +313,10 @@ command as part of this QA pass.
   and is unchanged; a scheduler who assigns — or moves/reactivates an assignment
   onto — an event whose defined audience excludes a linked-user member is warned
   and must acknowledge before saving (`SERVING-EVENT-VISIBILITY.1A-FU1`; no data
-  field/migration added; cancelled and zero-audience saves are not nagged).
+  field/migration added; cancelled and zero-audience saves are not nagged). The
+  same warning/acknowledgement also applies on the team-schedule scheduler path
+  (`SERVING-EVENT-VISIBILITY.1B`, `TeamScheduleAssignmentForm`); the event is
+  fixed by the row there, so re-checks happen on create or reactivation.
 - [ ] (`CHURCH-CALENDAR.2B`) An explicit linked `BibleStudyMeetingRole` lets the
   assignee open only that one Bible Study meeting detail (read-only), not other
   meetings in that audience, and grants no manage/edit/role-management/attendance/

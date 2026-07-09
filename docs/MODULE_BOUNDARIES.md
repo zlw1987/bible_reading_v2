@@ -432,8 +432,16 @@ notifications, or `ServiceEvent`.
    changes the `ServiceEvent`, and on reactivation from cancelled to active; a
    plain notes/status edit on the same event only checks newly added members, a
    cancelled submission is never nagged (it grants no visibility), and
-   zero-audience events are not nagged. No model, migration, data write, Today, or
-   My Serving behavior change.
+   zero-audience events are not nagged.
+   `SERVING-EVENT-VISIBILITY.1B` applies the same non-persistent acknowledgement
+   to the team-schedule scheduler path (`TeamScheduleAssignmentForm`), which can
+   also create/update a `TeamAssignment` and sync its members. Because the
+   `ServiceEvent` is fixed by the instance on that form (not an editable field),
+   there is no "event changed" case; it re-checks all selected members on a new
+   assignment or on reactivation from cancelled to active, otherwise only newly
+   added members, with the same display-name-only / zero-audience / cancelled
+   skips and the same shared read-visibility helper (unchanged). No model,
+   migration, data write, Today, or My Serving behavior change.
 7. **New modules require explicit approval.** `COMMUNITY-EVENTS.1A` is the
    approved independent foundation for Community Events/Activities, registered
    here with explicit model/migration/visibility scope. `COMMUNITY-EVENTS.1B`

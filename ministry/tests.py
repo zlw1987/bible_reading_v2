@@ -4923,7 +4923,7 @@ class ServingReadinessMinistryWarningTests(TestCase):
 
 
 class MinistryStructureFoundationTests(TestCase):
-    """MINISTRY-STRUCTURE.1B model foundation tests (additive, no runtime change)."""
+    """MINISTRY-STRUCTURE model foundation and current role-source tests."""
 
     def setUp(self):
         self.user = User.objects.create_user(username="ms_user", password="pw")
@@ -5254,23 +5254,23 @@ class MinistryStructureFoundationTests(TestCase):
         )
         self.assertEqual(TeamMembership.objects.count(), 0)
 
-    def test_role_assignment_does_not_drive_can_manage_ministry_team(self):
-        # A lead role assignment must NOT grant management; permission still
-        # comes from TeamMembership.role (none here), so the user cannot manage.
+    def test_role_assignment_grants_can_manage_ministry_team(self):
+        # After MINISTRY-ROLE-SOURCE.1C, an active exact-team lead assignment is
+        # the runtime team-management source.
         lead = MinistryTeamRoleType.objects.create(
             code="lead", name="负责人", name_en="Lead"
         )
         MinistryTeamRoleAssignment.objects.create(
             team=self.team, role_type=lead, user=self.user
         )
-        self.assertFalse(can_manage_ministry_team(self.user, self.team))
+        self.assertTrue(can_manage_ministry_team(self.user, self.team))
 
-    def test_team_membership_lead_still_grants_management(self):
-        # Existing permission source unchanged: a TeamMembership lead can manage.
+    def test_team_membership_lead_does_not_grant_management(self):
+        # TeamMembership.role is legacy compatibility/candidate-pool data only.
         TeamMembership.objects.create(
             team=self.team, user=self.user, role=TeamMembership.ROLE_LEAD
         )
-        self.assertTrue(can_manage_ministry_team(self.user, self.team))
+        self.assertFalse(can_manage_ministry_team(self.user, self.team))
 
 
 class MinistryStructureRoleSeedTests(TestCase):
@@ -5741,14 +5741,14 @@ class MinistryStructureMapTests(TestCase):
         after = self._snapshot_counts()
         self.assertEqual(before, after)
 
-    def test_can_manage_ministry_team_unchanged_by_get(self):
-        # Permission source stays TeamMembership.role; a role-assignment-only user
-        # is not a manager, and a lead membership still is - before and after GET.
+    def test_can_manage_ministry_team_role_source_unchanged_by_get(self):
+        # GET is read-only: it preserves current role-assignment-sourced
+        # permission results and never promotes legacy TeamMembership.role.
         MinistryTeamRoleAssignment.objects.create(
-            team=self.video, role_type=self.lead_type, user=self.regular
+            team=self.video, role_type=self.lead_type, user=self.lead_user
         )
         TeamMembership.objects.create(
-            team=self.video, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+            team=self.video, user=self.regular, role=TeamMembership.ROLE_LEAD
         )
         self.assertFalse(can_manage_ministry_team(self.regular, self.video))
         self.assertTrue(can_manage_ministry_team(self.lead_user, self.video))
@@ -6252,9 +6252,12 @@ class MinistryTeamStructureSetupTests(TestCase):
         )
         self.assertEqual(before, self._snapshot_counts())
 
-    def test_can_manage_ministry_team_unchanged_by_structure_edit(self):
+    def test_can_manage_ministry_team_role_source_unchanged_by_structure_edit(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection, role_type=self.lead_type, user=self.lead_user
+        )
         TeamMembership.objects.create(
-            team=self.projection, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+            team=self.projection, user=self.regular, role=TeamMembership.ROLE_LEAD
         )
         self.assertFalse(can_manage_ministry_team(self.regular, self.projection))
         self.assertTrue(can_manage_ministry_team(self.lead_user, self.projection))
@@ -6299,9 +6302,9 @@ class MinistryTeamRoleAssignmentUITests(TestCase):
     creates/deactivates only ``MinistryTeamRoleAssignment`` rows. Access is
     staff/superuser only and is never granted by TeamMembership.role,
     MinistryTeamRoleAssignment, ChurchStructureUnitRoleAssignment, or
-    ChurchStructureMembership. Role assignments are additive: they drive no
-    permission, do not appear in My Serving, and create no membership/serving
-    rows.
+    ChurchStructureMembership. Role assignments are canonical long-term ministry
+    roles: active lead/coordinator assignments drive exact-team management, but
+    still do not appear in My Serving and create no membership/serving rows.
     """
 
     def setUp(self):
@@ -6660,18 +6663,18 @@ class MinistryTeamRoleAssignmentUITests(TestCase):
         )
         self.assertEqual(before, self._snapshot_counts())
 
-    def test_can_manage_ministry_team_unchanged_by_role_assignment(self):
+    def test_role_assignment_post_grants_can_manage_ministry_team(self):
         TeamMembership.objects.create(
             team=self.projection, user=self.bob, role=TeamMembership.ROLE_LEAD
         )
         self.assertFalse(can_manage_ministry_team(self.alice, self.projection))
-        self.assertTrue(can_manage_ministry_team(self.bob, self.projection))
+        self.assertFalse(can_manage_ministry_team(self.bob, self.projection))
         self._login("ra_staff")
         self._add_role_post(self.projection, self.lead_type, self.alice)
-        self.assertFalse(can_manage_ministry_team(self.alice, self.projection))
-        self.assertTrue(can_manage_ministry_team(self.bob, self.projection))
+        self.assertTrue(can_manage_ministry_team(self.alice, self.projection))
+        self.assertFalse(can_manage_ministry_team(self.bob, self.projection))
 
-    def test_ministry_role_lead_cannot_access_team_edit_route(self):
+    def test_ministry_role_lead_can_access_team_edit_route(self):
         MinistryTeamRoleAssignment.objects.create(
             team=self.projection, role_type=self.lead_type, user=self.regular
         )
@@ -6679,8 +6682,7 @@ class MinistryTeamRoleAssignmentUITests(TestCase):
         response = self.client.get(
             reverse("edit_ministry_team", args=[self.projection.id])
         )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, reverse("ministry_team_list"))
+        self.assertEqual(response.status_code, 200)
 
     def test_ministry_role_lead_cannot_access_structure_setup(self):
         MinistryTeamRoleAssignment.objects.create(
@@ -7007,16 +7009,17 @@ class MinistryTeamIsAssignableEnforcementTests(TestCase):
 
     # ----- permissions / boundaries -----------------------------------------
 
-    def test_can_manage_ministry_team_unchanged_for_non_assignable_team(self):
-        # is_assignable does not affect TeamMembership-derived management.
-        self.assertTrue(
+    def test_membership_role_does_not_grant_management_on_non_assignable_team(self):
+        # TeamMembership.role is legacy compatibility data and grants no
+        # management permission, even on a non-assignable container team.
+        self.assertFalse(
             can_manage_ministry_team(self.lead_user, self.container_team)
         )
         self.assertFalse(
             can_manage_ministry_team(self.member_user, self.container_team)
         )
 
-    def test_role_assignment_does_not_grant_management_on_non_assignable_team(self):
+    def test_role_assignment_grants_management_on_non_assignable_container_team(self):
         role_type = MinistryTeamRoleType.objects.create(
             code=MinistryTeamRoleType.CODE_LEAD,
             name="负责人",
@@ -7028,8 +7031,9 @@ class MinistryTeamIsAssignableEnforcementTests(TestCase):
             user=self.member_user,
             start_date=timezone.localdate(),
         )
-        # A long-term ministry role still does not drive management permission.
-        self.assertFalse(
+        # is_assignable=False blocks serving assignment targets; it does not
+        # suppress exact-team long-term role authority.
+        self.assertTrue(
             can_manage_ministry_team(self.member_user, self.container_team)
         )
 
@@ -7742,9 +7746,9 @@ class MinistryStructureEntryPointTests(TestCase):
         self.client.get(reverse("ministry_team_list"))
         self.assertEqual(before, self._snapshot_counts())
 
-    def test_can_manage_ministry_team_unchanged_by_get(self):
+    def test_can_manage_ministry_team_role_source_unchanged_by_get(self):
         TeamMembership.objects.create(
-            team=self.ready, user=self.lead_user, role=TeamMembership.ROLE_LEAD
+            team=self.ready, user=self.regular, role=TeamMembership.ROLE_LEAD
         )
         self.assertFalse(can_manage_ministry_team(self.regular, self.ready))
         self.assertTrue(can_manage_ministry_team(self.lead_user, self.ready))

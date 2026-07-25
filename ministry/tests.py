@@ -2350,7 +2350,8 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "My Serving")
-        self.assertContains(response, "You have 1 serving assignment waiting for confirmation.")
+        self.assertContains(response, "Needs Attention")
+        self.assertContains(response, "Confirm in My Serving")
         self.assertContains(response, "Pending confirmation")
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Lighting Team")
@@ -2384,9 +2385,15 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You have 2 serving assignments waiting for confirmation.")
+        self.assertContains(
+            response,
+            'data-attention-kind="team_confirmation"',
+            count=1,
+        )
         self.assertContains(response, "Sunday Service")
         self.assertNotContains(response, "Midweek Service")
+        self.assertContains(response, "1 more action needs attention.")
+        self.assertContains(response, "Open My Serving")
 
     def test_home_does_not_show_unrelated_user_assignment(self):
         self.set_language("en")
@@ -2411,7 +2418,7 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "You have an upcoming serving assignment.")
+        self.assertContains(response, "Serving this week")
         self.assertContains(response, "Confirmed")
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, reverse("my_serving"))
@@ -2447,10 +2454,10 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "我的服事")
-        self.assertContains(response, "你有 1 个服事安排等待确认。")
+        self.assertContains(response, "需要你留意")
         self.assertContains(response, "等待确认")
         self.assertContains(response, "主日崇拜")
-        self.assertContains(response, "去确认")
+        self.assertContains(response, "去「我的服事」确认")
 
     def test_profile_links_to_my_serving(self):
         self.set_language("en")

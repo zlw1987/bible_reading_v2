@@ -1,0 +1,28 @@
+<a class="nav-link{% if active_nav == 'today' %} active{% endif %}"
+   href="{% url 'home' %}"
+   {% if active_nav == 'today' %}aria-current="page"{% endif %}>{{ ui.today }}</a>
+{% for item in enabled_nav_items %}
+{% if item.is_group %}
+<details class="nav-group-menu nav-dropdown" data-dropdown-var-prefix="nav-group-{{ item.active_nav }}">
+    <summary class="nav-link{% if active_nav in item.child_active_navs %} active{% endif %}">
+        <span>{% if language == "zh" %}{{ item.label_zh }}{% else %}{{ item.label_en }}{% endif %}</span>
+        <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
+    </summary>
+    <div class="nav-group-menu-panel nav-dropdown-panel">
+        {% for child in item.children %}
+        <a{% if active_nav == child.active_nav %} class="active"{% endif %}
+           href="{% url child.url_name %}"
+           {% if active_nav == child.active_nav %}aria-current="page"{% endif %}>
+            {% if language == "zh" %}{{ child.label_zh }}{% else %}{{ child.label_en }}{% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</details>
+{% else %}
+<a class="nav-link{% if active_nav == item.active_nav %} active{% endif %}"
+   href="{% url item.url_name %}"
+   {% if active_nav == item.active_nav %}aria-current="page"{% endif %}>
+    {% if language == "zh" %}{{ item.label_zh }}{% else %}{{ item.label_en }}{% endif %}
+</a>
+{% endif %}
+{% endfor %}

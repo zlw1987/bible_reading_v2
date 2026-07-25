@@ -1,0 +1,43 @@
+{% load datetime_extras %}
+
+<div class="card week-day-row week-day-{{ day.status }}{% if day.is_today %} week-day-today{% endif %}">
+    <div class="week-day-head">
+        <h3 class="week-day-title">
+            {% if language == "zh" %}第 {{ day.day_number }} 天{% else %}Day {{ day.day_number }}{% endif %}
+            {% if day.is_today %}<span class="week-day-todaymark">· {{ ui.today }}</span>{% endif %}
+        </h3>
+        {% if day.status == "checked" %}
+        <span class="status status-good">{% if language == "zh" %}已打卡{% else %}Checked in{% endif %}</span>
+        {% elif day.status == "missing" %}
+        <span class="status status-danger">{% if language == "zh" %}未打卡{% else %}Not checked in{% endif %}</span>
+        {% elif day.status == "future" %}
+        <span class="status status-muted">{% if language == "zh" %}未来{% else %}Upcoming{% endif %}</span>
+        {% elif day.status == "future_rest" %}
+        <span class="status status-muted">{% if language == "zh" %}未来休息日{% else %}Upcoming rest day{% endif %}</span>
+        {% elif day.status == "rest" %}
+        <span class="status status-warning">{{ ui.rest_day }}</span>
+        {% endif %}
+    </div>
+    <p class="muted week-day-date">{{ day.calendar_date|member_date:language }}</p>
+
+    {% if day.is_rest_day %}
+    <p class="muted">
+        {% if language == "zh" %}这一天没有指定读经。{% else %}No assigned reading for this day.{% endif %}
+    </p>
+    {% elif day.passages %}
+    <div class="week-day-actions">
+        <a class="button button-secondary"
+           href="{% url 'passage_reader' active_plan.id day.plan_day.id 0 %}?lang={{ language }}">
+            {% if day.is_checked %}{% if language == "zh" %}再次阅读{% else %}Read again{% endif %}{% else %}{% if language == "zh" %}阅读{% else %}Read{% endif %}{% endif %}
+        </a>
+        <a class="audio-icon-button"
+           href="{% url 'audio_reader' active_plan.id day.plan_day.id 0 %}?lang={{ language }}"
+           title="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}"
+           aria-label="{% if language == 'zh' %}听第 {{ day.day_number }} 天{% else %}Listen to Day {{ day.day_number }}{% endif %}">
+            {% include "reading/_audio_icon.html" %}
+        </a>
+    </div>
+    {% else %}
+    <p class="muted">{{ day.plan_day.reading_text }}</p>
+    {% endif %}
+</div>

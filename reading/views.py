@@ -5,7 +5,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db.models import Max, Q
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -18,6 +18,7 @@ import reading.today_provider
 import studies.today_provider
 from accounts.language import get_user_language
 from core.today_providers import build_today_context
+from .today_presentation import build_today_presentation
 from accounts.permissions import (
     CAP_PUBLISH_READING_GUIDES,
     get_accessible_progress_groups,
@@ -591,11 +592,28 @@ ministry.today_provider.register()
 def home(request):
     # MODULAR-CORE.3A: Today asks the enabled modules' registered providers
     # for their context instead of coordinating every module inline.
-    return render(request, "reading/home.html", build_today_context(request))
+    context = build_today_context(request)
+    # UX-MEMBER-JOURNEY.1A: reshape the aggregated reading slice into one hero
+    # plus compact secondary rows. Presentation only — no queries are added
+    # back into the home view.
+    context.update(
+        build_today_presentation(
+            context,
+            language=get_user_language(request),
+        )
+    )
+    return render(request, "reading/home.html", context)
+
+
+DETAIL_WEEK_LENGTH = 7
 
 
 @login_required
 def active_plan_detail(request, active_plan_id):
+    # UX-MEMBER-JOURNEY.1A: the detail page renders a single server-side week
+    # (at most seven calendar days) plus a Today's Reading block, instead of
+    # materialising and rendering every day of a potentially very long plan.
+    # Full-plan browsing stays on the Calendar page (active_plan_calendar).
     active_plan = get_object_or_404(
         ActivePlan.objects.select_related("plan"),
         id=active_plan_id,
@@ -610,53 +628,164 @@ def active_plan_detail(request, active_plan_id):
         messages.error(request, "You need to join this plan before viewing it.")
         return redirect("home")
 
+    language = get_user_language(request)
+    plan_day_stats = ReadingPlanDay.objects.filter(
+        plan=active_plan.plan
+    ).aggregate(
+        total_reading_days=Count("id"),
+        max_day_number=Max("day_number"),
+    )
+    total_reading_days = plan_day_stats["total_reading_days"]
+    max_day_number = plan_day_stats["max_day_number"] or 0
+    current_day_number = active_plan.current_day_number()
+    total_calendar_days = max_day_number
+    rest_days = max(total_calendar_days - total_reading_days, 0)
+
+    is_not_started = current_day_number < 1
+    is_ended = bool(max_day_number and current_day_number > max_day_number)
+    has_configured_days = bool(max_day_number)
+
+    # Weeks are fixed 7-day blocks of day-numbers aligned to plan day 1, so
+    # every day belongs to exactly one week and "this week" is deterministic.
+    # ?week= is an offset from the current week (0 = this week); out-of-range
+    # values are clamped to the first/last real week rather than 404-ing.
+    last_week_index = (
+        (max_day_number - 1) // DETAIL_WEEK_LENGTH
+        if has_configured_days
+        else 0
+    )
+    anchor_day = min(max(current_day_number, 1), max_day_number or 1)
+    current_week_index = (anchor_day - 1) // DETAIL_WEEK_LENGTH
+
+    try:
+        requested_offset = int(request.GET.get("week", 0))
+    except (TypeError, ValueError):
+        requested_offset = 0
+
+    selected_week_index = max(
+        0, min(current_week_index + requested_offset, last_week_index)
+    )
+    selected_week_offset = selected_week_index - current_week_index
+
+    if has_configured_days:
+        week_start_day = selected_week_index * DETAIL_WEEK_LENGTH + 1
+        week_end_day = min(
+            week_start_day + DETAIL_WEEK_LENGTH - 1,
+            max_day_number,
+        )
+        selected_day_numbers = set(range(week_start_day, week_end_day + 1))
+    else:
+        week_start_day = None
+        week_end_day = None
+        selected_day_numbers = set()
+
+    today_is_in_plan = 1 <= current_day_number <= max_day_number
+    queried_day_numbers = set(selected_day_numbers)
+    if today_is_in_plan:
+        queried_day_numbers.add(current_day_number)
+
     plan_days = list(
-        ReadingPlanDay.objects.filter(plan=active_plan.plan).order_by("day_number")
+        ReadingPlanDay.objects.filter(
+            plan=active_plan.plan,
+            day_number__in=queried_day_numbers,
+        )
+        .prefetch_related("structured_passages")
+        .order_by("day_number")
     )
     plan_day_by_number = {day.day_number: day for day in plan_days}
+    relevant_plan_day_ids = [day.id for day in plan_days]
 
-    max_day_number = max(plan_day_by_number.keys(), default=0)
-    current_day_number = active_plan.current_day_number()
-
+    checkins = CheckIn.objects.filter(
+        user=request.user,
+        active_plan=active_plan,
+    )
+    checked_days = checkins.aggregate(total=Count("id"))["total"]
     checked_plan_day_ids = set(
-        CheckIn.objects.filter(user=request.user, active_plan=active_plan).values_list(
-            "plan_day_id", flat=True
+        checkins.filter(plan_day_id__in=relevant_plan_day_ids).values_list(
+            "plan_day_id",
+            flat=True,
         )
     )
-
-    day_items = []
-
-    for day_number in range(1, max_day_number + 1):
-        plan_day = plan_day_by_number.get(day_number)
-        calendar_date = active_plan.start_date + timezone.timedelta(days=day_number - 1)
-
-        day_items.append(
-            {
-                "day_number": day_number,
-                "plan_day": plan_day,
-                "calendar_date": calendar_date,
-                "passages": get_reading_passages(plan_day) if plan_day else [],
-                "memory_passages": (
-                    get_memory_passages(plan_day)
-                    if plan_day and plan_day.memory_verse
-                    else []
-                ),
-                "is_checked": bool(plan_day and plan_day.id in checked_plan_day_ids),
-                "is_today": day_number == current_day_number,
-                "is_future": day_number > current_day_number,
-                "is_rest_day": plan_day is None,
-                "is_reading_day": plan_day is not None,
-            }
-        )
-
-    total_reading_days = len(plan_days)
-    total_calendar_days = max_day_number
-    rest_days = total_calendar_days - total_reading_days
-    checked_days = len(checked_plan_day_ids)
     progress_percent = (
         round((checked_days / total_reading_days) * 100)
         if total_reading_days
         else 0
+    )
+
+    def _build_day(day_number):
+        plan_day = plan_day_by_number.get(day_number)
+        calendar_date = active_plan.start_date + timezone.timedelta(days=day_number - 1)
+        is_checked = bool(plan_day and plan_day.id in checked_plan_day_ids)
+        is_today = day_number == current_day_number
+        is_future = day_number > current_day_number
+        is_rest_day = plan_day is None
+
+        if is_rest_day and is_future:
+            status = "future_rest"
+        elif is_rest_day:
+            status = "rest"
+        elif is_checked:
+            status = "checked"
+        elif is_future:
+            status = "future"
+        else:
+            status = "missing"
+
+        return {
+            "day_number": day_number,
+            "plan_day": plan_day,
+            "calendar_date": calendar_date,
+            "passages": get_reading_passages(plan_day) if plan_day else [],
+            "memory_passages": (
+                get_memory_passages(plan_day)
+                if plan_day and plan_day.memory_verse
+                else []
+            ),
+            "is_checked": is_checked,
+            "is_today": is_today,
+            "is_future": is_future,
+            "is_rest_day": is_rest_day,
+            "is_reading_day": plan_day is not None,
+            "status": status,
+        }
+
+    week_days = [
+        _build_day(day_number)
+        for day_number in sorted(selected_day_numbers)
+    ]
+    today_day = next(
+        (day for day in week_days if day["is_today"]),
+        None,
+    )
+    if today_day is None and today_is_in_plan:
+        today_day = _build_day(current_day_number)
+
+    today_plan_day = today_day["plan_day"] if today_day else None
+    today_block = {
+        "is_not_started": is_not_started,
+        "is_ended": is_ended,
+        "is_rest_day": (
+            has_configured_days
+            and not is_not_started
+            and not is_ended
+            and today_plan_day is None
+        ),
+        "is_reading_day": today_plan_day is not None,
+        "plan_day": today_plan_day,
+        "passages": today_day["passages"] if today_day else [],
+        "memory_passages": today_day["memory_passages"] if today_day else [],
+        "is_checked": today_day["is_checked"] if today_day else False,
+    }
+
+    week_range_start = (
+        active_plan.start_date + timezone.timedelta(days=week_start_day - 1)
+        if week_start_day is not None
+        else None
+    )
+    week_range_end = (
+        active_plan.start_date + timezone.timedelta(days=week_end_day - 1)
+        if week_end_day is not None
+        else None
     )
 
     return render(
@@ -664,12 +793,28 @@ def active_plan_detail(request, active_plan_id):
         "reading/active_plan_detail.html",
         {
             "active_plan": active_plan,
-            "day_items": day_items,
+            "current_day_number": current_day_number,
+            "max_day_number": max_day_number,
             "total_reading_days": total_reading_days,
             "total_calendar_days": total_calendar_days,
             "rest_days": rest_days,
             "checked_days": checked_days,
             "progress_percent": progress_percent,
+            "is_not_started": is_not_started,
+            "is_ended": is_ended,
+            "has_configured_days": has_configured_days,
+            "introduction": active_plan.plan.get_introduction(language),
+            "reading_guidance": active_plan.plan.get_reading_guidance(language),
+            "today_block": today_block,
+            "week_days": week_days,
+            "week_range_start": week_range_start,
+            "week_range_end": week_range_end,
+            "selected_week_offset": selected_week_offset,
+            "prev_week_offset": selected_week_offset - 1,
+            "next_week_offset": selected_week_offset + 1,
+            "has_prev_week": selected_week_index > 0,
+            "has_next_week": selected_week_index < last_week_index,
+            "is_current_week": selected_week_index == current_week_index,
         },
     )
 

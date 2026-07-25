@@ -1,0 +1,45 @@
+{% load datetime_extras %}
+
+{% if needs_attention_items %}
+<section class="dashboard-zone" aria-labelledby="needs-attention-heading">
+    <h2 class="dashboard-section-title" id="needs-attention-heading">
+        {% if language == "zh" %}需要你留意{% else %}Needs Attention{% endif %}
+    </h2>
+    <div class="card dashboard-reminder">
+        <div class="dashboard-attention-list">
+            {% for item in needs_attention_items %}
+            <div class="dashboard-attention-row" data-attention-kind="{{ item.kind }}">
+                <div class="dashboard-attention-main">
+                    <p class="dashboard-attention-title">
+                        <strong>{{ item.title }}</strong>
+                        <span class="status status-{{ item.status_tone }}">{{ item.status_label }}</span>
+                    </p>
+                    <p class="muted dashboard-attention-detail">
+                        {% if item.when %}{{ item.when|member_datetime:language }} · {% endif %}{{ item.detail }}
+                    </p>
+                </div>
+                <a class="button button-secondary" href="{{ item.action_url }}">
+                    {{ item.action_label }}
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+        {% if needs_attention_remaining_count %}
+        <div class="dashboard-attention-footer">
+            <p class="muted">
+                {% if language == "zh" %}
+                    另有 {{ needs_attention_remaining_count }} 项需要处理。请前往对应工作区查看。
+                {% else %}
+                    {{ needs_attention_remaining_count }} more action{{ needs_attention_remaining_count|pluralize }} {% if needs_attention_remaining_count == 1 %}needs{% else %}need{% endif %} attention. Open the owning workspace to review.
+                {% endif %}
+            </p>
+            <div class="actions">
+                {% for link in needs_attention_workspace_links %}
+                <a class="button button-secondary" href="{{ link.url }}">{{ link.label }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}

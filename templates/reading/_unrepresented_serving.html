@@ -1,0 +1,17 @@
+{% load datetime_extras %}
+
+{% if unrepresented_serving_items %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}本周服事{% else %}Serving this week{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for item in unrepresented_serving_items %}
+        <div class="dashboard-week-row">
+            <p><strong>{{ item.title }}</strong></p>
+            <p class="muted">{{ item.when|member_datetime:language }} · {{ item.detail }}</p>
+            <p><span class="status status-{{ item.status_tone }}">{{ item.status_label }}</span></p>
+            <a class="button button-secondary" href="{{ item.action_url }}">{{ item.action_label }}</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

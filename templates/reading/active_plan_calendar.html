@@ -170,7 +170,7 @@
                     <a class="calendar-audio-link"
                        href="{% url 'audio_reader' active_plan.id cell.plan_day.id 0 %}?lang={{ language }}"
                        aria-label="{% if language == 'zh' %}听 Day {{ cell.day_number }}{% else %}Listen to Day {{ cell.day_number }}{% endif %}">
-                        🔊
+                        {% include "reading/_audio_icon.html" %}
                     </a>
                 </div>
                 {% else %}

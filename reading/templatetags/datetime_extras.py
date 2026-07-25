@@ -40,3 +40,13 @@ def member_datetime(value, language):
     if language == "zh":
         return _format_chinese(local_value)
     return _format_english(local_value)
+
+
+@register.filter
+def member_date(value, language):
+    if not value:
+        return ""
+    if language == "zh":
+        weekday = ZH_WEEKDAYS[value.weekday()]
+        return f"{value.year}年{value.month}月{value.day}日（{weekday}）"
+    return f"{value:%a}, {value:%b} {value.day}, {value.year}"

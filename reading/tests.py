@@ -4,6 +4,7 @@ import tempfile
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -44,7 +45,9 @@ from reading.models import (
     ReadingPlan,
     ReadingPlanDay,
 )
-from reading.templatetags.datetime_extras import member_datetime
+from reading.today_provider import reading_today_provider
+from reading.today_presentation import build_today_presentation
+from reading.templatetags.datetime_extras import member_date, member_datetime
 from reading.views import get_visible_reflection_filter
 from studies.models import (
     BibleStudyLesson,
@@ -78,6 +81,559 @@ class MemberDatetimeFilterTests(TestCase):
 
     def test_member_datetime_handles_none_safely(self):
         self.assertEqual(member_datetime(None, "en"), "")
+
+    def test_member_date_formats_english_and_chinese(self):
+        value = timezone.localdate().replace(year=2026, month=7, day=24)
+
+        self.assertEqual(member_date(value, "en"), "Fri, Jul 24, 2026")
+        self.assertEqual(member_date(value, "zh"), "2026年7月24日（周五）")
+
+
+class ReadingTodayProviderQueryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="today_query_user",
+            password="TestPass123!",
+        )
+
+    def add_enrollment(self, number):
+        plan = ReadingPlan.objects.create(
+            name=f"Query Plan {number}",
+            is_active=True,
+        )
+        ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+        )
+        active_plan = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate(),
+            title=f"Query Run {number}",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_plan)
+
+    def provider_query_count(self):
+        request = type("Request", (), {"user": self.user})()
+        with CaptureQueriesContext(connection) as captured:
+            reading_today_provider(request)
+        return len(captured)
+
+    def test_query_count_is_bounded_across_multiple_enrollments(self):
+        self.add_enrollment(1)
+        one_plan_queries = self.provider_query_count()
+
+        for number in range(2, 6):
+            self.add_enrollment(number)
+        five_plan_queries = self.provider_query_count()
+
+        self.assertEqual(
+            five_plan_queries,
+            5,
+            (
+                "Reading Today provider exceeded its stable query budget: "
+                f"one_plan={one_plan_queries}, five_plans={five_plan_queries}"
+            ),
+        )
+        self.assertEqual(five_plan_queries, one_plan_queries)
+
+    def test_today_checkin_is_correlated_to_exact_active_run_and_plan_day(self):
+        plan = ReadingPlan.objects.create(name="Shared Plan", is_active=True)
+        day1 = ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=1,
+            reading_text="John 1",
+        )
+        ReadingPlanDay.objects.create(
+            plan=plan,
+            day_number=5,
+            reading_text="John 5",
+        )
+        day1_run = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate(),
+            title="Day 1 Run",
+        )
+        day5_run = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate() - timezone.timedelta(days=4),
+            title="Day 5 Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=day1_run)
+        PlanEnrollment.objects.create(user=self.user, active_plan=day5_run)
+        CheckIn.objects.create(
+            user=self.user,
+            active_plan=day1_run,
+            plan_day=day1,
+        )
+        # This is a legitimate earlier check-in for the second run. It must not
+        # make that run's current Day 5 appear checked.
+        CheckIn.objects.create(
+            user=self.user,
+            active_plan=day5_run,
+            plan_day=day1,
+        )
+
+        result = reading_today_provider(
+            type("Request", (), {"user": self.user})()
+        )
+        items = {
+            item["active_plan"].id: item
+            for item in result["today_items"]
+        }
+
+        self.assertTrue(items[day1_run.id]["is_checked"])
+        self.assertEqual(items[day1_run.id]["plan_day"].day_number, 1)
+        self.assertFalse(items[day5_run.id]["is_checked"])
+        self.assertEqual(items[day5_run.id]["plan_day"].day_number, 5)
+
+    def test_long_plan_fetches_only_current_day_objects_with_stable_budget(self):
+        plan = ReadingPlan.objects.create(name="365 Day Plan", is_active=True)
+        ReadingPlanDay.objects.bulk_create(
+            [
+                ReadingPlanDay(
+                    plan=plan,
+                    day_number=day_number,
+                    reading_text=f"John {day_number}",
+                )
+                for day_number in range(1, 366)
+            ]
+        )
+        active_plan = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate(),
+            title="Long Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_plan)
+        request = type("Request", (), {"user": self.user})()
+
+        with CaptureQueriesContext(connection) as captured:
+            result = reading_today_provider(request)
+
+        self.assertEqual(len(captured), 5)
+        self.assertEqual(len(result["today_items"]), 1)
+        self.assertEqual(result["today_items"][0]["plan_day"].day_number, 1)
+        current_day_queries = [
+            query["sql"]
+            for query in captured.captured_queries
+            if 'FROM "reading_readingplanday"' in query["sql"]
+        ]
+        self.assertEqual(len(current_day_queries), 1)
+        self.assertIn(
+            '"reading_readingplanday"."day_number" = 1',
+            current_day_queries[0],
+        )
+
+    def test_zero_day_plan_is_not_presented_as_a_rest_day(self):
+        plan = ReadingPlan.objects.create(name="Empty Plan", is_active=True)
+        active_plan = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate(),
+            title="Empty Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_plan)
+
+        result = reading_today_provider(
+            type("Request", (), {"user": self.user})()
+        )
+
+        self.assertEqual(len(result["today_items"]), 1)
+        item = result["today_items"][0]
+        self.assertFalse(item["has_configured_days"])
+        self.assertFalse(item["is_rest_day"])
+        self.assertFalse(item["is_reading_day"])
+
+
+class TodayPresentationTests(TestCase):
+    def named(self, title):
+        return SimpleNamespace(
+            get_title=lambda language: title,
+        )
+
+    def test_attention_rows_share_one_complete_contract(self):
+        when = timezone.now()
+        team = SimpleNamespace(get_name=lambda language: "Welcome Team")
+        event = self.named("Sunday Gathering")
+        event.start_datetime = when
+        event.id = 11
+        assignment = SimpleNamespace(
+            service_event=event,
+            service_event_id=event.id,
+            ministry_team=team,
+        )
+        lesson = self.named("Bible Study Lesson")
+        meeting = SimpleNamespace(id=22, lesson=lesson)
+        role = SimpleNamespace(
+            role="host",
+            get_role_display=lambda: "Host",
+        )
+        leader_row = {
+            "event": event,
+            "team": team,
+            "issue_label": "No assignment",
+            "action_url": "/teams/1/schedule/",
+        }
+        activity = self.named("Neighborhood Picnic")
+        activity.id = 33
+        activity.start_datetime = when
+
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "serving_summary": {
+                    "is_pending": True,
+                    "items": [
+                        {
+                            "kind": "team",
+                            "assignment": assignment,
+                            "starts_at": when,
+                            "is_pending": True,
+                        },
+                        {
+                            "kind": "bible_study",
+                            "meeting": meeting,
+                            "roles": [role],
+                            "starts_at": when,
+                            "is_pending": True,
+                        },
+                    ],
+                },
+                "leader_summary": {"items": [leader_row]},
+                "community_activity_creator_attention_items": [activity],
+            },
+            language="en",
+        )
+
+        items = presentation["needs_attention_items"]
+        self.assertEqual(
+            [item["kind"] for item in items],
+            [
+                "team_confirmation",
+                "bible_study_confirmation",
+                "leader_scheduling_gap",
+                "community_activity_changes",
+            ],
+        )
+        required_keys = {
+            "kind",
+            "title",
+            "detail",
+            "status_label",
+            "action_label",
+            "action_url",
+            "when",
+        }
+        for item in items:
+            self.assertTrue(required_keys.issubset(item))
+
+    def test_confirmed_serving_does_not_enter_needs_attention(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "serving_summary": {
+                    "is_pending": False,
+                    "items": [],
+                },
+            },
+            language="en",
+        )
+
+        self.assertEqual(presentation["needs_attention_items"], [])
+
+    def reading_item(self, title, *, checked=False, rest=False, configured=True):
+        return {
+            "active_plan": SimpleNamespace(
+                title=title,
+                start_date=timezone.localdate(),
+            ),
+            "current_day_number": 1,
+            "checked_days": 1 if checked else 0,
+            "total_reading_days": 10 if configured else 0,
+            "progress_percent": 10 if checked else 0,
+            "has_configured_days": configured,
+            "is_reading_day": configured and not rest,
+            "is_checked": checked,
+            "is_rest_day": rest,
+        }
+
+    def upcoming_item(self, title, *, days_from_now, configured=True):
+        return {
+            "active_plan": SimpleNamespace(
+                id=days_from_now,
+                title=title,
+                start_date=(
+                    timezone.localdate()
+                    + timezone.timedelta(days=days_from_now)
+                ),
+            ),
+            "current_day_number": 1 - days_from_now,
+            "checked_days": 0,
+            "total_reading_days": 10 if configured else 0,
+            "progress_percent": 0,
+            "has_configured_days": configured,
+            "is_not_started": True,
+            "is_ended": False,
+        }
+
+    def test_only_future_enrollment_becomes_upcoming_reading(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "other_plan_items": [
+                    self.upcoming_item(
+                        "Future Plan",
+                        days_from_now=7,
+                    )
+                ],
+            }
+        )
+
+        self.assertIsNone(presentation["primary_reading"])
+        self.assertEqual(
+            presentation["upcoming_reading"]["active_plan"].title,
+            "Future Plan",
+        )
+        self.assertEqual(
+            presentation["upcoming_reading"]["status_kind"],
+            "not_started",
+        )
+        self.assertEqual(presentation["secondary_reading_items"], [])
+
+    def test_multiple_future_enrollments_choose_nearest_only(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "other_plan_items": [
+                    self.upcoming_item("Later Plan", days_from_now=14),
+                    self.upcoming_item("Nearest Plan", days_from_now=3),
+                    self.upcoming_item("Middle Plan", days_from_now=8),
+                ],
+            }
+        )
+
+        self.assertEqual(
+            presentation["upcoming_reading"]["active_plan"].title,
+            "Nearest Plan",
+        )
+        self.assertEqual(presentation["secondary_reading_items"], [])
+
+    def test_future_zero_day_enrollment_is_not_configured(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "other_plan_items": [
+                    self.upcoming_item(
+                        "Awaiting Schedule",
+                        days_from_now=5,
+                        configured=False,
+                    )
+                ],
+            }
+        )
+
+        self.assertEqual(
+            presentation["upcoming_reading"]["status_kind"],
+            "not_configured",
+        )
+
+    def test_no_enrollments_preserves_genuine_empty_presentation(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "other_plan_items": [],
+            }
+        )
+
+        self.assertIsNone(presentation["primary_reading"])
+        self.assertIsNone(presentation["upcoming_reading"])
+        self.assertEqual(presentation["secondary_reading_items"], [])
+
+    def test_secondary_reading_cap_keeps_more_urgent_in_progress_plans(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [
+                    self.reading_item("Checked A", checked=True),
+                    self.reading_item("Primary Unchecked"),
+                    self.reading_item("Rest", rest=True),
+                    self.reading_item("Unchecked B"),
+                    self.reading_item("Checked B", checked=True),
+                ],
+            }
+        )
+
+        self.assertEqual(
+            [
+                item["active_plan"].title
+                for item in presentation["secondary_reading_items"]
+            ],
+            ["Unchecked B", "Checked A", "Checked B"],
+        )
+        self.assertEqual(presentation["secondary_reading_remaining_count"], 1)
+
+    def test_zero_day_plan_presentation_is_not_configured_not_rest(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [
+                    self.reading_item(
+                        "Empty",
+                        configured=False,
+                    )
+                ],
+            }
+        )
+
+        self.assertFalse(presentation["primary_reading"]["is_rest_day"])
+        self.assertFalse(
+            presentation["primary_reading"]["has_configured_days"]
+        )
+
+    def test_needs_attention_is_sorted_capped_and_reports_remaining_routes(self):
+        now = timezone.now()
+        activities = []
+        for number in range(8, 0, -1):
+            activity = self.named(f"Activity {number}")
+            activity.id = number
+            activity.start_datetime = now + timezone.timedelta(days=number)
+            activities.append(activity)
+
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "community_activity_creator_attention_items": activities,
+            },
+            language="en",
+        )
+
+        self.assertEqual(len(presentation["needs_attention_items"]), 6)
+        self.assertEqual(
+            [item["title"] for item in presentation["needs_attention_items"]],
+            [f"Activity {number}" for number in range(1, 7)],
+        )
+        self.assertEqual(presentation["needs_attention_remaining_count"], 2)
+        self.assertEqual(
+            presentation["needs_attention_workspace_links"],
+            [
+                {
+                    "label": "Open Community Activities",
+                    "url": reverse("community_activity_list"),
+                }
+            ],
+        )
+
+    def test_hidden_multi_team_leader_actions_use_aggregate_workspace(self):
+        now = timezone.now()
+        teams = [
+            SimpleNamespace(get_name=lambda language: "Team A"),
+            SimpleNamespace(get_name=lambda language: "Team B"),
+        ]
+        rows = []
+        for number in range(8):
+            event = self.named(f"Leader Event {number + 1}")
+            event.start_datetime = now + timezone.timedelta(days=number)
+            rows.append(
+                {
+                    "event": event,
+                    "team": teams[number % 2],
+                    "issue_label": "Unassigned",
+                    "action_url": f"/teams/{number % 2 + 1}/schedule/?event={number + 1}",
+                }
+            )
+
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "leader_summary": {
+                    "count": 8,
+                    "items": rows,
+                },
+            },
+            language="en",
+        )
+
+        self.assertEqual(len(presentation["needs_attention_items"]), 6)
+        self.assertEqual(presentation["needs_attention_remaining_count"], 2)
+        self.assertEqual(
+            presentation["needs_attention_workspace_links"],
+            [
+                {
+                    "label": "Review leader attention",
+                    "url": (
+                        reverse("my_serving")
+                        + "#leader-needs-attention"
+                    ),
+                }
+            ],
+        )
+        self.assertEqual(
+            presentation["needs_attention_items"][0]["action_url"],
+            "/teams/1/schedule/?event=1",
+        )
+
+    def test_confirmation_and_leader_attention_deduplicate_my_serving_link(self):
+        when = timezone.now()
+        team = SimpleNamespace(get_name=lambda language: "Welcome Team")
+        event = self.named("Sunday Gathering")
+        event.start_datetime = when
+        assignment = SimpleNamespace(
+            service_event=event,
+            ministry_team=team,
+        )
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "serving_summary": {
+                    "is_pending": True,
+                    "pending_count": 1,
+                    "items": [
+                        {
+                            "kind": "team",
+                            "assignment": assignment,
+                            "starts_at": when,
+                            "is_pending": True,
+                        }
+                    ],
+                },
+                "leader_summary": {
+                    "count": 1,
+                    "items": [
+                        {
+                            "event": event,
+                            "team": team,
+                            "issue_label": "Unassigned",
+                            "action_url": "/teams/1/schedule/",
+                        }
+                    ],
+                },
+            },
+            language="en",
+        )
+
+        self.assertEqual(
+            presentation["needs_attention_workspace_links"],
+            [
+                {
+                    "label": "Open My Serving",
+                    "url": (
+                        reverse("my_serving")
+                        + "#leader-needs-attention"
+                    ),
+                }
+            ],
+        )
+
+    def test_no_leader_items_produce_no_leader_workspace_link(self):
+        presentation = build_today_presentation(
+            {
+                "today_items": [],
+                "leader_summary": None,
+            },
+            language="en",
+        )
+
+        self.assertEqual(
+            presentation["needs_attention_workspace_links"],
+            [],
+        )
 
 
 class StructuredPassageModelTests(TestCase):
@@ -3980,7 +4536,7 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "今天没有指定读经")
 
 
-    def test_home_hides_not_started_plan_and_links_to_reading(self):
+    def test_home_only_future_enrollment_shows_upcoming_plan(self):
         self.set_language("en")
         PlanEnrollment.objects.create(
             user=self.user,
@@ -3995,9 +4551,45 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Not started")
-        self.assertContains(response, "You do not have an active reading plan right now.")
-        self.assertContains(response, reverse("my_plans"))
+        self.assertContains(response, "Your next reading plan starts on")
+        self.assertContains(response, "May Test Plan")
+        self.assertContains(
+            response,
+            reverse("active_plan_detail", args=[self.active_plan.id]),
+        )
+        self.assertNotContains(response, "Join a reading plan")
+        self.assertNotContains(response, "Browse reading plans")
+
+    def test_home_future_zero_day_enrollment_shows_configuration_state(self):
+        self.set_language("en")
+        empty_plan = ReadingPlan.objects.create(
+            name="Future Empty Plan",
+            is_active=True,
+        )
+        empty_active_plan = ActivePlan.objects.create(
+            plan=empty_plan,
+            start_date=timezone.localdate() + timezone.timedelta(days=3),
+            title="Future Empty Run",
+        )
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=empty_active_plan,
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Schedule unavailable")
+        self.assertContains(
+            response,
+            "You are enrolled in this reading plan, but its reading schedule is not configured yet.",
+        )
+        self.assertContains(
+            response,
+            reverse("active_plan_detail", args=[empty_active_plan.id]),
+        )
+        self.assertNotContains(response, "Join a reading plan")
 
 
     def test_home_does_not_show_ended_plan_as_primary_card(self):
@@ -4036,7 +4628,7 @@ class BibleReadingFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Day 3")
+        self.assertContains(response, "第 3 天")
         self.assertContains(response, "休息 / 补读日")
         self.assertContains(response, "这一天没有指定读经")
 
@@ -4063,6 +4655,389 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "1 / 3 读经日")
         self.assertContains(response, "总日历天数：10")
         self.assertContains(response, "休息 / 补读日：7")
+
+    # --- UX-MEMBER-JOURNEY.1A: Today multi-plan primary/secondary ---------
+
+    def _make_plan(self, name, *, start_offset_days=0, day_numbers=(1,)):
+        plan = ReadingPlan.objects.create(name=name, is_active=True)
+        for number in day_numbers:
+            ReadingPlanDay.objects.create(
+                plan=plan, day_number=number, reading_text="John %s" % number
+            )
+        active_plan = ActivePlan.objects.create(
+            plan=plan,
+            start_date=timezone.localdate() + timezone.timedelta(days=start_offset_days),
+            title="%s Run" % name,
+        )
+        return plan, active_plan
+
+    def test_home_multi_plan_picks_incomplete_reading_day_as_primary(self):
+        self.set_language("en")
+        # Plan A (self.active_plan): reading day today, already checked in.
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        CheckIn.objects.create(
+            user=self.user, active_plan=self.active_plan, plan_day=self.day1
+        )
+        # Plan B: reading day today, not checked in -> higher priority hero.
+        _, active_b = self._make_plan("Plan B")
+        day_b1 = active_b.plan.days.get(day_number=1)
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_b)
+
+        self.client.login(username="levin", password="testpass123")
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        # The incomplete plan B is the hero.
+        self.assertContains(response, 'class="card dashboard-hero"')
+        self.assertContains(
+            response, reverse("passage_reader", args=[active_b.id, day_b1.id, 0])
+        )
+        # The completed plan A is a compact secondary row, not a second hero.
+        self.assertContains(response, "secondary-plans-card")
+        self.assertContains(response, "Your other reading plans")
+        self.assertContains(
+            response, reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+        self.assertContains(response, "Checked in today")
+
+    def test_home_shows_nearest_not_started_but_not_ended_plan_as_secondary(self):
+        self.set_language("en")
+        # Primary in-progress plan (reading day today).
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        # Not-started plan (starts in the future).
+        _, active_ns = self._make_plan("Future Plan", start_offset_days=3)
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_ns)
+        # Ended plan (started well in the past, single day).
+        _, active_end = self._make_plan("Old Plan", start_offset_days=-30)
+        PlanEnrollment.objects.create(user=self.user, active_plan=active_end)
+
+        self.client.login(username="levin", password="testpass123")
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "secondary-plans-card")
+        self.assertContains(response, "Not started")
+        self.assertNotContains(response, "Old Plan")
+        self.assertNotContains(response, "Ended ·")
+        self.assertContains(
+            response, reverse("active_plan_detail", args=[active_ns.id])
+        )
+        self.assertNotContains(
+            response, reverse("active_plan_detail", args=[active_end.id])
+        )
+        self.assertContains(response, "View all reading plans", count=1)
+
+    def test_home_caps_secondary_plans_and_exposes_remaining_count(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        for number in range(1, 6):
+            _, active = self._make_plan(f"Extra Plan {number}")
+            PlanEnrollment.objects.create(user=self.user, active_plan=active)
+
+        self.client.login(username="levin", password="testpass123")
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="secondary-plan-row"', count=3)
+        self.assertContains(response, "2 more in-progress or upcoming plans.")
+        self.assertContains(response, "View all reading plans", count=1)
+
+    def test_home_single_completed_plan_has_no_secondary_section(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        CheckIn.objects.create(
+            user=self.user, active_plan=self.active_plan, plan_day=self.day1
+        )
+        self.client.login(username="levin", password="testpass123")
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "secondary-plans-card")
+
+    # --- UX-MEMBER-JOURNEY.1A: reading plan detail weekly view ------------
+
+    def test_plan_detail_default_week_shows_only_current_week(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Current week is days 1-7 only; later days are not materialised.
+        self.assertContains(response, "Day 1")
+        self.assertContains(response, "Day 7")
+        self.assertNotContains(response, "Day 8")
+        self.assertNotContains(response, "Day 10")
+
+    def test_plan_detail_next_week_shows_later_days(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id]) + "?week=1"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Day 8")
+        self.assertContains(response, "Day 10")
+        # Not the current week, so a jump-to-current-week control is offered.
+        self.assertContains(response, "Jump to current week")
+
+    def test_plan_detail_prev_week_out_of_range_clamps_to_first_week(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id]) + "?week=-5"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Clamped back to week 0 (days 1-7), previous control disabled.
+        self.assertContains(response, "Day 1")
+        self.assertContains(response, 'aria-disabled="true"')
+
+    def test_plan_detail_invalid_week_uses_current_week(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+            + "?week=not-a-number"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Day 1")
+        self.assertNotContains(response, "Day 10")
+        self.assertEqual(response.context["selected_week_offset"], 0)
+
+    def test_plan_detail_large_week_offsets_clamp_to_real_range(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+        detail_url = reverse("active_plan_detail", args=[self.active_plan.id])
+
+        far_future = self.client.get(detail_url + "?week=999999")
+        far_past = self.client.get(detail_url + "?week=-999999")
+
+        self.assertEqual(far_future.status_code, 200)
+        self.assertContains(far_future, "Day 10")
+        self.assertNotContains(far_future, "Day 2")
+        self.assertEqual(far_future.context["selected_week_offset"], 1)
+        self.assertEqual(far_past.status_code, 200)
+        self.assertContains(far_past, "Day 1")
+        self.assertNotContains(far_past, "Day 10")
+        self.assertEqual(far_past.context["selected_week_offset"], 0)
+
+    def test_plan_detail_zero_day_plan_has_clear_configuration_state(self):
+        self.set_language("en")
+        empty_plan = ReadingPlan.objects.create(
+            name="Empty Plan",
+            is_active=True,
+        )
+        empty_active_plan = ActivePlan.objects.create(
+            plan=empty_plan,
+            start_date=timezone.localdate(),
+            title="Empty Run",
+        )
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=empty_active_plan,
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[empty_active_plan.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Plan schedule needs configuration")
+        self.assertContains(
+            response,
+            "This plan does not have any reading days configured yet.",
+        )
+        self.assertIsNone(response.context["week_range_start"])
+        self.assertIsNone(response.context["week_range_end"])
+        self.assertEqual(response.context["week_days"], [])
+        self.assertNotContains(response, "week-range")
+
+    def test_home_zero_day_plan_has_configuration_state_not_rest_copy(self):
+        self.set_language("en")
+        empty_plan = ReadingPlan.objects.create(
+            name="Empty Today Plan",
+            is_active=True,
+        )
+        empty_active_plan = ActivePlan.objects.create(
+            plan=empty_plan,
+            start_date=timezone.localdate(),
+            title="Empty Today Run",
+        )
+        PlanEnrollment.objects.create(
+            user=self.user,
+            active_plan=empty_active_plan,
+        )
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Plan schedule needs configuration")
+        self.assertContains(response, "Schedule unavailable")
+        self.assertNotContains(
+            response,
+            "There is no assigned reading today.",
+        )
+        self.assertFalse(response.context["primary_reading"]["is_rest_day"])
+        self.assertFalse(
+            response.context["primary_reading"]["has_configured_days"]
+        )
+
+    def test_plan_detail_uses_neutral_chinese_schedule_heading(self):
+        self.set_language("zh")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+
+        self.assertContains(response, "读经日程")
+        self.assertNotContains(response, "本周日程")
+
+    def test_plan_detail_marks_future_rest_day_distinctly(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+
+        future_rest = next(
+            day
+            for day in response.context["week_days"]
+            if day["day_number"] == 3
+        )
+        self.assertEqual(future_rest["status"], "future_rest")
+        self.assertContains(response, "Upcoming rest day")
+
+    def test_not_started_plan_non_anchor_week_jumps_to_first_week(self):
+        self.set_language("en")
+        active = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate() + timezone.timedelta(days=2),
+            title="Not Started Week Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[active.id]) + "?week=1"
+        )
+
+        self.assertContains(response, "Jump to first week")
+        self.assertNotContains(response, "Jump to current week")
+
+    def test_ended_plan_non_anchor_week_jumps_to_final_week(self):
+        self.set_language("en")
+        active = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate() - timezone.timedelta(days=30),
+            title="Ended Week Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[active.id]) + "?week=-1"
+        )
+
+        self.assertContains(response, "Jump to final week")
+        self.assertNotContains(response, "Jump to current week")
+
+    def test_plan_detail_reuses_today_item_when_today_is_inside_selected_week(self):
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id])
+        )
+
+        today_row = next(day for day in response.context["week_days"] if day["is_today"])
+        self.assertEqual(
+            response.context["today_block"]["plan_day"],
+            today_row["plan_day"],
+        )
+        self.assertEqual(
+            response.context["today_block"]["passages"],
+            today_row["passages"],
+        )
+
+    def test_plan_detail_loads_today_separately_when_outside_selected_week(self):
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(
+            reverse("active_plan_detail", args=[self.active_plan.id]) + "?week=1"
+        )
+
+        self.assertFalse(any(day["is_today"] for day in response.context["week_days"]))
+        self.assertEqual(
+            response.context["today_block"]["plan_day"],
+            self.day1,
+        )
+        self.assertEqual(
+            [day["day_number"] for day in response.context["week_days"]],
+            [8, 9, 10],
+        )
+
+    def test_plan_detail_check_in_next_preserves_week_param(self):
+        self.set_language("en")
+        PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
+        self.client.login(username="levin", password="testpass123")
+
+        detail_url = reverse("active_plan_detail", args=[self.active_plan.id])
+        response = self.client.get(detail_url + "?week=0")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, 'name="next" value="%s?week=0"' % detail_url
+        )
+
+    def test_plan_detail_not_started_shows_not_started_block(self):
+        self.set_language("en")
+        active = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate() + timezone.timedelta(days=2),
+            title="Not Started Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("active_plan_detail", args=[active.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This reading plan hasn't started yet.")
+
+    def test_plan_detail_ended_shows_ended_block(self):
+        self.set_language("en")
+        active = ActivePlan.objects.create(
+            plan=self.plan,
+            start_date=timezone.localdate() - timezone.timedelta(days=30),
+            title="Ended Run",
+        )
+        PlanEnrollment.objects.create(user=self.user, active_plan=active)
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.get(reverse("active_plan_detail", args=[active.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This reading plan has ended.")
 
     def test_my_plans_requires_login(self):
         response = self.client.get(reverse("my_plans"))
@@ -4953,32 +5928,35 @@ class BibleReadingFlowTests(TestCase):
         self.assertContains(response, "Browse reading plans")
         self.assertContains(response, reverse("my_plans"))
 
-    def test_home_shows_secondary_actions_for_logged_in_user(self):
+    def test_home_no_longer_renders_where_to_go_next_static_cards(self):
+        # UX-MEMBER-JOURNEY.1A retired the static "Where to go next" module
+        # navigation cards from Today; the grouped primary nav owns module
+        # discovery instead. Module links still live in the header nav.
         self.set_language("en")
         self.client.login(username="levin", password="testpass123")
 
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Where to go next")
-        self.assertContains(response, "Open Bible Study")
-        self.assertContains(response, "Open Prayer Wall")
-        self.assertContains(response, "Open My Serving")
+        self.assertNotContains(response, "Where to go next")
+        self.assertNotContains(response, "Open Bible Study")
+        self.assertNotContains(response, "Open Prayer Wall")
+        self.assertNotContains(response, "Open My Serving")
+        self.assertNotContains(response, "dashboard-action-card")
+        # The header nav still links to the modules.
         self.assertContains(response, reverse("study_session_list"))
         self.assertContains(response, reverse("prayer_list"))
         self.assertContains(response, reverse("my_serving"))
 
-    def test_chinese_home_shows_secondary_actions_for_logged_in_user(self):
+    def test_chinese_home_no_longer_renders_where_to_go_next_static_cards(self):
         self.set_language("zh")
         self.client.login(username="levin", password="testpass123")
 
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "接下来去哪里")
-        self.assertContains(response, "打开查经")
-        self.assertContains(response, "打开代祷墙")
-        self.assertContains(response, "打开我的服事")
+        self.assertNotContains(response, "接下来去哪里")
+        self.assertNotContains(response, "打开代祷墙")
 
     def test_home_shows_pending_confirmation_in_needs_attention(self):
         team = MinistryTeam.objects.create(name="Lighting Team", name_en="Lighting Team")
@@ -5003,7 +5981,7 @@ class BibleReadingFlowTests(TestCase):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Pending confirmation")
         self.assertContains(response, "Sunday Service")
         self.assertContains(response, "Lighting Team")
@@ -6124,7 +7102,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Sunday Service Alpha")
         self.assertContains(response, "Confirm in My Serving")
 
@@ -6134,7 +7112,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm in My Serving")
 
     def test_pending_assignment_not_duplicated_as_full_row_in_week(self):
@@ -6147,7 +7125,7 @@ class TodayActionCenterTests(TestCase):
         response = self.get_home()
         content = response.content.decode()
 
-        # Pending item is a full row in "Needs your attention" (one confirm link),
+        # Pending item is a full row in "Needs Attention" (one confirm link),
         # and the same gathering shows only a compact serving note in This Week.
         self.assertEqual(content.count("Confirm in My Serving"), 1)
         self.assertContains(response, "You are serving — pending confirmation")
@@ -6161,7 +7139,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Started Today Pending Service")
         self.assertContains(response, "Confirm in My Serving")
         self.assertContains(response, "You are serving — pending confirmation")
@@ -6455,12 +7433,14 @@ class TodayActionCenterTests(TestCase):
         self.make_visible_event(title_en="Bilingual Gathering")
 
         english = self.get_home(language="en")
-        self.assertContains(english, "Today's Reading")
+        self.assertContains(english, 'id="today-zone-heading"')
+        self.assertContains(english, "Today")
         self.assertContains(english, "This Week")
         self.assertContains(english, "Church Gatherings this week")
 
         chinese = self.get_home(language="zh")
-        self.assertContains(chinese, "今日读经")
+        self.assertContains(chinese, 'id="today-zone-heading"')
+        self.assertContains(chinese, "今日")
         self.assertContains(chinese, "本周")
         self.assertContains(chinese, "本周教会聚会")
 
@@ -6726,7 +7706,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm in My Serving")
         self.assertNotContains(response, "You are serving")
 
@@ -6742,7 +7722,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm in My Serving")
         self.assertNotContains(response, "You are serving")
 
@@ -6751,10 +7731,39 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home(user=self.staff)
 
-        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Staff Managed Service")
         self.assertContains(response, "Lighting Team")
         self.assertContains(response, "Review coverage")
+
+    def test_multi_team_hidden_leader_actions_link_to_aggregate_queue(self):
+        other_team = MinistryTeam.objects.create(
+            name="音响团队",
+            name_en="Sound Team",
+        )
+        for number in range(1, 8):
+            event = self.make_event(
+                title_en=f"Coverage Event {number}",
+                days_from_now=number,
+            )
+            event.required_teams.add(
+                other_team if number == 7 else self.team
+            )
+
+        response = self.get_home(user=self.staff)
+
+        self.assertContains(response, "2 more actions need attention.")
+        self.assertContains(response, "Review leader attention")
+        self.assertContains(
+            response,
+            reverse("my_serving") + "#leader-needs-attention",
+        )
+        self.assertContains(
+            response,
+            reverse("team_schedule", args=[self.team.id]),
+        )
+        self.assertNotContains(response, "Coverage Event 6")
+        self.assertNotContains(response, "Coverage Event 7")
 
     def test_leader_summary_shown_for_active_ministry_role_manager(self):
         lead_user = User.objects.create_user(
@@ -6770,7 +7779,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home(user=lead_user)
 
-        self.assertContains(response, "Leader Needs Attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Lead Managed Service")
         self.assertContains(response, "Lighting Team")
 
@@ -6779,8 +7788,10 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Review coverage")
+        self.assertNotContains(response, "Review leader attention")
+        self.assertNotContains(response, "#leader-needs-attention")
 
     def test_leader_summary_hidden_for_team_membership_role_lead_without_assignment(self):
         role_lead_user = User.objects.create_user(
@@ -6796,7 +7807,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home(user=role_lead_user)
 
-        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Review coverage")
 
     def test_leader_summary_hidden_for_can_lead_membership(self):
@@ -6814,14 +7825,14 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home(user=can_lead_user)
 
-        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Review coverage")
 
     def test_leader_summary_bilingual_labels_render(self):
         self.make_uncovered_required_event(title_en="Bilingual Managed Service")
 
         chinese = self.get_home(user=self.staff, language="zh")
-        self.assertContains(chinese, "组长待处理")
+        self.assertContains(chinese, "需要你留意")
         self.assertContains(chinese, "查看排班")
 
     # --- MY-SERVING-BS.1B: Bible Study serving in Today action center ----
@@ -6842,7 +7853,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertContains(response, "Needs your attention")
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Pending Study Serving Lesson")
         self.assertContains(response, "Bible Study serving")
         self.assertContains(response, "Confirm in My Serving")
@@ -6857,7 +7868,7 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm in My Serving")
         # Still rendered as a plain agenda row, not as serving.
         self.assertContains(response, "No Role Study Lesson")
@@ -6880,13 +7891,12 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "Confirm in My Serving")
 
     def test_action_center_counts_team_and_bible_study_without_double_count(self):
         # A pending team assignment and a pending Bible Study role are two
-        # distinct pending serving items; the total count reflects both and the
-        # single confirm call-to-action is not duplicated.
+        # distinct normalized pending serving rows, each with its owning action.
         event = self.make_event(title_en="Team Pending Service")
         self.make_assignment(event, confirmed=False)
         meeting = self.make_meeting(
@@ -6902,15 +7912,19 @@ class TodayActionCenterTests(TestCase):
         response = self.get_home()
         content = response.content.decode()
 
-        self.assertContains(response, "Needs your attention")
-        self.assertContains(
-            response,
-            "You have 2 serving assignments waiting for confirmation.",
-        )
+        self.assertContains(response, "Needs Attention")
         self.assertContains(response, "Team Pending Service")
         self.assertContains(response, "Study Pending Serving Lesson")
         self.assertContains(response, "Bible Study serving")
-        self.assertEqual(content.count("Confirm in My Serving"), 1)
+        self.assertEqual(
+            content.count('data-attention-kind="team_confirmation"'),
+            1,
+        )
+        self.assertEqual(
+            content.count('data-attention-kind="bible_study_confirmation"'),
+            1,
+        )
+        self.assertEqual(content.count("Confirm in My Serving"), 2)
 
     def test_action_center_counts_meeting_with_multiple_roles_once(self):
         # A meeting is one Bible Study serving item even with several linked
@@ -6932,10 +7946,12 @@ class TodayActionCenterTests(TestCase):
 
         response = self.get_home()
 
-        self.assertContains(
-            response,
-            "You have 1 serving assignment waiting for confirmation.",
+        content = response.content.decode()
+        self.assertEqual(
+            content.count('data-attention-kind="bible_study_confirmation"'),
+            1,
         )
+        self.assertEqual(content.count("Confirm in My Serving"), 1)
 
     def test_visible_meeting_without_role_still_shown_as_agenda(self):
         # Even with no personal role, a visible meeting remains an agenda row in
@@ -6950,7 +7966,7 @@ class TodayActionCenterTests(TestCase):
 
         self.assertContains(response, "Today's Bible study")
         self.assertContains(response, "Agenda Only Study Lesson")
-        self.assertNotContains(response, "Needs your attention")
+        self.assertNotContains(response, "Needs Attention")
         self.assertNotContains(response, "My role:")
 
     def test_action_center_bible_study_serving_bilingual(self):

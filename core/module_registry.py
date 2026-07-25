@@ -52,6 +52,72 @@ class PrimaryNavEntry:
     label_zh: str
     active_nav: str
     order: int
+    # UX-MEMBER-JOURNEY.1A: presentation-only grouping key. When set, this
+    # entry is rendered inside the named top-level nav group (see
+    # ``_NAV_GROUPS``) instead of as a standalone top-level link. ``None`` keeps
+    # the entry as its own top-level link. This is display metadata only: it
+    # never changes enablement, dependency, Today, or visibility behavior.
+    nav_group: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class NavGroupMeta:
+    """Presentation-only metadata for a top-level nav group (UX-MEMBER-JOURNEY.1A).
+
+    Groups are a rendering convenience only. Their members are still the
+    enabled modules' ``PrimaryNavEntry`` links, so a group never shows a link
+    for a disabled module and disappears entirely when it has no enabled
+    members.
+    """
+
+    key: str
+    label_en: str
+    label_zh: str
+    active_nav: str
+    order: int
+
+
+# Top-level nav groups, in display order. A module opts into a group by setting
+# ``PrimaryNavEntry.nav_group`` to the group key. Ungrouped entries (e.g.
+# ministry / My Serving) render as their own top-level link.
+_NAV_GROUPS = (
+    NavGroupMeta(
+        key="grow",
+        label_en="Grow",
+        label_zh="成长",
+        active_nav="grow",
+        order=10,
+    ),
+    NavGroupMeta(
+        key="community",
+        label_en="Community",
+        label_zh="群体生活",
+        active_nav="community",
+        order=40,
+    ),
+)
+
+_NAV_GROUPS_BY_KEY = {group.key: group for group in _NAV_GROUPS}
+
+
+@dataclass(frozen=True)
+class NavItem:
+    """One rendered top-level nav item: either a single link or a group.
+
+    For a link item (``is_group`` is ``False``) the link fields are set. For a
+    group item (``is_group`` is ``True``) ``children`` holds the enabled
+    ``PrimaryNavEntry`` members in display order and ``child_active_navs`` lists
+    their active-nav keys so a child route can mark its parent group active.
+    """
+
+    is_group: bool
+    order: int
+    url_name: str = ""
+    label_en: str = ""
+    label_zh: str = ""
+    active_nav: str = ""
+    children: tuple = ()
+    child_active_navs: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -84,6 +150,7 @@ _REGISTERED_MODULES = (
             label_zh="读经",
             active_nav="reading",
             order=10,
+            nav_group="grow",
         ),
         dependency_notes=(
             "Group progress and reflection visibility read structure "
@@ -104,6 +171,7 @@ _REGISTERED_MODULES = (
             label_zh="代祷",
             active_nav="prayer",
             order=30,
+            nav_group="grow",
         ),
         dependency_notes=(
             "Group visibility uses PrayerRequest.structure_unit_at_post "
@@ -128,6 +196,7 @@ _REGISTERED_MODULES = (
             label_zh="查经",
             active_nav="bible_study",
             order=20,
+            nav_group="grow",
         ),
         dependency_notes=(
             "V2 visibility/generation uses structure audience rows "
@@ -154,6 +223,7 @@ _REGISTERED_MODULES = (
             label_zh="教会聚会",
             active_nav="events",
             order=40,
+            nav_group="community",
         ),
         dependency_notes=(
             "Visibility uses ServiceEventAudienceScope rows plus active "
@@ -177,6 +247,7 @@ _REGISTERED_MODULES = (
             label_zh="活动",
             active_nav="community_events",
             order=45,
+            nav_group="community",
         ),
         dependency_notes=(
             "Independent community/fellowship activities. Ordinary visibility "
@@ -204,6 +275,7 @@ _REGISTERED_MODULES = (
             label_zh="公告",
             active_nav="announcements",
             order=47,
+            nav_group="community",
         ),
         dependency_notes=(
             "Official staff-authored communication. Member visibility uses "
@@ -226,6 +298,7 @@ _REGISTERED_MODULES = (
             label_zh="日历",
             active_nav="church_calendar",
             order=60,
+            nav_group="community",
         ),
         dependency_notes=(
             "Independent read-only member calendar. Aggregates member-safe "
@@ -363,6 +436,61 @@ def get_enabled_primary_nav_entries():
         if module.primary_nav is not None
     )
     return tuple(sorted(entries, key=lambda entry: entry.order))
+
+
+def get_enabled_nav_items():
+    """Top-level nav items (grouped) for enabled modules, in display order.
+
+    Groups (``_NAV_GROUPS``) collect their enabled member entries; a group with
+    no enabled members is omitted. Ungrouped entries render as standalone
+    links. This is a presentation reshape of ``get_enabled_primary_nav_entries``
+    — it changes no enablement, dependency, or visibility behavior — so a
+    disabled module never contributes a link or keeps a group alive.
+    """
+    entries = get_enabled_primary_nav_entries()
+
+    grouped = {}
+    standalone = []
+    for entry in entries:
+        if entry.nav_group and entry.nav_group not in _NAV_GROUPS_BY_KEY:
+            raise ImproperlyConfigured(
+                f"Primary navigation entry {entry.active_nav!r} references "
+                f"unknown nav_group {entry.nav_group!r}. Known groups: "
+                f"{', '.join(sorted(_NAV_GROUPS_BY_KEY))}."
+            )
+        if entry.nav_group:
+            grouped.setdefault(entry.nav_group, []).append(entry)
+        else:
+            standalone.append(entry)
+
+    items = []
+    for group_key, members in grouped.items():
+        group = _NAV_GROUPS_BY_KEY[group_key]
+        ordered_members = tuple(sorted(members, key=lambda e: e.order))
+        items.append(
+            NavItem(
+                is_group=True,
+                order=group.order,
+                label_en=group.label_en,
+                label_zh=group.label_zh,
+                active_nav=group.active_nav,
+                children=ordered_members,
+                child_active_navs=tuple(e.active_nav for e in ordered_members),
+            )
+        )
+    for entry in standalone:
+        items.append(
+            NavItem(
+                is_group=False,
+                order=entry.order,
+                url_name=entry.url_name,
+                label_en=entry.label_en,
+                label_zh=entry.label_zh,
+                active_nav=entry.active_nav,
+            )
+        )
+
+    return tuple(sorted(items, key=lambda item: item.order))
 
 
 def is_module_enabled(key):

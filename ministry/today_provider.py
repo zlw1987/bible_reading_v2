@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.language import get_user_language
 from core.module_registry import is_module_enabled
 from core.today_providers import register_today_provider
-from core.today_windows import THIS_WEEK_DAYS
+from core.today_windows import THIS_WEEK_DAYS, get_today_week_windows
 
 from .models import TeamAssignment
 from .views import (
@@ -38,7 +38,11 @@ NEEDS_ATTENTION_CAP = 5
 # when nothing is pending confirmation.
 NEAR_TERM_CONFIRMED_DAYS = 30
 
-TODAY_DEFAULTS = {"serving_summary": None, "leader_summary": None}
+TODAY_DEFAULTS = {
+    "serving_summary": None,
+    "leader_summary": None,
+    "personal_serving_items": [],
+}
 
 
 def _user_serving_members(user):
@@ -103,7 +107,7 @@ def _serving_summary_row(item):
     }
 
 
-def get_today_serving_summary(user):
+def get_today_serving_summary(user, *, rows=None):
     """Count-aware Today serving reminder for the signed-in user (action center).
 
     Covers both team-assignment serving and linked-user Bible Study serving.
@@ -121,7 +125,8 @@ def get_today_serving_summary(user):
     if not is_module_enabled("ministry"):
         return None
     now = timezone.now()
-    rows = [_serving_summary_row(item) for item in _user_serving_items(user)]
+    if rows is None:
+        rows = [_serving_summary_row(item) for item in _user_serving_items(user)]
 
     pending_rows = [row for row in rows if row["is_pending"]]
     pending_count = len(pending_rows)
@@ -155,6 +160,16 @@ def get_today_serving_summary(user):
         }
 
     return None
+
+
+def get_week_personal_serving_items(rows):
+    """Bounded explicit personal serving rows for Today/This Week presentation."""
+    today_start, _tomorrow_start, week_end = get_today_week_windows()
+    return [
+        row
+        for row in rows
+        if today_start <= row["starts_at"] < week_end
+    ]
 
 
 def get_week_serving_notes(user):
@@ -206,12 +221,14 @@ def ministry_today_provider(request):
     Personal serving stays explicit (TeamAssignmentMember / linked-user
     BibleStudyMeetingRole.user); belonging and audience visibility never count.
     """
+    rows = [_serving_summary_row(item) for item in _user_serving_items(request.user)]
     return {
-        "serving_summary": get_today_serving_summary(request.user),
+        "serving_summary": get_today_serving_summary(request.user, rows=rows),
         "leader_summary": get_today_leader_summary(
             request.user,
             language=get_user_language(request),
         ),
+        "personal_serving_items": get_week_personal_serving_items(rows),
     }
 
 

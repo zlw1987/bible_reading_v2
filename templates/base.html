@@ -1,7 +1,7 @@
 {% load static %}
 
 <!doctype html>
-<html lang="en">
+<html lang="{% if language == 'zh' %}zh-Hans{% else %}en{% endif %}">
 <head>
     <meta charset="utf-8">
     <title>{% block title %}Church Life{% endblock %}</title>
@@ -15,7 +15,9 @@
 
             {% if user.is_authenticated %}
             <button type="button" class="nav-toggle" aria-controls="primary-nav" aria-expanded="false"
-                    aria-label="{% if language == 'zh' %}打开菜单{% else %}Open menu{% endif %}">
+                    aria-label="{% if language == 'zh' %}打开菜单{% else %}Open menu{% endif %}"
+                    data-open-label="{% if language == 'zh' %}打开菜单{% else %}Open menu{% endif %}"
+                    data-close-label="{% if language == 'zh' %}关闭菜单{% else %}Close menu{% endif %}">
                 <span class="nav-toggle-bar" aria-hidden="true"></span>
                 <span class="nav-toggle-bar" aria-hidden="true"></span>
                 <span class="nav-toggle-bar" aria-hidden="true"></span>
@@ -24,14 +26,7 @@
 
             <nav class="nav{% if user.is_authenticated %} nav-collapsible{% endif %}" id="primary-nav">
                 {% if user.is_authenticated %}
-                <a class="nav-link{% if active_nav == 'today' %} active{% endif %}"
-                   href="{% url 'home' %}">{{ ui.today }}</a>
-                {% for nav_entry in enabled_primary_nav_entries %}
-                <a class="nav-link{% if active_nav == nav_entry.active_nav %} active{% endif %}"
-                   href="{% url nav_entry.url_name %}">
-                    {% if language == "zh" %}{{ nav_entry.label_zh }}{% else %}{{ nav_entry.label_en }}{% endif %}
-                </a>
-                {% endfor %}
+                {% include "partials/_primary_navigation.html" %}
                 <div class="nav-account-group">
                 {% if user.is_staff %}
                 <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">
@@ -145,9 +140,9 @@
                         <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                     </summary>
                     <div class="nav-account-menu-panel nav-dropdown-panel">
-                        <a href="{% url 'profile' %}">{{ ui.profile }}</a>
+                        <a href="{% url 'profile' %}"{% if active_nav == 'profile' %} aria-current="page"{% endif %}>{{ ui.profile }}</a>
                         {% if show_my_units_nav %}
-                        <a href="{% url 'my_units' %}">
+                        <a href="{% url 'my_units' %}"{% if active_nav == 'my_units' %} aria-current="page"{% endif %}>
                             {% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}
                         </a>
                         {% endif %}
@@ -201,8 +196,8 @@
             var siteHeader = document.querySelector(".site-header");
             var menuNodes = document.querySelectorAll(".nav-dropdown");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
-            var mobileDropdown = window.matchMedia("(hover: none), (max-width: 760px)");
-            var mobileHeader = window.matchMedia("(max-width: 760px)");
+            var mobileDropdown = window.matchMedia("(hover: none), (max-width: 940px)");
+            var mobileHeader = window.matchMedia("(max-width: 940px)");
             var lockedMenu = null;
             var lockedScrollY = 0;
             var bodyOriginalStyles = {};
@@ -628,6 +623,12 @@
             function syncNavToggleState() {
                 if (navToggle) {
                     navToggle.setAttribute("aria-expanded", primaryNavOpen ? "true" : "false");
+                    navToggle.setAttribute(
+                        "aria-label",
+                        navToggle.getAttribute(
+                            primaryNavOpen ? "data-close-label" : "data-open-label"
+                        )
+                    );
                 }
             }
 

@@ -58,14 +58,27 @@ def sync_plan_day_passages(plan_day, passage_type=None):
 
 
 def get_plan_day_passages(plan_day, passage_type):
-    structured_passages = list(
-        ReadingPlanDayPassage.objects
-        .filter(
-            plan_day=plan_day,
-            passage_type=passage_type,
-        )
-        .order_by("sort_order")
+    prefetched = getattr(plan_day, "_prefetched_objects_cache", {}).get(
+        "structured_passages"
     )
+    if prefetched is None:
+        structured_passages = list(
+            ReadingPlanDayPassage.objects
+            .filter(
+                plan_day=plan_day,
+                passage_type=passage_type,
+            )
+            .order_by("sort_order")
+        )
+    else:
+        structured_passages = sorted(
+            (
+                passage
+                for passage in prefetched
+                if passage.passage_type == passage_type
+            ),
+            key=lambda passage: passage.sort_order,
+        )
 
     if structured_passages:
         return [

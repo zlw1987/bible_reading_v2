@@ -14,8 +14,10 @@ from .module_registry import (
     CAPABILITY_REQUIRES_STRUCTURE_CORE,
     CAPABILITY_SETUP_CHECKS,
     CAPABILITY_TODAY,
+    PrimaryNavEntry,
     get_enabled_module_keys,
     get_enabled_modules,
+    get_enabled_nav_items,
     get_enabled_primary_nav_entries,
     get_module,
     get_registered_module_keys,
@@ -55,6 +57,7 @@ ALL_MODULE_KEYS = (
 TODAY_CONTEXT_KEYS = (
     "today_items",
     "ended_plan_count",
+    "other_plan_items",
     "today_gatherings",
     "show_all_today_gatherings_link",
     "week_gatherings",
@@ -66,6 +69,7 @@ TODAY_CONTEXT_KEYS = (
     "community_activity_this_week_items",
     "community_activity_creator_attention_items",
     "announcement_today_item",
+    "personal_serving_items",
     "serving_summary",
     "leader_summary",
 )
@@ -155,6 +159,103 @@ class ModuleRegistryTests(SimpleTestCase):
                 ),
             ),
         )
+
+    def test_nav_items_group_structure_all_enabled(self):
+        # UX-MEMBER-JOURNEY.1A: top-level nav is Grow (Reading/Bible Study/
+        # Prayer), Community (Church Gatherings/Activities/Announcements/
+        # Calendar), and standalone My Serving, in that order.
+        items = get_enabled_nav_items()
+        shape = [
+            (
+                item.is_group,
+                item.active_nav,
+                item.url_name,
+                tuple(child.active_nav for child in item.children),
+            )
+            for item in items
+        ]
+        self.assertEqual(
+            shape,
+            [
+                (True, "grow", "", ("reading", "bible_study", "prayer")),
+                (
+                    True,
+                    "community",
+                    "",
+                    (
+                        "events",
+                        "community_events",
+                        "announcements",
+                        "church_calendar",
+                    ),
+                ),
+                (False, "my_serving", "my_serving", ()),
+            ],
+        )
+
+    def test_nav_group_bilingual_labels(self):
+        groups = {
+            item.active_nav: item
+            for item in get_enabled_nav_items()
+            if item.is_group
+        }
+        self.assertEqual((groups["grow"].label_en, groups["grow"].label_zh), ("Grow", "成长"))
+        self.assertEqual(
+            (groups["community"].label_en, groups["community"].label_zh),
+            ("Community", "群体生活"),
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=["reading"])
+    def test_nav_group_survives_partial_member_enablement(self):
+        # Grow still renders with only Reading enabled; disabled siblings drop
+        # out of the group's children.
+        items = get_enabled_nav_items()
+        self.assertEqual(len(items), 1)
+        grow = items[0]
+        self.assertTrue(grow.is_group)
+        self.assertEqual(grow.active_nav, "grow")
+        self.assertEqual(
+            tuple(child.active_nav for child in grow.children),
+            ("reading",),
+        )
+
+    @override_settings(CMS_ENABLED_MODULES=["events", "ministry"])
+    def test_nav_group_omitted_when_no_members_enabled(self):
+        # Grow has no enabled members, so it does not render at all; Community
+        # keeps only its enabled member and My Serving stays standalone.
+        items = get_enabled_nav_items()
+        group_keys = [item.active_nav for item in items if item.is_group]
+        self.assertNotIn("grow", group_keys)
+        self.assertIn("community", group_keys)
+        community = next(item for item in items if item.active_nav == "community")
+        self.assertEqual(
+            tuple(child.active_nav for child in community.children),
+            ("events",),
+        )
+        self.assertIn(
+            ("my_serving", False),
+            [(item.active_nav, item.is_group) for item in items],
+        )
+
+    def test_unknown_nav_group_fails_fast(self):
+        invalid_entry = PrimaryNavEntry(
+            url_name="my_plans",
+            label_en="Reading",
+            label_zh="读经",
+            active_nav="reading",
+            order=10,
+            nav_group="typo-group",
+        )
+
+        with patch(
+            "core.module_registry.get_enabled_primary_nav_entries",
+            return_value=(invalid_entry,),
+        ):
+            with self.assertRaisesMessage(
+                ImproperlyConfigured,
+                "unknown nav_group 'typo-group'",
+            ):
+                get_enabled_nav_items()
 
     @override_settings(CMS_ENABLED_MODULES=["reading", "prayers"])
     def test_primary_nav_metadata_includes_enabled_modules_only(self):
@@ -734,7 +835,7 @@ class ModuleGateNavTests(ModuleGateTestBase):
                 for url_name, label in labels.items():
                     self.assertRegex(
                         content,
-                        r'href="%s">\s*%s\s*</a>'
+                        r'href="%s"\s*[^>]*>\s*%s\s*</a>'
                         % (re.escape(reverse(url_name)), re.escape(label)),
                     )
 
@@ -773,15 +874,84 @@ class ModuleGateNavTests(ModuleGateTestBase):
                 self.assertEqual(response.status_code, 200)
 
 
+class ModuleGateNavGroupTests(ModuleGateTestBase):
+    """UX-MEMBER-JOURNEY.1A: grouped top-level navigation (Grow / Community)."""
+
+    def test_grow_and_community_groups_render_with_all_enabled(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Group summaries render, and their member links live under them.
+        self.assertRegex(content, r"<summary[^>]*>\s*<span>Grow</span>")
+        self.assertRegex(content, r"<summary[^>]*>\s*<span>Community</span>")
+        self.assertIn('href="%s"' % reverse("my_plans"), content)
+        self.assertIn('href="%s"' % reverse("service_event_list"), content)
+        # My Serving stays a standalone top-level link, not inside a group.
+        self.assertIn('href="%s"' % reverse("my_serving"), content)
+
+    def test_ordinary_user_nav_hides_staff_menu(self):
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "nav-staff-menu")
+
+    def test_staff_user_nav_shows_staff_menu(self):
+        User.objects.create_user(
+            username="staffer",
+            email="",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.client.login(username="staffer", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "nav-staff-menu")
+
+    def test_child_route_marks_parent_group_active(self):
+        # Visiting a Reading child route (active_nav == "reading") marks the
+        # Grow parent group active and the Reading child link active.
+        response = self.client.get(reverse("my_plans"))
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertRegex(
+            content,
+            r'class="nav-link active">\s*<span>Grow</span>',
+        )
+        self.assertRegex(
+            content,
+            r'<a class="active"\s+href="%s"\s+aria-current="page">'
+            % re.escape(reverse("my_plans")),
+        )
+        # A sibling group (Community) is not marked active on a Reading route.
+        self.assertRegex(
+            content,
+            r'<summary class="nav-link">\s*<span>Community</span>',
+        )
+
+    def test_document_language_follows_user_language(self):
+        english = self.client.get(reverse("profile"))
+        self.assertContains(english, '<html lang="en">')
+
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        chinese = self.client.get(reverse("profile"))
+        self.assertContains(chinese, '<html lang="zh-Hans">')
+
+
 class ModuleGateHomeTests(ModuleGateTestBase):
     def test_home_renders_with_all_modules_enabled(self):
         response = self.client.get(reverse("home"))
 
         self.assertEqual(response.status_code, 200)
-        # Default all-enabled behavior: the Today's Reading section renders,
+        # Default all-enabled behavior: the Today reading hero renders,
         # including the no-plan empty state and its reading-plans link.
         content = response.content.decode()
-        self.assertIn("Today's Reading", content)
+        self.assertIn("dashboard-hero", content)
         self.assertIn("No reading plan in progress yet", content)
         self.assertIn(self.nav_href("my_plans"), content)
 
@@ -791,9 +961,9 @@ class ModuleGateHomeTests(ModuleGateTestBase):
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        # No Today's Reading section: heading, empty-state card, and
+        # No Today reading hero: empty-state card and
         # my_plans links (nav and body) must all be gone.
-        self.assertNotIn("Today's Reading", content)
+        self.assertNotIn("dashboard-hero", content)
         self.assertNotIn("No reading plan in progress yet", content)
         self.assertNotIn(self.nav_href("my_plans"), content)
         # Other enabled modules still render their surfaces normally.
@@ -923,8 +1093,8 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         leader_summary.assert_not_called()
         content = response.content.decode()
         self.assertNotIn(self.nav_href("my_serving"), content)
-        self.assertNotIn("Needs your attention", content)
-        self.assertNotIn("Leader Needs Attention", content)
+        self.assertNotIn("Needs Attention", content)
+        self.assertNotIn("Review coverage", content)
         self.assertNotIn("Open My Serving", content)
 
     @override_settings(CMS_ENABLED_MODULES=enabled_without("ministry"))
@@ -996,7 +1166,7 @@ class ModuleGateHomeTests(ModuleGateTestBase):
         self.assertNotIn("Today's Church Gatherings", content)
         self.assertNotIn("Today's Bible study", content)
         self.assertNotIn("Important announcement", content)
-        self.assertNotIn("Leader Needs Attention", content)
+        self.assertNotIn("Needs Attention", content)
         for url_name in (
             "my_plans",
             "prayer_list",

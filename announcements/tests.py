@@ -829,7 +829,7 @@ class AnnouncementTodayTests(TestCase):
                 }
             )
         )
-        self.assertNotContains(response, "Leader Needs Attention")
+        self.assertNotContains(response, "Review coverage")
         announcement_fields = {
             field.name for field in Announcement._meta.get_fields()
         }

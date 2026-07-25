@@ -15,174 +15,19 @@
     <p class="page-subtitle">{{ ui.today_subtitle }}</p>
 </div>
 
-{# --- Zone 1: Serving action center ------------------------------------ #}
-{% if serving_summary %}
-{% if serving_summary.is_pending %}
-<div class="card dashboard-reminder">
-    <h2 class="card-title">{% if language == "zh" %}需要你留意{% else %}Needs your attention{% endif %}</h2>
-    <p class="muted">
-        {% if language == "zh" %}
-            你有 {{ serving_summary.pending_count }} 个服事安排等待确认。
-        {% else %}
-            You have {{ serving_summary.pending_count }} serving assignment{{ serving_summary.pending_count|pluralize }} waiting for confirmation.
-        {% endif %}
-    </p>
-    {% for item in serving_summary.items %}
-    <div class="dashboard-attention-row">
-        {% if item.kind == "bible_study" %}
-        <p>
-            <strong>{{ item.meeting.lesson|study_lesson_title:language }}</strong>
-            <span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span>
-        </p>
-        <p class="muted">
-            {{ item.meeting.meeting_datetime|member_datetime:language }} ·
-            {% if language == "zh" %}查经服事{% else %}Bible Study serving{% endif %}
-        </p>
-        {% else %}
-        <p>
-            <strong>{{ item.assignment.service_event|event_title:language }}</strong>
-            <span class="status status-warning">{% if language == "zh" %}等待确认{% else %}Pending confirmation{% endif %}</span>
-        </p>
-        <p class="muted">
-            {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
-            {{ item.assignment.ministry_team|ministry_team_name:language }}
-        </p>
-        {% endif %}
-    </div>
-    {% endfor %}
-    <a class="button" href="{% url 'my_serving' %}">
-        {% if language == "zh" %}去确认{% else %}Confirm in My Serving{% endif %}
-    </a>
-</div>
-{% else %}
-<div class="card dashboard-reminder">
-    <h2 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h2>
-    <p class="muted">
-        {% if language == "zh" %}
-            你有一个即将到来的服事安排。
-        {% else %}
-            You have an upcoming serving assignment.
-        {% endif %}
-    </p>
-    {% for item in serving_summary.items %}
-    <div class="dashboard-attention-row">
-        {% if item.kind == "bible_study" %}
-        <p>
-            <strong>{{ item.meeting.lesson|study_lesson_title:language }}</strong>
-            <span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span>
-        </p>
-        <p class="muted">
-            {{ item.meeting.meeting_datetime|member_datetime:language }} ·
-            {% if language == "zh" %}查经服事{% else %}Bible Study serving{% endif %}
-        </p>
-        {% else %}
-        <p>
-            <strong>{{ item.assignment.service_event|event_title:language }}</strong>
-            <span class="status status-good">{% if language == "zh" %}已确认{% else %}Confirmed{% endif %}</span>
-        </p>
-        <p class="muted">
-            {{ item.assignment.service_event.start_datetime|member_datetime:language }} ·
-            {{ item.assignment.ministry_team|ministry_team_name:language }}
-        </p>
-        {% endif %}
-    </div>
-    {% endfor %}
-    <a class="button" href="{% url 'my_serving' %}">
-        {% if language == "zh" %}查看我的服事{% else %}View in My Serving{% endif %}
-    </a>
-</div>
-{% endif %}
-{% endif %}
+{# --- Zone 1: every real pending action, normalized in presentation ----- #}
+{% include "reading/_needs_attention.html" %}
 
-{# --- Zone 1b: Leader summary (actual team managers only) -------------- #}
-{# Manager-gated by leader_needs_attention_rows (active lead/coordinator #}
-{# MinistryTeamRoleAssignment or global/staff capability). This is #}
-{# team-management responsibility, not personal serving, so it is never #}
-{# shown as My Serving. TeamMembership.role / can_lead grant nothing here. #}
-{% if leader_summary %}
-<div class="card dashboard-reminder">
-    <h2 class="card-title">{% if language == "zh" %}组长待处理{% else %}Leader Needs Attention{% endif %}</h2>
-    <p class="muted">
-        {% if language == "zh" %}
-            你负责的团队有 {{ leader_summary.count }} 项排班需要留意。
-        {% else %}
-            {{ leader_summary.count }} scheduling item{{ leader_summary.count|pluralize }} on teams you lead need attention.
-        {% endif %}
-    </p>
-    {% for row in leader_summary.items %}
-    <div class="dashboard-attention-row">
-        <p>
-            <strong>{{ row.event|event_title:language }}</strong>
-            <span class="status status-warning">{{ row.issue_label }}</span>
-        </p>
-        <p class="muted">
-            {{ row.event.start_datetime|member_datetime:language }} ·
-            {{ row.team|ministry_team_name:language }}
-        </p>
-        <a class="button button-secondary" href="{{ row.action_url }}">
-            {% if language == "zh" %}查看排班{% else %}Review coverage{% endif %}
-        </a>
-    </div>
-    {% endfor %}
-    <a class="button button-secondary" href="{% url 'my_serving' %}">
-        {% if language == "zh" %}打开我的服事{% else %}Open My Serving{% endif %}
-    </a>
-</div>
-{% endif %}
-
-{# --- Personally relevant Community Activities (never serving) --------- #}
-{% if community_activity_creator_attention_items or community_activity_today_items %}
-<div class="card">
-    <h2 class="card-title">{% if language == "zh" %}活动提醒{% else %}Activity reminders{% endif %}</h2>
-    <div class="dashboard-week-list">
-        {% for activity in community_activity_creator_attention_items %}
-        <div class="dashboard-week-row">
-            <p>
-                <a href="{% url 'community_activity_detail' activity.id %}">
-                    {{ activity|activity_title:language }}
-                </a>
-            </p>
-            <p><span class="status status-warning">{% if language == "zh" %}需要修改{% else %}Changes requested{% endif %}</span></p>
-            <a class="button button-secondary" href="{% url 'community_activity_edit' activity.id %}">
-                {% if language == "zh" %}修改并重新提交{% else %}Edit and resubmit{% endif %}
-            </a>
-        </div>
-        {% endfor %}
-        {% for activity in community_activity_today_items %}
-        <div class="dashboard-week-row">
-            <p>
-                <a href="{% url 'community_activity_detail' activity.id %}">
-                    {{ activity|activity_title:language }}
-                </a>
-            </p>
-            <p class="muted">{{ activity.start_datetime|member_datetime:language }}</p>
-            <p><span class="status status-good">{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</span></p>
-        </div>
-        {% endfor %}
-    </div>
-</div>
-{% endif %}
-
-{# --- One low-noise Official Announcement reminder (never serving) ----- #}
-{% if announcement_today_item %}
-<div class="card">
-    <h2 class="card-title">{% if language == "zh" %}重要公告{% else %}Important announcement{% endif %}</h2>
-    <p>
-        <a href="{% url 'announcement_detail' announcement_today_item.id %}">
-            {{ announcement_today_item|announcement_title:language }}
-        </a>
-    </p>
-</div>
-{% endif %}
-
-{# --- Zone 2: Today's Reading ------------------------------------------ #}
-{% if "reading" in enabled_modules %}
-<h2 class="dashboard-section-title">
-    {% if language == "zh" %}今日读经{% else %}Today's Reading{% endif %}
+{# --- Zone 2: today's reading and agenda ------------------------------- #}
+<section class="dashboard-zone" aria-labelledby="today-zone-heading">
+<h2 class="dashboard-section-title" id="today-zone-heading">
+    {% if language == "zh" %}今日{% else %}Today{% endif %}
 </h2>
-{% if today_items %}
-{% for item in today_items %}
-<div class="card {% if item.is_checked %}dashboard-reading-completed{% elif item.is_rest_day %}dashboard-reading-state{% else %}dashboard-hero{% endif %}">
+
+{% if "reading" in enabled_modules %}
+{% if primary_reading %}
+{% with item=primary_reading %}
+<div class="card {% if not item.has_configured_days %}dashboard-reading-state{% elif item.is_checked %}dashboard-reading-completed{% elif item.is_rest_day %}dashboard-reading-state{% else %}dashboard-hero{% endif %}">
     <div class="dashboard-hero-head">
         <div>
             <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
@@ -194,7 +39,11 @@
         </div>
 
         <div>
-            {% if item.is_rest_day %}
+            {% if not item.has_configured_days %}
+            <span class="status status-warning">
+                {% if language == "zh" %}尚未配置{% else %}Schedule unavailable{% endif %}
+            </span>
+            {% elif item.is_rest_day %}
             <span class="status status-warning">{{ ui.rest_day }}</span>
             {% elif item.is_checked %}
             <span class="status status-good">
@@ -208,6 +57,7 @@
         </div>
     </div>
 
+    {% if item.has_configured_days %}
     <p class="muted dashboard-progress-meta">
         {% if language == "zh" %}
             计划第 {{ item.current_day_number }} 天 · 已完成 {{ item.checked_days }} / {{ item.total_reading_days }} 个读经日 · {{ item.progress_percent }}%
@@ -219,8 +69,22 @@
     <div class="progress-bar">
         <div class="progress-bar-fill" style="width: {{ item.progress_percent }}%;"></div>
     </div>
+    {% endif %}
 
-    {% if item.is_checked %}
+    {% if not item.has_configured_days %}
+    <hr class="divider">
+    <h3>
+        {% if language == "zh" %}计划内容尚未配置{% else %}Plan schedule needs configuration{% endif %}
+    </h3>
+    <p>
+        {% if language == "zh" %}
+            这个计划还没有配置读经日。请稍后再查看，或联系负责同工。
+        {% else %}
+            This plan does not have any reading days configured yet. Please check back later or contact a staff member.
+        {% endif %}
+    </p>
+
+    {% elif item.is_checked %}
     <hr class="divider">
     <p>
         {% if language == "zh" %}
@@ -280,7 +144,8 @@
 
         <a class="button button-secondary"
            href="{% url 'audio_reader' item.active_plan.id item.plan_day.id 0 %}?lang={{ language }}">
-            🔊 {% if language == "zh" %}听今日读经{% else %}Listen to Today’s Reading{% endif %}
+            {% include "reading/_audio_icon.html" %}
+            {% if language == "zh" %}听今日读经{% else %}Listen to Today’s Reading{% endif %}
         </a>
     </div>
 
@@ -299,7 +164,7 @@
                href="{% url 'audio_reader' item.active_plan.id item.plan_day.id forloop.counter0 %}?lang={{ language }}"
                title="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}"
                aria-label="{% if language == 'zh' %}听音频{% else %}Listen{% endif %}: {{ passage|passage_display:language }}">
-                🔊
+                {% include "reading/_audio_icon.html" %}
             </a>
         </div>
         {% endfor %}
@@ -357,13 +222,49 @@
         <a class="button button-secondary" href="{% url 'active_plan_calendar' item.active_plan.id %}">
             {% if language == "zh" %}日历{% else %}Calendar{% endif %}
         </a>
-        <a class="button button-secondary" href="{% url 'my_plans' %}">
-            {{ ui.browse_reading_plans }}
-        </a>
     </div>
     {% endif %}
 </div>
-{% endfor %}
+{% endwith %}
+
+{% include "reading/_secondary_reading_plans.html" %}
+<p class="reading-plans-all">
+    <a class="button button-secondary" href="{% url 'my_plans' %}">
+        {% if language == "zh" %}查看所有读经计划{% else %}View all reading plans{% endif %}
+    </a>
+</p>
+{% elif upcoming_reading %}
+{% with plan=upcoming_reading %}
+<div class="card dashboard-reading-state">
+    <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
+    <h2 class="card-title">
+        <a href="{% url 'active_plan_detail' plan.active_plan.id %}">
+            {{ plan.active_plan|active_plan_name:language }}
+        </a>
+    </h2>
+    {% if plan.status_kind == "not_configured" %}
+    <p><span class="status status-warning">{% if language == "zh" %}尚未配置{% else %}Schedule unavailable{% endif %}</span></p>
+    <p>
+        {% if language == "zh" %}
+            你已加入这个读经计划，但读经日程尚未配置。
+        {% else %}
+            You are enrolled in this reading plan, but its reading schedule is not configured yet.
+        {% endif %}
+    </p>
+    {% else %}
+    <p>
+        {% if language == "zh" %}
+            你的下一个读经计划将于 {{ plan.active_plan.start_date|member_date:language }} 开始。
+        {% else %}
+            Your next reading plan starts on {{ plan.active_plan.start_date|member_date:language }}.
+        {% endif %}
+    </p>
+    {% endif %}
+    <a class="button" href="{% url 'active_plan_detail' plan.active_plan.id %}">
+        {% if language == "zh" %}查看计划{% else %}View plan{% endif %}
+    </a>
+</div>
+{% endwith %}
 {% else %}
 <div class="card dashboard-hero">
     <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
@@ -453,8 +354,40 @@
 </div>
 {% endif %}
 
+{% if community_activity_today_items %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}今日活动{% else %}Today's Community Activities{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for activity in community_activity_today_items %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'community_activity_detail' activity.id %}">
+                    {{ activity|activity_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ activity.start_datetime|member_datetime:language }}</p>
+            <p><span class="status status-good">{% if language == "zh" %}你已报名{% else %}You’re signed up{% endif %}</span></p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if announcement_today_item %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}重要公告{% else %}Important announcement{% endif %}</h3>
+    <p>
+        <a href="{% url 'announcement_detail' announcement_today_item.id %}">
+            {{ announcement_today_item|announcement_title:language }}
+        </a>
+    </p>
+</div>
+{% endif %}
+</section>
+
 {# --- Zone 3: This Week ------------------------------------------------ #}
-<h2 class="dashboard-section-title">
+<section class="dashboard-zone" aria-labelledby="this-week-heading">
+<h2 class="dashboard-section-title" id="this-week-heading">
     {% if language == "zh" %}本周{% else %}This Week{% endif %}
 </h2>
 
@@ -527,7 +460,27 @@
 </div>
 {% endif %}
 
-{% if not week_gatherings and not week_study_meetings and not study_meeting_context.show_no_small_group %}
+{% if community_activity_this_week_items %}
+<div class="card">
+    <h3 class="card-title">{% if language == "zh" %}本周活动{% else %}Activities this week{% endif %}</h3>
+    <div class="dashboard-week-list">
+        {% for activity in community_activity_this_week_items %}
+        <div class="dashboard-week-row">
+            <p>
+                <a href="{% url 'community_activity_detail' activity.id %}">
+                    {{ activity|activity_title:language }}
+                </a>
+            </p>
+            <p class="muted">{{ activity.start_datetime|member_datetime:language }}</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% include "reading/_unrepresented_serving.html" %}
+
+{% if not week_gatherings and not week_study_meetings and not community_activity_this_week_items and not unrepresented_serving_items and not study_meeting_context.show_no_small_group %}
 <div class="card">
     <p class="muted">
         {% if language == "zh" %}
@@ -538,60 +491,6 @@
     </p>
 </div>
 {% endif %}
-
-{# --- Secondary: where to go next --------------------------------------- #}
-<h2 class="dashboard-section-title">
-    {% if language == "zh" %}接下来去哪里{% else %}Where to go next{% endif %}
-</h2>
-
-<div class="grid dashboard-actions-grid">
-    {% if "studies" in enabled_modules %}
-    <div class="card dashboard-action-card">
-        <h3 class="card-title">{% if language == "zh" %}查经{% else %}Bible Study{% endif %}</h3>
-        <p class="muted">
-            {% if language == "zh" %}
-                查看小组查经安排和每周查经指引。
-            {% else %}
-                See Bible study schedules and weekly study guides.
-            {% endif %}
-        </p>
-        <a class="button button-secondary" href="{% url 'study_session_list' %}">
-            {% if language == "zh" %}打开查经{% else %}Open Bible Study{% endif %}
-        </a>
-    </div>
-    {% endif %}
-
-    {% if "prayers" in enabled_modules %}
-    <div class="card dashboard-action-card">
-        <h3 class="card-title">{% if language == "zh" %}代祷{% else %}Prayer{% endif %}</h3>
-        <p class="muted">
-            {% if language == "zh" %}
-                查看代祷墙，为弟兄姊妹的需要代祷。
-            {% else %}
-                Open the Prayer Wall and pray for one another.
-            {% endif %}
-        </p>
-        <a class="button button-secondary" href="{% url 'prayer_list' %}">
-            {% if language == "zh" %}打开代祷墙{% else %}Open Prayer Wall{% endif %}
-        </a>
-    </div>
-    {% endif %}
-
-    {% if "ministry" in enabled_modules %}
-    <div class="card dashboard-action-card">
-        <h3 class="card-title">{% if language == "zh" %}我的服事{% else %}My Serving{% endif %}</h3>
-        <p class="muted">
-            {% if language == "zh" %}
-                查看你的服事安排，并确认排班。
-            {% else %}
-                Check your serving assignments and confirm your schedule.
-            {% endif %}
-        </p>
-        <a class="button button-secondary" href="{% url 'my_serving' %}">
-            {% if language == "zh" %}打开我的服事{% else %}Open My Serving{% endif %}
-        </a>
-    </div>
-    {% endif %}
-</div>
+</section>
 
 {% endblock %}

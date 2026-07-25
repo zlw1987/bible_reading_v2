@@ -1,0 +1,56 @@
+{% load reading_extras %}
+
+{% if secondary_reading_items %}
+<div class="card secondary-plans-card">
+    <h3 class="card-subtitle">
+        {% if language == "zh" %}我的其他读经计划{% else %}Your other reading plans{% endif %}
+    </h3>
+    <div class="secondary-plan-list">
+        {% for plan in secondary_reading_items %}
+        <div class="secondary-plan-row">
+            <div class="secondary-plan-main">
+                <p class="secondary-plan-name">
+                    <a href="{% url 'active_plan_detail' plan.active_plan.id %}">
+                        {{ plan.active_plan|active_plan_name:language }}
+                    </a>
+                </p>
+                <p class="secondary-plan-meta muted">
+                    {% if plan.status_kind == "not_configured" %}
+                        {% if language == "zh" %}计划内容尚未配置{% else %}Schedule unavailable{% endif %}
+                    {% elif plan.status_kind == "not_started" %}
+                        {% if language == "zh" %}尚未开始{% else %}Not started yet{% endif %}
+                    {% else %}
+                        {% if language == "zh" %}第 {{ plan.current_day_number }} 天 · 已完成 {{ plan.checked_days }} / {{ plan.total_reading_days }} · {{ plan.progress_percent }}%{% else %}Day {{ plan.current_day_number }} · {{ plan.checked_days }} of {{ plan.total_reading_days }} · {{ plan.progress_percent }}%{% endif %}
+                    {% endif %}
+                </p>
+            </div>
+            <div class="secondary-plan-side">
+                {% if plan.status_kind == "not_configured" %}
+                <span class="status status-warning">{% if language == "zh" %}尚未配置{% else %}Not configured{% endif %}</span>
+                {% elif plan.status_kind == "checked" %}
+                <span class="status status-good">{% if language == "zh" %}今日已打卡{% else %}Checked in today{% endif %}</span>
+                {% elif plan.status_kind == "not_checked" %}
+                <span class="status status-danger">{% if language == "zh" %}今日未打卡{% else %}Not checked in yet{% endif %}</span>
+                {% elif plan.status_kind == "rest" %}
+                <span class="status status-warning">{{ ui.rest_day }}</span>
+                {% else %}
+                <span class="status status-muted">{% if language == "zh" %}尚未开始{% else %}Not started{% endif %}</span>
+                {% endif %}
+                <a class="button button-secondary" href="{% url 'active_plan_detail' plan.active_plan.id %}">
+                    {% if language == "zh" %}打开{% else %}Open{% endif %}
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% if secondary_reading_remaining_count %}
+    <p class="muted secondary-plan-remaining">
+        {% if language == "zh" %}
+            另有 {{ secondary_reading_remaining_count }} 个进行中或即将开始的计划。
+        {% else %}
+            {{ secondary_reading_remaining_count }} more in-progress or upcoming plan{{ secondary_reading_remaining_count|pluralize }}.
+        {% endif %}
+    </p>
+    {% endif %}
+</div>
+{% endif %}

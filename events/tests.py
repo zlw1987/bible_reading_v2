@@ -2041,12 +2041,16 @@ class ServiceEventFoundationTests(TestCase):
     # --- UI-H.3A member-facing event discovery polish ---
 
     def assert_single_active_nav(self, response, url_name):
+        # UX-MEMBER-JOURNEY.1A: Church Gatherings now lives inside the Community
+        # top-level nav group, so the group summary carries the active marker
+        # and the member events link is the active child link.
         content = response.content.decode()
-        expected_href = reverse(url_name)
         self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
         self.assertRegex(
             content,
-            r'class="nav-link active"\s+href="%s"' % re.escape(expected_href),
+            r'<a class="active"\s+href="%s"\s+aria-current="page">'
+            % re.escape(reverse(url_name)),
         )
 
     def test_member_list_shows_member_subtitle_english(self):

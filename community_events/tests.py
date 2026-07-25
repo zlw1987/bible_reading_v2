@@ -2296,7 +2296,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
         response = self.get_home()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Activity reminders")
+        self.assertContains(response, "Today's Community Activities")
         self.assertContains(response, "Today Signed Activity")
         self.assertContains(response, "You’re signed up")
         self.assertIn(
@@ -2308,7 +2308,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
             response.context["community_activity_this_week_items"],
         )
 
-    def test_later_signed_up_activity_is_not_rendered_on_today(self):
+    def test_later_signed_up_activity_is_rendered_in_this_week(self):
         activity = self.signed_up_activity(
             starts_at=self.today + timezone.timedelta(days=2),
             title_en="Later This Week Activity",
@@ -2316,12 +2316,16 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
 
         response = self.get_home()
 
-        self.assertNotContains(response, "Later This Week Activity")
+        self.assertContains(response, "Activities this week")
+        self.assertContains(response, "Later This Week Activity")
         self.assertNotIn(
             activity,
             response.context["community_activity_today_items"],
         )
-        self.assertEqual(response.context["community_activity_this_week_items"], [])
+        self.assertIn(
+            activity,
+            response.context["community_activity_this_week_items"],
+        )
 
     def test_visible_published_activity_without_signup_is_not_on_today(self):
         activity = self.create_activity(
@@ -2473,7 +2477,8 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
 
         response = self.get_home(language="zh")
 
-        self.assertContains(response, "活动提醒")
+        self.assertContains(response, "今日活动")
+        self.assertContains(response, "需要你留意")
         self.assertContains(response, "你已报名")
         self.assertContains(response, "需要修改")
 
@@ -2522,7 +2527,7 @@ class CommunityActivityTodayTests(CommunityActivityWebTestBase):
             response.context["community_activity_creator_attention_items"],
             [],
         )
-        self.assertNotContains(response, "Activity reminders")
+        self.assertNotContains(response, "Today's Community Activities")
 
     def test_today_integration_creates_no_serving_or_service_event_state(self):
         self.signed_up_activity(

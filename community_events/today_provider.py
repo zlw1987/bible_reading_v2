@@ -43,7 +43,7 @@ def get_signed_up_activities_for_window(user, start_datetime, end_datetime, now)
 def community_activity_today_provider(request):
     """Low-noise Community Activity reminders for Today."""
     now = current_time()
-    today_start, tomorrow_start, _week_end = get_today_week_windows()
+    today_start, tomorrow_start, week_end = get_today_week_windows()
 
     return {
         "community_activity_today_items": get_signed_up_activities_for_window(
@@ -52,10 +52,12 @@ def community_activity_today_provider(request):
             tomorrow_start,
             now,
         ),
-        # Keep the declared key as a safe compatibility default, but do not
-        # populate or render later-this-week activities on the low-noise Today
-        # surface. The full activity list remains the main entrance.
-        "community_activity_this_week_items": [],
+        "community_activity_this_week_items": get_signed_up_activities_for_window(
+            request.user,
+            tomorrow_start,
+            week_end,
+            now,
+        ),
         "community_activity_creator_attention_items": list(
             CommunityActivity.objects.filter(
                 created_by=request.user,

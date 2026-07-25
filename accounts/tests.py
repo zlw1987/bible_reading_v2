@@ -158,6 +158,19 @@ class AccountProfileTests(TestCase):
             r'class="nav-link active"\s+href="%s"' % re.escape(expected_href),
         )
 
+    def assert_active_group_member(self, response, url_name):
+        # UX-MEMBER-JOURNEY.1A: modules grouped under a top-level nav group
+        # (Grow / Community) put the active marker on the group summary, while
+        # the visited module link is the active child link inside the group.
+        content = response.content.decode()
+        self.assertEqual(content.count('class="nav-link active"'), 1)
+        self.assertIn('<summary class="nav-link active">', content)
+        self.assertRegex(
+            content,
+            r'<a class="active"\s+href="%s"\s+aria-current="page">'
+            % re.escape(reverse(url_name)),
+        )
+
     def test_profile_requires_login(self):
         response = self.client.get(reverse("profile"))
 
@@ -629,7 +642,8 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("profile"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Calendar")
+        self.assertContains(response, "Calendar")
+        self.assertContains(response, reverse("church_calendar_month"))
         self.assertNotContains(response, "Reflection Wall")
         self.assertNotContains(response, "Prayer Wall")
         self.assertNotContains(response, "Group Progress")
@@ -852,7 +866,7 @@ class AccountProfileTests(TestCase):
         self.assertIn("transform: translateY(calc(-100% - 1px));", css)
         self.assertIn("body.nav-menu-open .site-header", css)
         self.assertIn("transition: none;", css)
-        self.assertIn("@media (max-width: 760px) and (prefers-reduced-motion: reduce)", css)
+        self.assertIn("@media (max-width: 940px) and (prefers-reduced-motion: reduce)", css)
         self.assertNotIn("will-change: transform", css)
         self.assertNotIn("transform: translateY(0);", css)
         self.assertNotIn("min-width: min(300px", css)
@@ -919,6 +933,18 @@ class AccountProfileTests(TestCase):
         self.assertIn("primaryNavOpen ||", content)
         # Staff overlay must not engage while the drawer is open.
         self.assertIn("&& !primaryNavOpen", content)
+        self.assertIn(
+            'window.matchMedia("(hover: none), (max-width: 940px)")',
+            content,
+        )
+        self.assertIn(
+            'window.matchMedia("(max-width: 940px)")',
+            content,
+        )
+        self.assertNotIn(
+            'window.matchMedia("(max-width: 760px)")',
+            content,
+        )
 
     def test_mobile_nav_drawer_css_present(self):
         css_path = Path(__file__).resolve().parent.parent / "static" / "css" / "app.css"
@@ -940,6 +966,10 @@ class AccountProfileTests(TestCase):
         # Hamburger hidden by default (desktop) and shown at mobile width.
         self.assertIn(".nav-toggle {\n    display: none;", css)
         self.assertIn(".nav-toggle {\n        display: inline-flex;", css)
+        self.assertIn(
+            "@media (min-width: 761px) and (max-width: 940px)",
+            css,
+        )
 
     def test_normal_chinese_user_sees_simple_primary_nav(self):
         self.set_language("zh")
@@ -1021,7 +1051,7 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("my_plans"))
 
         self.assertEqual(response.status_code, 200)
-        self.assert_active_nav_href(response, "my_plans")
+        self.assert_active_group_member(response, "my_plans")
 
     def test_bible_study_page_marks_bible_study_nav_active(self):
         self.set_language("en")
@@ -1030,7 +1060,7 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("study_session_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assert_active_nav_href(response, "study_session_list")
+        self.assert_active_group_member(response, "study_session_list")
 
     def test_prayer_page_marks_prayer_nav_active(self):
         self.set_language("en")
@@ -1039,7 +1069,7 @@ class AccountProfileTests(TestCase):
         response = self.client.get(reverse("prayer_list"))
 
         self.assertEqual(response.status_code, 200)
-        self.assert_active_nav_href(response, "prayer_list")
+        self.assert_active_group_member(response, "prayer_list")
 
     def test_my_serving_page_marks_my_serving_nav_active(self):
         self.set_language("en")

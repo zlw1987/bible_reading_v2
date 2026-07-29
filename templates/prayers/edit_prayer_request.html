@@ -28,12 +28,17 @@
 <div class="card reflection-section-card">
     <form method="post" class="reflection-form">
         {% csrf_token %}
+        {% include "shared/_form_error_summary.html" with form=form %}
 
         <div class="reflection-body-field">
+            {{ form.title.errors }}
+            <label class="sr-only" for="{{ form.title.id_for_label }}">{% if language == "zh" %}标题{% else %}Title{% endif %}</label>
             {{ form.title }}
         </div>
 
         <div class="reflection-body-field" style="margin-top: 10px;">
+            {{ form.body.errors }}
+            <label class="sr-only" for="{{ form.body.id_for_label }}">{{ form.body.label }}</label>
             {{ form.body }}
         </div>
 
@@ -42,6 +47,7 @@
                 <label for="{{ form.visibility.id_for_label }}">
                     {% if language == "zh" %}可见范围{% else %}Visibility{% endif %}
                 </label>
+                {{ form.visibility.errors }}
                 {{ form.visibility }}
             </div>
 
@@ -51,6 +57,7 @@
                     {% if language == "zh" %}匿名发表{% else %}Post anonymously{% endif %}
                 </span>
             </label>
+            {{ form.is_anonymous.errors }}
 
             <button type="submit">
                 {% if language == "zh" %}保存修改{% else %}Save Changes{% endif %}

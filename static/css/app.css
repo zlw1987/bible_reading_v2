@@ -387,6 +387,10 @@ textarea:focus-visible,
     color: var(--muted);
 }
 
+.text-break {
+    overflow-wrap: anywhere;
+}
+
 .event-card .card-title {
     font-size: 20px;
 }
@@ -416,26 +420,26 @@ textarea:focus-visible,
 
 .status-good {
     color: #216e39;
-    border-color: #b7e2c2;
+    border-color: #679573;
     background: #eef9f0;
 }
 
 .status-warning {
     color: #8a5a00;
-    border-color: #f1d18a;
+    border-color: #aa7309;
     background: #fff8e6;
 }
 
 .status-danger {
     color: var(--danger);
-    border-color: #efb4b4;
+    border-color: #bd6565;
     background: #fff0f0;
 }
 
 button,
 .button {
     display: inline-block;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 10px;
     background: var(--primary);
     color: white;
@@ -453,6 +457,7 @@ button,
 
 .button-secondary {
     background: #e8e3da;
+    border-color: #7b858e;
     color: var(--text);
 }
 
@@ -508,7 +513,7 @@ select,
 textarea {
     width: 100%;
     max-width: 520px;
-    border: 1px solid var(--border);
+    border: 1px solid #7b858e;
     border-radius: 10px;
     padding: 10px 12px;
     font-size: 15px;
@@ -3454,6 +3459,187 @@ th {
     border-radius: 999px;
     text-decoration: none;
     background: var(--surface);
+}
+
+/* UX-ACCESSIBILITY-FOUNDATION.1A: shared member-facing accessibility
+   primitives. Keep these utilities small and prefer native HTML semantics. */
+.skip-link {
+    position: fixed;
+    left: 16px;
+    top: -80px;
+    z-index: 100;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: var(--text);
+    color: var(--surface);
+    transition: top 120ms ease-out;
+}
+
+.skip-link:focus {
+    top: 12px;
+}
+
+.site-footer {
+    margin-top: 32px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.site-footer .container {
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+.sr-only,
+.cc-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.button,
+button,
+summary {
+    min-height: 44px;
+}
+
+.button-icon {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+}
+
+.checkbox-option,
+.radio-option {
+    min-height: 44px;
+}
+
+.checkbox-option input[type="checkbox"],
+.radio-option input[type="radio"] {
+    min-height: 20px;
+    min-width: 20px;
+}
+
+button:disabled,
+.button[aria-disabled="true"],
+input:disabled,
+select:disabled,
+textarea:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+}
+
+button[aria-busy="true"],
+.button[aria-busy="true"] {
+    cursor: progress;
+    opacity: 0.75;
+    pointer-events: none;
+}
+
+.required-mark,
+label.required::after {
+    color: var(--danger);
+    content: " *";
+    font-weight: 700;
+}
+
+.status {
+    max-width: 100%;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.status-neutral {
+    color: var(--text);
+    border-color: #7b858e;
+    background: #f2f4f5;
+}
+
+.card-emphasized {
+    border-width: 2px;
+    border-color: var(--primary);
+}
+
+.compact-action-row,
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.empty-state {
+    background: var(--surface);
+    border: 1px dashed #9da6ae;
+    border-radius: var(--radius);
+    padding: 20px;
+    overflow-wrap: anywhere;
+}
+
+.section-stack > * + * {
+    margin-top: 18px;
+}
+
+.error-summary {
+    margin: 0 0 18px;
+    padding: 16px 18px;
+    border: 2px solid var(--danger);
+    border-radius: 10px;
+    background: #fff5f5;
+    color: var(--text);
+}
+
+.error-summary-title {
+    margin: 0 0 8px;
+    color: var(--danger);
+    font-size: 18px;
+}
+
+.error-summary ul {
+    margin: 0;
+    padding-left: 22px;
+}
+
+.error-summary a {
+    color: #7e2525;
+    text-decoration: underline;
+}
+
+.table-wrap,
+.table-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+}
+
+svg[aria-hidden="true"] {
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto !important;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
 }
 
 @media (max-width: 640px) {

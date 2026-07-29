@@ -31,11 +31,11 @@
     <div class="dashboard-hero-head">
         <div>
             <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
-            <h2 class="card-title">
+            <h3 class="card-title">
                 <a href="{% url 'active_plan_detail' item.active_plan.id %}">
                     {{ item.active_plan|active_plan_name:language }}
                 </a>
-            </h2>
+            </h3>
         </div>
 
         <div>
@@ -237,11 +237,11 @@
 {% with plan=upcoming_reading %}
 <div class="card dashboard-reading-state">
     <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
-    <h2 class="card-title">
+    <h3 class="card-title">
         <a href="{% url 'active_plan_detail' plan.active_plan.id %}">
             {{ plan.active_plan|active_plan_name:language }}
         </a>
-    </h2>
+    </h3>
     {% if plan.status_kind == "not_configured" %}
     <p><span class="status status-warning">{% if language == "zh" %}尚未配置{% else %}Schedule unavailable{% endif %}</span></p>
     <p>
@@ -268,9 +268,9 @@
 {% else %}
 <div class="card dashboard-hero">
     <p class="dashboard-eyebrow">{{ ui.today_reading }}</p>
-    <h2 class="card-title">
+    <h3 class="card-title">
         {% if language == "zh" %}还没有进行中的读经计划{% else %}No reading plan in progress yet{% endif %}
-    </h2>
+    </h3>
     <p class="muted">{{ ui.no_active_reading_plan }}</p>
     <p>
         {% if language == "zh" %}

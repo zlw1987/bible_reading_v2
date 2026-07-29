@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -105,6 +107,38 @@ class PrayerRequestFlowTests(TestCase):
         self.assertContains(response, "Prayer title")
         self.assertContains(response, "Share your prayer request")
         self.assertContains(response, "Post Prayer Request")
+
+    def test_invalid_prayer_renders_localized_linked_error_summary(self):
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("prayer_list"),
+            {
+                "title": "",
+                "body": "",
+                "visibility": PrayerRequest.VISIBILITY_CHURCH,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please correct the following errors")
+        self.assertContains(response, 'href="#id_title"')
+        self.assertContains(response, 'href="#id_body"')
+        self.assertContains(response, 'class="errorlist"', count=2)
+
+        self.set_language("zh")
+        response = self.client.post(
+            reverse("prayer_list"),
+            {
+                "title": "",
+                "body": "",
+                "visibility": PrayerRequest.VISIBILITY_CHURCH,
+                "is_anonymous": "",
+            },
+        )
+        self.assertContains(response, "请更正以下错误")
 
     def test_user_can_create_group_prayer_request(self):
         self.set_language("en")
@@ -447,6 +481,32 @@ class PrayerRequestFlowTests(TestCase):
         # group visibility.
         self.assertIsNone(prayer.structure_unit_at_post)
         self.assertTrue(prayer.is_anonymous)
+
+    def test_invalid_prayer_edit_uses_accessible_error_summary(self):
+        prayer = PrayerRequest.objects.create(
+            user=self.user,
+            title="Original title",
+            body="Original body",
+            visibility=PrayerRequest.VISIBILITY_CHURCH,
+        )
+        self.set_language("en")
+        self.client.login(username="levin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("edit_prayer_request", args=[prayer.id]),
+            {
+                "title": "",
+                "body": "",
+                "visibility": PrayerRequest.VISIBILITY_CHURCH,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "prayers/edit_prayer_request.html")
+        self.assertContains(response, "Please correct the following errors")
+        self.assertContains(response, 'href="#id_title"')
+        self.assertContains(response, 'href="#id_body"')
 
     def test_edit_to_group_rebinds_current_membership_context(self):
         prayer = PrayerRequest.objects.create(
@@ -1409,6 +1469,17 @@ class PrayerLegacyMirrorWriteRetirementTests(TestCase):
         )
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Mirrorless display prayer")
+        levels = [
+            int(level)
+            for level in re.findall(
+                r"<h([1-6])(?:\s|>)",
+                detail_response.content.decode(),
+            )
+        ]
+        self.assertEqual(levels.count(1), 1)
+        self.assertEqual(levels[0], 1)
+        for previous, current in zip(levels, levels[1:]):
+            self.assertLessEqual(current, previous + 1)
 
 
 class PrayerListTabAudienceTests(TestCase):

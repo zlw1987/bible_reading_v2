@@ -31,9 +31,9 @@
 
     {% if prayer.answer_note %}
     <hr class="divider">
-    <h3>
+    <h2>
         {% if language == "zh" %}回应 / 关闭说明{% else %}Answer / Closing Note{% endif %}
-    </h3>
+    </h2>
     <p>{{ prayer.answer_note|linebreaksbr }}</p>
     {% endif %}
 

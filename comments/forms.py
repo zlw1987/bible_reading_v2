@@ -8,6 +8,7 @@ from .reflection_visibility import get_user_group_reflection_write_context
 
 COMMENT_FORM_TEXT = {
     "en": {
+        "body": "Reflection",
         "share_reflection": "Share your reflection...",
         "write_reply": "Write a reply...",
         "visibility": "Visibility",
@@ -18,6 +19,7 @@ COMMENT_FORM_TEXT = {
         "group_required": "You need to belong to a small group to share with your group.",
     },
     "zh": {
+        "body": "默想内容",
         "share_reflection": "分享你的默想...",
         "write_reply": "写下回复...",
         "visibility": "可见范围",
@@ -162,6 +164,7 @@ class ReflectionCommentEditForm(forms.ModelForm):
         self.user = user
         self.is_reply = is_reply
         self.language = normalize_language(language)
+        self.fields["body"].label = form_text(self.language, "body")
         self.fields["visibility"].label = form_text(self.language, "visibility")
         self.fields["visibility"].choices = localized_visibility_choices(self.language)
         self.fields["is_anonymous"].label = form_text(self.language, "post_anonymously")

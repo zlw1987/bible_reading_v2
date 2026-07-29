@@ -942,6 +942,131 @@ class ModuleGateNavGroupTests(ModuleGateTestBase):
         chinese = self.client.get(reverse("profile"))
         self.assertContains(chinese, '<html lang="zh-Hans">')
 
+    def test_shared_shell_has_accessible_landmarks_and_skip_target(self):
+        for url_name in (
+            "home",
+            "my_serving",
+            "my_plans",
+            "study_session_list",
+            "prayer_list",
+            "profile",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                content = response.content.decode()
+                self.assertIn('class="skip-link" href="#main-content"', content)
+                self.assertRegex(
+                    content,
+                    r'<nav class="nav nav-collapsible" id="primary-nav"\s+'
+                    r'aria-label="Primary navigation">',
+                )
+                self.assertIn(
+                    '<main class="container" id="main-content" tabindex="-1">',
+                    content,
+                )
+                self.assertEqual(len(re.findall(r"<main(?:\s|>)", content)), 1)
+                self.assertEqual(len(re.findall(r"<h1(?:\s|>)", content)), 1)
+                self.assertIn('<footer class="site-footer">', content)
+
+    def test_representative_member_pages_have_no_heading_level_jumps(self):
+        for url_name in (
+            "home",
+            "my_serving",
+            "my_plans",
+            "study_session_list",
+            "prayer_list",
+            "profile",
+        ):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 200)
+                levels = [
+                    int(level)
+                    for level in re.findall(
+                        r"<h([1-6])(?:\s|>)",
+                        response.content.decode(),
+                    )
+                ]
+                self.assertTrue(levels)
+                self.assertEqual(levels.count(1), 1)
+                self.assertEqual(levels[0], 1)
+                for previous, current in zip(levels, levels[1:]):
+                    self.assertLessEqual(current, previous + 1)
+
+    def test_accessibility_css_and_keyboard_markers_are_present(self):
+        response = self.client.get(reverse("profile"))
+        content = response.content.decode()
+        self.assertIn('event.key === "Escape"', content)
+        self.assertIn("firstControl.focus()", content)
+        self.assertIn("navToggle.focus()", content)
+        self.assertIn("summary.focus()", content)
+        self.assertIn('document.querySelector("[data-error-summary]")', content)
+
+        from pathlib import Path
+
+        project_root = Path(__file__).resolve().parent.parent
+        css = (project_root / "static" / "css" / "app.css").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("@media (prefers-reduced-motion: reduce)", css)
+        self.assertIn(".table-scroll {", css)
+        self.assertIn(".error-summary {", css)
+        self.assertIn(".button-icon {", css)
+        self.assertIn(".text-break {", css)
+        self.assertIn('.button[aria-busy="true"]', css)
+
+        audio_icon = (
+            project_root / "templates" / "reading" / "_audio_icon.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn('aria-hidden="true"', audio_icon)
+        self.assertIn('focusable="false"', audio_icon)
+
+        group_progress = (
+            project_root / "templates" / "reading" / "group_progress.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'class="table-wrap table-scroll group-progress-table-wrap"',
+            group_progress,
+        )
+
+    def test_invalid_profile_renders_localized_linked_error_summary(self):
+        profile = self.client.get(reverse("profile"))
+        self.assertContains(profile, 'class="text-break"')
+        self.assertContains(
+            profile,
+            'aria-describedby="id_requested_unit_helptext"',
+        )
+        self.assertContains(profile, 'id="id_requested_unit_helptext"')
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "not-an-email",
+                "requested_unit": "",
+                "preferred_language": "en",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('class="error-summary"', content)
+        self.assertIn("Please correct the following errors", content)
+        self.assertRegex(content, r'href="#id_email"')
+        self.assertIn('class="errorlist"', content)
+
+        session = self.client.session
+        session["language"] = "zh"
+        session.save()
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "email": "not-an-email",
+                "requested_unit": "",
+                "preferred_language": "zh",
+            },
+        )
+        self.assertContains(response, "请更正以下错误")
+
 
 class ModuleGateHomeTests(ModuleGateTestBase):
     def test_home_renders_with_all_modules_enabled(self):

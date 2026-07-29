@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="{% static 'css/app.css' %}">
 </head>
 <body>
+    <a class="skip-link" href="#main-content">
+        {% if language == "zh" %}跳到主要内容{% else %}Skip to main content{% endif %}
+    </a>
     <header class="site-header">
         <div class="site-header-inner{% if user.is_authenticated %} site-header-inner--app{% endif %}">
             <a class="brand" href="{% url 'home' %}">{{ ui.site_title }}</a>
@@ -24,7 +27,8 @@
             </button>
             {% endif %}
 
-            <nav class="nav{% if user.is_authenticated %} nav-collapsible{% endif %}" id="primary-nav">
+            <nav class="nav{% if user.is_authenticated %} nav-collapsible{% endif %}" id="primary-nav"
+                 aria-label="{% if language == 'zh' %}主要导航{% else %}Primary navigation{% endif %}">
                 {% if user.is_authenticated %}
                 {% include "partials/_primary_navigation.html" %}
                 <div class="nav-account-group">
@@ -180,7 +184,7 @@
         </div>
     </header>
 
-    <main class="container">
+    <main class="container" id="main-content" tabindex="-1">
         {% if messages %}
         <div class="messages">
             {% for message in messages %}
@@ -191,8 +195,17 @@
 
         {% block content %}{% endblock %}
     </main>
+    <footer class="site-footer">
+        <div class="container">
+            <span>{{ ui.site_title }}</span>
+        </div>
+    </footer>
     <script>
         (function () {
+            var errorSummary = document.querySelector("[data-error-summary]");
+            if (errorSummary) {
+                errorSummary.focus();
+            }
             var siteHeader = document.querySelector(".site-header");
             var menuNodes = document.querySelectorAll(".nav-dropdown");
             var finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
@@ -416,12 +429,31 @@
             }
 
             function closeMenuWithKeyboard(event) {
-                if (event.key !== "Escape" || !lockedMenu) {
+                if (event.key !== "Escape") {
                     return;
                 }
 
-                lockedMenu.open = false;
-                unlockBodyScroll();
+                var menu = event.target.closest
+                    ? event.target.closest(".nav-dropdown")
+                    : null;
+                if (!menu || !menu.open) {
+                    menu = Array.prototype.find.call(menuNodes, function (node) {
+                        return node.open;
+                    });
+                }
+                if (!menu) {
+                    return;
+                }
+
+                var summary = menu.querySelector("summary");
+                var wasLocked = lockedMenu === menu;
+                menu.open = false;
+                if (wasLocked) {
+                    unlockBodyScroll();
+                }
+                if (summary) {
+                    summary.focus();
+                }
             }
 
             function addOutsideCloseHandlers() {
@@ -430,7 +462,6 @@
                 }
 
                 document.addEventListener("click", closeMenuFromOutside);
-                document.addEventListener("keydown", closeMenuWithKeyboard);
                 outsideClickListening = true;
             }
 
@@ -440,7 +471,6 @@
                 }
 
                 document.removeEventListener("click", closeMenuFromOutside);
-                document.removeEventListener("keydown", closeMenuWithKeyboard);
                 outsideClickListening = false;
             }
 
@@ -545,6 +575,8 @@
                 });
             });
 
+            document.addEventListener("keydown", closeMenuWithKeyboard);
+
             window.addEventListener("resize", function () {
                 var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
                 var widthChanged = viewportWidth !== lastViewportWidth;
@@ -648,9 +680,6 @@
             function onPrimaryNavKeydown(event) {
                 if (event.key === "Escape" && primaryNavOpen) {
                     closePrimaryNav();
-                    if (navToggle) {
-                        navToggle.focus();
-                    }
                 }
             }
 
@@ -688,6 +717,14 @@
                 document.body.classList.add("primary-nav-open");
                 syncNavToggleState();
                 addPrimaryNavOutsideHandlers();
+                window.requestAnimationFrame(function () {
+                    var firstControl = primaryNav.querySelector(
+                        "a[href], summary, button:not([disabled]), input:not([disabled])"
+                    );
+                    if (firstControl) {
+                        firstControl.focus();
+                    }
+                });
             }
 
             function closePrimaryNav() {
@@ -705,6 +742,9 @@
                 clearTransientHeaderInteraction();
                 resetScrollTracking();
                 requestHeaderVisibilityUpdate();
+                if (navToggle) {
+                    navToggle.focus();
+                }
             }
 
             function togglePrimaryNav() {

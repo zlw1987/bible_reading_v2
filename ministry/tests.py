@@ -2600,7 +2600,7 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("my_serving"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'href="/my-serving/">', html=False)
+        self.assertContains(response, 'href="/my-serving/"', html=False)
         self.assertContains(response, "My Serving")
 
     def test_my_serving_shows_manage_section_for_team_lead(self):

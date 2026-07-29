@@ -16,13 +16,13 @@
     </p>
 </section>
 
-<section class="notice-panel group-progress-boundary">
+<div class="notice-panel group-progress-boundary">
     {% if language == "zh" %}
     小组归属来自已生效的主要教会结构归属；服事安排和职分权限是另外的概念。
     {% else %}
     Group belonging comes from active primary Church Structure membership. Serving assignments and role permissions are separate.
     {% endif %}
-</section>
+</div>
 
 {% if message %}
 <div class="card group-progress-empty">
@@ -65,7 +65,7 @@
 {% endif %}
 
 {% if groups|length > 1 or active_plans %}
-<section class="card group-progress-filters">
+<div class="card group-progress-filters">
     {% if groups|length > 1 %}
     <form method="get" class="group-progress-filter-form">
         <label for="group">{% if language == "zh" %}当前小组{% else %}Current Group{% endif %}</label>
@@ -107,14 +107,14 @@
         <button type="submit" class="button-secondary">{% if language == "zh" %}切换计划{% else %}Switch plan{% endif %}</button>
     </form>
     {% endif %}
-</section>
+</div>
 {% endif %}
 
 {% if member_rows %}
 <section class="card group-progress-members">
     <h2 class="card-title">{% if language == "zh" %}成员进度{% else %}Member Progress{% endif %}</h2>
 
-    <div class="table-wrap group-progress-table-wrap">
+    <div class="table-wrap table-scroll group-progress-table-wrap">
         <table class="group-progress-table">
             <thead>
                 <tr>

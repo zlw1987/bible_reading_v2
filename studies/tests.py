@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone as datetime_timezone
 from io import StringIO
+import re
 from unittest import mock
 
 from django.contrib import admin
@@ -2439,6 +2440,33 @@ class BibleStudyModuleTests(TestCase):
         self.assertContains(response, "Group Discussion Questions")
         self.assertNotContains(response, "Meeting Time")
         self.assertNotContains(response, "Status")
+
+    def test_member_meeting_detail_has_logical_heading_hierarchy(self):
+        self.set_language("en")
+        meeting = self.create_meeting(status=BibleStudyMeeting.STATUS_PUBLISHED)
+        BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+        self.create_membership(self.user, self.group_unit)
+        self.client.login(username="regular", password="testpass123")
+
+        response = self.client.get(
+            reverse("bible_study_meeting_detail", args=[meeting.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        levels = [
+            int(level)
+            for level in re.findall(
+                r"<h([1-6])(?:\s|>)",
+                response.content.decode(),
+            )
+        ]
+        self.assertEqual(levels.count(1), 1)
+        self.assertEqual(levels[0], 1)
+        for previous, current in zip(levels, levels[1:]):
+            self.assertLessEqual(current, previous + 1)
 
     def test_staff_can_update_meeting_preparation_only(self):
         self.set_language("en")

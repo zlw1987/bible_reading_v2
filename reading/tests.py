@@ -4772,6 +4772,18 @@ class BibleReadingFlowTests(TestCase):
         self.assertNotContains(response, "Day 8")
         self.assertNotContains(response, "Day 10")
 
+        levels = [
+            int(level)
+            for level in re.findall(
+                r"<h([1-6])(?:\s|>)",
+                response.content.decode(),
+            )
+        ]
+        self.assertEqual(levels.count(1), 1)
+        self.assertEqual(levels[0], 1)
+        for previous, current in zip(levels, levels[1:]):
+            self.assertLessEqual(current, previous + 1)
+
     def test_plan_detail_next_week_shows_later_days(self):
         self.set_language("en")
         PlanEnrollment.objects.create(user=self.user, active_plan=self.active_plan)
@@ -6673,6 +6685,45 @@ class BibleReadingFlowTests(TestCase):
         self.assertEqual(comment.body, "Updated reflection.")
         self.assertEqual(comment.visibility, ReflectionComment.VISIBILITY_CHURCH)
         self.assertTrue(comment.is_anonymous)
+
+    def test_invalid_reflection_edit_renders_linked_localized_error_summary(self):
+        comment = ReflectionComment.objects.create(
+            user=self.user,
+            active_plan=self.active_plan,
+            plan_day=self.day1,
+            scripture_ref_key="John 1",
+            scripture_display_zh="约翰福音 第 1 章",
+            scripture_display_en="John 1",
+            visibility=ReflectionComment.VISIBILITY_PRIVATE,
+            body="Original reflection.",
+        )
+        self.set_language("en")
+        self.client.login(username="levin", password="testpass123")
+
+        response = self.client.post(
+            reverse("edit_comment", args=[comment.id]),
+            {
+                "body": "",
+                "visibility": ReflectionComment.VISIBILITY_PRIVATE,
+                "is_anonymous": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please correct the following errors")
+        self.assertContains(response, 'href="#id_body"')
+        self.assertContains(response, 'class="errorlist"')
+
+        self.set_language("zh")
+        response = self.client.post(
+            reverse("edit_comment", args=[comment.id]),
+            {
+                "body": "",
+                "visibility": ReflectionComment.VISIBILITY_PRIVATE,
+                "is_anonymous": "",
+            },
+        )
+        self.assertContains(response, "请更正以下错误")
 
 
     def test_user_cannot_edit_other_users_reflection(self):

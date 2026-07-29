@@ -9,6 +9,7 @@ from .structure_visibility import get_user_group_prayer_write_context
 PRAYER_FORM_TEXT = {
     "en": {
         "title": "Title",
+        "body": "Prayer request",
         "prayer_title": "Prayer title",
         "share_prayer": "Share your prayer request...",
         "visibility": "Visibility",
@@ -24,6 +25,7 @@ PRAYER_FORM_TEXT = {
     },
     "zh": {
         "title": "标题",
+        "body": "代祷内容",
         "prayer_title": "代祷标题",
         "share_prayer": "分享你的代祷事项...",
         "visibility": "可见范围",
@@ -112,6 +114,7 @@ class PrayerRequestForm(forms.ModelForm):
         self.user = user
         self.language = normalize_language(language)
         self.fields["title"].label = form_text(self.language, "title")
+        self.fields["body"].label = form_text(self.language, "body")
         self.fields["title"].widget.attrs["placeholder"] = form_text(
             self.language,
             "prayer_title",

@@ -1,0 +1,19 @@
+{% if form.errors %}
+<div class="error-summary" role="alert" tabindex="-1" data-error-summary>
+    <h2 class="error-summary-title">
+        {% if language == "zh" %}请更正以下错误{% else %}Please correct the following errors{% endif %}
+    </h2>
+    <ul>
+        {% for field in form %}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <li><a href="#{{ field.id_for_label }}">{% if field.label %}{{ field.label }}: {% endif %}{{ error }}</a></li>
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}

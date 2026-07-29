@@ -43,16 +43,41 @@
 <div class="card">
     <form method="post">
         {% csrf_token %}
+        {% include "shared/_form_error_summary.html" with form=form %}
 
         {% if return_url %}
         <input type="hidden" name="next" value="{{ return_url }}">
         {% endif %}
 
-        {{ form.as_p }}
+        <div class="form-field">
+            {{ form.body.errors }}
+            <label class="sr-only" for="{{ form.body.id_for_label }}">
+                {{ form.body.label }}
+            </label>
+            {{ form.body }}
+        </div>
 
+        {% if form.visibility %}
+        <div class="form-field">
+            {{ form.visibility.label_tag }}
+            {{ form.visibility.errors }}
+            {{ form.visibility }}
+        </div>
+        {% endif %}
+
+        <div class="form-field">
+            {{ form.is_anonymous.errors }}
+            <label class="checkbox-option" for="{{ form.is_anonymous.id_for_label }}">
+                {{ form.is_anonymous }}
+                <span>{{ form.is_anonymous.label }}</span>
+            </label>
+        </div>
+
+        <div class="form-actions">
         <button type="submit">
             {% if language == "zh" %}保存修改{% else %}Save Changes{% endif %}
         </button>
+        </div>
     </form>
 </div>
 {% endblock %}

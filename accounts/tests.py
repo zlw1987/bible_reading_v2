@@ -4,7 +4,7 @@ from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from django.contrib.auth.models import AnonymousUser, User
+from django.contrib.auth.models import AnonymousUser, Permission, User
 from django.contrib.messages import get_messages
 from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.management import call_command, CommandError
@@ -104,6 +104,15 @@ def create_role_assignment_without_validation(**kwargs):
     assignment = ChurchRoleAssignment(**kwargs)
     assignment.save_base(force_insert=True)
     return assignment
+
+
+def grant_structure_unit_change_permission(user):
+    permission = Permission.objects.get(
+        content_type__app_label="accounts",
+        content_type__model="churchstructureunit",
+        codename="change_churchstructureunit",
+    )
+    user.user_permissions.add(permission)
 
 
 class AccountProfileTests(TestCase):
@@ -4289,6 +4298,13 @@ class ChurchStructureSetupDetailTests(TestCase):
             username="setup_ordinary",
             password="UserPass123!",
         )
+        self.permissioned_non_staff = User.objects.create_user(
+            username="setup_permissioned_non_staff",
+            password="PermPass123!",
+            is_staff=False,
+            is_superuser=False,
+        )
+        grant_structure_unit_change_permission(self.permissioned_non_staff)
         self.member_only = User.objects.create_user(
             username="setup_member_only",
             password="UserPass123!",
@@ -4354,6 +4370,12 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.client.login(
             username="setup_structure_admin",
             password="AdminPass123!",
+        )
+
+    def login_permissioned_non_staff(self):
+        self.client.login(
+            username="setup_permissioned_non_staff",
+            password="PermPass123!",
         )
 
     def create_membership(self, user, unit=None, **overrides):
@@ -4859,6 +4881,18 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.group.refresh_from_db()
         self.assertIsNone(self.group.role_profile)
 
+    def test_non_staff_with_structure_permission_cannot_update_role_profile(self):
+        profile = self.create_role_profile()
+        url = reverse("update_structure_unit_role_profile", args=[self.group.id])
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(url, {"role_profile": profile.id})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.group.refresh_from_db()
+        self.assertIsNone(self.group.role_profile)
+
     def test_structure_admin_can_update_and_clear_unit_role_profile(self):
         profile = self.create_role_profile()
         url = reverse("update_structure_unit_role_profile", args=[self.group.id])
@@ -4968,6 +5002,50 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertEqual(ordinary_response.status_code, 302)
         self.assertEqual(ChurchStructureUnitRoleAssignment.objects.count(), 0)
 
+    def test_non_staff_with_structure_permission_cannot_add_coworker_assignment(self):
+        role_type = self.create_role_type()
+        before = {
+            "unit_role_assignments": ChurchStructureUnitRoleAssignment.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "church_role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+            "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+        }
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(
+            reverse("add_structure_unit_coworker_assignment", args=[self.group.id])
+            + "?coworker_user_scope=all",
+            {
+                "role_type": role_type.id,
+                "user": self.target_user.id,
+                "start_date": timezone.localdate().isoformat(),
+                "notes": "Should not save.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.assertFalse(
+            ChurchStructureUnitRoleAssignment.objects.filter(
+                unit=self.group,
+                role_type=role_type,
+                user=self.target_user,
+            ).exists()
+        )
+        self.assertEqual(
+            {
+                "unit_role_assignments": ChurchStructureUnitRoleAssignment.objects.count(),
+                "memberships": ChurchStructureMembership.objects.count(),
+                "church_role_assignments": ChurchRoleAssignment.objects.count(),
+                "team_assignments": TeamAssignment.objects.count(),
+                "team_assignment_members": TeamAssignmentMember.objects.count(),
+                "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+            },
+            before,
+        )
+
     def test_add_coworker_assignment_rejects_inactive_unit_and_duplicates(self):
         role_type = self.create_role_type()
         self.create_membership(self.target_user, is_primary=True)
@@ -5060,6 +5138,29 @@ class ChurchStructureSetupDetailTests(TestCase):
         self.assertEqual(response.status_code, 405)
         assignment.refresh_from_db()
         self.assertTrue(assignment.is_active)
+
+    def test_non_staff_with_structure_permission_cannot_end_coworker_assignment(self):
+        role_type = self.create_role_type()
+        assignment = ChurchStructureUnitRoleAssignment.objects.create(
+            unit=self.group,
+            role_type=role_type,
+            user=self.target_user,
+            start_date=timezone.localdate() - timedelta(days=5),
+        )
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(
+            reverse("end_structure_unit_coworker_assignment", args=[assignment.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.assertTrue(
+            ChurchStructureUnitRoleAssignment.objects.filter(id=assignment.id).exists()
+        )
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.is_active)
+        self.assertIsNone(assignment.end_date)
 
     def test_role_profile_is_explicit_not_leaf_inferred(self):
         profile = self.create_role_profile()
@@ -5523,6 +5624,13 @@ class StaffStructureMapEditModeTests(TestCase):
             username="structure_plain",
             password="PlainPass123!",
         )
+        self.permissioned_non_staff = User.objects.create_user(
+            username="structure_permissioned_non_staff",
+            password="PermPass123!",
+            is_staff=False,
+            is_superuser=False,
+        )
+        grant_structure_unit_change_permission(self.permissioned_non_staff)
         self.url = reverse("staff_structure_map")
 
         self.root = ChurchStructureUnit.objects.create(
@@ -5589,6 +5697,12 @@ class StaffStructureMapEditModeTests(TestCase):
             username="structure_viewer", password="ViewerPass123!"
         )
 
+    def login_permissioned_non_staff(self):
+        self.client.login(
+            username="structure_permissioned_non_staff",
+            password="PermPass123!",
+        )
+
     def child_payload(self, **overrides):
         payload = {
             "name": "青年小组",
@@ -5606,6 +5720,16 @@ class StaffStructureMapEditModeTests(TestCase):
             "unit_ids": [str(unit_id) for unit_id in unit_ids],
         }
         return self.client.post(self.order_siblings_url, payload, **kwargs)
+
+    def structure_runtime_counts(self):
+        return {
+            "units": ChurchStructureUnit.objects.count(),
+            "memberships": ChurchStructureMembership.objects.count(),
+            "role_assignments": ChurchRoleAssignment.objects.count(),
+            "team_assignments": TeamAssignment.objects.count(),
+            "team_assignment_members": TeamAssignmentMember.objects.count(),
+            "bible_study_roles": BibleStudyMeetingRole.objects.count(),
+        }
 
     # --- view / edit mode ---------------------------------------------------
 
@@ -6462,6 +6586,17 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(ChurchStructureUnit.objects.filter(code="YOUTH").exists())
 
+    def test_non_staff_with_structure_permission_cannot_create_child_unit(self):
+        before_units = ChurchStructureUnit.objects.count()
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(self.add_child_url, self.child_payload())
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.assertEqual(ChurchStructureUnit.objects.count(), before_units)
+        self.assertFalse(ChurchStructureUnit.objects.filter(code="YOUTH").exists())
+
     def test_invalid_child_unit_data_is_rejected(self):
         self.set_language("en")
         self.login_admin()
@@ -6591,6 +6726,21 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.child.refresh_from_db()
         self.assertTrue(self.child.is_active)
+
+    def test_non_staff_with_structure_permission_cannot_disable_unit(self):
+        before = self.structure_runtime_counts()
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(
+            self.disable_child_url,
+            {"confirm_disable": "on"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.is_active)
+        self.assertEqual(self.structure_runtime_counts(), before)
 
     def test_disable_does_not_delete_or_rewrite_related_rows(self):
         ended_membership = ChurchStructureMembership.objects.create(
@@ -6831,6 +6981,18 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.inactive_child.refresh_from_db()
         self.assertFalse(self.inactive_child.is_active)
+
+    def test_non_staff_with_structure_permission_cannot_re_enable_unit(self):
+        before = self.structure_runtime_counts()
+        self.login_permissioned_non_staff()
+
+        response = self.client.post(self.enable_child_url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/admin/login/", response.url)
+        self.inactive_child.refresh_from_db()
+        self.assertFalse(self.inactive_child.is_active)
+        self.assertEqual(self.structure_runtime_counts(), before)
 
     def test_re_enable_writes_logentry_audit(self):
         from django.contrib.admin.models import LogEntry

@@ -761,6 +761,7 @@ def staff_structure_units_order_siblings(request):
     return redirect(_staff_structure_edit_url())
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def staff_structure_unit_add_child(request, parent_id):
@@ -1020,6 +1021,7 @@ def _inactive_structure_unit_rows(language):
     return rows
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def staff_structure_unit_disable(request, unit_id):
@@ -1093,6 +1095,7 @@ def staff_structure_unit_disable(request, unit_id):
     return redirect(_staff_structure_edit_url())
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def staff_structure_unit_enable(request, unit_id):
@@ -1756,6 +1759,7 @@ def church_structure_unit_detail(request, unit_id):
     )
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def update_structure_unit_role_profile(request, unit_id):
@@ -1803,6 +1807,7 @@ def update_structure_unit_role_profile(request, unit_id):
     return redirect("church_structure_unit_detail", unit_id=unit.id)
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def add_structure_unit_coworker_assignment(request, unit_id):
@@ -1864,6 +1869,7 @@ def add_structure_unit_coworker_assignment(request, unit_id):
     return redirect("church_structure_unit_detail", unit_id=unit.id)
 
 
+@staff_member_required
 @user_passes_test(can_change_church_structure_units)
 @require_POST
 def end_structure_unit_coworker_assignment(request, assignment_id):

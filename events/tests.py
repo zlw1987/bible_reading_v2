@@ -2334,6 +2334,393 @@ class ServiceEventFoundationTests(TestCase):
         self.assertContains(response, "Rotation Anchor Team")
 
 
+class ServiceEventAdminAudienceIntegrityTests(TestCase):
+    def setUp(self):
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+            name_en="Whole Church",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North District",
+            name_en="North District",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+            name_en="Rainbow 4",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R5",
+            name="Rainbow 5",
+            name_en="Rainbow 5",
+        )
+        self.inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVE",
+            name="Inactive Group",
+            name_en="Inactive Group",
+            is_active=False,
+        )
+        self.required_team = MinistryTeam.objects.create(
+            name="Hospitality",
+            name_en="Hospitality",
+        )
+        self.superuser = User.objects.create_superuser(
+            username="event_admin",
+            email="event-admin@example.com",
+            password="testpass123",
+        )
+        self.client.force_login(self.superuser)
+        self.future_time = timezone.localtime(timezone.now() + timezone.timedelta(days=3))
+        self.end_time = self.future_time + timezone.timedelta(hours=2)
+
+    def admin_add_url(self):
+        return reverse("admin:events_serviceevent_add")
+
+    def admin_change_url(self, event):
+        return reverse("admin:events_serviceevent_change", args=[event.id])
+
+    def audience_inline_formset(self, response):
+        for inline_admin_formset in response.context["inline_admin_formsets"]:
+            if inline_admin_formset.formset.model is ServiceEventAudienceScope:
+                return inline_admin_formset.formset
+        self.fail("ServiceEventAudienceScope inline formset was not rendered.")
+
+    def event_admin_post_data(
+        self,
+        *,
+        audience_units=None,
+        required_team_ids=None,
+        initial_audience=None,
+        delete_initial_audience=False,
+        **overrides,
+    ):
+        audience_units = list(audience_units or [])
+        required_team_ids = list(required_team_ids or [])
+        initial_audience = list(initial_audience or [])
+        data = {
+            "title": "Admin Service Event",
+            "title_en": "Admin Service Event",
+            "description": "Admin description",
+            "description_en": "Admin English description",
+            "event_type": ServiceEvent.EVENT_SPECIAL_MEETING,
+            "start_datetime_0": self.future_time.strftime("%Y-%m-%d"),
+            "start_datetime_1": self.future_time.strftime("%H:%M:%S"),
+            "end_datetime_0": self.end_time.strftime("%Y-%m-%d"),
+            "end_datetime_1": self.end_time.strftime("%H:%M:%S"),
+            "location": "Sanctuary",
+            "meeting_link": "https://example.com/service-event",
+            "host_language_unit": "",
+            "rotation_anchor_team": "",
+            "status": ServiceEvent.STATUS_PUBLISHED,
+            "created_by": "",
+            "required_team_links-TOTAL_FORMS": str(len(required_team_ids)),
+            "required_team_links-INITIAL_FORMS": "0",
+            "required_team_links-MIN_NUM_FORMS": "0",
+            "required_team_links-MAX_NUM_FORMS": "1000",
+            "audience_scope_links-TOTAL_FORMS": str(
+                len(initial_audience) + len(audience_units)
+            ),
+            "audience_scope_links-INITIAL_FORMS": str(len(initial_audience)),
+            "audience_scope_links-MIN_NUM_FORMS": "0",
+            "audience_scope_links-MAX_NUM_FORMS": "1000",
+            "_save": "Save",
+        }
+        for index, team_id in enumerate(required_team_ids):
+            data[f"required_team_links-{index}-ministry_team"] = str(team_id)
+
+        for index, scope in enumerate(initial_audience):
+            data[f"audience_scope_links-{index}-id"] = str(scope.id)
+            data[f"audience_scope_links-{index}-service_event"] = str(
+                scope.service_event_id
+            )
+            data[f"audience_scope_links-{index}-unit"] = str(scope.unit_id)
+            if delete_initial_audience:
+                data[f"audience_scope_links-{index}-DELETE"] = "on"
+
+        offset = len(initial_audience)
+        for index, unit in enumerate(audience_units, start=offset):
+            data[f"audience_scope_links-{index}-unit"] = str(unit.id)
+
+        data.update(overrides)
+        return data
+
+    def create_event(self, **overrides):
+        data = {
+            "title": "Existing Admin Event",
+            "title_en": "Existing Admin Event",
+            "event_type": ServiceEvent.EVENT_SPECIAL_MEETING,
+            "start_datetime": self.future_time,
+            "end_datetime": self.end_time,
+            "status": ServiceEvent.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return ServiceEvent.objects.create(**data)
+
+    def test_admin_add_page_renders_audience_inline(self):
+        response = self.client.get(self.admin_add_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="audience_scope_links-0-unit"')
+        self.assertContains(response, 'name="required_team_links-TOTAL_FORMS"')
+
+    def test_admin_add_rejects_zero_audience_without_partial_rows(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(required_team_ids=[self.required_team.id]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_admin_add_with_one_audience_unit_creates_event_and_scope(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(audience_units=[self.group_unit]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="Admin Service Event")
+        self.assertEqual(
+            list(event.get_audience_scope_units()),
+            [self.group_unit],
+        )
+
+    def test_admin_add_surfaces_audience_constraint_validation_error(self):
+        message = "patched service event audience constraint failure"
+
+        with patch.object(
+            ServiceEventAudienceScope,
+            "validate_constraints",
+            side_effect=ValidationError(message),
+        ):
+            response = self.client.post(
+                self.admin_add_url(),
+                self.event_admin_post_data(
+                    audience_units=[self.group_unit],
+                    required_team_ids=[self.required_team.id],
+                ),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, message)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_admin_existing_audience_unit_is_immutable_but_extra_row_is_enabled(self):
+        event = self.create_event(title="Immutable Event")
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.group_unit,
+        )
+
+        get_response = self.client.get(self.admin_change_url(event))
+
+        self.assertEqual(get_response.status_code, 200)
+        formset = self.audience_inline_formset(get_response)
+        self.assertTrue(formset.initial_forms[0].fields["unit"].disabled)
+        self.assertFalse(formset.extra_forms[0].fields["unit"].disabled)
+
+        data = self.event_admin_post_data(
+            title="Forged Unit Change",
+            title_en="Forged Unit Change",
+            initial_audience=[scope],
+        )
+        data["audience_scope_links-0-unit"] = str(self.other_group_unit.id)
+
+        post_response = self.client.post(self.admin_change_url(event), data)
+
+        self.assertNotEqual(post_response.status_code, 500)
+        self.assertEqual(post_response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Forged Unit Change")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+        self.assertEqual(ServiceEventRequiredTeam.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_admin_change_rejects_deleting_final_audience_row(self):
+        event = self.create_event(title="Keep Audience")
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Changed Without Audience",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Keep Audience")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+
+    def test_admin_change_can_replace_district_with_descendant_in_one_save(self):
+        event = self.create_event(title="Replace District")
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.north_unit,
+        )
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Replaced With Group",
+                title_en="Replaced With Group",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Replaced With Group")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_admin_change_can_replace_small_group_with_ancestor_in_one_save(self):
+        event = self.create_event(title="Replace Group")
+        scope = ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Replaced With District",
+                title_en="Replaced With District",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.north_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Replaced With District")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.north_unit])
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
+
+    def test_admin_add_rejects_ancestor_descendant_audience_conflict(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(
+                audience_units=[self.north_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include both an ancestor and descendant unit.",
+        )
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+
+    def test_admin_add_rejects_inactive_audience_unit(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(audience_units=[self.inactive_unit]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+
+    def test_admin_add_rejects_duplicate_audience_units_without_partial_rows(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(
+                audience_units=[self.group_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include the same unit more than once.",
+        )
+        self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+
+    def test_admin_change_can_repair_existing_zero_row_event(self):
+        event = self.create_event(title="Zero Row Event")
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Repaired Event",
+                title_en="Repaired Event",
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Repaired Event")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+
+    def test_admin_add_allows_valid_sibling_audience_units(self):
+        response = self.client.post(
+            self.admin_add_url(),
+            self.event_admin_post_data(
+                audience_units=[self.group_unit, self.other_group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        event = ServiceEvent.objects.get(title="Admin Service Event")
+        self.assertEqual(
+            set(event.get_audience_scope_units()),
+            {self.group_unit, self.other_group_unit},
+        )
+
+    def test_admin_delete_service_event_still_works_with_audience_inline(self):
+        event = self.create_event(title="Delete Me")
+        ServiceEventAudienceScope.objects.create(
+            service_event=event,
+            unit=self.group_unit,
+        )
+        delete_url = reverse("admin:events_serviceevent_delete", args=[event.id])
+
+        response = self.client.post(delete_url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ServiceEvent.objects.filter(id=event.id).exists())
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
+
+
 class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
     """SE-AS.4 / CS-CORE.2B-A runtime visibility rules.
 

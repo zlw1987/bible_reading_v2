@@ -1,8 +1,107 @@
 from django.contrib import admin
+from django import forms
+from django.forms.models import (
+    BaseInlineFormSet,
+    InlineForeignKeyField,
+    construct_instance,
+)
 
 from accounts.models import ChurchStructureUnit
+from accounts.ordering import order_units_by_sibling_key
 
-from .models import ServiceEvent, ServiceEventRequiredTeam
+from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequiredTeam
+
+
+class ServiceEventAudienceScopeInlineFormSet(BaseInlineFormSet):
+    zero_message = "Select at least one audience scope unit."
+    duplicate_message = "Audience scope cannot include the same unit more than once."
+    inactive_message = "Audience scope must use an active church structure unit."
+    ancestor_message = (
+        "Audience scope cannot include both an ancestor and descendant unit."
+    )
+
+    def clean(self):
+        if any(self.errors):
+            return
+
+        units = []
+        for form in self.forms:
+            cleaned_data = getattr(form, "cleaned_data", {})
+            if not cleaned_data or cleaned_data.get("DELETE"):
+                continue
+
+            unit = cleaned_data.get("unit")
+            if unit is None:
+                continue
+            if not unit.is_active:
+                form.add_error("unit", self.inactive_message)
+                continue
+            units.append(unit)
+
+        if any(form.errors for form in self.forms):
+            return
+
+        if not units:
+            raise forms.ValidationError(self.zero_message)
+
+        unit_ids = [unit.id for unit in units]
+        if len(unit_ids) != len(set(unit_ids)):
+            raise forms.ValidationError(self.duplicate_message)
+
+        selected_ids = set(unit_ids)
+        for unit in units:
+            ancestor_ids = {
+                ancestor.id
+                for ancestor in unit.get_ancestors()
+                if ancestor.id is not None
+            }
+            if ancestor_ids & selected_ids:
+                raise forms.ValidationError(self.ancestor_message)
+
+        super().clean()
+
+
+class ServiceEventAudienceScopeInlineForm(forms.ModelForm):
+    """Admin-only form that leaves cross-row audience checks to the formset."""
+
+    class Meta:
+        model = ServiceEventAudienceScope
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["unit"].disabled = True
+
+    def _post_clean(self):
+        exclude = self._get_validation_exclusions()
+
+        for name, field in self.fields.items():
+            if isinstance(field, InlineForeignKeyField):
+                exclude.add(name)
+
+        try:
+            self.instance = construct_instance(
+                self,
+                self.instance,
+                self._meta.fields,
+                self._meta.exclude,
+            )
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        try:
+            self.instance.clean_fields(exclude=exclude)
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        try:
+            self.instance.validate_constraints(exclude=exclude)
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        if self._validate_unique:
+            self.validate_unique()
 
 
 class ServiceEventRequiredTeamInline(admin.TabularInline):
@@ -11,9 +110,29 @@ class ServiceEventRequiredTeamInline(admin.TabularInline):
     autocomplete_fields = ("ministry_team",)
 
 
+class ServiceEventAudienceScopeInline(admin.TabularInline):
+    model = ServiceEventAudienceScope
+    form = ServiceEventAudienceScopeInlineForm
+    formset = ServiceEventAudienceScopeInlineFormSet
+    fields = ("unit",)
+    extra = 1
+    min_num = 1
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "unit":
+            kwargs["queryset"] = order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                "en",
+            )
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "unit":
+            formfield.label_from_instance = lambda unit: unit.path_label("en")
+        return formfield
+
+
 @admin.register(ServiceEvent)
 class ServiceEventAdmin(admin.ModelAdmin):
-    inlines = (ServiceEventRequiredTeamInline,)
+    inlines = (ServiceEventRequiredTeamInline, ServiceEventAudienceScopeInline)
     list_display = (
         "title",
         "event_type",

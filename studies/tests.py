@@ -6242,12 +6242,736 @@ class BibleStudyModuleTests(TestCase):
         self.assertEqual(response.context["generation_preview"]["existing_count"], 2)
 
 
+class BibleStudyAdminAudienceIntegrityTests(TestCase):
+    def setUp(self):
+        self.root_unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+            name_en="Whole Church",
+        )
+        self.north_unit = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_DISTRICT,
+            code="NORTH",
+            name="North District",
+            name_en="North District",
+        )
+        self.group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R4",
+            name="Rainbow 4",
+            name_en="Rainbow 4",
+        )
+        self.other_group_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="R5",
+            name="Rainbow 5",
+            name_en="Rainbow 5",
+        )
+        self.inactive_unit = ChurchStructureUnit.objects.create(
+            parent=self.north_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="INACTIVE",
+            name="Inactive Group",
+            name_en="Inactive Group",
+            is_active=False,
+        )
+        self.superuser = User.objects.create_superuser(
+            username="study_admin",
+            email="study-admin@example.com",
+            password="testpass123",
+        )
+        self.client.force_login(self.superuser)
+        self.future_date = timezone.localdate() + timezone.timedelta(days=7)
+        self.future_time = timezone.localtime(timezone.now() + timezone.timedelta(days=3))
+        self.series = BibleStudySeries.objects.create(
+            title="Existing Admin Series",
+            title_en="Existing Admin Series",
+            start_date=self.future_date,
+            end_date=self.future_date + timezone.timedelta(days=84),
+            status=BibleStudySeries.STATUS_PUBLISHED,
+            is_active=True,
+        )
+        self.lesson = BibleStudyLesson.objects.create(
+            series=self.series,
+            title="Existing Admin Lesson",
+            title_en="Existing Admin Lesson",
+            scripture_reference="John 15:1-17",
+            lesson_date=self.future_date,
+            prestudy_datetime=self.future_time,
+            pastor_guide_body="Guide",
+            pastor_guide_body_en="Guide",
+            global_discussion_questions="Questions",
+            global_discussion_questions_en="Questions",
+            status=BibleStudyLesson.STATUS_PUBLISHED,
+        )
+
+    def series_add_url(self):
+        return reverse("admin:studies_biblestudyseries_add")
+
+    def series_change_url(self, series):
+        return reverse("admin:studies_biblestudyseries_change", args=[series.id])
+
+    def meeting_add_url(self):
+        return reverse("admin:studies_biblestudymeeting_add")
+
+    def meeting_change_url(self, meeting):
+        return reverse("admin:studies_biblestudymeeting_change", args=[meeting.id])
+
+    def audience_inline_formset(self, response, model):
+        for inline_admin_formset in response.context["inline_admin_formsets"]:
+            if inline_admin_formset.formset.model is model:
+                return inline_admin_formset.formset
+        self.fail(f"{model.__name__} inline formset was not rendered.")
+
+    def series_admin_post_data(
+        self,
+        *,
+        audience_units=None,
+        initial_audience=None,
+        delete_initial_audience=False,
+        **overrides,
+    ):
+        audience_units = list(audience_units or [])
+        initial_audience = list(initial_audience or [])
+        data = {
+            "title": "Admin Bible Study Series",
+            "title_en": "Admin Bible Study Series",
+            "description": "Admin schedule description",
+            "description_en": "Admin schedule English description",
+            "start_date": self.future_date.strftime("%Y-%m-%d"),
+            "end_date": (self.future_date + timezone.timedelta(days=84)).strftime(
+                "%Y-%m-%d"
+            ),
+            "status": BibleStudySeries.STATUS_PUBLISHED,
+            "created_by": "",
+            "is_active": "on",
+            "audience_scope_links-TOTAL_FORMS": str(
+                len(initial_audience) + len(audience_units)
+            ),
+            "audience_scope_links-INITIAL_FORMS": str(len(initial_audience)),
+            "audience_scope_links-MIN_NUM_FORMS": "0",
+            "audience_scope_links-MAX_NUM_FORMS": "1000",
+            "_save": "Save",
+        }
+        for index, scope in enumerate(initial_audience):
+            data[f"audience_scope_links-{index}-id"] = str(scope.id)
+            data[f"audience_scope_links-{index}-series"] = str(scope.series_id)
+            data[f"audience_scope_links-{index}-unit"] = str(scope.unit_id)
+            if delete_initial_audience:
+                data[f"audience_scope_links-{index}-DELETE"] = "on"
+
+        offset = len(initial_audience)
+        for index, unit in enumerate(audience_units, start=offset):
+            data[f"audience_scope_links-{index}-unit"] = str(unit.id)
+
+        data.update(overrides)
+        return data
+
+    def meeting_admin_post_data(
+        self,
+        *,
+        audience_units=None,
+        initial_audience=None,
+        delete_initial_audience=False,
+        lesson=None,
+        anchor_unit=None,
+        **overrides,
+    ):
+        audience_units = list(audience_units or [])
+        initial_audience = list(initial_audience or [])
+        lesson = lesson or self.lesson
+        data = {
+            "lesson": str(lesson.id),
+            "anchor_unit": str(anchor_unit.id) if anchor_unit else "",
+            "generation_key": "",
+            "meeting_kind": BibleStudyMeeting.KIND_NORMAL,
+            "meeting_datetime_0": self.future_time.strftime("%Y-%m-%d"),
+            "meeting_datetime_1": self.future_time.strftime("%H:%M:%S"),
+            "location": "Small group home",
+            "location_en": "Small group home",
+            "meeting_link": "https://example.com/study",
+            "discussion_leader_user": "",
+            "discussion_leader_name": "Leader fallback",
+            "group_direction": "Direction",
+            "group_direction_en": "Direction",
+            "group_questions": "Questions",
+            "group_questions_en": "Questions",
+            "status": BibleStudyMeeting.STATUS_PUBLISHED,
+            "service_event": "",
+            "created_by": "",
+            "audience_scope_links-TOTAL_FORMS": str(
+                len(initial_audience) + len(audience_units)
+            ),
+            "audience_scope_links-INITIAL_FORMS": str(len(initial_audience)),
+            "audience_scope_links-MIN_NUM_FORMS": "0",
+            "audience_scope_links-MAX_NUM_FORMS": "1000",
+            "_save": "Save",
+        }
+        for index, scope in enumerate(initial_audience):
+            data[f"audience_scope_links-{index}-id"] = str(scope.id)
+            data[f"audience_scope_links-{index}-meeting"] = str(scope.meeting_id)
+            data[f"audience_scope_links-{index}-unit"] = str(scope.unit_id)
+            if delete_initial_audience:
+                data[f"audience_scope_links-{index}-DELETE"] = "on"
+
+        offset = len(initial_audience)
+        for index, unit in enumerate(audience_units, start=offset):
+            data[f"audience_scope_links-{index}-unit"] = str(unit.id)
+
+        data.update(overrides)
+        return data
+
+    def create_meeting(self, **overrides):
+        data = {
+            "lesson": self.lesson,
+            "meeting_datetime": self.future_time,
+            "location": "Small group home",
+            "location_en": "Small group home",
+            "meeting_link": "https://example.com/study",
+            "discussion_leader_name": "Leader fallback",
+            "group_direction": "Direction",
+            "group_direction_en": "Direction",
+            "group_questions": "Questions",
+            "group_questions_en": "Questions",
+            "status": BibleStudyMeeting.STATUS_PUBLISHED,
+        }
+        data.update(overrides)
+        return BibleStudyMeeting.objects.create(**data)
+
+    def test_series_admin_add_page_renders_audience_inline(self):
+        response = self.client.get(self.series_add_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="audience_scope_links-0-unit"')
+
+    def test_series_admin_add_rejects_zero_audience_without_partial_rows(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 0)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_series_admin_add_with_one_audience_unit_creates_series_and_scope(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(audience_units=[self.group_unit]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        series = BibleStudySeries.objects.get(title="Admin Bible Study Series")
+        self.assertEqual(list(series.get_audience_scope_units()), [self.group_unit])
+
+    def test_series_admin_add_surfaces_audience_constraint_validation_error(self):
+        message = "patched bible study audience constraint failure"
+
+        with mock.patch.object(
+            BibleStudySeriesAudienceScope,
+            "validate_constraints",
+            side_effect=ValidationError(message),
+        ):
+            response = self.client.post(
+                self.series_add_url(),
+                self.series_admin_post_data(audience_units=[self.group_unit]),
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, message)
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 0)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_series_admin_existing_audience_unit_is_immutable_but_extra_row_is_enabled(self):
+        scope = BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.group_unit,
+        )
+
+        get_response = self.client.get(self.series_change_url(self.series))
+
+        self.assertEqual(get_response.status_code, 200)
+        formset = self.audience_inline_formset(
+            get_response,
+            BibleStudySeriesAudienceScope,
+        )
+        self.assertTrue(formset.initial_forms[0].fields["unit"].disabled)
+        self.assertFalse(formset.extra_forms[0].fields["unit"].disabled)
+
+        data = self.series_admin_post_data(
+            title="Forged Series Unit Change",
+            title_en="Forged Series Unit Change",
+            initial_audience=[scope],
+        )
+        data["audience_scope_links-0-unit"] = str(self.other_group_unit.id)
+
+        post_response = self.client.post(self.series_change_url(self.series), data)
+
+        self.assertNotEqual(post_response.status_code, 500)
+        self.assertEqual(post_response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Forged Series Unit Change")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_series_admin_change_rejects_deleting_final_audience_row(self):
+        scope = BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Changed Series Without Audience",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Existing Admin Series")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+
+    def test_series_admin_change_can_replace_root_with_group_in_one_save(self):
+        scope = BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.root_unit,
+        )
+
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Series Replaced With Group",
+                title_en="Series Replaced With Group",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Series Replaced With Group")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_series_admin_change_can_replace_group_with_root_in_one_save(self):
+        scope = BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Series Replaced With Root",
+                title_en="Series Replaced With Root",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.root_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Series Replaced With Root")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.root_unit])
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 1)
+
+    def test_series_admin_rejects_root_plus_another_unit_before_save(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(
+                audience_units=[self.root_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Whole-church audience scope cannot be combined with other units.",
+        )
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+
+    def test_series_admin_rejects_ancestor_descendant_before_save(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(
+                audience_units=[self.north_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include both an ancestor and descendant unit.",
+        )
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+
+    def test_series_admin_rejects_inactive_unit(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(audience_units=[self.inactive_unit]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+
+    def test_series_admin_rejects_duplicate_audience_units_without_partial_rows(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(
+                audience_units=[self.group_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include the same unit more than once.",
+        )
+        self.assertFalse(
+            BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
+        )
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 0)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_series_admin_change_can_repair_existing_zero_row_series(self):
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Repaired Series",
+                title_en="Repaired Series",
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Repaired Series")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+
+    def test_series_admin_allows_valid_sibling_audience_units(self):
+        response = self.client.post(
+            self.series_add_url(),
+            self.series_admin_post_data(
+                audience_units=[self.group_unit, self.other_group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        series = BibleStudySeries.objects.get(title="Admin Bible Study Series")
+        self.assertEqual(
+            set(series.get_audience_scope_units()),
+            {self.group_unit, self.other_group_unit},
+        )
+
+    def test_admin_delete_series_still_works_with_audience_inline(self):
+        series = BibleStudySeries.objects.create(
+            title="Delete Series",
+            title_en="Delete Series",
+            start_date=self.future_date,
+            end_date=self.future_date + timezone.timedelta(days=84),
+            status=BibleStudySeries.STATUS_DRAFT,
+            is_active=True,
+        )
+        BibleStudySeriesAudienceScope.objects.create(
+            series=series,
+            unit=self.group_unit,
+        )
+        delete_url = reverse("admin:studies_biblestudyseries_delete", args=[series.id])
+
+        response = self.client.post(delete_url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(BibleStudySeries.objects.filter(id=series.id).exists())
+        self.assertFalse(
+            BibleStudySeriesAudienceScope.objects.filter(series_id=series.id).exists()
+        )
+
+    def test_meeting_admin_add_page_renders_audience_inline(self):
+        response = self.client.get(self.meeting_add_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="audience_scope_links-0-unit"')
+
+    def test_meeting_admin_add_rejects_zero_audience_without_inference_or_side_effects(self):
+        BibleStudySeriesAudienceScope.objects.create(
+            series=self.series,
+            unit=self.other_group_unit,
+        )
+
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(anchor_unit=self.group_unit),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_meeting_admin_add_with_one_audience_unit_creates_meeting_and_scope(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(audience_units=[self.group_unit]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting = BibleStudyMeeting.objects.get(location="Small group home")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+
+    def test_meeting_admin_change_rejects_deleting_final_audience_row(self):
+        meeting = self.create_meeting(location="Preserved Location")
+        scope = BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                location="Changed Location",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Preserved Location")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+
+    def test_meeting_admin_existing_audience_unit_is_immutable_but_extra_row_is_enabled(self):
+        meeting = self.create_meeting(location="Immutable Meeting")
+        scope = BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.group_unit,
+        )
+
+        get_response = self.client.get(self.meeting_change_url(meeting))
+
+        self.assertEqual(get_response.status_code, 200)
+        formset = self.audience_inline_formset(
+            get_response,
+            BibleStudyMeetingAudienceScope,
+        )
+        self.assertTrue(formset.initial_forms[0].fields["unit"].disabled)
+        self.assertFalse(formset.extra_forms[0].fields["unit"].disabled)
+
+        data = self.meeting_admin_post_data(
+            initial_audience=[scope],
+            location="Forged Meeting Unit Change",
+        )
+        data["audience_scope_links-0-unit"] = str(self.other_group_unit.id)
+
+        post_response = self.client.post(self.meeting_change_url(meeting), data)
+
+        self.assertNotEqual(post_response.status_code, 500)
+        self.assertEqual(post_response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Forged Meeting Unit Change")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_meeting_admin_change_can_replace_root_with_group_in_one_save(self):
+        meeting = self.create_meeting(location="Root Meeting")
+        scope = BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.root_unit,
+        )
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+                location="Group Meeting",
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Group Meeting")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_meeting_admin_change_can_replace_district_with_group_in_one_save(self):
+        meeting = self.create_meeting(location="District Meeting")
+        scope = BibleStudyMeetingAudienceScope.objects.create(
+            meeting=meeting,
+            unit=self.north_unit,
+        )
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+                location="Group Replacement Meeting",
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Group Replacement Meeting")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 1)
+
+    def test_meeting_admin_rejects_root_plus_another_unit_before_save(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(
+                audience_units=[self.root_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Whole-church audience scope cannot be combined with other units.",
+        )
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_meeting_admin_rejects_ancestor_descendant_before_save(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(
+                audience_units=[self.north_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include both an ancestor and descendant unit.",
+        )
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_meeting_admin_rejects_inactive_unit(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(audience_units=[self.inactive_unit]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+
+    def test_meeting_admin_rejects_duplicate_audience_units_without_partial_rows(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(
+                audience_units=[self.group_unit, self.group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Audience scope cannot include the same unit more than once.",
+        )
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_meeting_admin_change_can_repair_existing_zero_row_meeting(self):
+        meeting = self.create_meeting(location="Zero Row Meeting")
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                audience_units=[self.group_unit],
+                location="Repaired Meeting",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Repaired Meeting")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+
+    def test_meeting_admin_allows_valid_sibling_audience_units(self):
+        response = self.client.post(
+            self.meeting_add_url(),
+            self.meeting_admin_post_data(
+                audience_units=[self.group_unit, self.other_group_unit],
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        meeting = BibleStudyMeeting.objects.get(location="Small group home")
+        self.assertEqual(
+            set(meeting.get_audience_scope_units()),
+            {self.group_unit, self.other_group_unit},
+        )
+
+
 class BibleStudyV2AdminSurfaceTests(SimpleTestCase):
     """The active V2 admin surface remains registered after V1 schema removal."""
 
     def test_v2_meeting_admin_remains_registered(self):
         # The active V2 Bible Study path must remain administrable.
+        self.assertIn(BibleStudySeries, admin.site._registry)
+        self.assertIn(BibleStudyLesson, admin.site._registry)
         self.assertIn(BibleStudyMeeting, admin.site._registry)
+        self.assertIn(BibleStudyMeetingRole, admin.site._registry)
         self.assertIn(BibleStudyMeetingWorshipSong, admin.site._registry)
 
 

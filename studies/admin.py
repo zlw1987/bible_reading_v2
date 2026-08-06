@@ -1,11 +1,22 @@
+from django import forms
 from django.contrib import admin
+from django.forms.models import (
+    BaseInlineFormSet,
+    InlineForeignKeyField,
+    construct_instance,
+)
+
+from accounts.models import ChurchStructureUnit
+from accounts.ordering import order_units_by_sibling_key
 
 from .models import (
     BibleStudyLesson,
     BibleStudyMeeting,
+    BibleStudyMeetingAudienceScope,
     BibleStudyMeetingRole,
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
+    BibleStudySeriesAudienceScope,
 )
 
 # BS-V1-ADMIN-RETIRE.1A retired the active Django Admin surface for the legacy
@@ -14,8 +25,139 @@ from .models import (
 # V1-only child admins. The active V2 path uses ``BibleStudyMeeting``.
 
 
+class BibleStudyAudienceScopeInlineFormSet(BaseInlineFormSet):
+    zero_message = "Select at least one audience scope unit."
+    duplicate_message = "Audience scope cannot include the same unit more than once."
+    inactive_message = "Audience scope must use an active church structure unit."
+    root_combo_message = (
+        "Whole-church audience scope cannot be combined with other units."
+    )
+    ancestor_message = (
+        "Audience scope cannot include both an ancestor and descendant unit."
+    )
+
+    def clean(self):
+        if any(self.errors):
+            return
+
+        units = []
+        for form in self.forms:
+            cleaned_data = getattr(form, "cleaned_data", {})
+            if not cleaned_data or cleaned_data.get("DELETE"):
+                continue
+
+            unit = cleaned_data.get("unit")
+            if unit is None:
+                continue
+            if not unit.is_active:
+                form.add_error("unit", self.inactive_message)
+                continue
+            units.append(unit)
+
+        if any(form.errors for form in self.forms):
+            return
+
+        if not units:
+            raise forms.ValidationError(self.zero_message)
+
+        unit_ids = [unit.id for unit in units]
+        if len(unit_ids) != len(set(unit_ids)):
+            raise forms.ValidationError(self.duplicate_message)
+
+        if (
+            any(unit.unit_type == ChurchStructureUnit.UNIT_ROOT for unit in units)
+            and len(units) > 1
+        ):
+            raise forms.ValidationError(self.root_combo_message)
+
+        selected_ids = set(unit_ids)
+        for unit in units:
+            ancestor_ids = {
+                ancestor.id
+                for ancestor in unit.get_ancestors()
+                if ancestor.id is not None
+            }
+            if ancestor_ids & selected_ids:
+                raise forms.ValidationError(self.ancestor_message)
+
+        super().clean()
+
+
+class BibleStudyAudienceScopeInlineForm(forms.ModelForm):
+    """Admin-only form that leaves cross-row audience checks to the formset."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["unit"].disabled = True
+
+    def _post_clean(self):
+        exclude = self._get_validation_exclusions()
+
+        for name, field in self.fields.items():
+            if isinstance(field, InlineForeignKeyField):
+                exclude.add(name)
+
+        try:
+            self.instance = construct_instance(
+                self,
+                self.instance,
+                self._meta.fields,
+                self._meta.exclude,
+            )
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        try:
+            self.instance.clean_fields(exclude=exclude)
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        try:
+            self.instance.validate_constraints(exclude=exclude)
+        except forms.ValidationError as exc:
+            self._update_errors(exc)
+
+        if self._validate_unique:
+            self.validate_unique()
+
+
+class AudienceScopeInlineMixin:
+    fields = ("unit",)
+    form = BibleStudyAudienceScopeInlineForm
+    formset = BibleStudyAudienceScopeInlineFormSet
+    extra = 1
+    min_num = 1
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "unit":
+            kwargs["queryset"] = order_units_by_sibling_key(
+                ChurchStructureUnit.objects.filter(is_active=True),
+                "en",
+            )
+        formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
+        if db_field.name == "unit":
+            formfield.label_from_instance = lambda unit: unit.path_label("en")
+        return formfield
+
+
+class BibleStudySeriesAudienceScopeInline(
+    AudienceScopeInlineMixin,
+    admin.TabularInline,
+):
+    model = BibleStudySeriesAudienceScope
+
+
+class BibleStudyMeetingAudienceScopeInline(
+    AudienceScopeInlineMixin,
+    admin.TabularInline,
+):
+    model = BibleStudyMeetingAudienceScope
+
+
 @admin.register(BibleStudySeries)
 class BibleStudySeriesAdmin(admin.ModelAdmin):
+    inlines = (BibleStudySeriesAudienceScopeInline,)
     list_display = (
         "title",
         "title_en",
@@ -56,6 +198,7 @@ class BibleStudyLessonAdmin(admin.ModelAdmin):
 
 @admin.register(BibleStudyMeeting)
 class BibleStudyMeetingAdmin(admin.ModelAdmin):
+    inlines = (BibleStudyMeetingAudienceScopeInline,)
     list_display = (
         "lesson",
         "structure_label",

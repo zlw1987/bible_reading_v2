@@ -37,6 +37,27 @@ audit-output/
 *_local.txt
 *_dry_run*.txt
 
+# Local recovery and editor-conflict artifacts
+recovery/
+recover/
+tmp/
+temp/
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*.swp
+*.swo
+*.save
+*.copy
+*_recovery_*.patch
+*_recovery_*.diff
+*_recovery_*.html
+*_conflicted_before_fix.*
+*_staged_before_fix.patch
+*_worktree_before_fix.patch
+
 # Local database backups and sidecar files
 backups/
 *.db

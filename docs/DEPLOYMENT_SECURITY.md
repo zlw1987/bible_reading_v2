@@ -1,12 +1,23 @@
 # Deployment Security and Release Boundary
 
 Status: canonical deployment-security and release-hygiene guidance, current
-through `RELEASE-HYGIENE.0A` (July 2026).
+through `RELEASE-HYGIENE.1A` (August 2026).
 
 `RELEASE-HYGIENE.0A` secured the administrator bootstrap helper, expanded
 repository ignore coverage for local secrets/databases/backups/logs/audit and
 agent artifacts, and removed previously committed local ServiceEvent audit
 outputs. It did not create an external release archive.
+
+`RELEASE-HYGIENE.1A` removed three committed local Calendar/My Serving recovery
+snapshots from the current tree:
+`calendar_serving_recovery_serving_card_conflicted_before_fix.html`,
+`calendar_serving_recovery_staged_before_fix.patch`, and
+`calendar_serving_recovery_worktree_before_fix.patch`. These were unreferenced
+editor/conflict recovery artifacts, not runtime source, migrations, fixtures, or
+canonical history. The cleanup also added ignore coverage for local recovery
+directories, editor conflict leftovers, and similarly named staged/worktree
+patch snapshots. Intentional historical migrations, operational runbooks,
+release/security guidance, and application source remain preserved.
 
 ## Safe administrator bootstrap
 
@@ -41,7 +52,9 @@ password after bootstrap if the hosting platform cannot remove it immediately.
 
 ## Future external release boundary
 
-`RELEASE-HYGIENE.0A` does not build a release archive. A future
+Repository hygiene remains separate from external deployment/security
+validation and from delivery-layer package material such as `ship-pack v0.9.2`.
+`RELEASE-HYGIENE.1A` did not build or expand a release archive. A future
 `RELEASE-HYGIENE.0B` should use an allowlist-based builder and must exclude:
 
 - `.git`, agent/tool state, IDE state, caches, screenshots, and test output;

@@ -44,7 +44,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Notification V0 planning | [`NOTIFICATIONS_V0_PLAN.md`](NOTIFICATIONS_V0_PLAN.md) | Docs-only implementation boundary for future in-app per-user notifications. It keeps notifications separate from Calendar, Today, My Serving, Official Announcements, Community Activities, staff dashboards, permissions, serving inference, and external delivery; implementation requires separately approved slices. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
-| Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene completed in `RELEASE-HYGIENE.0A`, and the still-future external archive boundary. |
+| Deployment security and release hygiene | [`DEPLOYMENT_SECURITY.md`](DEPLOYMENT_SECURITY.md) | Secure administrator bootstrap, repository hygiene through `RELEASE-HYGIENE.1A`, and the still-future external archive boundary. |
 | Trial setup operations | [`TRIAL_SETUP_READINESS_RUNBOOK.md`](TRIAL_SETUP_READINESS_RUNBOOK.md) | Current read-only setup audit, operator review flow, and latest limited-trial readiness closure. |
 | Staff/internal user guide | [`STAFF_SETUP_GUIDE.md`](STAFF_SETUP_GUIDE.md) | Canonical index for the separate [English](STAFF_SETUP_GUIDE.en.md) and [Chinese](STAFF_SETUP_GUIDE.zh.md) practical church-staff guides covering current Church Structure, audience, Today, My Serving, Official Announcements, Community Activities, Church Gatherings, and Bible Study behavior. Deployment/audit procedures remain in the separate trial setup runbook. This is not an ordinary-member help surface or a production-readiness certification. `/staff/setup-guide/` selects one language and remains staff/superuser-gated. |
 
@@ -195,8 +195,11 @@ migration-safety instruction source.
   described above are surface-gated.
 - `RELEASE-HYGIENE.0A` secured the deployment admin bootstrap, expanded
   ignore rules for local secrets/databases/backups/logs/audit output, and
-  removed committed local audit artifacts. It did not build an external release
-  archive; that remains a separate future allowlist-based task.
+  removed committed local audit artifacts. `RELEASE-HYGIENE.1A` removed
+  unreferenced local Calendar/My Serving recovery snapshots and added ignore
+  coverage for local recovery/editor-conflict scratch files. Neither milestone
+  built an external release archive; delivery-layer material such as
+  `ship-pack v0.9.2` remains separate.
 
 ## Historical Design and Execution Records
 

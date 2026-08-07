@@ -2620,6 +2620,84 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
         self.assertEqual(ActivitySignup.objects.count(), 1)
 
+    def test_cancel_before_start_retains_row_and_sets_cancelled(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.cancel_url(activity))
+        signup.refresh_from_db()
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(ActivitySignup.objects.count(), 1)
+        self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+        self.assertEqual(activity.active_signup_count(), 0)
+
+    def test_cancel_after_start_does_not_change_active_signup(self):
+        activity = self.create_activity(
+            start_datetime=timezone.now() - timezone.timedelta(minutes=1),
+        )
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.cancel_url(activity))
+        signup.refresh_from_db()
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
+        self.assertEqual(activity.active_signup_count(), 1)
+
+    def test_cancel_nonpublished_activity_does_not_mutate_signup(self):
+        self.login(self.member)
+
+        for status in (
+            CommunityActivity.STATUS_DRAFT,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+            CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
+        ):
+            with self.subTest(status=status):
+                activity = self.create_activity(
+                    status=status,
+                    created_by=self.member,
+                )
+                signup = ActivitySignup.objects.create(
+                    activity=activity,
+                    user=self.member,
+                )
+
+                response = self.client.post(self.cancel_url(activity))
+                signup.refresh_from_db()
+
+                self.assertRedirects(response, self.detail_url(activity))
+                self.assertEqual(signup.status, ActivitySignup.STATUS_SIGNED_UP)
+
+    def test_cancel_already_cancelled_signup_is_idempotent(self):
+        activity = self.create_activity()
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+            status=ActivitySignup.STATUS_CANCELLED,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.cancel_url(activity))
+        signup.refresh_from_db()
+
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(ActivitySignup.objects.count(), 1)
+        self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+
     def test_signup_is_allowed_below_capacity(self):
         activity = self.create_activity(capacity_limit=2)
         self.add_audience(activity, self.parent)
@@ -2755,6 +2833,56 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(ActivitySignup.objects.count(), 0)
 
+    def test_cancelled_signup_cannot_reactivate_after_start(self):
+        activity = self.create_activity(
+            start_datetime=timezone.now() - timezone.timedelta(minutes=1),
+        )
+        self.add_audience(activity, self.parent)
+        signup = ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+            status=ActivitySignup.STATUS_CANCELLED,
+        )
+        self.login(self.member)
+
+        response = self.client.post(self.signup_url(activity))
+        signup.refresh_from_db()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+        self.assertEqual(ActivitySignup.objects.count(), 1)
+
+    def test_cancelled_signup_cannot_reactivate_cancelled_or_completed_activity(self):
+        self.login(self.member)
+
+        for status in (
+            CommunityActivity.STATUS_CANCELLED,
+            CommunityActivity.STATUS_COMPLETED,
+        ):
+            with self.subTest(status=status):
+                activity = self.create_activity(
+                    status=status,
+                    created_by=self.member,
+                )
+                signup = ActivitySignup.objects.create(
+                    activity=activity,
+                    user=self.member,
+                    status=ActivitySignup.STATUS_CANCELLED,
+                )
+
+                response = self.client.post(self.signup_url(activity))
+                signup.refresh_from_db()
+
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(signup.status, ActivitySignup.STATUS_CANCELLED)
+                self.assertEqual(
+                    ActivitySignup.objects.filter(
+                        activity=activity,
+                        user=self.member,
+                    ).count(),
+                    1,
+                )
+
     def test_detail_shows_signup_and_signed_up_states(self):
         activity = self.create_activity()
         self.add_audience(activity, self.parent)
@@ -2775,6 +2903,25 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         self.assertContains(signed_up_response, "You’re signed up")
         self.assertContains(signed_up_response, "Cancel signup")
         self.assertContains(signed_up_response, self.cancel_url(activity))
+
+    def test_detail_for_past_activity_shows_no_signup_state_actions(self):
+        activity = self.create_activity(
+            start_datetime=timezone.now() - timezone.timedelta(minutes=1),
+        )
+        self.add_audience(activity, self.parent)
+        ActivitySignup.objects.create(
+            activity=activity,
+            user=self.member,
+        )
+        self.login(self.member)
+
+        response = self.client.get(self.detail_url(activity))
+
+        self.assertTrue(response.context["is_signed_up"])
+        self.assertFalse(response.context["can_cancel_signup"])
+        self.assertNotContains(response, self.cancel_url(activity))
+        self.assertNotContains(response, self.signup_url(activity))
+        self.assertNotContains(response, "Cancel signup")
 
     def test_detail_shows_unlimited_and_limited_signup_counts(self):
         unlimited = self.create_activity(title_en="Unlimited Picnic")
@@ -2854,15 +3001,22 @@ class ActivitySignupTests(CommunityActivityWebTestBase):
         activity = self.create_activity()
         self.add_audience(activity, self.parent)
         self.login(self.member)
+        membership_count = ChurchStructureMembership.objects.count()
 
         self.client.post(self.signup_url(activity))
         detail_response = self.client.get(self.detail_url(activity))
         self.client.post(self.cancel_url(activity))
+        self.client.post(self.signup_url(activity))
 
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
         self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
         self.assertEqual(ServiceEvent.objects.count(), 0)
+        self.assertEqual(
+            ChurchStructureMembership.objects.count(),
+            membership_count,
+        )
+        self.assertEqual(ActivitySignup.objects.count(), 1)
         for leaked_key in (
             "today_items",
             "today_gatherings",

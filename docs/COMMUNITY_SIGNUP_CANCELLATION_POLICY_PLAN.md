@@ -1,22 +1,24 @@
 # Community Signup Cancellation Policy Plan
 
-Status: docs-only repository audit and implementation recommendation for
-`COMMUNITY-SIGNUP-CANCELLATION-POLICY.0A`. This document does not implement a
-runtime change. It records the current Community Activities signup/cancellation
-behavior from the repository and recommends the narrow V1 policy to preserve.
+Status: current policy and implementation record.
+`COMMUNITY-SIGNUP-CANCELLATION-POLICY.0A` completed the docs-only repository
+audit and recommendation. `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` implements
+the narrow runtime hardening: member signup-state changes are transactional
+where they mutate state, use activity-first locking, and freeze at
+`CommunityActivity.start_datetime`.
 
 ## 1. Executive Recommendation
 
 Community Activities should keep the existing persistent signup-row model and
 formalize it as the V1 cancellation policy:
 
-- A signed-up member may cancel their own signup immediately, without organizer
-  or staff approval.
+- A signed-up member may cancel their own signup immediately before the activity
+  starts, without organizer or staff approval.
 - Cancellation must retain the `ActivitySignup` row by setting
   `status=cancelled`; it must not hard-delete the row.
 - Cancelled rows do not consume capacity, do not appear on Today, and may be
   reactivated by the same member if the activity remains published, visible,
-  upcoming, and not full.
+  before its start time, and not full.
 - Only one effective active signup may exist per activity/user, enforced by the
   existing `(activity, user)` unique constraint.
 - Activity signup/cancellation remains attendance intent only. It must not
@@ -24,13 +26,11 @@ formalize it as the V1 cancellation policy:
   `TeamAssignment`, `ChurchStructureMembership`, roles, permissions, or
   notifications.
 
-The current code already implements the core of this recommendation in
-`ActivitySignup.status`, `community_activity_signup`, and
-`community_activity_cancel_signup`. The first implementation slice should be a
-hardening slice, not a redesign: make cancellation state eligibility explicit,
-wrap cancellation in the same service/transaction discipline as signup, add
-focused concurrency/state tests, and update the existing Community Activities
-docs to remove ambiguity.
+The current code implements this recommendation in `ActivitySignup.status`,
+`community_activity_signup`, and `community_activity_cancel_signup`.
+`COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` keeps the existing model/schema and
+adds the runtime guardrails recommended by the audit instead of redesigning the
+lifecycle.
 
 ## 2. Current Implementation Map
 
@@ -54,8 +54,11 @@ Primary domain files:
     affordances.
   - `community_activity_signup` creates or reactivates a signup inside
     `transaction.atomic()` and locks the activity row.
-  - `community_activity_cancel_signup` bulk-updates the current user's active
-    signup to `cancelled`.
+  - `community_activity_cancel_signup` runs inside `transaction.atomic()`, locks
+    the `CommunityActivity` row first with `select_for_update()`, then locks the
+    current user's existing `ActivitySignup` row. It mutates only an active
+    signup on a published pre-start activity, setting the retained row to
+    `cancelled`.
   - Review routes publish/request changes/cancel pending submissions only.
 - `community_events/urls.py`
   - Registers POST-only signup and cancel-signup member routes.
@@ -183,7 +186,7 @@ Authoritative records:
 | Duplicate signup | Existing active row redirects idempotently. The database unique constraint also prevents duplicate activity/user rows. |
 | Sign up when full | Full activity returns 404 and creates/reactivates no row. |
 | View own signup state | List/detail annotate or fetch the user's active row. Detail shows "You're signed up" and a cancel button. |
-| Cancel/withdraw | POST to `community_activity_cancel_signup`; visible active row is updated to `cancelled`. The row is not deleted. |
+| Cancel/withdraw | POST to `community_activity_cancel_signup`; before start, a visible active row on a published activity is updated to `cancelled`. The row is not deleted. At/after start this is a no-op redirect. |
 | Rejoin after cancellation | POST signup reuses the same row and sets `status=signed_up` if capacity is available. |
 | Activity cancellation by organizer | No published-activity organizer cancellation route exists. Staff review can cancel/reject only pending-review or changes-requested submissions; admin can edit status directly. |
 | Activity edits reducing capacity | Creator/co-organizer edit is pre-publication only, before signups exist. Django admin can set capacity below active count; model validation does not block that. New/reactivated signups are then denied because the activity is full. |
@@ -195,11 +198,11 @@ Authoritative records:
 
 | Actor | View states | Sign up | See participant identities | Cancel own signup | Cancel another signup | Edit capacity | Cancel activity | Restore activity | Management pages |
 |---|---|---|---|---|---|---|---|---|---|
-| Ordinary member | Published audience-matching activities only | Yes, if visible/published/upcoming/not full | No | Yes, if detail is visible and row active | No | No | No | No | No |
-| Creator | Own activity in any status through `created_by`; published audience matching also applies | Same signup rules as any user | No member-facing participant list | Yes, for own active signup | No | Draft/pending/changes only | No published cancellation route | No | Own create/edit surfaces only |
-| Co-organizer | Linked draft/pending/changes activities; published only through ordinary visibility unless staff | Same signup rules as any user | No member-facing participant list | Yes, for own active signup | No | Draft/pending/changes, but cannot change co-organizer list | No | No | No review inbox |
-| Staff | `visible_community_activities_for` returns all activities; staff review pages show pending/changes | Only published/upcoming activities; tests cover nonpublished denial even for staff | Django admin can read signup rows; member detail does not list identities | Yes, for own active signup | No app route; admin signup rows are read-only/no delete | Django admin; review UI does not expose capacity editing | Review cancel/reject for pending/changes; admin direct status edit | Admin direct status edit only | Staff review inbox and Django admin |
-| Superuser | Same or broader than staff depending admin permissions | Same route rules as staff | Admin | Same as staff | Same as staff | Admin | Admin/review | Admin | Admin/review |
+| Ordinary member | Published audience-matching activities only | Yes, if visible/published/upcoming/not full | No | Yes, only for own active signup on a visible published pre-start activity | No | No | No | No | No |
+| Creator | Own activity in any status through `created_by`; published audience matching also applies | Same signup rules as any user | No member-facing participant list | Same self-cancellation rule: own active signup, published, pre-start | No | Draft/pending/changes only | No published cancellation route | No | Own create/edit surfaces only |
+| Co-organizer | Linked draft/pending/changes activities; published only through ordinary visibility unless staff | Same signup rules as any user | No member-facing participant list | Same self-cancellation rule: own active signup, published, pre-start | No | Draft/pending/changes, but cannot change co-organizer list | No | No | No review inbox |
+| Staff | `visible_community_activities_for` returns all activities; staff review pages show pending/changes | Only published/upcoming activities; tests cover nonpublished denial even for staff | Django admin can read signup rows; member detail does not list identities | Same self-cancellation rule for the staff user's own signup; no special bypass | No app route; admin signup rows are read-only/no delete | Django admin; review UI does not expose capacity editing | Review cancel/reject for pending/changes; admin direct status edit | Admin direct status edit only | Staff review inbox and Django admin |
+| Superuser | Same or broader than staff depending admin permissions | Same route rules as staff | Admin | Same self-cancellation rule for the superuser's own signup; no special bypass | No app route for another user's signup | Admin | Admin/review | Admin | Admin/review |
 
 No path found where audience visibility grants organizer authority. Signup does
 not grant management rights. Staff visibility bypasses ordinary audience
@@ -235,13 +238,13 @@ What is currently strong:
 
 Integrity gaps or limits:
 
-- `community_activity_cancel_signup` is not wrapped in `transaction.atomic()`
-  and does not lock the activity or signup row. The operation is idempotent, but
-  a simultaneous signup/cancel for the same user can be last-write-wins.
-- Cancellation currently does not explicitly check `published` or
-  `start_datetime > now`. Because detail can show a published past activity,
-  an active signup can be cancelled after the start time if the activity remains
-  visible.
+- `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` wraps cancellation in
+  `transaction.atomic()`, locks `CommunityActivity` first, then locks the
+  current user's `ActivitySignup` row when present. This matches the
+  signup/reactivation lock order.
+- `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` explicitly requires
+  `published` and `start_datetime > now` before cancellation mutates the signup
+  row. At/after start, existing signup rows remain historical intent.
 - There is no explicit participant-history organizer view, so the retained row
   helps audit/storage but is not yet visible outside admin.
 - Django admin can reduce `capacity_limit` below active signup count. That does
@@ -259,8 +262,12 @@ Race conditions, separate from normal validation:
   activity row lock on supporting databases; tests do not prove it.
 - Concurrent cancellation and another member's signup cannot overbook, but can
   deny a signup that would have fit if cancellation committed first.
-- Concurrent cancellation and reactivation by the same user can end in either
-  status because cancellation does not lock the same row.
+- Signup/reactivation and cancellation now use the same activity-first lock
+  order on databases that enforce row locks, then lock/read the current user's
+  signup row consistently. SQLite-focused tests do not prove production
+  multi-connection row-lock behavior, so true backend-level concurrency remains
+  documented as not empirically proven by this suite rather than identified as
+  a lock-order bug.
 
 ## 7. Existing Tests Summary
 
@@ -302,10 +309,9 @@ Covered:
 
 Missing or thin:
 
-- No true concurrent final-slot signup test.
-- No concurrent signup/cancel same-user test.
-- No explicit test that member cancellation is denied after start time, if that
-  becomes the formal policy.
+- No true concurrent final-slot signup test; the local SQLite backend does not
+  prove production row-lock serialization.
+- No concurrent signup/cancel same-user test for the same SQLite reason.
 - No organizer/staff participant-history UI tests because no such UI exists.
 - No test for admin capacity below active count because admin is currently the
   only published-capacity edit surface.
@@ -328,22 +334,24 @@ Consistent current-state claims:
   member-facing attendance intent, not official Church Gatherings or serving.
 - `docs/NOTIFICATIONS_V0_PLAN.md` says no notifications runtime is implemented.
 
-Ambiguities/stale wording to clean in a later docs slice:
+0A documentation findings and 1A closeout:
 
-- `docs/README.md` line items for earlier milestones still say capacity and
-  Today were deferred in the `1C` bullet. The later `1E`/`1F` bullets correct
-  this, but the paragraph can be read as stale unless the milestone framing is
-  clear.
-- `docs/README.md` says "calendar integration" remains deferred while the
-  Church Calendar adapter already reads Community Activities. The intended
-  distinction appears to be "no Community Activity-owned calendar workflow";
-  that wording should be clarified.
+- 0A found that the runtime already used retained `ActivitySignup` rows with
+  `signed_up` / `cancelled`, active-only capacity, and reactivation semantics,
+  while cancellation still needed transactional activity-first locking and
+  post-start freeze hardening.
+- 1A implemented the runtime hardening and updated the canonical Community
+  Activities docs and README index to record current behavior.
+- 1A-FU1 removes remaining pre-1A recommendation wording from this policy
+  record and clarifies README Calendar wording so the existing read-only Church
+  Calendar adapter is not confused with a deferred Community Activity-owned
+  writable calendar workflow or external-calendar sync.
 - Older architecture docs may still refer to `CommunityActivity` as future in
   historical sections. That is acceptable only where the section is clearly
   historical or superseded.
-
-No documentation was edited by this audit except adding this plan to the
-canonical docs index.
+- Deferred work remains deferred: participant management, waitlist,
+  notifications, writable calendar workflow, external-calendar sync, serving
+  integration, `ServiceEvent` linkage, and retention changes for deleted users.
 
 ## 9. Options A-D
 
@@ -418,11 +426,10 @@ Who may cancel:
 Eligible states:
 
 - Signup row must exist for the current user and be `signed_up`.
-- Activity should be `published`.
-- Recommended hardening: self-cancellation should be allowed only before
-  `start_datetime`. After the start time, retain the row as historical
-  attendance intent unless a later approved attendance/check-in policy changes
-  this.
+- Activity must be `published`.
+- Self-cancellation is allowed only before `start_datetime`. After the start
+  time, the row remains historical attendance intent unless a later approved
+  attendance/check-in policy changes this.
 - Cancelled, completed, draft, pending-review, and changes-requested activities
   should not accept member signup changes.
 
@@ -459,10 +466,12 @@ Capacity:
 Concurrency:
 
 - Keep signup serialized on the activity row.
-- Move cancellation into the same explicit transactional service boundary and
-  lock the signup row when it exists.
-- Add focused tests for idempotent cancellation, reactivation at capacity, and
-  concurrent final-slot behavior where the test backend can support it.
+- Cancellation now runs in the same explicit transactional boundary and locks
+  the signup row when it exists.
+- Focused tests cover idempotent cancellation, reactivation at capacity,
+  post-start freeze, nonpublished no-op cancellation, and no-action past detail
+  UI. True concurrent final-slot behavior remains documented rather than
+  falsely proven on SQLite.
 
 Organizer view:
 
@@ -533,10 +542,10 @@ Current member-facing UI:
 - No attendee list or cancellation history is exposed to ordinary members.
 - Co-organizer names are displayed as collaborators, not participant state.
 
-Recommended first-slice UI hardening:
+Implemented 1A UI behavior:
 
-- Hide or disable the cancel button after start time if the formal policy
-  freezes past signup state.
+- The cancel button is shown only when the viewer has an active signup on a
+  published pre-start activity.
 - Keep ordinary copy operational and non-sensitive.
 - Do not expose model names, IDs, source-of-truth wording, or cancellation
   history to ordinary users.
@@ -569,13 +578,14 @@ focused no-serving/no-ServiceEvent tests.
   if eligible.
 - Activity already cancelled: no ordinary signup/cancellation changes; retained
   signup rows become history.
-- Start time passed: recommended policy should freeze self-service signup state
-  to avoid post-event history rewrites.
+- Start time passed: implemented policy freezes self-service signup state to
+  avoid post-event history rewrites.
 - Inactive user: existing rows can remain; new login-based actions are naturally
   unavailable to users who cannot authenticate. User deletion currently cascades
   rows and loses history.
-- Concurrent signup/cancel: formal service should lock consistently and tests
-  should document accepted outcomes.
+- Concurrent signup/cancel: signup/reactivation and cancellation share the
+  activity-first lock order and then read/lock the user's signup row; SQLite
+  tests do not prove production multi-connection row-lock behavior.
 - Privacy: ordinary member pages should show only their own signup state and
   aggregate active counts. Cancelled-history visibility belongs only on future
   authorized management/admin surfaces.
@@ -604,10 +614,9 @@ View/service tests:
 
 Concurrency tests:
 
-- Final-slot concurrent signups do not overbook on the supported database.
-- Concurrent cancel/reactivate for the same user has documented lock ordering
-  and deterministic final behavior, or an explicitly accepted last-write-wins
-  rule.
+- Lock-order implementation is covered by code review and documented here.
+  SQLite-focused tests are intentionally not presented as proof of production
+  `select_for_update()` serialization.
 
 UI tests:
 
@@ -627,27 +636,30 @@ Docs/tests:
 
 ### Slice 1: Policy hardening for existing signup lifecycle
 
+Status: implemented by `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A`.
+
 Goal: formalize and harden the already implemented persistent-status policy.
 
-Likely files:
+Files changed by 1A:
 
-- `community_events/views.py` or a new narrow `community_events/services.py`
+- `community_events/views.py`
 - `community_events/tests.py`
 - `templates/community_events/community_activity_detail.html`
 - `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`
 - `docs/README.md`
 
-Work:
+Implemented work:
 
-- Centralize signup/cancellation state checks.
+- Keep signup/cancellation state checks narrow and colocated with the existing
+  views.
 - Make cancellation transactional and row-locking.
-- Decide and enforce pre-start-only self-cancellation.
+- Enforce pre-start-only self-cancellation.
 - Preserve current status-row reactivation behavior.
 - Add focused tests listed above.
 - Update docs only for the implemented policy.
 
-No migration should be needed unless a separately approved audit timestamp is
-added later.
+No migration was generated. A separately approved future audit timestamp would
+require its own migration and policy decision.
 
 ### Slice 2: Organizer/staff participant-state presentation
 
@@ -686,10 +698,6 @@ part of the first slice.
 
 ## 19. Open Questions
 
-- Should self-service cancellation be frozen exactly at `start_datetime`, or
-  should there be a configurable cutoff? Repository evidence supports freezing
-  after start for audit clarity, but no current product doc explicitly states
-  the cutoff.
 - Should deleted users preserve anonymized signup history instead of cascading
   deletion? Current model cascades; changing that is a separate retention policy
   decision, not required for V1 member cancellation.

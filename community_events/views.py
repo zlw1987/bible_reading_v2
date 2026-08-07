@@ -162,6 +162,7 @@ def community_activity_detail(request, activity_id):
     signup = activity.signup_for(request.user)
     signup_count = activity.active_signup_count()
     is_full = activity.is_full(active_signup_count=signup_count)
+    now = timezone.now()
     is_creator = activity.created_by_id == request.user.id
     is_co_organizer = activity.is_co_organizer(request.user)
     return render(
@@ -175,7 +176,14 @@ def community_activity_detail(request, activity_id):
             "is_submission_collaborator": is_creator or is_co_organizer,
             "can_edit": activity.can_be_edited_by(request.user),
             "can_signup": activity.is_signup_open(
+                at=now,
                 active_signup_count=signup_count,
+            ),
+            "can_cancel_signup": bool(
+                signup
+                and signup.is_active
+                and activity.status == CommunityActivity.STATUS_PUBLISHED
+                and activity.start_datetime > now
             ),
             "signup_count": signup_count,
             "is_full": is_full,
@@ -419,14 +427,23 @@ def community_activity_signup(request, activity_id):
 def community_activity_cancel_signup(request, activity_id):
     """Cancel an existing signup without deleting its lifecycle row."""
     activity = _visible_activity_or_404(request.user, activity_id)
-    ActivitySignup.objects.filter(
-        activity=activity,
-        user=request.user,
-        status=ActivitySignup.STATUS_SIGNED_UP,
-    ).update(
-        status=ActivitySignup.STATUS_CANCELLED,
-        updated_at=timezone.now(),
-    )
+    with transaction.atomic():
+        activity = CommunityActivity.objects.select_for_update().get(
+            pk=activity.pk,
+        )
+        signup = (
+            ActivitySignup.objects.select_for_update()
+            .filter(activity=activity, user=request.user)
+            .first()
+        )
+        if (
+            signup
+            and signup.is_active
+            and activity.status == CommunityActivity.STATUS_PUBLISHED
+            and activity.start_datetime > timezone.now()
+        ):
+            signup.status = ActivitySignup.STATUS_CANCELLED
+            signup.save(update_fields=["status", "updated_at"])
     return redirect("community_activity_detail", activity_id=activity.id)
 
 

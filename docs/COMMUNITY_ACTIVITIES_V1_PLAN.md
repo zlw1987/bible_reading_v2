@@ -1,6 +1,8 @@
 # Community Activities V1 Plan
 
 Status: current plan and stabilization checkpoint updated through
+`COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A-FU1` (August 2026), with the
+historical manual-QA stabilization closure still recorded under
 `COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
@@ -22,7 +24,11 @@ hard-off and stay governed by their login/visibility rules.
 to sign up and cancel. Each activity/user pair keeps one lifecycle row:
 cancellation sets `cancelled`, and signing up again reactivates it to
 `signed_up`. Signup is allowed only for authenticated users who can see a
-published upcoming activity. It is attendance intent, never serving.
+published upcoming activity. `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` hardens
+the same lifecycle so signup, cancellation, and reactivation mutate state only
+while the activity is published and before `start_datetime`; at/after start,
+existing signup rows remain frozen as historical intent. It is attendance
+intent, never serving.
 
 `COMMUNITY-EVENTS.1D-A` adds the bounded member submission + admin publish
 gate. An ordinary authenticated user with an active primary
@@ -100,9 +106,13 @@ Today serving action, or `ServiceEvent` relationship.
 maximum number of active `signed_up` rows. Cancelled rows do not count.
 Signup checks serialize on the activity row, reactivation preserves the
 existing lifecycle row, and a full activity fails closed for a new or
-cancelled signup. An already-active signup stays idempotent. This is
-attendance-intent management only, not serving. Waitlist, attendee list,
-notifications, check-in, and signup deadlines remain deferred.
+cancelled signup. `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A` makes cancellation
+use the same activity-first lock order before locking the signup row, so
+signup/reactivation and cancellation serialize through the activity row on
+databases that enforce row locks. An already-active signup and an
+already-cancelled cancellation stay idempotent. This is attendance-intent
+management only, not serving. Waitlist, attendee list, notifications, check-in,
+and signup deadlines remain deferred.
 
 `COMMUNITY-EVENTS.1H-A` adds the member-facing draft workflow. Eligible
 members may save the complete, validated create form as `draft` or submit it
@@ -648,7 +658,10 @@ ordinary in-scope member, an ordinary out-of-scope member, and staff.
 - [ ] As an in-scope member, confirm the published activity is visible. As an
   out-of-scope member, confirm it is not visible.
 - [ ] Sign up, cancel, and sign up again; confirm cancellation retains the row
-  and the later signup reactivates it.
+  and the later signup reactivates it before the activity starts.
+- [ ] After the activity start time, confirm signup, cancellation, and
+  reactivation actions are no longer offered and do not change stored signup
+  state.
 - [ ] For an unlimited activity, confirm multiple eligible members can sign up
   without a capacity block.
 - [ ] For a limited-capacity activity, fill the final slot and confirm a new
@@ -682,9 +695,10 @@ a separately approved slice, stabilize the implemented lifecycle rather than
 adding features.
 
 Do not add a waitlist, attendee list, check-in, notifications, comments,
-payments, calendar integration, broader Today browse/discovery, Staff Overview
-cards, a setup/readiness provider, a `ServiceEvent` relationship, or My Serving
-integration without separate approval.
+payments, Community Activity-owned writable calendar workflow, external-calendar
+sync, broader Today browse/discovery, Staff Overview cards, a setup/readiness
+provider, a `ServiceEvent` relationship, or My Serving integration without
+separate approval.
 
 Community Activities remains a secondary independent module. It is not
 official Church Gatherings, not My Serving, not `ServiceEvent`, and not a

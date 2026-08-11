@@ -1,6 +1,6 @@
 # Portal UX and Help Center Plan
 
-Status: canonical current/future product plan for `PORTAL-UX-HELP-CENTER.1A`, with `PORTAL-UX-HELP-CENTER.1A-FU1` and `1A-FU2` hardening applied.
+Status: canonical current/future product plan for `PORTAL-UX-HELP-CENTER.1A`, with `PORTAL-UX-HELP-CENTER.1A-FU1`, `PORTAL-UX-HELP-CENTER.1A-FU2`, and `PORTAL-HELP-MANUAL-QA.1A-FU1` hardening applied.
 
 This plan records the current portal shell, Staff navigation, Help Center foundation, completed implementation, and deferred slices. It is intended to let a future Codex, Claude, or ChatGPT session continue without relying on conversation memory.
 
@@ -133,7 +133,7 @@ Ordinary-user guide copy should avoid implementation model names. Internal names
 
 Desktop keeps the top navigation and dropdown model. No permanent sidebar is introduced.
 
-Mobile keeps the hamburger drawer and inline dropdown expansion already owned by `templates/base.html` and `static/css/app.css`. The Staff dropdown uses the same grouped partial on desktop and mobile.
+Mobile keeps the hamburger drawer and inline dropdown expansion already owned by `templates/base.html` and `static/css/app.css`. In the mobile drawer, top-level Grow, Community, Staff, and Account dropdowns use one-open-at-a-time accordion behavior so opening one closes the other open top-level dropdowns. The Staff dropdown uses the same grouped partial on desktop and mobile.
 
 Groups render only when they have visible items. Section headings are non-clickable text.
 
@@ -163,6 +163,12 @@ Groups render only when they have visible items. Section headings are non-clicka
 - Expanded Member Guide Activities guidance to cover the current V1 signup, cancellation, capacity, re-signup, start-time freeze, no-waitlist, and attendance-intent boundaries.
 - Clarified Church Structure / Group Leader guide membership-request wording: delegated leaders use pending requests on managed small-group pages under My Units, while staff may separately use the global Staff membership-request queue.
 
+## 13c. Completed In PORTAL-HELP-MANUAL-QA.1A-FU1
+
+- Product-owner manual QA for `PORTAL-HELP-MANUAL-QA.1A` otherwise passed, with one `LOW` mobile navigation issue found: multiple top-level dropdowns could remain open inside the hamburger drawer.
+- Implemented one-open-at-a-time top-level dropdown behavior for the mobile drawer while preserving desktop dropdown behavior and existing drawer open/close semantics.
+- After deployment, only a quick mobile regression confirmation remains before `PORTAL-HELP-MANUAL-QA.1A` can fully close.
+
 ## 14. Deferred Slices
 
 ### Help Center feedback
@@ -188,6 +194,7 @@ Future possible work: refine account utility navigation, staff IA, and responsiv
 - Sign in as staff and confirm Staff dropdown groups render, Staff User Guide remains available, and Staff Guide is recommended in Help Center.
 - Disable modules in a test/dev setting and confirm module-gated Staff links disappear without empty headings.
 - Confirm mobile hamburger drawer shows the same Staff grouped links for staff.
+- Confirm mobile hamburger drawer top-level dropdowns use one-open-at-a-time behavior.
 - Confirm `/staff/setup-guide/` still uses staff-only auth behavior.
 
 ## 16. Explicit Non-Goals

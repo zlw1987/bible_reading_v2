@@ -432,6 +432,30 @@
                 requestHeaderVisibilityUpdate();
             }
 
+            function isMobilePrimaryNavDropdown(menu) {
+                return primaryNavOpen &&
+                    isMobileNav() &&
+                    primaryNav &&
+                    primaryNav.contains(menu) &&
+                    menu.matches(".nav-dropdown");
+            }
+
+            function closeSiblingMobilePrimaryNavDropdowns(activeMenu) {
+                if (!activeMenu || !activeMenu.open || !isMobilePrimaryNavDropdown(activeMenu)) {
+                    return;
+                }
+
+                menuNodes.forEach(function (menu) {
+                    if (
+                        menu !== activeMenu &&
+                        menu.open &&
+                        isMobilePrimaryNavDropdown(menu)
+                    ) {
+                        menu.open = false;
+                    }
+                });
+            }
+
             menuNodes.forEach(function (menu) {
                 var summary = menu.querySelector("summary");
                 if (!summary) {
@@ -466,6 +490,7 @@
                 menu.addEventListener("toggle", function () {
                     if (menu.open) {
                         showSiteHeader();
+                        closeSiblingMobilePrimaryNavDropdowns(menu);
                     }
 
                     if (menu.open && shouldUseMobileOverlay()) {

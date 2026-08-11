@@ -718,7 +718,7 @@ class AccountProfileTests(TestCase):
         self.assertIn("closeMenuFromOutside", content)
         self.assertIn('document.addEventListener("click"', content)
         self.assertIn("lockedMenu.contains(event.target)", content)
-        self.assertContains(response, "Content Management")
+        self.assertContains(response, "Content &amp; Communication")
         self.assertContains(response, "Reading Plan Admin")
         self.assertContains(response, "Bible Study Schedules")
         self.assertContains(response, "Weekly Bible Study Guides")
@@ -733,7 +733,7 @@ class AccountProfileTests(TestCase):
             content.index("Weekly Bible Study Guides"),
             content.index("Small Group Meetings"),
         )
-        self.assertContains(response, "Ministry Operations")
+        self.assertContains(response, "Gatherings &amp; Serving")
         # Staff dropdown uses the management-flavored label to separate the
         # manage surface from the ordinary primary-nav module label.
         self.assertContains(response, "Manage Church Gatherings")
@@ -743,18 +743,18 @@ class AccountProfileTests(TestCase):
         # menu; its route remains available but is not linked here.
         self.assertNotContains(response, "Lighting Pilot Import")
         self.assertContains(response, "Church Structure")
-        self.assertContains(response, "Church Structure Setup & Review")
+        self.assertContains(response, "Church Structure Setup &amp; Review")
         self.assertContains(response, reverse("staff_structure_map"))
-        self.assertContains(response, "Users and Review")
+        self.assertContains(response, "People &amp; Structure")
         self.assertContains(response, "User Admin")
         self.assertContains(response, "Reflection Reports")
         self.assertContains(response, "Prayer Reports")
         self.assertContains(response, "Django Admin")
-        # Staff Overview is a dashboard entry point, not Content Management;
+        # Staff Overview is a dashboard entry point, not Content & Communication;
         # it renders ahead of the first group heading.
         self.assertLess(
             content.index("Staff Overview"),
-            content.index("Content Management"),
+            content.index("Content &amp; Communication"),
         )
 
     @override_settings(
@@ -935,6 +935,13 @@ class AccountProfileTests(TestCase):
         self.assertIn("primary-nav-open", content)
         self.assertIn("var primaryNavOpen = false;", content)
         self.assertIn('navToggle.setAttribute("aria-expanded"', content)
+        # Mobile drawer dropdowns behave like an accordion: opening one
+        # top-level dropdown closes the other open top-level dropdowns.
+        self.assertIn("function closeSiblingMobilePrimaryNavDropdowns(activeMenu)", content)
+        self.assertIn("function isMobilePrimaryNavDropdown(menu)", content)
+        self.assertIn("primaryNav.contains(menu)", content)
+        self.assertIn('menu.matches(".nav-dropdown")', content)
+        self.assertIn("closeSiblingMobilePrimaryNavDropdowns(menu);", content)
         # Outside-click + Escape close.
         self.assertIn("onPrimaryNavOutsideClick", content)
         self.assertIn('event.key === "Escape"', content)

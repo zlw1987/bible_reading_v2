@@ -2396,6 +2396,20 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
                 return inline_admin_formset.formset
         self.fail("ServiceEventAudienceScope inline formset was not rendered.")
 
+    def create_inactive_audience_scope(self, event):
+        ServiceEventAudienceScope.objects.bulk_create(
+            [
+                ServiceEventAudienceScope(
+                    service_event=event,
+                    unit=self.inactive_unit,
+                )
+            ]
+        )
+        return ServiceEventAudienceScope.objects.get(
+            service_event=event,
+            unit=self.inactive_unit,
+        )
+
     def event_admin_post_data(
         self,
         *,
@@ -2473,6 +2487,8 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="audience_scope_links-0-unit"')
         self.assertContains(response, 'name="required_team_links-TOTAL_FORMS"')
+        formset = self.audience_inline_formset(response)
+        self.assertNotIn(self.inactive_unit, formset.extra_forms[0].fields["unit"].queryset)
 
     def test_admin_add_rejects_zero_audience_without_partial_rows(self):
         response = self.client.post(
@@ -2558,6 +2574,26 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_admin_existing_inactive_audience_unit_renders_with_repair_warning(self):
+        event = self.create_event(title="Inactive Audience")
+        self.create_inactive_audience_scope(event)
+
+        response = self.client.get(self.admin_change_url(event))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Inactive Group")
+        self.assertContains(
+            response,
+            "Inactive unit - delete this audience row and add an active replacement "
+            "if needed.",
+        )
+        formset = self.audience_inline_formset(response)
+        initial_unit_field = formset.initial_forms[0].fields["unit"]
+        extra_unit_field = formset.extra_forms[0].fields["unit"]
+        self.assertTrue(initial_unit_field.disabled)
+        self.assertIn(self.inactive_unit, initial_unit_field.queryset)
+        self.assertNotIn(self.inactive_unit, extra_unit_field.queryset)
+
     def test_admin_change_rejects_deleting_final_audience_row(self):
         event = self.create_event(title="Keep Audience")
         scope = ServiceEventAudienceScope.objects.create(
@@ -2579,6 +2615,47 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.title, "Keep Audience")
         self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+
+    def test_admin_change_rejects_deleting_only_inactive_audience_row(self):
+        event = self.create_event(title="Keep Inactive Audience")
+        scope = self.create_inactive_audience_scope(event)
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Changed Without Replacement",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Keep Inactive Audience")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.inactive_unit])
+
+    def test_admin_change_can_replace_inactive_audience_row_in_one_save(self):
+        event = self.create_event(title="Replace Inactive Audience")
+        scope = self.create_inactive_audience_scope(event)
+
+        response = self.client.post(
+            self.admin_change_url(event),
+            self.event_admin_post_data(
+                title="Replaced Inactive Audience",
+                title_en="Replaced Inactive Audience",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        event.refresh_from_db()
+        self.assertEqual(event.title, "Replaced Inactive Audience")
+        self.assertEqual(list(event.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(ServiceEventAudienceScope.objects.count(), 1)
 
     def test_admin_change_can_replace_district_with_descendant_in_one_save(self):
         event = self.create_event(title="Replace District")
@@ -2655,6 +2732,10 @@ class ServiceEventAdminAudienceIntegrityTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Select a valid choice. That choice is not one of the available choices.",
+        )
         self.assertEqual(ServiceEvent.objects.count(), 0)
         self.assertEqual(ServiceEventAudienceScope.objects.count(), 0)
 

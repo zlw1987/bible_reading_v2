@@ -6327,6 +6327,34 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
                 return inline_admin_formset.formset
         self.fail(f"{model.__name__} inline formset was not rendered.")
 
+    def create_inactive_series_audience_scope(self, series):
+        BibleStudySeriesAudienceScope.objects.bulk_create(
+            [
+                BibleStudySeriesAudienceScope(
+                    series=series,
+                    unit=self.inactive_unit,
+                )
+            ]
+        )
+        return BibleStudySeriesAudienceScope.objects.get(
+            series=series,
+            unit=self.inactive_unit,
+        )
+
+    def create_inactive_meeting_audience_scope(self, meeting):
+        BibleStudyMeetingAudienceScope.objects.bulk_create(
+            [
+                BibleStudyMeetingAudienceScope(
+                    meeting=meeting,
+                    unit=self.inactive_unit,
+                )
+            ]
+        )
+        return BibleStudyMeetingAudienceScope.objects.get(
+            meeting=meeting,
+            unit=self.inactive_unit,
+        )
+
     def series_admin_post_data(
         self,
         *,
@@ -6447,6 +6475,11 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="audience_scope_links-0-unit"')
+        formset = self.audience_inline_formset(
+            response,
+            BibleStudySeriesAudienceScope,
+        )
+        self.assertNotIn(self.inactive_unit, formset.extra_forms[0].fields["unit"].queryset)
 
     def test_series_admin_add_rejects_zero_audience_without_partial_rows(self):
         response = self.client.post(
@@ -6537,6 +6570,28 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_series_admin_existing_inactive_audience_unit_renders_with_repair_warning(self):
+        self.create_inactive_series_audience_scope(self.series)
+
+        response = self.client.get(self.series_change_url(self.series))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Inactive Group")
+        self.assertContains(
+            response,
+            "Inactive unit - delete this audience row and add an active replacement "
+            "if needed.",
+        )
+        formset = self.audience_inline_formset(
+            response,
+            BibleStudySeriesAudienceScope,
+        )
+        initial_unit_field = formset.initial_forms[0].fields["unit"]
+        extra_unit_field = formset.extra_forms[0].fields["unit"]
+        self.assertTrue(initial_unit_field.disabled)
+        self.assertIn(self.inactive_unit, initial_unit_field.queryset)
+        self.assertNotIn(self.inactive_unit, extra_unit_field.queryset)
+
     def test_series_admin_change_rejects_deleting_final_audience_row(self):
         scope = BibleStudySeriesAudienceScope.objects.create(
             series=self.series,
@@ -6557,6 +6612,47 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         self.series.refresh_from_db()
         self.assertEqual(self.series.title, "Existing Admin Series")
         self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+
+    def test_series_admin_change_rejects_deleting_only_inactive_audience_row(self):
+        scope = self.create_inactive_series_audience_scope(self.series)
+
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Changed Series Without Replacement",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Existing Admin Series")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.inactive_unit])
+
+    def test_series_admin_change_can_replace_inactive_audience_row_in_one_save(self):
+        scope = self.create_inactive_series_audience_scope(self.series)
+
+        response = self.client.post(
+            self.series_change_url(self.series),
+            self.series_admin_post_data(
+                title="Series Replaced Inactive Audience",
+                title_en="Series Replaced Inactive Audience",
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        self.series.refresh_from_db()
+        self.assertEqual(self.series.title, "Series Replaced Inactive Audience")
+        self.assertEqual(list(self.series.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudySeriesAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyLesson.objects.count(), 1)
+        self.assertEqual(BibleStudyMeeting.objects.count(), 0)
 
     def test_series_admin_change_can_replace_root_with_group_in_one_save(self):
         scope = BibleStudySeriesAudienceScope.objects.create(
@@ -6649,6 +6745,10 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Select a valid choice. That choice is not one of the available choices.",
+        )
         self.assertFalse(
             BibleStudySeries.objects.filter(title="Admin Bible Study Series").exists()
         )
@@ -6731,6 +6831,11 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="audience_scope_links-0-unit"')
+        formset = self.audience_inline_formset(
+            response,
+            BibleStudyMeetingAudienceScope,
+        )
+        self.assertNotIn(self.inactive_unit, formset.extra_forms[0].fields["unit"].queryset)
 
     def test_meeting_admin_add_rejects_zero_audience_without_inference_or_side_effects(self):
         BibleStudySeriesAudienceScope.objects.create(
@@ -6820,6 +6925,29 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
+    def test_meeting_admin_existing_inactive_audience_unit_renders_with_repair_warning(self):
+        meeting = self.create_meeting(location="Inactive Audience Meeting")
+        self.create_inactive_meeting_audience_scope(meeting)
+
+        response = self.client.get(self.meeting_change_url(meeting))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Inactive Group")
+        self.assertContains(
+            response,
+            "Inactive unit - delete this audience row and add an active replacement "
+            "if needed.",
+        )
+        formset = self.audience_inline_formset(
+            response,
+            BibleStudyMeetingAudienceScope,
+        )
+        initial_unit_field = formset.initial_forms[0].fields["unit"]
+        extra_unit_field = formset.extra_forms[0].fields["unit"]
+        self.assertTrue(initial_unit_field.disabled)
+        self.assertIn(self.inactive_unit, initial_unit_field.queryset)
+        self.assertNotIn(self.inactive_unit, extra_unit_field.queryset)
+
     def test_meeting_admin_change_can_replace_root_with_group_in_one_save(self):
         meeting = self.create_meeting(location="Root Meeting")
         scope = BibleStudyMeetingAudienceScope.objects.create(
@@ -6847,6 +6975,48 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_meeting_admin_change_rejects_deleting_only_inactive_audience_row(self):
+        meeting = self.create_meeting(location="Keep Inactive Audience")
+        scope = self.create_inactive_meeting_audience_scope(meeting)
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                location="Changed Without Replacement",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one audience scope unit.")
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Keep Inactive Audience")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.inactive_unit])
+
+    def test_meeting_admin_change_can_replace_inactive_audience_row_in_one_save(self):
+        meeting = self.create_meeting(location="Replace Inactive Audience")
+        scope = self.create_inactive_meeting_audience_scope(meeting)
+
+        response = self.client.post(
+            self.meeting_change_url(meeting),
+            self.meeting_admin_post_data(
+                initial_audience=[scope],
+                delete_initial_audience=True,
+                audience_units=[self.group_unit],
+                location="Replaced Inactive Audience",
+            ),
+        )
+
+        self.assertNotEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        meeting.refresh_from_db()
+        self.assertEqual(meeting.location, "Replaced Inactive Audience")
+        self.assertEqual(list(meeting.get_audience_scope_units()), [self.group_unit])
+        self.assertEqual(BibleStudyMeetingAudienceScope.objects.count(), 1)
+        self.assertEqual(BibleStudyMeetingRole.objects.count(), 0)
+        self.assertEqual(BibleStudyMeetingWorshipSong.objects.count(), 0)
 
     def test_meeting_admin_change_can_replace_district_with_group_in_one_save(self):
         meeting = self.create_meeting(location="District Meeting")
@@ -6909,6 +7079,10 @@ class BibleStudyAdminAudienceIntegrityTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Select a valid choice. That choice is not one of the available choices.",
+        )
         self.assertEqual(BibleStudyMeeting.objects.count(), 0)
 
     def test_meeting_admin_rejects_duplicate_audience_units_without_partial_rows(self):

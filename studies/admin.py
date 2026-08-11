@@ -5,6 +5,7 @@ from django.forms.models import (
     InlineForeignKeyField,
     construct_instance,
 )
+from django.db.models import Q
 
 from accounts.models import ChurchStructureUnit
 from accounts.ordering import order_units_by_sibling_key
@@ -86,10 +87,23 @@ class BibleStudyAudienceScopeInlineFormSet(BaseInlineFormSet):
 class BibleStudyAudienceScopeInlineForm(forms.ModelForm):
     """Admin-only form that leaves cross-row audience checks to the formset."""
 
+    inactive_unit_repair_message = (
+        "Inactive unit - delete this audience row and add an active replacement "
+        "if needed."
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
-            self.fields["unit"].disabled = True
+            unit_field = self.fields["unit"]
+            if self.instance.unit_id:
+                unit_field.queryset = order_units_by_sibling_key(
+                    ChurchStructureUnit.objects.filter(
+                        Q(is_active=True) | Q(pk=self.instance.unit_id)
+                    ),
+                    "en",
+                )
+            unit_field.disabled = True
 
     def _post_clean(self):
         exclude = self._get_validation_exclusions()
@@ -123,9 +137,10 @@ class BibleStudyAudienceScopeInlineForm(forms.ModelForm):
 
 
 class AudienceScopeInlineMixin:
-    fields = ("unit",)
+    fields = ("unit", "inactive_unit_repair")
     form = BibleStudyAudienceScopeInlineForm
     formset = BibleStudyAudienceScopeInlineFormSet
+    readonly_fields = ("inactive_unit_repair",)
     extra = 1
     min_num = 1
 
@@ -139,6 +154,12 @@ class AudienceScopeInlineMixin:
         if db_field.name == "unit":
             formfield.label_from_instance = lambda unit: unit.path_label("en")
         return formfield
+
+    @admin.display(description="Inactive unit")
+    def inactive_unit_repair(self, obj):
+        if obj and obj.unit_id and not obj.unit.is_active:
+            return BibleStudyAudienceScopeInlineForm.inactive_unit_repair_message
+        return ""
 
 
 class BibleStudySeriesAudienceScopeInline(

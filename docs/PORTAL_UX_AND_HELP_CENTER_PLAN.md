@@ -1,6 +1,9 @@
 # Portal UX and Help Center Plan
 
-Status: canonical current/future product plan for `PORTAL-UX-HELP-CENTER.1A`, with `PORTAL-UX-HELP-CENTER.1A-FU1`, `PORTAL-UX-HELP-CENTER.1A-FU2`, and `PORTAL-HELP-MANUAL-QA.1A-FU1` hardening applied.
+Status: canonical current/future product plan for `PORTAL-UX-HELP-CENTER.1A`,
+with `PORTAL-UX-HELP-CENTER.1A-FU1`, `PORTAL-UX-HELP-CENTER.1A-FU2`,
+`PORTAL-HELP-MANUAL-QA.1A-FU1` hardening applied, and
+`PORTAL-HELP-MANUAL-QA.1A` product-owner manual QA closed.
 
 This plan records the current portal shell, Staff navigation, Help Center foundation, completed implementation, and deferred slices. It is intended to let a future Codex, Claude, or ChatGPT session continue without relying on conversation memory.
 
@@ -167,7 +170,17 @@ Groups render only when they have visible items. Section headings are non-clicka
 
 - Product-owner manual QA for `PORTAL-HELP-MANUAL-QA.1A` otherwise passed, with one `LOW` mobile navigation issue found: multiple top-level dropdowns could remain open inside the hamburger drawer.
 - Implemented one-open-at-a-time top-level dropdown behavior for the mobile drawer while preserving desktop dropdown behavior and existing drawer open/close semantics.
-- After deployment, only a quick mobile regression confirmation remains before `PORTAL-HELP-MANUAL-QA.1A` can fully close.
+
+## 13d. Completed In PORTAL-HELP-MANUAL-QA.1A
+
+- Product-owner deployed manual QA passed after the mobile accordion follow-up.
+- Confirmed ordinary member desktop Portal and Help Center behavior.
+- Confirmed explicit-serving user recommendations.
+- Confirmed delegated My Units leader recommendations.
+- Confirmed Staff desktop grouped navigation and Help Center access.
+- Confirmed ordinary member mobile and Staff mobile navigation.
+- Confirmed final mobile one-open-at-a-time top-level dropdown behavior.
+- This records the bounded Portal / Help Center QA pass only; it is not a broad production-readiness claim.
 
 ## 14. Deferred Slices
 

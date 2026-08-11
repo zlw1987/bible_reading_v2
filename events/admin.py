@@ -5,6 +5,7 @@ from django.forms.models import (
     InlineForeignKeyField,
     construct_instance,
 )
+from django.db.models import Q
 
 from accounts.models import ChurchStructureUnit
 from accounts.ordering import order_units_by_sibling_key
@@ -64,6 +65,11 @@ class ServiceEventAudienceScopeInlineFormSet(BaseInlineFormSet):
 class ServiceEventAudienceScopeInlineForm(forms.ModelForm):
     """Admin-only form that leaves cross-row audience checks to the formset."""
 
+    inactive_unit_repair_message = (
+        "Inactive unit - delete this audience row and add an active replacement "
+        "if needed."
+    )
+
     class Meta:
         model = ServiceEventAudienceScope
         fields = "__all__"
@@ -71,7 +77,15 @@ class ServiceEventAudienceScopeInlineForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
-            self.fields["unit"].disabled = True
+            unit_field = self.fields["unit"]
+            if self.instance.unit_id:
+                unit_field.queryset = order_units_by_sibling_key(
+                    ChurchStructureUnit.objects.filter(
+                        Q(is_active=True) | Q(pk=self.instance.unit_id)
+                    ),
+                    "en",
+                )
+            unit_field.disabled = True
 
     def _post_clean(self):
         exclude = self._get_validation_exclusions()
@@ -114,7 +128,8 @@ class ServiceEventAudienceScopeInline(admin.TabularInline):
     model = ServiceEventAudienceScope
     form = ServiceEventAudienceScopeInlineForm
     formset = ServiceEventAudienceScopeInlineFormSet
-    fields = ("unit",)
+    fields = ("unit", "inactive_unit_repair")
+    readonly_fields = ("inactive_unit_repair",)
     extra = 1
     min_num = 1
 
@@ -128,6 +143,12 @@ class ServiceEventAudienceScopeInline(admin.TabularInline):
         if db_field.name == "unit":
             formfield.label_from_instance = lambda unit: unit.path_label("en")
         return formfield
+
+    @admin.display(description="Inactive unit")
+    def inactive_unit_repair(self, obj):
+        if obj and obj.unit_id and not obj.unit.is_active:
+            return ServiceEventAudienceScopeInlineForm.inactive_unit_repair_message
+        return ""
 
 
 @admin.register(ServiceEvent)

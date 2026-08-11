@@ -176,6 +176,17 @@ def _active_primary_membership_counts_by_user(target_date):
     return counts
 
 
+def _write_time_active_primary_membership_counts_by_user():
+    counts = defaultdict(int)
+    rows = ChurchStructureMembership.objects.filter(
+        status=ChurchStructureMembership.STATUS_ACTIVE,
+        is_primary=True,
+    ).values_list("user_id", flat=True)
+    for user_id in rows:
+        counts[user_id] += 1
+    return counts
+
+
 def _build_church_structure_section(target_date):
     section = ReadinessSection(
         "church_structure", "1. Church Structure / membership readiness"
@@ -198,6 +209,7 @@ def _build_church_structure_section(target_date):
     )
 
     membership_counts = _active_primary_membership_counts_by_user(target_date)
+    write_time_primary_counts = _write_time_active_primary_membership_counts_by_user()
     section.add_info(
         "active_primary_memberships",
         sum(membership_counts.values()),
@@ -207,13 +219,14 @@ def _build_church_structure_section(target_date):
     no_membership = 0
     for user_id in active_user_ids:
         count = membership_counts.get(user_id, 0)
-        if count > 1:
+        write_time_count = write_time_primary_counts.get(user_id, 0)
+        if write_time_count > 1:
             multiple += 1
             section.detail(
                 "users_multiple_active_primary_membership",
-                f"user_id={user_id} active_primary_memberships={count}",
+                f"user_id={user_id} active_primary_memberships={write_time_count}",
             )
-        elif count == 0 and user_id not in staff_ids:
+        if count == 0 and user_id not in staff_ids:
             no_membership += 1
             section.detail(
                 "active_users_without_active_primary_membership",

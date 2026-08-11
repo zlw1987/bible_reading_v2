@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
@@ -403,6 +404,33 @@ class ChurchStructureMembership(models.Model):
             is_primary=True
         ).first()
 
+    @classmethod
+    def active_primary_conflicts_for_user(cls, user, exclude_pk=None):
+        """Rows that conflict with the current write-time primary policy."""
+        conflicts = cls.objects.filter(
+            user=user,
+            status=cls.STATUS_ACTIVE,
+            is_primary=True,
+        )
+        if exclude_pk:
+            conflicts = conflicts.exclude(pk=exclude_pk)
+        return conflicts
+
+    @classmethod
+    def lock_user_membership_scope(cls, user):
+        """Lock the user's membership mutation scope inside an atomic block.
+
+        SQLite ignores ``select_for_update()``, but databases with row locking
+        can serialize normal membership writers on the user row plus existing
+        membership rows.
+        """
+        user_id = getattr(user, "pk", None)
+        if user_id is None:
+            return
+        UserModel = get_user_model()
+        list(UserModel._default_manager.select_for_update().filter(pk=user_id))
+        list(cls.objects.select_for_update().filter(user_id=user_id).order_by("pk"))
+
     def active_for_date(self, date):
         if self.status != self.STATUS_ACTIVE or not self.start_date:
             return False
@@ -442,13 +470,10 @@ class ChurchStructureMembership(models.Model):
             )
 
         if self.user_id and self.status == self.STATUS_ACTIVE and self.is_primary:
-            duplicate = ChurchStructureMembership.objects.filter(
-                user=self.user,
-                status=self.STATUS_ACTIVE,
-                is_primary=True,
+            duplicate = ChurchStructureMembership.active_primary_conflicts_for_user(
+                self.user,
+                exclude_pk=self.pk,
             )
-            if self.pk:
-                duplicate = duplicate.exclude(pk=self.pk)
             if duplicate.exists():
                 errors["is_primary"] = (
                     "A user can have only one active primary church structure membership."

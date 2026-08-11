@@ -102,6 +102,20 @@ class TrialSetupReadinessCommandTests(TestCase):
                 return section
         raise AssertionError(f"section {key!r} not found")
 
+    def make_sibling_unit(self, code="RAINBOW5"):
+        return ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code=code,
+            name=code,
+            name_en=code,
+        )
+
+    def multiple_primary_blockers(self):
+        audit = run_audit()
+        section = self.section(audit, "church_structure")
+        return section.blockers["users_multiple_active_primary_membership"]
+
     # ----- existence / read-only -------------------------------------------
 
     def test_minimal_database_runs_without_crashing(self):
@@ -183,6 +197,118 @@ class TrialSetupReadinessCommandTests(TestCase):
         )
         with self.assertRaises(CommandError):
             self.run_command("--fail-on-blockers")
+
+    def test_multiple_current_active_primary_memberships_are_blocker(self):
+        user = User.objects.create_user(username="trial_multi_primary")
+        sibling_unit = self.make_sibling_unit()
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=sibling_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+            ]
+        )
+
+        self.assertEqual(self.multiple_primary_blockers(), 1)
+
+        with self.assertRaises(CommandError):
+            self.run_command("--fail-on-blockers")
+
+    def test_current_and_future_active_primary_memberships_are_blocker(self):
+        user = User.objects.create_user(username="trial_current_future_primary")
+        sibling_unit = self.make_sibling_unit()
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today,
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=sibling_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today + timezone.timedelta(days=7),
+                ),
+            ]
+        )
+
+        self.assertEqual(self.multiple_primary_blockers(), 1)
+
+    def test_two_future_active_primary_memberships_are_blocker(self):
+        user = User.objects.create_user(username="trial_future_future_primary")
+        sibling_unit = self.make_sibling_unit()
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.bulk_create(
+            [
+                ChurchStructureMembership(
+                    user=user,
+                    unit=self.group_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today + timezone.timedelta(days=3),
+                ),
+                ChurchStructureMembership(
+                    user=user,
+                    unit=sibling_unit,
+                    status=ChurchStructureMembership.STATUS_ACTIVE,
+                    is_primary=True,
+                    start_date=today + timezone.timedelta(days=7),
+                ),
+            ]
+        )
+
+        self.assertEqual(self.multiple_primary_blockers(), 1)
+
+    def test_one_future_active_primary_membership_is_not_multiple_primary_blocker(self):
+        user = User.objects.create_user(username="trial_future_primary_only")
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() + timezone.timedelta(days=7),
+        )
+
+        self.assertEqual(self.multiple_primary_blockers(), 0)
+
+    def test_ended_primary_and_current_primary_are_not_multiple_active_blocker(self):
+        user = User.objects.create_user(username="trial_ended_current_primary")
+        sibling_unit = self.make_sibling_unit()
+        today = timezone.localdate()
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=sibling_unit,
+            status=ChurchStructureMembership.STATUS_ENDED,
+            is_primary=True,
+            start_date=today - timezone.timedelta(days=30),
+            end_date=today - timezone.timedelta(days=1),
+        )
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=self.group_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=today,
+        )
+
+        self.assertEqual(self.multiple_primary_blockers(), 0)
 
     # ----- warnings do not fail --------------------------------------------
 

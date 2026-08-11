@@ -2141,11 +2141,20 @@ def end_structure_membership(request, membership_id):
         id=membership_id,
     )
     today = timezone.localdate()
-    membership.status = ChurchStructureMembership.STATUS_ENDED
-    membership.is_primary = False
-    if not membership.end_date:
-        membership.end_date = today
-    membership.save()
+    with transaction.atomic():
+        ChurchStructureMembership.lock_user_membership_scope(membership.user)
+        locked_membership = get_object_or_404(
+            ChurchStructureMembership.objects.select_for_update().select_related(
+                "unit", "user"
+            ),
+            pk=membership.pk,
+        )
+        locked_membership.status = ChurchStructureMembership.STATUS_ENDED
+        locked_membership.is_primary = False
+        if not locked_membership.end_date:
+            locked_membership.end_date = today
+        locked_membership.save()
+        membership = locked_membership
     messages.success(
         request,
         f"Ended membership for {membership.user.username}.",
@@ -2165,6 +2174,13 @@ def set_primary_structure_membership(request, membership_id):
         return redirect("church_structure_unit_detail", unit_id=membership.unit_id)
 
     with transaction.atomic():
+        ChurchStructureMembership.lock_user_membership_scope(membership.user)
+        membership.refresh_from_db()
+        if not membership.is_active_membership or not membership.unit.is_active:
+            messages.error(
+                request, "Only active memberships on active units can be primary."
+            )
+            return redirect("church_structure_unit_detail", unit_id=membership.unit_id)
         ChurchStructureMembership.objects.filter(
             user=membership.user,
             status=ChurchStructureMembership.STATUS_ACTIVE,
@@ -2890,11 +2906,32 @@ def end_my_unit_member(request, membership_id):
         return redirect("my_unit_detail", unit_id=membership.unit_id)
 
     today = timezone.localdate()
-    membership.status = ChurchStructureMembership.STATUS_ENDED
-    membership.is_primary = False
-    if not membership.end_date or membership.end_date > today:
-        membership.end_date = today
-    membership.save()
+    with transaction.atomic():
+        ChurchStructureMembership.lock_user_membership_scope(membership.user)
+        locked_membership = get_object_or_404(
+            ChurchStructureMembership.objects.select_for_update().select_related(
+                "unit", "user"
+            ),
+            pk=membership.pk,
+        )
+        if not can_manage_unit_members(request.user, locked_membership.unit):
+            raise Http404("Membership is not manageable by this user.")
+        if not locked_membership.is_active_membership:
+            messages.info(
+                request,
+                (
+                    "该组员归属已不是有效状态。"
+                    if language == "zh"
+                    else "That membership is no longer active."
+                ),
+            )
+            return redirect("my_unit_detail", unit_id=locked_membership.unit_id)
+        locked_membership.status = ChurchStructureMembership.STATUS_ENDED
+        locked_membership.is_primary = False
+        if not locked_membership.end_date or locked_membership.end_date > today:
+            locked_membership.end_date = today
+        locked_membership.save()
+        membership = locked_membership
     LogEntry.objects.log_action(
         user_id=request.user.pk,
         content_type_id=ContentType.objects.get_for_model(
@@ -3014,7 +3051,16 @@ def reject_my_unit_member_request(request, membership_id):
     if not can_manage_unit_members(request.user, membership.unit):
         raise Http404("Membership request is not manageable by this user.")
 
-    reject_membership_request(membership)
+    if not reject_membership_request(membership):
+        messages.info(
+            request,
+            (
+                "该申请已处理，未再次更改。"
+                if language == "zh"
+                else "That request was already processed; no further change was made."
+            ),
+        )
+        return redirect("my_unit_detail", unit_id=membership.unit_id)
     LogEntry.objects.log_action(
         user_id=request.user.pk,
         content_type_id=ContentType.objects.get_for_model(
@@ -3347,7 +3393,7 @@ def approve_membership_request(membership, *, approved_by):
     Used by the staff request review workflow and the delegated My Units
     small-group review surface (GROUP-MEMBERSHIP-REQUEST.1B), so both paths
     approve identically. Fails closed and returns ``False`` (leaving the row
-    untouched and pending) when the requester already has a current active
+    untouched and pending) when the requester already has an active
     primary membership; returns ``True`` after activating the row.
 
     CS-RETIRE.1A: the approved ChurchStructureMembership is the source of truth
@@ -3356,34 +3402,66 @@ def approve_membership_request(membership, *, approved_by):
     TeamAssignmentMember, MinistryTeamRoleAssignment, ChurchRoleAssignment,
     BibleStudyMeetingRole, coworker-role, capability, or serving rows.
     """
-    active_primary = ChurchStructureMembership.current_primary_for_user(
-        membership.user,
-    )
-    if active_primary:
-        return False
+    with transaction.atomic():
+        ChurchStructureMembership.lock_user_membership_scope(membership.user)
+        locked_membership = get_object_or_404(
+            ChurchStructureMembership.objects.select_for_update(),
+            pk=membership.pk,
+        )
+        if locked_membership.status != ChurchStructureMembership.STATUS_REQUESTED:
+            return False
+        active_primary = ChurchStructureMembership.active_primary_conflicts_for_user(
+            locked_membership.user,
+            exclude_pk=locked_membership.pk,
+        )
+        if active_primary.exists():
+            return False
 
-    membership.status = ChurchStructureMembership.STATUS_ACTIVE
-    membership.is_primary = True
-    if not membership.membership_type:
-        membership.membership_type = ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
-    if not membership.start_date:
-        membership.start_date = timezone.localdate()
-    membership.approved_by = approved_by
-    membership.approved_at = timezone.now()
-    membership.save()
+        locked_membership.status = ChurchStructureMembership.STATUS_ACTIVE
+        locked_membership.is_primary = True
+        if not locked_membership.membership_type:
+            locked_membership.membership_type = (
+                ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER
+            )
+        if not locked_membership.start_date:
+            locked_membership.start_date = timezone.localdate()
+        locked_membership.approved_by = approved_by
+        locked_membership.approved_at = timezone.now()
+        locked_membership.save()
+        membership.status = locked_membership.status
+        membership.is_primary = locked_membership.is_primary
+        membership.membership_type = locked_membership.membership_type
+        membership.start_date = locked_membership.start_date
+        membership.approved_by = locked_membership.approved_by
+        membership.approved_at = locked_membership.approved_at
     return True
 
 
 def reject_membership_request(membership):
     """Shared rejection semantics for a ``requested`` ChurchStructureMembership.
 
-    Marks the row rejected and never primary. The row is retained (no
-    hard-delete) and the user account is untouched. Shared by the staff review
-    workflow and the delegated My Units surface (GROUP-MEMBERSHIP-REQUEST.1B).
+    Marks the row rejected and never primary. Returns ``False`` without
+    changing data if the row was already processed after the caller loaded it.
+    The row is retained (no hard-delete) and the user account is untouched.
+    Shared by the staff review workflow and the delegated My Units surface
+    (GROUP-MEMBERSHIP-REQUEST.1B).
     """
-    membership.status = ChurchStructureMembership.STATUS_REJECTED
-    membership.is_primary = False
-    membership.save()
+    with transaction.atomic():
+        ChurchStructureMembership.lock_user_membership_scope(membership.user)
+        locked_membership = get_object_or_404(
+            ChurchStructureMembership.objects.select_for_update(),
+            pk=membership.pk,
+        )
+        if locked_membership.status != ChurchStructureMembership.STATUS_REQUESTED:
+            return False
+        locked_membership.status = ChurchStructureMembership.STATUS_REJECTED
+        locked_membership.is_primary = False
+        locked_membership.save()
+        membership.status = locked_membership.status
+        membership.is_primary = locked_membership.is_primary
+        membership.approved_by = locked_membership.approved_by
+        membership.approved_at = locked_membership.approved_at
+    return True
 
 
 @user_passes_test(can_manage_church_memberships)
@@ -3422,7 +3500,7 @@ def staff_membership_request_approve(request, membership_id):
     if not approve_membership_request(membership, approved_by=request.user):
         messages.error(
             request,
-            "Approval blocked: this user already has an active future primary membership.",
+            "Approval blocked: this user already has an active primary group belonging.",
         )
         return redirect("staff_membership_request_detail", membership_id=membership.id)
 
@@ -3442,7 +3520,12 @@ def staff_membership_request_reject(request, membership_id):
         return redirect("staff_membership_request_detail", membership_id=membership_id)
 
     membership = get_requested_membership_or_404(membership_id)
-    reject_membership_request(membership)
+    if not reject_membership_request(membership):
+        messages.info(
+            request,
+            "Group request was already processed; no further change was made.",
+        )
+        return redirect("staff_membership_request_list")
 
     messages.success(request, "Group request declined.")
     return redirect("staff_membership_request_list")

@@ -136,6 +136,7 @@ class StructureMembershipAddForm(forms.Form):
     def save(self, *, approved_by):
         user = self.cleaned_data["user"]
         is_primary = self.cleaned_data.get("is_primary", False)
+        ChurchStructureMembership.lock_user_membership_scope(user)
 
         if is_primary:
             ChurchStructureMembership.objects.filter(
@@ -251,13 +252,23 @@ class MyUnitMemberAddForm(forms.Form):
 
     @transaction.atomic
     def save(self, *, approved_by):
+        user = self.cleaned_data["user"]
+        ChurchStructureMembership.lock_user_membership_scope(user)
+        today = timezone.localdate()
+        blocking = ChurchStructureMembership.objects.filter(user=user).filter(
+            _blocking_membership_filter(today)
+        )
+        if blocking.exists():
+            raise forms.ValidationError(
+                "This user already has a group belonging or a pending group request."
+            )
         return ChurchStructureMembership.objects.create(
-            user=self.cleaned_data["user"],
+            user=user,
             unit=self.unit,
             membership_type=ChurchStructureMembership.TYPE_SMALL_GROUP_MEMBER,
             status=ChurchStructureMembership.STATUS_ACTIVE,
             is_primary=True,
-            start_date=timezone.localdate(),
+            start_date=today,
             requested_by=approved_by,
             approved_by=approved_by,
             approved_at=timezone.now(),

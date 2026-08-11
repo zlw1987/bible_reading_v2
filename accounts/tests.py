@@ -2353,6 +2353,31 @@ class ChurchStructureMembershipFoundationTests(TestCase):
         with self.assertRaises(ValidationError):
             duplicate.full_clean()
 
+    def test_future_active_primary_blocks_second_active_primary(self):
+        user = User.objects.create_user(username="future_primary_conflict")
+        future_unit = self.create_unit("FUTUREGROUP", "Future Group")
+        current_unit = self.create_unit("CURRENTGROUP", "Current Group")
+        tomorrow = timezone.localdate() + timedelta(days=1)
+        ChurchStructureMembership.objects.create(
+            user=user,
+            unit=future_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=tomorrow,
+        )
+
+        self.assertIsNone(ChurchStructureMembership.current_primary_for_user(user))
+        duplicate = ChurchStructureMembership(
+            user=user,
+            unit=current_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        with self.assertRaises(ValidationError):
+            duplicate.full_clean()
+
     def test_active_non_primary_membership_can_coexist(self):
         user = User.objects.create_user(username="non_primary_member")
         primary_unit = self.create_unit("RAINBOW4", "Rainbow 4")
@@ -3138,6 +3163,28 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertIsNone(membership.approved_at)
         self.user.profile.refresh_from_db()
 
+    def test_approve_blocks_existing_future_active_primary_membership(self):
+        membership = self.create_membership()
+        ChurchStructureMembership.objects.create(
+            user=self.user,
+            unit=self.other_unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate() + timedelta(days=1),
+        )
+        self.client.login(username="membership_staff", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("staff_membership_request_approve", args=[membership.id]),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REQUESTED)
+        self.assertFalse(membership.is_primary)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+
     def test_reject_changes_requested_to_rejected_and_not_primary(self):
         membership = self.create_membership(is_primary=True)
         requested_by = membership.requested_by
@@ -3154,6 +3201,35 @@ class StaffMembershipRequestListTests(TestCase):
         self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REJECTED)
         self.assertFalse(membership.is_primary)
         self.assertEqual(membership.requested_by, requested_by)
+        self.assertIsNone(membership.approved_by)
+        self.assertIsNone(membership.approved_at)
+
+    def test_stale_reject_helper_does_not_overwrite_approved_request(self):
+        from accounts.views import approve_membership_request, reject_membership_request
+
+        membership = self.create_membership()
+        stale_rejection_object = ChurchStructureMembership.objects.get(pk=membership.pk)
+
+        self.assertTrue(approve_membership_request(membership, approved_by=self.staff))
+        self.assertFalse(reject_membership_request(stale_rejection_object))
+
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_ACTIVE)
+        self.assertTrue(membership.is_primary)
+        self.assertEqual(membership.approved_by, self.staff)
+        self.assertIsNotNone(membership.approved_at)
+
+    def test_processed_rejected_request_cannot_be_approved_by_shared_helper(self):
+        from accounts.views import approve_membership_request, reject_membership_request
+
+        membership = self.create_membership()
+
+        self.assertTrue(reject_membership_request(membership))
+        self.assertFalse(approve_membership_request(membership, approved_by=self.staff))
+
+        membership.refresh_from_db()
+        self.assertEqual(membership.status, ChurchStructureMembership.STATUS_REJECTED)
+        self.assertFalse(membership.is_primary)
         self.assertIsNone(membership.approved_by)
         self.assertIsNone(membership.approved_at)
 
@@ -10219,6 +10295,27 @@ class MyUnitMemberRequestReviewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self._assert_still_requested()
         # The existing active primary belonging is untouched.
+        self.assertEqual(
+            ChurchStructureMembership.objects.filter(
+                user=self.requester,
+                status=ChurchStructureMembership.STATUS_ACTIVE,
+                is_primary=True,
+            ).count(),
+            1,
+        )
+
+    def test_approve_blocked_when_requester_has_future_active_primary(self):
+        ChurchStructureMembership.objects.create(
+            user=self.requester,
+            unit=self.sibling,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=self.today + timedelta(days=1),
+        )
+        self._make_lead_login("gmr_future_block_lead", self.group)
+        response = self.client.post(self._approve_url(self.request_row))
+        self.assertEqual(response.status_code, 302)
+        self._assert_still_requested()
         self.assertEqual(
             ChurchStructureMembership.objects.filter(
                 user=self.requester,

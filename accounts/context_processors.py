@@ -1,6 +1,8 @@
 from .language import get_user_language, SUPPORTED_LANGUAGES
+from .staff_navigation import build_staff_navigation_groups
 from .ui_text import UI_TEXT
 from .unit_management import should_show_my_units_nav
+from core.module_registry import get_enabled_module_keys
 
 
 READING_NAV_URLS = {
@@ -49,6 +51,11 @@ PROFILE_NAV_URLS = {
     "profile",
     "password_change",
     "password_change_done",
+}
+
+HELP_NAV_URLS = {
+    "help_center",
+    "help_guide",
 }
 
 # Member-facing event discovery pages. These read-only pages are accessible to
@@ -160,6 +167,8 @@ def get_active_nav(request):
         return "my_serving"
     if url_name == "my_units":
         return "my_units"
+    if url_name in HELP_NAV_URLS:
+        return "help"
     if url_name in PROFILE_NAV_URLS:
         return "profile"
 
@@ -180,4 +189,7 @@ def language_context(request):
         "ui": UI_TEXT[language],
         "active_nav": get_active_nav(request),
         "show_my_units_nav": should_show_my_units_nav(request.user),
+        "staff_navigation_groups": build_staff_navigation_groups(
+            get_enabled_module_keys()
+        ),
     }

@@ -57,6 +57,7 @@ from .unit_management import (
     can_manage_unit_coworkers,
     can_manage_unit_members,
     get_manageable_structure_units,
+    should_show_my_units_nav,
 )
 from .unit_member_record_access import (
     build_unit_member_record_safe_snapshot,
@@ -1199,6 +1200,201 @@ def staff_setup_guide(request):
         "accounts/staff/setup_guide.html",
         {
             "active_nav": "staff",
+            "guide_blocks": guide_blocks,
+            "guide_missing": guide_missing,
+        },
+    )
+
+
+HELP_GUIDES = (
+    {
+        "slug": "member",
+        "title_en": "Member Guide",
+        "title_zh": "成员指南",
+        "description_en": "Daily starting points for Today, Reading, Bible Study, Prayer, Calendar, Gatherings, Activities, Announcements, and Profile.",
+        "description_zh": "说明今日、读经、查经、代祷、日历、聚会、活动、公告与个人资料的日常入口。",
+        "filename_base": "HELP_CENTER_MEMBER_GUIDE",
+    },
+    {
+        "slug": "serving-ministry",
+        "title_en": "Serving / Ministry Guide",
+        "title_zh": "服事与事工指南",
+        "description_en": "How My Serving, explicit assignments, confirmations, and Bible Study serving fit together.",
+        "description_zh": "说明我的服事、明确安排、确认状态与查经服事如何配合。",
+        "filename_base": "HELP_CENTER_SERVING_MINISTRY_GUIDE",
+    },
+    {
+        "slug": "church-structure-group-leader",
+        "title_en": "Church Structure / Group Leader Guide",
+        "title_zh": "教会结构与小组负责人指南",
+        "description_en": "Belonging, primary membership, My Units, and delegated group maintenance boundaries.",
+        "description_zh": "说明归属、主要成员关系、我负责的单位，以及小组维护的边界。",
+        "filename_base": "HELP_CENTER_CHURCH_STRUCTURE_GROUP_LEADER_GUIDE",
+    },
+)
+
+
+def _localized_guide(guide, language):
+    localized = guide.copy()
+    localized["title"] = guide["title_zh"] if language == "zh" else guide["title_en"]
+    localized["description"] = (
+        guide["description_zh"] if language == "zh" else guide["description_en"]
+    )
+    return localized
+
+
+def _user_has_explicit_serving_signal(user):
+    if not getattr(user, "is_authenticated", False):
+        return False
+
+    from ministry.models import TeamAssignment, TeamAssignmentMember
+    from studies.models import BibleStudyMeeting, BibleStudyMeetingRole
+
+    team_serving_exists = TeamAssignmentMember.objects.filter(
+        membership__user=user,
+        membership__is_active=True,
+    ).exclude(
+        assignment__status__in=[
+            TeamAssignment.STATUS_CANCELLED,
+            TeamAssignment.STATUS_COMPLETED,
+        ],
+    ).exists()
+    if team_serving_exists:
+        return True
+
+    return BibleStudyMeetingRole.objects.filter(
+        user=user,
+        meeting__status__in=[
+            BibleStudyMeeting.STATUS_PUBLISHED,
+            BibleStudyMeeting.STATUS_COMPLETED,
+        ],
+    ).exists()
+
+
+def _help_center_recommended_guides(user, language):
+    recommendations = [
+        {
+            **_localized_guide(HELP_GUIDES[0], language),
+            "reason": (
+                "Recommended for every signed-in user."
+                if language != "zh"
+                else "推荐给每一位已登录用户。"
+            ),
+            "url_name": "help_guide",
+        }
+    ]
+
+    if _user_has_explicit_serving_signal(user):
+        recommendations.append(
+            {
+                **_localized_guide(HELP_GUIDES[1], language),
+                "reason": (
+                    "Recommended because you have explicit serving data."
+                    if language != "zh"
+                    else "因你已有明确服事资料而推荐。"
+                ),
+                "url_name": "help_guide",
+            }
+        )
+
+    if should_show_my_units_nav(user):
+        recommendations.append(
+            {
+                **_localized_guide(HELP_GUIDES[2], language),
+                "reason": (
+                    "Recommended because My Units is available to you."
+                    if language != "zh"
+                    else "因你可以使用我负责的单位而推荐。"
+                ),
+                "url_name": "help_guide",
+            }
+        )
+
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        recommendations.append(
+            {
+                "slug": "staff",
+                "title": "同工使用指南" if language == "zh" else "Staff User Guide",
+                "description": (
+                    "Detailed internal guide for current staff workflows."
+                    if language != "zh"
+                    else "当前同工工作流程的详细内部指南。"
+                ),
+                "reason": (
+                    "Recommended for staff and superusers."
+                    if language != "zh"
+                    else "推荐给同工与系统管理员。"
+                ),
+                "url_name": "staff_setup_guide",
+            }
+        )
+
+    return recommendations
+
+
+@login_required
+def help_center(request):
+    """Authenticated, read-only Help Center landing page."""
+    language = get_user_language(request)
+    guides = [_localized_guide(guide, language) for guide in HELP_GUIDES]
+    staff_guide = None
+    if getattr(request.user, "is_staff", False) or getattr(
+        request.user, "is_superuser", False
+    ):
+        staff_guide = {
+            "slug": "staff",
+            "title": "同工使用指南" if language == "zh" else "Staff User Guide",
+            "description": (
+                "Detailed internal guide for current staff workflows."
+                if language != "zh"
+                else "当前同工工作流程的详细内部指南。"
+            ),
+            "url_name": "staff_setup_guide",
+        }
+
+    return render(
+        request,
+        "accounts/help_center.html",
+        {
+            "guides": guides,
+            "staff_guide": staff_guide,
+            "recommended_guides": _help_center_recommended_guides(
+                request.user,
+                language,
+            ),
+        },
+    )
+
+
+@login_required
+def help_guide(request, slug):
+    """Render one authenticated member-safe Help Center guide."""
+    from django.conf import settings
+
+    language = get_user_language(request)
+    guide = next((guide for guide in HELP_GUIDES if guide["slug"] == slug), None)
+    if guide is None:
+        raise Http404("Help guide not found.")
+
+    guide_path = (
+        Path(settings.BASE_DIR)
+        / "docs"
+        / f"{guide['filename_base']}.{language}.md"
+    )
+    guide_blocks = []
+    guide_missing = False
+    try:
+        guide_blocks = _parse_staff_setup_guide_blocks(
+            guide_path.read_text(encoding="utf-8")
+        )
+    except OSError:
+        guide_missing = True
+
+    return render(
+        request,
+        "accounts/help_guide.html",
+        {
+            "guide": _localized_guide(guide, language),
             "guide_blocks": guide_blocks,
             "guide_missing": guide_missing,
         },

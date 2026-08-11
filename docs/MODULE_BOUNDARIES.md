@@ -284,13 +284,16 @@ notifications, or `ServiceEvent`.
   follows `events`; Ministry Teams and Team Assignments follow `ministry`; and
   Prayer Reports follows `prayers`. Reflection Reports remains visible because
   `comments` is a reading support app rather than an independently registered
-  module. Staff Overview, Church Structure Setup & Review, Ministry Structure,
-  user/review links, and Django Admin remain always visible to staff. This
-  changes staff-dropdown discoverability only; setup routes/checks, direct
-  URLs, admin routes, and permissions are unchanged. At the `6A` milestone,
-  Staff Overview content was unchanged; `MODULAR-CORE.6B` later gated its
-  module-owned cards/counts/links while preserving the route and Core/staff
-  content.
+  module. At the `6A` milestone, Staff Overview, Church Structure Setup &
+  Review, Ministry Structure, user/review links, and Django Admin remained
+  always visible to staff. This changed staff-dropdown discoverability only;
+  setup routes/checks, direct URLs, admin routes, and permissions were
+  unchanged. `MODULAR-CORE.6B` later gated Staff Overview module-owned
+  cards/counts/links while preserving the route and Core/staff content.
+  `PORTAL-UX-HELP-CENTER.1A-FU1` later classified the Staff dropdown Ministry
+  Structure link consistently as `ministry`-owned and surface-gates that link
+  with the `ministry` module; direct route access and permissions remain
+  unchanged.
 * `STAFF-HELP-PAGE.1A` adds a Core/staff internal-reference surface: the Staff
   Setup Guide page (`/staff/setup-guide/`, route name `staff_setup_guide`) and
   its staff-dropdown link. `STAFF-GUIDE-READABILITY.1A` keeps
@@ -329,9 +332,11 @@ notifications, or `ServiceEvent`.
 ### What disabling a module does today
 
 * Omits its registry-contributed primary nav link from `templates/base.html`.
-* Omits its module-owned staff dropdown links from `templates/base.html`
-  (`MODULAR-CORE.6A`) while leaving the staff dropdown itself and its Core
-  links available.
+* Omits its module-owned staff dropdown links from the shared staff navigation
+  inventory (`MODULAR-CORE.6A`, with Ministry Structure reconciled in
+  `PORTAL-UX-HELP-CENTER.1A-FU1`) while leaving the staff dropdown itself and
+  its Core links available. Ministry Structure now follows the `ministry`
+  module gate in the Staff dropdown.
 * Hides its module-owned Staff Overview cards, counts, and workflow links
   (`MODULAR-CORE.6B`) and skips computing their counts, while the Staff
   Overview route stays reachable and its Core/staff cards (Membership
@@ -389,8 +394,9 @@ notifications, or `ServiceEvent`.
 3. **Primary module nav is registry-driven (`MODULAR-CORE.4A`).** Enabled
    ordinary-user module links come from each module's registry metadata.
    Today stays Core; the account and staff dropdowns remain separately
-   hard-coded. The staff dropdown's module-owned links are individually
-   guarded by the enabled-module set (`MODULAR-CORE.6A`).
+   maintained. The staff dropdown's module-owned links, including Ministry
+   Structure, are individually guarded by the enabled-module set
+   (`MODULAR-CORE.6A` plus `PORTAL-UX-HELP-CENTER.1A-FU1` reconciliation).
 4. **Setup/readiness checks are provider/registry-driven (`MODULAR-CORE.5A`).**
    Module-specific checks register readiness providers against
    `core.setup_readiness` and are aggregated by `build_readiness_sections` for

@@ -13849,39 +13849,310 @@ class StaffSetupGuidePageTests(TestCase):
         response = self.client.get(reverse("profile"))
 
         self.assertContains(response, reverse("staff_setup_guide"))
-        self.assertContains(response, "Staff Setup Guide")
+
+
+class PortalHelpCenterTests(TestCase):
+    """PORTAL-UX-HELP-CENTER.1A shell and Help Center coverage."""
+
+    def setUp(self):
+        self.member = User.objects.create_user(
+            username="help_member",
+            password="UserPass123!",
+        )
+        self.staff = User.objects.create_user(
+            username="help_staff",
+            password="StaffPass123!",
+            is_staff=True,
+        )
+        self.superuser = User.objects.create_superuser(
+            username="help_super",
+            email="help_super@example.com",
+            password="SuperPass123!",
+        )
+
+    def set_language(self, language="en"):
+        session = self.client.session
+        session["language"] = language
+        session.save()
+
+    def test_staff_dropdown_groups_english_links(self):
+        self.set_language("en")
+        self.client.login(username="help_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, "Start &amp; Help")
+        self.assertContains(response, "People &amp; Structure")
+        self.assertContains(response, "Content &amp; Communication")
+        self.assertContains(response, "Gatherings &amp; Serving")
+        self.assertContains(response, "Review &amp; Moderation")
+        self.assertContains(response, "System Administration")
+        self.assertContains(response, "Staff User Guide")
+        self.assertContains(response, "Ministry Structure")
+        self.assertContains(response, "Ministry Teams")
+        self.assertContains(response, "Team Assignments")
+        self.assertContains(response, "Django Admin")
+        self.assertNotContains(response, "Content Management")
+        self.assertEqual(response.content.decode().count('href="/staff/"'), 1)
+
+    def test_staff_dropdown_groups_chinese_labels(self):
+        self.set_language("zh")
+        self.client.login(username="help_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, "开始与帮助")
+        self.assertContains(response, "人员与结构")
+        self.assertContains(response, "聚会与服事")
+        self.assertContains(response, "同工使用指南")
+
+    @override_settings(CMS_ENABLED_MODULES=["reading"])
+    def test_module_disabled_staff_groups_do_not_render_empty_headings(self):
+        self.set_language("en")
+        self.client.login(username="help_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, "Content &amp; Communication")
+        self.assertContains(response, "Reading Plan Admin")
+        self.assertNotContains(response, "Bible Study Schedules")
+        self.assertNotContains(response, "Gatherings &amp; Serving")
+        self.assertNotContains(response, "Manage Church Gatherings")
+        self.assertNotContains(response, "Ministry Structure")
+        self.assertNotContains(response, "Ministry Teams")
+        self.assertNotContains(response, "Team Assignments")
+        self.assertNotContains(response, "Prayer Reports")
+
+    @override_settings(CMS_ENABLED_MODULES=["reading", "events"])
+    def test_ministry_disabled_hides_only_ministry_staff_links(self):
+        self.set_language("en")
+        self.client.login(username="help_staff", password="StaffPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, "People &amp; Structure")
+        self.assertContains(response, "User Admin")
+        self.assertContains(response, "Membership Requests")
+        self.assertContains(response, "Church Structure Setup &amp; Review")
+        self.assertContains(response, "Gatherings &amp; Serving")
+        self.assertContains(response, "Manage Church Gatherings")
+        self.assertNotContains(response, "Ministry Structure")
+        self.assertNotContains(response, "Ministry Teams")
+        self.assertNotContains(response, "Team Assignments")
+
+    def test_ordinary_user_gets_help_link_but_no_staff_links(self):
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("profile"))
+
+        self.assertContains(response, reverse("help_center"))
+        self.assertContains(response, "Help Center")
+        self.assertNotContains(response, "Staff User Guide")
+        self.assertNotContains(response, reverse("staff_overview"))
+
+    def test_help_center_anonymous_uses_normal_login_redirect(self):
+        response = self.client.get(reverse("help_center"))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login/", response.url)
+        self.assertNotIn("/admin/login/", response.url)
+
+    def test_authenticated_member_can_open_help_center_and_member_guide(self):
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_center"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Recommended for you")
+        self.assertContains(response, "Member Guide")
+        self.assertContains(response, "Recommended for every signed-in user.")
+        self.assertNotContains(
+            response,
+            "Recommended because you have explicit serving data.",
+        )
+        self.assertNotContains(response, "Staff User Guide")
+
+        guide_response = self.client.get(reverse("help_guide", args=["member"]))
+        self.assertEqual(guide_response.status_code, 200)
+        self.assertContains(guide_response, "Seeing an event does not make you a server.")
+        self.assertContains(guide_response, "Calendar is read-only.")
+
+    def test_chinese_help_center_and_member_guide_render(self):
+        self.set_language("zh")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_center"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "帮助中心")
+        self.assertContains(response, "从这里开始")
+        self.assertContains(response, "成员指南")
+        self.assertNotContains(response, "Start here")
+
+        guide_response = self.client.get(reverse("help_guide", args=["member"]))
+        self.assertContains(guide_response, "成员指南")
+        self.assertContains(guide_response, "日历是只读页面")
+        self.assertNotContains(guide_response, "Start here")
+        self.assertNotContains(guide_response, "Calendar 是只读页面")
+
+    def test_chinese_serving_guide_avoids_developer_model_names(self):
+        self.set_language("zh")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_guide", args=["serving-ministry"]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "服事与事工指南")
+        self.assertNotContains(response, "TeamAssignmentMember")
+        self.assertNotContains(response, "BibleStudyMeetingRole")
+        self.assertNotContains(response, "ChurchStructureMembership")
+
+    def test_staff_recommendation_only_for_staff_and_does_not_bypass_route(self):
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        member_response = self.client.get(reverse("help_center"))
+        self.assertNotContains(member_response, "Staff User Guide")
+        staff_route_response = self.client.get(reverse("staff_setup_guide"))
+        self.assertEqual(staff_route_response.status_code, 302)
+        self.assertIn("/admin/login/", staff_route_response.url)
+
+        self.client.logout()
+        self.set_language("en")
+        self.client.login(username="help_staff", password="StaffPass123!")
+        staff_response = self.client.get(reverse("help_center"))
+        self.assertContains(staff_response, "Staff User Guide")
+        self.assertContains(staff_response, "Recommended for staff and superusers.")
+
+    def test_membership_alone_does_not_create_serving_recommendation(self):
+        unit = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="HELP-SG",
+            name="帮助小组",
+            name_en="Help Small Group",
+        )
+        ChurchStructureMembership.objects.create(
+            user=self.member,
+            unit=unit,
+            status=ChurchStructureMembership.STATUS_ACTIVE,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_center"))
+
+        self.assertNotContains(
+            response,
+            "Recommended because you have explicit serving data.",
+        )
+        self.assertNotContains(
+            response,
+            "Recommended because My Units is available to you.",
+        )
+
+    def test_explicit_serving_data_recommends_serving_guide(self):
+        from events.models import ServiceEvent
+        from ministry.models import MinistryTeam, TeamAssignment, TeamMembership
+
+        team = MinistryTeam.objects.create(name="Help Team", name_en="Help Team")
+        membership = TeamMembership.objects.create(
+            team=team,
+            user=self.member,
+            display_name="Help Member",
+            is_active=True,
+        )
+        event = ServiceEvent.objects.create(
+            title="Help Gathering",
+            title_en="Help Gathering",
+            event_type=ServiceEvent.EVENT_OTHER,
+            start_datetime=timezone.now() + timedelta(days=1),
+            status=ServiceEvent.STATUS_PUBLISHED,
+        )
+        assignment = TeamAssignment.objects.create(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        assignment.assignment_members.create(membership=membership)
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_center"))
+
+        self.assertContains(
+            response,
+            "Recommended because you have explicit serving data.",
+        )
+
+    def test_my_units_signal_recommends_structure_guide(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="HELP-ROOT",
+            name="帮助堂",
+            name_en="Help Church",
+        )
+        unit = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="HELP-LEAD-SG",
+            name="带领小组",
+            name_en="Lead Small Group",
+        )
+        role_type = ChurchStructureUnitRoleType.objects.create(
+            code=ChurchStructureUnitRoleType.CODE_LEAD,
+            name="带领",
+            name_en="Lead",
+        )
+        ChurchStructureUnitRoleAssignment.objects.create(
+            unit=unit,
+            role_type=role_type,
+            user=self.member,
+            start_date=timezone.localdate(),
+        )
+        self.set_language("en")
+        self.client.login(username="help_member", password="UserPass123!")
+
+        response = self.client.get(reverse("help_center"))
+
+        self.assertContains(
+            response,
+            "Recommended because My Units is available to you.",
+        )
 
     def test_staff_dropdown_link_visible_to_superuser(self):
         self.set_language("en")
-        self.client.login(username="guide_super", password="SuperPass123!")
+        self.client.login(username="help_super", password="SuperPass123!")
 
         response = self.client.get(reverse("profile"))
 
         self.assertContains(response, reverse("staff_setup_guide"))
-        self.assertContains(response, "Staff Setup Guide")
+        self.assertContains(response, "Staff User Guide")
 
     def test_staff_dropdown_link_keeps_chinese_label(self):
         self.set_language("zh")
-        self.client.login(username="guide_staff", password="StaffPass123!")
+        self.client.login(username="help_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("profile"))
 
         self.assertContains(response, reverse("staff_setup_guide"))
-        self.assertContains(response, "同工设置指南")
 
     def test_ordinary_primary_nav_does_not_expose_guide(self):
         self.set_language("en")
-        self.client.login(username="guide_ordinary", password="UserPass123!")
+        self.client.login(username="help_member", password="UserPass123!")
 
         response = self.client.get(reverse("profile"))
 
         self.assertNotContains(response, reverse("staff_setup_guide"))
-        self.assertNotContains(response, "Staff Setup Guide")
+        self.assertNotContains(response, "Staff User Guide")
 
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_guide_page_works_with_all_modules_disabled(self):
         self.set_language("en")
-        self.client.login(username="guide_staff", password="StaffPass123!")
+        self.client.login(username="help_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("staff_setup_guide"))
 
@@ -13891,7 +14162,7 @@ class StaffSetupGuidePageTests(TestCase):
     @override_settings(CMS_ENABLED_MODULES=[])
     def test_staff_dropdown_link_works_with_all_modules_disabled(self):
         self.set_language("en")
-        self.client.login(username="guide_staff", password="StaffPass123!")
+        self.client.login(username="help_staff", password="StaffPass123!")
 
         response = self.client.get(reverse("profile"))
 

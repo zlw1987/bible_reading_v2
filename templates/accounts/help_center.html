@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}
+{% if language == "zh" %}帮助中心{% else %}Help Center{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header help-center-header">
+    <p class="summary-label">{% if language == "zh" %}从这里开始{% else %}Start here{% endif %}</p>
+    <h1 class="page-title">{% if language == "zh" %}帮助中心{% else %}Help Center{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+        帮助你找到日常使用、服事、结构维护和同工工作的正确入口。
+        {% else %}
+        Practical guidance for daily use, serving, structure care, and staff work.
+        {% endif %}
+    </p>
+</section>
+
+<section class="notice-panel help-start-panel">
+    <h2 class="help-section-title">{% if language == "zh" %}从哪里开始{% else %}Where to start{% endif %}</h2>
+    <ul class="help-start-list">
+        <li>{% if language == "zh" %}普通成员通常从“今日”、读经、查经、代祷、日历和个人资料开始。{% else %}Members usually start with Today, Reading, Bible Study, Prayer, Calendar, and Profile.{% endif %}</li>
+        <li>{% if language == "zh" %}有明确服事安排的人从“我的服事”查看和确认自己的服事。{% else %}Serving users start in My Serving to review and confirm explicit serving assignments.{% endif %}</li>
+        <li>{% if language == "zh" %}同工从“同工总览”和具体管理页面进入当前工作。{% else %}Staff start with Staff Overview and the existing management pages for their task.{% endif %}</li>
+        <li>{% if language == "zh" %}推荐内容只根据你的职责提供指引；实际访问仍由系统权限决定。{% else %}Recommendations are guidance based on your responsibilities; actual access is still governed by system permissions.{% endif %}</li>
+    </ul>
+</section>
+
+<section class="help-section">
+    <h2 class="help-section-title">{% if language == "zh" %}推荐给你{% else %}Recommended for you{% endif %}</h2>
+    <div class="help-guide-grid">
+        {% for guide in recommended_guides %}
+        <article class="card help-guide-card">
+            <h3 class="card-title">{{ guide.title }}</h3>
+            <p class="muted">{{ guide.reason }}</p>
+            <p>{{ guide.description }}</p>
+            {% if guide.url_name == "staff_setup_guide" %}
+            <a class="button" href="{% url 'staff_setup_guide' %}">
+                {% if language == "zh" %}打开指南{% else %}Open guide{% endif %}
+            </a>
+            {% else %}
+            <a class="button" href="{% url 'help_guide' guide.slug %}">
+                {% if language == "zh" %}打开指南{% else %}Open guide{% endif %}
+            </a>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="help-section">
+    <h2 class="help-section-title">{% if language == "zh" %}所有指南{% else %}All guides{% endif %}</h2>
+    <div class="help-guide-grid">
+        {% for guide in guides %}
+        <article class="card help-guide-card">
+            <h3 class="card-title">{{ guide.title }}</h3>
+            <p>{{ guide.description }}</p>
+            <a class="button-secondary button" href="{% url 'help_guide' guide.slug %}">
+                {% if language == "zh" %}阅读指南{% else %}Read guide{% endif %}
+            </a>
+        </article>
+        {% endfor %}
+        {% if staff_guide %}
+        <article class="card help-guide-card">
+            <h3 class="card-title">{{ staff_guide.title }}</h3>
+            <p>{{ staff_guide.description }}</p>
+            <a class="button-secondary button" href="{% url 'staff_setup_guide' %}">
+                {% if language == "zh" %}阅读指南{% else %}Read guide{% endif %}
+            </a>
+        </article>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

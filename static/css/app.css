@@ -172,6 +172,16 @@ textarea:focus-visible,
     text-transform: uppercase;
 }
 
+.nav-staff-menu-group {
+    border-top: 1px solid var(--border);
+    padding-top: 4px;
+}
+
+.nav-staff-menu-group:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
 .nav-staff-menu-panel a {
     display: block;
     padding: 8px 10px;
@@ -3214,6 +3224,57 @@ th {
     overflow-wrap: anywhere;
     font-size: 14px;
     color: var(--text);
+}
+
+.help-center-header {
+    margin-bottom: 14px;
+}
+
+.help-start-panel {
+    margin-bottom: 22px;
+}
+
+.help-start-panel .help-section-title {
+    margin-top: 0;
+}
+
+.help-start-list {
+    margin: 10px 0 0;
+    padding-left: 22px;
+}
+
+.help-section {
+    margin-top: 24px;
+}
+
+.help-section-title {
+    font-size: 22px;
+    margin: 0 0 12px;
+}
+
+.help-guide-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.help-guide-card {
+    align-content: start;
+    display: grid;
+    gap: 10px;
+}
+
+.help-guide-card p {
+    margin: 0;
+}
+
+.help-guide-card .button {
+    justify-self: start;
+    margin-top: 4px;
+}
+
+.help-guide {
+    margin-top: 0;
 }
 
 /* ---- Church Calendar month/day UI (CHURCH-CALENDAR.1C) -------------------- */

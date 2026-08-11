@@ -39,112 +39,21 @@
                         <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                     </summary>
                     <div class="nav-staff-menu-panel nav-dropdown-panel">
-                        <a href="{% url 'staff_overview' %}">
-                            {% if language == "zh" %}同工总览{% else %}Staff Overview{% endif %}
-                        </a>
-
-                        {% if "reading" in enabled_modules or "studies" in enabled_modules or "announcements" in enabled_modules %}
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}内容管理{% else %}Content Management{% endif %}
-                        </span>
-                        {% endif %}
-                        {% if "reading" in enabled_modules %}
-                        <a href="{% url 'staff_reading_plan_list' %}">
-                            {% if language == "zh" %}读经计划管理{% else %}Reading Plan Admin{% endif %}
-                        </a>
-                        {% endif %}
-                        {% if "studies" in enabled_modules %}
-                        <a href="{% url 'bible_study_schedule_manage_list' %}">
-                            {% if language == "zh" %}查经安排{% else %}Bible Study Schedules{% endif %}
-                        </a>
-                        <a href="{% url 'bible_study_lesson_manage_list' %}">
-                            {% if language == "zh" %}每周查经指引{% else %}Weekly Bible Study Guides{% endif %}
-                        </a>
-                        <a href="{% url 'bible_study_meeting_manage_list' %}">
-                            {% if language == "zh" %}小组查经聚会{% else %}Small Group Meetings{% endif %}
-                        </a>
-                        {% endif %}
-                        {% if "announcements" in enabled_modules %}
-                        <a href="{% url 'staff_announcement_list' %}">
-                            {% if language == "zh" %}公告管理{% else %}Announcement Admin{% endif %}
-                        </a>
-                        {% endif %}
-
-                        {% if "events" in enabled_modules or "ministry" in enabled_modules %}
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}事工运作{% else %}Ministry Operations{% endif %}
-                        </span>
-                        {% endif %}
-                        {% if "events" in enabled_modules %}
-                        <a href="{% url 'service_event_list' %}">
-                            {% if language == "zh" %}管理教会聚会{% else %}Manage Church Gatherings{% endif %}
-                        </a>
-                        {% endif %}
-                        {% if "ministry" in enabled_modules %}
-                        <a href="{% url 'ministry_team_list' %}">
-                            {% if language == "zh" %}事工团队{% else %}Ministry Teams{% endif %}
-                        </a>
-                        <a href="{% url 'team_assignment_list' %}">
-                            {% if language == "zh" %}服事排班{% else %}Team Assignments{% endif %}
-                        </a>
-                        {% endif %}
-
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}结构设置{% else %}Structure Setup{% endif %}
-                        </span>
-                        <a href="{% url 'staff_structure_map' %}">
-                            {% if language == "zh" %}教会结构设置与检查{% else %}Church Structure Setup & Review{% endif %}
-                        </a>
-                        <a href="{% url 'ministry_structure_map' %}">
-                            {% if language == "zh" %}事工结构{% else %}Ministry Structure{% endif %}
-                        </a>
-
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}用户与审核{% else %}Users and Review{% endif %}
-                        </span>
-                        <a href="{% url 'staff_user_list' %}">
-                            {% if language == "zh" %}用户管理{% else %}User Admin{% endif %}
-                        </a>
-                        <a href="{% url 'staff_membership_request_list' %}">
-                            {{ ui.membership_requests }}
-                        </a>
-                        <a href="{% url 'staff_moderation_queue' %}">
-                            {{ ui.moderation_queue }}
-                        </a>
-                        {% if "community_events" in enabled_modules %}
-                        <a href="{% url 'community_activity_review_list' %}">
-                            {% if language == "zh" %}活动审核{% else %}Activity Review{% endif %}
-                        </a>
-                        {% endif %}
-                        <a href="{% url 'staff_reflection_reports' %}">
-                            {% if language == "zh" %}默想举报{% else %}Reflection Reports{% endif %}
-                        </a>
-                        {% if "prayers" in enabled_modules %}
-                        <a href="{% url 'staff_prayer_reports' %}">
-                            {% if language == "zh" %}代祷举报{% else %}Prayer Reports{% endif %}
-                        </a>
-                        {% endif %}
-                        <a href="{% url 'admin:index' %}">
-                            {% if language == "zh" %}Django 后台{% else %}Django Admin{% endif %}
-                        </a>
-
-                        <span class="nav-staff-menu-heading">
-                            {% if language == "zh" %}内部参考{% else %}Internal Reference{% endif %}
-                        </span>
-                        <a href="{% url 'staff_setup_guide' %}">
-                            {% if language == "zh" %}同工设置指南{% else %}Staff Setup Guide{% endif %}
-                        </a>
+                        {% include "partials/_staff_navigation.html" %}
                     </div>
                 </details>
                 {% endif %}
 
                 <details class="nav-account-menu nav-dropdown" data-dropdown-var-prefix="account-menu">
-                    <summary class="nav-link{% if active_nav == 'profile' or active_nav == 'my_units' %} active{% endif %}">
+                    <summary class="nav-link{% if active_nav == 'profile' or active_nav == 'my_units' or active_nav == 'help' %} active{% endif %}">
                         <span class="nav-account-name">{{ user.username }}</span>
                         <span class="nav-dropdown-caret" aria-hidden="true">▾</span>
                     </summary>
                     <div class="nav-account-menu-panel nav-dropdown-panel">
                         <a href="{% url 'profile' %}"{% if active_nav == 'profile' %} aria-current="page"{% endif %}>{{ ui.profile }}</a>
+                        <a href="{% url 'help_center' %}"{% if active_nav == 'help' %} aria-current="page"{% endif %}>
+                            {% if language == "zh" %}&#24110;&#21161;&#20013;&#24515;{% else %}Help Center{% endif %}
+                        </a>
                         {% if show_my_units_nav %}
                         <a href="{% url 'my_units' %}"{% if active_nav == 'my_units' %} aria-current="page"{% endif %}>
                             {% if language == "zh" %}我负责的单位{% else %}My Units{% endif %}

@@ -1,0 +1,16 @@
+{% for group in staff_navigation_groups %}
+<div class="nav-staff-menu-group" data-staff-nav-group="{{ group.key }}">
+    <span class="nav-staff-menu-heading">
+        {% if language == "zh" %}{{ group.label_zh }}{% else %}{{ group.label_en }}{% endif %}
+    </span>
+    {% for item in group.items %}
+    <a href="{% url item.url_name %}">
+        {% if language == "zh" %}
+            {{ item.label_zh }}
+        {% else %}
+            {{ item.label_en }}
+        {% endif %}
+    </a>
+    {% endfor %}
+</div>
+{% endfor %}

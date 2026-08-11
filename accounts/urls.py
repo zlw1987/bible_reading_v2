@@ -68,6 +68,9 @@ urlpatterns = [
         name="edit_my_unit_member_record",
     ),
 
+    path("help/", views.help_center, name="help_center"),
+    path("help/<slug:slug>/", views.help_guide, name="help_guide"),
+
     path("staff/", views.staff_overview, name="staff_overview"),
     path(
         "staff/setup-guide/",

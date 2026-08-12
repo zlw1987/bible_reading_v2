@@ -12,8 +12,8 @@ exclusion, audience enforcement for Important items, disabled-module Today
 surface gate, and the absence of serving/My Serving/attention/Staff Overview
 or other cross-module behavior. Neither docs slice changes Today runtime
 behavior, and the pass is not a production-readiness claim.
-`CHURCH-CALENDAR.0A` separately plans a future read-only member Church
-Calendar; it does not change Today in this slice.
+Church Calendar V1 is now implemented as a separate read-only aggregation
+surface. It does not change Today or My Serving behavior.
 
 This note records product and architecture boundaries for Today, My Serving, Bible Study meeting roles, and future people-status design. It does not approve new models, schema changes, migrations, or serving inference from Church Structure membership.
 
@@ -48,15 +48,19 @@ priority never bypasses the shared member/public audience visibility rules;
 disabled-module aggregation returns an empty default without querying
 announcements.
 
-The separately planned Church Calendar / 教会日历 exists because Today must
-remain selective and low-noise rather than becoming a complete feed. A future
-calendar may aggregate all enabled-source, ordinary-member-visible Church
-Gatherings, Bible Study V2 meetings, active-window Official Announcements, and
-Community Activities across a selected date range. That calendar remains a
-separate route and provider system: it does not widen Today's caps, cards,
-actions, serving notes, manager summaries, or Community Activity reminder
-rules. `CHURCH-CALENDAR.0A` is documentation only; no calendar runtime exists
-yet.
+The implemented Church Calendar / 教会日历 exists because Today must remain
+selective and low-noise rather than becoming a complete feed. Calendar V1 is a
+separate read-only route and provider system that aggregates source-owned
+items across a selected date range, including member-visible Church Gatherings,
+Bible Study V2 meetings, active-window Official Announcements, Community
+Activities, and explicit personal serving overlays where currently implemented.
+It does not widen Today's caps, cards, actions, serving notes, manager
+summaries, or Community Activity reminder rules.
+
+Calendar presence is not serving assignment. The calendar may display explicit
+personal serving overlays, but it does not create, edit, publish, cancel,
+approve, confirm, or otherwise mutate source objects, Community Activity signup,
+Bible Study roles, serving state, notifications, or external calendar sync.
 
 ## My Serving
 
@@ -78,6 +82,11 @@ BS-SERVING-CONFIRM.1A adds minimal confirmation state to explicit user-linked Bi
 BS-MYSERVING.1A was evaluated as a separate slice and found already satisfied by the shipped BS-SERVING-MYSERVING.1A (`my_bible_study_role_serving_items`, linked-user `BibleStudyMeetingRole.user == request.user` only, cancelled/draft meetings excluded, visibility-gated, display-name-only excluded) plus BS-SERVING-CONFIRM.1A; the focused helper/page/boundary tests it called for already exist in `ministry/tests.py`. No new section was added: a second Bible Study section would duplicate the existing integrated serving cards, and the slice's "read-only" framing predates the already-approved BS-SERVING-CONFIRM.1A confirmation workflow, which was not reverted. No code, models, migrations, or data changed.
 
 MYSERVING-LEADER.1A adds a leader-only, near-term, read-only Unassigned Ministry Work summary to My Serving. It uses explicit `ServiceEvent.required_teams`, `TeamAssignment`, and `TeamAssignmentMember` coverage data; it is gated by existing team-assignment management permission or teams returned by `manageable_assignment_teams(user)`. It does not create assignments automatically, does not infer serving or management from Church Structure membership, does not add models or migrations, and links back to the existing Team Schedule / Assignment workflows for full scheduling.
+
+Calendar does not replace My Serving. My Serving remains the explicit serving
+workspace, and only explicit serving data qualifies as personal serving.
+Belonging, audience visibility, event visibility, activity signup, Calendar
+presence, and staff/member visibility do not imply serving.
 
 ## Assignment Boundaries
 

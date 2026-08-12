@@ -476,11 +476,16 @@ notifications, or `ServiceEvent`.
    stabilization boundary. Community Activities remains secondary and
    independent: not official Church Gatherings, My Serving, `ServiceEvent`, or
    serving.
-   Waitlist, attendee list, check-in, notifications, comments, payments,
-   calendar integration, broader Today browse/discovery, Staff Overview cards,
-   setup/readiness, any `ServiceEvent` relationship, My Serving integration,
-   and Checklist remain deferred. Any further expansion requires its own
-   approved slice.
+   The read-only Church Calendar adapter for Community Activities is
+   implemented: Calendar can aggregate published, visible Community Activities
+   when `community_events` is enabled. Waitlist, attendee list, check-in,
+   notifications, comments, payments, Community Activity-owned writable
+   calendar workflow, external calendar / Google Calendar sync,
+   Calendar-driven signup or cancellation, broader Today browse/discovery,
+   Staff Overview cards, setup/readiness, any `ServiceEvent` relationship, My
+   Serving integration, and Checklist remain deferred. Calendar never owns
+   Community Activity records or treats them as `ServiceEvent` rows. Any further
+   expansion requires its own approved slice.
    Official Announcements V1 is bounded in
    `docs/ANNOUNCEMENTS_V1_PLAN.md`. `ANNOUNCEMENTS.1A` implements its
    app/model/admin/visibility foundation, and `ANNOUNCEMENTS.1B` implements

@@ -1,8 +1,8 @@
 # Documentation Index
 
-Status: canonical documentation entry point, current through `NOTIFY.1A`
-(notification app/model/admin/Core delivery-port foundation after
-`REPOSITORY-AUDIT-CLOSEOUT.1A`).
+Status: canonical documentation entry point, current through `NOTIFY.1B`
+(notification app/model/admin/Core delivery-port foundation plus recipient UI
+after `REPOSITORY-AUDIT-CLOSEOUT.1A`).
 Church Calendar V1 remains implemented as a
 model-free, read-only aggregation surface with source providers, month/day UI,
 grouping, and personal explicit-serving overlays through `CHURCH-CALENDAR.2B`.
@@ -25,7 +25,7 @@ schema or runtime instructions unless their opening status note says otherwise.
 | Community signup cancellation policy | [`COMMUNITY_SIGNUP_CANCELLATION_POLICY_PLAN.md`](COMMUNITY_SIGNUP_CANCELLATION_POLICY_PLAN.md) | Current V1 policy and implementation record for member signup cancellation: retain `ActivitySignup` rows with `signed_up` / `cancelled` status, count active rows only, allow immediate pre-start self-service cancellation without review, freeze signup state at activity start time, and keep Community Activities separate from serving, official events, Calendar writes, and notifications. |
 | Official Announcements | [`ANNOUNCEMENTS_V1_PLAN.md`](ANNOUNCEMENTS_V1_PLAN.md) | Canonical bounded V1 plan and QA record. `ANNOUNCEMENTS.1A` through `ANNOUNCEMENTS.1D-SLIM` implement the bounded app, member/staff surfaces, and one-item important-announcement Today reminder. `ANNOUNCEMENTS.1E` adds docs/QA closure only; `ANNOUNCEMENTS-QA-PASS.1A` records the user-confirmed manual-QA pass. Limited trial use is acceptable under the existing trial boundary; this is not a production-readiness claim. |
 | Church Calendar | [`CHURCH_CALENDAR_V1_PLAN.md`](CHURCH_CALENDAR_V1_PLAN.md) | Canonical bounded V1 plan and current implementation boundary. `CHURCH-CALENDAR.1A` implements the model-free app, registry/nav foundation, authenticated month/day routes, safe empty states, and provider contract; `CHURCH-CALENDAR.1B` implements the four member-safe source providers/adapters; `CHURCH-CALENDAR.1C` implements the month/day UI; `CHURCH-CALENDAR.1D-A` prepares closure docs/checklist plus a missing focused regression test; and `CHURCH-CALENDAR.2A` adds the `ministry`-owned read-only personal `my_serving` overlay of the viewer's own explicit `TeamAssignmentMember` serving (registered after the four sources, gated by `ministry` enablement, deep-links to the existing My Serving assignment card, serving never inferred); `CHURCH-CALENDAR.2A-FU4` groups the base ServiceEvent and the viewer's own serving rows for it into one presentation occurrence (shared `occurrence_key`, month serving summary / day subitems, header links to the member-facing ServiceEvent detail). `CHURCH-CALENDAR.2B` adds the `studies`-owned `bible_study_serving` overlay grouped by `bible_study_meeting:<id>` and records product-owner manual QA passed in `CHURCH-CALENDAR.2B-QA-CLOSURE`. `CHURCH-CALENDAR.1D-B` records the product-owner manual QA pass after deployment, including the `/my-serving/?tab=past` hotfix and assignment-anchor deep-link verification. Calendar V1 is QA-passed for limited trial/current-state use, without claiming broad production readiness. See [`CHURCH_CALENDAR_V1_QA_CHECKLIST.md`](CHURCH_CALENDAR_V1_QA_CHECKLIST.md). |
-| Notification V0 | [`NOTIFICATIONS_V0_PLAN.md`](NOTIFICATIONS_V0_PLAN.md) | Canonical boundary through implemented `NOTIFY.1A`: registered/gateable notifications app, Notification model/migration/admin, Core directed-delivery port and one-sink contract, notifications-owned idempotent persistence, module-disabled no-op, post-commit dispatch, contained normal failures, and strict test/development delivery. No producer or member-facing UI is implemented. |
+| Notification V0 | [`NOTIFICATIONS_V0_PLAN.md`](NOTIFICATIONS_V0_PLAN.md) | Canonical boundary through implemented `NOTIFY.1B`: registered/gateable notifications app, model/admin, Core directed-delivery port, notifications-owned persistence, recipient center/read state, and bilingual utility bell/unread count. No producer is implemented; notification targets remain permission-neutral. |
 | Church Structure architecture | [`CHURCH_STRUCTURE_FOUNDATION_PLAN.md`](CHURCH_STRUCTURE_FOUNDATION_PLAN.md) | Current canonical structure/belonging models and the boundary between Church Structure and product-specific consumers. |
 | Church Structure primary membership integrity | [`STRUCTURE_MEMBERSHIP_PRIMARY_INTEGRITY_PLAN.md`](STRUCTURE_MEMBERSHIP_PRIMARY_INTEGRITY_PLAN.md) | Current primary-membership invariant, mutation-path inventory, 1A hardening, readiness detection, and deferred DB-constraint design. |
 | Today versus My Serving | [`TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`](TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md) | Agenda, personal serving, manager attention, and belonging-versus-serving rules. |
@@ -70,9 +70,12 @@ migration-safety instruction source.
   development/test seam. Source modules still resolve recipients and import no
   notifications code. The module has no source dependency and contributes no
   ordinary primary nav, Today, setup/readiness, or Staff Overview surface.
-  Producers, center/bell/unread/mark-read UI, routes/templates, Calendar/My
-  Serving integration, announcement fanout, external channels, schedulers, and
-  background jobs remain separately approved future work.
+  `NOTIFY.1B` adds the authenticated recipient-only `/notifications/` center,
+  newest-first bounded snapshot list, textually visible read/unread state,
+  POST-only mark-one/mark-all read actions, and an enabled-only bilingual
+  utility bell/unread count. The stored target remains permission-neutral.
+  Producers, Calendar/My Serving/Staff Overview integration, announcement
+  fanout, external channels, schedulers, and background jobs remain future work.
 - `CHURCH-CALENDAR.1A` adds the independent, default-enabled
   `church_calendar` module, module-gated bilingual navigation, authenticated
   read-only `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, basic

@@ -32,6 +32,18 @@
                 {% if user.is_authenticated %}
                 {% include "partials/_primary_navigation.html" %}
                 <div class="nav-account-group">
+                {% if notifications_enabled %}
+                <a class="nav-link nav-notification-link{% if active_nav == 'notifications' %} active{% endif %}"
+                   href="{% url 'notification_center' %}"
+                   {% if active_nav == 'notifications' %}aria-current="page"{% endif %}
+                   aria-label="{% if language == 'zh' %}通知{% if unread_notification_count %}，{{ unread_notification_count }} 条未读{% endif %}{% else %}Notifications{% if unread_notification_count %}, {{ unread_notification_count }} unread{% endif %}{% endif %}">
+                    <span class="nav-notification-icon" aria-hidden="true">&#128276;</span>
+                    <span>{% if language == "zh" %}通知{% else %}Notifications{% endif %}</span>
+                    {% if unread_notification_count %}
+                    <span class="notification-unread-badge" aria-hidden="true">{{ unread_notification_count }}</span>
+                    {% endif %}
+                </a>
+                {% endif %}
                 {% if user.is_staff %}
                 <details class="nav-staff-menu nav-dropdown" data-dropdown-var-prefix="staff-menu">
                     <summary class="nav-link{% if active_nav == 'staff' %} active{% endif %}">

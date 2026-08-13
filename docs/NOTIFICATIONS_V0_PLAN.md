@@ -1,11 +1,11 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1A`. The app/model/admin/Core delivery-port
-foundation is implemented. No notification producer or member-facing
-notification UI is implemented.
+Status: current through `NOTIFY.1B`. The app/model/admin/Core delivery-port
+foundation and the recipient-scoped Notification Center/bell UI are implemented.
+No notification producer is implemented.
 
 This document is the implementation boundary for Notification V0. The completed
-`NOTIFY.1A` scope is recorded below; later producers, routes, templates,
+`NOTIFY.1A` and `NOTIFY.1B` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
 
@@ -26,11 +26,21 @@ foundation only:
 - normal post-commit failure logging/containment and an explicit strict
   development/test delivery seam.
 
-`NOTIFY.1A` implements no producer, center, bell, unread or mark-read UI, route,
-template, Today/Calendar/My Serving/Staff Overview integration, announcement
-fanout, external channel, scheduler, background job, queue, retry framework, or
-outbox. Those remain separately approved future work; this record does not
-authorize `NOTIFY.1B`, `NOTIFY.1C`, or later slices.
+`NOTIFY.1B` adds an authenticated recipient-scoped center at `/notifications/`,
+newest-first bounded snapshot rendering, visible read/unread state, explicit
+POST-only mark-one and mark-all read actions, and a bilingual shared-shell
+notification utility bell/link with a recipient-scoped unread count. The bell is
+not a `PrimaryNavEntry`; when Notifications is disabled, it is absent and its
+notifications-owned context data does not query Notification rows. Direct URLs
+retain the existing module surface-gate semantics and their own authentication
+and recipient checks.
+
+No source producer exists. `NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
+Overview integration, announcement fanout, external channel, scheduler,
+background job, queue, retry framework, outbox, preference, deletion, archive,
+or search behavior. A notification target remains permission-neutral: the
+stored internal target path is rendered without source-model lookup, and that
+owning target still enforces its own access rules.
 
 ## 2. Purpose
 
@@ -522,8 +532,17 @@ logging/containment, and strict development/test failure surfacing;
 
 ### NOTIFY.1B Notification Center And Bell UI
 
-Goal: add authenticated notification center, unread count, bell link, mark-one
-read, and mark-all-read.
+Status: implemented. The slice adds the authenticated `/notifications/` center,
+recipient-scoped newest-first list, safe bounded snapshot rendering, localized
+source label from registry metadata (with a historical-key fallback), textually
+visible read/unread state, POST-only/idempotent mark-one and mark-all actions,
+and the notifications-owned bilingual utility bell/link with unread count. The
+bell remains outside ordinary primary navigation; it is absent and performs no
+Notification ORM query for anonymous requests or when the module is disabled.
+
+The target path stays an ordinary permission-neutral link. It does not grant
+access, auto-mark a row read, or load a source object. Stored title/body/source
+text remains normally template-escaped. No model or migration change was needed.
 
 Likely files: notification views/urls/templates, base navbar template, focused
 tests.
@@ -611,11 +630,11 @@ needed for routine docs, model, simple UI, or focused producer slices.
 
 ## 12. Current Implementation Recommendation
 
-Keep `NOTIFY.1A` as the completed foundation boundary. It includes no producer,
-bell, center, route, template, or other member-facing UI.
+Keep `NOTIFY.1A` as the completed delivery foundation and `NOTIFY.1B` as the
+completed notification-owned recipient UI boundary. Neither slice adds a
+producer or changes target permission, serving, audience, or membership rules.
 
-`NOTIFY.1B` may add the notification center and bell only when separately
-authorized. Producers may be added one at a time only in separately approved
+Producers may be added one at a time only in separately approved
 `NOTIFY.1C+` slices after the foundation and UI exist. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

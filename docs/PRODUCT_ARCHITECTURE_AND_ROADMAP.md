@@ -1,8 +1,8 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `NOTIFY.1A` (notification app/model/admin/Core delivery-port
-foundation after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
+through `NOTIFY.1B` (notification app/model/admin/Core delivery-port foundation
+plus recipient Notification Center/bell UI after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -171,11 +171,17 @@ resolve their own recipients, import no `notifications` code, and declare no
 dependency on the optional module. Disabled Notifications is a safe no-op with
 no callback, row, or source lifecycle/permission change.
 
-The foundation has no producer and creates no notification from normal product
-workflows. It adds no center, bell, unread or mark-read UI, route, template,
-Today, Calendar, My Serving, Staff Overview, announcement fanout, external
-delivery, scheduler, background job, queue, retry, or outbox. `NOTIFY.1B`,
-`NOTIFY.1C`, and later work remain unapproved until separately authorized.
+`NOTIFY.1B` adds the authenticated recipient-only Notification Center, explicit
+POST-only mark-one/mark-all read actions, and an enabled-only notifications-owned
+bilingual utility bell with a recipient unread count. It is not ordinary primary
+navigation and does not grant target permission: target paths remain ordinary
+links to source-owned protected surfaces. Anonymous and disabled-module shared
+shells perform no notification count query.
+
+There is still no producer, so normal product workflows create no Notification
+rows. There is no Today, Calendar, My Serving, Staff Overview, announcement
+fanout, external delivery, scheduler, background job, queue, retry, or outbox.
+`NOTIFY.1C` and later work remain unapproved until separately authorized.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 

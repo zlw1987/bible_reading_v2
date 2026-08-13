@@ -293,8 +293,8 @@ _REGISTERED_MODULES = (
         dependency_notes=(
             "Owns directed in-app Notification persistence. Source modules "
             "resolve recipients and use the Core delivery port; Notifications "
-            "has no source-module dependency and contributes no shared surface "
-            "in NOTIFY.1A."
+            "has no source-module dependency and no ordinary primary-nav, "
+            "Today, setup/readiness, or Staff Overview contribution."
         ),
     ),
     CmsModule(

@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load datetime_extras %}
+
+{% block title %}
+    {% if language == "zh" %}通知{% else %}Notifications{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<div class="page-header notification-page-header">
+    <div>
+        <h1 class="page-title">{% if language == "zh" %}通知{% else %}Notifications{% endif %}</h1>
+        <p class="page-subtitle">
+            {% if language == "zh" %}查看发给你的通知。{% else %}Updates sent to you.{% endif %}
+        </p>
+    </div>
+    {% if notification_items %}
+    <form method="post" action="{% url 'mark_all_notifications_read' %}">
+        {% csrf_token %}
+        <button type="submit" class="button button-secondary">
+            {% if language == "zh" %}全部标为已读{% else %}Mark all as read{% endif %}
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+{% if notification_items %}
+<div class="notification-list">
+    {% for item in notification_items %}
+    <article class="card notification-card{% if not item.notification.read_at %} notification-card--unread{% endif %}">
+        <div class="notification-card-header">
+            <p class="notification-source">{{ item.source_label }}</p>
+            <p class="notification-state">
+                {% if item.notification.read_at %}
+                    {% if language == "zh" %}已读{% else %}Read{% endif %}
+                {% else %}
+                    {% if language == "zh" %}未读{% else %}Unread{% endif %}
+                {% endif %}
+            </p>
+        </div>
+        <h2 class="card-title">{{ item.notification.title }}</h2>
+        {% if item.notification.body %}
+        <p class="notification-body">{{ item.notification.body }}</p>
+        {% endif %}
+        <p class="muted notification-created">{{ item.notification.created_at|member_datetime:language }}</p>
+        <div class="compact-action-row">
+            <a class="button button-secondary" href="{{ item.notification.target_url }}">
+                {% if language == "zh" %}打开{% else %}Open{% endif %}
+            </a>
+            {% if not item.notification.read_at %}
+            <form method="post" action="{% url 'mark_notification_read' item.notification.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button button-secondary">
+                    {% if language == "zh" %}标为已读{% else %}Mark as read{% endif %}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p>{% if language == "zh" %}暂时没有通知。{% else %}No notifications yet.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -97,6 +97,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 "accounts.context_processors.language_context",
                 "core.context_processors.module_context",
+                "notifications.context_processors.notification_context",
             ],
         },
     },

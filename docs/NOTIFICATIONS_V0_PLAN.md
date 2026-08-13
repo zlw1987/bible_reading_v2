@@ -1,24 +1,36 @@
 # Notification V0 Plan
 
-Status: planning only, architecture aligned through `NOTIFY.0B`. No
-notification runtime is implemented by this plan. Implementation requires
-separately approved slices.
+Status: current through `NOTIFY.1A`. The app/model/admin/Core delivery-port
+foundation is implemented. No notification producer or member-facing
+notification UI is implemented.
 
-This document is a practical implementation boundary for future notification
-work. It does not authorize app creation, models, migrations, routes, templates,
-producer hooks, background jobs, external delivery, or any permission changes.
+This document is the implementation boundary for Notification V0. The completed
+`NOTIFY.1A` scope is recorded below; later producers, routes, templates,
+background jobs, external delivery, and permission changes still require
+separate approval.
 
 ## 1. Status
 
-`NOTIFY.0A` created the docs-only plan. `NOTIFY.0B` resolves the cross-module
-delivery dependency direction before implementation is authorized.
+`NOTIFY.0A` created the docs-only plan. `NOTIFY.0B` resolved the cross-module
+delivery dependency direction. `NOTIFY.1A` implements the authorized
+foundation only:
 
-No notification runtime is implemented. There is no `notifications` app, no
-notification model, no notification center, no bell UI, no Core delivery port,
-no persistence sink, and no source-module emission logic from this plan.
+- a registered, default-enabled `notifications` app/module with no source-module
+  dependencies or shared-surface capabilities;
+- the `Notification` model, initial migration, and operational Django admin;
+- a Core-owned immutable directed payload, one-sink registration contract,
+  notifications-module gate, and `transaction.on_commit()` dispatch;
+- a notifications-owned persistence sink with database-backed uniqueness for
+  recipient plus producer-owned `dedupe_key`, preserving the first stored
+  snapshot on duplicate delivery;
+- normal post-commit failure logging/containment and an explicit strict
+  development/test delivery seam.
 
-Future implementation must be approved one small slice at a time. Planning text
-here is not authorization to add runtime behavior.
+`NOTIFY.1A` implements no producer, center, bell, unread or mark-read UI, route,
+template, Today/Calendar/My Serving/Staff Overview integration, announcement
+fanout, external channel, scheduler, background job, queue, retry framework, or
+outbox. Those remain separately approved future work; this record does not
+authorize `NOTIFY.1B`, `NOTIFY.1C`, or later slices.
 
 ## 2. Purpose
 
@@ -70,18 +82,17 @@ V0 explicitly excludes:
 
 ### Architecture Decision (`NOTIFY.0B`)
 
-Notifications will be a registered, gateable CMS module, not an always-on Core
-product. The future `notifications` app owns Notification persistence, its
-model and admin, idempotent storage, read/unread state, retention decisions,
-notification-specific rendering, the notification center, and the bell/unread
-count.
+Notifications is a registered, gateable CMS module, not an always-on Core
+product. The `notifications` app owns Notification persistence, its model and
+admin, and idempotent storage; it will own future read/unread state, retention
+decisions, notification-specific rendering, the notification center, and the
+bell/unread count.
 
-Core will own only a deliberately small directed-notification delivery port and
+Core owns only a deliberately small directed-notification delivery port and
 sink-registration contract. A future source module may import that Core port
-(conceptually `core.notifications.emit_notification`) and pass an
+(implemented as `core.notification_delivery.emit_notification`) and pass an
 already-resolved recipient plus notification payload. The `notifications` app
-will import the Core registration contract and register its persistence sink.
-The exact module/function names may be finalized in `NOTIFY.1A`, but the
+imports the Core registration contract and registers its persistence sink. The
 dependency direction is fixed:
 
 ```text
@@ -118,18 +129,18 @@ small Core delivery port for this integration; they must not import
 
 ### Registry And Disablement
 
-The future registry key is `notifications`. It will declare no dependency on
+The registry key is `notifications`. It declares no dependency on
 `events`, `studies`, `ministry`, `community_events`, or another source module.
 Source modules must not declare `depends_on=("notifications",)` merely to emit
 an optional notification.
 
 Existing `CMS_ENABLED_MODULES` semantics remain the only feature gate:
 
-- absent/`None` means every registered module, including `notifications` once
-  registered, is enabled;
+- absent/`None` means every registered module, including `notifications`, is
+  enabled;
 - an explicit list enables `notifications` only when it contains the
   `notifications` key;
-- no second notification feature-flag system is planned.
+- no second notification feature-flag system exists.
 
 In the foundation slice, `notifications` contributes no ordinary primary-nav
 entry, Today provider, setup/readiness provider, or Staff Overview content.
@@ -144,7 +155,7 @@ or becomes an authorization check.
 
 ### Commit And Failure Policy
 
-The intended V0 path is to register delivery with `transaction.on_commit()` so
+The V0 foundation registers delivery with `transaction.on_commit()` so
 a source rollback creates no notification and persistence runs only after the
 source-domain transaction succeeds. The source module must resolve the
 recipient and build the bounded payload before scheduling the callback; the
@@ -155,8 +166,8 @@ enough context to diagnose the source module/type and dedupe key, but must not
 normally turn a successfully committed source-domain save into a source-domain
 failure. Development and tests must have a deterministic strict execution seam
 that surfaces sink/registration/persistence failures rather than silently
-hiding them. `NOTIFY.1A` must test both the production containment policy and
-the strict failure path. This does not add a queue, retry worker, scheduler,
+hiding them. `NOTIFY.1A` tests both the production containment policy and the
+strict failure path. This does not add a queue, retry worker, scheduler,
 outbox, or background job.
 
 If the module is enabled but no sink is registered, that is a configuration or
@@ -487,11 +498,12 @@ diff/status review. No Django tests.
 
 ### NOTIFY.1A App/model/admin/Core Port Foundation
 
-Goal: add only the minimal `notifications` app, Notification model/migration,
-registry entry, minimal admin, Core delivery port and sink-registration
-contract, notifications-owned persistence sink/service, idempotency, disabled
-module no-op, post-commit delivery/failure policy, and focused foundation tests.
-It includes no source producer and no member-facing UI.
+Status: implemented. The slice adds only the minimal `notifications` app,
+Notification model/migration, registry entry, minimal admin, Core delivery port
+and sink-registration contract, notifications-owned persistence sink/service,
+database-backed idempotency, disabled-module no-op, post-commit delivery/failure
+policy, and focused foundation tests. It includes no source producer and no
+member-facing UI.
 
 Likely files: `notifications/models.py`, `notifications/admin.py`, a small
 notifications-owned persistence service/sink, `notifications/apps.py`, a small
@@ -597,16 +609,13 @@ UI changes.
 Fable 5 should be reserved for hard architecture/planning questions. It is not
 needed for routine docs, model, simple UI, or focused producer slices.
 
-## 12. First Implementation Recommendation
+## 12. Current Implementation Recommendation
 
-Do not implement notifications in this task.
+Keep `NOTIFY.1A` as the completed foundation boundary. It includes no producer,
+bell, center, route, template, or other member-facing UI.
 
-When separately authorized, start with the `NOTIFY.1A` app/model/admin, Core
-port, registered persistence sink, idempotency, enablement, post-commit, and
-failure-policy foundation only. It includes no producer, bell, center, route,
-template, or other member-facing UI.
-
-`NOTIFY.1B` adds the notification center and bell. Add producers one at a time
-only in `NOTIFY.1C+` after the foundation and UI exist. Each producer must prove
+`NOTIFY.1B` may add the notification center and bell only when separately
+authorized. Producers may be added one at a time only in separately approved
+`NOTIFY.1C+` slices after the foundation and UI exist. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

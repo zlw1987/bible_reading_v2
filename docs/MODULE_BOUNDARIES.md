@@ -1,7 +1,8 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`NOTIFY.0B` (docs-only architecture alignment; no notification runtime).
+`NOTIFY.1A` (notification app/model/admin/Core delivery-port foundation; no
+producer or member-facing notification UI).
 `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation, `CHURCH-CALENDAR.1B` adds the four
 member-safe source range providers/adapters, `CHURCH-CALENDAR.1C` implements
@@ -79,6 +80,7 @@ Registered in `core/module_registry.py`, enabled via
 | `events`   | `events`   | Church Gatherings / 教会聚会            | Audience rows + membership; zero rows fail closed. |
 | `community_events` | `community_events` | Community Activities / 活动 | Independent browse/detail, signup/cancel with an optional participant limit, complete validated member drafts, member submission, user-linked co-organizers with bounded pre-publication edit permission, a lightweight staff review inbox + request-changes loop, and a low-noise Today provider for signed-up activities happening today plus creator `changes_requested` reminders. Drafts are creator/co-organizer/staff preparation only; published visibility uses app-owned audience rows + active primary membership, and zero rows fail closed. Draft, signup, capacity, and co-organizer permission are not serving. No larger approval dashboard, My Serving, serving action-center contribution, waitlist, attendee list, check-in, Staff Overview, setup/readiness, notifications, or `ServiceEvent` link. |
 | `announcements` | `announcements` | Announcements / 公告 | Official member-facing list/detail uses published active-window rows + app-owned audience rows + active primary membership for every viewer; zero rows fail closed. Module-gated ordinary nav plus a module-gated staff management link; staff/superusers have bounded draft/create/edit/publish/archive management. Publish/archive are explicit POST actions. Today contributes at most one visible active important announcement as a localized title/detail link only. No feed, Staff Overview, notification, event/activity, signup, attendance, approval/request-changes, My Serving, or serving behavior. |
+| `notifications` | `notifications` | Notifications / 通知 | Registered and default-enabled gateable module owning directed Notification persistence. Source modules resolve recipients through the Core delivery port and have no hard dependency on Notifications. `NOTIFY.1A` contributes no ordinary nav, Today, setup/readiness, Staff Overview, or member-facing notification UI. |
 | `church_calendar` | `church_calendar` | Calendar / 日历 | Model-free read-only member foundation with registered/default-enabled ordinary nav, authenticated `/calendar/` and `/calendar/<year>/<month>/<day>/` routes, safe empty states, and a provider contract. `CHURCH-CALENDAR.1B` registers four member-safe source range providers (events → studies → announcements → community_events) via the `church_calendar.registration` site (called from `ready()`); disabled sources are not called and run no query, and staff status never bypasses source disablement. Each adapter enforces ordinary current audience/belonging visibility only (no staff/superuser/creator/co-organizer/capability bypass) and fails closed for absent/ambiguous active primary membership, zero audience rows, and nonmatching audience. `CHURCH-CALENDAR.1C` adds the member-facing responsive month grid and complete day detail UI (presentation-only local-date bucketing, discoverable "more" links, timed/announcement split, owning member-facing detail links). `CHURCH-CALENDAR.1D-A` prepares tests/docs closure and the manual QA checklist. `CHURCH-CALENDAR.2A` adds a fifth provider — the `ministry`-owned read-only personal `my_serving` overlay of the viewer's *own* explicit `TeamAssignmentMember` serving (registered at the same explicit site after the four sources, gated by `ministry` enablement, deep-linking to the existing My Serving assignment card). `CHURCH-CALENDAR.2A-FU4` collapses the same real occurrence into one presentation row/card: the `events` and `ministry` providers share a presentation-only `occurrence_key = "service_event:<id>"`, so the base ServiceEvent and the viewer's own serving rows for it group into one occurrence (month serving summary / day subitems), with the grouped header linking to the member-facing ServiceEvent detail (read visibility from `SERVING-EVENT-VISIBILITY.1A`); grouping keys on the event id, never on title/time strings, is presentation-only, and never widens member-safe visibility. `CHURCH-CALENDAR.2B` adds a `studies`-owned `bible_study_serving` overlay emitted by the existing single `studies` provider (so gated by `studies` enablement), grouped into the base meeting occurrence via `occurrence_key = "bible_study_meeting:<id>"`; the ordinary `bible_study_meeting` provider stays audience-only, an explicit linked `BibleStudyMeetingRole` additionally grants read-only visibility to exactly that one meeting's detail (studies-owned mirror of `SERVING-EVENT-VISIBILITY.1A`, no audience/management expansion), and product-owner manual QA passed (`CHURCH-CALENDAR.2B-QA-CLOSURE`). `CHURCH-CALENDAR.1D-B` records product-owner manual QA passed after deployment, including `/calendar/`, day detail, real calendar items, My Serving assignment-anchor deep links, `/my-serving/?tab=past` hotfix verification, and removal of leaked template comment text. Calendar is QA-passed for limited trial/current-state use, not broad production readiness. Serving stays explicit only: never inferred from membership/audience/visibility or staff/manager authority, and the calendar never creates/edits/confirms serving. It changes no Today or My Serving behavior and adds no model, migration, or data write. Still no attendance/check-in, notification, external-calendar sync, staff/team-coverage dashboard, or CommunityActivity-to-ServiceEvent relationship. |
 | `ministry` | `ministry` | Ministry teams, serving, My Serving / 我的服事 | Depends on `events` (assignments schedule against ServiceEvents). Membership is belonging, never serving. |
 
@@ -384,10 +386,10 @@ notifications, or `ServiceEvent`.
    Existing cross-module reads (including ministry reading `events` / studies
    serving roles) are declared in the registry's `depends_on` / dependency
    notes and should not grow silently.
-   `NOTIFY.0B` applies this rule to future directed notifications: source
-   modules will import only a minimal Core notification delivery port, while
-   the future registered `notifications` module will register its
-   persistence sink through Core. Source modules must not import
+   `NOTIFY.0B` applies this rule to directed notifications: future source
+   modules may import only the minimal Core notification delivery port, while
+   the registered `notifications` module registers its persistence sink
+   through Core. Source modules must not import
    `notifications`, the notifications app must not import source modules, and
    Core must not import either source modules or Notification persistence.
 2. **Today is provider/registry-driven (`MODULAR-CORE.3A` + `3B`).**
@@ -631,28 +633,28 @@ notifications, or `ServiceEvent`.
    2B (also confirming ServiceEvent serving grouping still works and My Serving
    behavior is unchanged).
 
-9. **Notifications stays a registered module behind a small Core delivery
-   port (`NOTIFY.0B`, planning only).** No notification runtime exists yet.
-   When separately implemented, module key `notifications` will own the
-   Notification model/rows, admin, idempotent persistence sink, read/unread
-   state, retention, rendering, center, and bell. Core will own only the small
+9. **Notifications is a registered module behind a small Core delivery port
+   (`NOTIFY.1A`).** Module key `notifications` owns the Notification model/rows,
+   initial migration, operational admin, and idempotent persistence sink. It
+   will also own future read/unread UI, retention, rendering, center, and bell.
+   Core owns only the small
    directed emit/sink-registration contract, its module-enablement check, and
    the delivery failure policy. A source module resolves exactly one recipient
    under its own domain authority and calls the Core port; Core and
    notifications never infer recipients from membership, audience, serving,
    staff/manager authority, a source object, or a target URL.
 
-   The future registry entry has no `depends_on` relationship to `events`,
+   The registry entry has no `depends_on` relationship to `events`,
    `studies`, `ministry`, or `community_events`, and those source modules must
    not declare a hard dependency on optional `notifications`. Under existing
    `CMS_ENABLED_MODULES` semantics, absent/`None` enables all registered
    modules; an explicit list must contain `notifications` to enable it. No
-   second feature flag is planned. Disabled notifications means the Core emit
+   second feature flag exists. Disabled notifications means the Core emit
    is a safe no-op: no sink call or Notification row, with no source lifecycle
    or permission change. The foundation adds no ordinary primary-nav entry,
    Today provider, setup/readiness provider, or Staff Overview contribution.
 
-   Delivery is intended to run through `transaction.on_commit()` so a source
+   Delivery runs through `transaction.on_commit()` so a source
    rollback creates no record. An ordinary post-commit persistence failure is
    logged and normally contained so it does not reinterpret a successful
    source-domain commit as a domain failure; development/tests must expose a
@@ -661,6 +663,9 @@ notifications, or `ServiceEvent`.
    database-backed idempotency per recipient plus dedupe key. This is one
    directed-record seam, not a generic event bus, signal discovery system,
    queue, outbox, retry framework, broadcast subscription, or plugin system.
+   No source module emits through the port in 1A. There is no notification
+   route, template, center, bell, unread/mark-read UI, Today, Calendar, My
+   Serving, Staff Overview, external delivery, scheduler, or background job.
 
 ## Follow-ups (not yet done)
 

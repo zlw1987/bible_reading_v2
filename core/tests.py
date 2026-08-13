@@ -47,6 +47,7 @@ ALL_MODULE_KEYS = (
     "events",
     "community_events",
     "announcements",
+    "notifications",
     "church_calendar",
     "ministry",
 )
@@ -370,6 +371,21 @@ class ModuleRegistryTests(SimpleTestCase):
 
     def test_ministry_declares_events_dependency(self):
         self.assertIn("events", get_module("ministry").depends_on)
+
+    @override_settings(CMS_ENABLED_MODULES=["notifications"])
+    def test_notifications_is_independent_and_has_no_shared_surface(self):
+        module = get_module("notifications")
+        self.assertEqual(get_enabled_module_keys(), frozenset({"notifications"}))
+        self.assertEqual(module.depends_on, ())
+        self.assertEqual(module.capabilities, frozenset())
+        self.assertIsNone(module.primary_nav)
+        self.assertNotIn("notifications", get_registered_today_provider_keys())
+
+    @override_settings(CMS_ENABLED_MODULES=["events", "studies", "community_events"])
+    def test_sources_do_not_depend_on_disabled_notifications(self):
+        self.assertFalse(is_module_enabled("notifications"))
+        for key in ("events", "studies", "ministry", "community_events"):
+            self.assertNotIn("notifications", get_module(key).depends_on)
 
     @override_settings(CMS_ENABLED_MODULES=["announcements"])
     def test_announcements_is_valid_without_module_dependencies(self):

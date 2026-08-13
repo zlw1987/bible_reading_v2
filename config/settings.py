@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "events",
     "community_events.apps.CommunityEventsConfig",
     "announcements.apps.AnnouncementsConfig",
+    "notifications.apps.NotificationsConfig",
     "church_calendar.apps.ChurchCalendarConfig",
     "ministry",
 ]
@@ -66,6 +67,7 @@ CMS_ENABLED_MODULES = [
     "events",
     "community_events",
     "announcements",
+    "notifications",
     "church_calendar",
     "ministry",
 ]

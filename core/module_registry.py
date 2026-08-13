@@ -286,6 +286,18 @@ _REGISTERED_MODULES = (
         ),
     ),
     CmsModule(
+        key="notifications",
+        label_en="Notifications",
+        label_zh="通知",
+        capabilities=frozenset(),
+        dependency_notes=(
+            "Owns directed in-app Notification persistence. Source modules "
+            "resolve recipients and use the Core delivery port; Notifications "
+            "has no source-module dependency and contributes no shared surface "
+            "in NOTIFY.1A."
+        ),
+    ),
+    CmsModule(
         key="church_calendar",
         label_en="Calendar",
         label_zh="日历",

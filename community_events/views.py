@@ -209,36 +209,42 @@ def community_activity_edit(request, activity_id):
     co-organizer links. Any prior staff ``review_note`` is preserved for
     context; neither collaborator can publish.
     """
-    activity = get_object_or_404(CommunityActivity, id=activity_id)
-    if not activity.can_be_edited_by(request.user):
-        raise Http404("Community activity is not editable.")
-
     language = get_user_language(request)
-    can_manage_co_organizers = activity.created_by_id == request.user.id
-    is_draft = activity.status == CommunityActivity.STATUS_DRAFT
-    if (
-        request.method == "POST"
-        and is_draft
-        and not can_manage_co_organizers
-        and request.POST.get("workflow_action") != "save_draft"
-    ):
-        raise Http404("Community activity draft cannot be submitted.")
     if request.method == "POST":
-        form = CommunityActivitySubmissionForm(
-            request.POST,
-            instance=activity,
-            language=language,
-            acting_user=request.user,
-            include_co_organizers=can_manage_co_organizers,
-        )
-        if form.is_valid():
-            audience_units = list(form.cleaned_data["audience_units"])
-            co_organizers = (
-                list(form.cleaned_data["co_organizer_users"])
-                if can_manage_co_organizers
-                else None
+        with transaction.atomic():
+            activity = get_object_or_404(
+                CommunityActivity.objects.select_for_update(),
+                id=activity_id,
             )
-            with transaction.atomic():
+            if not activity.can_be_edited_by(request.user):
+                raise Http404("Community activity is not editable.")
+
+            expected_status = request.POST.get("expected_status")
+            if expected_status != activity.status:
+                raise Http404("Community activity is not editable.")
+
+            can_manage_co_organizers = activity.created_by_id == request.user.id
+            is_draft = activity.status == CommunityActivity.STATUS_DRAFT
+            if (
+                is_draft
+                and not can_manage_co_organizers
+                and request.POST.get("workflow_action") != "save_draft"
+            ):
+                raise Http404("Community activity draft cannot be submitted.")
+            form = CommunityActivitySubmissionForm(
+                request.POST,
+                instance=activity,
+                language=language,
+                acting_user=request.user,
+                include_co_organizers=can_manage_co_organizers,
+            )
+            if form.is_valid():
+                audience_units = list(form.cleaned_data["audience_units"])
+                co_organizers = (
+                    list(form.cleaned_data["co_organizer_users"])
+                    if can_manage_co_organizers
+                    else None
+                )
                 activity = form.save(commit=False)
                 activity.status = (
                     CommunityActivity.STATUS_DRAFT
@@ -261,11 +267,17 @@ def community_activity_edit(request, activity_id):
                             user=user,
                             added_by=request.user,
                         )
-            return redirect(
-                "community_activity_detail",
-                activity_id=activity.id,
-            )
+                return redirect(
+                    "community_activity_detail",
+                    activity_id=activity.id,
+                )
     else:
+        activity = get_object_or_404(CommunityActivity, id=activity_id)
+        if not activity.can_be_edited_by(request.user):
+            raise Http404("Community activity is not editable.")
+
+        can_manage_co_organizers = activity.created_by_id == request.user.id
+        is_draft = activity.status == CommunityActivity.STATUS_DRAFT
         form = CommunityActivitySubmissionForm(
             instance=activity,
             language=language,
@@ -303,6 +315,7 @@ def community_activity_edit(request, activity_id):
             "activity": activity,
             "review_note": activity.review_note,
             "can_manage_co_organizers": can_manage_co_organizers,
+            "expected_status": activity.status if activity.pk else "",
         },
     )
 
@@ -518,15 +531,38 @@ def _record_review(activity, user, status):
     activity.reviewed_at = timezone.now()
 
 
+def _apply_locked_review_transition(
+    activity_id,
+    user,
+    *,
+    allowed_statuses,
+    target_status,
+    review_note=None,
+):
+    with transaction.atomic():
+        activity = get_object_or_404(
+            CommunityActivity.objects.select_for_update(),
+            pk=activity_id,
+        )
+        if activity.status not in allowed_statuses:
+            return activity, False
+        if review_note is not None:
+            activity.review_note = review_note
+        _record_review(activity, user, target_status)
+        activity.save()
+    return activity, True
+
+
 @staff_member_required
 @require_POST
 def community_activity_review_publish(request, activity_id):
     """Publish a pending-review or changes-requested activity."""
-    activity = get_object_or_404(CommunityActivity, id=activity_id)
-    if activity.status not in _REVIEW_STATUSES:
-        raise Http404("Community activity is not awaiting review.")
-    _record_review(activity, request.user, CommunityActivity.STATUS_PUBLISHED)
-    activity.save()
+    activity, _applied = _apply_locked_review_transition(
+        activity_id,
+        request.user,
+        allowed_statuses=_REVIEW_STATUSES,
+        target_status=CommunityActivity.STATUS_PUBLISHED,
+    )
     return redirect("community_activity_review_detail", activity_id=activity.id)
 
 
@@ -534,22 +570,19 @@ def community_activity_review_publish(request, activity_id):
 @require_POST
 def community_activity_review_request_changes(request, activity_id):
     """Send a pending-review activity back to the creator with a required note."""
-    activity = get_object_or_404(CommunityActivity, id=activity_id)
-    if activity.status != CommunityActivity.STATUS_PENDING_REVIEW:
-        raise Http404("Community activity is not awaiting review.")
     review_note = (request.POST.get("review_note") or "").strip()
     if not review_note:
         return redirect(
-            reverse("community_activity_review_detail", args=[activity.id])
+            reverse("community_activity_review_detail", args=[activity_id])
             + "?error=note"
         )
-    activity.review_note = review_note
-    _record_review(
-        activity,
+    activity, _applied = _apply_locked_review_transition(
+        activity_id,
         request.user,
-        CommunityActivity.STATUS_CHANGES_REQUESTED,
+        allowed_statuses=(CommunityActivity.STATUS_PENDING_REVIEW,),
+        target_status=CommunityActivity.STATUS_CHANGES_REQUESTED,
+        review_note=review_note,
     )
-    activity.save()
     return redirect("community_activity_review_detail", activity_id=activity.id)
 
 
@@ -557,12 +590,12 @@ def community_activity_review_request_changes(request, activity_id):
 @require_POST
 def community_activity_review_cancel(request, activity_id):
     """Cancel/reject a pending-review or changes-requested activity."""
-    activity = get_object_or_404(CommunityActivity, id=activity_id)
-    if activity.status not in _REVIEW_STATUSES:
-        raise Http404("Community activity is not awaiting review.")
     review_note = (request.POST.get("review_note") or "").strip()
-    if review_note:
-        activity.review_note = review_note
-    _record_review(activity, request.user, CommunityActivity.STATUS_CANCELLED)
-    activity.save()
+    activity, _applied = _apply_locked_review_transition(
+        activity_id,
+        request.user,
+        allowed_statuses=_REVIEW_STATUSES,
+        target_status=CommunityActivity.STATUS_CANCELLED,
+        review_note=review_note or None,
+    )
     return redirect("community_activity_review_detail", activity_id=activity.id)

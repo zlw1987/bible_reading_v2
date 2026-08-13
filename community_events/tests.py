@@ -1551,6 +1551,144 @@ class CommunityActivityReviewInboxTests(CommunityActivityWebTestBase):
                 )
                 self.assertEqual(activity.reviewed_by, self.staff)
 
+    def test_stale_request_changes_after_publish_does_not_overwrite(self):
+        activity = self.pending_activity()
+        stale_activity = CommunityActivity.objects.get(pk=activity.pk)
+        second_staff = User.objects.create_user(
+            username="review_second_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(self.publish_url(activity))
+
+        self.login(second_staff)
+        response = self.client.post(
+            self.request_changes_url(stale_activity),
+            {"review_note": "Please change this after publish."},
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PUBLISHED)
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+        self.assertEqual(activity.review_note, "")
+
+    def test_stale_cancel_after_publish_does_not_overwrite(self):
+        activity = self.pending_activity()
+        stale_activity = CommunityActivity.objects.get(pk=activity.pk)
+        second_staff = User.objects.create_user(
+            username="review_cancel_second_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(self.publish_url(activity))
+
+        self.login(second_staff)
+        response = self.client.post(
+            self.cancel_url(stale_activity),
+            {"review_note": "Cancel after publish."},
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PUBLISHED)
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+        self.assertEqual(activity.review_note, "")
+
+    def test_stale_request_changes_after_request_changes_keeps_winner_metadata(self):
+        activity = self.pending_activity()
+        stale_activity = CommunityActivity.objects.get(pk=activity.pk)
+        second_staff = User.objects.create_user(
+            username="review_note_second_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(
+                self.request_changes_url(activity),
+                {"review_note": "Winning note."},
+            )
+
+        self.login(second_staff)
+        response = self.client.post(
+            self.request_changes_url(stale_activity),
+            {"review_note": "Losing note."},
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+        )
+        self.assertEqual(activity.review_note, "Winning note.")
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+
+    def test_publish_after_request_changes_still_uses_current_lifecycle(self):
+        activity = self.pending_activity()
+        stale_activity = CommunityActivity.objects.get(pk=activity.pk)
+        second_staff = User.objects.create_user(
+            username="review_publish_second_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        first_time = timezone.now()
+        second_time = first_time + timezone.timedelta(minutes=5)
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=first_time):
+            self.client.post(
+                self.request_changes_url(activity),
+                {"review_note": "Please adjust first."},
+            )
+
+        self.login(second_staff)
+        with patch("community_events.views.timezone.now", return_value=second_time):
+            response = self.client.post(self.publish_url(stale_activity))
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PUBLISHED)
+        self.assertEqual(activity.reviewed_by, second_staff)
+        self.assertEqual(activity.reviewed_at, second_time)
+        self.assertEqual(activity.review_note, "Please adjust first.")
+
+    def test_stale_publish_after_cancel_does_not_reactivate(self):
+        activity = self.pending_activity()
+        stale_activity = CommunityActivity.objects.get(pk=activity.pk)
+        second_staff = User.objects.create_user(
+            username="review_cancel_publish_staff",
+            password="testpass123",
+            is_staff=True,
+        )
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(
+                self.cancel_url(activity),
+                {"review_note": "Not approved."},
+            )
+
+        self.login(second_staff)
+        response = self.client.post(self.publish_url(stale_activity))
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.review_detail_url(activity))
+        self.assertEqual(activity.status, CommunityActivity.STATUS_CANCELLED)
+        self.assertEqual(activity.review_note, "Not approved.")
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+
     def test_cancelled_activity_hidden_and_not_signup_able(self):
         # A non-creator member in the selected parent scope must not see or
         # sign up for the activity once it is cancelled.
@@ -1657,6 +1795,7 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
             "capacity_limit": activity.capacity_limit or "",
             "audience_units": [self.parent.id],
             "requested_audience_note": activity.requested_audience_note,
+            "expected_status": activity.status,
         }
         data.update(overrides)
         return data
@@ -1730,6 +1869,10 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         response = self.client.get(self.edit_url(activity))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="expected_status" value="changes_requested"',
+        )
         self.assertContains(response, "Resubmit for review")
 
     def test_creator_can_open_edit_form_for_own_pending_review(self):
@@ -1739,6 +1882,10 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         response = self.client.get(self.edit_url(activity))
 
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="expected_status" value="pending_review"',
+        )
         self.assertContains(response, "Edit activity")
         self.assertContains(response, "Save changes")
 
@@ -1961,6 +2108,129 @@ class CommunityActivityCreatorEditTests(CommunityActivityWebTestBase):
         activity.refresh_from_db()
         self.assertRedirects(response, self.detail_url(activity))
         self.assertEqual(activity.capacity_limit, 15)
+
+    def test_stale_creator_edit_after_publish_does_not_overwrite_staff_decision(self):
+        activity = self.pending_activity()
+        stale_data = self.resubmit_data(activity, description="Stale edit")
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(
+                reverse("community_activity_review_publish", args=[activity.id])
+            )
+
+        self.login(self.member)
+        response = self.client.post(self.edit_url(activity), stale_data)
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(activity.status, CommunityActivity.STATUS_PUBLISHED)
+        self.assertNotEqual(activity.description, "Stale edit")
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+
+    def test_stale_co_organizer_edit_after_cancel_does_not_overwrite_staff_decision(self):
+        activity = self.pending_activity()
+        self.add_co_organizer(activity)
+        stale_data = self.resubmit_data(activity, description="Stale co-edit")
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(
+                reverse("community_activity_review_cancel", args=[activity.id]),
+                {"review_note": "Cancelled by review."},
+            )
+
+        self.login(self.other_member)
+        response = self.client.post(self.edit_url(activity), stale_data)
+
+        activity.refresh_from_db()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(activity.status, CommunityActivity.STATUS_CANCELLED)
+        self.assertNotEqual(activity.description, "Stale co-edit")
+        self.assertEqual(activity.review_note, "Cancelled by review.")
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+
+    def test_stale_pending_review_form_after_request_changes_fails_closed(self):
+        activity = self.pending_activity()
+        stale_data = self.resubmit_data(
+            activity,
+            description="Old pending form edit",
+            audience_units=[self.sibling.id],
+        )
+        original_scope_ids = list(
+            activity.audience_scope_links.values_list(
+                "structure_unit_id",
+                flat=True,
+            )
+        )
+        winning_time = timezone.now()
+        self.login(self.staff)
+        with patch("community_events.views.timezone.now", return_value=winning_time):
+            self.client.post(
+                reverse(
+                    "community_activity_review_request_changes",
+                    args=[activity.id],
+                ),
+                {"review_note": "Please address this before resubmitting."},
+            )
+
+        self.login(self.member)
+        response = self.client.post(self.edit_url(activity), stale_data)
+
+        activity.refresh_from_db()
+        current_scope_ids = list(
+            activity.audience_scope_links.values_list(
+                "structure_unit_id",
+                flat=True,
+            )
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_CHANGES_REQUESTED,
+        )
+        self.assertNotEqual(activity.description, "Old pending form edit")
+        self.assertEqual(current_scope_ids, original_scope_ids)
+        self.assertEqual(
+            activity.review_note,
+            "Please address this before resubmitting.",
+        )
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, winning_time)
+
+    def test_fresh_changes_requested_form_resubmits_and_preserves_review_metadata(self):
+        activity = self.changes_requested_activity(
+            description="Needs changes",
+            review_note="Please address this before resubmitting.",
+            reviewed_by=self.staff,
+            reviewed_at=timezone.now(),
+        )
+        reviewed_at = activity.reviewed_at
+        self.login(self.member)
+
+        response = self.client.post(
+            self.edit_url(activity),
+            self.resubmit_data(
+                activity,
+                description="Edited after staff note",
+            ),
+        )
+
+        activity.refresh_from_db()
+        self.assertRedirects(response, self.detail_url(activity))
+        self.assertEqual(
+            activity.status,
+            CommunityActivity.STATUS_PENDING_REVIEW,
+        )
+        self.assertEqual(activity.description, "Edited after staff note")
+        self.assertEqual(
+            activity.review_note,
+            "Please address this before resubmitting.",
+        )
+        self.assertEqual(activity.reviewed_by, self.staff)
+        self.assertEqual(activity.reviewed_at, reviewed_at)
 
     def test_co_organizer_changes_requested_save_returns_to_pending(self):
         activity = self.changes_requested_activity()

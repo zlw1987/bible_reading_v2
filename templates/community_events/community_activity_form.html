@@ -50,6 +50,9 @@
 
 <form method="post" class="card">
     {% csrf_token %}
+    {% if is_edit %}
+    <input type="hidden" name="expected_status" value="{{ expected_status }}">
+    {% endif %}
     {{ form.non_field_errors }}
 
     {% for field in form %}

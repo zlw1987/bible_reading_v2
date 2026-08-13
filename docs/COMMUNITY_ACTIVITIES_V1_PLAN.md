@@ -1,8 +1,10 @@
 # Community Activities V1 Plan
 
 Status: current plan and stabilization checkpoint updated through
-`COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A-FU1` (August 2026), with the
-historical manual-QA stabilization closure still recorded under
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` (August 2026), with
+signup/cancellation policy hardening through
+`COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A-FU1` and the historical manual-QA
+stabilization closure still recorded under
 `COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
@@ -62,18 +64,36 @@ context. Ordinary selected-scope users still cannot see pending-review or
 changes-requested activities, and signup stays limited to published upcoming
 activities. A staff-dropdown "Activity Review" / "活动审核" link appears only when
 the `community_events` module is enabled.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A` preserves this lifecycle while routing
+staff review transitions through atomic locked current-state rechecks. Stale
+staff POST actions fail closed instead of last-write-wins overwriting an
+already completed transition. SQLite tests cover serialized stale-state
+correctness but do not prove production-style row-lock concurrency.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU1` makes creator/co-organizer POST edits
+join that lifecycle protocol: edits lock and recheck the current
+`CommunityActivity` before binding the edit form, then save activity fields,
+audience replacement, and optional co-organizer replacement in the same
+transaction. Staff review transitions and collaborator lifecycle edits now use
+the activity row as their shared serialization point.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` adds a non-model edit-form
+`expected_status` guard. Existing activity edit forms carry the lifecycle
+status they were rendered against; after locking the current row, the POST path
+rejects a stale form whose submitted expected status no longer matches the
+current status. A freshly loaded `changes_requested` form still follows the
+accepted `changes_requested` -> `pending_review` resubmit lifecycle.
 
 A full approval dashboard beyond this inbox, waitlist, My Serving, any
 `ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
 notifications remain deferred.
 
 `COMMUNITY-EVENTS.1E-A` adds the minimal module-owned Today contribution.
-Today shows only published visible activities happening today for which the
-current user has an active `signed_up` attendance-intent row. A separate
-creator reminder shows only the current user's own `changes_requested`
-submissions with an edit/resubmit link. Later-this-week signups and
-`pending_review` submissions stay on the owning Activities surfaces rather
-than Today. Visible activities without an active signup do not appear.
+Today shows published visible activities happening today for which the current
+user has an active `signed_up` attendance-intent row, and the home page's This
+Week section shows the same active-signup reminder for later-this-week
+activities. A separate creator reminder shows only the current user's own
+`changes_requested` submissions with an edit/resubmit link. `pending_review`
+submissions stay on the owning Activities surfaces rather than Today. Visible
+activities without an active signup do not appear.
 Published creator activities do not appear merely because the user created
 them. The provider is skipped, with empty context defaults, when the module is
 disabled.
@@ -419,6 +439,18 @@ that policy:
   changes is allowed from `pending_review` and requires a non-empty
   `review_note`; cancel/reject is allowed from either review status with an
   optional note;
+- `COMMUNITY-REVIEW-TRANSITION-LOCK.1A` applies those same rules only after
+  re-reading the current row inside `transaction.atomic()` with
+  `select_for_update()`; stale staff actions that are no longer valid for the
+  current status redirect safely without saving stale reviewer, note, or
+  timestamp fields;
+- `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU1` makes creator/co-organizer POST
+  edits follow the same activity-row lock protocol before mutating lifecycle
+  state or replacing audience/co-organizer rows;
+- `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` adds a non-model expected lifecycle
+  status token to existing edit forms; stale browser forms whose expected
+  status no longer matches the locked current row fail closed, while freshly
+  loaded `changes_requested` forms still resubmit to `pending_review`;
 - every action records `reviewed_by` and `reviewed_at` and never deletes the
   activity or its audience rows;
 - when staff request changes, the creator may edit and resubmit their own
@@ -500,9 +532,10 @@ This is a future navigation consideration only.
 
 `COMMUNITY-EVENTS.1E-A` contributes only active-signup published visible
 activities happening today and creator-owned `changes_requested` reminders to
-Today. It does not show later-this-week signups or `pending_review` status,
-turn Today into an activity browse page, place signups or visible activities
-in the Today serving action center, create My Serving items, or infer serving.
+Today. It shows later-this-week active signups only in the home page's This
+Week section; it does not show `pending_review` status, turn Today into an
+activity browse page, place signups or visible activities in the Today serving
+action center, create My Serving items, or infer serving.
 
 ## 9. Non-Goals for V1
 
@@ -564,6 +597,19 @@ review link. `COMMUNITY-EVENTS.1G-A` later extends that edit path to linked
 co-organizers without granting review authority.
 It adds no Staff Overview counts, Today, My Serving, setup/readiness,
 notifications, or `ServiceEvent` link.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A` later hardens the same staff review POST
+actions by locking and rechecking the current activity status before applying
+the existing transition metadata. It adds no model, migration, notification,
+dashboard, permission expansion, visibility change, signup change, serving
+behavior, or `ServiceEvent` relationship. SQLite remains a serialized
+stale-state regression backend here, not proof of real row-level lock behavior.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU1` extends that same lifecycle
+serialization point to creator/co-organizer POST edits without changing the
+edit lifecycle, permissions, audience semantics, or review rules.
+`COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` adds the edit-form expected lifecycle
+status guard on top of that lock protocol, so old browser forms cannot be
+silently reinterpreted after staff changes the review status. It adds no model,
+migration, version field, generic optimistic-lock behavior, or lifecycle rule.
 
 `COMMUNITY-EVENTS.1F-A` completes primary-creator editing while an activity is
 `pending_review`. A successful save keeps the activity in review and does not
@@ -571,11 +617,11 @@ make it visible to selected-scope ordinary users.
 
 `COMMUNITY-EVENTS.1E-A` completes the minimal Today integration. Its
 module-owned provider renders active-signup published visible activities
-happening today and creator-owned `changes_requested` reminders. The retained
-This Week context key stays an empty compatibility default; later-this-week
-signups and `pending_review` submissions are not rendered. The module gate
-skips the provider and its activity/signup queries when disabled. No serving
-context, record, or relationship is added.
+happening today, active-signup published visible activities later this week in
+the home page's This Week section, and creator-owned `changes_requested`
+reminders. `pending_review` submissions are not rendered. The module gate skips
+the provider and its activity/signup queries when disabled. No serving context,
+record, or relationship is added.
 
 `COMMUNITY-EVENTS.1G-A` completes the bounded linked co-organizer edit
 permission and active-user search picker. `created_by` remains primary owner;
@@ -673,11 +719,11 @@ ordinary in-scope member, an ordinary out-of-scope member, and staff.
 
 ### Shared-surface and product boundaries
 
-- [ ] On Today, confirm Community Activities shows only an active signup for a
-  published visible activity happening today and the creator's own
-  `changes_requested` reminder. Confirm later activities, cancelled signups,
-  unsigned visible activities, drafts, and `pending_review` activities do not
-  appear.
+- [ ] On Today, confirm Community Activities shows active signups for published
+  visible activities happening today, later-this-week active signups in the
+  home page's This Week section, and the creator's own `changes_requested`
+  reminder. Confirm cancelled signups, unsigned visible activities, drafts, and
+  `pending_review` activities do not appear.
 - [ ] Confirm My Serving shows no Community Activities item.
 - [ ] Confirm the lifecycle creates no `TeamAssignment`,
   `TeamAssignmentMember`, `BibleStudyMeetingRole`, or `ServiceEvent`

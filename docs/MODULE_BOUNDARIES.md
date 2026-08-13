@@ -1,7 +1,8 @@
 # Module Boundaries — Modular CMS Foundation
 
 Status: canonical current-state module boundary, updated through
-`CHURCH-CALENDAR.2B`. `CHURCH-CALENDAR.1A` implements the model-free,
+`NOTIFY.0B` (docs-only architecture alignment; no notification runtime).
+`CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation, `CHURCH-CALENDAR.1B` adds the four
 member-safe source range providers/adapters, `CHURCH-CALENDAR.1C` implements
 the member-facing month grid and day detail UI, `CHURCH-CALENDAR.1D-A`
@@ -383,6 +384,12 @@ notifications, or `ServiceEvent`.
    Existing cross-module reads (including ministry reading `events` / studies
    serving roles) are declared in the registry's `depends_on` / dependency
    notes and should not grow silently.
+   `NOTIFY.0B` applies this rule to future directed notifications: source
+   modules will import only a minimal Core notification delivery port, while
+   the future registered `notifications` module will register its
+   persistence sink through Core. Source modules must not import
+   `notifications`, the notifications app must not import source modules, and
+   Core must not import either source modules or Notification persistence.
 2. **Today is provider/registry-driven (`MODULAR-CORE.3A` + `3B`).**
    Per-module Today providers are registered against their module key in
    `core/today_providers.py`, and the home view aggregates enabled
@@ -623,6 +630,37 @@ notifications, or `ServiceEvent`.
    `CHURCH-CALENDAR.2B-QA-CLOSURE` records the product-owner manual QA pass for
    2B (also confirming ServiceEvent serving grouping still works and My Serving
    behavior is unchanged).
+
+9. **Notifications stays a registered module behind a small Core delivery
+   port (`NOTIFY.0B`, planning only).** No notification runtime exists yet.
+   When separately implemented, module key `notifications` will own the
+   Notification model/rows, admin, idempotent persistence sink, read/unread
+   state, retention, rendering, center, and bell. Core will own only the small
+   directed emit/sink-registration contract, its module-enablement check, and
+   the delivery failure policy. A source module resolves exactly one recipient
+   under its own domain authority and calls the Core port; Core and
+   notifications never infer recipients from membership, audience, serving,
+   staff/manager authority, a source object, or a target URL.
+
+   The future registry entry has no `depends_on` relationship to `events`,
+   `studies`, `ministry`, or `community_events`, and those source modules must
+   not declare a hard dependency on optional `notifications`. Under existing
+   `CMS_ENABLED_MODULES` semantics, absent/`None` enables all registered
+   modules; an explicit list must contain `notifications` to enable it. No
+   second feature flag is planned. Disabled notifications means the Core emit
+   is a safe no-op: no sink call or Notification row, with no source lifecycle
+   or permission change. The foundation adds no ordinary primary-nav entry,
+   Today provider, setup/readiness provider, or Staff Overview contribution.
+
+   Delivery is intended to run through `transaction.on_commit()` so a source
+   rollback creates no record. An ordinary post-commit persistence failure is
+   logged and normally contained so it does not reinterpret a successful
+   source-domain commit as a domain failure; development/tests must expose a
+   strict deterministic path that surfaces the same failure. The source owns
+   the stable dedupe key, Core transports it unchanged, and notifications owns
+   database-backed idempotency per recipient plus dedupe key. This is one
+   directed-record seam, not a generic event bus, signal discovery system,
+   queue, outbox, retry framework, broadcast subscription, or plugin system.
 
 ## Follow-ups (not yet done)
 

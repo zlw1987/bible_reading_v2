@@ -1,7 +1,8 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `REPOSITORY-AUDIT-CLOSEOUT.1A`. Church Calendar V1 remains implemented
+through `NOTIFY.0B` (docs-only architecture alignment after
+`REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -158,6 +159,21 @@ serving workspace. The calendar remains separate from the reading
 attendance/check-in, notifications, external-calendar sync,
 CommunityActivity-to-ServiceEvent relationships, authoring/management
 workflows, staff-dashboard behavior, and any audience membership creation.
+
+`NOTIFY.0B` is docs-only and implements no notification runtime. It resolves
+the future cross-module dependency direction: Notifications remains a
+registered, gateable module that will own Notification persistence and UX;
+Core will own only a small directed-delivery port and registered-sink contract;
+and each source module will continue to resolve its own recipient before
+calling Core. Source modules will not import `notifications`, and the
+notifications app will not import source modules. Existing
+`CMS_ENABLED_MODULES` semantics will gate delivery: disabled Notifications is a
+safe no-op with no row and no source lifecycle/permission change. Future
+`NOTIFY.1A` is foundation only (app/model/migration/registry/admin, Core port,
+notifications sink, idempotency, on-commit/failure policy, focused tests), with
+no producer and no UI; `NOTIFY.1B` is center/bell UI, and `NOTIFY.1C+` adds one
+explicit producer at a time. None of those implementation slices is authorized
+by this planning record.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -980,7 +996,8 @@ closed in `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. Remaining audit items
 are accepted residual, backend-conditional, or opportunistic work; they are not
 automatic next slices and do not authorize Notifications or any other product
 implementation. Product development may resume only through separately approved
-roadmap slices.
+roadmap slices. `NOTIFY.0B` now records the docs-only architecture decision for
+one possible future slice; it does not authorize `NOTIFY.1A` or later work.
 
 Short next-candidate list:
 

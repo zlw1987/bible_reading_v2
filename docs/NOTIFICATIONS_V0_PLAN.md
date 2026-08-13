@@ -1,7 +1,8 @@
 # Notification V0 Plan
 
-Status: planning only. No notification runtime is implemented by this plan.
-Implementation requires separately approved slices.
+Status: planning only, architecture aligned through `NOTIFY.0B`. No
+notification runtime is implemented by this plan. Implementation requires
+separately approved slices.
 
 This document is a practical implementation boundary for future notification
 work. It does not authorize app creation, models, migrations, routes, templates,
@@ -9,11 +10,12 @@ producer hooks, background jobs, external delivery, or any permission changes.
 
 ## 1. Status
 
-`NOTIFY.0A` is docs-only planning.
+`NOTIFY.0A` created the docs-only plan. `NOTIFY.0B` resolves the cross-module
+delivery dependency direction before implementation is authorized.
 
 No notification runtime is implemented. There is no `notifications` app, no
-notification model, no notification center, no bell UI, no producer helper, and
-no source-module emission logic from this plan.
+notification model, no notification center, no bell UI, no Core delivery port,
+no persistence sink, and no source-module emission logic from this plan.
 
 Future implementation must be approved one small slice at a time. Planning text
 here is not authorization to add runtime behavior.
@@ -66,9 +68,148 @@ V0 explicitly excludes:
 - A notification may help a user find an allowed action or detail page, but it
   must not become the authorization layer for that action or page.
 
+### Architecture Decision (`NOTIFY.0B`)
+
+Notifications will be a registered, gateable CMS module, not an always-on Core
+product. The future `notifications` app owns Notification persistence, its
+model and admin, idempotent storage, read/unread state, retention decisions,
+notification-specific rendering, the notification center, and the bell/unread
+count.
+
+Core will own only a deliberately small directed-notification delivery port and
+sink-registration contract. A future source module may import that Core port
+(conceptually `core.notifications.emit_notification`) and pass an
+already-resolved recipient plus notification payload. The `notifications` app
+will import the Core registration contract and register its persistence sink.
+The exact module/function names may be finalized in `NOTIFY.1A`, but the
+dependency direction is fixed:
+
+```text
+source module -> Core notification port
+notifications module -> Core sink-registration contract
+```
+
+The following directions are forbidden:
+
+```text
+source module -> notifications module
+Core -> source module
+notifications module -> source module
+```
+
+Core does not own Notification records or notification UX. It transports one
+directed request to the registered sink and applies enablement/failure policy;
+it is not a generic event bus, producer registry, recipient resolver, or
+broadcast system.
+
+### Recipient And Authority Ownership
+
+The source module selects the recipient before calling Core. For the current
+candidate producers, that means `ministry` resolves the linked serving user,
+`studies` resolves `BibleStudyMeetingRole.user`, and `community_events`
+resolves the primary activity creator. Neither Core nor the notifications app
+may inspect a source object, Church Structure membership, audience rows,
+serving rows, target URLs, staff roles, or manager capabilities to discover or
+expand recipients.
+
+The notifications module may depend on Core. Source modules may import only the
+small Core delivery port for this integration; they must not import
+`notifications`. The notifications app must not import source modules.
+
+### Registry And Disablement
+
+The future registry key is `notifications`. It will declare no dependency on
+`events`, `studies`, `ministry`, `community_events`, or another source module.
+Source modules must not declare `depends_on=("notifications",)` merely to emit
+an optional notification.
+
+Existing `CMS_ENABLED_MODULES` semantics remain the only feature gate:
+
+- absent/`None` means every registered module, including `notifications` once
+  registered, is enabled;
+- an explicit list enables `notifications` only when it contains the
+  `notifications` key;
+- no second notification feature-flag system is planned.
+
+In the foundation slice, `notifications` contributes no ordinary primary-nav
+entry, Today provider, setup/readiness provider, or Staff Overview content.
+The later bell/center is notification-owned UI, not a Today, Calendar, My
+Serving, or ordinary primary-nav contribution.
+
+When `notifications` is disabled, the Core emit call is a safe no-op: it writes
+no Notification row, does not call the persistence sink, and lets the source
+transaction continue normally. Disablement is optional-product behavior only;
+it never grants or revokes source permissions, changes source lifecycle rules,
+or becomes an authorization check.
+
+### Commit And Failure Policy
+
+The intended V0 path is to register delivery with `transaction.on_commit()` so
+a source rollback creates no notification and persistence runs only after the
+source-domain transaction succeeds. The source module must resolve the
+recipient and build the bounded payload before scheduling the callback; the
+callback must not reopen the source object to discover recipients or authority.
+
+An ordinary notification persistence failure after commit must be logged with
+enough context to diagnose the source module/type and dedupe key, but must not
+normally turn a successfully committed source-domain save into a source-domain
+failure. Development and tests must have a deterministic strict execution seam
+that surfaces sink/registration/persistence failures rather than silently
+hiding them. `NOTIFY.1A` must test both the production containment policy and
+the strict failure path. This does not add a queue, retry worker, scheduler,
+outbox, or background job.
+
+If the module is enabled but no sink is registered, that is a configuration or
+programming failure, not disabled-module behavior. It follows the same
+visible/logged failure policy and must fail loudly in foundation tests and
+development.
+
+### Idempotency Ownership
+
+The source module owns the stable logical `dedupe_key` for the event it emits.
+Core transports that key unchanged and performs no dedupe. The notifications
+module owns idempotent persistence, backed by a database-level uniqueness rule
+per recipient plus dedupe key and a sink/service that safely returns the
+existing row for repeated delivery.
+
+### Alternatives Considered
+
+| Architecture | Dependency and disablement | Authority, testability, coupling, and fit |
+|---|---|---|
+| Source modules directly import `notifications.services` | Creates new source-to-notifications dependencies; every producer must understand module disablement. | Easy initially, but couples producers to persistence details, spreads gate/failure behavior, and weakens isolated source-module tests. Rejected. |
+| Make notifications Core / always on | Avoids a cross-module import only by moving persistence and UX into always-on Core; cannot express optional module disablement cleanly. | Central and testable, but gives Core product/data ownership it does not need and conflicts with modular adoption. Rejected. |
+| Registered notifications module plus Core delivery port and registered sink | Source modules depend only on Core; the notifications module registers a sink and Core applies one enablement/failure policy. | Keeps recipient authority in each source, persistence in notifications, and provides a narrow injectable seam for focused tests. Lowest coupling consistent with the registry. Chosen. |
+| Notifications imports source modules and discovers producers/recipients | Reverses ownership, requires source knowledge in notifications, and makes disablement/import order fragile. | Centralizes coupling, duplicates permission/serving logic, and risks recipient expansion. Rejected. |
+
+This comparison does not authorize a generic domain event bus, app
+auto-discovery, model reflection, signals for recipient discovery, broadcast
+subscriptions, webhooks, event sourcing, Kafka, Celery, Redis, an outbox, or a
+retry framework. V0 needs one narrow seam for directed in-app records only.
+
+### Decision Record Before `NOTIFY.1A`
+
+1. Notifications is a registered, gateable module, not Core.
+2. The notifications module owns Notification persistence.
+3. Each source module selects its recipient under source-domain rules.
+4. Core owns only the directed emit/sink-registration seam plus its enablement
+   and failure policy.
+5. Source modules may import the Core notification port; they may not import
+   the notifications app.
+6. The notifications app may import Core; it may not import source modules.
+7. Disabled Notifications makes an emit a safe no-op with no row and no source
+   behavior change.
+8. Ordinary post-commit persistence failure is logged and normally contained;
+   strict development/test execution surfaces it.
+9. The source owns the logical dedupe key; notifications owns database-backed
+   idempotent persistence; Core owns neither.
+10. `NOTIFY.1A` includes no producer.
+11. `NOTIFY.1A` includes no center, bell, route, template, or member UI.
+12. A notification never grants permission; its target enforces its own access.
+
 ## 5. Recommended V0 Scope
 
-The smallest useful V0 should include:
+The complete smallest useful V0 (across separately approved slices) should
+include:
 
 - in-app notifications only;
 - a notification center page;
@@ -76,7 +217,8 @@ The smallest useful V0 should include:
 - a notification bell with unread count;
 - source module and source object reference;
 - target URL;
-- an idempotent producer helper;
+- an idempotent notifications-owned persistence sink behind the Core delivery
+  port;
 - simple severity or category;
 - no background scheduler;
 - no external delivery.
@@ -156,10 +298,10 @@ remains after the source object changes.
 
 ## 7. Producer Contract
 
-Future implementation should expose a conceptual helper such as:
+Future source modules should call the Core-owned port, conceptually:
 
 ```python
-notify_user(
+emit_notification(
     *,
     recipient,
     source_module,
@@ -182,11 +324,15 @@ Producer contract:
 - The source module owns recipient resolution.
 - The source module owns visibility, serving, and permission checks before
   calling the helper.
-- The helper should log failures clearly.
-- The helper should not break source save flows for ordinary transient failures.
-- Persistent failures must not be silently hidden in tests or development.
-- The helper must not infer extra recipients from church structure, audience
-  rows, serving rows, staff roles, or target URLs.
+- The source module imports the Core port, never `notifications.services` or
+  another notifications-app implementation module.
+- The source module should call the port within its successful domain write
+  path; Core arranges post-commit delivery.
+- Core applies the disabled-module no-op and delivery failure policy described
+  above.
+- The notifications-owned sink persists idempotently and must not infer extra
+  recipients from Church Structure, audience rows, serving rows, staff roles,
+  source models, or target URLs.
 
 ## 8. Candidate V0 Producers
 
@@ -324,21 +470,41 @@ Suggested agent: Codex.
 Targeted tests/checks: `git diff --check`, targeted docs grep for the title and
 index link.
 
-### NOTIFY.1A App/model/admin/service Helper Foundation
+### NOTIFY.0B Cross-module Delivery Architecture Alignment
 
-Goal: add the minimal `notifications` app, model, admin, and idempotent helper
-without source producers.
+Goal: resolve dependency direction before runtime by keeping Notifications a
+registered module, Notification persistence module-owned, recipient selection
+source-owned, and the directed delivery port/sink-registration contract in
+Core.
 
-Likely files: `notifications/models.py`, `notifications/admin.py`,
-`notifications/services.py`, `notifications/apps.py`, settings/app registry,
-migration, focused tests.
+Files: this plan plus narrow canonical module-boundary, roadmap, and docs-index
+alignment.
 
-Risk: medium; model privacy, dedupe uniqueness, and app-boundary choices set the
-foundation.
+Risk: low; documentation ambiguity is the only changed surface.
 
-Suggested agent: Codex.
+Targeted checks: required architecture term searches, `git diff --check`, and
+diff/status review. No Django tests.
 
-Targeted tests/checks: model/admin/service helper tests,
+### NOTIFY.1A App/model/admin/Core Port Foundation
+
+Goal: add only the minimal `notifications` app, Notification model/migration,
+registry entry, minimal admin, Core delivery port and sink-registration
+contract, notifications-owned persistence sink/service, idempotency, disabled
+module no-op, post-commit delivery/failure policy, and focused foundation tests.
+It includes no source producer and no member-facing UI.
+
+Likely files: `notifications/models.py`, `notifications/admin.py`, a small
+notifications-owned persistence service/sink, `notifications/apps.py`, a small
+Core delivery-port module, settings/module registry, migration, and focused
+foundation tests. The notifications app may import Core; source modules are not
+touched.
+
+Risk: medium; model privacy, dedupe uniqueness, registration/import order,
+disabled-module behavior, and failure containment set the foundation.
+
+Targeted tests/checks: model/admin/port/sink tests, including repeated delivery,
+disabled no-op, source rollback, post-commit success, production failure
+logging/containment, and strict development/test failure surfacing;
 `makemigrations --check --dry-run` after migrations are generated,
 `manage.py check`, `git diff --check`.
 
@@ -359,8 +525,9 @@ tests, `manage.py check`, `git diff --check`, browser QA if rendered UI changes.
 
 ### NOTIFY.1C Explicit ServiceEvent Serving Assignment Producer
 
-Goal: emit notifications for linked-user `TeamAssignmentMember` serving
-assignment creation or meaningful changes.
+Goal: add the first source producer by emitting through the Core port for
+linked-user `TeamAssignmentMember` serving assignment creation or meaningful
+changes.
 
 Likely files: `ministry` assignment save flow/forms/services, notification
 producer helper tests.
@@ -377,8 +544,8 @@ dedupe tests, display-name-only exclusion tests, permission non-regression tests
 
 ### NOTIFY.1D Explicit Bible Study Serving Role Producer
 
-Goal: emit notifications for linked-user `BibleStudyMeetingRole` assignment
-creation or meaningful changes.
+Goal: add one producer by emitting through the Core port for linked-user
+`BibleStudyMeetingRole` assignment creation or meaningful changes.
 
 Likely files: `studies` role form/save flow/services, notification producer
 helper tests.
@@ -395,7 +562,8 @@ tests, outside-audience linked-role tests, duplicate-save dedupe tests,
 
 ### NOTIFY.1E Community Activity Review Outcome Producer
 
-Goal: notify the primary creator about narrow review outcomes.
+Goal: add one producer by emitting through the Core port to the primary creator
+for narrow review outcomes.
 
 Likely files: `community_events` review action flow/services, notification
 producer tests.
@@ -433,9 +601,12 @@ needed for routine docs, model, simple UI, or focused producer slices.
 
 Do not implement notifications in this task.
 
-When ready, start with model/helper foundation only. The first implementation
-slice should not touch source producers yet.
+When separately authorized, start with the `NOTIFY.1A` app/model/admin, Core
+port, registered persistence sink, idempotency, enablement, post-commit, and
+failure-policy foundation only. It includes no producer, bell, center, route,
+template, or other member-facing UI.
 
-Add producers one at a time after the foundation and UI exist. Each producer
-must prove recipient selection, idempotency, and permission neutrality in its
-own focused tests before another producer is added.
+`NOTIFY.1B` adds the notification center and bell. Add producers one at a time
+only in `NOTIFY.1C+` after the foundation and UI exist. Each producer must prove
+recipient selection, idempotency, disabled-module behavior, and permission
+neutrality in its own focused tests before another producer is added.

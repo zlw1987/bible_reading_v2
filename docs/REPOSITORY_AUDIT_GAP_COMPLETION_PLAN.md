@@ -1,20 +1,23 @@
 # Repository Audit Gap Completion Plan
 
-Status: canonical repository-wide audit and gap roadmap for
-`REPOSITORY-AUDIT-GAP-COMPLETION.1A`, with docs-only precision follow-up
-`REPOSITORY-AUDIT-GAP-COMPLETION.1A-FU1`.
+Status: canonical repository-wide audit, remediation roadmap, and
+hardening-cycle closeout record for `REPOSITORY-AUDIT-GAP-COMPLETION.1A`,
+docs-only precision follow-up `REPOSITORY-AUDIT-GAP-COMPLETION.1A-FU1`, and
+docs-only closeout slice `REPOSITORY-AUDIT-CLOSEOUT.1A`.
 
-Date: 2026-08-11.
+Date: 2026-08-13.
 
 Scope: repository-only static and test-inventory audit. No runtime model,
 migration, data, deployment, production, GoDaddy, staging, commit, push, or
-module behavior change was made by this slice or FU1.
+module behavior change was made by these repository audit slices.
 
 Conclusion: no repository-proven `BLOCKER` or `HIGH` issue was found. The
 current codebase is suitable to continue the existing limited-trial path under
 the already documented product and operational boundaries, with the open items
-below handled as hardening or deliberately deferred product work. This is not a
-broad production-readiness certification and does not replace live hosting
+below handled as accepted residual hardening, conditional proof, opportunistic
+maintainability, or deliberately deferred product work. The current remediation
+cycle is closed for the limited-trial scope; this is not a broad
+production-readiness certification and does not replace live hosting
 verification.
 
 ## Starting State And Sync
@@ -245,41 +248,88 @@ Status changes from completed follow-ups are reflected in the findings table.
 
 | ID | AREA | SEVERITY | STATUS | EVIDENCE | USER / PRODUCT IMPACT | RECOMMENDED ACTION | PROPOSED SLICE |
 |---|---|---|---|---|---|---|---|
-| `AUDIT-DATA-001` | Active/current primary membership integrity and concurrency hardening | `MEDIUM` | Partially hardened / residual defense-in-depth gap | `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A` established the canonical invariant in `docs/STRUCTURE_MEMBERSHIP_PRIMARY_INTEGRITY_PLAN.md`: read-time current primary is date-window aware, while today's normal write policy permits at most one `status=active, is_primary=True` row per user regardless of date window. 1A added shared active-primary conflict helpers, per-user membership mutation-scope locking for normal product writes, in-transaction rechecks, and focused tests for future-active-primary conflicts. `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A-FU1` kept visibility/no-current readiness date-window-aware while adding broader active-primary write-invariant blocker detection for current+future and future+future drift; it also finished the post-lock target refetch/recheck pattern for rejection and end paths so stale reject objects cannot overwrite approved requests. `accounts/structure_selectors.get_user_primary_membership_unit()` still fails closed when multiple current active primary rows exist. `audit_trial_setup_readiness` remains the read-only drift detector and now covers both current-primary ambiguity and stricter active-primary write-policy drift. | Normal staff/delegated membership add, approve, reject, end, and set-primary paths are more consistent and fail closed cleanly, including future-dated active-primary conflicts and serialized stale approve/reject sequencing. Bulk operations, manual SQL, direct shell/import drift, and the absence of a database constraint can still create ambiguous current-primary belonging; affected users may lose scoped content until repaired because selectors intentionally fail closed. SQLite does not prove PostgreSQL-style row-lock concurrency behavior. | Keep 1A/FU1 as application/readiness hardening, but do not claim complete closure. Evaluate a separately approved `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B` before adding schema enforcement. A simple partial unique constraint on active primary rows may match today's write policy, but it must be explicitly approved because it encodes the no current+future active-primary coexistence rule and requires a migration. | `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A`; `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A-FU1`; possible future `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B` |
+| `AUDIT-DATA-001` | Active/current primary membership integrity and concurrency hardening | `MEDIUM` | Accepted residual risk | `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A` established the canonical invariant in `docs/STRUCTURE_MEMBERSHIP_PRIMARY_INTEGRITY_PLAN.md`: read-time current primary is date-window aware, while today's normal write policy permits at most one `status=active, is_primary=True` row per user regardless of date window. 1A added shared active-primary conflict helpers, per-user membership mutation-scope locking for normal product writes, in-transaction rechecks, and focused tests for future-active-primary conflicts. `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A-FU1` kept visibility/no-current readiness date-window-aware while adding broader active-primary write-invariant blocker detection for current+future and future+future drift; it also finished the post-lock target refetch/recheck pattern for rejection and end paths so stale reject objects cannot overwrite approved requests. FU2 completed the application/readiness hardening record. `accounts/structure_selectors.get_user_primary_membership_unit()` still fails closed when multiple current active primary rows exist. `audit_trial_setup_readiness` remains the read-only drift detector and now covers both current-primary ambiguity and stricter active-primary write-policy drift. | Normal staff/delegated membership add, approve, reject, end, and set-primary paths are hardened and fail closed cleanly, including future-dated active-primary conflicts and serialized stale approve/reject sequencing. Bulk operations, manual SQL, direct shell/import drift, and future code that bypasses shared helpers can still create ambiguous current-primary belonging; affected users may lose scoped content until repaired because selectors intentionally fail closed. SQLite does not prove PostgreSQL-style row-lock concurrency behavior. This accepted residual risk is not a current limited-trial blocker. | Do not implement `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B` in this closeout slice. Keep it as a separately approved future defense-in-depth option only: a database constraint would encode today's stricter no-second-active-primary write policy into schema, could constrain a future design that intentionally permits current plus future scheduled primary memberships, and would require a migration plus deployment data preflight. Do not mark fully closed or lower severity just to make the audit cleaner. | `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A`; `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A-FU1`; `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A-FU2`; deferred future option `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B` |
 | `AUDIT-ADMIN-001` | Django Admin audience repair UX | `LOW` | Closed | `ADMIN-INACTIVE-AUDIENCE-REPAIR-UX.1A` keeps existing audience unit fields disabled/immutable while allowing the current inactive unit to render in the existing inline row. The inline now shows a concise inactive-unit repair warning; inactive units remain unavailable for new audience rows, and delete-and-replace remains the repair path. Focused Admin GET/POST tests cover ServiceEvent, BibleStudySeries, and BibleStudyMeeting inactive-existing display, immutable existing units, inactive-new rejection, delete-only rejection, and delete-plus-active-replacement success. | Staff/admin users can now see which inactive unit an existing audience row points to and repair it by deleting the obsolete row and adding an active replacement, without broadening audience semantics. | Closed; preserve the current audience visibility-only contract and do not treat audience as serving, belonging, leadership, or staff authority. | `ADMIN-INACTIVE-AUDIENCE-REPAIR-UX.1A` |
 | `AUDIT-DOC-001` | Today/My Serving documentation | `DOCS-DRIFT` | Closed | `DOCS-CALENDAR-BOUNDARY-DRIFT.1A` updates `docs/TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md` so current-state wording describes Church Calendar V1 as an implemented read-only aggregation surface that remains separate from Today and My Serving. | Readers no longer need to reconcile stale `CHURCH-CALENDAR.0A` planned/no-runtime wording with the implemented Calendar V1 docs. | Closed; preserve the serving-vs-belonging boundary and do not expand Today, My Serving, or Calendar behavior without a separate approved slice. | `DOCS-CALENDAR-BOUNDARY-DRIFT.1A` |
 | `AUDIT-DOC-002` | Module boundary wording | `DOCS-DRIFT` | Closed | `DOCS-CALENDAR-BOUNDARY-DRIFT.1A` updates `docs/MODULE_BOUNDARIES.md` to distinguish the implemented read-only Church Calendar adapter for Community Activities from still-deferred Community Activity-owned writable calendar workflow, external / Google Calendar sync, Calendar-driven signup/cancellation, `ServiceEvent` linkage, and My Serving integration. | Readers no longer need to infer whether "calendar integration" means the implemented read-only adapter or deferred writable/external calendar scope. | Closed; keep Community Activities independent from Calendar ownership, `ServiceEvent`, serving, and My Serving. | `DOCS-CALENDAR-BOUNDARY-DRIFT.1A` |
 | `AUDIT-QA-001` | Portal UX and Help Center | `MANUAL-QA` | Closed | `docs/PORTAL_UX_AND_HELP_CENTER_PLAN.md` records that product-owner deployed manual QA passed after the mobile accordion follow-up. Coverage included ordinary member desktop, explicit-serving user recommendations, delegated My Units leader recommendations, Staff desktop grouped navigation, Help Center, ordinary member mobile, Staff mobile, and final one-open-at-a-time mobile top-level dropdown behavior. | The bounded Portal / Help Center manual-QA gap is closed without making a broad production-readiness claim. | Closed; re-run manual QA only for future Portal, Staff navigation, Help Center, or mobile navigation changes. | `PORTAL-HELP-MANUAL-QA.1A`; `PORTAL-HELP-MANUAL-QA.1A-FU1` |
-| `AUDIT-TEST-001` | Community signup/cancel concurrency proof | `LOW` | Open | `community_events/views.py` locks the activity first and then the signup row inside `transaction.atomic()` for signup/cancel; `docs/COMMUNITY_SIGNUP_CANCELLATION_POLICY_PLAN.md` records the SQLite caveat. | SQLite-backed tests cannot prove production row-lock behavior for final-slot races on a database with real row-level locks. Code order is correct, so this is proof coverage rather than a current bug. | Run a backend-appropriate concurrency harness or add targeted tests when a production-like DB is available. | `COMMUNITY-SIGNUP-CONCURRENCY-PROOF.1A` |
+| `AUDIT-TEST-001` | Community signup/cancel concurrency proof | `LOW` | Deferred pending production-like backend | `community_events/views.py` locks the activity first and then the signup row inside `transaction.atomic()` for signup/cancel; `docs/COMMUNITY_SIGNUP_CANCELLATION_POLICY_PLAN.md` records the SQLite caveat and the documented activity-first lock order. | SQLite-backed tests cannot prove production row-lock behavior for final-slot races on a database with real row-level locks. Code order is correct, so this is a proof gap rather than a repository-proven current runtime bug. It is not a current limited-trial blocker. | Do not implement a concurrency harness or introduce PostgreSQL solely for this finding in the closeout slice. Perform backend-specific concurrency proof only when a production-like database/backend strategy makes the result meaningful. | Deferred future option `COMMUNITY-SIGNUP-CONCURRENCY-PROOF.1A` |
 | `AUDIT-DATA-002` | Community staff review and collaborator edit lifecycle transitions | `LOW` | Closed | `COMMUNITY-REVIEW-TRANSITION-LOCK.1A` routes staff review publish/request-changes/cancel through a shared transition helper that re-reads the `CommunityActivity` inside `transaction.atomic()` using `select_for_update()`, then rechecks the current mutable status before writing the status, reviewer, timestamp, and any accepted review note. `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU1` makes normal creator/co-organizer POST edits use the same `CommunityActivity` row serialization point: the edit path locks and rechecks the current row before binding the form, derives draft/edit state from that locked row, and saves the activity plus audience/co-organizer replacements in the same transaction. `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` adds a browser stale-state guard: existing activity edit forms submit a non-model expected lifecycle status, and POST rejects the form after locking if that status no longer matches the current row. Focused serialized stale-state tests cover staff publish/request-changes/cancel behavior, collaborator edit attempts after staff publish/cancel/request-changes, and old pending-review browser forms after staff request-changes. SQLite does not prove PostgreSQL-style row-lock concurrency behavior. | Stale losing staff actions no longer silently overwrite an already completed transition, stale collaborator edits no longer restore editable lifecycle state over published/cancelled staff decisions or clobber winning review metadata, and old browser forms cannot be silently reinterpreted as a different lifecycle action after staff changes the status. Request-changes notes are not saved unless the current locked row still accepts that staff transition, and fresh edit-side resubmission preserves existing review metadata under the accepted current lifecycle. | Closed for the normal product transition gap. Preserve the existing V1 lifecycle and keep backend-specific row-lock proof caveats separate from this runtime defect closure; this is not generic optimistic concurrency. | `COMMUNITY-REVIEW-TRANSITION-LOCK.1A`; `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU1`; `COMMUNITY-REVIEW-TRANSITION-LOCK.1A-FU2` |
-| `AUDIT-MAINT-001` | Accounts app size | `LOW` | Open | `accounts/views.py` is 3,448 lines and `accounts/tests.py` is 14,169 lines, covering staff shell, Help Center, structure, membership, My Units, user admin, readiness, and profile flows. | Large files increase review cost and make unrelated future changes easier to tangle. File size alone is not a runtime defect. | Opportunistically extract helpers/tests by surface only when related work is already being touched. Do not perform a broad refactor solely because files are large. | `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A` |
+| `AUDIT-MAINT-001` | Accounts app size | `LOW` | Opportunistic | `accounts/views.py` is 3,448 lines and `accounts/tests.py` is 14,169 lines, covering staff shell, Help Center, structure, membership, My Units, user admin, readiness, and profile flows. | Large files increase review cost and make unrelated future changes easier to tangle. File size alone is not a runtime defect. | Do not create `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A` as a standalone broad refactor. Extract helpers/tests only when future approved functional work already touches the relevant surface. | Opportunistic future option `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A` |
 | `AUDIT-DEFER-001` | Notifications | `DEFERRED-BY-DESIGN` | Open by design | `docs/NOTIFICATIONS_V0_PLAN.md` is planning-only; no runtime notification app or delivery path is present. | Users will not receive in-app or external notifications until separately approved and implemented. | Future `NOTIFICATIONS` slices only after explicit approval. Do not backfill notifications into Calendar, Today, Announcements, or Community Activities ad hoc. | Future approved notifications slice |
 | `AUDIT-DEFER-002` | Community expansion | `DEFERRED-BY-DESIGN` | Open by design | Community Activities V1 docs intentionally defer waitlists, attendee management/check-in, payments, recurring activities, external calendar sync, notification delivery, and serving integration. | Product expectations can exceed the intentionally bounded V1 implementation if not communicated. | Future separately approved Community V2 slices. Preserve Community Activities as separate from serving and official events. | Future approved Community V2 slice |
 | `AUDIT-NOISSUE-001` | Serving inference | `NO-ISSUE` | Closed | `ministry/permissions.py`, `studies/permissions.py`, Calendar serving providers, and serving visibility tests keep serving explicit and separate from membership. | No repository issue found. | Keep this as a regression boundary for future changes. | None |
 | `AUDIT-NOISSUE-002` | Church Calendar mutability | `NO-ISSUE` | Closed | `church_calendar/providers.py` validates provider ownership, skips disabled source modules, and only aggregates source items. | No repository issue found. | Keep Calendar read-only unless a separate writable-calendar slice is approved. | None |
 | `AUDIT-NOISSUE-003` | GoDaddy static security audit status | `NO-ISSUE` | Closed | `docs/GODADDY_PRODUCTION_SECURITY_AUDIT.md` remains repository-only and does not claim live cPanel/proxy/environment facts. Prior static audit found no repository-proven `BLOCKER` or `HIGH`; live unknowns remain manual verification. | No new repository-proven GoDaddy issue was found in this audit. | Manual live verification remains outside repository-only work and requires explicit authorization. | None |
 
+## Repository Hardening Cycle Closeout
+
+`REPOSITORY-AUDIT-CLOSEOUT.1A` closes the current repository audit remediation
+cycle for the limited-trial scope without implementing new runtime behavior or
+new proof-only/schema work. The completed remediation categories are:
+
+- primary membership application/readiness hardening through
+  `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A/FU1/FU2`;
+- inactive-existing audience Admin repair UX;
+- Portal / Help Center manual QA closure;
+- Calendar documentation reconciliation;
+- Community review lifecycle locking and stale-form protection;
+- release and repository hygiene work recorded in the deployment/security and
+  audit docs.
+
+There is no repository-proven `BLOCKER` or `HIGH` issue requiring another
+remediation slice before continuing product work. The remaining open items are
+accepted residual hardening, backend-conditional proof, or opportunistic
+maintainability items. They are not authorization to continue indefinite audit
+cleanup and they do not block the current limited trial under the documented
+boundaries.
+
+This closeout does not claim broad production readiness, security
+certification, enterprise readiness, hosting certification, or live GoDaddy
+verification.
+
 ## Top Open Risks And Watch Items
 
 1. Active/current primary membership integrity remains the only `MEDIUM`
-   hardening item because it is central to scoped visibility and must preserve
-   date-window semantics.
+   accepted residual risk because it is central to scoped visibility, must
+   preserve date-window semantics, and still lacks schema-level enforcement
+   against direct/bulk/manual drift.
 2. Community signup/cancel logic is coded with a safe lock order, but true
-   row-lock proof needs a production-like database.
+   row-lock proof is deferred until a production-like database/backend strategy
+   makes it meaningful.
 3. Accounts app maintainability debt remains opportunistic cleanup only; do
    not turn it into a broad standalone refactor.
 
 ## Remediation Roadmap
+
+This roadmap is a disposition ledger, not an automatic implementation queue.
+
+Completed:
+
+- `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A/FU1/FU2`
+- `PORTAL-HELP-MANUAL-QA.1A/FU1`
+- `ADMIN-INACTIVE-AUDIENCE-REPAIR-UX.1A`
+- `COMMUNITY-REVIEW-TRANSITION-LOCK.1A/FU1/FU2`
+- `DOCS-CALENDAR-BOUNDARY-DRIFT.1A`
+
+Deferred / conditional:
+
+- `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B`
+- `COMMUNITY-SIGNUP-CONCURRENCY-PROOF.1A`
+
+Opportunistic:
+
+- `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A`
 
 | SLICE | GOAL | LIKELY FILES / AREAS | MODEL / MIGRATION EXPECTED? | RISK | DEPENDENCIES | VERIFICATION | SOURCE FINDING IDS |
 |---|---|---|---|---|---|---|---|
 | `STRUCTURE-MEMBERSHIP-PRIMARY-INTEGRITY-HARDENING.1A` | Completed application/readiness hardening for the active/current primary belonging invariant through 1A/FU1/FU2 while preserving date-window-aware reads. | `accounts/models.py`, `accounts/structure_selectors.py`, `accounts/views.py`, `accounts/forms.py`, `accounts/tests.py`, trial readiness/audit command areas. | No additional model/migration is authorized by 1A/FU1/FU2. A possible `STRUCTURE-MEMBERSHIP-PRIMARY-DB-CONSTRAINT.1B` remains optional, unapproved, and separate because it would encode write-policy enforcement in schema. | Medium: belonging integrity affects scoped visibility; residual risk is direct/bulk/manual drift without a database constraint. | Completed application/readiness slices; any DB constraint slice requires separate approval and migration design. | Existing focused application/readiness tests and drift checks cover the completed hardening. A future 1B would need its own migration and backend-specific verification. | `AUDIT-DATA-001` |
 | `PORTAL-HELP-MANUAL-QA.1A` | Completed product-owner visual/manual QA for Portal UX, grouped Staff dropdown, and Help Center after the mobile accordion follow-up. | `docs/PORTAL_UX_AND_HELP_CENTER_PLAN.md`, intended deployed/test environment, navigation and Help Center routes. | No. | Closed: visual/manual QA evidence recorded for the bounded Portal / Help Center slice. | Completed product-owner deployed manual QA. | Recorded pass for ordinary member desktop/mobile, explicit serving user recommendations, My Units leader recommendations, Staff desktop/mobile navigation, Help Center, and final one-open-at-a-time mobile dropdown behavior. | `AUDIT-QA-001` |
 | `ADMIN-INACTIVE-AUDIENCE-REPAIR-UX.1A` | Completed Django Admin inactive-existing audience repair UX while preserving existing validation. | `events/admin.py`, `studies/admin.py`, focused admin tests in `events/tests.py` and `studies/tests.py`. | No model/migration expected. | Closed: staff/admin UX hardening only. | Current admin inline validation contract. | Actual Django Admin GET/POST tests cover inactive existing row display, delete-only rejection, delete-plus-active-replacement success, inactive-new rejection, and immutable existing rows. | `AUDIT-ADMIN-001` |
-| `COMMUNITY-SIGNUP-CONCURRENCY-PROOF.1A` | Prove final-slot signup/cancel behavior on a backend with real row-level locks. | `community_events/views.py`, `community_events/tests.py`, backend-specific test harness or manual verification notes. | No model/migration expected. | Low: proof gap, code lock order already matches policy. | Production-like database or explicit backend test strategy. | Concurrency harness or documented DB-specific verification for simultaneous signup/reactivation/cancel cases. | `AUDIT-TEST-001` |
+| `COMMUNITY-SIGNUP-CONCURRENCY-PROOF.1A` | Deferred backend-specific proof for final-slot signup/cancel behavior on a backend with real row-level locks. | `community_events/views.py`, `community_events/tests.py`, backend-specific test harness or manual verification notes. | No model/migration expected. Do not introduce PostgreSQL solely to satisfy this finding. | Low: proof gap, code lock order already matches policy. | Production-like database or explicit backend test strategy. | Concurrency harness or documented DB-specific verification for simultaneous signup/reactivation/cancel cases when the backend strategy is meaningful. | `AUDIT-TEST-001` |
 | `COMMUNITY-REVIEW-TRANSITION-LOCK.1A` | Completed staff review and collaborator edit lifecycle transition hardening against stale writers and stale browser forms. | `community_events/views.py`, `templates/community_events/community_activity_form.html`, `community_events/tests.py`, `docs/COMMUNITY_ACTIVITIES_V1_PLAN.md`. | No model/migration. | Closed: staff/collaborator last-write-wins and stale-form hardening. | Existing Community Activities V1 lifecycle. | Focused tests for staff publish/request-changes/cancel stale-state behavior, creator/co-organizer stale edit behavior, and stale expected-status browser forms; `manage.py check`; migration dry-run; `git diff --check`. SQLite remains a backend caveat, not database-level concurrency proof. | `AUDIT-DATA-002` |
 | `DOCS-CALENDAR-BOUNDARY-DRIFT.1A` | Completed current-state Calendar wording correction in Today/My Serving and Module Boundaries docs. | `docs/TODAY_AND_MY_SERVING_PRODUCT_BOUNDARIES.md`, `docs/MODULE_BOUNDARIES.md`, `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. | No. | Closed: docs-only clarity. | Current Calendar V1 docs and implemented read-only provider behavior. | `git diff --check`; targeted doc search verified no stale current-state "no calendar runtime" wording remains in the canonical docs touched by this slice. | `AUDIT-DOC-001`, `AUDIT-DOC-002` |
-| `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A` | Reduce future review cost by extracting helpers/tests only when related work is already being touched. | Candidate accounts views/tests by surface: Help Center, Staff shell, membership requests, My Units, readiness, profile. | No model/migration expected unless a future functional slice separately requires one. | Low if opportunistic; higher if attempted as broad refactor. | A related feature/fix that already touches the area. | Existing focused tests for the touched surface; no broad refactor solely because files are large. | `AUDIT-MAINT-001` |
+| `ACCOUNTS-SURFACE-HELPER-EXTRACTION.1A` | Opportunistically reduce future review cost by extracting helpers/tests only when related work is already being touched. | Candidate accounts views/tests by surface: Help Center, Staff shell, membership requests, My Units, readiness, profile. | No model/migration expected unless a future functional slice separately requires one. | Low if opportunistic; higher if attempted as broad refactor. | A related feature/fix that already touches the area; no standalone broad refactor is authorized. | Existing focused tests for the touched surface; no broad refactor solely because files are large. | `AUDIT-MAINT-001` |
 
 ## Manual QA Gaps
 
@@ -323,13 +373,14 @@ enterprise, security, hosting, or GoDaddy live-environment certification.
 Deferred-by-design work is not required for the existing limited-trial scope
 unless a future approved slice explicitly changes the scope.
 
-## Verification Plan For This Docs-Only FU1
+## Verification Plan For Docs-Only Closeout
 
-Run the following non-mutating checks after updating this document:
+Run the following non-mutating checks after closeout updates:
 
 - `git diff --check`
 - `git diff --stat`
 - `git status --short`
 
 No data-changing command, Django test suite, migration command, migration
-generation, stage, commit, push, deploy, or production access belongs to FU1.
+generation, stage, commit, push, deploy, or production access belongs to this
+docs-only closeout.

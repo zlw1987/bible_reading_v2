@@ -1,15 +1,12 @@
 # Product Architecture and Roadmap
 
-Status: canonical current-state product architecture and roadmap, updated
-through `CHURCH-CALENDAR.2B-QA-CLOSURE` and
-`SERVING-EVENT-VISIBILITY.1B`. Church Calendar V1 has its model-free,
-read-only foundation, source providers, month/day UI, grouping, and
-limited-trial baseline QA closure in place. It aggregates member-visible
-`ServiceEvent`, `BibleStudyMeeting`, `Announcement`, and `CommunityActivity`
-items plus the viewer's own explicit ServiceEvent and Bible Study serving
-overlays. Calendar remains read-only and does not change Today, My Serving,
-serving authority, notification, attendance/check-in, authoring/management, or
-external-sync behavior.
+Status: canonical current-state product architecture and roadmap, current
+through `REPOSITORY-AUDIT-CLOSEOUT.1A`. Church Calendar V1 remains implemented
+as a model-free, read-only aggregation surface with source providers, month/day
+UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
+overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
+change Today, My Serving, serving authority, notification, attendance/check-in,
+authoring/management, or external-sync behavior.
 
 ## 1. Project Identity
 
@@ -60,12 +57,13 @@ workspace for team and Bible Study confirmation. Audience visibility,
 `ChurchStructureMembership`, display-name-only Bible Study roles, and
 `MinistryTeamRoleAssignment` alone never become personal serving.
 
-`COMMUNITY-EVENTS.1E-A` adds the minimal Community Activities Today provider.
-It contributes only active-signup published visible activities happening
-today, plus creator-owned `changes_requested` reminders. Later-this-week
-signups and `pending_review` submissions stay off Today. It adds no My Serving
-or serving action-center item, no serving record, and no `ServiceEvent`
-relationship.
+`COMMUNITY-EVENTS.1E-A` adds minimal Community Activities home-page reminders.
+It contributes same-day active-signup published visible activities to Today,
+later-this-week active-signup published visible activities to the home page's
+This Week section, and creator-owned `changes_requested` reminders as creator
+attention. `pending_review` activities and unsigned visible activities are not
+shown in those reminder surfaces. It adds no My Serving or serving
+action-center item, no serving record, and no `ServiceEvent` relationship.
 
 `COMMUNITY-EVENTS.1F-A` allows the primary creator to edit an activity while
 it remains `pending_review`. It does not expose the activity to selected-scope
@@ -234,8 +232,10 @@ for `changes_requested` activities that returns them to `pending_review`. It
 adds the `changes_requested` status and `review_note` / `reviewed_by` /
 `reviewed_at` fields and a module-gated staff-dropdown review link, without
 Staff Overview counts, Today, My Serving, notifications, or a `ServiceEvent`
-link. `COMMUNITY-EVENTS.1E-A` later adds only the minimal module-owned Today
-provider for same-day active signups and creator-requested changes.
+link. `COMMUNITY-EVENTS.1E-A` later adds minimal home-page reminders: same-day
+active signup items on Today, later-this-week active signup items in This Week,
+and creator-owned `changes_requested` attention items, while `pending_review`
+and unsigned visible activities are not shown there.
 `COMMUNITY-EVENTS.1F-A` adds primary-creator editing while an activity remains
 `pending_review`; `1F-B` adds optional capacity; `1G-A` adds bounded
 user-linked co-organizers; and `1H-A` adds complete validated member drafts.
@@ -814,11 +814,14 @@ runtime guidance; use Section 2 and the canonical documents in
 - `COMMUNITY-EVENTS.1F-A` allows the primary creator to edit an activity while
   it stays `pending_review`; selected-scope ordinary visibility and staff
   review authority are unchanged.
-- `COMMUNITY-EVENTS.1E-A` adds the module-owned minimal Today provider. It
-  shows active-signup published visible activities happening today and
-  creator-owned `changes_requested` reminders only. Later-this-week signups
-  and `pending_review` submissions are not rendered. Module disablement skips the provider and its queries. It
-  adds no My Serving or serving action-center context, serving record, Staff
+- `COMMUNITY-EVENTS.1E-A` adds the module-owned minimal Today and This Week
+  home-page reminders. It shows same-day published visible activities backed by
+  the current user's active signup on Today, later-this-week active signup
+  reminders in the home page's This Week section, and creator-owned
+  `changes_requested` reminders. `pending_review` submissions and unsigned
+  visible activities are not rendered in those reminder surfaces. Module
+  disablement skips the provider and its queries. It adds no My Serving or
+  serving action-center context, serving record, Staff
   Overview, setup/readiness, notification, capacity/waitlist, or
   `ServiceEvent` relationship.
 - `COMMUNITY-EVENTS.1F-B` adds nullable `capacity_limit` to
@@ -971,6 +974,13 @@ sources as practical church-staff user guides from shipped behavior only; the
 separate trial-readiness runbook retains developer/operator validation. Do not reopen
 legacy Church Structure cleanup or add Community Activities features merely
 because the trial is starting.
+
+Repository audit remediation for the current limited-trial scope is also
+closed in `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. Remaining audit items
+are accepted residual, backend-conditional, or opportunistic work; they are not
+automatic next slices and do not authorize Notifications or any other product
+implementation. Product development may resume only through separately approved
+roadmap slices.
 
 Short next-candidate list:
 

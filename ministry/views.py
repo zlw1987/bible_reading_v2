@@ -76,6 +76,10 @@ from .services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from .services.assignment_notifications import (
+    capture_assignment_notification_state,
+    emit_assignment_notifications,
+)
 from .services.copy_forward_suggestions import (
     MODE_ANCHOR,
     MODE_TEAM,
@@ -1500,6 +1504,7 @@ def team_schedule(request, team_id):
 
     if form_instance is not None and not team_not_assignable:
         if request.method == "POST":
+            notification_state = capture_assignment_notification_state(form_instance)
             active_form = TeamScheduleAssignmentForm(
                 request.POST,
                 instance=form_instance,
@@ -1521,6 +1526,11 @@ def team_schedule(request, team_id):
                 sync_assignment_members(
                     assignment,
                     active_form.cleaned_data["assigned_members"],
+                )
+                emit_assignment_notifications(
+                    assignment,
+                    previous_state=notification_state,
+                    actor=request.user,
                 )
                 messages.success(request, ministry_ui_text(language, "assignment_saved"))
                 return redirect(
@@ -2214,6 +2224,7 @@ def create_team_assignment(request):
         return redirect("team_assignment_list")
 
     if request.method == "POST":
+        notification_state = capture_assignment_notification_state(None)
         form = TeamAssignmentForm(
             request.POST,
             language=language,
@@ -2224,6 +2235,11 @@ def create_team_assignment(request):
             assignment.created_by = request.user
             assignment.save()
             sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
+            emit_assignment_notifications(
+                assignment,
+                previous_state=notification_state,
+                actor=request.user,
+            )
             messages.success(request, ministry_ui_text(language, "assignment_saved"))
             warn_assignment_member_readiness(
                 request, form.cleaned_data["assigned_members"], language
@@ -2258,6 +2274,7 @@ def edit_team_assignment(request, assignment_id):
         return redirect("team_assignment_list")
 
     if request.method == "POST":
+        notification_state = capture_assignment_notification_state(assignment)
         form = TeamAssignmentForm(
             request.POST,
             instance=assignment,
@@ -2267,6 +2284,11 @@ def edit_team_assignment(request, assignment_id):
         if form.is_valid():
             assignment = form.save()
             sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
+            emit_assignment_notifications(
+                assignment,
+                previous_state=notification_state,
+                actor=request.user,
+            )
             messages.success(request, ministry_ui_text(language, "assignment_saved"))
             warn_assignment_member_readiness(
                 request, form.cleaned_data["assigned_members"], language

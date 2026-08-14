@@ -1,11 +1,11 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1B`. The app/model/admin/Core delivery-port
-foundation and the recipient-scoped Notification Center/bell UI are implemented.
-No notification producer is implemented.
+Status: current through `NOTIFY.1C`. The app/model/admin/Core delivery-port
+foundation, recipient-scoped Notification Center/bell UI, and the first narrow
+ministry-owned explicit ServiceEvent serving-assignment producer are implemented.
 
 This document is the implementation boundary for Notification V0. The completed
-`NOTIFY.1A` and `NOTIFY.1B` scopes are recorded below; later producers,
+`NOTIFY.1A` through `NOTIFY.1C` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
 
@@ -35,10 +35,22 @@ notifications-owned context data does not query Notification rows. Direct URLs
 retain the existing module surface-gate semantics and their own authentication
 and recipient checks.
 
-No source producer exists. `NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
+`NOTIFY.1C` adds the first source producer, owned by `ministry`, for current
+explicit linked-user `TeamAssignmentMember` serving. It emits only through the
+Core port. A newly added eligible member receives one assigned snapshot; a
+retained eligible member receives at most one updated snapshot when the
+assignment moves to a different ServiceEvent and/or transitions from cancelled
+to active. Display-name-only members, audience members, belonging rows,
+managers, and staff are never inferred as recipients. Ordinary notes/same-event
+non-cancelled status edits, confirmation, removal, cancellation, ServiceEvent
+cancellation, previews, admin/import/direct ORM writes, and failed forms emit
+nothing. The target is the existing exact My Serving member-row anchor.
+
+`NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
 Overview integration, announcement fanout, external channel, scheduler,
 background job, queue, retry framework, outbox, preference, deletion, archive,
-or search behavior. A notification target remains permission-neutral: the
+or search behavior, and `NOTIFY.1C` changes none of those surfaces. A
+notification target remains permission-neutral: the
 stored internal target path is rendered without source-model lookup, and that
 owning target still enforces its own access rules.
 
@@ -372,17 +384,21 @@ Producer contract:
 
 ### A. Explicit ServiceEvent Serving Assignment
 
-V0 candidate.
+Implemented in `NOTIFY.1C`.
 
 Recipient rule: notify the linked user on
 `TeamAssignmentMember.membership.user`.
 
-Emit when a linked user is newly assigned or a meaningful assignment detail
-changes. Do not notify display-name-only members. Do not notify all event
-audience members. Do not make the assigned user an event audience member.
+Emit once when an eligible linked user is newly assigned. For a retained
+eligible member, emit at most once when the assignment changes ServiceEvent
+and/or is reactivated from cancelled to active. Notes-only and same-event
+non-cancelled status edits do not notify; removal and cancellation notifications
+remain deferred. Do not notify display-name-only members. Do not notify all
+event audience members. Do not make the assigned user an event audience member.
 
-The target can be My Serving or an assignment detail if one exists. It must not
-target a staff edit page for ordinary users.
+The target is `/my-serving/?tab=all#serving-assignment-<member-id>`, built from
+the named My Serving route plus the stable `TeamAssignmentMember` anchor. It
+never targets a staff edit or scheduling page.
 
 ### B. Explicit Bible Study Meeting Serving Role
 
@@ -569,9 +585,29 @@ tests, `manage.py check`, `git diff --check`, browser QA if rendered UI changes.
 
 ### NOTIFY.1C Explicit ServiceEvent Serving Assignment Producer
 
-Goal: add the first source producer by emitting through the Core port for
-linked-user `TeamAssignmentMember` serving assignment creation or meaningful
-changes.
+Status: implemented. The first source producer is the ministry-owned
+`ministry/services/assignment_notifications.py` helper. Approved interactive
+assignment create/edit and team-schedule writes call it only after the
+assignment and final member set save successfully; explicit copy-forward POST
+therefore uses the same semantics, while suggestion GET remains read-only.
+
+Recipients come only from active `TeamAssignmentMember.membership.user` rows on
+an active team, non-cancelled assignment, and non-draft/non-cancelled
+ServiceEvent. New linked member rows emit `team_assignment.assigned`; retained
+rows emit at most one `team_assignment.updated` for ServiceEvent change and/or
+cancelled-to-active reactivation. New-member semantics take priority when both
+conditions occur. Display-name-only members receive nothing, and no recipient
+is inferred from audience, Church Structure belonging, ministry role,
+management authority, or staff status.
+
+Snapshots use the recipient's persisted English/Chinese preference (English
+fallback), contain only localized event title plus ministry-team name, exclude
+notes/contact/audience internals, and target the exact existing My Serving
+member-row anchor. The stable initial dedupe key uses the durable member-row id;
+updates add the successful assignment `updated_at` mutation token, so repeated
+execution of one save is idempotent while later genuine changes remain distinct.
+No signal, schema/migration, notification ORM dependency, UI change, permission
+change, or source serving/audience behavior change was added.
 
 Likely files: `ministry` assignment save flow/forms/services, notification
 producer helper tests.
@@ -643,11 +679,12 @@ needed for routine docs, model, simple UI, or focused producer slices.
 
 ## 12. Current Implementation Recommendation
 
-Keep `NOTIFY.1A` as the completed delivery foundation and `NOTIFY.1B` as the
-completed notification-owned recipient UI boundary. Neither slice adds a
-producer or changes target permission, serving, audience, or membership rules.
+Keep `NOTIFY.1A` as the completed delivery foundation, `NOTIFY.1B` as the
+completed notification-owned recipient UI boundary, and `NOTIFY.1C` as the
+completed first narrow ministry-owned producer. None changes target permission,
+serving-read, audience, or membership rules.
 
-Producers may be added one at a time only in separately approved
-`NOTIFY.1C+` slices after the foundation and UI exist. Each producer must prove
+Additional producers may be added one at a time only in separately approved
+`NOTIFY.1D+` slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

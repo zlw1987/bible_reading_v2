@@ -1,8 +1,9 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `NOTIFY.1B` (notification app/model/admin/Core delivery-port foundation
-plus recipient Notification Center/bell UI after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
+through `NOTIFY.1C` (notification app/model/admin/Core delivery-port foundation,
+recipient Notification Center/bell UI, and the first ministry-owned explicit
+ServiceEvent serving-assignment producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -182,10 +183,21 @@ and shared-navigation scope; this supports the current limited-trial/product
 stage only, not a broad production, accessibility, security, or hosting
 readiness claim.
 
-There is still no producer, so normal product workflows create no Notification
-rows. There is no Today, Calendar, My Serving, Staff Overview, announcement
+`NOTIFY.1C` adds the first producer, owned by `ministry`, for intentional current
+TeamAssignment create/edit/team-schedule writes. It emits directed assigned
+snapshots only for newly added eligible linked-user `TeamAssignmentMember` rows,
+and at most one updated snapshot per retained eligible row for ServiceEvent
+change and/or cancelled-to-active reactivation. Display-name-only members and
+audience, belonging, ministry-role, manager, or staff users are not inferred.
+Ordinary notes/non-cancelled status edits, confirmation, removal/cancellation,
+preview GETs, imports/admin/direct ORM, and failed writes remain non-notifying.
+The target is the existing exact My Serving assignment-member anchor, and no
+source permission, audience, serving-read, My Serving, Calendar, or UI behavior
+changed.
+
+There is no Today, Calendar, Staff Overview, announcement
 fanout, external delivery, scheduler, background job, queue, retry, or outbox.
-`NOTIFY.1C` and later work remain unapproved until separately authorized.
+`NOTIFY.1D` and later producer work remain unapproved until separately authorized.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -1008,10 +1020,11 @@ closed in `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. Remaining audit items
 are accepted residual, backend-conditional, or opportunistic work; they are not
 automatic next slices and do not authorize unrelated product implementation.
 Product development may resume only through separately approved roadmap slices.
-`NOTIFY.1A` foundation and `NOTIFY.1B` recipient UI are implemented under the
+`NOTIFY.1A` foundation, `NOTIFY.1B` recipient UI, and the narrow ministry-owned
+`NOTIFY.1C` explicit serving-assignment producer are implemented under the
 `NOTIFY.0B` architecture; product-owner manual rendered QA passed for the
 current limited-trial/product stage only, not as production, security,
-accessibility, or hosting certification, and `NOTIFY.1C` and later producer work
+accessibility, or hosting certification, and `NOTIFY.1D` and later producer work
 remain separately unapproved.
 
 Short next-candidate list:

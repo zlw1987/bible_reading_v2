@@ -21,6 +21,7 @@ from .models import (
     CommunityActivityCoOrganizer,
     CommunityActivitySubmissionBlock,
 )
+from .review_notifications import emit_review_outcome_notification
 from .visibility import (
     user_has_community_activity_manager_override,
     visible_community_activities_for,
@@ -550,6 +551,7 @@ def _apply_locked_review_transition(
             activity.review_note = review_note
         _record_review(activity, user, target_status)
         activity.save()
+        emit_review_outcome_notification(activity, actor=user)
     return activity, True
 
 

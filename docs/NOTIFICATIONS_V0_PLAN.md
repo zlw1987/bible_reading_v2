@@ -1,12 +1,13 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1D`. The app/model/admin/Core delivery-port
+Status: current through `NOTIFY.1E`. The app/model/admin/Core delivery-port
 foundation, recipient-scoped Notification Center/bell UI, the ministry-owned
 explicit ServiceEvent serving-assignment producer, and the studies-owned
-explicit Bible Study meeting-role producer are implemented.
+explicit Bible Study meeting-role producer, and the Community Activities-owned
+primary-creator review-outcome producer are implemented.
 
 This document is the implementation boundary for Notification V0. The completed
-`NOTIFY.1A` through `NOTIFY.1D` scopes are recorded below; later producers,
+`NOTIFY.1A` through `NOTIFY.1E` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
 
@@ -58,10 +59,23 @@ confirmation, deletion/removal, lifecycle, admin, direct ORM, generation, and
 failed writes remain non-notifying. The target is the existing member-facing
 Bible Study meeting detail.
 
+`NOTIFY.1E` adds the third source producer, owned by `community_events`, at the
+existing successful locked staff review-transition seam. A successful request
+changes, publish, or cancel/reject transition emits at most one directed
+snapshot to the active primary `created_by` account. Co-organizers, selected
+audience users, signup users, Church Structure memberships, staff authority,
+and organizer display text never expand recipients. Missing/inactive creators,
+submission/resubmission and ordinary edits, missing-note validation failures,
+stale/disallowed review actions, signup lifecycle, admin/direct ORM/setup/import
+writes, and reads emit nothing. The target is the existing creator-safe member
+activity detail, and the stored snapshot excludes the review note and other
+private review/audience content.
+
 `NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
 Overview integration, announcement fanout, external channel, scheduler,
 background job, queue, retry framework, outbox, preference, deletion, archive,
-or search behavior, and `NOTIFY.1C`/`NOTIFY.1D` change none of those surfaces. A
+or search behavior, and `NOTIFY.1C`/`NOTIFY.1D`/`NOTIFY.1E` change none of those
+surfaces. A
 notification target remains permission-neutral: the
 stored internal target path is rendered without source-model lookup, and that
 owning target still enforces its own access rules.
@@ -86,6 +100,12 @@ and confirmed that the implemented explicit ServiceEvent serving-assignment
 notification workflow worked as expected. This is a narrow workflow result,
 not browser automation or a production, security, accessibility, or hosting
 certification.
+
+### NOTIFY.1D Deployed Smoke QA
+
+The product owner completed deployed `NOTIFY.1D` smoke QA successfully. This is
+the user-confirmed result of a narrow deployed smoke test, not browser
+automation or a production, security, accessibility, or hosting certification.
 
 ## 2. Purpose
 
@@ -443,13 +463,25 @@ read-only serving gate without granting management permission.
 
 ### C. Community Activity Review Outcome
 
-V0 candidate, narrow only.
+Implemented in `NOTIFY.1E`.
 
-Recipient rule: notify the primary creator only.
+Recipient rule: notify the active primary `CommunityActivity.created_by` only.
 
-Candidate outcomes: `changes_requested`, `published`, and
-`rejected_cancelled`. Co-organizer notifications are later, not V0, unless a
-separate approved slice says otherwise.
+Emit `community_activity.review_changes_requested`,
+`community_activity.review_published`, or
+`community_activity.review_cancelled` only after the corresponding staff review
+transition is successfully applied through the existing locked transition
+helper. Missing/inactive creators, stale/disallowed actions, creator or
+co-organizer submission/resubmission/edits, admin/direct ORM/setup/import, and
+signup lifecycle emit nothing. Co-organizer, selected-audience, signup-user,
+membership, manager, and staff authority never expand recipients.
+
+The target is the existing member-facing Community Activity detail. Primary
+creator access is source-owned for changes-requested, published, and cancelled
+records; the Notification grants no permission. Stored text is the localized
+outcome title plus localized activity title only. `review_note`, audience notes,
+descriptions, locations, co-organizer/signup identity, audience internals, and
+staff-only review metadata are excluded.
 
 Do not notify selected-scope ordinary users for pending-review,
 changes-requested, or other review states.
@@ -689,20 +721,36 @@ tests, outside-audience linked-role tests, duplicate-save dedupe tests,
 
 ### NOTIFY.1E Community Activity Review Outcome Producer
 
-Goal: add one producer by emitting through the Core port to the primary creator
-for narrow review outcomes.
+Status: implemented. The Community Activities-owned
+`community_events/review_notifications.py` helper emits through Core only after
+the existing locked staff review helper saves an applied request-changes,
+publish, or cancel/reject transition. The active primary creator is the sole
+recipient; creator membership, audience match, and submission-block state do
+not gate this ownership result. Missing/inactive creators safely skip delivery.
 
-Likely files: `community_events` review action flow/services, notification
-producer tests.
+Creator/co-organizer edits and resubmission, draft submission, signup lifecycle,
+stale/disallowed review POSTs, admin/direct ORM/setup/import writes, and reads
+remain non-producers. Co-organizers, selected audience, signup users,
+memberships, and staff authority never fan out recipients. The localized stored
+snapshot contains only the outcome and activity title and targets the existing
+creator-safe activity detail; `review_note` and other private source content are
+not copied.
 
-Risk: medium; co-organizers and selected-scope ordinary users must stay out of
-V0 unless separately approved.
+The dedupe key is
+`community:activity:<id>:review:<outcome>:<reviewed_at>`. The source-owned
+`reviewed_at` timestamp is set for every applied staff review transition, stays
+stable for repeated producer invocation of that mutation, and changes for a
+later genuine review cycle after resubmission. No schema, signal, UI,
+permission, lifecycle, visibility, serving, My Serving, Calendar, or
+`ServiceEvent` relationship changed.
 
-Suggested agent: Codex.
-
-Targeted tests/checks: review outcome producer tests, creator-only tests,
-co-organizer exclusion tests, selected-scope exclusion tests, `manage.py check`,
-`git diff --check`.
+Focused verification covers all currently valid outcomes/states, creator-only
+selection, co-organizer/audience/signup exclusion, no-membership and
+submission-block independence, inactive/null creators, recipient language,
+private snapshot exclusions, target permission neutrality, stable/new-cycle
+dedupe, stale/invalid actions, resubmission non-production, disabled
+Notifications, direct ORM non-production, and the existing source lifecycle and
+Core/1C/1D regressions.
 
 ### NOTIFY.1F Read/unread Polish And Cleanup/retention Review
 
@@ -729,10 +777,11 @@ needed for routine docs, model, simple UI, or focused producer slices.
 Keep `NOTIFY.1A` as the completed delivery foundation, `NOTIFY.1B` as the
 completed notification-owned recipient UI boundary, `NOTIFY.1C` as the first
 narrow ministry-owned producer, and `NOTIFY.1D` as the second narrow
-studies-owned producer. None changes target permission, audience, belonging, or
-source serving semantics.
+studies-owned producer. `NOTIFY.1E` is the third narrow producer, owned by
+Community Activities for primary-creator staff-review outcomes only. None
+changes target permission, audience, belonging, or source serving semantics.
 
 Additional producers may be added one at a time only in separately approved
-`NOTIFY.1E+` slices. Each producer must prove
+`NOTIFY.1F+` slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

@@ -1,10 +1,11 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `NOTIFY.1D` (notification app/model/admin/Core delivery-port foundation,
+through `NOTIFY.1E` (notification app/model/admin/Core delivery-port foundation,
 recipient Notification Center/bell UI, the ministry-owned explicit ServiceEvent
-serving-assignment producer, and the studies-owned explicit Bible Study
-meeting-role producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
+serving-assignment producer, the studies-owned explicit Bible Study meeting-role
+producer, and the Community Activities-owned primary-creator review-outcome
+producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -77,8 +78,8 @@ Activities. Null means unlimited; a positive integer caps active signup rows.
 Full activities fail closed for new/reactivated signups, cancelled rows do not
 count, and already-active signup posts remain idempotent. Capacity is
 attendance-intent management only; it creates no serving or `ServiceEvent`
-state. Waitlist, attendee list, notifications, check-in, and signup deadlines
-remain deferred.
+state. Waitlist, attendee list, signup/capacity notifications, check-in, and
+signup deadlines remain deferred.
 
 `COMMUNITY-EVENTS.1H-A` adds a bounded member-facing draft workflow. Eligible
 creators may save a complete validated activity as draft, continue editing and
@@ -218,9 +219,26 @@ and grants no management permission. No model, migration, UI, Today, My Serving,
 Calendar, permission, visibility, audience, belonging, or serving behavior
 changed.
 
+The product owner completed deployed `NOTIFY.1D` smoke QA successfully. This is
+the user-confirmed result of a narrow deployed smoke test, not browser
+automation or a production, security, accessibility, or hosting certification.
+
+`NOTIFY.1E` adds the third producer, owned by `community_events`, only after the
+existing locked staff review helper successfully applies request changes,
+publish, or cancel/reject. The active primary creator is the sole possible
+recipient. Co-organizers, selected audience, signup users, memberships,
+manager/staff authority, and organizer display text are not inferred. Creator
+and co-organizer submission/resubmission/ordinary edits, stale/disallowed or
+missing-note review actions, signup lifecycle, admin/direct ORM/setup/import,
+and reads remain non-notifying. The existing creator-safe activity detail is the
+target; the localized stored snapshot excludes `review_note` and other private
+review/audience content. No model, migration, signal, UI, Today, Calendar, My
+Serving, permission, visibility, audience, belonging, serving, or
+`ServiceEvent` relationship changed.
+
 There is no Today, Calendar, Staff Overview, announcement
 fanout, external delivery, scheduler, background job, queue, retry, or outbox.
-`NOTIFY.1E` and later producer work remain unapproved until separately authorized.
+`NOTIFY.1F` and later work remain unapproved until separately authorized.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -305,8 +323,9 @@ user-linked co-organizers; and `1H-A` adds complete validated member drafts.
 `COMMUNITY-EVENTS-STABILIZATION.1A` moved the implemented lifecycle to manual
 QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass. A
 limited trial is acceptable under the existing stabilization boundary.
-Waitlist, attendee list, check-in, notifications, comments, payments, calendar
-integration, broader Today browse/discovery, Staff Overview cards,
+Waitlist, attendee list, check-in, broader Community Activity notifications
+beyond the implemented primary-creator review outcomes, comments, payments,
+calendar integration, broader Today browse/discovery, Staff Overview cards,
 setup/readiness, any `ServiceEvent` relationship, My Serving integration, and
 the separate Checklist product require separately approved slices. See
 `docs/MODULE_BOUNDARIES.md` for the canonical boundary details.
@@ -483,7 +502,7 @@ These are final CMS product directions, not authorization to implement them now.
 Future CMS scope may include:
 - Prayer Wall continued refinement.
 - Bible Study / small group attendance.
-- Bounded in-app Notifications are implemented through `NOTIFY.1D`;
+- Bounded in-app Notifications are implemented through `NOTIFY.1E`;
   external delivery such as email, SMS, WeChat, push, and broader
   notification/reminder behavior remain future unless separately approved.
 - Pastor/staff Official Announcements V1 is now bounded in
@@ -907,6 +926,18 @@ runtime guidance; use Section 2 and the canonical documents in
   The project is usable for a limited trial under the existing stabilization
   boundary, not certified for production deployment. These checkpoints add no
   runtime behavior.
+- `NOTIFY.1E` adds the only current Community Activity notification producer.
+  After an existing locked staff review transition successfully applies request
+  changes, publish, or cancel/reject, `community_events` emits through the Core
+  notification port to the active primary creator only. Creator/co-organizer
+  submission, resubmission, and ordinary edits; stale/disallowed or missing-note
+  review actions; signup lifecycle; admin/direct ORM/setup/import; and reads
+  remain non-notifying. Co-organizers, audience users, signup users,
+  memberships, and staff authority do not expand recipients. The target is the
+  existing creator-safe activity detail and the bounded localized snapshot
+  excludes `review_note` and other private review/audience content. This adds no
+  schema, signal, UI, permission, lifecycle, visibility, serving, My Serving,
+  Calendar, or `ServiceEvent` relationship.
 - Church Calendar V1 is implemented for limited trial/current-state use as an
   independent read-only member calendar at `/calendar/` month and day routes.
   The base providers aggregate member-visible `service_event`,
@@ -925,10 +956,11 @@ runtime guidance; use Section 2 and the canonical documents in
 - ServiceEvent legacy scope field retirement is complete (SE-FIELD-RETIRE.1A);
   only immutable historical migrations/docs should still name those fields.
 - No further Community Activities expansion without separate approval,
-  including waitlist, attendee list, check-in, notifications, comments,
-  payments, module-owned calendar workflow, broader Today browse/discovery,
-  Staff Overview cards, setup/readiness, a `ServiceEvent` relationship, or My
-  Serving integration. The separately planned Church Calendar may read
+  including waitlist, attendee list, check-in, notifications beyond the narrow
+  implemented primary-creator staff review outcomes, comments, payments,
+  module-owned calendar workflow, broader Today browse/discovery, Staff Overview
+  cards, setup/readiness, a `ServiceEvent` relationship, or My Serving
+  integration. The separately planned Church Calendar may read
   published member-visible activities through an adapter, but does not change
   the Community Activity lifecycle or merge it with `ServiceEvent`.
 - Checklist V1 remains deferred.
@@ -1046,13 +1078,15 @@ are accepted residual, backend-conditional, or opportunistic work; they are not
 automatic next slices and do not authorize unrelated product implementation.
 Product development may resume only through separately approved roadmap slices.
 `NOTIFY.1A` foundation, `NOTIFY.1B` recipient UI, the narrow ministry-owned
-`NOTIFY.1C` explicit serving-assignment producer, and the narrow studies-owned
-`NOTIFY.1D` explicit Bible Study meeting-role producer are implemented under the
-`NOTIFY.0B` architecture. Product-owner manual rendered QA passed for the 1B UI,
-and the product owner separately completed the defined deployed 1C producer
-smoke QA successfully; these are bounded workflow results, not production,
-security, accessibility, or hosting certification. `NOTIFY.1E` and later
-producer work remain separately unapproved.
+`NOTIFY.1C` explicit serving-assignment producer, the narrow studies-owned
+`NOTIFY.1D` explicit Bible Study meeting-role producer, and the narrow Community
+Activities-owned `NOTIFY.1E` primary-creator review-outcome producer are
+implemented under the `NOTIFY.0B` architecture. Product-owner manual rendered
+QA passed for the 1B UI, and the product owner separately completed the defined
+deployed 1C producer smoke QA and deployed 1D smoke QA successfully; these are
+bounded workflow results, not browser automation or production, security,
+accessibility, or hosting certification. `NOTIFY.1F` and later work remain
+separately unapproved.
 
 Short next-candidate list:
 
@@ -1083,7 +1117,7 @@ Future foundation planning:
 
 `ChurchStructureUnit` seeding/mapping now exists only as an explicit management command, passed GoDaddy production/staging verification, and completed seeded structure data QA closure. SE-AS.1 records the docs-only `ServiceEvent` audience-scope redesign recommendation; SE-AS.2 adds the `ChurchStructureUnit`-linked audience scope beside legacy fields as a model-only foundation; SE-AS.4 made those rows the ServiceEvent ordinary-user visibility source when rows exist (zero-row events fell back to legacy `scope_type` / `district` / `small_group` plus `Profile.small_group` at that time); CS-CORE.2B-A switched audience-row matching to active primary membership; SE-AS.6C apply is complete; SE-AS.7A stops normal zero-row writes; SE-RETIRE.1B retired the zero-row runtime fallback, so zero-row events now fail closed for ordinary users; and SE-FIELD-RETIRE.1A later removed the legacy `scope_type` / `district` / `small_group` fields. CS-F.3 is not filtering; it is only an optional ServiceEvent label.
 
-Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this V1 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass; a limited trial is acceptable under the existing stabilization boundary. Waitlist, notifications, comments, payments, a Community Activity-owned calendar workflow, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned. Church Calendar now reads published member-visible Community Activities through its read-only adapter, but that does not change the Community Activity lifecycle, create a Community Activity-owned calendar workflow, merge Community Activities with `ServiceEvent`, or add Today/My Serving behavior.
+Large deferred items remain deferred pending feedback. MO-S.4 now supports manual team-leader scheduling, MO-S.4A completed scheduling semantic cleanup, MO-S.5A/MO-S.5B completed bounded rotation-anchor and copy-forward helper work, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C completed ServiceEvent audience-row migration/backfill/write-guard/fallback and legacy-field retirement work, and BS-AS.1 / BS-AS.2 / BS-AS.2A plus BS-STRUCT.1L/1M/2A completed Bible Study Schedule audience scope, structure-unit-native normal generation, V2 audience-row visibility, V1 schema retirement, and My Serving Bible Study role confirmation. `COMMUNITY-EVENTS.1A` provides the independent Community Activities model/admin/visibility foundation, `1B` adds browse/detail/nav, `1C` adds minimal signup/cancel, `1D-A` adds member submission plus the Django-admin publish gate, `1D-A-FU1` adds required member-selected Activity Scope rows, `1D-B` adds the lightweight staff review + creator resubmit loop, `1E-A` adds the minimal Today provider for active signups and creator review reminders, `1F-A` adds pending-review creator editing, `1F-B` adds optional active-signup capacity, `1G-A` adds bounded linked co-organizers, and `1H-A` adds complete validated member drafts that remain outside review, signup, Today, My Serving, serving, and `ServiceEvent`. `COMMUNITY-EVENTS-STABILIZATION.1A` moved this V1 lifecycle to manual QA, and `COMMUNITY-EVENTS-STABILIZATION.1B` records the user-confirmed pass; a limited trial is acceptable under the existing stabilization boundary. `NOTIFY.1E` now implements only the primary-creator outcomes for successful staff request-changes, publish, and cancel/reject transitions. Waitlist, broader Community Activity notifications (including co-organizer, audience, signup, capacity/waitlist, reminder, broadcast, Calendar-driven, and external delivery), comments, payments, a Community Activity-owned calendar workflow, attendee-list/check-in behavior, broader shared surfaces, automatic scheduling, availability, swaps, reminders, and Checklist V1 remain deferred unless separately planned. Church Calendar now reads published member-visible Community Activities through its read-only adapter, but that does not change the Community Activity lifecycle, create a Community Activity-owned calendar workflow, merge Community Activities with `ServiceEvent`, or add Today/My Serving behavior.
 
 Not next:
 - Lighting Team-specific model

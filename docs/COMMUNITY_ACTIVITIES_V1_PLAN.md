@@ -5,7 +5,8 @@ Status: current plan and stabilization checkpoint updated through
 signup/cancellation policy hardening through
 `COMMUNITY-SIGNUP-CANCELLATION-POLICY.1A-FU1` and the historical manual-QA
 stabilization closure still recorded under
-`COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026).
+`COMMUNITY-EVENTS-STABILIZATION.1B` (July 2026), plus the narrowly approved
+primary-creator review-outcome producer in `NOTIFY.1E` (August 2026).
 The independent `community_events` app foundation is implemented and
 registered. `CommunityActivity`, `CommunityActivityAudienceScope`, migration
 `community_events/0001_initial`, structure-native visibility, and Django admin
@@ -82,9 +83,25 @@ rejects a stale form whose submitted expected status no longer matches the
 current status. A freshly loaded `changes_requested` form still follows the
 accepted `changes_requested` -> `pending_review` resubmit lifecycle.
 
+`NOTIFY.1E` joins that existing successful locked staff review seam without
+changing its lifecycle. Only an applied request-changes, publish, or
+cancel/reject transition emits through the Core notification port, and the sole
+possible recipient is the active primary `created_by` account. Creator or
+co-organizer edits/resubmission, missing-note validation, stale/disallowed staff
+actions, admin/direct ORM/setup/import writes, and signup lifecycle remain
+non-notifying. Co-organizers, selected-scope users, signup users, memberships,
+organizer display text, and staff authority never expand recipients. The target
+is the existing creator-safe activity detail; the stored localized snapshot is
+limited to the outcome and activity title and does not copy `review_note` or
+other private review/audience content. This adds no schema, signal, UI,
+permission, visibility, serving, My Serving, Calendar, or `ServiceEvent`
+relationship.
+
 A full approval dashboard beyond this inbox, waitlist, My Serving, any
 `ServiceEvent` relationship, Staff Overview, setup/readiness provider, and
-notifications remain deferred.
+all broader Community Activity notifications remain deferred. Deferred
+notification work includes co-organizer, selected-audience, signup,
+capacity/waitlist, reminder, broadcast, Calendar-driven, and external delivery.
 
 `COMMUNITY-EVENTS.1E-A` adds the minimal module-owned Today contribution.
 Today shows published visible activities happening today for which the current
@@ -100,7 +117,8 @@ disabled.
 
 This Today card is ordinary activity agenda/review status, never serving. My
 Serving, the serving action center, Staff Overview, setup/readiness,
-waitlist, notifications, and any `ServiceEvent` relationship remain
+waitlist, Today/Calendar-driven notifications, and any `ServiceEvent`
+relationship remain
 deferred.
 
 `COMMUNITY-EVENTS.1F-A` allows the primary creator to edit their own
@@ -131,8 +149,8 @@ use the same activity-first lock order before locking the signup row, so
 signup/reactivation and cancellation serialize through the activity row on
 databases that enforce row locks. An already-active signup and an
 already-cancelled cancellation stay idempotent. This is attendance-intent
-management only, not serving. Waitlist, attendee list, notifications, check-in,
-and signup deadlines remain deferred.
+management only, not serving. Waitlist, attendee list, signup/capacity
+notifications, check-in, and signup deadlines remain deferred.
 
 `COMMUNITY-EVENTS.1H-A` adds the member-facing draft workflow. Eligible
 members may save the complete, validated create form as `draft` or submit it
@@ -458,8 +476,8 @@ that policy:
   returning it to `pending_review`;
 - staff may still adjust audience rows in Django admin.
 
-A larger review dashboard, leader approval workflow, and notifications remain
-deferred.
+A larger review dashboard, leader approval workflow, and all notifications
+beyond the implemented primary-creator staff review outcomes remain deferred.
 
 ## 8. UI Direction
 
@@ -654,8 +672,9 @@ Later work still requires separately approved, bounded slices for:
 - a larger approval dashboard or leader approval;
 - any Staff Overview or setup/readiness contribution;
 - any broader Today browse/discovery surface;
-- waitlist, attendee list, check-in, reminders, payments, notifications,
-  signup deadlines, or calendar behavior.
+- waitlist, attendee list, check-in, reminders, payments, signup/co-organizer/
+  audience/capacity/broadcast/Calendar-driven notifications, signup deadlines,
+  external delivery, or calendar behavior.
 
 No later slice may infer serving from activity visibility, signup, or
 membership, and no link to `ServiceEvent` is implied by this foundation.
@@ -740,11 +759,12 @@ and `migrate --plan` with no planned operations. Until trial feedback produces
 a separately approved slice, stabilize the implemented lifecycle rather than
 adding features.
 
-Do not add a waitlist, attendee list, check-in, notifications, comments,
-payments, Community Activity-owned writable calendar workflow, external-calendar
-sync, broader Today browse/discovery, Staff Overview cards, a setup/readiness
-provider, a `ServiceEvent` relationship, or My Serving integration without
-separate approval.
+Do not add a waitlist, attendee list, check-in, notifications beyond the
+implemented primary-creator staff review outcomes, comments, payments,
+Community Activity-owned writable calendar workflow, external-calendar sync,
+broader Today browse/discovery, Staff Overview cards, a setup/readiness provider,
+a `ServiceEvent` relationship, or My Serving integration without separate
+approval.
 
 Community Activities remains a secondary independent module. It is not
 official Church Gatherings, not My Serving, not `ServiceEvent`, and not a

@@ -1,11 +1,12 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1C`. The app/model/admin/Core delivery-port
-foundation, recipient-scoped Notification Center/bell UI, and the first narrow
-ministry-owned explicit ServiceEvent serving-assignment producer are implemented.
+Status: current through `NOTIFY.1D`. The app/model/admin/Core delivery-port
+foundation, recipient-scoped Notification Center/bell UI, the ministry-owned
+explicit ServiceEvent serving-assignment producer, and the studies-owned
+explicit Bible Study meeting-role producer are implemented.
 
 This document is the implementation boundary for Notification V0. The completed
-`NOTIFY.1A` through `NOTIFY.1C` scopes are recorded below; later producers,
+`NOTIFY.1A` through `NOTIFY.1D` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
 
@@ -46,10 +47,21 @@ non-cancelled status edits, confirmation, removal, cancellation, ServiceEvent
 cancellation, previews, admin/import/direct ORM writes, and failed forms emit
 nothing. The target is the existing exact My Serving member-row anchor.
 
+`NOTIFY.1D` adds the second source producer, owned by `studies`, and calls it
+only after successful interactive `BibleStudyMeetingRole` create/edit saves.
+The only recipient is the role's active linked `user`; display-name-only roles
+and audience, belonging, coworker-role, manager, or staff users are never
+inferred. A new linked role, newly linked user, or reassigned user receives
+`bible_study_role.assigned`; the same linked user receives
+`bible_study_role.updated` only when the role type changes. Notes, display-name,
+confirmation, deletion/removal, lifecycle, admin, direct ORM, generation, and
+failed writes remain non-notifying. The target is the existing member-facing
+Bible Study meeting detail.
+
 `NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
 Overview integration, announcement fanout, external channel, scheduler,
 background job, queue, retry framework, outbox, preference, deletion, archive,
-or search behavior, and `NOTIFY.1C` changes none of those surfaces. A
+or search behavior, and `NOTIFY.1C`/`NOTIFY.1D` change none of those surfaces. A
 notification target remains permission-neutral: the
 stored internal target path is rendered without source-model lookup, and that
 owning target still enforces its own access rules.
@@ -66,6 +78,14 @@ The current recipient UI is acceptable for the present limited-trial/product
 stage. This manual QA result is not a broad production-readiness,
 accessibility-certification, security-certification, or hosting-certification
 claim, and it does not represent browser automation.
+
+### NOTIFY.1C Deployed Smoke QA
+
+The product owner completed the previously defined deployed producer smoke QA
+and confirmed that the implemented explicit ServiceEvent serving-assignment
+notification workflow worked as expected. This is a narrow workflow result,
+not browser automation or a production, security, accessibility, or hosting
+certification.
 
 ## 2. Purpose
 
@@ -402,17 +422,24 @@ never targets a staff edit or scheduling page.
 
 ### B. Explicit Bible Study Meeting Serving Role
 
-V0 candidate.
+Implemented in `NOTIFY.1D`.
 
 Recipient rule: notify `BibleStudyMeetingRole.user`.
 
-Emit when a linked user is newly assigned or a meaningful role detail changes.
-Do not notify display-name-only roles. Do not notify all meeting audience
-members. Do not infer recipients from church structure role, active primary
-membership, or audience scope.
+Emit `bible_study_role.assigned` when an eligible active linked user is newly
+assigned, when a display-only role becomes linked, or when the role is
+reassigned to a different linked user. Emit `bible_study_role.updated` only
+when the same linked user remains and the serving role type changes. Recipient
+reassignment has priority and produces only the assigned payload to the new
+user. Notes, display-name, confirmation, deletion/removal, and lifecycle
+changes do not notify. Display-name-only roles receive nothing. Meeting
+audience, Church Structure belonging/coworker roles, managers, and staff never
+expand recipients.
 
-The target can be My Serving or the meeting detail if existing permission allows
-the linked user to open that meeting.
+The target is the existing member-facing meeting detail. An explicit linked
+role remains a serving fact even outside the ordinary meeting audience; it
+creates no audience or membership row and uses the existing exact-meeting
+read-only serving gate without granting management permission.
 
 ### C. Community Activity Review Outcome
 
@@ -624,8 +651,28 @@ dedupe tests, display-name-only exclusion tests, permission non-regression tests
 
 ### NOTIFY.1D Explicit Bible Study Serving Role Producer
 
-Goal: add one producer by emitting through the Core port for linked-user
-`BibleStudyMeetingRole` assignment creation or meaningful changes.
+Status: implemented. The studies-owned
+`studies/meeting_role_notifications.py` helper captures pre-save row identity,
+linked user, role type, and meeting before ModelForm binding, then emits only
+after approved interactive create/edit saves succeed. New linked roles,
+display-only-to-linked changes, and user reassignment emit one assigned payload
+to the current linked active user; same-user role-type changes emit one updated
+payload. Recipient changes take priority over role-type changes.
+
+Eligibility mirrors existing explicit Bible Study serving/read lifecycle:
+published/completed meeting and lesson, active published/completed series, and
+active linked user, without an audience-membership requirement. Snapshots use
+the recipient's persisted language (English fallback), contain localized lesson
+title plus role label, use empty metadata, and target the member-facing meeting
+detail. The dedupe key combines durable role-row identity, notification kind,
+and the successful save's `updated_at` mutation token, so repeated execution of
+one mutation is stable while later updates and A -> B -> A reassignment remain
+distinct.
+
+No signal, schema/migration, Notification ORM dependency, UI, permission,
+visibility, My Serving, Calendar, Today, audience, belonging, confirmation, or
+role-picker behavior changed. Delete, confirmation, lifecycle, admin, direct
+ORM, generation, setup/import, and failed-form paths remain non-producers.
 
 Likely files: `studies` role form/save flow/services, notification producer
 helper tests.
@@ -680,11 +727,12 @@ needed for routine docs, model, simple UI, or focused producer slices.
 ## 12. Current Implementation Recommendation
 
 Keep `NOTIFY.1A` as the completed delivery foundation, `NOTIFY.1B` as the
-completed notification-owned recipient UI boundary, and `NOTIFY.1C` as the
-completed first narrow ministry-owned producer. None changes target permission,
-serving-read, audience, or membership rules.
+completed notification-owned recipient UI boundary, `NOTIFY.1C` as the first
+narrow ministry-owned producer, and `NOTIFY.1D` as the second narrow
+studies-owned producer. None changes target permission, audience, belonging, or
+source serving semantics.
 
 Additional producers may be added one at a time only in separately approved
-`NOTIFY.1D+` slices. Each producer must prove
+`NOTIFY.1E+` slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

@@ -33,6 +33,10 @@ from .models import (
     BibleStudyMeetingWorshipSong,
     BibleStudySeries,
 )
+from .meeting_role_notifications import (
+    capture_meeting_role_notification_state,
+    emit_meeting_role_notification,
+)
 from .services import (
     GENERATION_WARNING_MISSING_SERIES_AUDIENCE,
     _collect_descendant_or_self_unit_ids,
@@ -975,6 +979,7 @@ def manage_bible_study_meeting_roles(request, meeting_id):
 
     if request.method == "POST":
         selected_add_role = normalize_add_role(request.POST.get("role"))
+        previous_notification_state = capture_meeting_role_notification_state(None)
         form = BibleStudyMeetingRoleForm(
             request.POST,
             language=language,
@@ -984,6 +989,11 @@ def manage_bible_study_meeting_roles(request, meeting_id):
             role = form.save(commit=False)
             role.meeting = meeting
             role.save()
+            emit_meeting_role_notification(
+                role,
+                previous_state=previous_notification_state,
+                actor=request.user,
+            )
             messages.success(
                 request,
                 "同工分工已保存。" if language == "zh" else "Meeting role saved.",
@@ -1038,6 +1048,10 @@ def edit_bible_study_meeting_role(request, role_id):
         )
 
     if request.method == "POST":
+        # Capture before binding: ModelForm validation mutates ``meeting_role``.
+        previous_notification_state = capture_meeting_role_notification_state(
+            meeting_role
+        )
         form = BibleStudyMeetingRoleForm(
             request.POST,
             instance=meeting_role,
@@ -1046,6 +1060,11 @@ def edit_bible_study_meeting_role(request, role_id):
         )
         if form.is_valid():
             meeting_role = form.save()
+            emit_meeting_role_notification(
+                meeting_role,
+                previous_state=previous_notification_state,
+                actor=request.user,
+            )
             message = (
                 "聚会同工分工已保存。"
                 if language == "zh"

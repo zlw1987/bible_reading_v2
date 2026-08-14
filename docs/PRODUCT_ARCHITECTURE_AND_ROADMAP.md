@@ -1,9 +1,10 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `NOTIFY.1C` (notification app/model/admin/Core delivery-port foundation,
-recipient Notification Center/bell UI, and the first ministry-owned explicit
-ServiceEvent serving-assignment producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
+through `NOTIFY.1D` (notification app/model/admin/Core delivery-port foundation,
+recipient Notification Center/bell UI, the ministry-owned explicit ServiceEvent
+serving-assignment producer, and the studies-owned explicit Bible Study
+meeting-role producer after `REPOSITORY-AUDIT-CLOSEOUT.1A`). Church Calendar V1 remains implemented
 as a model-free, read-only aggregation surface with source providers, month/day
 UI, grouping, limited-trial baseline QA closure, and personal explicit-serving
 overlays through `CHURCH-CALENDAR.2B`. Calendar remains read-only and does not
@@ -195,15 +196,37 @@ The target is the existing exact My Serving assignment-member anchor, and no
 source permission, audience, serving-read, My Serving, Calendar, or UI behavior
 changed.
 
+The product owner completed the defined deployed `NOTIFY.1C` producer smoke QA
+and confirmed that the implemented serving-assignment notification workflow
+worked as expected. This is a narrow deployed workflow result, not browser
+automation or a production, security, accessibility, or hosting certification.
+
+`NOTIFY.1D` adds the second producer, owned by `studies`, after successful
+interactive `BibleStudyMeetingRole` create/edit saves only. The active linked
+`role.user` is the sole recipient. New linked roles, display-only-to-linked
+changes, and reassignment emit `bible_study_role.assigned`; a same-user role-type
+change emits `bible_study_role.updated`, with reassignment taking priority.
+Display-name-only roles and audience, belonging, coworker-role, manager, or
+staff users are not inferred. Notes/display-name edits, unchanged saves,
+confirmation, deletion/removal, lifecycle changes, admin/direct ORM,
+generation/setup/import, and failed writes remain non-notifying. Eligibility
+uses the existing published/completed meeting/lesson/active-series explicit
+serving lifecycle without an audience requirement. The target is the existing
+member-facing meeting detail; an outside-audience explicit role creates no
+audience/membership row, uses the existing exact-meeting read-only serving gate,
+and grants no management permission. No model, migration, UI, Today, My Serving,
+Calendar, permission, visibility, audience, belonging, or serving behavior
+changed.
+
 There is no Today, Calendar, Staff Overview, announcement
 fanout, external delivery, scheduler, background job, queue, retry, or outbox.
-`NOTIFY.1D` and later producer work remain unapproved until separately authorized.
+`NOTIFY.1E` and later producer work remain unapproved until separately authorized.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
 Checklist and advanced scheduling enhancements are still future phases.
 
-The overall project remains in staged development. The stable center is Daily Reading, Prayer, Bible Study V2, ServiceEvent foundation with required MinistryTeams and optional rotation anchors, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, limited Lighting Team Pilot Data/setup support, MO-S.1 scheduling requirements, MO-S.2 required-team data capture, MO-S.3 read-only assignment coverage display, MO-S.4 manual team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, MO-S.5B limited copy-forward suggestions, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C ServiceEvent audience-row migration/guard/retirement work, DOCS-AS.1 shared audience-scope direction, BS-AS.1 / BS-AS.2 / BS-AS.2A Bible Study Schedule audience scope using `ChurchStructureUnit`, BS-STRUCT.1L/1M/1O/1P/2A Bible Study V2 structure-native generation / audience-row visibility cleanup, BS-MEETING-MIRROR.1A mirror removal, BS-V1-SCHEMA-RETIRE.1A V1 schema retirement, My Serving Bible Study role confirmation, and Church Calendar limited-trial baseline integration through ServiceEvent, Bible Study, Announcements, Community Activities, and explicit personal serving overlays; future checklist, scheduling operations, notifications, and future module audience work should be added deliberately and kept within clear boundaries.
+The overall project remains in staged development. The stable center is Daily Reading, Prayer, Bible Study V2, ServiceEvent foundation with required MinistryTeams and optional rotation anchors, generic MinistryTeam foundation, manual TeamAssignment V1, My Serving Page V1, limited Lighting Team Pilot Data/setup support, MO-S.1 scheduling requirements, MO-S.2 required-team data capture, MO-S.3 read-only assignment coverage display, MO-S.4 manual team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, MO-S.5B limited copy-forward suggestions, SE-AS.1 through SERVICE-EVENT-CONTEXT.1C ServiceEvent audience-row migration/guard/retirement work, DOCS-AS.1 shared audience-scope direction, BS-AS.1 / BS-AS.2 / BS-AS.2A Bible Study Schedule audience scope using `ChurchStructureUnit`, BS-STRUCT.1L/1M/1O/1P/2A Bible Study V2 structure-native generation / audience-row visibility cleanup, BS-MEETING-MIRROR.1A mirror removal, BS-V1-SCHEMA-RETIRE.1A V1 schema retirement, My Serving Bible Study role confirmation, and Church Calendar limited-trial baseline integration through ServiceEvent, Bible Study, Announcements, Community Activities, and explicit personal serving overlays; future checklist, scheduling operations, later notification producers/integrations, and future module audience work should be added deliberately and kept within clear boundaries.
 
 Church structure domain planning is now implemented for approved local runtime consumers. `ChurchStructureUnit` is the canonical local structure model, `ChurchStructureMembership` is the canonical local belonging model for migrated consumers, and app-specific audience rows such as `ServiceEventAudienceScope`, `BibleStudySeriesAudienceScope`, and `BibleStudyMeetingAudienceScope` drive approved visibility/generation paths. Legacy `Profile.small_group`, `SmallGroup`, `District`, `MinistryContext`, ServiceEvent legacy scope fields, Bible Study Series legacy scope fields, and the V2 meeting `small_group` mirror have been retired from current models. PP-SA.1 records staff/admin surface planning, PP-SA.2 adds the permission-protected read-only staff overview at `/staff/`, PP-SA.3 completes staff membership request workflow polish, PP-SA.4 completes a permission-protected read-only staff moderation queue at `/staff/moderation/`, and PP-SA.5 completes read-only ministry ops health indicators on `/staff/`. See `docs/CHURCH_STRUCTURE_DOMAIN_PLAN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`, `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`, and `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md`.
 
@@ -460,7 +483,9 @@ These are final CMS product directions, not authorization to implement them now.
 Future CMS scope may include:
 - Prayer Wall continued refinement.
 - Bible Study / small group attendance.
-- Notifications through email, SMS, WeChat, and app notifications.
+- Bounded in-app Notifications are implemented through `NOTIFY.1D`;
+  external delivery such as email, SMS, WeChat, push, and broader
+  notification/reminder behavior remain future unless separately approved.
 - Pastor/staff Official Announcements V1 is now bounded in
   `docs/ANNOUNCEMENTS_V1_PLAN.md`; `ANNOUNCEMENTS.1A` model/admin/visibility
   foundation, `ANNOUNCEMENTS.1B` registry/navigation/member surfaces, and
@@ -609,7 +634,7 @@ Bible Study V2 Flow QA has passed. Historical CS-F bridge work served the pilot 
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam selection when creating or batch-creating ServiceEvents, TeamAssignment pages need required-team coverage with assigned coworkers and confirmation status rather than only counts, and ministry team leaders need an efficient same-type event scheduling entry point for their own team. MO-S.2 completes the first implementation slice by letting staff select required teams on ServiceEvent single create/edit and recurring batch-create. MO-S.3 completes the read-only coverage slice: the `TeamAssignment` list is the primary operational coverage surface, assignment detail shows compact event coverage, ServiceEvent detail shows coverage only to staff/service-event or team-assignment managers, ordinary event viewers do not see coworker coverage, `/staff/` adds upcoming required-team gap counts, and browser automation was blocked but user-completed manual QA accepted the UI. MO-S.4 completes the manual team-leader scheduling workspace, and MO-S.4A completes scheduling semantic cleanup after manual QA: Team detail shows Schedule Team / 安排团队服事 only for users who can manage that team's assignments; staff, superusers, and global assignment managers can schedule any team; Lead and Coordinator roles can schedule their own team assignments; ordinary members, `can_lead`-only members, and unrelated users cannot schedule; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the workspace defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display is structure-native; one active in-page schedule/edit form is selected by event or assignment query parameters.
 
-Required-team coverage is a ministry scheduling clarity need, not Checklist V1. Checklist, availability, swap requests, reminder automation, notifications, automatic scheduling, and advanced scheduling remain future unless separately planned.
+Required-team coverage is a ministry scheduling clarity need, not Checklist V1. Checklist, availability, swap requests, reminder automation, automatic scheduling, advanced scheduling, and broader scheduling-notification behavior remain future unless separately planned; the narrow explicit serving producers implemented under `NOTIFY.1C`/`NOTIFY.1D` remain separate from those deferred scheduling enhancements.
 Checklist V1 remains deferred and should not be revived without pilot feedback proving checklist need separately from required-team coverage.
 
 Before new large features:
@@ -1020,12 +1045,14 @@ closed in `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. Remaining audit items
 are accepted residual, backend-conditional, or opportunistic work; they are not
 automatic next slices and do not authorize unrelated product implementation.
 Product development may resume only through separately approved roadmap slices.
-`NOTIFY.1A` foundation, `NOTIFY.1B` recipient UI, and the narrow ministry-owned
-`NOTIFY.1C` explicit serving-assignment producer are implemented under the
-`NOTIFY.0B` architecture; product-owner manual rendered QA passed for the
-current limited-trial/product stage only, not as production, security,
-accessibility, or hosting certification, and `NOTIFY.1D` and later producer work
-remain separately unapproved.
+`NOTIFY.1A` foundation, `NOTIFY.1B` recipient UI, the narrow ministry-owned
+`NOTIFY.1C` explicit serving-assignment producer, and the narrow studies-owned
+`NOTIFY.1D` explicit Bible Study meeting-role producer are implemented under the
+`NOTIFY.0B` architecture. Product-owner manual rendered QA passed for the 1B UI,
+and the product owner separately completed the defined deployed 1C producer
+smoke QA successfully; these are bounded workflow results, not production,
+security, accessibility, or hosting certification. `NOTIFY.1E` and later
+producer work remain separately unapproved.
 
 Short next-candidate list:
 

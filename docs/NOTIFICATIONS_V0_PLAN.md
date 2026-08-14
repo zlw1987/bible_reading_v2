@@ -128,6 +128,31 @@ implemented primary-creator Community Activity review-notification workflow.
 This is a narrow user-confirmed workflow result, not browser automation or a
 production, security, accessibility, or hosting certification.
 
+### NOTIFY.1F Deployed Manual QA Closure
+
+The product owner completed deployed `NOTIFY.1F` manual QA successfully for
+the implemented recipient read/open/pagination UI. The confirmed scope covered
+unread Notification → POST Open → source-owned target behavior, bell unread
+count decrement, returning to the Notification Center with the row shown as
+Read, manual mark-one and mark-all actions, pagination controls and paginated
+center behavior, desktop/mobile usability, and English/Chinese labels. This is
+a bounded user-confirmed manual QA result, not browser automation or a
+production, security, accessibility, hosting, scale, or cross-browser
+certification.
+
+Notification V0 current limited-trial scope is closed through `NOTIFY.1F`.
+This closure is limited to the currently authorized in-app V0 scope: the
+registered/gateable Notifications module, notifications-owned persistence, the
+Core directed delivery port, recipient Center/bell/read UI, the three explicit
+ministry/studies/Community Activities producers, and the retain-for-now
+policy. Serving cancellation/removal notifications, announcement/audience
+fanout, Community Activity signup/capacity/co-organizer/audience notifications,
+reminders and automatic reminder scheduling, email/SMS/WeChat/push/external
+delivery, preferences, mark-unread, delete/archive, search/filtering, retention
+cleanup/purge, Today/Calendar/My Serving/Staff Overview integration, and
+queue/outbox/retry/background-job work remain separately deferred and
+unapproved.
+
 ## 2. Purpose
 
 Notifications are per-user directed records for important changes or actions

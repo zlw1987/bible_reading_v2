@@ -6,7 +6,10 @@ recipient-scoped center/bell UI, the ministry-owned explicit ServiceEvent
 serving-assignment producer, and the studies-owned explicit Bible Study
 meeting-role producer, the Community Activities-owned primary-creator
 review-outcome producer, recipient POST Open/read behavior, 25-row center
-pagination, and retain-for-now policy).
+pagination, and retain-for-now policy). Deployed `NOTIFY.1F` manual QA passed
+for the implemented recipient read/open/pagination UI, and the current
+limited-trial Notification V0 scope is closed through `NOTIFY.1F`; later
+producers, integrations, and cleanup remain separately deferred.
 `CHURCH-CALENDAR.1A` implements the model-free,
 read-only Church Calendar foundation, `CHURCH-CALENDAR.1B` adds the four
 member-safe source range providers/adapters, `CHURCH-CALENDAR.1C` implements
@@ -733,6 +736,16 @@ notifications, or `ServiceEvent`.
    closed without changing read state. The center paginates 25 newest-first rows;
    mark-one may return to its page, mark-all remains recipient-wide, and current
    Notification rows are retained for now without a cleanup/purge command.
+
+   The product owner completed deployed `NOTIFY.1F` manual QA successfully for
+   the implemented recipient read/open/pagination UI, including Open-to-source
+   behavior, unread-count/read-state updates, mark-one/mark-all behavior,
+   pagination usability, desktop/mobile rendering, and English/Chinese labels.
+   This is a bounded user-confirmed manual QA result, not browser automation or
+   a production, security, accessibility, hosting, scale, or cross-browser
+   certification. Notification V0 current limited-trial scope is closed through
+   `NOTIFY.1F`; later producers, integrations, and retention cleanup remain
+   separately deferred and unapproved.
 
    The center queries only its current
    recipient and renders only bounded stored fields; registered source labels

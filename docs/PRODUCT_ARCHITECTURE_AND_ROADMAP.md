@@ -241,12 +241,14 @@ read and redirects only to its safe stored internal target, while the source
 target remains authoritative for permission. The center is newest-first
 paginated at 25 rows, mark-one can return to its current page, mark-all remains
 recipient-wide, and the retain-for-now policy adds no cleanup command. The
-product owner completed deployed `NOTIFY.1E` smoke QA successfully for the
-implemented primary-creator review-notification workflow; this is a narrow
-user-confirmed result, not browser automation or production, security,
-accessibility, or hosting certification. There is no Today, Calendar, Staff
-Overview, announcement fanout, external delivery, scheduler, background job,
-queue, retry, outbox, mark-unread, delete/archive, search, or preferences.
+product owner completed deployed `NOTIFY.1F` manual QA successfully for the
+implemented recipient read/open/pagination UI; this is a narrow user-confirmed
+result, not browser automation or production, security, accessibility,
+hosting, scale, or cross-browser certification. Notification V0 current
+limited-trial scope is closed through `NOTIFY.1F`. There is no Today, Calendar,
+Staff Overview, announcement/audience fanout, external delivery, scheduler,
+background job, queue, retry, outbox, mark-unread, delete/archive, search, or
+preferences; broader notification expansion remains separately deferred.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -1093,12 +1095,18 @@ Product development may resume only through separately approved roadmap slices.
 Activities-owned `NOTIFY.1E` primary-creator review-outcome producer, and
 `NOTIFY.1F` recipient read/open and pagination polish are
 implemented under the `NOTIFY.0B` architecture. Product-owner manual rendered
-QA passed for the 1B UI, and the product owner separately completed the defined
-deployed 1C, 1D, and 1E producer smoke QA successfully; these are
-bounded workflow results, not browser automation or production, security,
-accessibility, or hosting certification. Later producers, external delivery,
-cleanup automation, and broader notification behavior remain separately
-unapproved.
+QA passed for the 1B UI, the product owner separately completed the defined
+deployed 1C, 1D, and 1E producer smoke QA successfully, and deployed 1F manual
+QA passed for the implemented recipient read/open/pagination UI. The confirmed
+1F result covered Open-to-source behavior, unread-count/read-state updates,
+mark-one/mark-all behavior, pagination, desktop/mobile usability, and
+English/Chinese labels. These are bounded user-confirmed results, not browser
+automation or production, security, accessibility, hosting, scale, or
+cross-browser certification. Notification V0 current limited-trial scope is
+closed through `NOTIFY.1F`; broader notification product expansion remains
+separately deferred and unapproved. Product work should return to limited-trial
+feedback and separately approved roadmap slices rather than continuing
+Notification expansion by default.
 
 Short next-candidate list:
 

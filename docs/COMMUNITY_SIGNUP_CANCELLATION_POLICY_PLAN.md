@@ -332,7 +332,9 @@ Consistent current-state claims:
   `docs/CHURCH_CALENDAR_V1_PLAN.md`, and `docs/STAFF_SETUP_GUIDE.en.md`
   support the boundaries that Community Activities are independent,
   member-facing attendance intent, not official Church Gatherings or serving.
-- `docs/NOTIFICATIONS_V0_PLAN.md` says no notifications runtime is implemented.
+- `docs/NOTIFICATIONS_V0_PLAN.md` records the implemented Notification V0
+  runtime through `NOTIFY.1F`; this signup/cancellation policy remains
+  deliberately non-notifying and has no approved signup lifecycle producer.
 
 0A documentation findings and 1A closeout:
 
@@ -407,7 +409,8 @@ Activities V1:
 - It creates staff workflow for unofficial member-organized activities.
 - It delays capacity release and makes full-activity behavior noisier.
 - It implies an operational seriousness closer to official events or serving.
-- No current model, route, or notification runtime supports this lifecycle.
+- No current model, route, or signup/cancellation notification producer
+  supports this lifecycle.
 
 Do not choose this for ordinary V1 member cancellation.
 
@@ -494,7 +497,9 @@ Notifications:
 
 - Produce no notifications in the first implementation slice.
 - Do not add email, SMS, push, scheduler, broadcast delivery, or a notification
-  producer. The current Notifications V0 plan is planning-only.
+  producer for signup, cancellation, or reactivation. Notification V0 is now
+  implemented through `NOTIFY.1F`, but this signup/cancellation policy still
+  has no approved notification producer.
 
 ## 11. State-Transition Rules
 
@@ -564,7 +569,8 @@ Cancellation should have no effect on:
 - `ChurchStructureMembership`.
 - Bible Study roles.
 - Staff permissions, co-organizer permission, or member authority.
-- Notifications, because no notification runtime or producer should be added.
+- Notifications: Notification V0 exists, but signup, cancellation, and
+  reactivation remain deliberately non-notifying and have no approved producer.
 
 Repository evidence supports the no-effect boundary through `today_provider`,
 `calendar_provider`, `core/module_registry.py`, `MODULE_BOUNDARIES.md`, and the

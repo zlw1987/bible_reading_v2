@@ -213,7 +213,7 @@ class NotificationCenterTests(TestCase):
         self.assertNotContains(response, "Recipient only")
         self.assertNotContains(response, "Other private title")
 
-    def test_center_renders_newest_first_and_stored_target_without_source_lookup(self):
+    def test_center_renders_newest_first_and_open_action_without_source_lookup(self):
         older = self.create_notification(title="Older notification")
         newer = self.create_notification(title="Newer notification")
         Notification.objects.filter(pk=older.pk).update(
@@ -227,7 +227,8 @@ class NotificationCenterTests(TestCase):
         content = response.content.decode()
 
         self.assertLess(content.index("Newer notification"), content.index("Older notification"))
-        self.assertContains(response, "/studies/meetings/42/")
+        self.assertContains(response, reverse("open_notification", args=[newer.id]))
+        self.assertNotContains(response, "/studies/meetings/42/")
         self.assertContains(response, "Bible Study")
 
     def test_empty_state_is_localized(self):
@@ -319,6 +320,99 @@ class NotificationCenterTests(TestCase):
         notification.refresh_from_db()
         self.assertEqual(notification.read_at, first_read_at)
 
+    def test_mark_one_read_returns_to_valid_current_page(self):
+        notifications = [
+            self.create_notification(title=f"Notification {index}")
+            for index in range(26)
+        ]
+        self.client.force_login(self.recipient)
+
+        response = self.client.post(
+            reverse("mark_notification_read", args=[notifications[0].id]),
+            {"page": "2"},
+        )
+
+        self.assertRedirects(response, f"{reverse('notification_center')}?page=2")
+
+    def test_open_unread_notification_marks_read_and_redirects_to_internal_target(self):
+        notification = self.create_notification(
+            target_url="/my-serving/?tab=all#serving-assignment-123"
+        )
+        self.client.force_login(self.recipient)
+
+        response = self.client.post(reverse("open_notification", args=[notification.id]))
+
+        self.assertRedirects(
+            response,
+            notification.target_url,
+            fetch_redirect_response=False,
+        )
+        notification.refresh_from_db()
+        self.assertIsNotNone(notification.read_at)
+
+    def test_open_preserves_existing_read_at(self):
+        read_at = timezone.now() - timedelta(hours=1)
+        notification = self.create_notification(read_at=read_at)
+        self.client.force_login(self.recipient)
+
+        response = self.client.post(reverse("open_notification", args=[notification.id]))
+
+        self.assertRedirects(
+            response,
+            notification.target_url,
+            fetch_redirect_response=False,
+        )
+        notification.refresh_from_db()
+        self.assertEqual(notification.read_at, read_at)
+
+    def test_open_is_post_only_and_recipient_scoped(self):
+        notification = self.create_notification()
+        other_notification = self.create_notification(self.other)
+        self.client.force_login(self.recipient)
+
+        get_response = self.client.get(reverse("open_notification", args=[notification.id]))
+        other_response = self.client.post(
+            reverse("open_notification", args=[other_notification.id])
+        )
+
+        self.assertEqual(get_response.status_code, 405)
+        self.assertEqual(other_response.status_code, 404)
+        notification.refresh_from_db()
+        other_notification.refresh_from_db()
+        self.assertIsNone(notification.read_at)
+        self.assertIsNone(other_notification.read_at)
+
+    def test_open_fails_closed_for_unsafe_stored_targets(self):
+        external = self.create_notification(target_url="https://example.com/unsafe")
+        protocol_relative = self.create_notification(target_url="//example.com/unsafe")
+        javascript_target = self.create_notification(target_url="javascript:alert('unsafe')")
+        malformed_target = self.create_notification(target_url="not-a-relative-path")
+        self.client.force_login(self.recipient)
+
+        external_response = self.client.post(reverse("open_notification", args=[external.id]))
+        protocol_relative_response = self.client.post(
+            reverse("open_notification", args=[protocol_relative.id])
+        )
+        javascript_response = self.client.post(
+            reverse("open_notification", args=[javascript_target.id])
+        )
+        malformed_response = self.client.post(
+            reverse("open_notification", args=[malformed_target.id])
+        )
+
+        self.assertEqual(external_response.status_code, 404)
+        self.assertEqual(protocol_relative_response.status_code, 404)
+        self.assertEqual(javascript_response.status_code, 404)
+        self.assertEqual(malformed_response.status_code, 404)
+        external.refresh_from_db()
+        protocol_relative.refresh_from_db()
+        javascript_target.refresh_from_db()
+        malformed_target.refresh_from_db()
+        self.assertIsNone(external.read_at)
+        self.assertIsNone(protocol_relative.read_at)
+        self.assertIsNone(javascript_target.read_at)
+        self.assertIsNone(malformed_target.read_at)
+
     def test_mark_one_read_fails_closed_for_another_recipient(self):
         notification = self.create_notification(self.other)
         self.client.force_login(self.recipient)
@@ -334,6 +428,10 @@ class NotificationCenterTests(TestCase):
     def test_mark_all_read_is_post_only_recipient_scoped_and_idempotent(self):
         unread_one = self.create_notification(title="Unread one")
         unread_two = self.create_notification(title="Unread two")
+        later_page_unread = [
+            self.create_notification(title=f"Later page unread {index}")
+            for index in range(24)
+        ]
         earlier_read_at = timezone.now() - timedelta(hours=1)
         already_read = self.create_notification(
             title="Already read",
@@ -354,6 +452,12 @@ class NotificationCenterTests(TestCase):
         other_unread.refresh_from_db()
         self.assertIsNotNone(unread_one.read_at)
         self.assertIsNotNone(unread_two.read_at)
+        self.assertTrue(
+            all(
+                Notification.objects.get(pk=notification.pk).read_at is not None
+                for notification in later_page_unread
+            )
+        )
         self.assertEqual(already_read.read_at, earlier_read_at)
         self.assertIsNone(other_unread.read_at)
 
@@ -361,6 +465,60 @@ class NotificationCenterTests(TestCase):
         self.client.post(reverse("mark_all_notifications_read"))
         unread_one.refresh_from_db()
         self.assertEqual(unread_one.read_at, first_read_at)
+
+    def test_center_paginates_only_recipient_rows_newest_first(self):
+        notifications = [
+            self.create_notification(title=f"Recipient notification {index}")
+            for index in range(27)
+        ]
+        for index, notification in enumerate(notifications):
+            Notification.objects.filter(pk=notification.pk).update(
+                created_at=timezone.now() + timedelta(seconds=index)
+            )
+        self.create_notification(self.other, title="Other recipient newest")
+        self.client.force_login(self.recipient)
+        self.set_language("en")
+
+        first_page = self.client.get(reverse("notification_center"))
+        second_page = self.client.get(f"{reverse('notification_center')}?page=2")
+
+        first_page_ids = [
+            item["notification"].pk for item in first_page.context["notification_items"]
+        ]
+        second_page_ids = [
+            item["notification"].pk for item in second_page.context["notification_items"]
+        ]
+        expected_ids = list(reversed([notification.pk for notification in notifications]))
+        self.assertEqual(first_page_ids, expected_ids[:25])
+        self.assertEqual(second_page_ids, expected_ids[25:])
+        self.assertEqual(first_page.context["page_obj"].number, 1)
+        self.assertEqual(second_page.context["page_obj"].number, 2)
+        self.assertContains(first_page, "Page 1 of 2")
+        self.assertContains(second_page, "Page 2 of 2")
+        self.assertContains(second_page, 'name="page" value="2"')
+        self.assertNotContains(first_page, "Other recipient newest")
+        self.assertNotContains(second_page, "Other recipient newest")
+
+    def test_center_invalid_page_input_uses_safe_paginator_page(self):
+        self.create_notification()
+        self.client.force_login(self.recipient)
+
+        non_integer_response = self.client.get(f"{reverse('notification_center')}?page=invalid")
+        out_of_range_response = self.client.get(f"{reverse('notification_center')}?page=999")
+
+        self.assertEqual(non_integer_response.status_code, 200)
+        self.assertEqual(out_of_range_response.status_code, 200)
+        self.assertEqual(non_integer_response.context["page_obj"].number, 1)
+        self.assertEqual(out_of_range_response.context["page_obj"].number, 1)
+
+    def test_bell_unread_count_falls_after_open(self):
+        notification = self.create_notification()
+        self.client.force_login(self.recipient)
+
+        self.client.post(reverse("open_notification", args=[notification.id]))
+        response = self.client.get(reverse("profile"))
+
+        self.assertNotContains(response, 'class="notification-unread-badge"')
 
     def test_authenticated_bell_is_localized_and_counts_only_own_unread_rows(self):
         self.create_notification(title="Unread one")

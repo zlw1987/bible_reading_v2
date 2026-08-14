@@ -1,15 +1,44 @@
 """Recipient-scoped Notification Center views (NOTIFY.1B)."""
 
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from accounts.language import get_user_language
 from core.module_registry import get_module
 
 from .models import Notification
+
+
+NOTIFICATIONS_PER_PAGE = 25
+
+
+def _is_safe_internal_target(target_url):
+    """Keep persisted historical targets from becoming open redirects."""
+
+    return (
+        isinstance(target_url, str)
+        and target_url.startswith("/")
+        and not target_url.startswith("//")
+        and url_has_allowed_host_and_scheme(target_url, allowed_hosts=set())
+    )
+
+
+def _notification_center_redirect(page_value):
+    """Return to a positive integer center page without accepting arbitrary URLs."""
+
+    try:
+        page_number = int(page_value)
+    except (TypeError, ValueError):
+        return redirect("notification_center")
+    if page_number < 1:
+        return redirect("notification_center")
+    return redirect(f"{reverse('notification_center')}?page={page_number}")
 
 
 def _source_label(source_module, language):
@@ -33,12 +62,15 @@ def notification_center(request):
         "-created_at",
         "-pk",
     )
+    page_obj = Paginator(notifications, NOTIFICATIONS_PER_PAGE).get_page(
+        request.GET.get("page")
+    )
     notification_items = [
         {
             "notification": notification,
             "source_label": _source_label(notification.source_module, language),
         }
-        for notification in notifications
+        for notification in page_obj.object_list
     ]
     return render(
         request,
@@ -46,6 +78,7 @@ def notification_center(request):
         {
             "active_nav": "notifications",
             "notification_items": notification_items,
+            "page_obj": page_obj,
         },
     )
 
@@ -66,7 +99,28 @@ def mark_notification_read(request, notification_id):
     ).exists():
         # Do not reveal whether another recipient has this identifier.
         raise Http404("Notification not available.")
-    return redirect("notification_center")
+    return _notification_center_redirect(request.POST.get("page"))
+
+
+@login_required
+@require_POST
+def open_notification(request, notification_id):
+    """Mark a recipient notification read, then open its safe stored target."""
+
+    notification = get_object_or_404(
+        Notification,
+        pk=notification_id,
+        recipient=request.user,
+    )
+    if not _is_safe_internal_target(notification.target_url):
+        # Do not expose, repair, or follow unsafe historical/direct-ORM targets.
+        raise Http404("Notification target not available.")
+    if notification.read_at is None:
+        Notification.objects.filter(
+            pk=notification.pk,
+            read_at__isnull=True,
+        ).update(read_at=timezone.now())
+    return redirect(notification.target_url)
 
 
 @login_required

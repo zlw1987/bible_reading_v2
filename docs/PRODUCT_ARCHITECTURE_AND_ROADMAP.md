@@ -1,7 +1,7 @@
 # Product Architecture and Roadmap
 
 Status: canonical current-state product architecture and roadmap, current
-through `NOTIFY.1E` (notification app/model/admin/Core delivery-port foundation,
+through `NOTIFY.1F` (notification app/model/admin/Core delivery-port foundation,
 recipient Notification Center/bell UI, the ministry-owned explicit ServiceEvent
 serving-assignment producer, the studies-owned explicit Bible Study meeting-role
 producer, and the Community Activities-owned primary-creator review-outcome
@@ -236,9 +236,17 @@ review/audience content. No model, migration, signal, UI, Today, Calendar, My
 Serving, permission, visibility, audience, belonging, serving, or
 `ServiceEvent` relationship changed.
 
-There is no Today, Calendar, Staff Overview, announcement
-fanout, external delivery, scheduler, background job, queue, retry, or outbox.
-`NOTIFY.1F` and later work remain unapproved until separately authorized.
+`NOTIFY.1F` adds recipient-scoped POST Open: it marks an unread notification
+read and redirects only to its safe stored internal target, while the source
+target remains authoritative for permission. The center is newest-first
+paginated at 25 rows, mark-one can return to its current page, mark-all remains
+recipient-wide, and the retain-for-now policy adds no cleanup command. The
+product owner completed deployed `NOTIFY.1E` smoke QA successfully for the
+implemented primary-creator review-notification workflow; this is a narrow
+user-confirmed result, not browser automation or production, security,
+accessibility, or hosting certification. There is no Today, Calendar, Staff
+Overview, announcement fanout, external delivery, scheduler, background job,
+queue, retry, outbox, mark-unread, delete/archive, search, or preferences.
 
 MO-S.1 Ministry Scheduling Requirements Plan is complete as docs-only planning for real pilot feedback about required ministry teams, assignment coverage display, and team-leader scheduling workflow. MO-S.2 Event Required-Team implementation, MO-S.3 read-only assignment coverage display, MO-S.4 team-leader scheduling workspace, MO-S.4A scheduling semantic cleanup, MO-S.5A rotation anchor foundation, and MO-S.5B limited copy-forward suggestion helper are complete.
 
@@ -502,7 +510,9 @@ These are final CMS product directions, not authorization to implement them now.
 Future CMS scope may include:
 - Prayer Wall continued refinement.
 - Bible Study / small group attendance.
-- Bounded in-app Notifications are implemented through `NOTIFY.1E`;
+- Bounded in-app Notifications are implemented through `NOTIFY.1F`, including
+  recipient-owned POST Open/read behavior, 25-row center pagination, and a
+  retain-for-now policy without a cleanup command;
   external delivery such as email, SMS, WeChat, push, and broader
   notification/reminder behavior remain future unless separately approved.
 - Pastor/staff Official Announcements V1 is now bounded in
@@ -1080,13 +1090,15 @@ Product development may resume only through separately approved roadmap slices.
 `NOTIFY.1A` foundation, `NOTIFY.1B` recipient UI, the narrow ministry-owned
 `NOTIFY.1C` explicit serving-assignment producer, the narrow studies-owned
 `NOTIFY.1D` explicit Bible Study meeting-role producer, and the narrow Community
-Activities-owned `NOTIFY.1E` primary-creator review-outcome producer are
+Activities-owned `NOTIFY.1E` primary-creator review-outcome producer, and
+`NOTIFY.1F` recipient read/open and pagination polish are
 implemented under the `NOTIFY.0B` architecture. Product-owner manual rendered
 QA passed for the 1B UI, and the product owner separately completed the defined
-deployed 1C producer smoke QA and deployed 1D smoke QA successfully; these are
+deployed 1C, 1D, and 1E producer smoke QA successfully; these are
 bounded workflow results, not browser automation or production, security,
-accessibility, or hosting certification. `NOTIFY.1F` and later work remain
-separately unapproved.
+accessibility, or hosting certification. Later producers, external delivery,
+cleanup automation, and broader notification behavior remain separately
+unapproved.
 
 Short next-candidate list:
 

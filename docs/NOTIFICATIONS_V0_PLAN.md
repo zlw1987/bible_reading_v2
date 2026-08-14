@@ -1,13 +1,14 @@
 # Notification V0 Plan
 
-Status: current through `NOTIFY.1E`. The app/model/admin/Core delivery-port
+Status: current through `NOTIFY.1F`. The app/model/admin/Core delivery-port
 foundation, recipient-scoped Notification Center/bell UI, the ministry-owned
 explicit ServiceEvent serving-assignment producer, and the studies-owned
 explicit Bible Study meeting-role producer, and the Community Activities-owned
-primary-creator review-outcome producer are implemented.
+primary-creator review-outcome producer, recipient-owned read/open behavior,
+pagination, and retain-for-now policy are implemented.
 
 This document is the implementation boundary for Notification V0. The completed
-`NOTIFY.1A` through `NOTIFY.1E` scopes are recorded below; later producers,
+`NOTIFY.1A` through `NOTIFY.1F` scopes are recorded below; later producers,
 background jobs, external delivery, and permission changes still require
 separate approval.
 
@@ -71,6 +72,19 @@ writes, and reads emit nothing. The target is the existing creator-safe member
 activity detail, and the stored snapshot excludes the review note and other
 private review/audience content.
 
+`NOTIFY.1F` closes the currently authorized limited-trial V0 polish scope:
+recipient-scoped POST Open marks an unread Notification read and then redirects
+only to its safe stored internal target, while that source-owned target remains
+the permission authority. The center is newest-first paginated at 25 rows per
+page; mark-one can return to its current page, and mark-all remains
+recipient-wide rather than page-only. No mark-unread, deletion/archive, search,
+preferences, producer, or shared-surface behavior was added. Notification rows
+are retained for now: V0 use has only just begun, volume and snapshots are
+intentionally bounded, read/unread history remains useful, and there is no trial
+evidence for a safe deletion threshold. Any future cleanup requires real usage
+evidence, separate approval, a dry-run-by-default policy, and must never mutate
+source data.
+
 `NOTIFY.1B` adds no Today/Calendar/My Serving/Staff
 Overview integration, announcement fanout, external channel, scheduler,
 background job, queue, retry framework, outbox, preference, deletion, archive,
@@ -106,6 +120,13 @@ certification.
 The product owner completed deployed `NOTIFY.1D` smoke QA successfully. This is
 the user-confirmed result of a narrow deployed smoke test, not browser
 automation or a production, security, accessibility, or hosting certification.
+
+### NOTIFY.1E Deployed Smoke QA
+
+The product owner completed deployed `NOTIFY.1E` smoke QA successfully for the
+implemented primary-creator Community Activity review-notification workflow.
+This is a narrow user-confirmed workflow result, not browser automation or a
+production, security, accessibility, or hosting certification.
 
 ## 2. Purpose
 
@@ -361,11 +382,13 @@ event.
 
 ### Retention And Cleanup
 
-V0 can start with retained records and a documented future cleanup review.
-Retention should later consider old read notifications, deleted source objects,
-and privacy-sensitive text snapshots.
-
-Cleanup must not delete or mutate source-module data.
+Notification rows are retained for now. Real V0 usage has only just begun,
+volume is intentionally low, stored snapshots are deliberately bounded, and
+read/unread history remains useful; there is not yet trial evidence for a safe
+deletion threshold. No cleanup or purge command exists. Revisit retention only
+after real limited-trial evidence about volume, usefulness, and privacy, through
+a separately approved dry-run-by-default slice that never deletes or mutates
+source-module data.
 
 ### Privacy
 
@@ -752,22 +775,18 @@ dedupe, stale/invalid actions, resubmission non-production, disabled
 Notifications, direct ORM non-production, and the existing source lifecycle and
 Core/1C/1D regressions.
 
-### NOTIFY.1F Read/unread Polish And Cleanup/retention Review
+### NOTIFY.1F Read/Open Polish, Pagination, And Retention Decision
 
-Goal: improve read/unread ergonomics and decide the first retention policy after
-real V0 usage.
-
-Likely files: notification views/templates/services/tests, optional cleanup
-management command if separately approved.
-
-Risk: medium; cleanup must not mutate source data and must preserve audit/useful
-records until retention rules are explicit.
-
-Suggested agent: Codex.
-
-Targeted tests/checks: read/unread tests, retention or cleanup dry-run tests if a
-command is added, `manage.py check`, `git diff --check`, browser QA if rendered
-UI changes.
+Status: implemented. The recipient-scoped POST Open action marks an unread row
+read and redirects only to its stored safe relative internal target; invalid
+historical/direct-ORM targets fail closed without changing read state. The center
+uses standard newest-first pagination at 25 rows per page, and mark-one preserves
+a valid current-page return. Mark-all remains recipient-wide. Notification rows
+are retained for now; no cleanup/purge command exists. Later retention cleanup
+requires real limited-trial evidence and separate approval, must default to
+dry-run, and must never mutate source data. This adds no producer, mark-unread,
+delete/archive, search, preferences, external delivery, scheduler, or shared
+surface integration.
 
 Fable 5 should be reserved for hard architecture/planning questions. It is not
 needed for routine docs, model, simple UI, or focused producer slices.
@@ -778,10 +797,12 @@ Keep `NOTIFY.1A` as the completed delivery foundation, `NOTIFY.1B` as the
 completed notification-owned recipient UI boundary, `NOTIFY.1C` as the first
 narrow ministry-owned producer, and `NOTIFY.1D` as the second narrow
 studies-owned producer. `NOTIFY.1E` is the third narrow producer, owned by
-Community Activities for primary-creator staff-review outcomes only. None
-changes target permission, audience, belonging, or source serving semantics.
+Community Activities for primary-creator staff-review outcomes only; `NOTIFY.1F`
+completes the current limited-trial V0 recipient read/open and pagination polish
+with a retain-for-now policy. None changes target permission, audience,
+belonging, or source serving semantics.
 
 Additional producers may be added one at a time only in separately approved
-`NOTIFY.1F+` slices. Each producer must prove
+later slices. Each producer must prove
 recipient selection, idempotency, disabled-module behavior, and permission
 neutrality in its own focused tests before another producer is added.

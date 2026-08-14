@@ -176,7 +176,11 @@ POST-only mark-one/mark-all read actions, and an enabled-only notifications-owne
 bilingual utility bell with a recipient unread count. It is not ordinary primary
 navigation and does not grant target permission: target paths remain ordinary
 links to source-owned protected surfaces. Anonymous and disabled-module shared
-shells perform no notification count query.
+shells perform no notification count query. Product-owner manual rendered QA
+passed for the desktop/mobile, English/Chinese, read-state, bell/count, target,
+and shared-navigation scope; this supports the current limited-trial/product
+stage only, not a broad production, accessibility, security, or hosting
+readiness claim.
 
 There is still no producer, so normal product workflows create no Notification
 rows. There is no Today, Calendar, My Serving, Staff Overview, announcement
@@ -1004,8 +1008,11 @@ closed in `docs/REPOSITORY_AUDIT_GAP_COMPLETION_PLAN.md`. Remaining audit items
 are accepted residual, backend-conditional, or opportunistic work; they are not
 automatic next slices and do not authorize unrelated product implementation.
 Product development may resume only through separately approved roadmap slices.
-`NOTIFY.1A` is now implemented as foundation-only work under the `NOTIFY.0B`
-architecture; it does not authorize `NOTIFY.1B`, `NOTIFY.1C`, or later work.
+`NOTIFY.1A` foundation and `NOTIFY.1B` recipient UI are implemented under the
+`NOTIFY.0B` architecture; product-owner manual rendered QA passed for the
+current limited-trial/product stage only, not as production, security,
+accessibility, or hosting certification, and `NOTIFY.1C` and later producer work
+remain separately unapproved.
 
 Short next-candidate list:
 

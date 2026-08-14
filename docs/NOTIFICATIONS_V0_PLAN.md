@@ -42,6 +42,19 @@ or search behavior. A notification target remains permission-neutral: the
 stored internal target path is rendered without source-model lookup, and that
 owning target still enforces its own access rules.
 
+### NOTIFY.1B Manual QA Closure
+
+Product-owner manual rendered QA passed for the deployed `NOTIFY.1B` UI. The
+confirmed scope covers desktop ordinary authenticated and staff users, mobile
+navigation/drawer, English and Chinese UI, zero and multiple unread states, the
+bell and unread count, Notification Center, mark-one and mark-all read actions,
+target links, and Staff, Account, Grow, and Community navigation.
+
+The current recipient UI is acceptable for the present limited-trial/product
+stage. This manual QA result is not a broad production-readiness,
+accessibility-certification, security-certification, or hosting-certification
+claim, and it does not represent browser automation.
+
 ## 2. Purpose
 
 Notifications are per-user directed records for important changes or actions

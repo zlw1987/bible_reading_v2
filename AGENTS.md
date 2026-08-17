@@ -28,9 +28,12 @@ Do not reintroduce removed legacy fields/models/tables or delete any remaining h
 
 ## Repo and workflow
 
-Repo path:
+Repository location:
 
-`E:\bible-reading\bible_reading_v2`
+* The repository may live at different absolute paths on different machines.
+* Use the current Git working tree as authoritative, verify that it is the Bible
+  Reading V2 repository, and report its resolved absolute path at task start and
+  end. Do not require one fixed machine-local path.
 
 Default current workflow:
 
@@ -42,6 +45,11 @@ Default current workflow:
   * `git merge --ff-only origin/master`
   * `git status --short`
 * If the tree is dirty before the task, stop and report the dirty files.
+  For an explicitly authorized continuation of identified uncommitted work,
+  first verify that the actual dirty set matches the expected continuation
+  scope. Proceed only when it matches; stop and report any unexpected or
+  unexplained change. This exception does not authorize unrelated cleanup or
+  scope expansion.
 * Do not stage, commit, or push unless the user explicitly asks.
 * Never commit local DB files, backups, logs, or generated artifacts not required by the task.
 * End every task with:
@@ -58,8 +66,13 @@ Do not run the full test suite unless explicitly required.
 
 Prefer targeted checks:
 
-* `E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
-* `E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe manage.py check`
+* Run repository commands from the verified current Git worktree. Prefer its
+  repository-local virtual-environment interpreter by relative path; do not
+  assume a drive letter or fixed absolute repository path, and do not silently
+  fall back to an unrelated global Python. If the expected local interpreter
+  is unavailable, stop and report that fact.
+* `.\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+* `.\.venv\Scripts\python.exe manage.py check`
 * focused Django test classes/modules for the changed app
 * command dry-runs for management command work
 * `git diff --check`

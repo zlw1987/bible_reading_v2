@@ -77,7 +77,7 @@ does not mutate membership rows or certify deployment.
 ## How to run
 
 ```powershell
-E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe manage.py audit_trial_setup_readiness
+.\.venv\Scripts\python.exe manage.py audit_trial_setup_readiness
 ```
 
 Options:

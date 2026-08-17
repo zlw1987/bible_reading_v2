@@ -15,6 +15,11 @@ urlpatterns = [
         name="lighting_pilot_import",
     ),
     path("assignments/", views.team_assignment_list, name="team_assignment_list"),
+    path(
+        "assignments/sunday-board/",
+        views.sunday_schedule_board,
+        name="sunday_schedule_board",
+    ),
     path("assignments/new/", views.create_team_assignment, name="create_team_assignment"),
     path(
         "assignments/<int:assignment_id>/",

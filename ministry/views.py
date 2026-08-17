@@ -91,6 +91,7 @@ from .services.lighting_pilot_import import (
     import_lighting_pilot,
     read_csv_file,
 )
+from .services.sunday_schedule_board import build_sunday_schedule_board
 from .structure_map import (
     build_ministry_structure_map,
     build_team_structure_setup_summary,
@@ -144,6 +145,9 @@ def ministry_ui_text(language, key):
             "team_not_assignable": (
                 "This ministry unit is not assignable for serving assignments."
             ),
+            "board_no_permission": (
+                "You do not have permission to view the Sunday Schedule Board."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理事工团队的权限。",
@@ -175,6 +179,7 @@ def ministry_ui_text(language, key):
             "event_not_available": "这个聚会事件不适用于这个团队排班。",
             "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
             "team_not_assignable": "这个事工单位目前不可用于服事排班。",
+            "board_no_permission": "你没有查看主日服事排班总览的权限。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -1340,6 +1345,31 @@ def ministry_team_detail(request, team_id):
                 else None
             ),
         },
+    )
+
+
+@login_required
+@require_GET
+def sunday_schedule_board(request):
+    language = get_user_language(request)
+    global_assignment_manager = can_manage_team_assignments(request.user)
+    manageable_team_ids = set(
+        manageable_assignment_teams(request.user).values_list("id", flat=True)
+    )
+    if not global_assignment_manager and not manageable_team_ids:
+        messages.error(request, ministry_ui_text(language, "board_no_permission"))
+        return redirect("my_serving")
+
+    board = build_sunday_schedule_board(
+        user=request.user,
+        manageable_team_ids=manageable_team_ids,
+        global_assignment_manager=global_assignment_manager,
+        language=language,
+    )
+    return render(
+        request,
+        "ministry/sunday_schedule_board.html",
+        {"board": board},
     )
 
 

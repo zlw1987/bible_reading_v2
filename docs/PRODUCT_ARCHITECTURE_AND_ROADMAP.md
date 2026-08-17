@@ -490,10 +490,10 @@ Future pieces include:
 - Swap requests
 - Reminder automation
 - Limited rotation/copy-forward helper, completed as bounded MO-S.5A/MO-S.5B ministry scheduling work
-- Sunday Ministry Scheduling planning is complete in MO-S.6A; after explicit
-  implementation approval, MO-S.6B Sunday Schedule Board V1 is the next slice.
-  Its bounded cross-team coordination projection replaces the older generic
-  “multi-team dashboard” future label; it is not yet implemented.
+- Sunday Ministry Scheduling planning is complete in MO-S.6A, and MO-S.6B
+  Sunday Schedule Board V1 is implemented. Its bounded cross-team coordination
+  projection replaces the older generic “multi-team dashboard” future label;
+  later MO-S.6 slices remain separately scoped and unapproved by default.
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
 
@@ -673,11 +673,25 @@ described as active runtime structure.
 
 The current explicitly approved product-development track is Sunday Ministry
 Scheduling, following the canonical planning document
-`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. That planning document does not
-authorize every later runtime slice: MO-S.6B and each subsequent slice require
-their own explicit task approval and repository-truth review.
+`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. MO-S.6B is now implemented, but that
+milestone does not authorize subsequent runtime slices: each later slice still
+requires its own explicit task approval and repository-truth review.
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam selection when creating or batch-creating ServiceEvents, TeamAssignment pages need required-team coverage with assigned coworkers and confirmation status rather than only counts, and ministry team leaders need an efficient same-type event scheduling entry point for their own team. MO-S.2 completes the first implementation slice by letting staff select required teams on ServiceEvent single create/edit and recurring batch-create. MO-S.3 completes the read-only coverage slice: the `TeamAssignment` list is the primary operational coverage surface, assignment detail shows compact event coverage, ServiceEvent detail shows coverage only to staff/service-event or team-assignment managers, ordinary event viewers do not see coworker coverage, `/staff/` adds upcoming required-team gap counts, and browser automation was blocked but user-completed manual QA accepted the UI. MO-S.4 completes the manual team-leader scheduling workspace, and MO-S.4A completes scheduling semantic cleanup after manual QA: Team detail shows Schedule Team / 安排团队服事 only for users who can manage that team's assignments; staff, superusers, and global assignment managers can schedule any team; Lead and Coordinator roles can schedule their own team assignments; ordinary members, `can_lead`-only members, and unrelated users cannot schedule; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the workspace defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display is structure-native; one active in-page schedule/edit form is selected by event or assignment query parameters.
+
+MO-S.6B implements the GET-only Sunday Schedule Board at
+`/assignments/sunday-board/`: a fixed local today-through-eight-weeks matrix of
+non-draft/non-cancelled Sunday Services with participating columns derived from
+required teams plus current operational assignments. Exact-team
+Lead/Coordinator row scope must first be anchored by one of that user's own
+manageable teams; staff, superusers, and global TeamAssignment managers receive
+the bounded participating Sunday set. Ordinary ServiceEvent audience visibility
+is not an additional Board requirement. Once a row is in operational scope,
+the Board shows only the approved cross-team team-name, serving-display-name,
+coarse coverage-state, and Worship rotation-anchor projection. It exposes no
+private notes, contact/profile data, or confirmation detail; creates no detail
+permission; grants no cross-team mutation; and navigates editable exact-team
+cells through the existing Team Schedule flow.
 
 Required-team coverage is a ministry scheduling clarity need, not Checklist V1. Checklist, availability, swap requests, reminder automation, automatic scheduling, advanced scheduling, and broader scheduling-notification behavior remain future unless separately planned; the narrow explicit serving producers implemented under `NOTIFY.1C`/`NOTIFY.1D` remain separate from those deferred scheduling enhancements.
 Checklist V1 remains deferred and should not be revived without pilot feedback proving checklist need separately from required-team coverage.
@@ -798,10 +812,9 @@ Do not add a LightingTeam-specific model. Pilot data should continue to use the 
 
 ### Phase 8: Ministry Operations Enhancements
 
-The next bounded Ministry Operations track is Sunday Ministry Scheduling:
-MO-S.6A planning is complete, and MO-S.6B Sunday Schedule Board V1 is the next
-implementation slice after its explicit task approval. MO-S.6B is planned,
-not implemented; later MO-S.6 slices require separate approval.
+The current bounded Ministry Operations track is Sunday Ministry Scheduling:
+MO-S.6A planning and MO-S.6B Sunday Schedule Board V1 are complete. Any later
+MO-S.6 slice requires separate explicit approval and repository-truth review.
 
 Still deferred unless separately approved and supported by real use:
 - Availability
@@ -1086,12 +1099,11 @@ For feature tasks:
 
 ## 11. Next Recommended Work
 
-Current immediate product direction: MO-S.6A Sunday Ministry Scheduling
-planning is complete. After explicit approval of the implementation task,
-MO-S.6B Sunday Schedule Board V1 is the next implementation slice. It remains
-planned work, not an implemented capability. Availability, swaps, reminders,
-automatic scheduling/optimizer behavior, arbitrary spreadsheet behavior, and
-broader scheduling enhancements remain deferred.
+Current immediate product state: MO-S.6A Sunday Ministry Scheduling planning
+and MO-S.6B Sunday Schedule Board V1 are complete. No later MO-S.6 slice is
+authorized by that completion. Availability, swaps, reminders, automatic
+scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader
+scheduling enhancements remain deferred.
 
 The limited trial readiness closure is also complete, with
 Community Activities V1 QA-passed by user confirmation and the setup-readiness
@@ -1137,7 +1149,9 @@ Notification expansion by default.
 
 Short next-candidate list:
 
-- after explicit task approval, implement MO-S.6B Sunday Schedule Board V1;
+- after separate product review and explicit task approval, consider the next
+  bounded Sunday Ministry Scheduling slice; MO-S.6C is not authorized by the
+  completion of MO-S.6B;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

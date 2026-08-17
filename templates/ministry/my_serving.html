@@ -162,6 +162,11 @@
 {% if manageable_teams %}
 <section class="serving-section">
     <h2 class="serving-section-title">{% if language == "zh" %}我负责的团队{% else %}Teams I manage{% endif %}</h2>
+    <div class="actions serving-section-actions">
+        <a class="button button-secondary" href="{% url 'sunday_schedule_board' %}">
+            {% if language == "zh" %}主日服事排班总览{% else %}Sunday Schedule Board{% endif %}
+        </a>
+    </div>
     <div class="grid grid-2">
         {% for team in manageable_teams %}
         <div class="card">

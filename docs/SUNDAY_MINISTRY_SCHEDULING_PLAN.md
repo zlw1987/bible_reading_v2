@@ -1,7 +1,7 @@
 # Sunday Ministry Scheduling Workflow & Import Plan
 
-Status: MO-S.6A planning document. Docs only; no runtime capability is
-implemented by this document.
+Status: current through implemented MO-S.6B Sunday Schedule Board V1. Later
+MO-S.6 slices remain separately scoped and require explicit approval.
 
 ## 1. Purpose
 
@@ -90,12 +90,13 @@ or a production import in this planning slice.
 
 ### Material gaps
 
-The current system does not provide a cross-team Sunday matrix, a board cell
-permission model, a first-class visible Worship context for downstream team
-schedulers, a downstream review warning when Worship changes, or a controlled
-`.xlsx` upload/parse/preview/confirm workflow. It also does not prove that a
-team named C2 is semantically a Worship rotation anchor; that remains
-configuration/data responsibility, not a hard-coded rule.
+MO-S.6B now provides the bounded cross-team Sunday matrix, exact-team cell
+editability, and visible event-level Worship rotation context. The current
+system still does not provide the richer Worship assignment/suggestion context
+planned for MO-S.6C, a downstream review warning when Worship changes, or a
+controlled `.xlsx` upload/parse/preview/confirm workflow. It also does not
+prove that a team named C2 is semantically a Worship rotation anchor; that
+remains configuration/data responsibility, not a hard-coded rule.
 
 ## 3. Real-world Sunday workflow
 
@@ -172,33 +173,48 @@ sync, and full assignment import in the first import slice.
 
 ## 6. Sunday Schedule Board V1
 
-### Proposed behavior
+### Implemented behavior
 
-The first board should show a bounded date range of relevant Sunday
-`ServiceEvent` rows and participating team columns derived from current event
-data. Each cell should summarize only data the viewer is allowed to see, for
-example:
+`/assignments/sunday-board/` is a GET-only operational matrix for the fixed
+local-date window from today through eight weeks later, inclusive. It shows
+non-draft/non-cancelled Sunday Service rows and participating team columns
+derived from required teams plus current operational assignments. Cancelled
+and completed assignments are excluded consistently with the existing Team
+Schedule workspace.
 
-- no assignment / required team missing;
-- assignment exists with no active members;
-- scheduled members and assignment status;
-- pending versus confirmed member state where the viewer may see that detail;
-- Worship anchor and whether a Worship assignment exists;
-- downstream review recommended when an established change signal exists.
+Each participating cell exposes only the approved coordination projection:
 
-The board should link to existing event, team schedule, assignment detail, and
-My Serving surfaces. V1 should be operational: a permitted user can open the
-owning team's cell action and edit that team's assignment, while an unauthorized
-cell is read-only or safely omitted according to existing visibility rules.
+- missing when the team is required but has no current assignment;
+- empty when a current assignment exists with no active scheduled members;
+- scheduled member display names and a coarse scheduled state;
+- an Additional label when an assignment exists for a non-required team;
+- the event's Worship rotation anchor as context, when configured.
+
+V1 deliberately omits member confirmation detail, assignment notes, contact
+and profile details, private staff metadata, prayer/care data, unrelated
+history, and cross-team management controls. It does not implement the later
+suggestion or changed-context warning semantics.
+
+My Serving provides the scheduler-only Board entry. The Board presents each
+event as plain operational text and does not link to `ServiceEvent` or
+`TeamAssignment` detail routes. An editable exact-team cell deep-links the
+existing Team Schedule workspace for the same date range, Sunday Service
+filter, and exact event/assignment; unauthorized cells are read-only.
 
 ### Board access and permission design
 
-Board access is an operational scheduler capability. A user may enter the
-Sunday board when they have valid scheduling-management authority for at least
-one participating team, using the existing canonical global assignment
-authority or exact-team Lead/Coordinator authority. Ordinary users do not gain
-the board from event audience visibility, ServiceEvent visibility, Calendar
-presence, Church Structure membership, TeamMembership alone, or an unrelated
+Board access is an operational scheduler capability. Staff, superusers, and
+users with the global TeamAssignment manager capability receive the bounded
+Sunday operational set when a row has at least one required team or current
+operational assignment. An exact-team Lead/Coordinator receives a row only
+when at least one of that user's canonically manageable teams is required for
+the event or has a current operational assignment for it. Participation by an
+unrelated team cannot establish exact-team row scope.
+
+Ordinary `ServiceEvent.can_be_seen_by()` audience visibility is intentionally
+not an additional Board row requirement. Ordinary users do not gain the Board
+from event audience visibility, ServiceEvent visibility, Calendar presence,
+Church Structure membership, TeamMembership alone, `can_lead`, or an unrelated
 serving assignment.
 
 Within the board, a qualifying team leader/coordinator may have narrow,
@@ -210,14 +226,16 @@ notes, contact details, private staff data, prayer/care data, management
 controls, and unrelated history. Confirmation details remain conservative
 unless a later product decision and repository evidence justify them.
 
-Derive editable team IDs from the existing
+Once a row is legitimately in scope through the preceding rule, the viewer may
+receive the approved narrow cross-team coordination projection for all
+participating teams on that row. Derive editable team IDs from the existing
 `can_manage_team_assignment_for_team` predicate (global assignment authority or
 exact-team management authority). A user may edit only those exact teams;
-cross-team read visibility never grants cross-team management. Derive event
-visibility from the existing ServiceEvent management/audience rules, with any
-explicit serving-detail rule remaining narrow to the exact event. Every future
-mutation must enforce these checks server-side; hiding an edit button is not
-authorization.
+cross-team read visibility never grants cross-team management. Board row scope
+is independent of the ordinary ServiceEvent audience predicate, but existing
+ServiceEvent and TeamAssignment detail permissions remain unchanged. Every
+mutation continues to enforce canonical team-management authority server-side;
+hiding an edit button is not authorization.
 
 The board may show the approved narrow cross-team coordination details even
 when the viewer cannot edit that team. It must not widen ordinary event or
@@ -227,9 +245,9 @@ assignment detail routes.
 
 The board owns presentation and navigation. Detailed assignment forms,
 member selection, status transitions, and confirmation remain owned by the
-existing assignment flows. No board load, filter, or suggestion preview may
-write rows. A board save must be one explicit, permission-checked event/team
-assignment operation.
+existing assignment flows. V1 has no Board POST or save action: Board loading
+and navigation write no rows, and any edit occurs through the existing
+permission-checked Team Schedule event/team operation.
 
 The board is spreadsheet-like only as a presentation and interaction metaphor,
 not as a multi-cell transaction model. MO-S.6B must not add a client-side
@@ -239,14 +257,13 @@ and saved through existing domain semantics.
 
 ### Column derivation
 
-Do not hard-code current church team names or A/C1/C2/C3 into generic CMS
-logic. A no-schema V1 should derive participating columns from the union of
+MO-S.6B does not hard-code current church team names or A/C1/C2/C3 into generic
+CMS logic. The no-schema V1 derives participating columns from the union of
 `ServiceEventRequiredTeam` teams and existing `TeamAssignment` teams for the
-selected Sunday rows, with inactive/historical rows handled explicitly and a
-stable deterministic order. The implementation should document the ordering
-rule and the treatment of a team that appears for only one event. The
-presentation may separately label the event's `rotation_anchor_team` as the
-Worship context; that anchor remains an ordinary configured
+selected Sunday rows, orders them by canonical team name and ID, labels
+inactive teams, and shows a non-participating dash where a column appears only
+for another event. The presentation separately labels the event's
+`rotation_anchor_team` as the Worship context; that anchor remains an ordinary configured
 `MinistryTeam`, not a global Worship taxonomy.
 
 ## 7. Worship-led coordination and suggestions
@@ -454,36 +471,43 @@ tests and limited-trial review pass.
 
 ### MO-S.6B — Sunday Schedule Board V1
 
+- Status: implemented and verified in the current repository.
 - Goal: bounded event-by-team operational matrix with permission-safe editing.
-- Scope: Sunday rows, configured team columns, coverage/status summaries,
-  links, and explicit edit of manageable team cells.
+- Scope delivered: fixed eight-week Sunday rows, participating team columns,
+  coarse coverage/status summaries, narrow cross-team display-name projection,
+  and explicit Team Schedule navigation for manageable team cells.
 - Out of scope: suggestion semantics, Excel import, optimizer, drag/drop,
   availability, swaps, notifications, and a new permission system.
-- Likely components: ministry views/templates/forms and focused service/event
-  query helpers; reuse existing coverage and permission helpers.
-- Schema impact: target no schema change; prove with implementation tests.
+- Components: a focused side-effect-free Board projection service, ministry
+  view/route/template, My Serving entry, responsive CSS, and focused tests;
+  existing coverage and permission helpers are reused.
+- Schema impact: no model or migration change.
 - Security: Board entry requires valid scheduling-management authority for at
   least one participating team. Authorized schedulers receive the approved
   narrow cross-team read projection, while editability is limited to exact
   teams allowed by existing canonical management predicates. The projection
   does not broaden the ordinary TeamAssignment detail route.
-- Failure modes: stale form, duplicate assignment, invisible event, inactive
-  team; all must fail safely.
-- Tests: board GET, qualifying scheduler entry, narrow cross-team projection,
+- Failure behavior: duplicate assignment and inactive/non-assignable team cells
+  fail closed as read-only. Audience-invisible but operationally in-scope events
+  have no misleading detail link.
+- Verified tests: board GET, qualifying scheduler entry, narrow cross-team projection,
   editable/read-only cells, staff/global manager, exact-team lead/coordinator,
   ordinary member denial/redaction, no-write GET, POST ownership checks,
   duplicate/stale handling, and unchanged general assignment-detail access.
-- Acceptance: a real authorized leader can see the approved narrow Sunday
+- Acceptance verified: an authorized leader can see the approved narrow Sunday
   coordination projection, schedule only their exact manageable team from the
   board, and leave existing Team Schedule/My Serving and general assignment
   detail behavior unchanged.
-- Implementation gate: before choosing Board query/access logic, inspect the
-  existing Team Schedule event-selection behavior and ServiceEvent visibility
-  behavior. If an assumed event-audience predicate would prevent an authorized
-  team scheduler from seeing a Sunday event they are responsible for
-  scheduling, stop and report the Team Schedule behavior, ServiceEvent
-  visibility behavior, the conflict, and the smallest safe alternatives. Do
-  not guess or silently broaden visibility.
+- Repository-truth gate resolution: Team Schedule already selected
+  required-or-assigned events independently of ordinary ServiceEvent audience
+  visibility, while ordinary detail visibility fails closed on zero audience.
+  Product approval selected operational parity for Board row scope, with no
+  widening of either detail route and no cross-team mutation authority.
+- Rendered QA: isolated local Playwright fallback verified lead, staff, and
+  ordinary-user flows; authorized Team Schedule navigation; English desktop;
+  Chinese mobile; and contained horizontal matrix scrolling. The in-app
+  Browser tool failed to initialize, and the only browser console entry in the
+  fallback was the pre-existing missing `/favicon.ico` request.
 - Dependency: MO-S.5B current assignment/suggestion semantics.
 
 ### MO-S.6C — Worship Context & Pairing Suggestions

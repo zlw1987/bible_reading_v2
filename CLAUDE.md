@@ -71,7 +71,9 @@ Start with:
 * `git merge --ff-only origin/master`
 * `git status --short`
 
-If the tree is dirty before the task, stop and report.
+Follow the canonical `AGENTS.md` dirty-worktree rule, including its narrow
+exception for an explicitly authorized continuation whose dirty scope has been
+verified exactly.
 
 Do not stage, commit, or push unless the user explicitly asks.
 
@@ -83,8 +85,10 @@ Do not run the full test suite unless explicitly approved.
 
 Prefer targeted tests:
 
-* `E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
-* `E:\bible-reading\bible_reading_v2\.venv\Scripts\python.exe manage.py check`
+* Run from the verified current Git worktree and use its repository-local
+  interpreter by relative path, as required by `AGENTS.md`.
+* `.\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run`
+* `.\.venv\Scripts\python.exe manage.py check`
 * focused Django test classes/modules
 * dry-run management commands when relevant
 * `git diff --check`

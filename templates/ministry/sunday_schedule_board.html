@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load event_extras ministry_extras %}
+
+{% block title %}
+    {% if language == "zh" %}主日服事排班总览{% else %}Sunday Schedule Board{% endif %}
+    | {{ ui.site_title }}
+{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'my_serving' %}">
+        ← {% if language == "zh" %}返回我的服事{% else %}Back to My Serving{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if language == "zh" %}主日服事排班总览{% else %}Sunday Schedule Board{% endif %}
+    </h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}
+            查看主日各团队的排班概况；只能编辑你有权负责的团队。
+        {% else %}
+            Review Sunday staffing across teams; edit only the teams you are authorized to manage.
+        {% endif %}
+    </p>
+</div>
+
+<div class="card sunday-board-summary">
+    <p>
+        <strong>{% if language == "zh" %}日期范围{% else %}Date range{% endif %}</strong>
+        · {{ board.start_date|date:"Y-m-d" }} – {{ board.end_date|date:"Y-m-d" }}
+    </p>
+    <div class="sunday-board-legend" aria-label="{% if language == 'zh' %}排班状态说明{% else %}Schedule state legend{% endif %}">
+        <span class="status status-danger">{% if language == "zh" %}缺少排班{% else %}Missing{% endif %}</span>
+        <span class="status status-warning">{% if language == "zh" %}暂无成员{% else %}Empty{% endif %}</span>
+        <span class="status status-good">{% if language == "zh" %}已安排{% else %}Scheduled{% endif %}</span>
+        <span class="muted">{% if language == "zh" %}“额外安排”表示该团队已有排班但不是必需团队。{% else %}“Additional” means an assignment exists although the team is not required.{% endif %}</span>
+    </div>
+</div>
+
+{% if board.rows %}
+<div
+    class="card table-wrap sunday-board-scroll"
+    tabindex="0"
+    aria-label="{% if language == 'zh' %}可横向滚动的主日服事排班表{% else %}Horizontally scrollable Sunday schedule matrix{% endif %}"
+>
+    <table class="sunday-board-table">
+        <thead>
+            <tr>
+                <th scope="col" class="sunday-board-event-column">
+                    {% if language == "zh" %}主日{% else %}Sunday{% endif %}
+                </th>
+                <th scope="col" class="sunday-board-context-column">
+                    {% if language == "zh" %}敬拜 / 配搭参考{% else %}Worship / Rotation Context{% endif %}
+                </th>
+                {% for team in board.teams %}
+                <th scope="col" class="sunday-board-team-column">
+                    {{ team|ministry_team_name:language }}
+                    {% if not team.is_active %}
+                    <span class="sunday-board-column-note">
+                        {% if language == "zh" %}已停用{% else %}Inactive{% endif %}
+                    </span>
+                    {% endif %}
+                </th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in board.rows %}
+            <tr>
+                <th scope="row" class="sunday-board-event-cell">
+                    <strong>{{ row.event|event_title:language }}</strong>
+                    <span>{{ row.event.start_datetime|date:"Y-m-d" }}</span>
+                    <span>{{ row.event.start_datetime|date:"H:i" }}</span>
+                </th>
+                <td class="sunday-board-context-cell">
+                    {% if row.event.rotation_anchor_team_id %}
+                        <strong>{{ row.event.rotation_anchor_team|ministry_team_name:language }}</strong>
+                    {% else %}
+                        <span class="muted">{% if language == "zh" %}未设置{% else %}Not set{% endif %}</span>
+                    {% endif %}
+                </td>
+                {% for cell in row.cells %}
+                <td class="sunday-board-cell sunday-board-cell-{{ cell.state }}">
+                    {% if not cell.participates %}
+                        <span class="sunday-board-not-participating" aria-label="{% if language == 'zh' %}本主日不参与{% else %}Not participating this Sunday{% endif %}">—</span>
+                    {% else %}
+                        <div class="sunday-board-cell-head">
+                            {% if cell.state == "missing" %}
+                                <span class="status status-danger">{% if language == "zh" %}缺少排班{% else %}Missing{% endif %}</span>
+                            {% elif cell.state == "empty" %}
+                                <span class="status status-warning">{% if language == "zh" %}暂无成员{% else %}Empty{% endif %}</span>
+                            {% else %}
+                                <span class="status status-good">{% if language == "zh" %}已安排{% else %}Scheduled{% endif %}</span>
+                            {% endif %}
+                            {% if cell.is_additional %}
+                                <span class="sunday-board-additional">{% if language == "zh" %}额外安排{% else %}Additional{% endif %}</span>
+                            {% endif %}
+                        </div>
+                        {% if cell.member_names %}
+                        <div class="sunday-board-members">
+                            {% for member_name in cell.member_names %}
+                                <span>{{ member_name }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% if cell.has_duplicate_assignments %}
+                        <p class="sunday-board-cell-note">
+                            {% if language == "zh" %}发现多个排班，请先在服事排班中检查。{% else %}Multiple assignments found; review them before editing.{% endif %}
+                        </p>
+                        {% elif cell.can_edit %}
+                        <a class="button button-secondary sunday-board-cell-action" href="{{ cell.action_url }}">
+                            {% if language == "zh" %}编辑本团队{% else %}Edit this team{% endif %}
+                        </a>
+                        {% else %}
+                        <span class="sunday-board-read-only">
+                            {% if language == "zh" %}只读{% else %}Read only{% endif %}
+                        </span>
+                        {% endif %}
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}
+            当前日期范围内没有属于你排班职责范围的主日服事安排。
+        {% else %}
+            No Sunday scheduling work is in your operational scope for this date range.
+        {% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

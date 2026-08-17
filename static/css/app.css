@@ -1244,6 +1244,98 @@ th {
     padding-top: 16px;
 }
 
+/* MO-S.6B: compact, horizontally scrollable Sunday event-by-team matrix. */
+.serving-section-actions {
+    margin: -4px 0 14px;
+}
+
+.sunday-board-summary p {
+    margin-top: 0;
+}
+
+.sunday-board-legend {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sunday-board-scroll {
+    padding: 0;
+}
+
+.sunday-board-scroll:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 2px;
+}
+
+.sunday-board-table {
+    min-width: 760px;
+}
+
+.sunday-board-table th,
+.sunday-board-table td {
+    padding: 12px;
+}
+
+.sunday-board-event-column,
+.sunday-board-event-cell {
+    min-width: 190px;
+    width: 190px;
+}
+
+.sunday-board-context-column,
+.sunday-board-context-cell {
+    min-width: 170px;
+    width: 170px;
+}
+
+.sunday-board-team-column,
+.sunday-board-cell {
+    min-width: 185px;
+}
+
+.sunday-board-column-note,
+.sunday-board-event-cell span,
+.sunday-board-cell-note,
+.sunday-board-read-only {
+    color: var(--muted);
+    display: block;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.sunday-board-cell-head {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.sunday-board-additional {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sunday-board-members {
+    display: grid;
+    gap: 3px;
+    margin-top: 8px;
+    overflow-wrap: anywhere;
+}
+
+.sunday-board-cell-action {
+    margin-top: 10px;
+    padding: 6px 9px;
+}
+
+.sunday-board-not-participating {
+    color: var(--muted);
+    display: block;
+    text-align: center;
+}
+
 .staff-overview-grid {
     display: grid;
     gap: 18px;

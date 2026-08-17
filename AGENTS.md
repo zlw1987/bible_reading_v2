@@ -4,7 +4,12 @@ This file contains standing instructions for AI coding agents working in this re
 
 ## Project priority
 
-The current top priority is protecting the completed Church Structure migration and finishing only explicitly approved remaining cleanup.
+The completed Church Structure, audience, serving, and permission work is a
+protected architectural foundation. Explicitly approved product development
+may continue on top of it; the current approved development track is Sunday
+Ministry Scheduling as documented in
+`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. Each implementation slice still
+requires explicit task approval.
 
 Primary goal:
 
@@ -225,11 +230,33 @@ Do not connect, install, or use third-party plugins without explicit user approv
 
 Do not add new skills/plugins as part of repo work unless explicitly requested.
 
+## Repository truth and implementer judgment
+
+Task prompts and planning documents are instructions, but they are not
+infallible descriptions of repository truth. Before implementing a material
+design or behavior change, verify the relevant assumptions against the current
+repository.
+
+If repository evidence shows that the requested approach is stale or
+incorrect, conflicts with a canonical invariant, risks a permission/privacy/
+data-integrity/migration regression, is materially more complex than an
+existing mechanism, or cannot be implemented safely within scope, stop before
+the material divergence and report: (1) the assumption, (2) the repository
+evidence, (3) why the difference matters, (4) the smallest safe alternative or
+decision options, and (5) whether completed work remains valid.
+
+Normal implementation details that do not alter approved behavior, scope,
+permissions, invariants, or architecture may be resolved independently. This
+does not authorize unrelated cleanup, redesign, scope expansion, or
+opportunistic features.
+
 ## Task-fit and scope discipline
 
 Before implementing, check whether the request matches the current project priority.
 
-If the prompt would move away from Church Structure migration, point that out unless the user explicitly chooses the detour.
+If the prompt would move away from the protected Church Structure foundation
+or the explicitly approved product track, point that out unless the user
+explicitly chooses the detour.
 
 Keep changes narrow and reversible.
 

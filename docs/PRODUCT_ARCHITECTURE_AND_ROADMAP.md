@@ -489,8 +489,11 @@ Future pieces include:
 - Availability
 - Swap requests
 - Reminder automation
-- Multi-team dashboard
 - Limited rotation/copy-forward helper, completed as bounded MO-S.5A/MO-S.5B ministry scheduling work
+- Sunday Ministry Scheduling planning is complete in MO-S.6A; after explicit
+  implementation approval, MO-S.6B Sunday Schedule Board V1 is the next slice.
+  Its bounded cross-team coordination projection replaces the older generic
+  “multi-team dashboard” future label; it is not yet implemented.
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
 
@@ -659,9 +662,20 @@ Reading, Prayer, Bible Study, Bible Study Worship Set, ServiceEvent Foundation, 
 
 Post-Pilot Backlog Triage led into the completed Church Structure migration and related retirement work. CS-H.1 through CS-H.10, PP-SA.1 through PP-SA.5, ServiceEvent audience/legacy-field retirement, Bible Study V2 structure-native generation/visibility, V1 schema retirement, and legacy structure table retirement are complete for the current codebase. See `docs/POST_PILOT_BACKLOG_TRIAGE.md`, `docs/FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`, `docs/CHURCH_STRUCTURE_MAPPING_AND_MEMBERSHIP_STRATEGY.md`, `docs/CHURCH_STRUCTURE_SEEDING_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_BACKFILL_VERIFICATION.md`, `docs/CHURCH_STRUCTURE_MEMBERSHIP_DESIGN.md`, and `docs/STAFF_ADMIN_SURFACE_EXPANSION_PLAN.md`.
 
-Current foundation step:
+Protected foundation and current development direction:
 
-Bible Study V2 Flow QA has passed. Historical CS-F bridge work served the pilot baseline; current Bible Study V2 and ServiceEvent paths use Church Structure audience rows plus active primary membership, and the retired `MinistryContext` table/FK paths should not be described as active runtime structure.
+Church Structure, audience, permission, and serving-boundary work is a
+protected architectural foundation. Bible Study V2 Flow QA has passed;
+historical CS-F bridge work served the pilot baseline, while current Bible
+Study V2 and ServiceEvent paths use Church Structure audience rows plus active
+primary membership. The retired `MinistryContext` table/FK paths must not be
+described as active runtime structure.
+
+The current explicitly approved product-development track is Sunday Ministry
+Scheduling, following the canonical planning document
+`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. That planning document does not
+authorize every later runtime slice: MO-S.6B and each subsequent slice require
+their own explicit task approval and repository-truth review.
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam selection when creating or batch-creating ServiceEvents, TeamAssignment pages need required-team coverage with assigned coworkers and confirmation status rather than only counts, and ministry team leaders need an efficient same-type event scheduling entry point for their own team. MO-S.2 completes the first implementation slice by letting staff select required teams on ServiceEvent single create/edit and recurring batch-create. MO-S.3 completes the read-only coverage slice: the `TeamAssignment` list is the primary operational coverage surface, assignment detail shows compact event coverage, ServiceEvent detail shows coverage only to staff/service-event or team-assignment managers, ordinary event viewers do not see coworker coverage, `/staff/` adds upcoming required-team gap counts, and browser automation was blocked but user-completed manual QA accepted the UI. MO-S.4 completes the manual team-leader scheduling workspace, and MO-S.4A completes scheduling semantic cleanup after manual QA: Team detail shows Schedule Team / 安排团队服事 only for users who can manage that team's assignments; staff, superusers, and global assignment managers can schedule any team; Lead and Coordinator roles can schedule their own team assignments; ordinary members, `can_lead`-only members, and unrelated users cannot schedule; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the workspace defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display is structure-native; one active in-page schedule/edit form is selected by event or assignment query parameters.
 
@@ -784,11 +798,17 @@ Do not add a LightingTeam-specific model. Pilot data should continue to use the 
 
 ### Phase 8: Ministry Operations Enhancements
 
-Only after real use:
+The next bounded Ministry Operations track is Sunday Ministry Scheduling:
+MO-S.6A planning is complete, and MO-S.6B Sunday Schedule Board V1 is the next
+implementation slice after its explicit task approval. MO-S.6B is planned,
+not implemented; later MO-S.6 slices require separate approval.
+
+Still deferred unless separately approved and supported by real use:
 - Availability
 - Swap request
 - Reminder automation
-- Multi-team dashboard
+- Automatic scheduling / optimizer
+- Arbitrary spreadsheet behavior or bidirectional Google Sheets sync
 - Advanced checklist
 - Service review history
 
@@ -1066,7 +1086,14 @@ For feature tasks:
 
 ## 11. Next Recommended Work
 
-Current direction: the limited trial readiness closure is complete, with
+Current immediate product direction: MO-S.6A Sunday Ministry Scheduling
+planning is complete. After explicit approval of the implementation task,
+MO-S.6B Sunday Schedule Board V1 is the next implementation slice. It remains
+planned work, not an implemented capability. Availability, swaps, reminders,
+automatic scheduling/optimizer behavior, arbitrary spreadsheet behavior, and
+broader scheduling enhancements remain deferred.
+
+The limited trial readiness closure is also complete, with
 Community Activities V1 QA-passed by user confirmation and the setup-readiness
 audit reporting 0 blockers plus 19 warnings. Before starting the limited trial,
 the product owner has approved and implemented `ANNOUNCEMENTS.1A` and
@@ -1110,15 +1137,16 @@ Notification expansion by default.
 
 Short next-candidate list:
 
+- after explicit task approval, implement MO-S.6B Sunday Schedule Board V1;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent
   relationships;
 - use the language-specific staff/internal user guide when orienting coworkers,
   and record target-environment readiness separately in the runbook;
-- Church Structure + Ministry + Bible Study setup/trial-readiness review;
-- manual-QA polish based on a real demo;
-- My Serving polish only when users report concrete confusion;
+- Church Structure + Ministry + Bible Study setup/trial-readiness review,
+  manual-QA polish based on a real demo, and My Serving polish only when users
+  report concrete confusion remain secondary feedback/readiness candidates;
 - no broad refactors.
 
 Pre-user-trial readiness tooling: SETUP-READINESS.1A is implemented and provides `audit_trial_setup_readiness`, a single **read-only** management command that summarizes setup/data readiness across the core modules (Church Structure / membership, Ministry Teams, TeamAssignment / My Serving, Bible Study serving, audience visibility, permission/admin) as blockers / warnings / info before inviting real users to a trial. It mutates nothing, has no `--apply`, infers no serving from membership/visibility, and is **not** a production-deployment claim. The ministry-structure portion delegates to `ministry.structure_readiness.run_audit`. The latest recorded run (`--verbose --limit 20 --fail-on-blockers`) reported 0 blockers and 19 warnings: 2 active non-staff users without active primary membership, 6 assignable teams without a role profile, 3 teams missing a required active Lead, 4 assignable teams without active members, and 4 upcoming required-team coverage gaps. Community Activities V1 manual/browser QA passed by user confirmation; `community_events` migrations through `0006` are applied and `migrate --plan` reports no planned operations. See `docs/TRIAL_SETUP_READINESS_RUNBOOK.md`.

@@ -13,12 +13,13 @@ from .models import (
 )
 
 
-# MINISTRY-STRUCTURE.1B admin (additive). Ministry structure is NOT church
+# MINISTRY-STRUCTURE.1B admin. Ministry structure is NOT church
 # structure; a ChurchStructureUnit parent link is a display anchor only. Parent
 # links and role assignments here do not grant membership, audience visibility,
-# serving, or runtime permissions. TeamMembership.role / can_lead remains the
-# current permission source; MinistryTeamRoleAssignment is additive only in this
-# foundation phase. The key warnings are also carried on model field help_text.
+# serving, or My Serving items. After MINISTRY-ROLE-SOURCE.1C, active date-valid
+# Lead/Coordinator MinistryTeamRoleAssignment rows grant exact-team management;
+# other role types and TeamMembership.role/can_lead grant no such permission.
+# The key warnings are also carried on model field help_text.
 
 
 class MinistryTeamParentLinkInline(admin.TabularInline):
@@ -41,12 +42,18 @@ class MinistryTeamAdmin(admin.ModelAdmin):
         "name",
         "team_kind",
         "is_assignable",
+        "is_worship_rotation_pool",
         "role_profile",
         "email_alias",
         "is_active",
         "updated_at",
     )
-    list_filter = ("team_kind", "is_assignable", "is_active")
+    list_filter = (
+        "team_kind",
+        "is_assignable",
+        "is_worship_rotation_pool",
+        "is_active",
+    )
     search_fields = ("name", "name_en", "description", "description_en", "email_alias")
     raw_id_fields = ("role_profile",)
     inlines = (MinistryTeamParentLinkInline,)

@@ -1,9 +1,10 @@
 # Multi-Campus Worship Rotation Governance Plan
 
 Status: canonical governance decisions through `MO-S.6D-0A-FU2`, plus
-implemented `MO-S.6D-1A` Campus / Site type foundation. FU2 finalizes the
-required event-planner prerequisite and Worship-specific pool semantics.
-Only the semantic Campus choice is implemented; every remaining future slice
+implemented `MO-S.6D-1A` Campus / Site type foundation and `MO-S.6D-1B`
+Worship rotation-pool configuration foundation. FU2 finalizes the required
+event-planner prerequisite and Worship-specific pool semantics. The Campus and
+pool-configuration foundations are implemented; every remaining future slice
 below requires separate explicit approval.
 
 ## 1. Problem and decisions owned here
@@ -25,9 +26,10 @@ serving, and management remain separate axes.
 
 This plan closes the architecture decisions needed before a later narrow
 rotation-edit path or the MO-S.6D Excel importer can be approved. It now
-records the implemented semantic Campus/Site foundation, but does not add pool
-configuration, event responsibilities, permissions, queryset reachability, an
-Excel dependency, or an importer.
+records the implemented semantic Campus/Site and Worship pool-configuration
+foundations, but does not add event responsibilities, event applicability,
+rotation-selection permissions, candidate selectors, queryset reachability,
+an Excel dependency, or an importer.
 
 ## 2. Current repository truth
 
@@ -46,6 +48,16 @@ The current code provides:
 - `MinistryTeam.team_kind` as descriptive taxonomy only;
 - `MinistryTeam.is_assignable` as the behavioral gate for new active
   `TeamAssignment` targets;
+- `MinistryTeam.is_worship_rotation_pool` as explicit configuration metadata
+  for a non-assignable Worship ministry container, exposed on the existing
+  bilingual staff Ministry Structure setup page;
+- a read-only `inspect_worship_rotation_pool()` resolver that follows only the
+  active primary Ministry Structure path, fails closed on inactive/missing/
+  ambiguous/cyclic/broken configuration, and reports canonical exact-team
+  Lead/Coordinator readiness without authorizing a user or inspecting an event;
+- Ministry Structure readiness integration: unusable active pool structure is
+  a blocker, missing active date-valid Lead/Coordinator is a warning, and an
+  inactive configured pool is retained informational state;
 - exact-team Lead/Coordinator management authority through active, date-valid
   `MinistryTeamRoleAssignment` rows;
 - nullable `ServiceEvent.rotation_anchor_team`, currently selectable from any
@@ -58,9 +70,9 @@ The current code provides:
 
 The current code does **not** provide:
 
-- metadata that safely says "this MinistryTeam container owns a Worship Team
-  selection pool";
 - an event-specific planner/coordinator responsibility;
+- event-audience applicability or eligible Worship Team candidate resolution
+  from the pool metadata;
 - narrow authorization to change only `rotation_anchor_team`;
 - enforcement that the selected Worship Team owns the event and matches any
   current Worship assignment;
@@ -224,8 +236,8 @@ No existing field safely identifies a Worship rotation pool:
 - a Church Structure anchor identifies display placement, not purpose or
   authority.
 
-The V1 decision is one explicit Worship-specific Boolean on `MinistryTeam`,
-semantically named `is_worship_rotation_pool`:
+`MO-S.6D-1B` implements the V1 decision as one explicit Worship-specific
+Boolean on `MinistryTeam`, named `is_worship_rotation_pool`:
 
 ```text
 is_worship_rotation_pool = True
@@ -233,22 +245,23 @@ is_worship_rotation_pool = True
     Worship Team selection pool for ServiceEvent Worship governance
 ```
 
-The exact Python identifier may be adjusted for normal repository naming
-conventions during implementation, but the stored semantic must remain
-Worship-specific. It must not mean "generic rotation pool" or make preaching,
+The stored semantic remains Worship-specific. It does not mean "generic
+rotation pool" or make preaching,
 ushering, or another future rotation domain eligible for the ServiceEvent
 Worship Team slot. If materially different rotation domains emerge from real
 use, reevaluate a typed `rotation_pool_kind`, responsibility-slot model, or
 other abstraction then; do not pre-abstract a generic rotation engine now.
 
-First-slice validity/readiness rules:
+Implemented configuration/readiness rules:
 
-- the pool team is active and `is_assignable=False`;
+- an operational pool team is active and `is_assignable=False`; a previously
+  configured inactive pool may retain the flag but is non-usable and reported
+  as informational state;
 - its active primary MinistryTeam parent path resolves to exactly one active
   Church Structure anchor;
 - the hierarchy/path is cycle-safe and unambiguous;
-- missing active Lead/Coordinator remains a setup warning, not an implicit
-  grant;
+- unusable active pool structure is a readiness blocker, while missing active,
+  date-valid Lead/Coordinator remains a setup warning, not an implicit grant;
 - the flag is configuration only and grants no authority by itself;
 - the flag creates no assignment, membership, audience row, required-team row,
   serving row, or role assignment; and
@@ -261,8 +274,10 @@ remain display-only in this slice. This deterministic rule avoids making one
 shared child silently eligible in several pools. A genuinely multi-anchor
 Worship rotation pool is deferred; first represent combined services as
 multiple separately configured applicable pools. Missing primary path,
-multiple-primary corruption, a cycle, an inactive anchor, or an unanchored pool
-fails closed and is a setup/readiness warning.
+multiple-primary corruption, a cycle, an inactive anchor, or an unanchored
+active pool fails closed and is a setup/readiness blocker. An inactive
+configured pool is non-operational informational state, not a noisy active
+blocker.
 
 Rejected alternatives are recorded in Section 16.
 
@@ -743,8 +758,8 @@ Each slice is separately approvable and must verify repository truth again.
 
 | Order | Candidate slice | Runtime/schema and permission impact | Targeted verification | Manual QA |
 | --- | --- | --- | --- | --- |
-| 1 | **Campus/Site type foundation** | Choice-only model state plus `AlterField` migration; semantic behavior only; no new permission | model/form/admin choices, flexible topology, generic audience/Bible Study ancestry, type-specific exclusions, no side effects | Staff setup label/choice QA after deployment |
-| 2 | **Worship rotation-pool configuration foundation** | Add a Worship-specific `MinistryTeam.is_worship_rotation_pool`-equivalent field, migration, and setup/readiness helper; configuration grants no authority | active non-assignable Worship pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, role warning, no created rows/permissions | Staff Ministry Structure setup copy and error-state QA |
+| 1 | **Campus/Site type foundation — IMPLEMENTED (`MO-S.6D-1A`)** | Choice-only model state plus `AlterField` migration; semantic behavior only; no new permission | model/form/admin choices, flexible topology, generic audience/Bible Study ancestry, type-specific exclusions, no side effects | Staff setup label/choice QA after deployment |
+| 2 | **Worship rotation-pool configuration foundation — IMPLEMENTED (`MO-S.6D-1B`)** | Worship-specific `MinistryTeam.is_worship_rotation_pool` field, default-safe migration, model/form validation, read-only configuration resolver, existing setup UI, and readiness integration; configuration grants no authority | active non-assignable pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, canonical role warning, no created rows/permissions | Narrow staff setup copy/error-state/rendered QA in the implementation slice; deployment QA remains separate |
 | 3 | **ServiceEvent planner/coordinator responsibility foundation** | Required small exact-event responsibility model and migration; grants narrow context/selection authority only; no Worship Team UI yet | lifecycle/endability, duplicates, multiple active planners, inactive user/event, audit fields, exact-event access, no audience/serving/full-event/structure/assignment authority | Required for responsibility setup/lifecycle UX if exposed |
 | 4 | **Narrow Worship Team authorization, consistency, and UI** | New applicability/candidate/authorization/ownership-consistency helpers and narrow GET/POST endpoint; no model migration expected beyond prerequisites; pool Leads/planners receive only this action | actual GET/POST denial/allow rules, locked-current reauthorization, stale form, combined union, off-team/duplicate roster conflict, assignment-path enforcement, LogEntry attribution, no roster move or unrelated writes | Required for rendered Worship Team selector, bilingual copy, and conflict UX |
 | 5 | **Worship Team operational reachability** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; no migration | selected-team-only rows, global/exact-team behavior, invalid selection, change/removal, privacy, no coverage/assignment/required-team writes | Required on Team Schedule and Board |
@@ -754,8 +769,8 @@ Each slice is separately approvable and must verify repository truth again.
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slice 1 is independent but should precede real multi-campus setup.
-Slices 2 and 3 both precede 4: pool configuration is required for pool-based
+Dependencies: slices 1 and 2 are implemented. Slice 1 remains independent but
+should precede real multi-campus setup. Slices 2 and 3 both precede 4: pool configuration is required for pool-based
 authority/applicability, and exact-event planner responsibility is required for
 the approved event-planner workflow. Slice 4 defines the ownership invariant
 used by 6 through 9. Slice 5 should precede 9 so an imported Worship Team is

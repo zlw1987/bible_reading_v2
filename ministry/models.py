@@ -7,6 +7,14 @@ from events.models import ServiceEvent
 
 
 class MinistryTeam(models.Model):
+    WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR_CODE = (
+        "worship_rotation_pool_requires_non_assignable"
+    )
+    WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR = (
+        "A Worship rotation pool must be non-assignable. / "
+        "敬拜轮值团队组必须设为不可排班。"
+    )
+
     # MINISTRY-STRUCTURE.1B: ``team_kind`` is descriptive taxonomy for the
     # structure map and default suggestions; it is NOT a behavior gate. The
     # authoritative gate for whether a team may be a ``TeamAssignment`` target is
@@ -56,6 +64,14 @@ class MinistryTeam(models.Model):
             "does not change current assignment behavior."
         ),
     )
+    is_worship_rotation_pool = models.BooleanField(
+        default=False,
+        help_text=(
+            "Marks this non-assignable ministry container as a Worship rotation "
+            "pool whose descendants may later be selected for Sunday Worship. "
+            "This setting schedules nobody and grants no permission."
+        ),
+    )
     role_profile = models.ForeignKey(
         "MinistryTeamRoleProfile",
         on_delete=models.SET_NULL,
@@ -82,6 +98,24 @@ class MinistryTeam(models.Model):
 
     def __str__(self):
         return self.name
+
+    def clean(self):
+        """Protect the Worship-pool container shape on validated writes.
+
+        Django ModelForms and explicit ``full_clean()`` calls enforce this
+        invariant. Direct queryset updates can still bypass model validation,
+        so the Worship-pool inspection/readiness service also detects malformed
+        stored rows and fails closed.
+        """
+        if self.is_worship_rotation_pool and self.is_assignable:
+            raise ValidationError(
+                {
+                    "is_worship_rotation_pool": ValidationError(
+                        self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR,
+                        code=self.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR_CODE,
+                    )
+                }
+            )
 
     def get_name(self, language="zh"):
         if language == "en" and self.name_en:
@@ -181,8 +215,24 @@ class MinistryTeam(models.Model):
         parts.append(self.get_name(language))
         return " > ".join(parts)
 
+    def current_role_assignments_for_readiness(self, target_date=None):
+        """Active current assignees used by role-profile readiness checks.
+
+        This is a read-only configuration predicate, not a permission grant.
+        Assignment, role type, linked user, and date window must all be current.
+        """
+        target_date = target_date or timezone.localdate()
+        return self.role_assignments.filter(
+            is_active=True,
+            role_type__is_active=True,
+            user__is_active=True,
+            start_date__lte=target_date,
+        ).filter(
+            models.Q(end_date__isnull=True) | models.Q(end_date__gte=target_date)
+        )
+
     def missing_required_role_types(self, target_date=None):
-        """Required role types with no active assignment on this team.
+        """Required role types with no current assignee on this team.
 
         Mirrors ``ChurchStructureUnit.missing_required_role_types``: read-only
         setup/readiness signal. Returns an empty list when no role profile is
@@ -198,21 +248,15 @@ class MinistryTeam(models.Model):
                 profile_requirements__profile=self.role_profile,
                 profile_requirements__is_active=True,
                 profile_requirements__is_required=True,
-                is_active=True,
             ).distinct()
         )
         if not required_role_types:
             return []
 
         covered_role_type_ids = set(
-            self.role_assignments.filter(
-                is_active=True,
-                role_type__in=required_role_types,
-                start_date__lte=target_date,
-            )
+            self.current_role_assignments_for_readiness(target_date)
             .filter(
-                models.Q(end_date__isnull=True)
-                | models.Q(end_date__gte=target_date)
+                role_type__in=required_role_types,
             )
             .values_list("role_type_id", flat=True)
         )
@@ -496,7 +540,8 @@ class TeamAssignmentMember(models.Model):
 
 
 # ---------------------------------------------------------------------------
-# MINISTRY-STRUCTURE.1B — ministry-structure model foundation (additive only).
+# MINISTRY-STRUCTURE.1B — ministry-structure model foundation (originally
+# additive; subsequently adopted by the approved role-source slices).
 #
 # These models upgrade the existing flat MinistryTeam into a ministry-structure
 # unit by adding, around it: multi-parent display links, and a ministry role
@@ -507,9 +552,10 @@ class TeamAssignmentMember(models.Model):
 # - Ministry structure is NOT church structure. A ChurchStructureUnit parent is
 #   a display anchor only; it never grants ChurchStructureMembership, audience
 #   visibility, serving, My Units management, or member/care-record access.
-# - MinistryTeamRoleAssignment is an explicit long-term ministry role. It is
-#   additive in this phase and does NOT drive can_manage_ministry_team or any
-#   permission; TeamMembership.role / can_lead remains the permission source.
+# - MinistryTeamRoleAssignment is an explicit long-term ministry role. After
+#   MINISTRY-ROLE-SOURCE.1C, active date-valid Lead/Coordinator assignments grant
+#   exact-team management authority. Other role types and
+#   TeamMembership.role/can_lead grant no automatic management permission.
 # - Nothing here auto-creates TeamMembership, TeamAssignment,
 #   TeamAssignmentMember, ChurchStructureMembership, ChurchStructureUnitRoleAssignment,
 #   or BibleStudyMeetingRole.
@@ -851,9 +897,11 @@ class MinistryTeamRoleAssignment(models.Model):
     """A user's explicit long-term ministry role on a ministry team.
 
     Mirrors ``accounts.ChurchStructureUnitRoleAssignment``. Multiple active
-    Leads are allowed. This is additive in MINISTRY-STRUCTURE.1B: it does NOT
-    drive ``can_manage_ministry_team`` or any permission, is never inferred from
-    ``TeamMembership``, and creates no membership/serving/assignment rows.
+    Leads are allowed. This model was originally additive in
+    MINISTRY-STRUCTURE.1B; after MINISTRY-ROLE-SOURCE.1C, active date-valid Lead
+    or Coordinator assignments grant exact-team management authority. Other
+    roles grant no automatic permission. Assignments are never inferred from
+    ``TeamMembership`` and create no membership/serving/assignment rows.
     """
 
     team = models.ForeignKey(

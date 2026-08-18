@@ -26,9 +26,10 @@ from ministry.structure_map import team_kind_label
 class Command(BaseCommand):
     help = (
         "Read-only MINISTRY-STRUCTURE.1G audit: inventory of ministry teams, "
-        "parent-link readiness, role-profile readiness, and is_assignable "
-        "assignment readiness, classified as blockers / warnings / info. Writes "
-        "nothing, has no apply mode, and repairs no data."
+        "parent-link readiness, role-profile readiness, is_assignable assignment "
+        "readiness, and Worship rotation-pool configuration, classified as "
+        "blockers / warnings / info. Writes nothing, has no apply mode, and "
+        "repairs no data."
     )
 
     def add_arguments(self, parser):
@@ -170,6 +171,22 @@ class Command(BaseCommand):
             write(
                 "  - Investigate parent-link integrity (multiple primaries / cycles) "
                 "via /teams/<id>/structure/. This audit does not repair links."
+            )
+        if (
+            stats["worship_rotation_pools_assignable"]
+            or stats["worship_rotation_pools_invalid_primary_path"]
+        ):
+            recommended = True
+            write(
+                "  - Active Worship rotation pools must be non-assignable and "
+                "resolve through exactly one active primary path to an active "
+                "Church Structure anchor. Review /teams/<id>/structure/."
+            )
+        if stats["worship_rotation_pools_missing_leadership"]:
+            recommended = True
+            write(
+                "  - Assign an active, date-valid Lead or Coordinator directly "
+                "to each otherwise valid active Worship rotation pool."
             )
         if stats["assignable_teams_no_role_profile"] or stats["teams_missing_required_lead"]:
             recommended = True

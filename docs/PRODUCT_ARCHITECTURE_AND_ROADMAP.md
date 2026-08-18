@@ -48,6 +48,15 @@ Lighting Team Pilot Data import support and setup UI are implemented and pilot-v
 
 Ministry Structure architecture is implemented through `MINISTRY-STRUCTURE.1A`–`1H`: `MinistryTeam` was upgraded in place into the ministry-structure unit (kind / assignable / role profile, `MinistryTeamParentLink`, and the additive ministry role system), with a read-only staff Ministry Structure map at `/structure/`, staff-only structure setup and long-term ministry-role assignment UI at `/teams/<id>/structure/`, a seed command, a readiness audit, and `is_assignable` enforcement for new serving assignments. The Ministry Structure setup foundation is complete enough for the current product stage. Ministry Teams / Ministry Structure UI polish is complete: `/teams/` has search and readiness filters, and the `/teams/` ↔ `/structure/` relationship is clearer. The authenticated navbar IA cleanup is complete (see "Navigation cleanup" above).
 
+`MO-S.6D-1B` adds the bounded Worship rotation-pool configuration foundation on
+that existing Ministry Structure surface: `MinistryTeam.is_worship_rotation_pool`
+is Worship-specific metadata for a non-assignable container, backed by
+model/form validation, a read-only fail-closed active-primary-path resolver,
+canonical Lead/Coordinator readiness, audit integration, and bilingual staff
+setup copy. The flag grants no permission or descendant roster authority,
+creates no serving/membership/audience/assignment/role/notification row, and
+does not implement event applicability, candidate selection, or anchor mutation.
+
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
 `MINISTRY-ROLE-SOURCE.1A` (docs + read-only audit) locked `MinistryTeamRoleAssignment` as the single source of truth for long-term ministry roles; `MINISTRY-ROLE-SOURCE.1A-FU1` clarified that assignable teams (`is_assignable=True`) expect role holders to also be active members while non-assignable container teams do not, and adjusted the read-only alignment audit accordingly. `MINISTRY-ROLE-SOURCE.1B` (implemented) added the dry-run-by-default backfill that creates missing `MinistryTeamRoleAssignment` rows from active user-linked `TeamMembership.role` in {`lead`, `coordinator`}. **`MINISTRY-ROLE-SOURCE.1C` (implemented) switched the runtime read:** `can_manage_ministry_team`, `manageable_assignment_teams`, team scheduling, manage-members, and My Serving "Teams I manage" now resolve team-management authority from active `MinistryTeamRoleAssignment` rows (role_type code in {`lead`, `coordinator`}) for the exact team, not `TeamMembership.role`. After `1C`, `TeamMembership.role` is legacy compatibility data and grants no runtime team-management permission; `TeamMembership.can_lead` remains deprecated/reserved and grants none. `1C` is exact-team only, leaves staff / superuser / global capability behavior unchanged, and changes no model or migration. **`MINISTRY-ROLE-SOURCE.1D` (implemented)** cleaned up the manage-members UI: `TeamMembershipForm` no longer includes `role` (normal creates default to `member`; existing legacy `role` is preserved untouched on edit) and never included `can_lead`, so neither can be set from that UI; the members list shows canonical long-term roles from active `MinistryTeamRoleAssignment` rows only and links staff to structure setup. **`MINISTRY-ROLE-SOURCE.1E-A` (implemented)** added the dry-run-by-default `cleanup_team_membership_can_lead_flags` command that clears deprecated `can_lead=True` flags under explicit `--apply` (only sets `can_lead` `True` → `False`; never touches `role`, membership rows, or role assignments; changes no permission). See `docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md`. Later legacy field retirement is optional and should not be reopened without a production blocker or audit warning.
@@ -496,7 +505,9 @@ Future pieces include:
   governance decisions, including Worship-specific pool configuration,
   required exact-event planner responsibility, selected-team/roster
   consistency, and safe batch-change boundaries. `MO-S.6D-1A` separately
-  implements the semantic-only Campus / Site foundation. The bounded cross-team
+  implements the semantic-only Campus / Site foundation, and `MO-S.6D-1B`
+  implements the Worship-specific pool-configuration foundation. The bounded
+  cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
   later MO-S.6 slice remains separately scoped and unapproved.
@@ -680,10 +691,12 @@ described as active runtime structure.
 The current explicitly approved product-development track is Sunday Ministry
 Scheduling, following the canonical planning document
 `docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. MO-S.6B and MO-S.6C are now
-implemented, and `MO-S.6D-1A` has implemented the semantic-only Campus / Site
-foundation. The docs-only MO-S.6D-0A/FU1/FU2 governance closure and Campus
-foundation do not authorize subsequent runtime slices: each Worship-pool,
-planner-responsibility, consistency/authorization, reachability, planner,
+implemented, `MO-S.6D-1A` has implemented the semantic-only Campus / Site
+foundation, and `MO-S.6D-1B` has implemented the Worship-specific
+pool-configuration foundation. The docs-only MO-S.6D-0A/FU1/FU2 governance
+closure and these foundations do not authorize subsequent runtime slices: each
+planner-responsibility, applicability/candidate, consistency/authorization,
+reachability, planner,
 notification, and import slice still requires its own explicit task approval and
 repository-truth review. The canonical governance decision is
 `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`.
@@ -824,10 +837,11 @@ Do not add a LightingTeam-specific model. Pilot data should continue to use the 
 ### Phase 8: Ministry Operations Enhancements
 
 The current bounded Ministry Operations track is Sunday Ministry Scheduling:
-MO-S.6A planning, MO-S.6B Sunday Schedule Board V1, MO-S.6C context, and the
-docs-only MO-S.6D-0A/FU1/FU2 investigations are complete. Any governance
-prerequisite or later MO-S.6 runtime slice requires separate explicit approval
-and repository-truth review.
+MO-S.6A planning, MO-S.6B Sunday Schedule Board V1, MO-S.6C context, the
+docs-only MO-S.6D-0A/FU1/FU2 investigations, and the separately approved
+`MO-S.6D-1A` Campus plus `MO-S.6D-1B` Worship pool-configuration foundations
+are complete. Any remaining governance prerequisite or later MO-S.6 runtime
+slice requires separate explicit approval and repository-truth review.
 
 Still deferred unless separately approved and supported by real use:
 - Availability
@@ -1117,10 +1131,11 @@ MO-S.6B Sunday Schedule Board V1, and MO-S.6C Worship Context & Pairing
 Suggestions are complete. The docs-only MO-S.6D-0A/FU1/FU2 workbook and
 governance closure is also complete; it authorized none of the prerequisite
 runtime by itself. The separately approved `MO-S.6D-1A` semantic Campus / Site
-foundation is now implemented, while Worship-pool, event-responsibility,
+and `MO-S.6D-1B` Worship pool-configuration foundations are now implemented,
+while event-responsibility, event applicability/candidate selection,
 ownership-consistency, planner, notification, reachability, and importer runtime
 remain unimplemented. MO-S.6D and later are not authorized by the governance
-closure or Campus foundation. Availability, swaps, reminders, automatic
+closure or these foundations. Availability, swaps, reminders, automatic
 scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader
 scheduling enhancements remain deferred.
 
@@ -1169,7 +1184,8 @@ Notification expansion by default.
 Short next-candidate list:
 
 - after separate product review and explicit task approval, implement the
-  ordered prerequisites in `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` before
+  remaining ordered prerequisites in
+  `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` before
   considering MO-S.6D Excel Event + Worship Team Import; documentation closure
   does not authorize any prerequisite or importer runtime;
 - review Church Calendar limited-trial feedback before separately approving any

@@ -5395,6 +5395,58 @@ class MinistryStructureFoundationTests(TestCase):
             [rt.id for rt in self.team.missing_required_role_types()], [lead.id]
         )
 
+    def test_inactive_user_does_not_satisfy_missing_required_role(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        self.assertEqual(self.team.missing_required_role_types(), [])
+
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+
+        self.assertEqual(
+            [rt.id for rt in self.team.missing_required_role_types()], [lead.id]
+        )
+
+    def test_future_and_expired_assignments_do_not_satisfy_required_role(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        today = timezone.localdate()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            role_type=lead,
+            user=self.user,
+            start_date=today - timezone.timedelta(days=10),
+            end_date=today - timezone.timedelta(days=1),
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team,
+            role_type=lead,
+            user=self.user,
+            start_date=today + timezone.timedelta(days=1),
+        )
+
+        self.assertEqual(
+            [rt.id for rt in self.team.missing_required_role_types(today)],
+            [lead.id],
+        )
+
+    def test_inactive_role_type_does_not_satisfy_active_requirement(self):
+        profile, lead = self._seed_lead_profile()
+        self.team.role_profile = profile
+        self.team.save()
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.team, role_type=lead, user=self.user
+        )
+        MinistryTeamRoleType.objects.filter(pk=lead.pk).update(is_active=False)
+
+        self.assertEqual(
+            [rt.id for rt in self.team.missing_required_role_types()], [lead.id]
+        )
+
     def test_active_assignment_requires_active_team_role_user(self):
         lead = MinistryTeamRoleType.objects.create(
             code="lead", name="负责人", name_en="Lead"
@@ -6687,6 +6739,21 @@ class MinistryTeamRoleAssignmentUITests(TestCase):
         self.assertEqual(response.context["missing_required_roles"], [])
         self.assertNotContains(response, "Missing required roles")
 
+    def test_inactive_role_user_restores_staff_page_missing_lead_warning(self):
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.projection,
+            role_type=self.lead_type,
+            user=self.alice,
+            start_date=timezone.localdate(),
+        )
+        User.objects.filter(pk=self.alice.pk).update(is_active=False)
+
+        self._login("ra_staff")
+        response = self.client.get(self._structure_url(self.projection))
+
+        self.assertIn("Lead", response.context["missing_required_roles"])
+        self.assertContains(response, "Missing required roles")
+
     def test_no_role_profile_shows_muted_note(self):
         self.projection.role_profile = None
         self.projection.save()
@@ -7488,6 +7555,138 @@ class MinistryStructureReadinessAuditTests(TestCase):
         audit = run_audit()
         self.assertEqual(audit["stats"]["teams_missing_required_lead"], 0)
         self.assertEqual(audit["stats"]["teams_missing_required_roles"], 0)
+
+    def test_inactive_user_does_not_cover_optional_role_requirement(self):
+        coordinator = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        MinistryTeamRoleRequirement.objects.create(
+            profile=self.profile,
+            role_type=coordinator,
+            is_required=False,
+        )
+        team = self.make_team("Optional Coordinator", role_profile=self.profile)
+        MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            role_type=coordinator,
+            user=self.user,
+            start_date=timezone.localdate(),
+        )
+        self.assertEqual(run_audit()["stats"]["teams_with_optional_role_gaps"], 0)
+
+        User.objects.filter(pk=self.user.pk).update(is_active=False)
+
+        self.assertEqual(run_audit()["stats"]["teams_with_optional_role_gaps"], 1)
+
+    # ----- general leadership source-of-truth readiness -------------------
+
+    def test_canonical_role_assignment_satisfies_assignable_team_leadership(self):
+        team = self.make_team("Canonical Lead")
+        MinistryTeamRoleAssignment.objects.create(
+            team=team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=timezone.localdate(),
+        )
+
+        audit = run_audit()
+        self.assertEqual(
+            audit["stats"]["assignable_teams_no_active_leadership"], 0
+        )
+        # Leadership does not imply serving-pool membership.
+        self.assertEqual(audit["stats"]["assignable_teams_no_active_membership"], 1)
+
+    def test_legacy_membership_role_and_can_lead_do_not_satisfy_leadership(self):
+        role_only = self.make_team("Legacy Role Only")
+        can_lead_only = self.make_team("Legacy Can Lead Only")
+        TeamMembership.objects.create(
+            team=role_only,
+            user=self.user,
+            role=TeamMembership.ROLE_LEAD,
+        )
+        second_user = User.objects.create_user(
+            username="audit_can_lead_only", password="testpass123"
+        )
+        TeamMembership.objects.create(
+            team=can_lead_only,
+            user=second_user,
+            role=TeamMembership.ROLE_MEMBER,
+            can_lead=True,
+        )
+
+        audit = run_audit()
+        self.assertEqual(
+            audit["stats"]["assignable_teams_no_active_membership"], 0
+        )
+        self.assertEqual(
+            audit["stats"]["assignable_teams_no_active_leadership"], 2
+        )
+
+    def test_non_current_or_inactive_role_rows_do_not_satisfy_leadership(self):
+        today = timezone.localdate()
+
+        future_team = self.make_team("Future Lead")
+        MinistryTeamRoleAssignment.objects.create(
+            team=future_team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=today + timezone.timedelta(days=1),
+        )
+
+        expired_team = self.make_team("Expired Lead")
+        MinistryTeamRoleAssignment.objects.create(
+            team=expired_team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=today - timezone.timedelta(days=2),
+            end_date=today - timezone.timedelta(days=1),
+        )
+
+        inactive_assignment_team = self.make_team("Inactive Assignment")
+        inactive_assignment = MinistryTeamRoleAssignment.objects.create(
+            team=inactive_assignment_team,
+            role_type=self.lead_type,
+            user=self.user,
+            start_date=today,
+        )
+        MinistryTeamRoleAssignment.objects.filter(pk=inactive_assignment.pk).update(
+            is_active=False
+        )
+
+        inactive_type_team = self.make_team("Inactive Role Type")
+        coordinator_type = MinistryTeamRoleType.objects.create(
+            code=MinistryTeamRoleType.CODE_COORDINATOR,
+            name="协调同工",
+            name_en="Coordinator",
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=inactive_type_team,
+            role_type=coordinator_type,
+            user=self.user,
+            start_date=today,
+        )
+        MinistryTeamRoleType.objects.filter(pk=coordinator_type.pk).update(
+            is_active=False
+        )
+
+        inactive_user_team = self.make_team("Inactive User")
+        inactive_user = User.objects.create_user(
+            username="audit_inactive_role_user", password="testpass123"
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=inactive_user_team,
+            role_type=self.lead_type,
+            user=inactive_user,
+            start_date=today,
+        )
+        User.objects.filter(pk=inactive_user.pk).update(is_active=False)
+
+        audit = run_audit()
+        self.assertEqual(
+            audit["stats"]["assignable_teams_no_active_leadership"], 5
+        )
 
     # ----- verbose / limit / filters ---------------------------------------
 

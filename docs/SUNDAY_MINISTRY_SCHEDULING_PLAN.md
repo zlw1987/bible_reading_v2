@@ -1,10 +1,11 @@
 # Sunday Ministry Scheduling Workflow & Import Plan
 
 Status: current through implemented MO-S.6C Worship Context & Pairing
-Suggestions, `MO-S.6D-1A` Campus / Site type foundation, and the MO-S.6D-0A
+Suggestions, `MO-S.6D-1A` Campus / Site type foundation,
+`MO-S.6D-1B` Worship rotation-pool configuration foundation, and the MO-S.6D-0A
 workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2 multi-campus Worship
-rotation governance closure. MO-S.6D and all other future runtime slices remain
-separately scoped and require explicit approval.
+rotation governance closure. Remaining MO-S.6D and other future runtime slices
+remain separately scoped and require explicit approval.
 
 ## 1. Purpose
 
@@ -105,9 +106,12 @@ a future explicitly configured Worship rotation pool, event audience, and
 primary Ministry Structure path determine eligible teams without treating a
 name such as C2 as semantic proof. They also require explicit exact-event
 planner/coordinator responsibility for the approved planner workflow.
-`MO-S.6D-1A` has implemented the semantic Campus / Site type foundation. The
-system still does not provide Worship-specific pool metadata/configuration,
-event planner/coordinator responsibility, governed Worship Team authorization
+`MO-S.6D-1A` has implemented the semantic Campus / Site type foundation, and
+`MO-S.6D-1B` has implemented Worship-specific pool metadata, validation,
+fail-closed primary-anchor configuration inspection, existing staff setup UI,
+and Ministry Structure readiness integration. The system still does not provide
+event planner/coordinator responsibility, event applicability/candidate
+resolution, governed Worship Team authorization
 and ownership consistency, selected-team operational reachability, the Worship
 Rotation Planner, direct Worship Team change notifications, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
@@ -379,11 +383,12 @@ silently converted into assignments. Worship member assignments and AVL
 assignment import are later slices. MO-S.6D-0A found that event plus anchor
 alone cannot start the implemented scheduling workflow and that the workbook
 cannot supply a safe event audience. MO-S.6D-0A-FU1/FU2 close the architecture
-by requiring a match/update-only first lifecycle, explicit Worship-specific
-rotation-pool configuration, required exact-event planner/coordinator
-responsibility, audience applicability, eligible token mappings, and
-anchor-only operational reachability. Those prerequisite runtime slices and
-the remaining importer-owned decisions still require separate approval.
+by requiring a match/update-only first lifecycle, the now-implemented explicit
+Worship-specific rotation-pool configuration foundation, required exact-event
+planner/coordinator responsibility, audience applicability, eligible token
+mappings, and
+anchor-only operational reachability. The remaining prerequisite runtime
+slices and importer-owned decisions still require separate approval.
 
 ### Required transaction flow
 
@@ -607,21 +612,26 @@ tests and limited-trial review pass.
 ### MO-S.6D-0A-FU1/FU2 — Multi-Campus Worship Rotation Governance
 
 - Status: canonical architecture closure complete through FU2, with the
-  separate `MO-S.6D-1A` Campus / Site type foundation implemented. FU2 makes
+  separate `MO-S.6D-1A` Campus / Site and `MO-S.6D-1B` Worship rotation-pool
+  configuration foundations implemented. FU2 makes
   exact-event planner/coordinator responsibility a required prerequisite and
-  fixes the pool semantic as Worship-specific. No Worship-pool field, event
-  responsibility model, permission, queryset, importer, or data change is
-  implemented or approved here.
+  fixes the pool semantic as Worship-specific. `MO-S.6D-1B` adds only the
+  configuration field, validation, read-only resolver/readiness integration,
+  and existing staff setup control; no event responsibility model,
+  applicability/candidate runtime, permission, queryset, importer, or data
+  change is implemented.
 - Canonical decision: see
   [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md).
 - Church Structure: `MO-S.6D-1A` implemented the semantic-only Campus / Site
   type while preserving a flexible tree and the separation between structure,
   belonging, audience, permission, and serving.
-- Pool applicability: a future active, non-assignable MinistryTeam explicitly
-  marked with the `is_worship_rotation_pool`-equivalent semantic applies only
-  when its valid primary Church Structure anchor is equal to or below a selected
-  active event audience unit. The configuration is Worship-specific and grants
-  nothing by itself. Audience establishes applicability, never authority.
+- Pool applicability: an active, non-assignable MinistryTeam may now be
+  explicitly marked with `is_worship_rotation_pool`, and its configuration can
+  be inspected through the active primary path to one active Church Structure
+  anchor. A future separately approved consumer may consider it applicable only
+  when that anchor is equal to or below a selected active event audience unit.
+  The configuration is Worship-specific and grants nothing by itself. Audience
+  establishes applicability, never authority.
 - Candidate anchors: the union of active assignable descendants of all
   applicable pools through active primary MinistryTeam parent paths. Names,
   fuzzy matching, database IDs, `team_kind`, and role profiles are excluded.
@@ -655,7 +665,8 @@ tests and limited-trial review pass.
   roster-change staleness detection.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
-- Dependency: every runtime/schema slice in the canonical governance plan still
+- Dependency: after the implemented Campus and pool-configuration foundations,
+  every remaining runtime/schema slice in the canonical governance plan still
   requires separate task approval and focused verification.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
@@ -939,13 +950,14 @@ architecture: first lifecycle is exact existing-event match/update; mapping is
 limited to eligible teams from applicable configured Worship pools; the
 selected Worship Team is operationally reachable without a RequiredTeam
 bootstrap; the event-planner responsibility foundation is required; and first
-bulk import is staff/superuser-only. These are documentation decisions, not
-implemented prerequisites.
+bulk import is staff/superuser-only. The Campus and pool-configuration
+foundations are now implemented; all other prerequisites remain documentation
+decisions only.
 
 MO-S.6D remains unapproved until its owning slices:
 
-1. implement and verify the Worship-specific rotation-pool configuration,
-   applicability, eligible-team resolution, required exact-event
+1. implement and verify Worship-pool applicability, eligible-team resolution,
+   required exact-event
    planner/coordinator foundation, Worship ownership consistency, and
    selected-team operational reachability; Campus remains an independent
    foundation that should precede real multi-campus setup;

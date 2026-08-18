@@ -3,7 +3,8 @@
 This module inventories the ministry-structure foundation
 (``MinistryTeam`` + ``MinistryTeamParentLink`` + the ministry role system added
 in MINISTRY-STRUCTURE.1B, the ``is_assignable`` gate enforced in
-MINISTRY-STRUCTURE.1F) and surfaces setup gaps as blockers / warnings / info.
+MINISTRY-STRUCTURE.1F, and MO-S.6D-1B Worship rotation-pool configuration) and
+surfaces setup gaps as blockers / warnings / info.
 
 It is strictly **read-only**: it creates, updates, or deletes nothing, has no
 apply mode, makes no permission decision, and never repairs data. It does not
@@ -31,8 +32,13 @@ from .models import (
     MinistryTeamParentLink,
     MinistryTeamRoleAssignment,
     MinistryTeamRoleRequirement,
+    MinistryTeamRoleType,
     TeamAssignment,
     TeamMembership,
+)
+from .worship_rotation_pool import (
+    WorshipRotationPoolStatus,
+    inspect_worship_rotation_pool,
 )
 
 
@@ -46,9 +52,6 @@ ACTIVE_ASSIGNMENT_STATUSES = (
     TeamAssignment.STATUS_PREPARED,
 )
 
-LEADERSHIP_ROLES = (TeamMembership.ROLE_LEAD, TeamMembership.ROLE_COORDINATOR)
-
-
 # Inventory counters (plain summary; not severity-classified).
 INVENTORY_KEYS = (
     "total_teams",
@@ -56,6 +59,7 @@ INVENTORY_KEYS = (
     "inactive_teams",
     "assignable_teams",
     "non_assignable_teams",
+    "worship_rotation_pools",
 )
 
 # Severity-classified counters. ``run_audit`` reports which of these are nonzero
@@ -64,6 +68,8 @@ BLOCKER_KEYS = (
     "active_assignments_on_non_assignable_team",
     "teams_multiple_active_primary_links",
     "parent_link_cycle_teams",
+    "worship_rotation_pools_assignable",
+    "worship_rotation_pools_invalid_primary_path",
 )
 
 WARNING_KEYS = (
@@ -79,6 +85,7 @@ WARNING_KEYS = (
     "required_event_links_to_non_assignable_team",
     "assignable_teams_no_active_membership",
     "assignable_teams_no_active_leadership",
+    "worship_rotation_pools_missing_leadership",
 )
 
 INFO_KEYS = (
@@ -89,6 +96,8 @@ INFO_KEYS = (
     "teams_with_optional_role_gaps",
     "cancelled_assignments_on_non_assignable_team",
     "completed_assignments_on_non_assignable_team",
+    "valid_active_worship_rotation_pools",
+    "inactive_worship_rotation_pools",
 )
 
 # Categories that carry capped example rows under ``--verbose``.
@@ -96,6 +105,8 @@ VERBOSE_DETAIL_KEYS = BLOCKER_KEYS + WARNING_KEYS + (
     "shared_teams_multi_active_parent_link",
     "cancelled_assignments_on_non_assignable_team",
     "completed_assignments_on_non_assignable_team",
+    "valid_active_worship_rotation_pools",
+    "inactive_worship_rotation_pools",
 )
 
 PERMISSION_NOTES = (
@@ -107,6 +118,9 @@ PERMISSION_NOTES = (
     "Delegated ministry management (ancestor-or-self lead) remains deferred; "
     "team-management authority is exact-team only.",
     "My Serving does not show ministry role assignments; Today is unchanged.",
+    "is_worship_rotation_pool is configuration metadata only: it grants no "
+    "permission or descendant roster-management authority and creates no role, "
+    "membership, audience, required-team, assignment, or serving row.",
 )
 
 ALL_COUNTER_KEYS = (
@@ -202,7 +216,45 @@ def run_audit(team_id=None, include_inactive=False, target_date=None):
             stats["assignable_teams"] += 1
         else:
             stats["non_assignable_teams"] += 1
+        if team.is_worship_rotation_pool:
+            stats["worship_rotation_pools"] += 1
         teams_by_kind[team.team_kind] = teams_by_kind.get(team.team_kind, 0) + 1
+
+    # --- Worship rotation-pool configuration -----------------------------
+    # Configuration only: this inspection receives no user or ServiceEvent and
+    # grants no authority/applicability. Inactive configured pools remain
+    # retained history and are info, not active blockers.
+    for team in teams:
+        if not team.is_worship_rotation_pool:
+            continue
+
+        inspection = inspect_worship_rotation_pool(team, target_date=target_date)
+        label = _team_label(team)
+
+        if inspection.status == WorshipRotationPoolStatus.INACTIVE_POOL:
+            stats["inactive_worship_rotation_pools"] += 1
+            details["inactive_worship_rotation_pools"].append(label)
+            continue
+
+        if inspection.status == WorshipRotationPoolStatus.ASSIGNABLE_POOL:
+            stats["worship_rotation_pools_assignable"] += 1
+            details["worship_rotation_pools_assignable"].append(label)
+            continue
+
+        if inspection.status != WorshipRotationPoolStatus.VALID:
+            stats["worship_rotation_pools_invalid_primary_path"] += 1
+            details["worship_rotation_pools_invalid_primary_path"].append(
+                f"{label} status={inspection.status.value}"
+            )
+            continue
+
+        stats["valid_active_worship_rotation_pools"] += 1
+        details["valid_active_worship_rotation_pools"].append(
+            f"{label} anchor=#{inspection.anchor.id}"
+        )
+        if not inspection.has_active_leadership:
+            stats["worship_rotation_pools_missing_leadership"] += 1
+            details["worship_rotation_pools_missing_leadership"].append(label)
 
     # Scanned set for active-team readiness checks.
     scanned = [t for t in teams if include_inactive or t.is_active]
@@ -303,13 +355,9 @@ def run_audit(team_id=None, include_inactive=False, target_date=None):
         optional_ids = optional_by_profile.get(profile.id)
         if optional_ids:
             covered = set(
-                team.role_assignments.filter(
-                    is_active=True,
-                    role_type_id__in=optional_ids,
-                    start_date__lte=target_date,
-                )
+                team.current_role_assignments_for_readiness(target_date)
                 .filter(
-                    Q(end_date__isnull=True) | Q(end_date__gte=target_date)
+                    role_type_id__in=optional_ids,
                 )
                 .values_list("role_type_id", flat=True)
             )
@@ -383,7 +431,10 @@ def run_audit(team_id=None, include_inactive=False, target_date=None):
             f"event_id={link.service_event_id}"
         )
 
-    # Assignable active teams missing an active membership / leadership.
+    # Assignable active teams missing an active membership / canonical
+    # leadership assignment. Membership remains the serving candidate source;
+    # active, date-valid lead/coordinator role assignments on the exact team are
+    # the separate leadership source after MINISTRY-ROLE-SOURCE.1C.
     assignable_active_teams = [
         team for team in scanned if team.is_active and team.is_assignable
     ]
@@ -394,11 +445,20 @@ def run_audit(team_id=None, include_inactive=False, target_date=None):
         ).values_list("team_id", flat=True)
     )
     leadership_team_ids = set(
-        TeamMembership.objects.filter(
+        MinistryTeamRoleAssignment.objects.filter(
             is_active=True,
             team_id__in=assignable_ids,
-            role__in=LEADERSHIP_ROLES,
-        ).values_list("team_id", flat=True)
+            team__is_active=True,
+            role_type__is_active=True,
+            role_type__code__in=(
+                MinistryTeamRoleType.CODE_LEAD,
+                MinistryTeamRoleType.CODE_COORDINATOR,
+            ),
+            user__is_active=True,
+            start_date__lte=target_date,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
+        .values_list("team_id", flat=True)
     )
     for team in assignable_active_teams:
         if team.id not in member_team_ids:

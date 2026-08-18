@@ -176,6 +176,15 @@ STRUCTURE_FORM_TEXT = {
     "en": {
         "team_kind": "Unit kind",
         "is_assignable": "Assignable (can be a serving assignment target)",
+        "is_worship_rotation_pool": "Worship Rotation Pool",
+        "is_worship_rotation_pool_help": (
+            "Mark a non-assignable ministry container whose child or descendant "
+            "teams may later be selected for Sunday Worship. This setting does "
+            "not schedule anyone or grant permission."
+        ),
+        "worship_rotation_pool_assignable_error": (
+            "A Worship rotation pool must be non-assignable."
+        ),
         "role_profile": "Role profile",
         "is_active": "Active",
         "role_profile_empty": "— No role profile —",
@@ -188,6 +197,12 @@ STRUCTURE_FORM_TEXT = {
     "zh": {
         "team_kind": "单位类型",
         "is_assignable": "可排班（可作为服事安排对象）",
+        "is_worship_rotation_pool": "敬拜轮值团队组",
+        "is_worship_rotation_pool_help": (
+            "标记一个不可排班的事工容器；其子级或后代团队以后可供主日敬拜选择。"
+            "此设置不会安排任何人，也不会授予权限。"
+        ),
+        "worship_rotation_pool_assignable_error": "敬拜轮值团队组必须设为不可排班。",
         "role_profile": "角色配置",
         "is_active": "启用",
         "role_profile_empty": "— 不设角色配置 —",
@@ -810,10 +825,11 @@ class TeamAssignmentConfirmForm(forms.Form):
 class MinistryTeamStructureForm(forms.ModelForm):
     """Edit ministry-structure metadata on an existing ``MinistryTeam``.
 
-    Scope is the structure-display fields only (``team_kind``,
-    ``is_assignable``, ``role_profile``, ``is_active``). Name/bilingual fields
-    stay on the existing ministry-team edit form. ``role_profile`` lists only
-    existing active profiles; this slice seeds/creates none.
+    Scope is the structure/setup metadata fields only (``team_kind``,
+    ``is_assignable``, Worship rotation-pool configuration, ``role_profile``,
+    ``is_active``). Name/bilingual fields stay on the existing ministry-team
+    edit form. ``role_profile`` lists only existing active profiles; this slice
+    seeds/creates none.
     """
 
     class Meta:
@@ -821,12 +837,14 @@ class MinistryTeamStructureForm(forms.ModelForm):
         fields = [
             "team_kind",
             "is_assignable",
+            "is_worship_rotation_pool",
             "role_profile",
             "is_active",
         ]
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
+        self.language = language
         text = structure_form_text(language)
 
         # Import locally to avoid any import-order coupling with structure_map.
@@ -837,6 +855,12 @@ class MinistryTeamStructureForm(forms.ModelForm):
             is_active=True
         ).order_by("sort_order", "code")
         self.fields["role_profile"].empty_label = text["role_profile_empty"]
+        self.fields["is_worship_rotation_pool"].help_text = text[
+            "is_worship_rotation_pool_help"
+        ]
+        self.fields["is_worship_rotation_pool"].error_messages[
+            MinistryTeam.WORSHIP_ROTATION_POOL_ASSIGNABLE_ERROR_CODE
+        ] = text["worship_rotation_pool_assignable_error"]
 
         for field_name in self.fields:
             self.fields[field_name].label = text[field_name]
@@ -925,11 +949,13 @@ class MinistryTeamChurchAnchorLinkForm(_BaseParentLinkForm):
 # ---------------------------------------------------------------------------
 # MINISTRY-STRUCTURE.1D-B — staff-only ministry role assignment form.
 #
-# Creates a single explicit long-term ``MinistryTeamRoleAssignment`` row. It is
-# additive/readiness setup only: it never creates/updates TeamMembership,
+# Creates a single explicit long-term ``MinistryTeamRoleAssignment`` row. It
+# never creates/updates TeamMembership,
 # TeamAssignment, TeamAssignmentMember, ChurchStructureMembership,
-# ChurchStructureUnitRoleAssignment, or BibleStudyMeetingRole, never drives
-# permissions, and never appears in My Serving. The view that uses it is
+# ChurchStructureUnitRoleAssignment, or BibleStudyMeetingRole, and never appears
+# in My Serving. After MINISTRY-ROLE-SOURCE.1C, an active date-valid Lead or
+# Coordinator assignment drives exact-team management authority; other role
+# types grant no automatic permission. The view that uses this form is
 # staff/superuser-only. Validation defers to
 # ``MinistryTeamRoleAssignment.full_clean()`` (overlapping same user/team/role
 # rejection, active team/role/user checks) so the UI never bypasses the model.

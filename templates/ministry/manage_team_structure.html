@@ -122,6 +122,9 @@
         <div class="form-row">
             {{ field.label_tag }}
             {{ field }}
+            {% if field.name == "is_worship_rotation_pool" %}
+            <span class="muted">{{ field.help_text }}</span>
+            {% endif %}
             {{ field.errors }}
         </div>
         {% endfor %}
@@ -252,9 +255,9 @@
     <h2 class="card-title">{% if language == "zh" %}长期事工角色{% else %}Long-term Ministry Roles{% endif %}</h2>
     <p class="muted">
         {% if language == "zh" %}
-        这些角色只记录长期事工责任；目前不会自动授予权限，也不会成为我的服事事项。
+        有效期内、启用的负责人或协调同工角色会授予此团队的管理权限；其他长期角色不会自动授予权限。所有长期角色都不会自动创建“我的服事”事项，也不会授予上级或下级团队、聚会或主日敬拜的权限。
         {% else %}
-        These roles record long-term ministry responsibility only; they do not currently grant permissions or create My Serving items.
+        An active, date-valid Lead or Coordinator role grants management authority for this exact team; other long-term roles grant no automatic permission. Long-term roles do not create My Serving items or grant authority over parent/child teams, events, or Sunday Worship.
         {% endif %}
     </p>
 

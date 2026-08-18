@@ -9,12 +9,11 @@ user. It creates, updates, and deletes nothing.
 from dataclasses import dataclass
 from enum import StrEnum
 
-from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import ChurchStructureUnit
 
-from .models import MinistryTeam, MinistryTeamRoleAssignment, MinistryTeamRoleType
+from .models import MinistryTeam, MinistryTeamRoleType
 
 
 class WorshipRotationPoolStatus(StrEnum):
@@ -44,19 +43,13 @@ class WorshipRotationPoolInspection:
 def _has_active_lead_or_coordinator(team, target_date):
     """Canonical exact-team role-source readiness; never a permission grant."""
     return (
-        MinistryTeamRoleAssignment.objects.filter(
-            team=team,
-            team__is_active=True,
-            is_active=True,
-            role_type__is_active=True,
+        team.current_role_assignments_for_readiness(target_date)
+        .filter(
             role_type__code__in=(
                 MinistryTeamRoleType.CODE_LEAD,
                 MinistryTeamRoleType.CODE_COORDINATOR,
             ),
-            user__is_active=True,
-            start_date__lte=target_date,
         )
-        .filter(Q(end_date__isnull=True) | Q(end_date__gte=target_date))
         .exists()
     )
 

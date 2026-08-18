@@ -844,7 +844,6 @@ class MinistryTeamStructureForm(forms.ModelForm):
 
     def __init__(self, *args, language="en", **kwargs):
         super().__init__(*args, **kwargs)
-        self.language = language
         text = structure_form_text(language)
 
         # Import locally to avoid any import-order coupling with structure_map.

@@ -274,7 +274,7 @@ direct way to maintain group belonging.
 
 Current architecture snapshot: Church Structure is canonical locally; legacy structure objects and bridge fields are retired from current models; Bible Study V2 (`BibleStudySeries` + `BibleStudyMeeting`) is active while V1 schema is removed; Today remains a general dashboard; My Serving is the explicit-assignment workspace, including Bible Study meeting role confirmation; external structure database integration is future architecture work. If that integration is pursued, prefer a sync/adaptor/local-shadow model that feeds local `ChurchStructureUnit` / `ChurchStructureMembership`, not direct module dependency on an external database. For ServiceEvents, `ServiceEventAudienceScope` rows are the ordinary-user visibility source and match by active primary `ChurchStructureMembership`; zero-row events fail closed for ordinary users. Bible Study normal generation is structure-unit-native: it targets active `UNIT_SMALL_GROUP` leaves from `BibleStudySeriesAudienceScope`, writes meeting audience rows, and uses `generation_key` / `anchor_unit` for identity. Since BS-STRUCT.2A, Bible Study V2 meeting visibility, `/studies/` / Today, and role/worship pickers read meeting audience rows plus active primary membership, and zero-row V2 meetings fail closed. See `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`, `docs/SERVICE_EVENT_AUDIENCE_SCOPE_REDESIGN_PLAN.md`, `docs/SERVICE_EVENT_AUDIENCE_RUNTIME_MIGRATION_PLAN.md`, and `docs/SERVICE_EVENT_AUDIENCE_SELECTOR_INTERACTION_PLAN.md`.
 
-Ministry scheduling requirements from real pilot feedback are recorded in `docs/MINISTRY_SCHEDULING_REQUIREMENTS_PLAN.md`. MO-S.2 is complete: `ServiceEvent` now has required MinistryTeams through explicit `ServiceEventRequiredTeam` rows. MO-S.3 is complete as read-only coverage display comparing those required teams against `TeamAssignment` and `TeamAssignmentMember` data. MO-S.4 is complete as a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`. MO-S.4A scheduling semantic cleanup is complete after manual QA. MO-S.5A is complete: `ServiceEvent.rotation_anchor_team` is an optional scheduling hint only. MO-S.5B is complete: the team schedule workspace can prefill editable anchor-based or team-history copy-forward suggestions and writes only on explicit save. MO-S.6B is complete as the bounded scheduler-only Sunday Schedule Board. MO-S.6C is complete: the Board and Sunday Team Schedule share a narrow current Worship anchor/roster state projection, and the existing anchor/team-history suggestions now identify their source, proposed members, explicit-save requirement, and an identity-based current-roster match/difference when truthful. Duplicate current Worship or downstream assignments fail closed; the projection adds no general detail access, write path, notification producer, model, or migration. `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; after `MINISTRY-ROLE-SOURCE.1C`, holders of an active lead/coordinator `MinistryTeamRoleAssignment` on a team can schedule that team's assignments (this authority no longer comes from `TeamMembership.role`); staff, superusers, and global assignment managers can schedule any team; ordinary members, membership-`role`-only leads/coordinators without a matching role assignment, and `can_lead`-only members cannot schedule; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the schedule defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display now uses `host_language_unit` and the audience-derived structure fallback, not the retired `ministry_context` FK.
+Ministry scheduling requirements from real pilot feedback are recorded in `docs/MINISTRY_SCHEDULING_REQUIREMENTS_PLAN.md`. MO-S.2 is complete: `ServiceEvent` now has required MinistryTeams through explicit `ServiceEventRequiredTeam` rows. MO-S.3 is complete as read-only coverage display comparing those required teams against `TeamAssignment` and `TeamAssignmentMember` data. MO-S.4 is complete as a team-scoped manual scheduling workspace at `/teams/<team_id>/schedule/`. MO-S.4A scheduling semantic cleanup is complete after manual QA. MO-S.5A is complete: current runtime uses `ServiceEvent.rotation_anchor_team` as an optional scheduling hint. MO-S.6D-0A-FU1/FU2 now document the stronger future governed meaning: it is the explicit event-level Worship Team ownership selection, while remaining separate from assignment, serving, RequiredTeam, coverage, audience, and permission; any current Worship assignment must match that selected team. FU2 also fixes Worship-specific pool configuration and required exact-event planner/coordinator responsibility as prerequisites. These documentation decisions do not enforce the invariants yet. MO-S.5B is complete: the team schedule workspace can prefill editable anchor-based or team-history copy-forward suggestions and writes only on explicit save. MO-S.6B is complete as the bounded scheduler-only Sunday Schedule Board. MO-S.6C is complete: the Board and Sunday Team Schedule share a narrow current Worship anchor/roster state projection, and the existing anchor/team-history suggestions now identify their source, proposed members, explicit-save requirement, and an identity-based current-roster match/difference when truthful. Duplicate current Worship or downstream assignments fail closed; the projection adds no general detail access, write path, notification producer, model, or migration. `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; after `MINISTRY-ROLE-SOURCE.1C`, holders of an active lead/coordinator `MinistryTeamRoleAssignment` on a team can schedule that team's assignments (this authority no longer comes from `TeamMembership.role`); staff, superusers, and global assignment managers can schedule any team; ordinary members, membership-`role`-only leads/coordinators without a matching role assignment, and `can_lead`-only members cannot schedule; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the schedule defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display now uses `host_language_unit` and the audience-derived structure fallback, not the retired `ministry_context` FK. See `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` for the canonical future governance and slice boundaries.
 
 The lightweight modular CMS foundation is implemented through
 `MODULAR-CORE.6B`:
@@ -491,9 +491,14 @@ Future pieces include:
 - Reminder automation
 - Limited rotation/copy-forward helper, completed as bounded MO-S.5A/MO-S.5B ministry scheduling work
 - Sunday Ministry Scheduling planning is complete in MO-S.6A, and MO-S.6B
-  Sunday Schedule Board V1 is implemented. Its bounded cross-team coordination
-  projection replaces the older generic “multi-team dashboard” future label;
-  later MO-S.6 slices remain separately scoped and unapproved by default.
+  Sunday Schedule Board V1 and MO-S.6C context are implemented. Docs-only
+  MO-S.6D-0A/FU1/FU2 closes workbook-readiness and multi-campus Worship
+  governance decisions, including Worship-specific pool configuration,
+  required exact-event planner responsibility, selected-team/roster
+  consistency, and safe batch-change boundaries. Its bounded cross-team
+  coordination projection replaces the older generic “multi-team dashboard”
+  future label; every governance runtime/schema prerequisite and later MO-S.6
+  slice remains separately scoped and unapproved.
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
 
@@ -673,9 +678,13 @@ described as active runtime structure.
 
 The current explicitly approved product-development track is Sunday Ministry
 Scheduling, following the canonical planning document
-`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. MO-S.6B is now implemented, but that
-milestone does not authorize subsequent runtime slices: each later slice still
-requires its own explicit task approval and repository-truth review.
+`docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. MO-S.6B and MO-S.6C are now
+implemented, but those milestones and the docs-only MO-S.6D-0A/FU1/FU2
+governance closure do not authorize subsequent runtime slices: each Campus,
+Worship-pool, planner-responsibility, consistency/authorization, reachability,
+planner, notification, and import slice still requires its own explicit task
+approval and repository-truth review. The canonical governance decision is
+`docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`.
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam selection when creating or batch-creating ServiceEvents, TeamAssignment pages need required-team coverage with assigned coworkers and confirmation status rather than only counts, and ministry team leaders need an efficient same-type event scheduling entry point for their own team. MO-S.2 completes the first implementation slice by letting staff select required teams on ServiceEvent single create/edit and recurring batch-create. MO-S.3 completes the read-only coverage slice: the `TeamAssignment` list is the primary operational coverage surface, assignment detail shows compact event coverage, ServiceEvent detail shows coverage only to staff/service-event or team-assignment managers, ordinary event viewers do not see coworker coverage, `/staff/` adds upcoming required-team gap counts, and browser automation was blocked but user-completed manual QA accepted the UI. MO-S.4 completes the manual team-leader scheduling workspace, and MO-S.4A completes scheduling semantic cleanup after manual QA: Team detail shows Schedule Team / 安排团队服事 only for users who can manage that team's assignments; staff, superusers, and global assignment managers can schedule any team; Lead and Coordinator roles can schedule their own team assignments; ordinary members, `can_lead`-only members, and unrelated users cannot schedule; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the workspace defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display is structure-native; one active in-page schedule/edit form is selected by event or assignment query parameters.
 
@@ -813,8 +822,10 @@ Do not add a LightingTeam-specific model. Pilot data should continue to use the 
 ### Phase 8: Ministry Operations Enhancements
 
 The current bounded Ministry Operations track is Sunday Ministry Scheduling:
-MO-S.6A planning and MO-S.6B Sunday Schedule Board V1 are complete. Any later
-MO-S.6 slice requires separate explicit approval and repository-truth review.
+MO-S.6A planning, MO-S.6B Sunday Schedule Board V1, MO-S.6C context, and the
+docs-only MO-S.6D-0A/FU1/FU2 investigations are complete. Any governance
+prerequisite or later MO-S.6 runtime slice requires separate explicit approval
+and repository-truth review.
 
 Still deferred unless separately approved and supported by real use:
 - Availability
@@ -1101,7 +1112,10 @@ For feature tasks:
 
 Current immediate product state: MO-S.6A Sunday Ministry Scheduling planning,
 MO-S.6B Sunday Schedule Board V1, and MO-S.6C Worship Context & Pairing
-Suggestions are complete. MO-S.6D and later are not authorized by that
+Suggestions are complete. The docs-only MO-S.6D-0A/FU1/FU2 workbook and
+governance closure is also complete; it authorizes no Campus, Worship-pool,
+event-responsibility, ownership-consistency, planner, notification,
+reachability, or importer runtime. MO-S.6D and later are not authorized by that
 completion. Availability, swaps, reminders, automatic
 scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader
 scheduling enhancements remain deferred.
@@ -1150,8 +1164,10 @@ Notification expansion by default.
 
 Short next-candidate list:
 
-- after separate product review and explicit task approval, consider MO-S.6D
-  Excel Event + Worship Anchor Import; MO-S.6C completion does not authorize it;
+- after separate product review and explicit task approval, implement the
+  ordered prerequisites in `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` before
+  considering MO-S.6D Excel Event + Worship Team Import; documentation closure
+  does not authorize any prerequisite or importer runtime;
 - review Church Calendar limited-trial feedback before separately approving any
   broader calendar behavior such as notifications, external sync, attendance,
   authoring/management, staff dashboards, or CommunityActivity-to-ServiceEvent

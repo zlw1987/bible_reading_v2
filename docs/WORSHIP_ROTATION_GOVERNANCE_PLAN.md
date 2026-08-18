@@ -1,0 +1,814 @@
+# Multi-Campus Worship Rotation Governance Plan
+
+Status: canonical docs-only decision closure through `MO-S.6D-0A-FU2`. FU2
+finalizes the required event-planner prerequisite and Worship-specific pool
+semantics. Nothing in this document implements runtime behavior. Every future
+slice below requires separate explicit approval.
+
+## 1. Problem and decisions owned here
+
+Sunday Worship has two separate decisions:
+
+1. **Event-level rotation selection:** an authorized planner or the active
+   Lead/Coordinator of an applicable larger Worship ministry selects the exact
+   assignable team that owns this event. `ServiceEvent.rotation_anchor_team`
+   represents this decision.
+2. **Exact-team roster scheduling:** the selected team's own Lead/Coordinator
+   selects that team's serving members through `TeamAssignment` and
+   `TeamAssignmentMember`.
+
+These responsibilities must not collapse. A larger ministry-container Lead
+does not inherit roster authority over descendants. A child-team Lead does not
+gain authority over peer rotation selection. Audience, structure, membership,
+serving, and management remain separate axes.
+
+This plan closes the architecture decisions needed before a later narrow
+rotation-edit path or the MO-S.6D Excel importer can be approved. It does not
+add Campus/Site, pool configuration, event responsibilities, permissions,
+queryset reachability, an Excel dependency, or an importer.
+
+## 2. Current repository truth
+
+The current code provides:
+
+- a flexible `ChurchStructureUnit.parent` tree with a 32-character choice
+  field for semantic unit type;
+- app-specific audience rows, including `ServiceEventAudienceScope`;
+- ordinary ServiceEvent audience matching through one active primary
+  `ChurchStructureMembership`, with zero-row events failing closed;
+- `ServiceEvent.host_language_unit` as display-only context;
+- `MinistryTeam` hierarchy through `MinistryTeamParentLink`, including multiple
+  active parents and at most one active primary display path;
+- `MinistryTeam.team_kind` as descriptive taxonomy only;
+- `MinistryTeam.is_assignable` as the behavioral gate for new active
+  `TeamAssignment` targets;
+- exact-team Lead/Coordinator management authority through active, date-valid
+  `MinistryTeamRoleAssignment` rows;
+- nullable `ServiceEvent.rotation_anchor_team`, currently selectable from any
+  active team on the normal event forms and described by older runtime/docs as
+  a hint, without enforcement of the governed ownership invariant below;
+- Team Schedule and Sunday Board event reachability through required-team or
+  existing-assignment participation, not an anchor alone; and
+- `ServiceEvent.created_by` plus `created_at` / `updated_at`, but no per-event
+  responsibility model and no `updated_by` field.
+
+The current code does **not** provide:
+
+- a Campus/Site unit type;
+- metadata that safely says "this MinistryTeam container owns a Worship Team
+  selection pool";
+- an event-specific planner/coordinator responsibility;
+- narrow authorization to change only `rotation_anchor_team`;
+- anchor-only Team Schedule or Board reachability; or
+- a declared `.xlsx` dependency or annual-workbook importer.
+
+`created_by` is creation attribution, not durable planner responsibility or
+runtime authority. `MinistryTeamParentLink.parent_church_unit` is currently a
+display/organization anchor, not an authority or applicability source. Making
+that anchor a rotation-applicability input is a new, explicitly governed
+consumer; the link alone must still grant nothing.
+
+## 3. Church Structure type semantics
+
+`unit_type` is semantic classification layered over one generic tree. Most
+hierarchy and audience behavior follows `parent`, not a fixed type matrix.
+
+| Type | Intended purpose | Current stronger behavior | Generic behavior and boundaries |
+| --- | --- | --- | --- |
+| `root` | Whole Church / the top organizational audience | A root cannot have a parent; child creation excludes `root`; setup prevents enabling a second active root; a selected root audience matches every authenticated user and is exclusive of lower audience selections | It creates no membership, role, serving row, or permission. |
+| `ministry_context` | Congregation, language, or ministry context such as CM/EM | The ServiceEvent Host / Language admin picker accepts only this type; display fallback walks audience ancestry to the nearest such unit | It remains display context when used by `host_language_unit`; as an audience row it uses the same subtree matching as other non-root units. |
+| `district` | A district-like organizational branch | `ChurchRoleAssignment` district-scoped validation rejects a `small_group` unit but otherwise permits a broader non-small-group structure scope; group-progress access then filters to descendant small-group units | The type alone grants nothing. Audience and Bible Study schedule selection use generic ancestry. |
+| `small_group` | The canonical group-level belonging and normal Bible Study generation leaf | Small-group member management, ordinary own-group progress, prayer/reflection group snapshots, and normal Bible Study generation explicitly require this type | A selected ancestor of small groups can still be an audience or Bible Study schedule scope; choosing this type does not auto-create membership or a meeting. |
+| `fellowship` | A fellowship-level or locally named group/branch | Signup/Profile request selection currently offers active `fellowship` and `small_group` units; the delegated My Units member-maintenance workflow remains small-group-only | A fellowship audience uses generic subtree matching. A fellowship selected for Bible Study generation yields only active descendant `small_group` targets, not the fellowship row itself. |
+| `department` | A church organizational department | No department-specific audience, membership, permission, or serving rule is implemented | It is mostly semantic metadata. It can participate in generic ancestry, audience, explicit role assignment, and an explicitly selected role profile. |
+| `custom` | A flexible local classification when the predefined labels do not fit | No custom-specific runtime rule is implemented | It is mostly semantic metadata and participates in the generic tree and consumer-specific audience/role rules. |
+
+Additional current rules:
+
+- Any active unit may be selected by the generic ServiceEvent audience picker;
+  audience matching covers that unit's subtree. Unit type does not grant
+  audience membership.
+- `ChurchStructureMembership` can technically point to an active unit without
+  a model-level type gate, while the ordinary signup and small-group-management
+  flows apply their narrower type policies.
+- `ChurchStructureUnitRoleProfile` is explicitly selected and drives readiness
+  warnings only. It is not inferred from unit type and grants nothing.
+- `ChurchStructureUnitRoleAssignment` and `ChurchRoleAssignment` are explicit
+  responsibility/permission rows. A unit type by itself is never a role.
+- Bible Study audience visibility accepts any structure level. Normal meeting
+  generation separately resolves only active descendant/self `small_group`
+  units.
+- Creating or editing a structure unit changes only structure metadata. The
+  current add-child and rename paths do not create or rewrite memberships,
+  ServiceEvent or Bible Study audience rows, role assignments, serving rows, or
+  management authority. Moving/reparenting remains outside the narrow setup UI.
+
+The binding boundaries are:
+
+```text
+ChurchStructureUnit != ChurchStructureMembership
+ChurchStructureUnit != audience row
+ChurchStructureUnit != permission or role assignment
+ChurchStructureUnit != serving
+ChurchStructureUnit != MinistryTeam
+```
+
+## 4. Campus / Site decision
+
+A future first-class choice is recommended:
+
+```text
+UNIT_CAMPUS = "campus"
+Campus / Site
+堂点
+```
+
+This is safer and clearer than misclassifying Main Campus / 母堂 as a
+`ministry_context`. The stored value fits the existing `max_length=32`; the
+generic parent tree, path helpers, audience selectors, and descendant matching
+do not assume the current choices are exhaustive.
+
+The first Campus slice should be semantic only:
+
+- no rigid parent-child type matrix;
+- no required CM/EM children;
+- no special permission, role, membership, audience, or serving grant;
+- no automatic role profile;
+- no automatic Host / Language meaning; and
+- no automatic MinistryTeam anchor or pool configuration.
+
+Expected effects of adding the choice:
+
+- Django model state requires an `AlterField` migration because choices change,
+  although no data rewrite or database column expansion is expected.
+- Django Admin and the staff add-child form derive their choices from
+  `UNIT_TYPE_CHOICES`, so Campus appears there after the code change; root
+  exclusion remains intact.
+- A Campus audience includes memberships in descendant branches through the
+  existing generic ancestry rule.
+- A Bible Study schedule scoped to Campus resolves any active descendant
+  `small_group` leaves without new generation logic.
+- Campus remains excluded from the Host / Language picker, signup request
+  picker, small-group member-management path, and small-group-only
+  prayer/reflection/progress logic.
+- An explicit role assignment may deliberately use a Campus as its structure
+  scope under existing rules; that authority comes from the role assignment,
+  never from the Campus type. The Campus slice must not widen or redesign
+  `ChurchRoleAssignment.scope_type`.
+
+Targeted tests should cover model/form/admin choice availability, flexible
+parents and children, audience ancestry, Bible Study descendant-small-group
+resolution, Host / Language exclusion, no automatic role profile, and no
+creation of membership/audience/role/serving rows.
+
+## 5. Flexible multi-campus contract
+
+The canonical contract is a flexible tree, not a universal depth:
+
+```text
+Whole Church [root]
+├── Main Campus [campus]
+│   ├── Chinese Ministry [ministry_context]
+│   └── English Ministry [ministry_context]
+└── Tri-Valley Campus [campus]
+    └── Tri-Valley Ministry [ministry_context today]
+```
+
+That example is data, not schema. A Campus may have zero, one, or many ministry
+contexts. A church may omit Campus entirely, use additional intermediate
+`department` / `fellowship` / `custom` units, or have unequal branch depth.
+Adding a later Tri-Valley CM/EM subdivision must be a data/setup change, not a
+code change. No behavior may depend on SVCA names, codes, or database IDs.
+
+## 6. Church Structure versus Ministry Structure
+
+Church Structure owns campus/congregation/group topology, belonging, and
+organizational audience. Ministry Structure owns operational ministries,
+assignable teams, long-term ministry roles, and serving assignments.
+
+A safe Worship shape is:
+
+```text
+Church Structure                         Ministry Structure
+Main Campus                              Chinese Worship Ministry [container]
+└── Chinese Ministry  <--- anchor -------├── Worship Team 1 [assignable]
+                                         ├── Worship Team 2 [assignable]
+                                         └── ...
+```
+
+The ministry hierarchy remains `MinistryTeamParentLink.parent_team`. The Church
+Structure link remains an organization anchor. Under the future governance
+consumer, the anchor may help answer whether an explicitly configured Worship
+pool applies to an event, but it still grants no permission. Authority requires
+an explicit active Lead/Coordinator role on the configured Worship pool
+**and** event applicability.
+
+## 7. Worship rotation-pool representation
+
+No existing field safely identifies a Worship rotation pool:
+
+- name/code matching and database IDs are church-specific and unsafe;
+- `team_kind` is explicitly descriptive only;
+- `is_assignable=False` identifies many containers, not rotation ownership;
+- `role_profile=worship_related_team` is readiness metadata, can be used on
+  assignable teams, and is explicitly not a behavior gate;
+- hierarchy identifies organization, not scheduling purpose; and
+- a Church Structure anchor identifies display placement, not purpose or
+  authority.
+
+The V1 decision is one explicit Worship-specific Boolean on `MinistryTeam`,
+semantically named `is_worship_rotation_pool`:
+
+```text
+is_worship_rotation_pool = True
+    this active non-assignable MinistryTeam container owns an eligible
+    Worship Team selection pool for ServiceEvent Worship governance
+```
+
+The exact Python identifier may be adjusted for normal repository naming
+conventions during implementation, but the stored semantic must remain
+Worship-specific. It must not mean "generic rotation pool" or make preaching,
+ushering, or another future rotation domain eligible for the ServiceEvent
+Worship Team slot. If materially different rotation domains emerge from real
+use, reevaluate a typed `rotation_pool_kind`, responsibility-slot model, or
+other abstraction then; do not pre-abstract a generic rotation engine now.
+
+First-slice validity/readiness rules:
+
+- the pool team is active and `is_assignable=False`;
+- its active primary MinistryTeam parent path resolves to exactly one active
+  Church Structure anchor;
+- the hierarchy/path is cycle-safe and unambiguous;
+- missing active Lead/Coordinator remains a setup warning, not an implicit
+  grant;
+- the flag is configuration only and grants no authority by itself;
+- the flag creates no assignment, membership, audience row, required-team row,
+  serving row, or role assignment; and
+- it becomes an applicability/candidate input only through the separately
+  governed Worship-rotation helpers.
+
+The first governance consumer should use only the active **primary** ministry
+parent path and its primary Church Structure anchor. Secondary parent links
+remain display-only in this slice. This deterministic rule avoids making one
+shared child silently eligible in several pools. A genuinely multi-anchor
+Worship rotation pool is deferred; first represent combined services as
+multiple separately configured applicable pools. Missing primary path,
+multiple-primary corruption, a cycle, an inactive anchor, or an unanchored pool
+fails closed and is a setup/readiness warning.
+
+Rejected alternatives are recorded in Section 16.
+
+## 8. Audience applicability, never authority
+
+For an event with selected audience units `A` and a configured Worship pool
+with primary Church Structure anchor `W`:
+
+```text
+pool_is_applicable(event, pool) =
+    event has at least one audience row
+    AND pool and W are active and valid
+    AND W is equal to or a descendant of at least one unit in A
+```
+
+The rule uses `ChurchStructureUnit.parent` ancestry. It does not inspect unit
+names, codes, fixed depth, membership rows, `host_language_unit`, event
+location, or the current anchor team.
+
+Examples:
+
+- Whole Church audience -> all valid descendant Campus/congregation pools may
+  apply.
+- Main Campus audience -> valid pools anchored in Main Campus descendants may
+  apply; Tri-Valley pools do not.
+- Main Chinese Ministry audience -> Chinese pool applies; Main English pool
+  does not.
+- Main Chinese + Main English audience -> union of both applicable pools.
+- Tri-Valley Ministry audience -> its current pool applies; later subdivisions
+  follow changed ancestry/configuration without code changes.
+
+Fail-closed behavior:
+
+- zero audience rows -> no applicable pools;
+- inactive selected audience unit or inactive pool anchor -> that branch grants
+  no applicability;
+- inactive or non-pool MinistryTeam -> not applicable;
+- unanchored pool -> not applicable;
+- missing/ambiguous/cyclic primary hierarchy -> not applicable;
+- multiple audience rows -> union of valid branches;
+- multiple applicable pools -> intentional union, not an ambiguity; and
+- `host_language_unit` and audience-derived Host / Language display fallback ->
+  excluded from applicability and authority.
+
+Audience answers where a pool is operationally relevant. It never answers who
+may change the event.
+
+## 9. Eligible rotation-anchor teams
+
+For all applicable configured Worship pools, the selector candidate set is the
+union of teams that are:
+
+- active;
+- `is_assignable=True`; and
+- descendants of an applicable pool through active **primary**
+  `MinistryTeamParentLink.parent_team` edges.
+
+Use all descendants, not direct children only, so an intermediate container
+does not require a schema change. Use the primary parent path only so each
+candidate has one deterministic pool owner in V1. The pool container itself is
+never a candidate because it must be non-assignable. A team linked to a pool
+only through a secondary parent is not eligible in V1. A candidate with a
+missing, inactive, ambiguous, or cyclic primary path is excluded.
+
+No candidate may be derived from names, fuzzy matching, `team_kind`,
+`role_profile`, database IDs, or existing `TeamAssignment` rows. Current event
+forms offering every active MinistryTeam are not the future governed selector
+contract.
+
+### Worship ownership and assignment consistency
+
+For the governed workflow, `rotation_anchor_team` is the event-level Worship
+team selected to **own Worship for that occurrence**. "Anchor" remains a useful
+internal field name, but "optional scheduling hint" is no longer the canonical
+product meaning once governance is implemented.
+
+The stronger meaning preserves the existing separations:
+
+```text
+rotation_anchor_team = event-level Worship team ownership selection
+rotation_anchor_team != TeamAssignment
+rotation_anchor_team != serving
+rotation_anchor_team != required coverage
+rotation_anchor_team != audience
+rotation_anchor_team != permission
+```
+
+An audience-ready future event may have a valid selected Worship team but no
+Worship `TeamAssignment` yet; that is the normal **selected but unscheduled**
+state. Once a current Worship assignment exists, however, it must be for the
+exact selected team:
+
+```text
+rotation_anchor_team = C1
+current Worship TeamAssignment team = C1        valid
+
+rotation_anchor_team = C1
+current Worship TeamAssignment team = C2        invalid / fail closed
+```
+
+For this invariant, a "current Worship assignment" is a non-cancelled
+operational assignment for the event whose team resolves through the governed
+primary path to any configured Worship rotation pool. A valid current row must
+also be inside this event's Section 9 eligible candidate union and equal the
+selected team. This catches an assignment under an inapplicable pool as a
+conflict rather than allowing it to disappear from validation.
+Completed/historical and cancelled rows remain history and must not be
+retagged. More than one current assignment for the selected team remains
+ambiguous under the existing duplicate fail-closed rule. A current assignment
+for another Worship team is a cross-team ownership conflict, even when the
+selected team has no assignment.
+
+The current `build_worship_contexts()` projection queries only the exact
+selected team. It can report the selected team as unscheduled while a different
+eligible Worship team has an assignment; the repository therefore does not yet
+enforce or fully diagnose this stronger invariant. A future governance slice
+must add one shared, pool-aware consistency helper and use it on every relevant
+anchor edit and Worship assignment create/edit/import path. This is a
+cross-row/hierarchy rule and should not be represented as a misleading simple
+database constraint.
+
+Creating or editing a Worship assignment for a team other than the selected
+team must fail closed. Changing the selected team while any current Worship
+assignment exists for the old or another Worship team must also fail closed in
+the ordinary anchor action. It must never move, rewrite, clone, retag, cancel,
+or delete that assignment or its members. A later explicit resolution workflow
+may show the conflicting assignment and require an authorized human to choose a
+separate, auditable action; until then the safe choices are to keep the current
+selection or resolve/cancel the old assignment through its existing owning-team
+workflow before retrying. An existing assignment on the proposed new team is a
+repair case, not permission for an ordinary silent anchor change.
+
+If a service genuinely needs several simultaneous Worship owner teams, the
+single selected-team model cannot express that truth. Configure one explicit
+assignable combined-service Worship team for the first workflow or approve a
+later multi-owner schema; do not encode co-ownership as mismatched parallel
+assignments.
+
+## 10. Rotation-selection authority
+
+A future server-side `can_change_rotation_anchor(user, event)` contract should
+allow exactly these classes:
+
+1. staff, superuser, or an existing full `CAP_MANAGE_SERVICE_EVENTS` holder;
+2. an active event-specific planner/coordinator assignment described in
+   Section 11; or
+3. a user holding an active, date-valid `lead` or `coordinator`
+   `MinistryTeamRoleAssignment` on at least one applicable configured Worship
+   rotation pool.
+
+For class 3, both halves are mandatory:
+
+```text
+active Lead/Coordinator role on pool
+AND
+pool applicable to current locked event audience
+```
+
+A role on an inapplicable pool grants nothing. An applicable pool with no role
+grants nothing. A role on a descendant candidate team grants exact-team roster
+management only and does not grant peer rotation selection.
+
+The narrow mutation endpoint/form may change only `rotation_anchor_team`, must
+offer only the Section 9 candidate union, and must reject cancelled events. It
+must not edit title, type, time, location, status, audience, Host / Language,
+required teams, assignments, or rosters. Full event managers may keep their
+existing broader event-edit path; the narrow endpoint must not turn a pool Lead
+or planner into a full event manager.
+
+For a combined event with several applicable pools, every qualifying pool
+Lead/Coordinator may edit the event and the allowed selector is the same union
+of candidates from all applicable pools. This is intentional shared
+coordination, not descendant roster authority.
+
+## 11. Event-specific planner/coordinator responsibility
+
+No current model provides durable event-level responsibility. `created_by`
+must not be reused: it records who created an event, has no lifecycle, and does
+not currently grant management.
+
+The approved workflow includes a person responsible for one exact Sunday
+Service who may legitimately select/change that event's Worship Team without
+being staff, a superuser, a full `CAP_MANAGE_SERVICE_EVENTS` holder, or a
+Lead/Coordinator of an applicable Worship rotation pool. Explicit event-level
+planner/coordinator responsibility is therefore a **required prerequisite** for
+the narrow Worship Team selection workflow, not an optional later enhancement.
+Do not satisfy this use case by granting full `CAP_MANAGE_SERVICE_EVENTS`.
+
+The smallest reusable future concept is an event-owned responsibility row,
+provisionally named `ServiceEventRoleAssignment`:
+
+```text
+service_event
+user
+role_type = planner | coordinator
+is_active
+assigned_by
+created_at
+ended_at / ended_by
+```
+
+Final naming is an implementation detail, but semantics are locked:
+
+- explicit assignment and explicit deactivation; retain ended rows for history;
+- active user and non-cancelled event required for authority;
+- multiple active planners/coordinators allowed;
+- overlapping active duplicate for the same event/user/role rejected;
+- grants read access to the minimum event/Worship context needed for rotation
+  selection and the narrow anchor change only;
+- not audience membership and does not expose other events;
+- not full ServiceEvent management;
+- no required-team, TeamAssignment, roster, MinistryTeam, or Church Structure
+  management authority;
+- not serving and does not appear in My Serving; and
+- creates no notification unless a later producer slice is approved.
+
+The foundation must be implemented before the narrow authorization/UI slice
+can claim the approved product workflow. The exact model name remains an
+implementation detail; the explicit, lifecycle-managed, exact-event semantics
+above do not.
+
+## 12. Exact child-team roster boundary
+
+`TeamAssignment` management remains exact-team:
+
+- staff/superuser/global assignment authority may manage any team;
+- otherwise an active Lead/Coordinator role on the exact assignable team may
+  manage that team's assignment;
+- a role on a pool or other ancestor must not flow to descendant teams; and
+- a planner, audience row, Campus, Church Structure anchor, or rotation anchor
+  must not grant roster management.
+
+The existing `can_manage_team_assignment_for_team` exact-team contract is the
+correct foundation and should remain unchanged. The future rotation endpoint
+selects which team owns the event; the existing Team Schedule endpoint selects
+who serves for that exact team.
+
+## 13. Anchor-only operational reachability
+
+The clean solution to the MO-S.6D-0A dead end is to make the exact current
+rotation anchor a third operational event-relevance predicate:
+
+```text
+required team
+OR existing non-cancelled assignment
+OR exact active/assignable current rotation_anchor_team
+```
+
+This is reachability only. It does not make the anchor required coverage, does
+not create a `ServiceEventRequiredTeam`, does not create a `TeamAssignment`, and
+does not grant edit authority.
+
+Future Team Schedule behavior:
+
+- add exact `rotation_anchor_team=selected_team` to the existing event set;
+- keep draft/cancelled exclusion and existing date/type filters;
+- preserve exact-team POST authorization and `is_assignable` validation; and
+- show anchor context without fabricating coverage or an assignment.
+
+Future Sunday Board behavior:
+
+- treat a valid current anchor as row-level operational participation for the
+  bounded Sunday window;
+- an exact anchor-team manager may see that row and the narrow Worship context;
+- a global assignment manager may see an anchor-only operational row;
+- the anchor remains outside generic required/additional coverage columns and
+  continues to render through the Worship context projection; and
+- general ServiceEvent detail and unrelated assignment-detail access remain
+  unchanged.
+
+When the anchor changes, the prior team immediately loses anchor-only
+reachability. It retains the event only if it is still required or has an
+existing assignment. The new exact team gains anchor relevance. An inactive or
+non-assignable anchor does not grant a team scheduling surface; existing global
+event-management/repair surfaces remain responsible for invalid configuration.
+
+This is a small future queryset/projection slice with no schema change. Focused
+tests must prove privacy redaction, exact-team authority, old/new anchor
+behavior, global-manager rows, draft/cancelled exclusion, invalid-anchor
+fail-closed behavior, and zero automatic required-team/assignment writes.
+
+## 14. Concurrent authorized editors
+
+Several pool Leads or planners may legitimately edit a combined event. A future
+POST must therefore:
+
+1. enter `transaction.atomic` and lock/reload the `ServiceEvent`;
+2. reauthorize against the locked current event, audience, active pool roles,
+   pool configuration, and candidate union;
+3. compare a browser-rendered expected `updated_at` and expected current anchor
+   against the locked row;
+4. reject a stale event or a selected team that is no longer eligible;
+5. save only the anchor; and
+6. record actor plus old/new anchor through the repository's established
+   `LogEntry` audit pattern inside the transaction.
+
+Using the event-level `updated_at` is conservatively broad: an unrelated event
+edit may force the user to refresh, but no silent lost update occurs and no new
+version field is needed initially. If trials show unacceptable false conflicts,
+a dedicated anchor version/audit model can be evaluated separately. SQLite
+tests can prove stale-form and atomic semantics, not parallel PostgreSQL lock
+behavior.
+
+### Future Worship Rotation Planner
+
+After the narrow one-event action is proven, a domain-specific **Worship
+Rotation Planner** may support two explicit operations:
+
+1. change the Worship Team for this Sunday only; and
+2. insert a selected special/combined-service Worship team, then shift the
+   later explicitly selected teams by one Sunday across a user-bounded range.
+
+This remains a batch editor of explicit per-`ServiceEvent` selections. It is
+not a C1/C2/C3/A rule engine, recurrence generator, or perpetual rotation
+source. The database values on each event remain authoritative after commit.
+No event outside the reviewed proposal may change.
+
+Required flow:
+
+```text
+select bounded events and operation
+-> calculate side-effect-free proposal
+-> preview every before/after Worship Team
+-> explicit confirmation
+-> locked revalidation and atomic commit
+```
+
+Preview must show event/date, before team, after team, applicable pool, and for
+each row whether there is a current Worship roster or downstream assignment.
+It must fingerprint the event audience, current selection, pool configuration,
+and affected assignment state. Confirmation must reauthorize and lock/reload
+the full set, recompute applicability/candidates/consistency, and fail the whole
+batch on stale or ineligible state. A user may explicitly remove a blocked row
+and generate a new proposal; confirmation must never silently skip it.
+
+Any current Worship assignment is a blocking roster conflict for an ordinary
+single change or batch shift, including an empty assignment with status/notes
+but no members. The planner must not move people, change an assignment's team,
+clone a roster, rewrite confirmation, or cancel/delete an assignment. Existing
+non-Worship downstream assignments are not rewritten; they are prominent
+review-impact evidence and drive the future notification set below. A later
+explicit roster-resolution workflow requires its own authority, preview,
+audit, notification, and rollback design.
+
+### Direct Worship Team change notifications
+
+A successfully committed selected-team change is a known domain event with an
+exact old/new value. A future ministry-owned producer should notify a bounded,
+deduplicated recipient set:
+
+- active, date-valid Leads/Coordinators of the old selected Worship team;
+- active, date-valid Leads/Coordinators of the new selected Worship team;
+- active, date-valid Leads/Coordinators of active required downstream service
+  teams for the event; and
+- active, date-valid Leads/Coordinators of active additional downstream teams
+  that already have a non-cancelled assignment for the event.
+
+The last class is repository-grounded: Sunday Board already treats a current
+assignment without a required-team row as real operational participation. It
+does not justify notifying assignment members, all team members, audience
+members, Church Structure members, generic staff, or unrelated pool leaders.
+Exclude Worship candidate teams from the downstream classes, deduplicate a user
+who qualifies through several teams, use recipient-persisted language, and keep
+the snapshot free of rosters, notes, contact data, audience internals, and
+private profile data.
+
+The producer must live in `ministry`, resolve its own recipients and dedupe
+identity, and emit only through the Core notification port after a successful
+commit. It must not import Notification persistence or use Django signals. A
+single-event change produces at most one notification per recipient. A batch
+shift produces one summarized notification per recipient for the committed
+batch, not one per Sunday. The owning slice must define a stable operation
+identity/dedupe key and a recipient-safe target; an old-team leader may lose
+anchor-only Board reachability after the change, so a Board link must not be
+assumed accessible. Disabled Notifications remains a safe no-op.
+
+This direct producer is separate from MO-S.6E. A committed selected-team change
+has explicit before/after facts and can notify immediately. Detecting a later
+roster membership/status change across every mutation path, deciding which
+downstream schedules became stale, and avoiding noisy repeats remains the
+harder MO-S.6E context/version problem. Existing member-facing assignment
+notifications do not solve that cross-team warning.
+
+Scheduler-facing copy should say **Worship Team** / **敬拜团队**, for example
+"Current Worship Team" and "Change Worship Team." Reserve
+`rotation_anchor_team`, "rotation anchor," pool, and path terminology for code,
+staff setup, audit, or architecture documentation.
+
+## 15. Consequences for MO-S.6D Excel import
+
+The strict MO-S.6D-0A workbook decisions remain:
+
+- known code-owned `.xlsx` contract; only `All 930` A:B for the Bethany 9:30
+  profile in the first importer;
+- explicit code-owned service-profile mapping;
+- exact local date/time/type/profile identity;
+- no fuzzy event or team matching, no hard-coded PKs, and no user/team creation;
+- no formula evaluation; cached date results only under the recorded structural
+  and weekly-sequence validation;
+- preview before confirmation, expiring signed normalized proposal,
+  confirmation-time reauthorization/revalidation, atomic fail-closed writes,
+  idempotent no-op behavior, and visible classification of special/unsupported
+  rows; and
+- no assignment/member import in the first importer.
+
+Revised first lifecycle:
+
+- match/update one exact existing, non-draft, non-cancelled,
+  audience-ready ServiceEvent;
+- resolve each workbook token by explicit preview mapping to a current eligible
+  candidate from that event's applicable configured Worship-pool union;
+- classify any current Worship assignment for a different team, or any ordinary
+  anchor change while a current Worship assignment exists, as a blocking
+  conflict rather than moving or retagging a roster;
+- surface existing downstream assignments as review impact without changing
+  them;
+- update `rotation_anchor_team` only; and
+- never infer audience, Campus, Ministry Context, required teams, assignments,
+  or serving from the workbook.
+
+The prior recommendation to create `ServiceEventRequiredTeam` for the anchor
+solely to bootstrap discoverability is **superseded**. Anchor-based operational
+reachability is the cleaner domain rule. The importer must not claim required
+coverage merely because a team owns the rotation.
+
+Single-event authority and bulk import authority remain separate. A Worship-pool
+Lead or event planner may be allowed to change one applicable event; that does
+not authorize an annual workbook. The safest first upload/preview/confirm
+boundary is staff/superuser only, rechecked at both preview and confirmation. A
+later dedicated bulk-import capability may be considered after trial evidence;
+do not reuse pool role, exact-team assignment authority, or audience as bulk
+authority.
+
+## 16. Rejected alternatives
+
+- **Model Campus as `ministry_context`:** rejected because Campus and
+  congregation/language context are different and the Host / Language consumer
+  gives `ministry_context` a real display meaning.
+- **Enforce Root -> Campus -> CM/EM -> District -> Small Group:** rejected
+  because current and future churches need uneven, optional, and custom depth.
+- **Use names, A/C1/C2/C3 codes, stable PKs, or fuzzy matching:** rejected as
+  church-specific and unsafe.
+- **Use `team_kind`, non-assignable status, or Worship role profile alone to
+  identify pools:** rejected because each is intentionally broader or
+  non-behavioral metadata.
+- **Use a generic `is_rotation_pool` Boolean in V1:** rejected because the only
+  governed slot is ServiceEvent Worship Team ownership; a generic flag could
+  make unrelated preaching, ushering, or future rotation systems appear to be
+  valid Worship candidates. Generalize only after a materially different domain
+  proves the need for a typed or slot-based abstraction.
+- **Treat every MinistryTeam Church Structure anchor as a pool:** rejected
+  because anchors are generic organization/display links and would silently
+  create authority/applicability.
+- **Grant a pool Lead full `CAP_MANAGE_SERVICE_EVENTS`:** rejected because it
+  exposes unrelated event fields and events.
+- **Flow pool/ancestor management to descendant rosters:** rejected because it
+  violates exact-team ownership and existing permission semantics.
+- **Use `created_by` as planner:** rejected because it is attribution without a
+  responsibility lifecycle.
+- **Use audience as authority:** rejected; applicability and authority are two
+  mandatory independent predicates.
+- **Use Host / Language as applicability:** rejected because it is display-only
+  and may be blank or derived.
+- **Create a required-team row for discoverability:** rejected as a false
+  coverage assertion; anchor reachability solves the workflow without changing
+  required-team meaning.
+- **Direct-child candidates only:** rejected because harmless intermediate
+  containers would require data/schema churn.
+- **All active parent links for candidate ownership:** rejected in V1 because a
+  secondary/display link would make a shared team eligible in multiple pools;
+  the primary path is deterministic.
+- **Automatically create a published event from the workbook:** rejected because
+  the workbook cannot supply safe audience or canonical profile data.
+
+## 17. Future implementation slices
+
+Each slice is separately approvable and must verify repository truth again.
+
+| Order | Candidate slice | Runtime/schema and permission impact | Targeted verification | Manual QA |
+| --- | --- | --- | --- | --- |
+| 1 | **Campus/Site type foundation** | Choice-only model state plus `AlterField` migration; semantic behavior only; no new permission | model/form/admin choices, flexible topology, generic audience/Bible Study ancestry, type-specific exclusions, no side effects | Staff setup label/choice QA after deployment |
+| 2 | **Worship rotation-pool configuration foundation** | Add a Worship-specific `MinistryTeam.is_worship_rotation_pool`-equivalent field, migration, and setup/readiness helper; configuration grants no authority | active non-assignable Worship pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, role warning, no created rows/permissions | Staff Ministry Structure setup copy and error-state QA |
+| 3 | **ServiceEvent planner/coordinator responsibility foundation** | Required small exact-event responsibility model and migration; grants narrow context/selection authority only; no Worship Team UI yet | lifecycle/endability, duplicates, multiple active planners, inactive user/event, audit fields, exact-event access, no audience/serving/full-event/structure/assignment authority | Required for responsibility setup/lifecycle UX if exposed |
+| 4 | **Narrow Worship Team authorization, consistency, and UI** | New applicability/candidate/authorization/ownership-consistency helpers and narrow GET/POST endpoint; no model migration expected beyond prerequisites; pool Leads/planners receive only this action | actual GET/POST denial/allow rules, locked-current reauthorization, stale form, combined union, off-team/duplicate roster conflict, assignment-path enforcement, LogEntry attribution, no roster move or unrelated writes | Required for rendered Worship Team selector, bilingual copy, and conflict UX |
+| 5 | **Worship Team operational reachability** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; no migration | selected-team-only rows, global/exact-team behavior, invalid selection, change/removal, privacy, no coverage/assignment/required-team writes | Required on Team Schedule and Board |
+| 6 | **Worship Rotation Planner** | Explicit one-Sunday and bounded shift proposal/confirm workflow; no rule engine or roster mutation; schema depends on separately decided durable batch audit need | before/after proposal, range boundary, roster blocker, downstream impact, stale/all-or-nothing rollback, no hidden skips or assignment writes | Required for batch preview, conflict, and result UX |
+| 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
+| 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
+| 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
+| 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
+
+Dependencies: slice 1 is independent but should precede real multi-campus setup.
+Slices 2 and 3 both precede 4: pool configuration is required for pool-based
+authority/applicability, and exact-event planner responsibility is required for
+the approved event-planner workflow. Slice 4 defines the ownership invariant
+used by 6 through 9. Slice 5 should precede 9 so an imported Worship Team is
+operationally reachable without false required coverage. Slice 6 should precede
+using annual import as a batch rotation tool. Slice 7 follows a proven change
+path. Slice 8 precedes 9. Slice 10 remains later.
+
+## 18. Permission, privacy, and data invariants
+
+- Audience is not permission.
+- Structure is not belonging; belonging is not serving.
+- Church Structure anchors are not authority by themselves.
+- Pool roles and event planner roles are not TeamAssignment roster authority.
+- Rotation anchor is not required coverage, assignment, serving, audience, or
+  permission grant.
+- A current Worship assignment must match the selected Worship Team; conflict
+  handling never silently retags or moves its roster.
+- Exact-team roster authority remains exact-team.
+- Narrow coordination views must not expose private notes, contact/profile data,
+  confirmation detail, or unrelated event/assignment detail.
+- All mutation paths reauthorize on POST and fail closed on stale or changed
+  configuration.
+- No name-based, fuzzy, or PK-configured production mapping.
+- No future slice may create memberships, audience rows, serving rows, or roles
+  as an undocumented side effect.
+
+## 19. Remaining bounded product decisions
+
+Architecture is closed enough for the proposed slices. The following details
+remain for their owning implementation approval:
+
+1. the exact Bethany 9:30 persisted location/Host profile mapping;
+2. whether signed request-scoped import proposals are sufficient or durable
+   `ImportRun` retention is required; and
+3. the reviewed `.xlsx` library/version compatible with local and deployment
+   Python runtimes.
+
+Multi-anchor pool semantics, a dedicated bulk-import capability, dedicated
+anchor version/audit schema, explicit roster-conflict resolution, and assignment
+import remain evidence-gated later decisions rather than hidden V1 assumptions.
+
+## 20. Evidence references
+
+This decision is grounded in:
+
+- `accounts/models.py`, `accounts/forms.py`, `accounts/permissions.py`,
+  `accounts/structure_selectors.py`, `accounts/unit_management.py`, and the
+  current staff Church Structure setup views/tests;
+- `events/models.py`, `events/forms.py`, `events/views.py`, and
+  `events/ministry_context_display.py`;
+- `ministry/models.py`, `ministry/permissions.py`, `ministry/views.py`,
+  `ministry/services/sunday_schedule_board.py`,
+  `ministry/services/worship_context.py`, and
+  `ministry/services/copy_forward_suggestions.py` plus the existing
+  `ministry/services/assignment_notifications.py` producer and Core notification
+  delivery boundary;
+- focused Team Schedule, Sunday Board, Ministry hierarchy, and Church Structure
+  setup tests; and
+- `CHURCH_STRUCTURE_FOUNDATION_PLAN.md`,
+  `CHURCH_STRUCTURE_MAP_AND_SETUP_READINESS_PLAN.md`,
+  `FLEXIBLE_CHURCH_STRUCTURE_AND_AUDIENCE_SCOPE_DESIGN.md`,
+  `MINISTRY_STRUCTURE_ARCHITECTURE_PLAN.md`,
+  `MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md`, and
+  `SUNDAY_MINISTRY_SCHEDULING_PLAN.md`.

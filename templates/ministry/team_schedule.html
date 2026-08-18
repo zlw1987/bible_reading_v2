@@ -100,6 +100,37 @@
             {% endif %}
         </div>
 
+        {% if item.is_sunday_service %}
+        <div class="assignment-coverage-rows">
+            <div class="assignment-coverage-row assignment-coverage-row-additional">
+                <div class="assignment-coverage-main">
+                    <strong>{% if language == "zh" %}敬拜背景{% else %}Worship context{% endif %}</strong>
+                    {% if item.worship_context.state == "no_anchor" %}
+                        <span class="muted">{% if language == "zh" %}未设置敬拜 / 配搭参考{% else %}Rotation/Worship context not set{% endif %}</span>
+                    {% else %}
+                        <span>{{ item.worship_context.anchor_team|ministry_team_name:language }}</span>
+                        {% if item.worship_context.state == "unscheduled" %}
+                            <span class="muted">{% if language == "zh" %}敬拜尚未排班{% else %}Worship not yet scheduled{% endif %}</span>
+                        {% elif item.worship_context.state == "empty" %}
+                            <span class="status status-warning">{% if language == "zh" %}敬拜已排班，暂无成员{% else %}Worship scheduled · no active members{% endif %}</span>
+                        {% elif item.worship_context.state == "scheduled" %}
+                            <span class="status status-good">{% if language == "zh" %}敬拜服事{% else %}Worship serving{% endif %}</span>
+                            <span class="assignment-coverage-members">
+                                {% for member_name in item.worship_context.member_names %}
+                                    {{ member_name }}{% if not forloop.last %}、{% endif %}
+                                {% endfor %}
+                            </span>
+                        {% elif item.worship_context.state == "ambiguous" %}
+                            <span class="status status-warning">{% if language == "zh" %}发现多个当前敬拜排班，需要检查{% else %}Multiple current Worship assignments · review required{% endif %}</span>
+                        {% else %}
+                            <span class="status status-warning">{% if language == "zh" %}配搭参考团队不可用于排班，需要检查{% else %}Rotation anchor is unavailable for scheduling · review required{% endif %}</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="assignment-coverage-rows team-schedule-coverage">
             {% for row in item.coverage_rows %}
             <div class="assignment-coverage-row assignment-coverage-row-{{ row.kind }}">
@@ -162,6 +193,11 @@
                 {{ active_form_event|event_title:language }}
                 · {{ active_form_event.start_datetime|date:"Y-m-d H:i" }}
             </p>
+            {% if duplicate_suggestion_conflict and not active_suggestion %}
+            <p class="status status-warning">
+                {% if language == "zh" %}存在多个当前排班，无法可靠预览或比较建议。请先检查重复排班。{% else %}Multiple current assignments prevent reliable suggestion review or comparison. Review the duplicates first.{% endif %}
+            </p>
+            {% endif %}
             {% if active_suggestion %}
             <div class="assignment-coverage-rows">
                 <div class="assignment-coverage-row assignment-coverage-row-additional">
@@ -169,6 +205,13 @@
                         <strong>
                             {% if language == "zh" %}建议来源{% else %}Suggestion Source{% endif %}
                         </strong>
+                        <span class="status">
+                            {% if active_suggestion.mode == "anchor" %}
+                                {% if language == "zh" %}相同敬拜 / 配搭参考历史{% else %}Same Worship/rotation anchor history{% endif %}
+                            {% else %}
+                                {% if language == "zh" %}本团队历史{% else %}Team history{% endif %}
+                            {% endif %}
+                        </span>
                         <span>
                             {{ active_suggestion.source_assignment.service_event|event_title:language }}
                             · {{ active_suggestion.source_assignment.service_event.start_datetime|date:"Y-m-d H:i" }}
@@ -179,10 +222,21 @@
                         </span>
                         {% if active_suggestion.source_members %}
                         <span class="assignment-coverage-members">
+                            {% if language == "zh" %}建议成员：{% else %}Suggested: {% endif %}
                             {% for member in active_suggestion.source_members %}
                                 {{ member.get_display_name }}{% if not forloop.last %}、{% endif %}
                             {% endfor %}
                         </span>
+                        {% endif %}
+                        <span class="muted">
+                            {% if language == "zh" %}这是待审核的建议。只有点击“保存排班”后才会更改排班。{% else %}This is a proposal for review. Nothing changes until you select Save Assignment.{% endif %}
+                        </span>
+                        {% if active_suggestion_comparison == suggestion_comparison_match %}
+                            <span class="status status-good">{% if language == "zh" %}当前排班与此建议一致{% else %}Current assignment matches this suggestion{% endif %}</span>
+                        {% elif active_suggestion_comparison == suggestion_comparison_different %}
+                            <span class="status status-warning">{% if language == "zh" %}当前排班与此建议不同{% else %}Current assignment differs from this suggestion{% endif %}</span>
+                        {% elif active_suggestion_comparison == suggestion_comparison_ambiguous %}
+                            <span class="status status-warning">{% if language == "zh" %}存在多个当前排班，无法可靠比较{% else %}Multiple current assignments prevent a reliable comparison{% endif %}</span>
                         {% endif %}
                     </div>
                 </div>

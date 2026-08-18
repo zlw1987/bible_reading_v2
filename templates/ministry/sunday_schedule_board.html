@@ -75,10 +75,35 @@
                     <span>{{ row.event.start_datetime|date:"H:i" }}</span>
                 </th>
                 <td class="sunday-board-context-cell">
-                    {% if row.event.rotation_anchor_team_id %}
-                        <strong>{{ row.event.rotation_anchor_team|ministry_team_name:language }}</strong>
+                    {% if row.worship_context.state == "no_anchor" %}
+                        <span class="muted">{% if language == "zh" %}未设置敬拜 / 配搭参考{% else %}Rotation/Worship context not set{% endif %}</span>
                     {% else %}
-                        <span class="muted">{% if language == "zh" %}未设置{% else %}Not set{% endif %}</span>
+                        <strong>{{ row.worship_context.anchor_team|ministry_team_name:language }}</strong>
+                        {% if row.worship_context.state == "unscheduled" %}
+                            <span class="muted">{% if language == "zh" %}敬拜尚未排班{% else %}Worship not yet scheduled{% endif %}</span>
+                        {% elif row.worship_context.state == "empty" %}
+                            <span class="status status-warning">{% if language == "zh" %}敬拜已排班，暂无成员{% else %}Worship scheduled · no active members{% endif %}</span>
+                        {% elif row.worship_context.state == "scheduled" %}
+                            <span class="status status-good">{% if language == "zh" %}敬拜服事{% else %}Worship serving{% endif %}</span>
+                            <div class="sunday-board-members">
+                                {% for member_name in row.worship_context.member_names %}
+                                    <span>{{ member_name }}</span>
+                                {% endfor %}
+                            </div>
+                        {% elif row.worship_context.state == "ambiguous" %}
+                            <span class="status status-warning">{% if language == "zh" %}发现多个当前敬拜排班，需要检查{% else %}Multiple current Worship assignments · review required{% endif %}</span>
+                        {% else %}
+                            <span class="status status-warning">{% if language == "zh" %}配搭参考团队不可用于排班，需要检查{% else %}Rotation anchor is unavailable for scheduling · review required{% endif %}</span>
+                        {% endif %}
+                        {% if row.worship_context.can_edit %}
+                        <a class="button button-secondary sunday-board-cell-action" href="{{ row.worship_context.action_url }}">
+                            {% if row.worship_context.action_kind == "schedule" %}
+                                {% if language == "zh" %}安排敬拜{% else %}Schedule Worship{% endif %}
+                            {% else %}
+                                {% if language == "zh" %}编辑敬拜{% else %}Edit Worship{% endif %}
+                            {% endif %}
+                        </a>
+                        {% endif %}
                     {% endif %}
                 </td>
                 {% for cell in row.cells %}

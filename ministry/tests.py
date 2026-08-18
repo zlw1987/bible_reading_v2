@@ -749,6 +749,25 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertIsNone(suggestion)
 
+    def test_copy_forward_suggestion_keeps_completed_history_semantics(self):
+        completed_event = self.create_schedule_event(
+            title_en="Completed Prior Sunday",
+            days_from_now=1,
+        )
+        completed_assignment = self.create_assignment(
+            service_event=completed_event,
+            status=TeamAssignment.STATUS_COMPLETED,
+            members=[self.second_membership],
+        )
+
+        suggestion = find_copy_forward_suggestion(
+            self.event,
+            self.team,
+            MODE_TEAM,
+        )
+
+        self.assertEqual(suggestion.source_assignment, completed_assignment)
+
     def test_copy_forward_suggestion_copies_active_members_only(self):
         source_event = self.create_schedule_event(
             title_en="Prior Sunday",
@@ -3493,8 +3512,83 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Rotation Anchor Team")
         self.assertContains(response, "Worship C1")
+        self.assertContains(response, "Worship not yet scheduled")
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
+    def test_team_schedule_shows_narrow_current_worship_context(self):
+        self.set_language("en")
+        anchor_team = MinistryTeam.objects.create(
+            name="敬拜 C2",
+            name_en="Worship C2",
+        )
+        worship_membership = TeamMembership.objects.create(
+            team=anchor_team,
+            display_name="Current Worship Person",
+            email="worship-private@example.com",
+        )
+        worship_assignment = TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=anchor_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            notes="Private Worship planning note",
+        )
+        worship_member = TeamAssignmentMember.objects.create(
+            assignment=worship_assignment,
+            membership=worship_membership,
+        )
+        worship_member.confirm("Private Worship confirmation")
+        self.event.required_teams.add(self.team)
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}"
+        )
+
+        self.assertContains(response, "Worship context")
+        self.assertContains(response, "Worship serving")
+        self.assertContains(response, "Current Worship Person")
+        self.assertNotContains(response, "Private Worship planning note")
+        self.assertNotContains(response, "worship-private@example.com")
+        self.assertNotContains(response, "Private Worship confirmation")
+        self.assertNotContains(
+            response,
+            reverse("team_schedule", args=[anchor_team.id]),
+        )
+        self.assertNotContains(
+            response,
+            reverse("team_assignment_detail", args=[worship_assignment.id]),
+        )
+
+    def test_team_schedule_duplicate_worship_assignments_fail_closed(self):
+        self.set_language("en")
+        anchor_team = MinistryTeam.objects.create(
+            name="敬拜 C2",
+            name_en="Worship C2",
+        )
+        self.event.required_teams.add(self.team)
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
+        TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=anchor_team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+        )
+        TeamAssignment.objects.create(
+            service_event=self.event,
+            ministry_team=anchor_team,
+            status=TeamAssignment.STATUS_CONFIRMED,
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(reverse("team_schedule", args=[self.team.id]))
+
+        self.assertContains(
+            response,
+            "Multiple current Worship assignments · review required",
+        )
 
     def test_team_schedule_anchor_suggestion_get_prefills_without_creating_assignment(self):
         self.set_language("en")
@@ -3524,8 +3618,12 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Suggestion Source")
+        self.assertContains(response, "Same Worship/rotation anchor history")
         self.assertContains(response, "Prior Sunday")
+        self.assertContains(response, "Suggested:")
+        self.assertContains(response, "proposal for review")
         self.assertContains(response, "regular_assign")
+        self.assertNotContains(response, "Manual override")
         self.assertEqual(TeamAssignment.objects.count(), before_count)
         self.assertFalse(
             TeamAssignment.objects.filter(
@@ -3533,6 +3631,73 @@ class TeamAssignmentV1Tests(TestCase):
                 ministry_team=self.team,
             ).exists()
         )
+
+    def test_team_schedule_team_history_suggestion_is_distinct_and_compares_by_identity(self):
+        self.set_language("en")
+        source_event = self.create_schedule_event(
+            title_en="Prior Team Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        current_assignment = self.create_assignment(
+            service_event=self.event,
+            members=[self.second_membership],
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?assignment={current_assignment.id}&suggest=team"
+        )
+
+        self.assertContains(response, "Team history")
+        self.assertContains(response, "Prior Team Sunday")
+        self.assertContains(response, "Current assignment matches this suggestion")
+
+        current_assignment.assignment_members.all().delete()
+        TeamAssignmentMember.objects.create(
+            assignment=current_assignment,
+            membership=self.membership,
+        )
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?assignment={current_assignment.id}&suggest=team"
+        )
+        self.assertContains(response, "Current assignment differs from this suggestion")
+
+    def test_team_schedule_duplicate_target_omits_unreliable_suggestion_comparison(self):
+        self.set_language("en")
+        source_event = self.create_schedule_event(
+            title_en="Prior Team Sunday",
+            days_from_now=1,
+        )
+        self.create_assignment(
+            service_event=source_event,
+            members=[self.second_membership],
+        )
+        self.event.required_teams.add(self.team)
+        self.create_assignment(service_event=self.event, members=[self.membership])
+        self.create_assignment(
+            service_event=self.event,
+            members=[self.second_membership],
+        )
+        self.client.login(username="assignment_lead", password="testpass123")
+
+        response = self.client.get(
+            f"{reverse('team_schedule', args=[self.team.id])}"
+            f"?event={self.event.id}&suggest=team"
+        )
+
+        self.assertContains(
+            response,
+            "Multiple current assignments prevent reliable suggestion review or comparison",
+        )
+        self.assertNotContains(response, "Current assignment matches this suggestion")
+        self.assertNotContains(response, "Current assignment differs from this suggestion")
 
     def test_team_schedule_suggested_form_creates_assignment_only_after_post(self):
         self.set_language("en")
@@ -3648,6 +3813,10 @@ class TeamAssignmentV1Tests(TestCase):
         self.assertEqual(form["status"].value(), TeamAssignment.STATUS_PREPARED)
         self.assertEqual(
             [membership.id for membership in form.fields["assigned_members"].initial],
+            [self.second_membership.id],
+        )
+        self.assertEqual(
+            [int(value) for value in form["assigned_members"].value()],
             [self.second_membership.id],
         )
 

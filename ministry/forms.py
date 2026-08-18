@@ -689,6 +689,11 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
             )
         if suggestion_members is not None:
             self.fields["assigned_members"].initial = suggestion_members
+            # A ModelForm with an existing instance also stores model-derived
+            # values in ``form.initial``. BoundField rendering reads that mapping
+            # before ``field.initial``, so override both to make the reviewed
+            # copy-forward proposal visible in the actual editable control.
+            self.initial["assigned_members"] = suggestion_members
 
         self.fields["status"].choices = [
             (TeamAssignment.STATUS_SCHEDULED, text["scheduled"]),

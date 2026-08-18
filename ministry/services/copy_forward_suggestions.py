@@ -9,6 +9,10 @@ MODE_ANCHOR = "anchor"
 MODE_TEAM = "team"
 VALID_MODES = {MODE_ANCHOR, MODE_TEAM}
 
+COMPARISON_MATCH = "match"
+COMPARISON_DIFFERENT = "different"
+COMPARISON_AMBIGUOUS = "ambiguous"
+
 
 @dataclass
 class CopyForwardSuggestion:
@@ -78,3 +82,28 @@ def find_copy_forward_suggestion(target_event, ministry_team, mode):
             )
 
     return None
+
+
+def compare_current_assignments_to_suggestion(current_assignments, suggestion):
+    """Compare one current target roster with a proposal by membership identity."""
+
+    if suggestion is None:
+        return None
+
+    current_assignments = list(current_assignments)
+    if len(current_assignments) > 1:
+        return COMPARISON_AMBIGUOUS
+    if not current_assignments:
+        return None
+
+    current_member_ids = {
+        assignment_member.membership_id
+        for assignment_member in current_assignments[0].assignment_members.all()
+        if assignment_member.membership.is_active
+    }
+    suggestion_member_ids = {member.id for member in suggestion.source_members}
+    return (
+        COMPARISON_MATCH
+        if current_member_ids == suggestion_member_ids
+        else COMPARISON_DIFFERENT
+    )

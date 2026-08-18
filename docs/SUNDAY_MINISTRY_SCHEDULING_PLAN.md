@@ -1,7 +1,8 @@
 # Sunday Ministry Scheduling Workflow & Import Plan
 
-Status: current through implemented MO-S.6B Sunday Schedule Board V1. Later
-MO-S.6 slices remain separately scoped and require explicit approval.
+Status: current through implemented MO-S.6C Worship Context & Pairing
+Suggestions. MO-S.6D and later slices remain separately scoped and require
+explicit approval.
 
 ## 1. Purpose
 
@@ -90,13 +91,14 @@ or a production import in this planning slice.
 
 ### Material gaps
 
-MO-S.6B now provides the bounded cross-team Sunday matrix, exact-team cell
-editability, and visible event-level Worship rotation context. The current
-system still does not provide the richer Worship assignment/suggestion context
-planned for MO-S.6C, a downstream review warning when Worship changes, or a
-controlled `.xlsx` upload/parse/preview/confirm workflow. It also does not
-prove that a team named C2 is semantically a Worship rotation anchor; that
-remains configuration/data responsibility, not a hard-coded rule.
+MO-S.6B provides the bounded cross-team Sunday matrix and exact-team cell
+editability. MO-S.6C now adds the narrow current Worship roster/state context
+and transparent, review-first pairing suggestions to that Board/Team Schedule
+workflow. The current system still does not provide the downstream review
+warning when Worship changes or a controlled
+`.xlsx` upload/parse/preview/confirm workflow. It also does not prove that a
+team named C2 is semantically a Worship rotation anchor; that remains
+configuration/data responsibility, not a hard-coded rule.
 
 ## 3. Real-world Sunday workflow
 
@@ -178,9 +180,13 @@ sync, and full assignment import in the first import slice.
 `/assignments/sunday-board/` is a GET-only operational matrix for the fixed
 local-date window from today through eight weeks later, inclusive. It shows
 non-draft/non-cancelled Sunday Service rows and participating team columns
-derived from required teams plus current operational assignments. Cancelled
-and completed assignments are excluded consistently with the existing Team
-Schedule workspace.
+derived from required teams plus current operational assignments. The
+dedicated Worship / Rotation Context column owns each event's exact rotation
+anchor, so that same event/anchor pair is omitted from its generic team cells.
+An anchor team still appears as an ordinary generic cell on another event when
+it participates there in a non-anchor role. Cancelled and completed
+assignments are excluded consistently with the existing Team Schedule
+workspace.
 
 Each participating cell exposes only the approved coordination projection:
 
@@ -200,6 +206,9 @@ event as plain operational text and does not link to `ServiceEvent` or
 `TeamAssignment` detail routes. An editable exact-team cell deep-links the
 existing Team Schedule workspace for the same date range, Sunday Service
 filter, and exact event/assignment; unauthorized cells are read-only.
+The Worship context uses the same navigation rule when the viewer can
+canonically manage that exact active, assignable anchor and the current anchor
+assignment is unambiguous. Downstream team owners remain read-only.
 
 ### Board access and permission design
 
@@ -258,12 +267,15 @@ and saved through existing domain semantics.
 ### Column derivation
 
 MO-S.6B does not hard-code current church team names or A/C1/C2/C3 into generic
-CMS logic. The no-schema V1 derives participating columns from the union of
-`ServiceEventRequiredTeam` teams and existing `TeamAssignment` teams for the
-selected Sunday rows, orders them by canonical team name and ID, labels
-inactive teams, and shows a non-participating dash where a column appears only
-for another event. The presentation separately labels the event's
-`rotation_anchor_team` as the Worship context; that anchor remains an ordinary configured
+CMS logic. The no-schema V1 derives row eligibility from the full union of
+`ServiceEventRequiredTeam` teams and existing `TeamAssignment` teams. Generic
+display columns use that same per-event union after subtracting only the
+event's exact `rotation_anchor_team`; their cross-event union is ordered by
+canonical team name and ID. This preserves exact-anchor scheduler row scope,
+avoids duplicate Worship cells for the anchor event, and still shows the team
+normally when it participates as a non-anchor on another event. The table
+labels inactive teams and shows a non-participating dash where a column appears
+only for another event. The anchor remains an ordinary configured
 `MinistryTeam`, not a global Worship taxonomy.
 
 ## 7. Worship-led coordination and suggestions
@@ -512,29 +524,57 @@ tests and limited-trial review pass.
 
 ### MO-S.6C — Worship Context & Pairing Suggestions
 
+- Status: implemented. MO-S.6D and later remain unapproved.
 - Goal: let a downstream scheduler understand current Worship context and
   review a safe suggestion.
-- Scope: anchor/roster/not-scheduled context, suggestion source and candidate
-  members, explicit review/save, and current assignment-versus-suggestion
-  comparison where derivable.
+- Scope delivered: a shared read-only presenter identifies the configured
+  anchor and an exact-event/exact-anchor scheduled/confirmed/prepared
+  `TeamAssignment`; it distinguishes no anchor, not scheduled, empty roster,
+  scheduled roster, unavailable anchor, and duplicate/ambiguous assignments.
+  The Board and Sunday Team Schedule show only anchor name, coarse state, and
+  active member display names.
+- Suggestions: the existing anchor and team-history copy-forward modes remain
+  separate. An active preview labels the source mode, source event/date, and
+  proposed members, and says explicitly that Save Assignment is required.
+  Current assignment match/difference compares canonical `TeamMembership`
+  identities; duplicate targets suppress unreliable comparison/proposal review.
 - Out of scope: automatic writes, hard-coded pairing rules, dependency graph,
-  Worship-specific model, optimizer.
-- Likely components: reusable copy-forward service, team schedule form/view,
-  focused context presenter.
-- Schema impact: target none; no provenance field unless a later evidence-based
-  slice is separately approved.
+  Worship-specific model, optimizer, changed-context warning, and suggestion
+  provenance.
+- Components: `ministry/services/worship_context.py`, the existing
+  `copy_forward_suggestions.py`, existing Team Schedule mutation/notification
+  path, Board/Team Schedule templates, and focused tests.
+- Schema impact: none; no model, migration, provenance, or context-version field.
 - Security: a qualifying Sunday scheduler may receive the approved narrow
   cross-team scheduling projection, including the current Worship roster
   context needed for coordination, even when they cannot manage Worship. This
   projection is not general `TeamAssignment`-detail visibility and must not
-  expose private Worship notes or controls. Edit remains limited to the
-  downstream team owner under the canonical management predicate.
-- Tests: same-anchor/team-history selection, approved narrow roster projection,
-  no source/no anchor, no-write
-  preview, explicit save, confirmation not copied, matching/differing current
-  assignment comparison, and no unsupported provenance claim.
-- Acceptance: suggestion is visibly a proposal and never creates or overwrites
-  until explicit save; V1 reports only derivable current-row comparison.
+  expose private Worship notes or confirmation/contact details. Board
+  de-duplication is presentation-only and does not reduce row authorization or
+  operational participation. An exact anchor manager may navigate from the
+  context cell to the existing exact-event/assignment Team Schedule flow;
+  downstream managers remain read-only under the canonical management
+  predicate. Duplicate and unavailable anchors expose no action.
+- Tests verified: current status mapping; no anchor/no assignment/empty/current
+  roster/unavailable anchor/duplicate states; downstream lead, staff/global and
+  ordinary-user boundaries; private-note/contact/confirmation redaction;
+  same-anchor and team-history sources; future/draft/cancelled filtering;
+  completed-history behavior; inactive-member filtering; no-write/no-notify GET;
+  explicit-save notification behavior; confirmation not copied; identity-based
+  match/difference; duplicate target fail-closed behavior; and forged cross-team
+  rejection.
+- Acceptance verified: suggestion is visibly a proposal and never creates or
+  overwrites until explicit save; only derivable current-row comparison is
+  reported, with no provenance or automatic-pairing claim.
+- Rendered QA: an isolated throwaway SQLite database and local Chrome
+  Playwright fallback verified exact-team lead, staff, and ordinary-user
+  boundaries; current/no-roster/no-anchor Worship states; English desktop
+  suggestion review/prefill; and Chinese mobile contained matrix scrolling.
+  The in-app Browser runtime failed twice during initialization with
+  `Cannot redefine property: process`; bundled Playwright had no Chromium
+  binary, so the existing local Chrome executable was used without installing
+  anything. The only console error was the pre-existing missing `/favicon.ico`
+  request. This is automated rendered QA, not product-owner manual QA.
 - Dependency: MO-S.6B or a shared board context helper.
 
 ### MO-S.6D — Excel Event + Worship Anchor Import

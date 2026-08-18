@@ -6,12 +6,19 @@ from django.utils import timezone
 
 from events.models import ServiceEvent
 
-from ..models import MinistryTeam, TeamAssignment
+from ..models import MinistryTeam
 from ..permissions import can_manage_team_assignment_for_team
 from .assignment_coverage import (
     assignment_coverage_queryset,
     build_assignment_coverage,
     events_with_coverage_queryset,
+)
+from .worship_context import (
+    CURRENT_ASSIGNMENT_STATUSES,
+    WORSHIP_CONTEXT_AMBIGUOUS,
+    WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
+    WORSHIP_CONTEXT_NO_ANCHOR,
+    build_worship_contexts,
 )
 
 
@@ -22,11 +29,7 @@ BOARD_CELL_EMPTY = "empty"
 BOARD_CELL_SCHEDULED = "scheduled"
 BOARD_CELL_NOT_PARTICIPATING = "not_participating"
 
-BOARD_ASSIGNMENT_STATUSES = (
-    TeamAssignment.STATUS_SCHEDULED,
-    TeamAssignment.STATUS_CONFIRMED,
-    TeamAssignment.STATUS_PREPARED,
-)
+BOARD_ASSIGNMENT_STATUSES = CURRENT_ASSIGNMENT_STATUSES
 
 
 def sunday_board_window(today=None):
@@ -133,10 +136,15 @@ def build_sunday_schedule_board(
         for assignment in assignments
         if assignment.service_event_id in eligible_event_ids
     ]
+    display_team_ids_by_event = {}
     participating_team_ids = set()
     for event in eligible_events:
-        participating_team_ids.update(required_team_ids_by_event[event.id])
-        participating_team_ids.update(assignment_team_ids_by_event[event.id])
+        display_team_ids = (
+            required_team_ids_by_event[event.id]
+            | assignment_team_ids_by_event[event.id]
+        ) - {event.rotation_anchor_team_id}
+        display_team_ids_by_event[event.id] = display_team_ids
+        participating_team_ids.update(display_team_ids)
 
     teams = list(
         MinistryTeam.objects.filter(id__in=participating_team_ids).order_by("name", "id")
@@ -146,6 +154,7 @@ def build_sunday_schedule_board(
         eligible_assignments,
         language=language,
     )
+    worship_contexts = build_worship_contexts(eligible_events)
     coverage_rows_by_event_team = defaultdict(list)
     for event_id, coverage in coverage_by_event.items():
         for coverage_row in coverage["rows"]:
@@ -157,11 +166,11 @@ def build_sunday_schedule_board(
     for event in eligible_events:
         cells = []
         required_team_ids = required_team_ids_by_event[event.id]
-        event_assignment_team_ids = assignment_team_ids_by_event[event.id]
+        display_team_ids = display_team_ids_by_event[event.id]
         for team in teams:
             is_required = team.id in required_team_ids
             team_assignments = assignments_by_event_team.get((event.id, team.id), [])
-            participates = is_required or team.id in event_assignment_team_ids
+            participates = team.id in display_team_ids
             if not participates:
                 cells.append(
                     {
@@ -226,7 +235,52 @@ def build_sunday_schedule_board(
                 }
             )
 
-        rows.append({"event": event, "cells": cells})
+        worship_context = dict(worship_contexts[event.id])
+        worship_context.update(
+            {
+                "can_edit": False,
+                "action_url": "",
+                "action_kind": "",
+            }
+        )
+        anchor_team = worship_context.get("anchor_team")
+        anchor_assignments = (
+            assignments_by_event_team.get((event.id, anchor_team.id), [])
+            if anchor_team is not None
+            else []
+        )
+        anchor_state_is_actionable = worship_context["state"] not in {
+            WORSHIP_CONTEXT_NO_ANCHOR,
+            WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
+            WORSHIP_CONTEXT_AMBIGUOUS,
+        }
+        if (
+            anchor_team is not None
+            and anchor_state_is_actionable
+            and len(anchor_assignments) <= 1
+            and can_manage_team_assignment_for_team(user, anchor_team)
+        ):
+            worship_context["can_edit"] = True
+            worship_context["action_kind"] = (
+                "edit" if anchor_assignments else "schedule"
+            )
+            worship_context["action_url"] = _team_schedule_action_url(
+                team_id=anchor_team.id,
+                start_date=start_date,
+                end_date=end_date,
+                event_id=event.id if not anchor_assignments else None,
+                assignment_id=(
+                    anchor_assignments[0].id if anchor_assignments else None
+                ),
+            )
+
+        rows.append(
+            {
+                "event": event,
+                "worship_context": worship_context,
+                "cells": cells,
+            }
+        )
 
     return {
         "start_date": start_date,

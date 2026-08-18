@@ -81,9 +81,13 @@ from .services.assignment_notifications import (
     emit_assignment_notifications,
 )
 from .services.copy_forward_suggestions import (
+    COMPARISON_AMBIGUOUS,
+    COMPARISON_DIFFERENT,
+    COMPARISON_MATCH,
     MODE_ANCHOR,
     MODE_TEAM,
     VALID_MODES as COPY_FORWARD_MODES,
+    compare_current_assignments_to_suggestion,
     find_copy_forward_suggestion,
 )
 from .services.lighting_pilot_import import (
@@ -92,6 +96,7 @@ from .services.lighting_pilot_import import (
     read_csv_file,
 )
 from .services.sunday_schedule_board import build_sunday_schedule_board
+from .services.worship_context import build_worship_contexts
 from .structure_map import (
     build_ministry_structure_map,
     build_team_structure_setup_summary,
@@ -1502,6 +1507,7 @@ def team_schedule(request, team_id):
     active_form_event = None
     active_form_assignment = active_assignment
     active_suggestion = None
+    active_suggestion_comparison = None
     duplicate_suggestion_conflict = False
     if active_assignment is not None:
         active_form_event = active_assignment.service_event
@@ -1530,6 +1536,10 @@ def team_schedule(request, team_id):
                 active_form_event,
                 team,
                 suggestion_mode,
+            )
+            active_suggestion_comparison = compare_current_assignments_to_suggestion(
+                target_assignments,
+                active_suggestion,
             )
 
     if form_instance is not None and not team_not_assignable:
@@ -1581,6 +1591,7 @@ def team_schedule(request, team_id):
                 ),
             )
 
+    worship_contexts = build_worship_contexts(events)
     schedule_rows = []
     for event in events:
         event_assignments = assignments_by_event.get(event.id, [])
@@ -1593,6 +1604,10 @@ def team_schedule(request, team_id):
         schedule_rows.append(
             {
                 "event": event,
+                "is_sunday_service": (
+                    event.event_type == ServiceEvent.EVENT_SUNDAY_SERVICE
+                ),
+                "worship_context": worship_contexts[event.id],
                 "coverage_rows": rows,
                 "assignment": assignment,
                 "action_url": (
@@ -1635,6 +1650,10 @@ def team_schedule(request, team_id):
             "active_form_event": active_form_event,
             "active_form_assignment": active_form_assignment,
             "active_suggestion": active_suggestion,
+            "active_suggestion_comparison": active_suggestion_comparison,
+            "suggestion_comparison_match": COMPARISON_MATCH,
+            "suggestion_comparison_different": COMPARISON_DIFFERENT,
+            "suggestion_comparison_ambiguous": COMPARISON_AMBIGUOUS,
             "duplicate_suggestion_conflict": duplicate_suggestion_conflict,
             "clear_action_url": f"{base_path}?{schedule_query_string(filters)}",
         },

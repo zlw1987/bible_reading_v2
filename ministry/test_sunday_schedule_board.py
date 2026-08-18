@@ -90,6 +90,10 @@ class SundayScheduleBoardTests(TestCase):
             name="Anchor Team",
             name_en="Anchor Team",
         )
+        self.anchor_lead = User.objects.create_user(
+            username="board_anchor_lead",
+            password=self.password,
+        )
 
         lead_type = MinistryTeamRoleType.objects.create(
             code=MinistryTeamRoleType.CODE_LEAD,
@@ -111,6 +115,12 @@ class SundayScheduleBoardTests(TestCase):
             team=self.alpha_team,
             user=self.coordinator,
             role_type=coordinator_type,
+            start_date=timezone.localdate(),
+        )
+        MinistryTeamRoleAssignment.objects.create(
+            team=self.anchor_team,
+            user=self.anchor_lead,
+            role_type=lead_type,
             start_date=timezone.localdate(),
         )
         TeamMembership.objects.create(
@@ -332,6 +342,81 @@ class SundayScheduleBoardTests(TestCase):
         )
         self.assertRedirects(detail_response, reverse("team_assignment_list"))
 
+    def test_downstream_lead_sees_narrow_current_worship_roster(self):
+        worship_membership = TeamMembership.objects.create(
+            team=self.anchor_team,
+            display_name="Worship Scheduled Person",
+            email="worship-private@example.com",
+        )
+        worship_assignment = self.create_assignment(
+            self.event,
+            self.anchor_team,
+            membership=worship_membership,
+            notes="Worship private note must not render.",
+        )
+        worship_assignment.assignment_members.update(
+            confirmed_at=timezone.now(),
+            confirmation_note="Private confirmation detail",
+        )
+        self.login(self.lead)
+
+        response = self.client.get(reverse("sunday_schedule_board"))
+
+        self.assertContains(response, "Worship serving")
+        self.assertContains(response, "Worship Scheduled Person", count=1)
+        self.assertNotIn(
+            self.anchor_team.id,
+            [team.id for team in response.context["board"]["teams"]],
+        )
+        context = next(
+            row["worship_context"]
+            for row in response.context["board"]["rows"]
+            if row["event"].id == self.event.id
+        )
+        self.assertFalse(context["can_edit"])
+        self.assertEqual(context["action_url"], "")
+        self.assertNotContains(response, "Worship private note must not render.")
+        self.assertNotContains(response, "worship-private@example.com")
+        self.assertNotContains(response, "Private confirmation detail")
+        self.assertNotContains(
+            response,
+            reverse("team_assignment_detail", args=[worship_assignment.id]),
+        )
+        detail_response = self.client.get(
+            reverse("team_assignment_detail", args=[worship_assignment.id])
+        )
+        self.assertRedirects(detail_response, reverse("team_assignment_list"))
+
+    def test_board_worship_context_distinguishes_no_anchor_empty_and_duplicates(self):
+        self.event.rotation_anchor_team = None
+        self.event.save()
+        self.login(self.lead)
+        response = self.client.get(reverse("sunday_schedule_board"))
+        self.assertContains(response, "Rotation/Worship context not set")
+
+        self.event.rotation_anchor_team = self.anchor_team
+        self.event.save()
+        empty_assignment = self.create_assignment(self.event, self.anchor_team)
+        response = self.client.get(reverse("sunday_schedule_board"))
+        self.assertContains(response, "Worship scheduled · no active members")
+
+        self.create_assignment(self.event, self.anchor_team)
+        response = self.client.get(reverse("sunday_schedule_board"))
+        self.assertContains(
+            response,
+            "Multiple current Worship assignments · review required",
+        )
+        self.assertNotContains(response, "Worship serving")
+        self.assertTrue(TeamAssignment.objects.filter(id=empty_assignment.id).exists())
+
+    def test_board_worship_context_copy_is_bilingual(self):
+        self.login(self.lead)
+        self.set_language("zh")
+
+        response = self.client.get(reverse("sunday_schedule_board"))
+
+        self.assertContains(response, "敬拜尚未排班")
+
     def test_board_states_columns_anchor_and_edit_authority(self):
         self.login(self.lead)
 
@@ -357,6 +442,125 @@ class SundayScheduleBoardTests(TestCase):
         self.assertContains(response, "Anchor Team")
         self.assertNotContains(response, "Projection")
         self.assertNotContains(response, "Lighting")
+
+    def test_exact_anchor_lead_keeps_row_scope_and_gets_existing_schedule_action(self):
+        worship_assignment = self.create_assignment(self.event, self.anchor_team)
+        self.login(self.anchor_lead)
+
+        response = self.client.get(reverse("sunday_schedule_board"))
+        row = next(
+            row
+            for row in response.context["board"]["rows"]
+            if row["event"].id == self.event.id
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(
+            self.anchor_team.id,
+            [team.id for team in response.context["board"]["teams"]],
+        )
+        self.assertTrue(row["worship_context"]["can_edit"])
+        self.assertEqual(row["worship_context"]["action_kind"], "edit")
+        self.assertIn(
+            f"assignment={worship_assignment.id}",
+            row["worship_context"]["action_url"],
+        )
+        self.assertContains(response, "Edit Worship")
+
+    def test_exact_anchor_lead_can_schedule_unscheduled_required_anchor(self):
+        anchor_only_event = self.create_event(
+            "Anchor Only Sunday",
+            days_from_today=(6 - timezone.localdate().weekday()) % 7 + 7,
+            rotation_anchor_team=self.anchor_team,
+        )
+        anchor_only_event.required_teams.add(self.anchor_team)
+        self.login(self.anchor_lead)
+
+        response = self.client.get(reverse("sunday_schedule_board"))
+        row = next(
+            row
+            for row in response.context["board"]["rows"]
+            if row["event"].id == anchor_only_event.id
+        )
+
+        self.assertEqual(row["cells"], [])
+        self.assertTrue(row["worship_context"]["can_edit"])
+        self.assertEqual(row["worship_context"]["action_kind"], "schedule")
+        self.assertIn(
+            f"event={anchor_only_event.id}",
+            row["worship_context"]["action_url"],
+        )
+        self.assertContains(response, "Schedule Worship")
+
+    def test_anchor_team_remains_a_generic_cell_when_non_anchor_elsewhere(self):
+        self.create_assignment(self.event, self.anchor_team)
+        mixed_event = self.create_event(
+            "Anchor Team In Ordinary Role",
+            days_from_today=(6 - timezone.localdate().weekday()) % 7 + 7,
+        )
+        mixed_event.required_teams.add(self.anchor_team)
+        self.login(self.global_manager)
+
+        response = self.client.get(reverse("sunday_schedule_board"))
+        board = response.context["board"]
+        self.assertIn(self.anchor_team.id, [team.id for team in board["teams"]])
+        anchor_row = next(row for row in board["rows"] if row["event"].id == self.event.id)
+        ordinary_row = next(
+            row for row in board["rows"] if row["event"].id == mixed_event.id
+        )
+        anchor_cell = next(
+            cell for cell in anchor_row["cells"] if cell["team"].id == self.anchor_team.id
+        )
+        ordinary_cell = next(
+            cell for cell in ordinary_row["cells"] if cell["team"].id == self.anchor_team.id
+        )
+
+        self.assertFalse(anchor_cell["participates"])
+        self.assertTrue(ordinary_cell["participates"])
+        self.assertEqual(ordinary_cell["state"], "missing")
+
+    def test_duplicate_and_unavailable_anchor_contexts_have_no_action(self):
+        self.create_assignment(self.event, self.anchor_team)
+        self.create_assignment(self.event, self.anchor_team)
+        self.login(self.anchor_lead)
+
+        duplicate_response = self.client.get(reverse("sunday_schedule_board"))
+        duplicate_context = next(
+            row["worship_context"]
+            for row in duplicate_response.context["board"]["rows"]
+            if row["event"].id == self.event.id
+        )
+        self.assertFalse(duplicate_context["can_edit"])
+        self.assertEqual(duplicate_context["action_url"], "")
+        self.assertNotContains(duplicate_response, "Edit Worship")
+
+        self.anchor_team.is_assignable = False
+        self.anchor_team.save(update_fields=["is_assignable"])
+        unavailable_response = self.client.get(reverse("sunday_schedule_board"))
+        unavailable_context = next(
+            row["worship_context"]
+            for row in unavailable_response.context["board"]["rows"]
+            if row["event"].id == self.event.id
+        )
+        self.assertFalse(unavailable_context["can_edit"])
+        self.assertEqual(unavailable_context["action_url"], "")
+
+    def test_forged_anchor_schedule_post_is_rejected_for_downstream_lead(self):
+        worship_assignment = self.create_assignment(self.event, self.anchor_team)
+        self.login(self.lead)
+
+        response = self.client.post(
+            reverse("team_schedule", args=[self.anchor_team.id]),
+            {
+                "assignment_id": worship_assignment.id,
+                "status": TeamAssignment.STATUS_SCHEDULED,
+                "notes": "Forged Worship note",
+            },
+        )
+
+        self.assertRedirects(response, reverse("ministry_team_list"))
+        worship_assignment.refresh_from_db()
+        self.assertEqual(worship_assignment.notes, "")
 
     def test_duplicate_assignment_cell_fails_closed_to_read_only(self):
         self.create_assignment(self.event, self.alpha_team)

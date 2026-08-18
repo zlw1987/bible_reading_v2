@@ -545,7 +545,7 @@ class ChurchStructureUnitChildForm(forms.ModelForm):
         model = ChurchStructureUnit
         fields = ["name", "name_en", "code", "unit_type", "sort_order"]
 
-    def __init__(self, *args, parent=None, **kwargs):
+    def __init__(self, *args, parent=None, language="en", **kwargs):
         super().__init__(*args, **kwargs)
         if parent is None:
             raise ValueError("ChurchStructureUnitChildForm requires a parent.")
@@ -554,7 +554,7 @@ class ChurchStructureUnitChildForm(forms.ModelForm):
         self.instance.is_active = True
         self.fields["unit_type"].choices = [
             choice
-            for choice in ChurchStructureUnit.UNIT_TYPE_CHOICES
+            for choice in ChurchStructureUnit.unit_type_choices_for_language(language)
             if choice[0] != ChurchStructureUnit.UNIT_ROOT
         ]
 

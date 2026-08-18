@@ -495,10 +495,11 @@ Future pieces include:
   MO-S.6D-0A/FU1/FU2 closes workbook-readiness and multi-campus Worship
   governance decisions, including Worship-specific pool configuration,
   required exact-event planner responsibility, selected-team/roster
-  consistency, and safe batch-change boundaries. Its bounded cross-team
+  consistency, and safe batch-change boundaries. `MO-S.6D-1A` separately
+  implements the semantic-only Campus / Site foundation. The bounded cross-team
   coordination projection replaces the older generic “multi-team dashboard”
-  future label; every governance runtime/schema prerequisite and later MO-S.6
-  slice remains separately scoped and unapproved.
+  future label; every remaining governance runtime/schema prerequisite and
+  later MO-S.6 slice remains separately scoped and unapproved.
 
 Lighting Team should be the first pilot, but there should not be a LightingTeam-specific data model. Models should remain generic enough for other ministry teams.
 
@@ -679,11 +680,12 @@ described as active runtime structure.
 The current explicitly approved product-development track is Sunday Ministry
 Scheduling, following the canonical planning document
 `docs/SUNDAY_MINISTRY_SCHEDULING_PLAN.md`. MO-S.6B and MO-S.6C are now
-implemented, but those milestones and the docs-only MO-S.6D-0A/FU1/FU2
-governance closure do not authorize subsequent runtime slices: each Campus,
-Worship-pool, planner-responsibility, consistency/authorization, reachability,
-planner, notification, and import slice still requires its own explicit task
-approval and repository-truth review. The canonical governance decision is
+implemented, and `MO-S.6D-1A` has implemented the semantic-only Campus / Site
+foundation. The docs-only MO-S.6D-0A/FU1/FU2 governance closure and Campus
+foundation do not authorize subsequent runtime slices: each Worship-pool,
+planner-responsibility, consistency/authorization, reachability, planner,
+notification, and import slice still requires its own explicit task approval and
+repository-truth review. The canonical governance decision is
 `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`.
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam selection when creating or batch-creating ServiceEvents, TeamAssignment pages need required-team coverage with assigned coworkers and confirmation status rather than only counts, and ministry team leaders need an efficient same-type event scheduling entry point for their own team. MO-S.2 completes the first implementation slice by letting staff select required teams on ServiceEvent single create/edit and recurring batch-create. MO-S.3 completes the read-only coverage slice: the `TeamAssignment` list is the primary operational coverage surface, assignment detail shows compact event coverage, ServiceEvent detail shows coverage only to staff/service-event or team-assignment managers, ordinary event viewers do not see coworker coverage, `/staff/` adds upcoming required-team gap counts, and browser automation was blocked but user-completed manual QA accepted the UI. MO-S.4 completes the manual team-leader scheduling workspace, and MO-S.4A completes scheduling semantic cleanup after manual QA: Team detail shows Schedule Team / 安排团队服事 only for users who can manage that team's assignments; staff, superusers, and global assignment managers can schedule any team; Lead and Coordinator roles can schedule their own team assignments; ordinary members, `can_lead`-only members, and unrelated users cannot schedule; `TeamMembership.can_lead` is deprecated/reserved and does not grant scheduling, member-management, or admin permissions; My Serving provides Teams I manage / 我负责的团队 as the non-staff team leader entry point; the workspace defaults to All event types / 全部类型 while still showing only required-or-already-assigned events within the date window; specific event type filtering still works; ServiceEvent Host / Language display is structure-native; one active in-page schedule/edit form is selected by event or assignment query parameters.
@@ -1113,10 +1115,12 @@ For feature tasks:
 Current immediate product state: MO-S.6A Sunday Ministry Scheduling planning,
 MO-S.6B Sunday Schedule Board V1, and MO-S.6C Worship Context & Pairing
 Suggestions are complete. The docs-only MO-S.6D-0A/FU1/FU2 workbook and
-governance closure is also complete; it authorizes no Campus, Worship-pool,
-event-responsibility, ownership-consistency, planner, notification,
-reachability, or importer runtime. MO-S.6D and later are not authorized by that
-completion. Availability, swaps, reminders, automatic
+governance closure is also complete; it authorized none of the prerequisite
+runtime by itself. The separately approved `MO-S.6D-1A` semantic Campus / Site
+foundation is now implemented, while Worship-pool, event-responsibility,
+ownership-consistency, planner, notification, reachability, and importer runtime
+remain unimplemented. MO-S.6D and later are not authorized by the governance
+closure or Campus foundation. Availability, swaps, reminders, automatic
 scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader
 scheduling enhancements remain deferred.
 

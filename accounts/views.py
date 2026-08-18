@@ -515,7 +515,7 @@ def staff_structure_map(request):
             "can_admin_units": can_admin_units,
             "child_unit_type_choices": [
                 choice
-                for choice in ChurchStructureUnit.UNIT_TYPE_CHOICES
+                for choice in ChurchStructureUnit.unit_type_choices_for_language(language)
                 if choice[0] != ChurchStructureUnit.UNIT_ROOT
             ],
             "edit_mode": edit_mode,
@@ -768,7 +768,11 @@ def staff_structure_units_order_siblings(request):
 def staff_structure_unit_add_child(request, parent_id):
     language = get_user_language(request)
     parent = get_object_or_404(ChurchStructureUnit, id=parent_id)
-    form = ChurchStructureUnitChildForm(request.POST, parent=parent)
+    form = ChurchStructureUnitChildForm(
+        request.POST,
+        parent=parent,
+        language=language,
+    )
 
     if form.is_valid():
         unit = form.save()

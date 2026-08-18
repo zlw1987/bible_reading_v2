@@ -131,6 +131,7 @@ class ChurchStructureUnitRoleRequirement(models.Model):
 
 class ChurchStructureUnit(models.Model):
     UNIT_ROOT = "root"
+    UNIT_CAMPUS = "campus"
     UNIT_MINISTRY_CONTEXT = "ministry_context"
     UNIT_DISTRICT = "district"
     UNIT_SMALL_GROUP = "small_group"
@@ -140,6 +141,7 @@ class ChurchStructureUnit(models.Model):
 
     UNIT_TYPE_CHOICES = [
         (UNIT_ROOT, "Root"),
+        (UNIT_CAMPUS, "Campus / Site"),
         (UNIT_MINISTRY_CONTEXT, "Ministry Context"),
         (UNIT_DISTRICT, "District"),
         (UNIT_SMALL_GROUP, "Small Group"),
@@ -147,6 +149,26 @@ class ChurchStructureUnit(models.Model):
         (UNIT_DEPARTMENT, "Department"),
         (UNIT_CUSTOM, "Custom"),
     ]
+
+    UNIT_TYPE_LABELS_ZH = {
+        UNIT_ROOT: "教会根节点",
+        UNIT_CAMPUS: "堂点",
+        UNIT_MINISTRY_CONTEXT: "事工语境",
+        UNIT_DISTRICT: "区",
+        UNIT_SMALL_GROUP: "小组",
+        UNIT_FELLOWSHIP: "团契",
+        UNIT_DEPARTMENT: "部门",
+        UNIT_CUSTOM: "自定义",
+    }
+
+    @classmethod
+    def unit_type_choices_for_language(cls, language="en"):
+        if language == "zh":
+            return [
+                (value, cls.UNIT_TYPE_LABELS_ZH.get(value, label))
+                for value, label in cls.UNIT_TYPE_CHOICES
+            ]
+        return cls.UNIT_TYPE_CHOICES
 
     parent = models.ForeignKey(
         "self",

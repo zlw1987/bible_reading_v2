@@ -5160,6 +5160,33 @@ class BibleStudyModuleTests(TestCase):
             {self.group_unit, self.same_group_unit},
         )
 
+    def test_generation_targets_expand_campus_to_descendant_small_groups(self):
+        campus = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_CAMPUS,
+            code="CAMPUS",
+            name="Campus",
+        )
+        campus_context = ChurchStructureUnit.objects.create(
+            parent=campus,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CAMPUS-CM",
+            name="Campus Ministry",
+        )
+        campus_group = ChurchStructureUnit.objects.create(
+            parent=campus_context,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="CAMPUS-GROUP",
+            name="Campus Group",
+        )
+        series = self._make_unit_series(campus)
+
+        targets, warnings = resolve_normal_generation_targets(series)
+
+        self.assertEqual(warnings, [])
+        self.assertEqual({target.unit for target in targets}, {campus_group})
+        self.assertNotIn(campus, {target.unit for target in targets})
+
     def test_generation_targets_union_multiple_district_units(self):
         series = self._make_unit_series(self.north_unit, self.south_unit)
 

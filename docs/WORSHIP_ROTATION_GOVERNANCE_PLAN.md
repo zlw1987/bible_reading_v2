@@ -1,9 +1,10 @@
 # Multi-Campus Worship Rotation Governance Plan
 
-Status: canonical docs-only decision closure through `MO-S.6D-0A-FU2`. FU2
-finalizes the required event-planner prerequisite and Worship-specific pool
-semantics. Nothing in this document implements runtime behavior. Every future
-slice below requires separate explicit approval.
+Status: canonical governance decisions through `MO-S.6D-0A-FU2`, plus
+implemented `MO-S.6D-1A` Campus / Site type foundation. FU2 finalizes the
+required event-planner prerequisite and Worship-specific pool semantics.
+Only the semantic Campus choice is implemented; every remaining future slice
+below requires separate explicit approval.
 
 ## 1. Problem and decisions owned here
 
@@ -23,9 +24,10 @@ gain authority over peer rotation selection. Audience, structure, membership,
 serving, and management remain separate axes.
 
 This plan closes the architecture decisions needed before a later narrow
-rotation-edit path or the MO-S.6D Excel importer can be approved. It does not
-add Campus/Site, pool configuration, event responsibilities, permissions,
-queryset reachability, an Excel dependency, or an importer.
+rotation-edit path or the MO-S.6D Excel importer can be approved. It now
+records the implemented semantic Campus/Site foundation, but does not add pool
+configuration, event responsibilities, permissions, queryset reachability, an
+Excel dependency, or an importer.
 
 ## 2. Current repository truth
 
@@ -33,6 +35,8 @@ The current code provides:
 
 - a flexible `ChurchStructureUnit.parent` tree with a 32-character choice
   field for semantic unit type;
+- `ChurchStructureUnit.UNIT_CAMPUS = "campus"` as the semantic-only Campus /
+  Site organizational type implemented by `MO-S.6D-1A`;
 - app-specific audience rows, including `ServiceEventAudienceScope`;
 - ordinary ServiceEvent audience matching through one active primary
   `ChurchStructureMembership`, with zero-row events failing closed;
@@ -54,12 +58,15 @@ The current code provides:
 
 The current code does **not** provide:
 
-- a Campus/Site unit type;
 - metadata that safely says "this MinistryTeam container owns a Worship Team
   selection pool";
 - an event-specific planner/coordinator responsibility;
 - narrow authorization to change only `rotation_anchor_team`;
-- anchor-only Team Schedule or Board reachability; or
+- enforcement that the selected Worship Team owns the event and matches any
+  current Worship assignment;
+- anchor-only Team Schedule or Board reachability;
+- a Worship Rotation Planner;
+- direct Worship Team change notifications; or
 - a declared `.xlsx` dependency or annual-workbook importer.
 
 `created_by` is creation attribution, not durable planner responsibility or
@@ -76,6 +83,7 @@ hierarchy and audience behavior follows `parent`, not a fixed type matrix.
 | Type | Intended purpose | Current stronger behavior | Generic behavior and boundaries |
 | --- | --- | --- | --- |
 | `root` | Whole Church / the top organizational audience | A root cannot have a parent; child creation excludes `root`; setup prevents enabling a second active root; a selected root audience matches every authenticated user and is exclusive of lower audience selections | It creates no membership, role, serving row, or permission. |
+| `campus` | A semantic Campus / Site organizational node | No Campus-specific permission, membership, audience row, serving, role profile, MinistryTeam, or Host / Language grant is implemented; signup/profile and small-group-only consumers keep their existing type-specific exclusions | It participates in the generic parent tree and may participate in generic audience ancestry. A Campus Bible Study scope resolves only active descendant `small_group` leaves through existing generic ancestry, never the Campus itself. |
 | `ministry_context` | Congregation, language, or ministry context such as CM/EM | The ServiceEvent Host / Language admin picker accepts only this type; display fallback walks audience ancestry to the nearest such unit | It remains display context when used by `host_language_unit`; as an audience row it uses the same subtree matching as other non-root units. |
 | `district` | A district-like organizational branch | `ChurchRoleAssignment` district-scoped validation rejects a `small_group` unit but otherwise permits a broader non-small-group structure scope; group-progress access then filters to descendant small-group units | The type alone grants nothing. Audience and Bible Study schedule selection use generic ancestry. |
 | `small_group` | The canonical group-level belonging and normal Bible Study generation leaf | Small-group member management, ordinary own-group progress, prayer/reflection group snapshots, and normal Bible Study generation explicitly require this type | A selected ancestor of small groups can still be an audience or Bible Study schedule scope; choosing this type does not auto-create membership or a meeting. |
@@ -115,7 +123,7 @@ ChurchStructureUnit != MinistryTeam
 
 ## 4. Campus / Site decision
 
-A future first-class choice is recommended:
+The first-class choice is implemented:
 
 ```text
 UNIT_CAMPUS = "campus"
@@ -128,7 +136,7 @@ This is safer and clearer than misclassifying Main Campus / 母堂 as a
 generic parent tree, path helpers, audience selectors, and descendant matching
 do not assume the current choices are exhaustive.
 
-The first Campus slice should be semantic only:
+The implemented Campus slice is semantic only:
 
 - no rigid parent-child type matrix;
 - no required CM/EM children;
@@ -137,13 +145,13 @@ The first Campus slice should be semantic only:
 - no automatic Host / Language meaning; and
 - no automatic MinistryTeam anchor or pool configuration.
 
-Expected effects of adding the choice:
+Implemented effects of the choice:
 
 - Django model state requires an `AlterField` migration because choices change,
   although no data rewrite or database column expansion is expected.
-- Django Admin and the staff add-child form derive their choices from
-  `UNIT_TYPE_CHOICES`, so Campus appears there after the code change; root
-  exclusion remains intact.
+- Django Admin and the staff add-child form derive Campus from
+  `UNIT_TYPE_CHOICES`; the staff add-child control presents `Campus / Site` in
+  English and `堂点` in Chinese, while root exclusion remains intact.
 - A Campus audience includes memberships in descendant branches through the
   existing generic ancestry rule.
 - A Bible Study schedule scoped to Campus resolves any active descendant

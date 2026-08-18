@@ -2983,6 +2983,29 @@ class ServiceEventAudienceRuntimeVisibilityTests(TestCase):
         self.assertFalse(event.can_be_seen_by(self.em_user))
         self.assertFalse(event.can_be_seen_by(self.no_group_user))
 
+    def test_campus_audience_matches_descendant_members_without_granting_membership(self):
+        campus = ChurchStructureUnit.objects.create(
+            parent=self.root_unit,
+            unit_type=ChurchStructureUnit.UNIT_CAMPUS,
+            code="CAMPUS",
+            name="Campus",
+        )
+        campus_group = ChurchStructureUnit.objects.create(
+            parent=campus,
+            unit_type=ChurchStructureUnit.UNIT_SMALL_GROUP,
+            code="CAMPUS-GROUP",
+            name="Campus Group",
+        )
+        campus_user = self.create_member("campus_member", campus_group)
+        event = self.create_event()
+        self.add_audience(event, campus)
+
+        self.assertTrue(event.can_be_seen_by(campus_user))
+        self.assertFalse(event.can_be_seen_by(self.group_user))
+        self.assertFalse(
+            ChurchStructureMembership.objects.filter(unit=campus).exists()
+        )
+
     def test_ministry_context_unit_audience_matches_context_groups(self):
         event = self.create_event()
         self.add_audience(event, self.cm_unit)

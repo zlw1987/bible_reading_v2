@@ -1,10 +1,10 @@
 # Sunday Ministry Scheduling Workflow & Import Plan
 
 Status: current through implemented MO-S.6C Worship Context & Pairing
-Suggestions and the docs-only MO-S.6D-0A workbook/readiness investigation plus
-MO-S.6D-0A-FU1/FU2 multi-campus Worship rotation governance closure. MO-S.6D
-and all other future runtime slices remain separately scoped and require
-explicit approval.
+Suggestions, `MO-S.6D-1A` Campus / Site type foundation, and the MO-S.6D-0A
+workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2 multi-campus Worship
+rotation governance closure. MO-S.6D and all other future runtime slices remain
+separately scoped and require explicit approval.
 
 ## 1. Purpose
 
@@ -104,10 +104,14 @@ warning when Worship changes or a controlled
 a future explicitly configured Worship rotation pool, event audience, and
 primary Ministry Structure path determine eligible teams without treating a
 name such as C2 as semantic proof. They also require explicit exact-event
-planner/coordinator responsibility for the approved planner workflow. This is
-documentation architecture only; the required Campus type, Worship-pool
-metadata, event responsibility, authorization, reachability, and import runtime
-do not yet exist.
+planner/coordinator responsibility for the approved planner workflow.
+`MO-S.6D-1A` has implemented the semantic Campus / Site type foundation. The
+system still does not provide Worship-specific pool metadata/configuration,
+event planner/coordinator responsibility, governed Worship Team authorization
+and ownership consistency, selected-team operational reachability, the Worship
+Rotation Planner, direct Worship Team change notifications, Excel
+dependency/parser/import runtime, or the MO-S.6E roster-change staleness
+mechanism.
 
 ## 3. Real-world Sunday workflow
 
@@ -602,16 +606,17 @@ tests and limited-trial review pass.
 
 ### MO-S.6D-0A-FU1/FU2 — Multi-Campus Worship Rotation Governance
 
-- Status: canonical docs-only architecture closure complete through FU2. FU2
-  makes exact-event planner/coordinator responsibility a required prerequisite
-  and fixes the pool semantic as Worship-specific. No Campus type, Worship-pool
-  field, event responsibility model, permission, queryset, importer, migration,
-  or data change is implemented or approved here.
+- Status: canonical architecture closure complete through FU2, with the
+  separate `MO-S.6D-1A` Campus / Site type foundation implemented. FU2 makes
+  exact-event planner/coordinator responsibility a required prerequisite and
+  fixes the pool semantic as Worship-specific. No Worship-pool field, event
+  responsibility model, permission, queryset, importer, or data change is
+  implemented or approved here.
 - Canonical decision: see
   [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md).
-- Church Structure: add a future semantic-only Campus / Site type while
-  preserving a flexible tree and the separation between structure, belonging,
-  audience, permission, and serving.
+- Church Structure: `MO-S.6D-1A` implemented the semantic-only Campus / Site
+  type while preserving a flexible tree and the separation between structure,
+  belonging, audience, permission, and serving.
 - Pool applicability: a future active, non-assignable MinistryTeam explicitly
   marked with the `is_worship_rotation_pool`-equivalent semantic applies only
   when its valid primary Church Structure anchor is equal to or below a selected

@@ -1132,6 +1132,48 @@ class AccountProfileTests(TestCase):
         self.assertContains(response, "我的服事")
 
 class ChurchStructureUnitFoundationTests(TestCase):
+    def test_campus_is_a_valid_flexible_non_root_structure_type(self):
+        root = ChurchStructureUnit.objects.create(
+            unit_type=ChurchStructureUnit.UNIT_ROOT,
+            code="CHURCH",
+            name="Whole Church",
+        )
+        campus = ChurchStructureUnit.objects.create(
+            parent=root,
+            unit_type=ChurchStructureUnit.UNIT_CAMPUS,
+            code="MAIN",
+            name="主堂",
+            name_en="Main Campus",
+        )
+        ministry = ChurchStructureUnit.objects.create(
+            parent=campus,
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+            code="CM",
+            name="中文事工",
+        )
+        intermediate = ChurchStructureUnit.objects.create(
+            parent=campus,
+            unit_type=ChurchStructureUnit.UNIT_CUSTOM,
+            code="CARE",
+            name="Care",
+        )
+
+        self.assertEqual(campus.parent, root)
+        self.assertEqual(ministry.parent, campus)
+        self.assertEqual(intermediate.parent, campus)
+        self.assertEqual(
+            dict(ChurchStructureUnit.UNIT_TYPE_CHOICES)[
+                ChurchStructureUnit.UNIT_CAMPUS
+            ],
+            "Campus / Site",
+        )
+        self.assertEqual(
+            dict(ChurchStructureUnit.unit_type_choices_for_language("zh"))[
+                ChurchStructureUnit.UNIT_CAMPUS
+            ],
+            "堂点",
+        )
+
     def test_church_structure_unit_can_be_created_as_root(self):
         root = ChurchStructureUnit.objects.create(
             unit_type=ChurchStructureUnit.UNIT_ROOT,
@@ -6660,6 +6702,33 @@ class StaffStructureMapEditModeTests(TestCase):
         self.assertEqual(created.unit_type, ChurchStructureUnit.UNIT_SMALL_GROUP)
         self.assertEqual(created.sort_order, 7)
         self.assertTrue(created.is_active)
+
+    def test_add_child_exposes_localized_campus_choice_without_side_effects(self):
+        self.login_admin()
+        before_memberships = ChurchStructureMembership.objects.count()
+        before_role_assignments = ChurchRoleAssignment.objects.count()
+
+        self.set_language("en")
+        english_response = self.client.get(f"{self.url}?edit=1")
+        self.assertContains(english_response, "Campus / Site")
+
+        self.set_language("zh")
+        chinese_response = self.client.get(f"{self.url}?edit=1")
+        self.assertContains(chinese_response, "堂点")
+
+        response = self.client.post(
+            self.add_child_url,
+            self.child_payload(
+                code="CAMPUS",
+                unit_type=ChurchStructureUnit.UNIT_CAMPUS,
+            ),
+        )
+        self.assertRedirects(response, f"{self.url}?edit=1")
+        campus = ChurchStructureUnit.objects.get(code="CAMPUS")
+        self.assertEqual(campus.unit_type, ChurchStructureUnit.UNIT_CAMPUS)
+        self.assertIsNone(campus.role_profile)
+        self.assertEqual(ChurchStructureMembership.objects.count(), before_memberships)
+        self.assertEqual(ChurchRoleAssignment.objects.count(), before_role_assignments)
 
     def test_normal_user_cannot_create_child_unit(self):
         self.client.login(username="structure_plain", password="PlainPass123!")

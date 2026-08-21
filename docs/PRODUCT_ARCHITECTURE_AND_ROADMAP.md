@@ -66,6 +66,16 @@ responsibility on the bilingual event-edit surface. The row currently grants
 no event visibility, edit, audience, serving, team, assignment, or Worship
 selection authority; that permission consumption remains a later slice.
 
+`MO-S.6D-1D-A` adds the read-only Worship governance domain foundation:
+applicable configured pools come only from active ServiceEvent audience rows
+plus valid pool Church anchors; eligible assignable teams come only from
+deterministic active primary Ministry paths; and scheduled / confirmed /
+prepared Worship assignments are inspected against the selected exact team.
+The result distinguishes unscheduled, invalid, off-team, out-of-scope,
+multiple, and duplicate states without exposing rosters/private fields. It
+accepts no user, grants no authority, adds no selector/endpoint, enforces no
+write path, and changes no Board/Team Schedule reachability or presentation.
+
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
 `MINISTRY-ROLE-SOURCE.1A` (docs + read-only audit) locked `MinistryTeamRoleAssignment` as the single source of truth for long-term ministry roles; `MINISTRY-ROLE-SOURCE.1A-FU1` clarified that assignable teams (`is_assignable=True`) expect role holders to also be active members while non-assignable container teams do not, and adjusted the read-only alignment audit accordingly. `MINISTRY-ROLE-SOURCE.1B` (implemented) added the dry-run-by-default backfill that creates missing `MinistryTeamRoleAssignment` rows from active user-linked `TeamMembership.role` in {`lead`, `coordinator`}. **`MINISTRY-ROLE-SOURCE.1C` (implemented) switched the runtime read:** `can_manage_ministry_team`, `manageable_assignment_teams`, team scheduling, manage-members, and My Serving "Teams I manage" now resolve team-management authority from active `MinistryTeamRoleAssignment` rows (role_type code in {`lead`, `coordinator`}) for the exact team, not `TeamMembership.role`. After `1C`, `TeamMembership.role` is legacy compatibility data and grants no runtime team-management permission; `TeamMembership.can_lead` remains deprecated/reserved and grants none. `1C` is exact-team only, leaves staff / superuser / global capability behavior unchanged, and changes no model or migration. **`MINISTRY-ROLE-SOURCE.1D` (implemented)** cleaned up the manage-members UI: `TeamMembershipForm` no longer includes `role` (normal creates default to `member`; existing legacy `role` is preserved untouched on edit) and never included `can_lead`, so neither can be set from that UI; the members list shows canonical long-term roles from active `MinistryTeamRoleAssignment` rows only and links staff to structure setup. **`MINISTRY-ROLE-SOURCE.1E-A` (implemented)** added the dry-run-by-default `cleanup_team_membership_can_lead_flags` command that clears deprecated `can_lead=True` flags under explicit `--apply` (only sets `can_lead` `True` → `False`; never touches `role`, membership rows, or role assignments; changes no permission). See `docs/MINISTRY_ROLE_SOURCE_OF_TRUTH_PLAN.md`. Later legacy field retirement is optional and should not be reopened without a production blocker or audit warning.
@@ -518,7 +528,10 @@ Future pieces include:
   implements the Worship-specific pool-configuration foundation.
   `MO-S.6D-1C` implements the exact-ServiceEvent planner/coordinator
   responsibility foundation while leaving permission consumption for a later
-  slice. The bounded
+  slice. `MO-S.6D-1D-A` implements the read-only applicability, candidate, and
+  ownership-consistency domain half of canonical slice 4; `1D-B` authorization,
+  selector/mutation UI, and enforcement across legacy event/admin/assignment
+  writes remain separately unapproved. The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
@@ -708,9 +721,11 @@ foundation, and `MO-S.6D-1B` has implemented the Worship-specific
 pool-configuration foundation. `MO-S.6D-1C` has implemented the exact-event
 planner/coordinator responsibility model, lifecycle, current-only lookup, and
 full-manager setup surface without consuming it for permission or visibility.
-The docs-only MO-S.6D-0A/FU1/FU2 governance closure and these foundations do
-not authorize subsequent runtime slices: each applicability/candidate,
-consistency/authorization, reachability, planner,
+`MO-S.6D-1D-A` has implemented only the side-effect-free event applicability,
+primary-path candidate, and pool-aware ownership-consistency domain facts. The
+docs-only MO-S.6D-0A/FU1/FU2 governance closure and these foundations do not
+authorize subsequent runtime slices: each authorization/mutation enforcement,
+reachability, planner,
 notification, and import slice still requires its own explicit task approval and
 repository-truth review. The canonical governance decision is
 `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`.
@@ -1149,9 +1164,10 @@ runtime by itself. The separately approved `MO-S.6D-1A` semantic Campus / Site
 and `MO-S.6D-1B` Worship pool-configuration foundations are now implemented,
 and `MO-S.6D-1C` has implemented the exact-event planner/coordinator
 responsibility source and full-manager lifecycle setup without granting
-planner permission or visibility. Event applicability/candidate selection,
-ownership-consistency, planner permission consumption, notification,
-reachability, and importer runtime remain unimplemented. MO-S.6D and later are
+planner permission or visibility. `MO-S.6D-1D-A` has implemented the read-only
+event applicability/candidate/ownership-consistency domain facts. Planner/pool-
+lead permission consumption, selector/mutation and legacy-write enforcement,
+notification, reachability, and importer runtime remain unimplemented. MO-S.6D and later are
 not authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
 scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader

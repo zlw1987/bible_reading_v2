@@ -3,6 +3,7 @@ from collections import defaultdict
 from django.db.models import Prefetch
 
 from ..models import TeamAssignment, TeamAssignmentMember
+from .worship_governance import CURRENT_WORSHIP_ASSIGNMENT_STATUSES
 
 
 WORSHIP_CONTEXT_NO_ANCHOR = "no_anchor"
@@ -12,11 +13,9 @@ WORSHIP_CONTEXT_EMPTY = "empty"
 WORSHIP_CONTEXT_SCHEDULED = "scheduled"
 WORSHIP_CONTEXT_AMBIGUOUS = "ambiguous"
 
-CURRENT_ASSIGNMENT_STATUSES = (
-    TeamAssignment.STATUS_SCHEDULED,
-    TeamAssignment.STATUS_CONFIRMED,
-    TeamAssignment.STATUS_PREPARED,
-)
+# Backward-compatible presentation alias. The domain definition lives in the
+# pool-aware governance service; current Board/context behavior is unchanged.
+CURRENT_ASSIGNMENT_STATUSES = CURRENT_WORSHIP_ASSIGNMENT_STATUSES
 
 
 def _context(*, anchor_team=None, state, member_names=None):

@@ -10,7 +10,12 @@ from django.db.models import Q
 from accounts.models import ChurchStructureUnit
 from accounts.ordering import order_units_by_sibling_key
 
-from .models import ServiceEvent, ServiceEventAudienceScope, ServiceEventRequiredTeam
+from .models import (
+    ServiceEvent,
+    ServiceEventAudienceScope,
+    ServiceEventPlannerAssignment,
+    ServiceEventRequiredTeam,
+)
 
 
 class ServiceEventAudienceScopeInlineFormSet(BaseInlineFormSet):
@@ -201,5 +206,35 @@ class ServiceEventAdmin(admin.ModelAdmin):
             formfield.help_text = (
                 "Optional scheduling hint for future copy-forward suggestions. "
                 "This does not make the team required and does not control coverage, audience, visibility, or permissions."
+            )
+        return formfield
+
+
+@admin.register(ServiceEventPlannerAssignment)
+class ServiceEventPlannerAssignmentAdmin(admin.ModelAdmin):
+    list_display = (
+        "service_event",
+        "user",
+        "is_active",
+        "created_at",
+        "updated_at",
+    )
+    list_filter = ("is_active", "service_event__status")
+    search_fields = (
+        "service_event__title",
+        "service_event__title_en",
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+    )
+    autocomplete_fields = ("service_event", "user")
+    readonly_fields = ("created_at", "updated_at")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "is_active":
+            formfield.help_text = (
+                "Records current responsibility only. It does not grant full "
+                "event editing, audience, serving, or team-assignment authority."
             )
         return formfield

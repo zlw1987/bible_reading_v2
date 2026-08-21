@@ -2,10 +2,11 @@
 
 Status: current through implemented MO-S.6C Worship Context & Pairing
 Suggestions, `MO-S.6D-1A` Campus / Site type foundation,
-`MO-S.6D-1B` Worship rotation-pool configuration foundation, and the MO-S.6D-0A
-workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2 multi-campus Worship
-rotation governance closure. Remaining MO-S.6D and other future runtime slices
-remain separately scoped and require explicit approval.
+`MO-S.6D-1B` Worship rotation-pool configuration foundation,
+`MO-S.6D-1C` ServiceEvent planner/coordinator responsibility foundation, and
+the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
+multi-campus Worship rotation governance closure. Remaining MO-S.6D and other
+future runtime slices remain separately scoped and require explicit approval.
 
 ## 1. Purpose
 
@@ -109,9 +110,12 @@ planner/coordinator responsibility for the approved planner workflow.
 `MO-S.6D-1A` has implemented the semantic Campus / Site type foundation, and
 `MO-S.6D-1B` has implemented Worship-specific pool metadata, validation,
 fail-closed primary-anchor configuration inspection, existing staff setup UI,
-and Ministry Structure readiness integration. The system still does not provide
-event planner/coordinator responsibility, event applicability/candidate
-resolution, governed Worship Team authorization
+and Ministry Structure readiness integration. `MO-S.6D-1C` now provides the
+explicit exact-ServiceEvent/user planner/coordinator responsibility lifecycle,
+current-only active-user lookup, and full-manager bilingual setup UI. The
+responsibility currently grants no permission or visibility. The system still
+does not provide event applicability/candidate resolution, governed Worship
+Team authorization
 and ownership consistency, selected-team operational reachability, the Worship
 Rotation Planner, direct Worship Team change notifications, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
@@ -613,13 +617,14 @@ tests and limited-trial review pass.
 
 - Status: canonical architecture closure complete through FU2, with the
   separate `MO-S.6D-1A` Campus / Site and `MO-S.6D-1B` Worship rotation-pool
-  configuration foundations implemented. FU2 makes
+  configuration foundations and `MO-S.6D-1C` exact-event planner/coordinator
+  responsibility foundation implemented. FU2 makes
   exact-event planner/coordinator responsibility a required prerequisite and
-  fixes the pool semantic as Worship-specific. `MO-S.6D-1B` adds only the
-  configuration field, validation, read-only resolver/readiness integration,
-  and existing staff setup control; no event responsibility model,
-  applicability/candidate runtime, permission, queryset, importer, or data
-  change is implemented.
+  fixes the pool semantic as Worship-specific. `MO-S.6D-1C` adds the explicit
+  responsibility model, active/inactive lifecycle, current-only active-user
+  lookup, existing full-manager setup controls, and admin exposure. It does not
+  add applicability/candidate runtime, planner permission consumption,
+  queryset visibility/reachability, an importer, or normal-data changes.
 - Canonical decision: see
   [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md).
 - Church Structure: `MO-S.6D-1A` implemented the semantic-only Campus / Site
@@ -646,8 +651,11 @@ tests and limited-trial review pass.
   unchanged and never flows from a pool role.
 - Event responsibility: the approved workflow requires a lifecycle-managed
   user + exact-ServiceEvent planner/coordinator foundation before the narrow
-  selector ships. It grants only minimum event/Worship context and this action;
-  it is not replaced by `created_by` or full `CAP_MANAGE_SERVICE_EVENTS`.
+  selector ships. `MO-S.6D-1C` implements that responsibility source as one
+  unique event/user row with explicit add, end, and restore, but intentionally
+  grants no event/Worship context or action yet. The later selector slice must
+  consume it narrowly; it is not replaced by `created_by` or full
+  `CAP_MANAGE_SERVICE_EVENTS`.
 - Reachability: the exact current valid rotation anchor should become a third
   operational relevance predicate beside required-team and existing-assignment
   participation. It must not create or imply a required team, assignment,
@@ -665,9 +673,10 @@ tests and limited-trial review pass.
   roster-change staleness detection.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
-- Dependency: after the implemented Campus and pool-configuration foundations,
-  every remaining runtime/schema slice in the canonical governance plan still
-  requires separate task approval and focused verification.
+- Dependency: after the implemented Campus, pool-configuration, and
+  event-responsibility foundations, every remaining runtime/schema slice in
+  the canonical governance plan still requires separate task approval and
+  focused verification.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -951,16 +960,16 @@ limited to eligible teams from applicable configured Worship pools; the
 selected Worship Team is operationally reachable without a RequiredTeam
 bootstrap; the event-planner responsibility foundation is required; and first
 bulk import is staff/superuser-only. The Campus and pool-configuration
-foundations are now implemented; all other prerequisites remain documentation
-decisions only.
+foundations and the event-planner responsibility foundation are now
+implemented; all other prerequisites remain documentation decisions only.
 
 MO-S.6D remains unapproved until its owning slices:
 
 1. implement and verify Worship-pool applicability, eligible-team resolution,
-   required exact-event
-   planner/coordinator foundation, Worship ownership consistency, and
-   selected-team operational reachability; Campus remains an independent
-   foundation that should precede real multi-campus setup;
+   narrow consumption of the implemented exact-event planner/coordinator
+   responsibility, Worship ownership consistency, and selected-team
+   operational reachability; Campus remains an independent foundation that
+   should precede real multi-campus setup;
 2. define the Bethany 9:30 profile's exact local time and persisted CMS
    discriminator, including its stable structure/location mapping;
 3. choose timestamped signed proposal retention, or state a durable audit need

@@ -67,4 +67,92 @@
     </div>
 </form>
 
+{% if is_edit %}
+<section class="card" aria-labelledby="service-planners-heading">
+    <h2 id="service-planners-heading">
+        {% if language == "zh" %}聚会安排人 / 协调人{% else %}Service Planners / Coordinators{% endif %}
+    </h2>
+    <p class="muted">
+        {% if language == "zh" %}
+            聚会安排人记录谁负责协调这一次具体聚会。此责任本身不会授予完整的聚会编辑权限，也不代表服事、适用范围成员或团队排班权限；主日敬拜的窄范围安排权限会另外连接。
+        {% else %}
+            Service planners record who is responsible for coordinating this specific event. This responsibility does not by itself grant full event editing, serving, audience membership, or team-assignment authority. Narrow Worship planning authority is connected separately.
+        {% endif %}
+    </p>
+
+    <h3>{% if language == "zh" %}当前安排人{% else %}Current planners{% endif %}</h3>
+    {% if current_planner_assignments %}
+    <div class="stack">
+        {% for assignment in current_planner_assignments %}
+        <div>
+            <strong>{{ assignment.user.get_full_name|default:assignment.user.username }}</strong>
+            {% if assignment.notes %}<p class="muted">{{ assignment.notes|linebreaksbr }}</p>{% endif %}
+            <form method="post" action="{% url 'end_service_event_planner' event.id assignment.id %}">
+                {% csrf_token %}
+                <button type="submit" class="button-secondary">
+                    {% if language == "zh" %}结束责任{% else %}End responsibility{% endif %}
+                </button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        {% if language == "zh" %}目前没有有效的聚会安排人记录。{% else %}No current service planner is recorded.{% endif %}
+    </p>
+    {% endif %}
+
+    <h3>{% if language == "zh" %}添加安排人{% else %}Add planner{% endif %}</h3>
+    <form method="post" action="{% url 'add_service_event_planner' event.id %}">
+        {% csrf_token %}
+        {{ planner_form.non_field_errors }}
+        {% for field in planner_form %}
+        <div class="form-row" data-field="planner-{{ field.name }}">
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}<p class="muted">{{ field.help_text }}</p>{% endif %}
+            {{ field.errors }}
+        </div>
+        {% endfor %}
+        <button type="submit">
+            {% if language == "zh" %}添加安排人{% else %}Add planner{% endif %}
+        </button>
+    </form>
+
+    {% if noncurrent_planner_assignments %}
+    <h3>{% if language == "zh" %}已结束 / 非当前记录{% else %}Ended / non-current records{% endif %}</h3>
+    <div class="stack">
+        {% for assignment in noncurrent_planner_assignments %}
+        <div>
+            <strong>{{ assignment.user.get_full_name|default:assignment.user.username }}</strong>
+            {% if assignment.notes %}<p class="muted">{{ assignment.notes|linebreaksbr }}</p>{% endif %}
+            {% if assignment.is_active and not assignment.user.is_active %}
+                <p class="muted">
+                    {% if language == "zh" %}用户已停用；此记录不会作为当前安排责任。{% else %}User inactive; this record is not current responsibility.{% endif %}
+                </p>
+                <form method="post" action="{% url 'end_service_event_planner' event.id assignment.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button-secondary">
+                        {% if language == "zh" %}结束责任记录{% else %}End responsibility record{% endif %}
+                    </button>
+                </form>
+            {% elif assignment.user.is_active %}
+                <form method="post" action="{% url 'restore_service_event_planner' event.id assignment.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="button-secondary">
+                        {% if language == "zh" %}恢复责任{% else %}Restore responsibility{% endif %}
+                    </button>
+                </form>
+            {% else %}
+                <p class="muted">
+                    {% if language == "zh" %}用户已停用；记录仅作历史保留。{% else %}User inactive; retained as history only.{% endif %}
+                </p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
 {% endblock %}

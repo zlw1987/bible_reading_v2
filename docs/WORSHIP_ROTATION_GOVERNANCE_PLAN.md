@@ -2,10 +2,12 @@
 
 Status: canonical governance decisions through `MO-S.6D-0A-FU2`, plus
 implemented `MO-S.6D-1A` Campus / Site type foundation and `MO-S.6D-1B`
-Worship rotation-pool configuration foundation. FU2 finalizes the required
-event-planner prerequisite and Worship-specific pool semantics. The Campus and
-pool-configuration foundations are implemented; every remaining future slice
-below requires separate explicit approval.
+Worship rotation-pool configuration foundation, and implemented `MO-S.6D-1C`
+ServiceEvent planner/coordinator responsibility foundation. FU2 finalizes the
+required event-planner prerequisite and Worship-specific pool semantics. The
+Campus, pool-configuration, and event-responsibility foundations are
+implemented; every remaining future slice below requires separate explicit
+approval.
 
 ## 1. Problem and decisions owned here
 
@@ -26,10 +28,10 @@ serving, and management remain separate axes.
 
 This plan closes the architecture decisions needed before a later narrow
 rotation-edit path or the MO-S.6D Excel importer can be approved. It now
-records the implemented semantic Campus/Site and Worship pool-configuration
-foundations, but does not add event responsibilities, event applicability,
-rotation-selection permissions, candidate selectors, queryset reachability,
-an Excel dependency, or an importer.
+records the implemented semantic Campus/Site, Worship pool-configuration, and
+exact-event planner/coordinator responsibility foundations, but does not add
+event applicability, rotation-selection permissions, candidate selectors,
+queryset reachability, an Excel dependency, or an importer.
 
 ## 2. Current repository truth
 
@@ -65,12 +67,18 @@ The current code provides:
   a hint, without enforcement of the governed ownership invariant below;
 - Team Schedule and Sunday Board event reachability through required-team or
   existing-assignment participation, not an anchor alone; and
-- `ServiceEvent.created_by` plus `created_at` / `updated_at`, but no per-event
-  responsibility model and no `updated_by` field.
+- `ServiceEvent.created_by` plus `created_at` / `updated_at`, and the explicit
+  `ServiceEventPlannerAssignment` responsibility foundation implemented by
+  `MO-S.6D-1C`; each event/user pair has one lifecycle row with `is_active`,
+  non-sensitive notes, and timestamps, while `created_by` remains attribution;
+- a side-effect-free `current_service_event_planner_assignments(event)` lookup
+  that returns only active rows linked to active users for that exact event;
+  planner rows are managed only by existing full ServiceEvent managers on the
+  existing bilingual event-edit surface and currently grant no authority; and
+- no `updated_by` field.
 
 The current code does **not** provide:
 
-- an event-specific planner/coordinator responsibility;
 - event-audience applicability or eligible Worship Team candidate resolution
   from the pool metadata;
 - narrow authorization to change only `rotation_anchor_team`;
@@ -454,9 +462,9 @@ coordination, not descendant roster authority.
 
 ## 11. Event-specific planner/coordinator responsibility
 
-No current model provides durable event-level responsibility. `created_by`
-must not be reused: it records who created an event, has no lifecycle, and does
-not currently grant management.
+`MO-S.6D-1C` implements durable event-level responsibility without reusing
+`created_by`: creation attribution still has no responsibility lifecycle and
+does not grant management.
 
 The approved workflow includes a person responsible for one exact Sunday
 Service who may legitimately select/change that event's Worship Team without
@@ -466,27 +474,34 @@ planner/coordinator responsibility is therefore a **required prerequisite** for
 the narrow Worship Team selection workflow, not an optional later enhancement.
 Do not satisfy this use case by granting full `CAP_MANAGE_SERVICE_EVENTS`.
 
-The smallest reusable future concept is an event-owned responsibility row,
-provisionally named `ServiceEventRoleAssignment`:
+The implemented bounded concept is one event-owned responsibility row named
+`ServiceEventPlannerAssignment`:
 
 ```text
 service_event
 user
-role_type = planner | coordinator
 is_active
-assigned_by
+notes (operational and non-sensitive only)
 created_at
-ended_at / ended_by
+updated_at
 ```
 
-Final naming is an implementation detail, but semantics are locked:
+Implemented foundation semantics:
 
-- explicit assignment and explicit deactivation; retain ended rows for history;
-- active user and non-cancelled event required for authority;
-- multiple active planners/coordinators allowed;
-- overlapping active duplicate for the same event/user/role rejected;
-- grants read access to the minimum event/Worship context needed for rotation
-  selection and the narrow anchor change only;
+- one unique row per exact event/user, with explicit add, end, and restore;
+  ended rows are retained for history;
+- normal active assignment or restore requires an active linked Django user;
+  a later-deactivated user makes the stored row non-current without rewriting
+  it;
+- draft, published, completed, and cancelled event lifecycle changes do not
+  automatically delete or rewrite responsibility rows;
+- multiple different active planners/coordinators are allowed;
+- duplicate rows for the same event/user are rejected rather than silently
+  reactivated;
+- only existing full ServiceEvent managers may manage the rows in this
+  foundation slice;
+- the current-planner lookup is responsibility-only and grants no read or
+  mutation access yet;
 - not audience membership and does not expose other events;
 - not full ServiceEvent management;
 - no required-team, TeamAssignment, roster, MinistryTeam, or Church Structure
@@ -494,10 +509,10 @@ Final naming is an implementation detail, but semantics are locked:
 - not serving and does not appear in My Serving; and
 - creates no notification unless a later producer slice is approved.
 
-The foundation must be implemented before the narrow authorization/UI slice
-can claim the approved product workflow. The exact model name remains an
-implementation detail; the explicit, lifecycle-managed, exact-event semantics
-above do not.
+The foundation is now implemented. The later narrow Worship authorization/UI
+slice must explicitly consume it before a planner receives minimum Worship
+context or anchor-change authority; this slice intentionally does not modify
+general ServiceEvent visibility or any permission helper.
 
 ## 12. Exact child-team roster boundary
 
@@ -760,7 +775,7 @@ Each slice is separately approvable and must verify repository truth again.
 | --- | --- | --- | --- | --- |
 | 1 | **Campus/Site type foundation — IMPLEMENTED (`MO-S.6D-1A`)** | Choice-only model state plus `AlterField` migration; semantic behavior only; no new permission | model/form/admin choices, flexible topology, generic audience/Bible Study ancestry, type-specific exclusions, no side effects | Staff setup label/choice QA after deployment |
 | 2 | **Worship rotation-pool configuration foundation — IMPLEMENTED (`MO-S.6D-1B`)** | Worship-specific `MinistryTeam.is_worship_rotation_pool` field, default-safe migration, model/form validation, read-only configuration resolver, existing setup UI, and readiness integration; configuration grants no authority | active non-assignable pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, canonical role warning, no created rows/permissions | Narrow staff setup copy/error-state/rendered QA in the implementation slice; deployment QA remains separate |
-| 3 | **ServiceEvent planner/coordinator responsibility foundation** | Required small exact-event responsibility model and migration; grants narrow context/selection authority only; no Worship Team UI yet | lifecycle/endability, duplicates, multiple active planners, inactive user/event, audit fields, exact-event access, no audience/serving/full-event/structure/assignment authority | Required for responsibility setup/lifecycle UX if exposed |
+| 3 | **ServiceEvent planner/coordinator responsibility foundation — IMPLEMENTED (`MO-S.6D-1C`)** | `ServiceEventPlannerAssignment` exact-event/user lifecycle model and migration, current-only read helper, existing full-manager bilingual edit-page setup controls, and admin exposure; grants no context, visibility, or selection authority yet | lifecycle/end/restore, unique event/user, multiple planners, inactive-user fail-closed lookup, draft/cancelled/completed persistence, full-manager-only setup, no audience/serving/full-event/structure/assignment authority | Narrow existing ServiceEvent edit-page rendered QA in the implementation slice; deployment QA remains separate |
 | 4 | **Narrow Worship Team authorization, consistency, and UI** | New applicability/candidate/authorization/ownership-consistency helpers and narrow GET/POST endpoint; no model migration expected beyond prerequisites; pool Leads/planners receive only this action | actual GET/POST denial/allow rules, locked-current reauthorization, stale form, combined union, off-team/duplicate roster conflict, assignment-path enforcement, LogEntry attribution, no roster move or unrelated writes | Required for rendered Worship Team selector, bilingual copy, and conflict UX |
 | 5 | **Worship Team operational reachability** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; no migration | selected-team-only rows, global/exact-team behavior, invalid selection, change/removal, privacy, no coverage/assignment/required-team writes | Required on Team Schedule and Board |
 | 6 | **Worship Rotation Planner** | Explicit one-Sunday and bounded shift proposal/confirm workflow; no rule engine or roster mutation; schema depends on separately decided durable batch audit need | before/after proposal, range boundary, roster blocker, downstream impact, stale/all-or-nothing rollback, no hidden skips or assignment writes | Required for batch preview, conflict, and result UX |
@@ -769,10 +784,11 @@ Each slice is separately approvable and must verify repository truth again.
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slices 1 and 2 are implemented. Slice 1 remains independent but
-should precede real multi-campus setup. Slices 2 and 3 both precede 4: pool configuration is required for pool-based
-authority/applicability, and exact-event planner responsibility is required for
-the approved event-planner workflow. Slice 4 defines the ownership invariant
+Dependencies: slices 1, 2, and 3 are implemented. Slice 1 remains independent
+but should precede real multi-campus setup. Slices 2 and 3 both precede 4: pool
+configuration is required for pool-based authority/applicability, and the
+implemented exact-event planner responsibility is required for the approved
+event-planner workflow. Slice 4 defines the ownership invariant
 used by 6 through 9. Slice 5 should precede 9 so an imported Worship Team is
 operationally reachable without false required coverage. Slice 6 should precede
 using annual import as a batch rotation tool. Slice 7 follows a proven change

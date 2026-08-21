@@ -12,5 +12,20 @@ urlpatterns = [
     ),
     path("events/<int:event_id>/", views.service_event_detail, name="service_event_detail"),
     path("events/<int:event_id>/edit/", views.edit_service_event, name="edit_service_event"),
+    path(
+        "events/<int:event_id>/planners/add/",
+        views.add_service_event_planner,
+        name="add_service_event_planner",
+    ),
+    path(
+        "events/<int:event_id>/planners/<int:assignment_id>/end/",
+        views.end_service_event_planner,
+        name="end_service_event_planner",
+    ),
+    path(
+        "events/<int:event_id>/planners/<int:assignment_id>/restore/",
+        views.restore_service_event_planner,
+        name="restore_service_event_planner",
+    ),
     path("events/<int:event_id>/cancel/", views.cancel_service_event, name="cancel_service_event"),
 ]

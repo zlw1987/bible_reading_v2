@@ -330,3 +330,89 @@ class ServiceEventAudienceScope(models.Model):
     def save(self, *args, **kwargs):
         self.full_clean()
         return super().save(*args, **kwargs)
+
+
+class ServiceEventPlannerAssignment(models.Model):
+    """Explicit planning responsibility for one exact ServiceEvent.
+
+    This row records responsibility only. Permission, audience, visibility,
+    serving, team-management, and assignment consumers must opt in separately.
+    """
+
+    service_event = models.ForeignKey(
+        ServiceEvent,
+        on_delete=models.CASCADE,
+        related_name="planner_assignments",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="service_event_planner_assignments",
+    )
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Operational, non-sensitive coordination notes only. Do not store "
+            "pastoral, medical, financial, or other private information."
+        ),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = [
+            "service_event__start_datetime",
+            "user__username",
+            "id",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["service_event", "user"],
+                name="unique_service_event_planner_user",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["service_event", "is_active"]),
+            models.Index(fields=["user", "is_active"]),
+        ]
+        verbose_name = "Service Event Planner / Coordinator"
+        verbose_name_plural = "Service Event Planners / Coordinators"
+
+    def __str__(self):
+        state = "active" if self.is_active else "ended"
+        return f"{self.user} — {self.service_event} ({state})"
+
+    def clean(self):
+        errors = {}
+        if self.is_active and self.user_id and not self.user.is_active:
+            errors["user"] = (
+                "Active planner responsibility requires an active user."
+            )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+def current_service_event_planner_assignments(event):
+    """Return current responsibility rows for one exact ServiceEvent.
+
+    Current means both the stored assignment and linked Django user are active.
+    This lookup is side-effect-free and deliberately grants no authority.
+    """
+
+    if event is None or not getattr(event, "pk", None):
+        return ServiceEventPlannerAssignment.objects.none()
+    return (
+        ServiceEventPlannerAssignment.objects.filter(
+            service_event=event,
+            is_active=True,
+            user__is_active=True,
+        )
+        .select_related("user")
+        .order_by("user__username", "id")
+    )

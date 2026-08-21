@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -17,8 +18,17 @@ from ministry.services.assignment_coverage import (
     events_with_coverage_queryset,
 )
 
-from .forms import RecurringServiceEventForm, ServiceEventForm
-from .models import ServiceEvent, service_event_is_history
+from .forms import (
+    RecurringServiceEventForm,
+    ServiceEventForm,
+    ServiceEventPlannerAssignmentForm,
+)
+from .models import (
+    ServiceEvent,
+    ServiceEventPlannerAssignment,
+    current_service_event_planner_assignments,
+    service_event_is_history,
+)
 
 
 def cancel_non_final_assignments_for_event(event):
@@ -42,12 +52,26 @@ def event_ui_text(language, key):
             "not_available": "This service event is not available.",
             "saved": "Service event saved.",
             "cancelled": "Service event cancelled.",
+            "planner_added": "Service planner responsibility added.",
+            "planner_ended": "Service planner responsibility ended.",
+            "planner_restored": "Service planner responsibility restored.",
+            "planner_already_ended": "This planner responsibility is already ended.",
+            "planner_already_active": "This planner responsibility is already active.",
+            "planner_inactive_user": (
+                "An inactive user cannot hold current planner responsibility."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理聚会事件的权限。",
             "not_available": "这个聚会事件目前不可用。",
             "saved": "聚会事件已保存。",
             "cancelled": "聚会事件已取消。",
+            "planner_added": "已添加聚会安排责任。",
+            "planner_ended": "已结束聚会安排责任。",
+            "planner_restored": "已恢复聚会安排责任。",
+            "planner_already_ended": "这项聚会安排责任已经结束。",
+            "planner_already_active": "这项聚会安排责任目前有效。",
+            "planner_inactive_user": "停用用户不能承担当前聚会安排责任。",
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -59,6 +83,28 @@ def can_manage_service_events(user):
         or getattr(user, "is_superuser", False)
         or has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
     )
+
+
+def _service_event_edit_context(event, language, planner_form=None):
+    return {
+        "event": event,
+        "form": ServiceEventForm(instance=event, language=language),
+        "is_edit": True,
+        "planner_form": planner_form
+        or ServiceEventPlannerAssignmentForm(
+            service_event=event,
+            language=language,
+        ),
+        "current_planner_assignments": current_service_event_planner_assignments(
+            event
+        ),
+        "noncurrent_planner_assignments": (
+            ServiceEventPlannerAssignment.objects.filter(service_event=event)
+            .filter(Q(is_active=False) | Q(user__is_active=False))
+            .select_related("user")
+            .order_by("user__username", "id")
+        ),
+    }
 
 
 def get_visible_service_events(user):
@@ -363,11 +409,125 @@ def edit_service_event(request, event_id):
         request,
         "events/service_event_form.html",
         {
-            "event": event,
+            **_service_event_edit_context(event, language),
             "form": form,
-            "is_edit": True,
         },
     )
+
+
+@login_required
+def add_service_event_planner(request, event_id):
+    language = get_user_language(request)
+    event = get_object_or_404(ServiceEvent, id=event_id)
+    if not can_manage_service_events(request.user):
+        messages.error(request, event_ui_text(language, "no_permission"))
+        return redirect("service_event_list")
+    if request.method != "POST":
+        return redirect("edit_service_event", event_id=event.id)
+
+    with transaction.atomic():
+        event = ServiceEvent.objects.select_for_update().get(id=event.id)
+        if not can_manage_service_events(request.user):
+            messages.error(request, event_ui_text(language, "no_permission"))
+            return redirect("service_event_list")
+        planner_form = ServiceEventPlannerAssignmentForm(
+            request.POST,
+            service_event=event,
+            language=language,
+        )
+        if planner_form.is_valid():
+            planner_form.save()
+            messages.success(
+                request,
+                event_ui_text(language, "planner_added"),
+            )
+            return redirect("edit_service_event", event_id=event.id)
+
+    return render(
+        request,
+        "events/service_event_form.html",
+        _service_event_edit_context(event, language, planner_form=planner_form),
+        status=200,
+    )
+
+
+@login_required
+def end_service_event_planner(request, event_id, assignment_id):
+    language = get_user_language(request)
+    event = get_object_or_404(ServiceEvent, id=event_id)
+    if not can_manage_service_events(request.user):
+        messages.error(request, event_ui_text(language, "no_permission"))
+        return redirect("service_event_list")
+    if request.method != "POST":
+        return redirect("edit_service_event", event_id=event_id)
+
+    with transaction.atomic():
+        event = ServiceEvent.objects.select_for_update().get(id=event.id)
+        if not can_manage_service_events(request.user):
+            messages.error(request, event_ui_text(language, "no_permission"))
+            return redirect("service_event_list")
+        assignment = get_object_or_404(
+            ServiceEventPlannerAssignment.objects.select_for_update().select_related(
+                "user",
+            ),
+            id=assignment_id,
+            service_event=event,
+        )
+        if not assignment.is_active:
+            messages.error(
+                request,
+                event_ui_text(language, "planner_already_ended"),
+            )
+        else:
+            assignment.is_active = False
+            assignment.save(update_fields=["is_active", "updated_at"])
+            messages.success(
+                request,
+                event_ui_text(language, "planner_ended"),
+            )
+    return redirect("edit_service_event", event_id=event_id)
+
+
+@login_required
+def restore_service_event_planner(request, event_id, assignment_id):
+    language = get_user_language(request)
+    event = get_object_or_404(ServiceEvent, id=event_id)
+    if not can_manage_service_events(request.user):
+        messages.error(request, event_ui_text(language, "no_permission"))
+        return redirect("service_event_list")
+    if request.method != "POST":
+        return redirect("edit_service_event", event_id=event_id)
+
+    with transaction.atomic():
+        event = ServiceEvent.objects.select_for_update().get(id=event.id)
+        if not can_manage_service_events(request.user):
+            messages.error(request, event_ui_text(language, "no_permission"))
+            return redirect("service_event_list")
+        assignment = get_object_or_404(
+            ServiceEventPlannerAssignment.objects.select_for_update().select_related(
+                "user",
+            ),
+            id=assignment_id,
+            service_event=event,
+        )
+        if assignment.is_active:
+            messages.error(
+                request,
+                event_ui_text(language, "planner_already_active"),
+            )
+        elif not assignment.user.is_active:
+            messages.error(
+                request,
+                event_ui_text(language, "planner_inactive_user"),
+            )
+        else:
+            assignment.is_active = True
+            assignment.save(update_fields=["is_active", "updated_at"])
+            messages.success(
+                request,
+                event_ui_text(language, "planner_restored"),
+            )
+    return redirect("edit_service_event", event_id=event_id)
 
 
 @login_required

@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -11,7 +12,14 @@ from accounts.ordering import (
 )
 from ministry.models import MinistryTeam
 
-from .models import ServiceEvent, ServiceEventAudienceScope
+from .models import (
+    ServiceEvent,
+    ServiceEventAudienceScope,
+    ServiceEventPlannerAssignment,
+)
+
+
+User = get_user_model()
 
 
 FORM_TEXT = {
@@ -452,6 +460,72 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
                 "Use the dedicated cancel action to cancel a service event."
             )
         return status
+
+
+class PlannerUserChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, user):
+        full_name = user.get_full_name().strip()
+        if full_name:
+            return f"{full_name} ({user.get_username()})"
+        return user.get_username()
+
+
+class ServiceEventPlannerAssignmentForm(forms.ModelForm):
+    user = PlannerUserChoiceField(queryset=User.objects.none())
+
+    class Meta:
+        model = ServiceEventPlannerAssignment
+        fields = ["user", "notes"]
+        widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, service_event, language="en", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.service_event = service_event
+        self.language = language
+        self.instance.service_event = service_event
+        self.fields["user"].queryset = User.objects.filter(is_active=True).order_by(
+            "last_name",
+            "first_name",
+            "username",
+        )
+
+        if language == "zh":
+            self.fields["user"].label = "聚会安排人 / 协调人"
+            self.fields["user"].help_text = "只能选择当前启用的用户。"
+            self.fields["notes"].label = "协调备注（可选）"
+            self.fields["notes"].help_text = (
+                "只填写非敏感的工作备注；不要填写牧养、医疗、财务或其他隐私信息。"
+            )
+        else:
+            self.fields["user"].label = "Service planner / coordinator"
+            self.fields["user"].help_text = "Only currently active users can be selected."
+            self.fields["notes"].label = "Coordination notes (optional)"
+            self.fields["notes"].help_text = (
+                "Operational, non-sensitive notes only; do not include pastoral, "
+                "medical, financial, or other private information."
+            )
+
+    def clean_user(self):
+        user = self.cleaned_data["user"]
+        if not user.is_active:
+            raise ValidationError(
+                "只能选择当前启用的用户。"
+                if self.language == "zh"
+                else "Only currently active users can be selected."
+            )
+        if ServiceEventPlannerAssignment.objects.filter(
+            service_event=self.service_event,
+            user=user,
+        ).exists():
+            raise ValidationError(
+                "这个用户已经有此聚会的安排责任记录；请使用下方的明确恢复操作。"
+                if self.language == "zh"
+                else (
+                    "This user already has a planner responsibility record for "
+                    "this event; use the explicit restore action below."
+                )
+            )
+        return user
 
 
 class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):

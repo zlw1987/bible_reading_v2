@@ -1,5 +1,8 @@
+from copy import copy
+
 from django import forms
 from django.contrib.auth import get_user_model
+from django.core.exceptions import NON_FIELD_ERRORS
 from django.db.models import Q
 from django.utils import timezone
 
@@ -20,6 +23,10 @@ from .models import (
     TeamAssignment,
     TeamMembership,
 )
+from .services.worship_assignment_guard import (
+    WORSHIP_ASSIGNMENT_OWNERSHIP_ERROR_CODE,
+    WORSHIP_ASSIGNMENT_RETARGET_ERROR_CODE,
+)
 
 
 class ServiceEventChoiceField(forms.ModelChoiceField):
@@ -34,6 +41,24 @@ class ServiceEventChoiceField(forms.ModelChoiceField):
         if event.location:
             parts.append(event.location)
         return " - ".join(parts)
+
+
+def localize_assignment_model_errors(form, text):
+    """Use per-form language mappings without mutating shared ModelForm meta."""
+
+    form._meta = copy(form._meta)
+    form._meta.error_messages = {
+        **(form._meta.error_messages or {}),
+        NON_FIELD_ERRORS: {
+            **(form._meta.error_messages or {}).get(NON_FIELD_ERRORS, {}),
+            WORSHIP_ASSIGNMENT_OWNERSHIP_ERROR_CODE: text[
+                "worship_ownership_error"
+            ],
+            WORSHIP_ASSIGNMENT_RETARGET_ERROR_CODE: text[
+                "worship_retarget_error"
+            ],
+        },
+    }
 
 
 class TeamMembershipChoiceField(forms.ModelMultipleChoiceField):
@@ -142,6 +167,16 @@ ASSIGNMENT_FORM_TEXT = {
             "event through My Serving / Calendar / Event detail for serving "
             "purposes."
         ),
+        "worship_ownership_error": (
+            "This Worship assignment does not match the event's selected Worship "
+            "Team. Select the exact eligible Worship Team first, or resolve the "
+            "existing Worship assignment conflict."
+        ),
+        "worship_retarget_error": (
+            "A Worship assignment cannot be moved to another event or team. "
+            "Cancel or complete it without changing its event or team, then "
+            "create a separate assignment if needed."
+        ),
     },
     "zh": {
         "service_event": "聚会事件",
@@ -167,6 +202,14 @@ ASSIGNMENT_FORM_TEXT = {
         "audience_override_warning": (
             "这位同工目前不在此聚会的适用范围内。如果仍然安排他服事，他将可以通过"
             "“我的服事 / 日历 / 聚会详情”查看这场聚会的必要信息，以便完成服事。"
+        ),
+        "worship_ownership_error": (
+            "这项敬拜排班与聚会当前选择的敬拜团队不一致。请先选择准确且符合条件的"
+            "敬拜团队，或先处理现有敬拜排班冲突。"
+        ),
+        "worship_retarget_error": (
+            "敬拜排班不能移到另一场聚会或另一个团队。请在不更改聚会或团队的情况"
+            "下取消或完成此排班；如有需要，再另建一项排班。"
         ),
     },
 }
@@ -398,6 +441,17 @@ class TeamAssignmentForm(forms.ModelForm):
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
+        error_messages = {
+            NON_FIELD_ERRORS: {
+                WORSHIP_ASSIGNMENT_OWNERSHIP_ERROR_CODE: (
+                    "This Worship assignment does not match the event's selected "
+                    "Worship Team."
+                ),
+                WORSHIP_ASSIGNMENT_RETARGET_ERROR_CODE: (
+                    "A Worship assignment cannot be moved to another event or team."
+                ),
+            }
+        }
 
     def __init__(
         self,
@@ -409,6 +463,7 @@ class TeamAssignmentForm(forms.ModelForm):
     ):
         super().__init__(*args, **kwargs)
         text = assignment_form_text(language)
+        localize_assignment_model_errors(self, text)
         self.manageable_teams = manageable_teams
         self.fields["service_event"].language = language
         base_events = ServiceEvent.objects.select_related(
@@ -670,6 +725,17 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 4}),
         }
+        error_messages = {
+            NON_FIELD_ERRORS: {
+                WORSHIP_ASSIGNMENT_OWNERSHIP_ERROR_CODE: (
+                    "This Worship assignment does not match the event's selected "
+                    "Worship Team."
+                ),
+                WORSHIP_ASSIGNMENT_RETARGET_ERROR_CODE: (
+                    "A Worship assignment cannot be moved to another event or team."
+                ),
+            }
+        }
 
     def __init__(
         self,
@@ -683,6 +749,7 @@ class TeamScheduleAssignmentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.team = team
         text = assignment_form_text(language)
+        localize_assignment_model_errors(self, text)
         self.assignment_form_text = text
 
         for field_name in self.fields:

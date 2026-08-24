@@ -5,7 +5,10 @@ Suggestions, `MO-S.6D-1A` Campus / Site type foundation,
 `MO-S.6D-1B` Worship rotation-pool configuration foundation,
 `MO-S.6D-1C` ServiceEvent planner/coordinator responsibility foundation, and
 `MO-S.6D-1D-A` read-only applicability/candidate/ownership-consistency domain
-foundation, plus
+foundation, and `MO-S.6D-1D-B` governed Worship Team authorization, mutation,
+legacy-write enforcement, and narrow planning UI, with
+`MO-S.6D-1D-B-FU1` assignment identity and cross-path serialization closure,
+plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Remaining MO-S.6D and other
 future runtime slices remain separately scoped and require explicit approval.
@@ -35,9 +38,8 @@ or a production import in this planning slice.
   `MinistryTeam`.
 - `rotation_anchor_team` can already store a Worship team such as Worship A,
   C1, C2, or C3 when configured as an ordinary assignable `MinistryTeam`. The
-  current runtime treats it only as an optional hint and does not enforce the
-  stronger governed invariant. Canonically, the future governed workflow uses
-  it as the event-level selection of the team that owns Worship for that
+  current governed runtime uses it as the event-level selection of the team
+  that owns Worship for that
   occurrence. It is still not an assignment, required team, audience,
   visibility, permission, serving, or coverage source.
 - `ServiceEventRequiredTeam` says which teams are expected for an event. It
@@ -120,9 +122,10 @@ active-primary-path Worship Team candidates, and pool-aware current ownership
 consistency. It reuses the existing pool inspection, treats scheduled /
 confirmed / prepared as current, reports off-team, inapplicable-pool, multiple,
 and duplicate conflicts, and exposes no roster/private data. These domain facts
-accept no user and grant no permission. The system still does not provide
-governed Worship Team authorization, selector/mutation UI, ownership
-enforcement on existing writes, selected-team operational reachability, the Worship
+accept no user and grant no permission by themselves. `MO-S.6D-1D-B` now
+provides the narrow Worship Team authorization and selector/mutation UI and
+enforces ownership on supported existing assignment writes. The system still
+does not provide selected-team operational reachability, the Worship
 Rotation Planner, direct Worship Team change notifications, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
 mechanism.
@@ -189,7 +192,9 @@ sync, and full assignment import in the first import slice.
 3. If a current Worship `TeamAssignment` exists, its team must equal the
    selected Worship Team. Off-team or duplicate assignments fail closed, and a
    selection change never silently moves, retags, clones, cancels, or rewrites
-   an existing roster. Current runtime does not yet enforce this FU1 invariant.
+   an existing roster. `MO-S.6D-1D-B-FU1` enforces this across supported write
+   paths: any persisted or proposed Worship row has immutable event/team
+   identity, including valid current rows and downstream-to-Worship retargets.
 4. Required teams remain coverage expectations, not placeholder assignments.
 5. Belonging, serving, management authority, and audience visibility remain
    separate axes. `ChurchStructureMembership` must not imply serving,
@@ -626,14 +631,16 @@ tests and limited-trial review pass.
   configuration foundations and `MO-S.6D-1C` exact-event planner/coordinator
   responsibility foundation implemented. `MO-S.6D-1D-A` also implements the
   read-only applicability/candidate/ownership-consistency domain half of the
-  canonical slice 4, without its authorization, selector, mutation, legacy
-  write-path enforcement, or UI half. FU2 makes
+  canonical slice 4. `MO-S.6D-1D-B` implements its narrow authorization,
+  selector/mutation UI, legacy write-path enforcement, and audit half, with
+  FU1 closing assignment identity and ServiceEvent serialization. FU2 makes
   exact-event planner/coordinator responsibility a required prerequisite and
   fixes the pool semantic as Worship-specific. `MO-S.6D-1C` adds the explicit
   responsibility model, active/inactive lifecycle, current-only active-user
-  lookup, existing full-manager setup controls, and admin exposure. It does not
-  add applicability/candidate runtime, planner permission consumption,
-  queryset visibility/reachability, an importer, or normal-data changes.
+  lookup, existing full-manager setup controls, and admin exposure. The 1C
+  source grants nothing by itself; 1D-B consumes it only for the exact-event
+  Worship Team action. It does not add queryset visibility/reachability, an
+  importer, or normal-data changes.
 - Canonical decision: see
   [`WORSHIP_ROTATION_GOVERNANCE_PLAN.md`](WORSHIP_ROTATION_GOVERNANCE_PLAN.md).
 - Church Structure: `MO-S.6D-1A` implemented the semantic-only Campus / Site
@@ -642,7 +649,7 @@ tests and limited-trial review pass.
 - Pool applicability: an active, non-assignable MinistryTeam may now be
   explicitly marked with `is_worship_rotation_pool`, and its configuration can
   be inspected through the active primary path to one active Church Structure
-  anchor. A future separately approved consumer may consider it applicable only
+  anchor. The implemented 1D-A/1D-B consumer considers it applicable only
   when that anchor is equal to or below a selected active event audience unit.
   The configuration is Worship-specific and grants nothing by itself. Audience
   establishes applicability, never authority.
@@ -655,22 +662,39 @@ tests and limited-trial review pass.
   roster is invalid/ambiguous and fails closed. Selection changes never move,
   retag, clone, cancel, or rewrite an existing roster.
 - Authority: full ServiceEvent managers, an explicit event planner/coordinator,
-  or an active date-valid Lead/Coordinator on an applicable pool may use a
-  future narrow anchor-only action. Exact child-team roster authority remains
+  or an active date-valid Lead/Coordinator on an applicable pool may use the
+  implemented narrow Worship-Team-only action. Exact child-team roster authority remains
   unchanged and never flows from a pool role.
 - Event responsibility: the approved workflow requires a lifecycle-managed
   user + exact-ServiceEvent planner/coordinator foundation before the narrow
   selector ships. `MO-S.6D-1C` implements that responsibility source as one
   unique event/user row with explicit add, end, and restore, but intentionally
-  grants no event/Worship context or action yet. The later `1D-B` selector
-  slice must consume it narrowly; it is not replaced by `created_by` or full
+  grants no general event visibility or full-event action. The implemented
+  `1D-B` selector consumes it narrowly; it is not replaced by `created_by` or full
   `CAP_MANAGE_SERVICE_EVENTS`.
 - Read-only governance: `ministry.services.worship_governance` now resolves
   active applicable pools from event audience, active assignable candidates
   through deterministic primary paths, and the stronger current Worship
-  ownership state. The existing Board/Team Schedule `worship_context.py`
-  presentation remains unchanged until `1D-B`; no current form/admin/import
-  write is governed by the new inspection yet.
+  ownership state. `MO-S.6D-1D-B` consumes those facts from the locked narrow
+  selector and the canonical TeamAssignment write guard. The existing Board/
+  Team Schedule `worship_context.py` presentation and reachability remain
+  unchanged pending the next slice.
+- Governed mutation: the contextual Worship Planning page lists only bounded
+  upcoming exact events currently authorized for the user, including initial
+  no-selection cases. The exact-event selector locks/reloads, reauthorizes,
+  compares expected `updated_at` and old team, recomputes 1D-A facts, changes
+  only the selected Worship Team, and writes one same-transaction `LogEntry`
+  for a real change. Normal/recurring ServiceEvent forms and ServiceEvent Admin
+  no longer provide a direct anchor write. Supported current Worship
+  TeamAssignment writes must match the valid eligible selected team; existing
+  conflicts may still cancel/complete in place, but are never silently
+  retargeted as repair. `MO-S.6D-1D-B-FU1` also makes event/team identity
+  immutable for every supported persisted/proposed Worship boundary and
+  serializes supported current Worship writes on the ServiceEvent row before
+  revalidation. Member confirmation locks in ServiceEvent -> assignment ->
+  member order and validates the parent before any member side effect. Raw SQL
+  and future arbitrary bulk updates remain outside this application-level
+  claim; SQLite tests verify the lock path, not parallel row-lock behavior.
 - Reachability: the exact current valid rotation anchor should become a third
   operational relevance predicate beside required-team and existing-assignment
   participation. It must not create or imply a required team, assignment,
@@ -689,10 +713,10 @@ tests and limited-trial review pass.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
 - Dependency: after the implemented Campus, pool-configuration,
-  event-responsibility, and read-only governance foundations, every remaining
-  authorization/mutation/UI/reachability/integration slice in
-  the canonical governance plan still requires separate task approval and
-  focused verification.
+  event-responsibility, read-only governance, and governed single-event
+  mutation foundations, every remaining reachability, batch-planning,
+  notification, and import slice in the canonical governance plan still
+  requires separate task approval and focused verification.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -946,13 +970,14 @@ attribution already exists.
 #### Permission and dependency readiness
 
 Single-event Worship Team selection and annual bulk import are different
-authority surfaces. MO-S.6D-0A-FU1/FU2 allow a future narrow one-event action
-for full ServiceEvent managers, an explicit lifecycle-managed exact-event
+authority surfaces. `MO-S.6D-1D-B` implements the narrow one-event action
+authorized by MO-S.6D-0A-FU1/FU2 for full ServiceEvent managers, an explicit
+lifecycle-managed exact-event
 planner/coordinator, or an active date-valid Lead/Coordinator on an applicable
 configured Worship rotation pool. The event-responsibility foundation is a
-required prerequisite for the approved planner use case and must not be
-replaced by full `CAP_MANAGE_SERVICE_EVENTS`. The action changes only the
-selected Worship Team and does not grant general event management. The first
+consumed prerequisite for the planner use case and is not replaced by full
+`CAP_MANAGE_SERVICE_EVENTS`. The action changes only the selected Worship Team
+and does not grant general event management. The first
 annual upload/preview/confirm workflow should be staff/superuser-only at both
 preview and confirmation. Exact-team assignment authority, audience, and pool
 leadership do not confer bulk import or event-creation authority. A future slice
@@ -977,15 +1002,15 @@ selected Worship Team is operationally reachable without a RequiredTeam
 bootstrap; the event-planner responsibility foundation is required; and first
 bulk import is staff/superuser-only. The Campus and pool-configuration
 foundations, the event-planner responsibility foundation, and the read-only
-applicability/candidate/consistency foundation are now implemented; all other
+applicability/candidate/consistency foundation, plus governed `1D-B`
+authorization/mutation enforcement, are now implemented; all other
 prerequisites remain documentation decisions only.
 
 MO-S.6D remains unapproved until its owning slices:
 
-1. consume the implemented Worship-pool applicability, eligible-team, and
-   ownership-consistency facts in a narrowly authorized locked-current
-   selector; govern all existing anchor/Worship-assignment write paths; then
-   add selected-team operational reachability. Campus remains an independent
+1. add selected-team operational reachability to Team Schedule and the Sunday
+   Board on top of the implemented narrowly authorized locked-current selector
+   and supported-write enforcement. Campus remains an independent
    foundation that should precede real multi-campus setup;
 2. define the Bethany 9:30 profile's exact local time and persisted CMS
    discriminator, including its stable structure/location mapping;

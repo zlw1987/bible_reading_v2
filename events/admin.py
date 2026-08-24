@@ -164,7 +164,7 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "event_type",
         "start_datetime",
         "host_language_unit",
-        "rotation_anchor_team",
+        "worship_team",
         "status",
         "created_by",
     )
@@ -187,7 +187,19 @@ class ServiceEventAdmin(admin.ModelAdmin):
         "rotation_anchor_team__name",
         "rotation_anchor_team__name_en",
     )
-    readonly_fields = ("created_at", "updated_at", "published_at")
+    exclude = ("rotation_anchor_team",)
+    readonly_fields = (
+        "worship_team",
+        "created_at",
+        "updated_at",
+        "published_at",
+    )
+
+    @admin.display(description="Worship Team")
+    def worship_team(self, obj):
+        if obj is None or not obj.rotation_anchor_team_id:
+            return "Not selected"
+        return obj.rotation_anchor_team
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         formfield = super().formfield_for_foreignkey(db_field, request, **kwargs)
@@ -200,12 +212,6 @@ class ServiceEventAdmin(admin.ModelAdmin):
             formfield.help_text = (
                 "Structure-native display-only Host / Language context. "
                 "This does not control visibility, serving assignment, or permissions."
-            )
-        if db_field.name == "rotation_anchor_team":
-            formfield.label = "Rotation Anchor Team"
-            formfield.help_text = (
-                "Optional scheduling hint for future copy-forward suggestions. "
-                "This does not make the team required and does not control coverage, audience, visibility, or permissions."
             )
         return formfield
 

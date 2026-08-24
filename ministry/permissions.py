@@ -16,6 +16,7 @@ from .models import (
     TeamAssignmentMember,
     TeamMembership,
 )
+from .services.worship_governance import applicable_worship_rotation_pools
 
 
 # Ministry role-type codes that grant runtime team-management / team-scheduling
@@ -130,6 +131,47 @@ def can_manage_team_assignments(user):
         or getattr(user, "is_superuser", False)
         or has_capability(user, CAP_MANAGE_TEAM_ASSIGNMENTS)
     )
+
+
+def can_change_worship_team(user, event):
+    """Narrow exact-event authority to select the governed Worship Team.
+
+    This grants no ordinary ServiceEvent visibility or edit access, no roster
+    authority, and no descendant-team management.  Pool authority is exact-pool
+    Lead/Coordinator authority evaluated against current applicable pools.
+    """
+
+    if (
+        event is None
+        or not getattr(event, "pk", None)
+        or not getattr(user, "is_authenticated", False)
+        or not getattr(user, "is_active", False)
+        or event.status == event.STATUS_CANCELLED
+    ):
+        return False
+
+    if (
+        getattr(user, "is_staff", False)
+        or getattr(user, "is_superuser", False)
+        or has_capability(user, CAP_MANAGE_SERVICE_EVENTS)
+    ):
+        return True
+
+    # Local import avoids making the events -> ministry model dependency
+    # circular during Django app loading.
+    from events.models import current_service_event_planner_assignments
+
+    if current_service_event_planner_assignments(event).filter(user=user).exists():
+        return True
+
+    applicable_pool_ids = [
+        item.pool.pk for item in applicable_worship_rotation_pools(event)
+    ]
+    if not applicable_pool_ids:
+        return False
+    return _active_management_role_assignments(user).filter(
+        team_id__in=applicable_pool_ids
+    ).exists()
 
 
 def can_import_lighting_pilot(user):

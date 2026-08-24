@@ -5,11 +5,13 @@ implemented `MO-S.6D-1A` Campus / Site type foundation and `MO-S.6D-1B`
 Worship rotation-pool configuration foundation, and implemented `MO-S.6D-1C`
 ServiceEvent planner/coordinator responsibility foundation, plus implemented
 `MO-S.6D-1D-A` read-only event applicability, candidate, and ownership-
-consistency domain foundation. FU2 finalizes the required event-planner
+consistency domain foundation, plus implemented `MO-S.6D-1D-B` governed
+authorization, mutation enforcement, and narrow Worship Planning UI, with
+`MO-S.6D-1D-B-FU1` identity and cross-path serialization closure. FU2 finalizes the required event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
-configuration, event-responsibility, and read-only governance foundations are
-implemented; every remaining mutation, authorization, UI, reachability, and
-integration slice below requires separate explicit approval.
+configuration, event-responsibility, read-only governance, and governed
+single-event mutation foundations are implemented; every remaining reachability,
+batch-planning, notification, and import slice below requires separate explicit approval.
 
 ## 1. Problem and decisions owned here
 
@@ -28,13 +30,15 @@ does not inherit roster authority over descendants. A child-team Lead does not
 gain authority over peer rotation selection. Audience, structure, membership,
 serving, and management remain separate axes.
 
-This plan closes the architecture decisions needed before a later narrow
+This plan closes the architecture decisions needed before the narrow
 rotation-edit path or the MO-S.6D Excel importer can be approved. It now
 records the implemented semantic Campus/Site, Worship pool-configuration,
 exact-event planner/coordinator responsibility, and read-only event
-applicability/candidate/consistency foundations, but does not add rotation-
-selection permissions, selector/mutation UI, write enforcement, queryset
-reachability, an Excel dependency, or an importer.
+applicability/candidate/consistency foundations. The separately implemented
+`MO-S.6D-1D-B` slice adds the narrow rotation-selection permission,
+selector/mutation UI, and supported-write enforcement described below. It does
+not add selected-team queryset reachability, an Excel dependency, or an
+importer.
 
 ## 2. Current repository truth
 
@@ -65,9 +69,8 @@ The current code provides:
   inactive configured pool is retained informational state;
 - exact-team Lead/Coordinator management authority through active, date-valid
   `MinistryTeamRoleAssignment` rows;
-- nullable `ServiceEvent.rotation_anchor_team`, currently selectable from any
-  active team on the normal event forms and described by older runtime/docs as
-  a hint, without enforcement of the governed ownership invariant below;
+- nullable `ServiceEvent.rotation_anchor_team`, now presented as the selected
+  Worship Team and editable only through the governed exact-event selector;
 - Team Schedule and Sunday Board event reachability through required-team or
   existing-assignment participation, not an anchor alone; and
 - `ServiceEvent.created_by` plus `created_at` / `updated_at`, and the explicit
@@ -77,7 +80,9 @@ The current code provides:
 - a side-effect-free `current_service_event_planner_assignments(event)` lookup
   that returns only active rows linked to active users for that exact event;
   planner rows are managed only by existing full ServiceEvent managers on the
-  existing bilingual event-edit surface and currently grant no authority;
+  existing bilingual event-edit surface; the `MO-S.6D-1C` responsibility
+  foundation grants nothing by itself, while `MO-S.6D-1D-B` now consumes a
+  current row only for the narrow applicable event's Worship Team action;
 - a side-effect-free `ministry.services.worship_governance` domain service that
   resolves valid applicable pools from active event audience rows, active
   assignable candidates from deterministic active primary Ministry paths, and
@@ -88,19 +93,15 @@ The current code provides:
 
 The current code does **not** provide:
 
-- narrow authorization to change only `rotation_anchor_team`;
-- enforcement on any write path that the selected Worship Team owns the event
-  and matches any current Worship assignment;
 - anchor-only Team Schedule or Board reachability;
 - a Worship Rotation Planner;
 - direct Worship Team change notifications; or
 - a declared `.xlsx` dependency or annual-workbook importer.
 
 `created_by` is creation attribution, not durable planner responsibility or
-runtime authority. `MinistryTeamParentLink.parent_church_unit` is currently a
-display/organization anchor, not an authority or applicability source. Making
-that anchor a rotation-applicability input is a new, explicitly governed
-consumer; the link alone must still grant nothing.
+runtime authority. `MinistryTeamParentLink.parent_church_unit` is a display/
+organization anchor and an input to implemented `MO-S.6D-1D-A` Worship event/
+pool applicability; the link alone still grants no authority.
 
 ## 3. Church Structure type semantics
 
@@ -232,9 +233,9 @@ Main Campus                              Chinese Worship Ministry [container]
 ```
 
 The ministry hierarchy remains `MinistryTeamParentLink.parent_team`. The Church
-Structure link remains an organization anchor. Under the future governance
-consumer, the anchor may help answer whether an explicitly configured Worship
-pool applies to an event, but it still grants no permission. Authority requires
+Structure link remains an organization anchor. Under the implemented Worship
+governance consumer, the anchor helps answer whether an explicitly configured
+Worship pool applies to an event, but it still grants no permission. Authority requires
 an explicit active Lead/Coordinator role on the configured Worship pool
 **and** event applicability.
 
@@ -283,9 +284,9 @@ Implemented configuration/readiness rules:
 - it becomes an applicability/candidate input only through the separately
   governed Worship-rotation helpers.
 
-The first governance consumer should use only the active **primary** ministry
+The implemented governance consumer uses only the active **primary** ministry
 parent path and its primary Church Structure anchor. Secondary parent links
-remain display-only in this slice. This deterministic rule avoids making one
+remain display-only for this purpose. This deterministic rule avoids making one
 shared child silently eligible in several pools. A genuinely multi-anchor
 Worship rotation pool is deferred; first represent combined services as
 multiple separately configured applicable pools. Missing primary path,
@@ -358,9 +359,9 @@ only through a secondary parent is not eligible in V1. A candidate with a
 missing, inactive, ambiguous, or cyclic primary path is excluded.
 
 No candidate may be derived from names, fuzzy matching, `team_kind`,
-`role_profile`, database IDs, or existing `TeamAssignment` rows. Current event
-forms offering every active MinistryTeam are not the future governed selector
-contract.
+`role_profile`, database IDs, or existing `TeamAssignment` rows. The governed
+selector uses this candidate contract; normal and recurring event forms no
+longer expose the field.
 
 ### Worship ownership and assignment consistency
 
@@ -416,14 +417,14 @@ assignment identifiers, never rosters, notes, contacts, or confirmations.
 
 The existing `build_worship_contexts()` projection intentionally remains
 unchanged for current Board/Team Schedule presentation and still queries only
-the exact selected team. The next mutation/UI slice must consume the new domain
-inspection rather than inventing another ownership definition. No current
-write path enforces the result yet. This remains a cross-row/hierarchy rule and
+the exact selected team. `MO-S.6D-1D-B` consumes the domain inspection for the
+governed selector and TeamAssignment write backstop rather than inventing a
+second ownership definition. This remains a cross-row/hierarchy rule and
 must not be represented as a misleading simple database constraint.
 
-### Current write-path inventory for `MO-S.6D-1D-B`
+### Implemented write-path closure for `MO-S.6D-1D-B`
 
-The read-only `1D-A` audit found these existing paths that `1D-B` must govern
+The read-only `1D-A` audit found these existing paths. `1D-B` now governs them
 without widening their present authority:
 
 - `ServiceEventForm` through normal create/edit writes
@@ -443,13 +444,43 @@ without widening their present authority:
 
 No other current management command writes `rotation_anchor_team`; no current
 management command other than the retained Lighting pilot importer creates
-`TeamAssignment`. Model-level/direct ORM callers remain a backstop concern:
-`TeamAssignment.clean()` enforces assignability but not Worship ownership, and
-duplicate event/team prevention is currently form-level rather than a database
-constraint. Therefore `1D-B` cannot safely ship only a new selector: it must
-apply locked-current consistency validation to the legacy event form/admin and
-all Worship-candidate assignment mutation surfaces, including status changes,
-or explicitly remove those bypasses from the governed workflow.
+`TeamAssignment`. `1D-B` removes the anchor from normal and recurring event
+forms, makes it read-only in ServiceEvent Admin, and adds the model-level
+Worship ownership guard used by generic forms, Team Schedule, Admin, direct
+`save()` / known `get_or_create()` callers, and member confirmation. Safe
+ServiceEvent bulk cancellation remains an intentional queryset transition out
+of the current set; arbitrary raw SQL or future `QuerySet.update()` callers are
+not claimed as protected and must not be introduced as Worship write paths.
+
+### `MO-S.6D-1D-B-FU1` identity and serialization closure
+
+The supported-write backstop now treats Worship assignment identity as
+immutable. If either the persisted or proposed current/historical assignment
+resolves through a configured Worship pool, an existing row cannot change its
+`service_event` or `team`. This applies even when the persisted row is currently
+valid and consistent, and it closes both directions of the boundary: a Worship
+row cannot be retargeted to another Worship or downstream team/event, and a
+downstream row cannot be retargeted into Worship. Supported pure-downstream
+retargeting remains unchanged. Cancellation and completion remain explicit
+in-place lifecycle transitions and never rewrite assignment identity.
+
+Supported current Worship assignment writes serialize on the governing
+`ServiceEvent` row. The model save boundary enters an atomic transaction, locks
+the proposed and/or persisted Worship event rows in deterministic ID order,
+then re-runs model validation before saving. The narrow selector already uses
+the same event lock, and member confirmation follows the lock order
+`ServiceEvent -> TeamAssignment -> TeamAssignmentMember` before revalidating
+the parent. This covers the supported form, Team Schedule, Django Admin,
+direct `save()`, known `get_or_create()`, and confirmation paths without adding
+a schema or lock table. Pure downstream writes and safe lifecycle transitions
+out of the current Worship set acquire no Worship event-row lock.
+
+This is an application-supported-write guarantee, not a database constraint.
+Arbitrary raw SQL and future bulk `QuerySet.update()` paths remain outside the
+claim and must not be introduced for Worship mutations. SQLite tests verify
+the guard decisions, transaction boundaries, and selected lock path, but do
+not prove PostgreSQL-style parallel row-lock behavior; that behavior remains a
+target-backend concurrency property.
 
 Creating or editing a Worship assignment for a team other than the selected
 team must fail closed. Changing the selected team while any current Worship
@@ -470,8 +501,8 @@ assignments.
 
 ## 10. Rotation-selection authority
 
-A future server-side `can_change_rotation_anchor(user, event)` contract should
-allow exactly these classes:
+The implemented server-side `can_change_worship_team(user, event)` contract
+allows exactly these classes:
 
 1. staff, superuser, or an existing full `CAP_MANAGE_SERVICE_EVENTS` holder;
 2. an active event-specific planner/coordinator assignment described in
@@ -492,7 +523,7 @@ A role on an inapplicable pool grants nothing. An applicable pool with no role
 grants nothing. A role on a descendant candidate team grants exact-team roster
 management only and does not grant peer rotation selection.
 
-The narrow mutation endpoint/form may change only `rotation_anchor_team`, must
+The narrow mutation endpoint/form changes only `rotation_anchor_team`, must
 offer only the Section 9 candidate union, and must reject cancelled events. It
 must not edit title, type, time, location, status, audience, Host / Language,
 required teams, assignments, or rosters. Full event managers may keep their
@@ -503,6 +534,15 @@ For a combined event with several applicable pools, every qualifying pool
 Lead/Coordinator may edit the event and the allowed selector is the same union
 of candidates from all applicable pools. This is intentional shared
 coordination, not descendant roster authority.
+
+`/events/worship-planning/` provides bounded upcoming initial-selection
+discoverability without adding a primary navigation item or ordinary event
+visibility. `/events/<id>/worship-team/` locks and reloads the event, rechecks
+authority, audience/pool applicability, candidates, and ownership consistency,
+then compares the submitted expected `updated_at` and old team before saving.
+Actual changes write one Django `LogEntry` in the same transaction; GET, denied,
+stale, invalid, conflict, no-op, and rolled-back attempts write no audit row.
+No Worship Team change notification is emitted in this slice.
 
 ## 11. Event-specific planner/coordinator responsibility
 
@@ -544,8 +584,9 @@ Implemented foundation semantics:
   reactivated;
 - only existing full ServiceEvent managers may manage the rows in this
   foundation slice;
-- the current-planner lookup is responsibility-only and grants no read or
-  mutation access yet;
+- the current-planner lookup is responsibility-only and grants no general read
+  or event-management access; `MO-S.6D-1D-B` consumes it only for the narrow
+  applicable event's Worship Team action;
 - not audience membership and does not expose other events;
 - not full ServiceEvent management;
 - no required-team, TeamAssignment, roster, MinistryTeam, or Church Structure
@@ -553,10 +594,11 @@ Implemented foundation semantics:
 - not serving and does not appear in My Serving; and
 - creates no notification unless a later producer slice is approved.
 
-The foundation is now implemented. The later narrow Worship authorization/UI
-slice must explicitly consume it before a planner receives minimum Worship
-context or anchor-change authority; this slice intentionally does not modify
-general ServiceEvent visibility or any permission helper.
+The `MO-S.6D-1C` foundation remains non-authorizing by itself.
+`MO-S.6D-1D-B` now explicitly consumes it so a current planner receives only
+the minimum Worship planning context and anchor-change authority for that exact
+event. General ServiceEvent visibility and full-event permission remain
+unchanged.
 
 ## 12. Exact child-team roster boundary
 
@@ -570,7 +612,7 @@ general ServiceEvent visibility or any permission helper.
   must not grant roster management.
 
 The existing `can_manage_team_assignment_for_team` exact-team contract is the
-correct foundation and should remain unchanged. The future rotation endpoint
+correct foundation and remains unchanged. The governed rotation endpoint
 selects which team owns the event; the existing Team Schedule endpoint selects
 who serves for that exact team.
 
@@ -620,8 +662,8 @@ fail-closed behavior, and zero automatic required-team/assignment writes.
 
 ## 14. Concurrent authorized editors
 
-Several pool Leads or planners may legitimately edit a combined event. A future
-POST must therefore:
+Several pool Leads or planners may legitimately edit a combined event. The
+implemented narrow POST therefore:
 
 1. enter `transaction.atomic` and lock/reload the `ServiceEvent`;
 2. reauthorize against the locked current event, audience, active pool roles,
@@ -819,9 +861,9 @@ Each slice is separately approvable and must verify repository truth again.
 | --- | --- | --- | --- | --- |
 | 1 | **Campus/Site type foundation — IMPLEMENTED (`MO-S.6D-1A`)** | Choice-only model state plus `AlterField` migration; semantic behavior only; no new permission | model/form/admin choices, flexible topology, generic audience/Bible Study ancestry, type-specific exclusions, no side effects | Staff setup label/choice QA after deployment |
 | 2 | **Worship rotation-pool configuration foundation — IMPLEMENTED (`MO-S.6D-1B`)** | Worship-specific `MinistryTeam.is_worship_rotation_pool` field, default-safe migration, model/form validation, read-only configuration resolver, existing setup UI, and readiness integration; configuration grants no authority | active non-assignable pool, primary anchor/path, inactive/ambiguous/cycle fail-closed, canonical role warning, no created rows/permissions | Narrow staff setup copy/error-state/rendered QA in the implementation slice; deployment QA remains separate |
-| 3 | **ServiceEvent planner/coordinator responsibility foundation — IMPLEMENTED (`MO-S.6D-1C`)** | `ServiceEventPlannerAssignment` exact-event/user lifecycle model and migration, current-only read helper, existing full-manager bilingual edit-page setup controls, and admin exposure; grants no context, visibility, or selection authority yet | lifecycle/end/restore, unique event/user, multiple planners, inactive-user fail-closed lookup, draft/cancelled/completed persistence, full-manager-only setup, no audience/serving/full-event/structure/assignment authority | Narrow existing ServiceEvent edit-page rendered QA in the implementation slice; deployment QA remains separate |
+| 3 | **ServiceEvent planner/coordinator responsibility foundation — IMPLEMENTED (`MO-S.6D-1C`)** | `ServiceEventPlannerAssignment` exact-event/user lifecycle model and migration, current-only read helper, existing full-manager bilingual edit-page setup controls, and admin exposure; the foundation grants nothing by itself, while 4B consumes it only for the exact-event Worship Team action | lifecycle/end/restore, unique event/user, multiple planners, inactive-user fail-closed lookup, draft/cancelled/completed persistence, full-manager-only setup, no audience/serving/full-event/structure/assignment authority | Narrow existing ServiceEvent edit-page rendered QA in the implementation slice; deployment QA remains separate |
 | 4A | **Read-only Worship applicability, candidate, and ownership-consistency foundation — IMPLEMENTED (`MO-S.6D-1D-A`)** | Side-effect-free domain helper only; reuses pool inspection and current scheduling statuses; no permission, selector, endpoint, enforcement, model, or migration | audience union/fail-closed applicability, active-primary descendant candidates, off-team/out-of-scope/multiple/duplicate consistency, privacy/read-only and authority boundaries | No rendered QA; no user-visible behavior changed |
-| 4B | **Narrow Worship Team authorization, write enforcement, and UI** | Consume 4A from narrow GET/POST plus every existing anchor/Worship-assignment write path; pool Leads/planners receive only this action; no model migration expected | actual denial/allow rules, locked-current reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, LogEntry attribution, no roster move or unrelated writes | Required for rendered Worship Team selector, bilingual copy, and conflict UX |
+| 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/serialization closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable and supported writes serialize on ServiceEvent; no model migration | actual denial/allow rules, locked-current reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, event-first lock path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
 | 5 | **Worship Team operational reachability** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; no migration | selected-team-only rows, global/exact-team behavior, invalid selection, change/removal, privacy, no coverage/assignment/required-team writes | Required on Team Schedule and Board |
 | 6 | **Worship Rotation Planner** | Explicit one-Sunday and bounded shift proposal/confirm workflow; no rule engine or roster mutation; schema depends on separately decided durable batch audit need | before/after proposal, range boundary, roster blocker, downstream impact, stale/all-or-nothing rollback, no hidden skips or assignment writes | Required for batch preview, conflict, and result UX |
 | 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
@@ -829,13 +871,13 @@ Each slice is separately approvable and must verify repository truth again.
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slices 1, 2, 3, and 4A are implemented. Slice 1 remains
+Dependencies: slices 1, 2, 3, 4A, and 4B are implemented. Slice 1 remains
 independent but should precede real multi-campus setup. Slices 2 and 3 both
 precede 4B: pool configuration is required for pool-based authority/
 applicability, and the implemented exact-event planner responsibility is
 required for the approved event-planner workflow. Slice 4A defines the
-read-only ownership facts; 4B must enforce them for writes before they are used
-by 6 through 9. Slice 5 should precede 9 so an imported Worship Team is
+read-only ownership facts; 4B enforces them for supported writes. Slice 5
+should precede 9 so an imported Worship Team is
 operationally reachable without false required coverage. Slice 6 should precede
 using annual import as a batch rotation tool. Slice 7 follows a proven change
 path. Slice 8 precedes 9. Slice 10 remains later.

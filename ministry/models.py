@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import DEFAULT_DB_ALIAS, models, transaction
 from django.utils import timezone
 
 from events.models import ServiceEvent
@@ -448,12 +448,37 @@ class TeamAssignment(models.Model):
         ):
             errors["ministry_team"] = self.NOT_ASSIGNABLE_ERROR
 
+        if not errors:
+            # MO-S.6D-1D-B: model-layer backstop for app forms, Django Admin,
+            # and known direct save/get_or_create callers.  ServiceEvent bulk
+            # cancellation intentionally remains a safe queryset transition
+            # out of the current operational set.
+            from .services.worship_assignment_guard import (
+                validate_worship_assignment_write,
+            )
+
+            validate_worship_assignment_write(self)
+
         if errors:
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        self.full_clean()
-        return super().save(*args, **kwargs)
+        from .services.worship_assignment_guard import (
+            lock_service_events_for_worship_assignment_write,
+        )
+
+        using = kwargs.get("using") or self._state.db or DEFAULT_DB_ALIAS
+        with transaction.atomic(using=using):
+            locked_events = lock_service_events_for_worship_assignment_write(
+                self,
+                using=using,
+            )
+            if self.service_event_id in locked_events:
+                # Rebind the related object so full_clean() and the governance
+                # inspection consume the locked-current ServiceEvent state.
+                self.service_event = locked_events[self.service_event_id]
+            self.full_clean()
+            return super().save(*args, **kwargs)
 
     def is_cancelled(self):
         return self.status == self.STATUS_CANCELLED

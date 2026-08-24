@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load event_extras %}
+{% load datetime_extras %}
+
+{% block title %}{% if language == "zh" %}敬拜安排{% else %}Worship Planning{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'service_event_list' %}">
+        ← {% if language == "zh" %}返回教会聚会{% else %}Back to Church Gatherings{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">{% if language == "zh" %}敬拜安排{% else %}Worship Planning{% endif %}</h1>
+    <p class="page-subtitle">
+        {% if language == "zh" %}选择你目前负责之具体聚会的敬拜团队。{% else %}Select the Worship Team for the specific gatherings you currently coordinate.{% endif %}
+    </p>
+</div>
+
+{% if planning_rows %}
+<div class="stack">
+    {% for row in planning_rows %}
+    <article class="card">
+        <h2 class="card-title">{{ row.event|event_title:language }}</h2>
+        <p>
+            <strong>{% if language == "zh" %}时间{% else %}Date and time{% endif %}:</strong>
+            {{ row.event.start_datetime|member_datetime:language }}
+        </p>
+        <p>
+            <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
+            {% if row.inspection.selected_team %}
+                {{ row.inspection.selected_team|ministry_team_name:language }}
+            {% else %}
+                {% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}
+            {% endif %}
+        </p>
+        <p class="muted">{{ row.consistency_label }}</p>
+        <div class="actions">
+            <a class="button" href="{% url 'change_worship_team' row.event.id %}">
+                {% if row.inspection.selected_team %}
+                    {% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %}
+                {% else %}
+                    {% if language == "zh" %}选择敬拜团队{% else %}Select Worship Team{% endif %}
+                {% endif %}
+            </a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <p class="muted">
+        {% if language == "zh" %}目前没有需要你安排敬拜团队的近期聚会。{% else %}There are no upcoming gatherings currently available for your Worship planning.{% endif %}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

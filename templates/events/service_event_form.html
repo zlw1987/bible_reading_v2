@@ -26,6 +26,16 @@
     </h1>
 </div>
 
+{% if is_edit and can_change_worship_team %}
+<div class="card">
+    <div class="actions">
+        <a class="button button-secondary" href="{% url 'change_worship_team' event.id %}">
+            {% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %}
+        </a>
+    </div>
+</div>
+{% endif %}
+
 <form method="post" class="card">
     {% csrf_token %}
     {{ form.non_field_errors }}

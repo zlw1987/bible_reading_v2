@@ -37,6 +37,11 @@
             {% if language == "zh" %}批量创建固定聚会{% else %}Create Recurring Events{% endif %}
         </a>
         {% endif %}
+        {% if has_worship_planning %}
+        <a class="button button-secondary" href="{% url 'worship_planning' %}">
+            {% if language == "zh" %}敬拜安排{% else %}Worship Planning{% endif %}
+        </a>
+        {% endif %}
     </div>
 </div>
 

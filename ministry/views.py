@@ -97,6 +97,9 @@ from .services.lighting_pilot_import import (
 )
 from .services.sunday_schedule_board import build_sunday_schedule_board
 from .services.worship_context import build_worship_contexts
+from .services.worship_assignment_guard import (
+    validate_worship_assignment_write,
+)
 from .structure_map import (
     build_ministry_structure_map,
     build_team_structure_setup_summary,
@@ -141,6 +144,11 @@ def ministry_ui_text(language, key):
             "bible_study_role_confirmed": "Bible Study serving confirmed.",
             "no_assignment_permission": "You do not have permission to manage team assignments.",
             "assignment_not_available": "This team assignment is not available.",
+            "worship_assignment_invalid": (
+                "This Worship assignment no longer matches the event's selected "
+                "Worship Team. Refresh and resolve the Worship assignment before "
+                "trying again."
+            ),
             "bible_study_role_not_available": "This Bible Study serving role is not available.",
             "event_not_available": "This service event is not available for this team schedule.",
             "duplicate_schedule_conflict": (
@@ -180,6 +188,10 @@ def ministry_ui_text(language, key):
             "bible_study_role_confirmed": "查经服事已确认。",
             "no_assignment_permission": "你没有管理服事排班的权限。",
             "assignment_not_available": "这个服事排班目前不可用。",
+            "worship_assignment_invalid": (
+                "这项敬拜排班已不再符合聚会当前选择的敬拜团队。请刷新并先处理敬拜"
+                "排班问题，再重试。"
+            ),
             "bible_study_role_not_available": "这个查经服事角色目前不可用。",
             "event_not_available": "这个聚会事件不适用于这个团队排班。",
             "duplicate_schedule_conflict": "这个聚会已经有重复的本团队排班。请先清理重复排班，再使用建议。",
@@ -1562,20 +1574,30 @@ def team_schedule(request, team_id):
                 assignment.ministry_team = team
                 if not assignment.pk:
                     assignment.created_by = request.user
-                assignment.save()
-                sync_assignment_members(
-                    assignment,
-                    active_form.cleaned_data["assigned_members"],
-                )
-                emit_assignment_notifications(
-                    assignment,
-                    previous_state=notification_state,
-                    actor=request.user,
-                )
-                messages.success(request, ministry_ui_text(language, "assignment_saved"))
-                return redirect(
-                    f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
-                )
+                try:
+                    with transaction.atomic():
+                        assignment.save()
+                        sync_assignment_members(
+                            assignment,
+                            active_form.cleaned_data["assigned_members"],
+                        )
+                        emit_assignment_notifications(
+                            assignment,
+                            previous_state=notification_state,
+                            actor=request.user,
+                        )
+                except ValidationError:
+                    active_form.add_error(
+                        None,
+                        ministry_ui_text(language, "worship_assignment_invalid"),
+                    )
+                else:
+                    messages.success(
+                        request, ministry_ui_text(language, "assignment_saved")
+                    )
+                    return redirect(
+                        f"{base_path}?{schedule_query_string(filters, assignment=assignment.id)}"
+                    )
         else:
             active_form = TeamScheduleAssignmentForm(
                 instance=form_instance,
@@ -2282,18 +2304,32 @@ def create_team_assignment(request):
         if form.is_valid():
             assignment = form.save(commit=False)
             assignment.created_by = request.user
-            assignment.save()
-            sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
-            emit_assignment_notifications(
-                assignment,
-                previous_state=notification_state,
-                actor=request.user,
-            )
-            messages.success(request, ministry_ui_text(language, "assignment_saved"))
-            warn_assignment_member_readiness(
-                request, form.cleaned_data["assigned_members"], language
-            )
-            return redirect("team_assignment_detail", assignment_id=assignment.id)
+            try:
+                with transaction.atomic():
+                    assignment.save()
+                    sync_assignment_members(
+                        assignment, form.cleaned_data["assigned_members"]
+                    )
+                    emit_assignment_notifications(
+                        assignment,
+                        previous_state=notification_state,
+                        actor=request.user,
+                    )
+            except ValidationError:
+                form.add_error(
+                    None,
+                    ministry_ui_text(language, "worship_assignment_invalid"),
+                )
+            else:
+                messages.success(
+                    request, ministry_ui_text(language, "assignment_saved")
+                )
+                warn_assignment_member_readiness(
+                    request, form.cleaned_data["assigned_members"], language
+                )
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
     else:
         form = TeamAssignmentForm(
             initial=assignment_form_initial_from_query(request),
@@ -2331,18 +2367,32 @@ def edit_team_assignment(request, assignment_id):
             manageable_teams=manageable_teams,
         )
         if form.is_valid():
-            assignment = form.save()
-            sync_assignment_members(assignment, form.cleaned_data["assigned_members"])
-            emit_assignment_notifications(
-                assignment,
-                previous_state=notification_state,
-                actor=request.user,
-            )
-            messages.success(request, ministry_ui_text(language, "assignment_saved"))
-            warn_assignment_member_readiness(
-                request, form.cleaned_data["assigned_members"], language
-            )
-            return redirect("team_assignment_detail", assignment_id=assignment.id)
+            try:
+                with transaction.atomic():
+                    assignment = form.save()
+                    sync_assignment_members(
+                        assignment, form.cleaned_data["assigned_members"]
+                    )
+                    emit_assignment_notifications(
+                        assignment,
+                        previous_state=notification_state,
+                        actor=request.user,
+                    )
+            except ValidationError:
+                form.add_error(
+                    None,
+                    ministry_ui_text(language, "worship_assignment_invalid"),
+                )
+            else:
+                messages.success(
+                    request, ministry_ui_text(language, "assignment_saved")
+                )
+                warn_assignment_member_readiness(
+                    request, form.cleaned_data["assigned_members"], language
+                )
+                return redirect(
+                    "team_assignment_detail", assignment_id=assignment.id
+                )
     else:
         form = TeamAssignmentForm(
             initial=assignment_form_initial_from_query(request),
@@ -2389,27 +2439,75 @@ def confirm_team_assignment(request, assignment_id):
     if request.method != "POST":
         return redirect("team_assignment_detail", assignment_id=assignment.id)
 
-    if not can_confirm_team_assignment(request.user, assignment):
-        messages.error(request, ministry_ui_text(language, "assignment_not_available"))
-        return redirect("team_assignment_list")
-
     form = TeamAssignmentConfirmForm(request.POST, language=language)
     if not form.is_valid():
         return redirect("team_assignment_detail", assignment_id=assignment.id)
 
-    assignment_member = assignment.assignment_members.filter(
-        membership__user=request.user,
-        membership__is_active=True,
-    ).first()
+    with transaction.atomic():
+        # Keep the governed write order aligned with Worship Team selection and
+        # TeamAssignment.save(): ServiceEvent first, then assignment, then
+        # member.  If a non-Worship row moved between the initial read and these
+        # locks, fail closed rather than acquiring a second event lock in reverse
+        # order or partially confirming against stale identity.
+        locked_event = get_object_or_404(
+            ServiceEvent.objects.select_for_update(),
+            id=assignment.service_event_id,
+        )
+        assignment = get_object_or_404(
+            TeamAssignment.objects.select_for_update().select_related(
+                "service_event",
+                "service_event__rotation_anchor_team",
+                "ministry_team",
+            ),
+            id=assignment_id,
+        )
+        if assignment.service_event_id != locked_event.id:
+            messages.error(
+                request,
+                ministry_ui_text(language, "assignment_not_available"),
+            )
+            return redirect("team_assignment_list")
+        if not can_confirm_team_assignment(request.user, assignment):
+            messages.error(
+                request,
+                ministry_ui_text(language, "assignment_not_available"),
+            )
+            return redirect("team_assignment_list")
 
-    if assignment_member is None:
-        messages.error(request, ministry_ui_text(language, "assignment_not_available"))
-        return redirect("team_assignment_detail", assignment_id=assignment.id)
+        try:
+            # Validate parent ownership before touching the member confirmation
+            # row so an invalid pre-existing Worship assignment cannot partially
+            # confirm a member and then fail on the parent status save.
+            validate_worship_assignment_write(assignment)
+        except ValidationError:
+            messages.error(
+                request,
+                ministry_ui_text(language, "worship_assignment_invalid"),
+            )
+            return redirect(
+                "team_assignment_detail", assignment_id=assignment.id
+            )
 
-    assignment_member.confirm(form.cleaned_data.get("confirmation_note", ""))
-    if assignment.all_members_confirmed():
-        assignment.status = TeamAssignment.STATUS_CONFIRMED
-        assignment.save()
+        assignment_member = assignment.assignment_members.select_for_update().filter(
+            membership__user=request.user,
+            membership__is_active=True,
+        ).first()
+
+        if assignment_member is None:
+            messages.error(
+                request,
+                ministry_ui_text(language, "assignment_not_available"),
+            )
+            return redirect(
+                "team_assignment_detail", assignment_id=assignment.id
+            )
+
+        assignment_member.confirm(
+            form.cleaned_data.get("confirmation_note", "")
+        )
+        if assignment.all_members_confirmed():
+            assignment.status = TeamAssignment.STATUS_CONFIRMED
+            assignment.save()
 
     messages.success(request, ministry_ui_text(language, "assignment_confirmed"))
     next_url = request.POST.get("next")

@@ -4,6 +4,11 @@ from . import views
 
 urlpatterns = [
     path("events/", views.service_event_list, name="service_event_list"),
+    path(
+        "events/worship-planning/",
+        views.worship_planning,
+        name="worship_planning",
+    ),
     path("events/new/", views.create_service_event, name="create_service_event"),
     path(
         "events/recurring/new/",
@@ -12,6 +17,11 @@ urlpatterns = [
     ),
     path("events/<int:event_id>/", views.service_event_detail, name="service_event_detail"),
     path("events/<int:event_id>/edit/", views.edit_service_event, name="edit_service_event"),
+    path(
+        "events/<int:event_id>/worship-team/",
+        views.change_worship_team,
+        name="change_worship_team",
+    ),
     path(
         "events/<int:event_id>/planners/add/",
         views.add_service_event_planner,

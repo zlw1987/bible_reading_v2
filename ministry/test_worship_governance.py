@@ -147,11 +147,17 @@ class WorshipGovernanceDomainTestBase(TestCase):
         ]
 
     def create_assignment(self, team, status=TeamAssignment.STATUS_SCHEDULED):
-        return TeamAssignment.objects.create(
+        # 1D-A must continue to diagnose pre-existing conflict rows after 1D-B
+        # closes normal model writes.  bulk_create is intentional test-fixture
+        # construction of stored legacy/conflict state, not a supported runtime
+        # write path.
+        assignment = TeamAssignment(
             service_event=self.event,
             ministry_team=team,
             status=status,
         )
+        TeamAssignment.objects.bulk_create([assignment])
+        return assignment
 
 
 class WorshipPoolApplicabilityTests(WorshipGovernanceDomainTestBase):

@@ -184,6 +184,17 @@ def _resolve_primary_worship_pool(team):
         current = link.parent_team
 
 
+def resolve_worship_rotation_pool_for_team(team):
+    """Return the canonical primary-path Worship-pool resolution for ``team``.
+
+    Mutation guards use the same fail-closed hierarchy resolution as the
+    read-only ownership inspection.  The result grants no authority and makes
+    no write; callers must still evaluate event applicability and candidates.
+    """
+
+    return _resolve_primary_worship_pool(team)
+
+
 def _eligible_worship_team_candidates(applicable_pools):
     applicable_pool_ids = {item.pool.pk for item in applicable_pools}
     if not applicable_pool_ids:

@@ -76,6 +76,11 @@
                 {% if language == "zh" %}取消聚会{% else %}Cancel Event{% endif %}
             </button>
         </form>
+        {% if can_change_worship_team %}
+        <a class="button button-secondary" href="{% url 'change_worship_team' event.id %}">
+            {% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %}
+        </a>
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -107,8 +112,13 @@
 
     {% if event.rotation_anchor_team_id %}
     <p>
-        <strong>{% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:</strong>
+        <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
         {{ event.rotation_anchor_team|ministry_team_name:language }}
+    </p>
+    {% else %}
+    <p>
+        <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
+        {% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}
     </p>
     {% endif %}
 

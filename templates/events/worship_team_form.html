@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load event_extras %}
+{% load datetime_extras %}
+
+{% block title %}{% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %} | {{ ui.site_title }}{% endblock %}
+
+{% block content %}
+<p>
+    <a href="{% url 'worship_planning' %}">
+        ← {% if language == "zh" %}返回敬拜安排{% else %}Back to Worship Planning{% endif %}
+    </a>
+</p>
+
+<div class="page-header">
+    <h1 class="page-title">
+        {% if inspection.selected_team %}
+            {% if language == "zh" %}更改敬拜团队{% else %}Change Worship Team{% endif %}
+        {% else %}
+            {% if language == "zh" %}选择敬拜团队{% else %}Select Worship Team{% endif %}
+        {% endif %}
+    </h1>
+</div>
+
+<section class="card" aria-labelledby="worship-event-heading">
+    <h2 id="worship-event-heading">{{ event|event_title:language }}</h2>
+    <p>
+        <strong>{% if language == "zh" %}时间{% else %}Date and time{% endif %}:</strong>
+        {{ event.start_datetime|member_datetime:language }}
+    </p>
+    <p>
+        <strong>{% if language == "zh" %}当前敬拜团队{% else %}Current Worship Team{% endif %}:</strong>
+        {% if inspection.selected_team %}
+            {{ inspection.selected_team|ministry_team_name:language }}
+        {% else %}
+            {% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}
+        {% endif %}
+    </p>
+    <p class="muted">{{ consistency_label }}</p>
+</section>
+
+{% if change_blocked %}
+<div class="card" role="alert">
+    <strong>{% if language == "zh" %}需要先处理现有排班{% else %}Existing schedule must be resolved first{% endif %}</strong>
+    <p>
+        {% if language == "zh" %}这场聚会已经安排了敬拜服事。请先处理或取消现有敬拜排班，再更改敬拜团队。{% else %}Worship has already been scheduled for this event. Resolve or cancel the existing Worship assignment before changing the Worship Team.{% endif %}
+    </p>
+</div>
+{% else %}
+<form method="post" class="card">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.expected_updated_at }}
+    {{ form.expected_anchor_team }}
+    <div class="form-row" data-field="worship_team">
+        {{ form.worship_team.label_tag }}
+        {{ form.worship_team }}
+        {{ form.worship_team.errors }}
+    </div>
+    <div class="actions">
+        <button type="submit">
+            {% if language == "zh" %}保存敬拜团队{% else %}Save Worship Team{% endif %}
+        </button>
+        <a class="button button-secondary" href="{% url 'worship_planning' %}">
+            {% if language == "zh" %}取消{% else %}Cancel{% endif %}
+        </a>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -4238,6 +4238,42 @@ class LightingPilotImportCommandTests(TestCase):
             MinistryTeam.objects.filter(name="灯光组", is_assignable=False).exists()
         )
 
+    def test_import_cannot_reuse_worship_child_as_assignment_bypass(self):
+        anchor = ChurchStructureUnit.objects.create(
+            code="CM-LIGHTING-GUARD",
+            name="华语事工",
+            name_en="Chinese Ministry",
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        )
+        pool = MinistryTeam.objects.create(
+            name="敬拜事工",
+            name_en="Worship Ministry",
+            is_assignable=False,
+            is_worship_rotation_pool=True,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=pool,
+            parent_church_unit=anchor,
+            is_primary=True,
+        )
+        lighting = MinistryTeam.objects.create(
+            name="灯光组",
+            name_en="Lighting Team",
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=lighting,
+            parent_team=pool,
+            is_primary=True,
+        )
+        csv_path = self.write_csv(self.csv_content())
+
+        output = self.run_import(csv_path)
+
+        self.assertIn("assignments_created=0", output)
+        self.assertIn("rows_errors=1", output)
+        self.assertEqual(TeamAssignment.objects.count(), 0)
+        self.assertEqual(TeamAssignmentMember.objects.count(), 0)
+
     def test_dry_run_does_not_normalize_legacy_lighting_team(self):
         team = MinistryTeam.objects.create(name="Lighting Team")
         csv_path = self.write_csv(self.csv_content())

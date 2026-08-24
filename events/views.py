@@ -1,14 +1,18 @@
 from django.contrib import messages
+from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.auth.decorators import login_required
+from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from accounts.language import get_user_language
 from accounts.permissions import CAP_MANAGE_SERVICE_EVENTS, has_capability
 from ministry.models import TeamAssignment
 from ministry.permissions import (
+    can_change_worship_team,
     can_manage_team_assignments,
     user_has_explicit_serving_assignment_for_event,
 )
@@ -17,11 +21,16 @@ from ministry.services.assignment_coverage import (
     build_assignment_coverage,
     events_with_coverage_queryset,
 )
+from ministry.services.worship_governance import (
+    WorshipOwnershipConsistencyState,
+    inspect_worship_ownership_consistency,
+)
 
 from .forms import (
     RecurringServiceEventForm,
     ServiceEventForm,
     ServiceEventPlannerAssignmentForm,
+    WorshipTeamSelectionForm,
 )
 from .models import (
     ServiceEvent,
@@ -29,6 +38,9 @@ from .models import (
     current_service_event_planner_assignments,
     service_event_is_history,
 )
+
+
+WORSHIP_PLANNING_HORIZON_DAYS = 548
 
 
 def cancel_non_final_assignments_for_event(event):
@@ -60,6 +72,18 @@ def event_ui_text(language, key):
             "planner_inactive_user": (
                 "An inactive user cannot hold current planner responsibility."
             ),
+            "worship_not_available": "This Worship planning action is not available.",
+            "worship_saved": "Worship Team updated.",
+            "worship_unchanged": "The Worship Team is unchanged.",
+            "worship_stale": (
+                "This event changed after you opened the form. Refresh and review "
+                "the current Worship Team before trying again."
+            ),
+            "worship_conflict": (
+                "Worship has already been scheduled for this event. Resolve or "
+                "cancel the existing Worship assignment before changing the "
+                "Worship Team."
+            ),
         },
         "zh": {
             "no_permission": "你没有管理聚会事件的权限。",
@@ -72,6 +96,14 @@ def event_ui_text(language, key):
             "planner_already_ended": "这项聚会安排责任已经结束。",
             "planner_already_active": "这项聚会安排责任目前有效。",
             "planner_inactive_user": "停用用户不能承担当前聚会安排责任。",
+            "worship_not_available": "这项敬拜安排目前不可用。",
+            "worship_saved": "敬拜团队已更新。",
+            "worship_unchanged": "敬拜团队没有更改。",
+            "worship_stale": "你打开表单后，这场聚会已有更改。请刷新并核对当前敬拜团队后再试。",
+            "worship_conflict": (
+                "这场聚会已经安排了敬拜服事。请先处理或取消现有敬拜排班，"
+                "再更改敬拜团队。"
+            ),
         },
     }
     return labels.get(language, labels["en"])[key]
@@ -85,7 +117,7 @@ def can_manage_service_events(user):
     )
 
 
-def _service_event_edit_context(event, language, planner_form=None):
+def _service_event_edit_context(event, language, user, planner_form=None):
     return {
         "event": event,
         "form": ServiceEventForm(instance=event, language=language),
@@ -104,6 +136,7 @@ def _service_event_edit_context(event, language, planner_form=None):
             .select_related("user")
             .order_by("user__username", "id")
         ),
+        "can_change_worship_team": can_change_worship_team(user, event),
     }
 
 
@@ -125,9 +158,91 @@ def get_visible_service_events(user):
     return events.filter(id__in=visible_ids)
 
 
+def worship_planning_events_for_user(user):
+    """Return the bounded, narrow event set for current Worship planning."""
+
+    now = timezone.now()
+    horizon = now + timezone.timedelta(days=WORSHIP_PLANNING_HORIZON_DAYS)
+    events = (
+        ServiceEvent.objects.select_related("rotation_anchor_team")
+        .prefetch_related("audience_scope_links__unit")
+        .exclude(status=ServiceEvent.STATUS_CANCELLED)
+        .filter(start_datetime__lte=horizon)
+        .filter(
+            Q(end_datetime__gte=now)
+            | Q(
+                end_datetime__isnull=True,
+                start_datetime__date__gte=timezone.localdate(),
+            )
+        )
+        .order_by("start_datetime", "id")
+    )
+    return [
+        event
+        for event in events
+        if not service_event_is_history(event, now=now)
+        and can_change_worship_team(user, event)
+    ]
+
+
+def worship_consistency_label(language, state):
+    labels = {
+        "en": {
+            WorshipOwnershipConsistencyState.NO_SELECTION: (
+                "Worship Team not selected"
+            ),
+            WorshipOwnershipConsistencyState.SELECTED_UNSCHEDULED: (
+                "Selected but not yet scheduled"
+            ),
+            WorshipOwnershipConsistencyState.CONSISTENT: "Scheduled",
+            WorshipOwnershipConsistencyState.INVALID_SELECTION: "Review required",
+            WorshipOwnershipConsistencyState.OFF_TEAM_CONFLICT: "Review required",
+            WorshipOwnershipConsistencyState.OUT_OF_SCOPE_WORSHIP_CONFLICT: (
+                "Review required"
+            ),
+            WorshipOwnershipConsistencyState.MULTIPLE_CURRENT_WORSHIP_ASSIGNMENTS: (
+                "Review required"
+            ),
+            WorshipOwnershipConsistencyState.DUPLICATE_SELECTED_TEAM_ASSIGNMENT: (
+                "Review required"
+            ),
+        },
+        "zh": {
+            WorshipOwnershipConsistencyState.NO_SELECTION: "尚未选择敬拜团队",
+            WorshipOwnershipConsistencyState.SELECTED_UNSCHEDULED: "已选择，尚未排班",
+            WorshipOwnershipConsistencyState.CONSISTENT: "已排班",
+            WorshipOwnershipConsistencyState.INVALID_SELECTION: "需要检查",
+            WorshipOwnershipConsistencyState.OFF_TEAM_CONFLICT: "需要检查",
+            WorshipOwnershipConsistencyState.OUT_OF_SCOPE_WORSHIP_CONFLICT: "需要检查",
+            WorshipOwnershipConsistencyState.MULTIPLE_CURRENT_WORSHIP_ASSIGNMENTS: "需要检查",
+            WorshipOwnershipConsistencyState.DUPLICATE_SELECTED_TEAM_ASSIGNMENT: "需要检查",
+        },
+    }
+    return labels.get(language, labels["en"])[state]
+
+
+def worship_planning_rows(user, language):
+    rows = []
+    for event in worship_planning_events_for_user(user):
+        inspection = inspect_worship_ownership_consistency(event)
+        rows.append(
+            {
+                "event": event,
+                "inspection": inspection,
+                "consistency_label": worship_consistency_label(
+                    language, inspection.state
+                ),
+            }
+        )
+    return rows
+
+
 @login_required
 def service_event_list(request):
     can_manage = can_manage_service_events(request.user)
+    has_worship_planning = bool(
+        worship_planning_events_for_user(request.user)
+    )
     tab = (request.GET.get("tab") or "upcoming").strip()
 
     if tab not in {"upcoming", "past", "drafts"}:
@@ -179,6 +294,7 @@ def service_event_list(request):
             "events": events,
             "tab": tab,
             "can_manage": can_manage,
+            "has_worship_planning": has_worship_planning,
         },
     )
 
@@ -227,6 +343,9 @@ def service_event_detail(request, event_id):
             "required_teams": event.required_teams.all().order_by("name"),
             "can_view_coverage": can_view_coverage,
             "event_coverage": event_coverage,
+            "can_change_worship_team": can_change_worship_team(
+                request.user, event
+            ),
         },
     )
 
@@ -297,7 +416,6 @@ def create_recurring_events(cleaned_data, user):
     dates_to_create, dates_to_skip = build_recurring_event_preview(cleaned_data)
     created_count = 0
     required_teams = cleaned_data.get("required_teams")
-    rotation_anchor_team = cleaned_data.get("rotation_anchor_team")
     # SE-SCOPE.1A/SE-CTX.1A: recurring app creates use structure audience rows
     # only. Legacy scope/context fields remain at model defaults.
     audience_units = list(cleaned_data.get("audience_units") or [])
@@ -324,7 +442,6 @@ def create_recurring_events(cleaned_data, user):
                 end_datetime=end_datetime,
                 location=cleaned_data.get("location") or "",
                 meeting_link=cleaned_data.get("meeting_link") or "",
-                rotation_anchor_team=rotation_anchor_team,
                 status=cleaned_data["status"],
                 created_by=user,
             )
@@ -409,10 +526,181 @@ def edit_service_event(request, event_id):
         request,
         "events/service_event_form.html",
         {
-            **_service_event_edit_context(event, language),
+            **_service_event_edit_context(event, language, request.user),
             "form": form,
         },
     )
+
+
+def _worship_selector_context(event, language, inspection, form):
+    return {
+        "event": event,
+        "inspection": inspection,
+        "form": form,
+        "consistency_label": worship_consistency_label(
+            language, inspection.state
+        ),
+        "change_blocked": bool(inspection.current_worship_assignments),
+    }
+
+
+def _expected_event_timestamp_matches(raw_value, current_value):
+    expected = parse_datetime(raw_value or "")
+    if expected is None:
+        return False
+    if timezone.is_naive(expected):
+        expected = timezone.make_aware(
+            expected, timezone.get_current_timezone()
+        )
+    return expected == current_value
+
+
+@login_required
+def worship_planning(request):
+    language = get_user_language(request)
+    return render(
+        request,
+        "events/worship_planning.html",
+        {"planning_rows": worship_planning_rows(request.user, language)},
+    )
+
+
+@login_required
+def change_worship_team(request, event_id):
+    language = get_user_language(request)
+    event = get_object_or_404(
+        ServiceEvent.objects.select_related("rotation_anchor_team").prefetch_related(
+            "audience_scope_links__unit"
+        ),
+        id=event_id,
+    )
+    if not can_change_worship_team(request.user, event):
+        messages.error(
+            request, event_ui_text(language, "worship_not_available")
+        )
+        return redirect("service_event_list")
+
+    if request.method != "POST":
+        inspection = inspect_worship_ownership_consistency(event)
+        form = WorshipTeamSelectionForm(
+            language=language,
+            candidates=inspection.eligible_candidates,
+            initial={
+                "worship_team": event.rotation_anchor_team_id,
+                "expected_updated_at": event.updated_at.isoformat(),
+                "expected_anchor_team": event.rotation_anchor_team_id or "",
+            },
+        )
+        return render(
+            request,
+            "events/worship_team_form.html",
+            _worship_selector_context(event, language, inspection, form),
+        )
+
+    with transaction.atomic():
+        locked_event = (
+            ServiceEvent.objects.select_for_update()
+            .select_related("rotation_anchor_team")
+            .prefetch_related("audience_scope_links__unit")
+            .get(id=event.id)
+        )
+        if not can_change_worship_team(request.user, locked_event):
+            messages.error(
+                request, event_ui_text(language, "worship_not_available")
+            )
+            return redirect("service_event_list")
+
+        inspection = inspect_worship_ownership_consistency(locked_event)
+        form = WorshipTeamSelectionForm(
+            request.POST,
+            language=language,
+            candidates=inspection.eligible_candidates,
+        )
+        expected_anchor = request.POST.get("expected_anchor_team", "")
+        current_anchor = str(locked_event.rotation_anchor_team_id or "")
+        stale = (
+            not _expected_event_timestamp_matches(
+                request.POST.get("expected_updated_at"),
+                locked_event.updated_at,
+            )
+            or expected_anchor != current_anchor
+        )
+        if stale:
+            form.add_error(
+                None, event_ui_text(language, "worship_stale")
+            )
+            return render(
+                request,
+                "events/worship_team_form.html",
+                _worship_selector_context(
+                    locked_event, language, inspection, form
+                ),
+            )
+
+        if not form.is_valid():
+            return render(
+                request,
+                "events/worship_team_form.html",
+                _worship_selector_context(
+                    locked_event, language, inspection, form
+                ),
+            )
+
+        proposed_team = form.cleaned_data["worship_team"]
+        proposed_team_id = proposed_team.pk if proposed_team else None
+        if proposed_team_id == locked_event.rotation_anchor_team_id:
+            messages.success(
+                request, event_ui_text(language, "worship_unchanged")
+            )
+            return redirect("change_worship_team", event_id=locked_event.id)
+
+        eligible_team_ids = {
+            candidate.team.pk for candidate in inspection.eligible_candidates
+        }
+        if proposed_team_id is not None and proposed_team_id not in eligible_team_ids:
+            form.add_error(
+                "worship_team",
+                event_ui_text(language, "worship_not_available"),
+            )
+        elif inspection.current_worship_assignments:
+            form.add_error(
+                None, event_ui_text(language, "worship_conflict")
+            )
+
+        if form.errors:
+            return render(
+                request,
+                "events/worship_team_form.html",
+                _worship_selector_context(
+                    locked_event, language, inspection, form
+                ),
+            )
+
+        old_team = locked_event.rotation_anchor_team
+        locked_event.rotation_anchor_team = proposed_team
+        locked_event.save(
+            update_fields=["rotation_anchor_team", "updated_at"]
+        )
+        LogEntry.objects.log_action(
+            user_id=request.user.pk,
+            content_type_id=ContentType.objects.get_for_model(
+                ServiceEvent
+            ).pk,
+            object_id=locked_event.pk,
+            object_repr=str(locked_event),
+            action_flag=CHANGE,
+            change_message=(
+                "Changed Worship Team via governed exact-event selector "
+                "(MO-S.6D-1D-B). "
+                f"old_team_id={getattr(old_team, 'pk', None)!r}; "
+                f"old_team={getattr(old_team, 'name', None)!r}; "
+                f"new_team_id={getattr(proposed_team, 'pk', None)!r}; "
+                f"new_team={getattr(proposed_team, 'name', None)!r}."
+            ),
+        )
+
+    messages.success(request, event_ui_text(language, "worship_saved"))
+    return redirect("change_worship_team", event_id=event.id)
 
 
 @login_required
@@ -446,7 +734,12 @@ def add_service_event_planner(request, event_id):
     return render(
         request,
         "events/service_event_form.html",
-        _service_event_edit_context(event, language, planner_form=planner_form),
+        _service_event_edit_context(
+            event,
+            language,
+            request.user,
+            planner_form=planner_form,
+        ),
         status=200,
     )
 

@@ -332,6 +332,10 @@ class WorshipRotationPoolConfigurationTests(TestCase):
             event_type=ServiceEvent.EVENT_SUNDAY_SERVICE,
             start_datetime=timezone.now() + timezone.timedelta(days=7),
             status=ServiceEvent.STATUS_PUBLISHED,
+            rotation_anchor_team=child,
+        )
+        ServiceEventAudienceScope.objects.create(
+            service_event=event, unit=self.anchor
         )
         assignment = TeamAssignment.objects.create(
             service_event=event, ministry_team=child

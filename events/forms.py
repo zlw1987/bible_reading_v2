@@ -33,7 +33,6 @@ FORM_TEXT = {
         "end_datetime": "End Time",
         "location": "Location",
         "meeting_link": "Meeting Link",
-        "rotation_anchor_team": "Rotation Anchor Team",
         "required_teams": "Required Ministry Teams",
         "audience_units": "Audience Scope",
         "audience_units_help": (
@@ -53,10 +52,6 @@ FORM_TEXT = {
         "gospel_music": "Gospel Music Night",
         "baptism": "Baptism",
         "other": "Other",
-        "rotation_anchor_team_help": (
-            "Optional scheduling hint for future copy-forward suggestions, such as Worship C1/C2/C3/A. "
-            "This does not make the team required and does not control coverage, audience, visibility, or permissions."
-        ),
         "required_teams_help": (
             "Select teams expected for this event. "
             "This records expectations only and does not create team assignments."
@@ -80,7 +75,6 @@ FORM_TEXT = {
         "end_datetime": "结束时间",
         "location": "地点",
         "meeting_link": "会议链接",
-        "rotation_anchor_team": "配搭参考团队",
         "audience_units": "适用范围",
         "audience_units_help": (
             "选择的教会结构单元会决定普通用户能否看到这个聚会。"
@@ -318,10 +312,6 @@ class AudienceUnitOptionsMixin:
 
 
 class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
-    rotation_anchor_team = MinistryTeamChoiceField(
-        queryset=MinistryTeam.objects.none(),
-        required=False,
-    )
     required_teams = RequiredTeamChoiceField(
         queryset=MinistryTeam.objects.none(),
         required=False,
@@ -340,7 +330,6 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
             "end_datetime",
             "location",
             "meeting_link",
-            "rotation_anchor_team",
             "required_teams",
             "status",
         ]
@@ -364,15 +353,10 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         if language == "zh":
             text = {
                 **text,
-                "rotation_anchor_team": "配搭参考团队",
                 "required_teams": "需要的事工团队",
                 "required_teams_help": (
                     "选择这个聚会预期需要的事工团队。"
                     "这里只记录需要，不会自动建立服事排班。"
-                ),
-                "rotation_anchor_team_help": (
-                    "可选，用于以后提供复制排班建议，例如 Worship C1/C2/C3/A。"
-                    "这不是需要的事工团队，不会控制服事覆盖、覆盖对象、可见范围或用户权限。"
                 ),
             }
 
@@ -414,18 +398,8 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
         self.fields["meeting_link"].widget.attrs.update(
             {"placeholder": text["meeting_link_placeholder"]}
         )
-        self.fields["rotation_anchor_team"].help_text = text["rotation_anchor_team_help"]
-        self.fields["rotation_anchor_team"].language = language
         self.fields["required_teams"].help_text = text["required_teams_help"]
         self.fields["required_teams"].language = language
-        rotation_anchor_filter = Q(is_active=True)
-        if self.instance.rotation_anchor_team_id:
-            rotation_anchor_filter |= Q(id=self.instance.rotation_anchor_team_id)
-        self.fields["rotation_anchor_team"].queryset = (
-            MinistryTeam.objects.filter(rotation_anchor_filter)
-            .distinct()
-            .order_by("name")
-        )
         required_team_filter = Q(is_active=True)
         if self.instance.pk:
             required_team_filter |= Q(required_service_events=self.instance)
@@ -460,6 +434,34 @@ class ServiceEventForm(AudienceUnitOptionsMixin, forms.ModelForm):
                 "Use the dedicated cancel action to cancel a service event."
             )
         return status
+
+
+class WorshipTeamSelectionForm(forms.Form):
+    worship_team = MinistryTeamChoiceField(
+        queryset=MinistryTeam.objects.none(),
+        required=False,
+    )
+    expected_updated_at = forms.CharField(widget=forms.HiddenInput)
+    expected_anchor_team = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput,
+    )
+
+    def __init__(self, *args, language="en", candidates=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        candidate_ids = [candidate.team.pk for candidate in candidates]
+        self.fields["worship_team"].queryset = MinistryTeam.objects.filter(
+            pk__in=candidate_ids
+        ).order_by("name", "name_en", "id")
+        self.fields["worship_team"].language = language
+        self.fields["worship_team"].label = (
+            "敬拜团队" if language == "zh" else "Worship Team"
+        )
+        self.fields["worship_team"].empty_label = (
+            "尚未选择敬拜团队"
+            if language == "zh"
+            else "Worship Team not selected"
+        )
 
 
 class PlannerUserChoiceField(forms.ModelChoiceField):
@@ -562,10 +564,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
         required=False,
         widget=forms.CheckboxSelectMultiple,
     )
-    rotation_anchor_team = MinistryTeamChoiceField(
-        queryset=MinistryTeam.objects.none(),
-        required=False,
-    )
     description = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
     description_en = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4}))
 
@@ -598,7 +596,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
             "event_type",
             "location",
             "meeting_link",
-            "rotation_anchor_team",
             "required_teams",
             "status",
         ]:
@@ -613,16 +610,6 @@ class RecurringServiceEventForm(AudienceUnitOptionsMixin, forms.Form):
         self.fields["status"].choices = service_event_form.fields[
             "status"
         ].choices
-        self.fields["rotation_anchor_team"].label = service_event_form.fields[
-            "rotation_anchor_team"
-        ].label
-        self.fields["rotation_anchor_team"].help_text = service_event_form.fields[
-            "rotation_anchor_team"
-        ].help_text
-        self.fields["rotation_anchor_team"].language = language
-        self.fields["rotation_anchor_team"].queryset = MinistryTeam.objects.filter(
-            is_active=True,
-        ).order_by("name")
         self.fields["required_teams"].label = service_event_form.fields[
             "required_teams"
         ].label

@@ -9,10 +9,12 @@ foundation, and `MO-S.6D-1D-B` governed Worship Team authorization, mutation,
 legacy-write enforcement, and narrow planning UI, with
 `MO-S.6D-1D-B-FU1` assignment identity and cross-path serialization closure,
 plus `MO-S.6D-1D-C` Worship Team operational reachability and its FU1/FU2
-projection-consistency closures, plus
+projection-consistency closures, plus the docs-only `MO-S.6D-1D-D-0A`
+Worship Rotation Planner batch contract and audit decision, plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
-multi-campus Worship rotation governance closure. Remaining MO-S.6D and other
-future runtime slices remain separately scoped and require explicit approval.
+multi-campus Worship rotation governance closure. The planner runtime and
+remaining MO-S.6D and other future runtime slices remain separately scoped and
+require explicit approval.
 
 ## 1. Purpose
 
@@ -732,9 +734,17 @@ tests and limited-trial review pass.
   maps tokens only to eligible candidates, blocks on current Worship-roster
   conflicts, changes only the selected Worship Team, and is staff/superuser-only
   for bulk upload/preview/confirm.
-- Later operations: a Worship Rotation Planner may preview/confirm one-Sunday
-  changes or a bounded one-Sunday shift of later explicit selections, without a
-  rotation rule engine or any roster movement. A separate ministry-owned
+- Later operations: the existing exact-event selector remains the one-Sunday
+  change path. The docs-only contract in
+  [`WORSHIP_ROTATION_PLANNER_PLAN.md`](WORSHIP_ROTATION_PLANNER_PLAN.md) limits
+  planner V1 to a bounded insert/shift of later explicit selections, with a
+  terminal blank landing slot, no non-null tail loss, per-destination candidate
+  validation, per-event authority, roster blockers, a 30-minute user-bound
+  signed proposal, and shared-operation per-event `LogEntry` audit without a
+  BatchRun schema. Runtime is split into read-only preview `1A` and locked
+  confirmation `1B`; `1B` must close supported downstream event-first
+  assignment serialization before promising downstream-impact staleness. A
+  separate ministry-owned
   post-commit producer may send direct old/new/downstream leadership notices,
   summarized once per recipient for a batch. This is distinct from MO-S.6E
   roster-change staleness detection.
@@ -742,9 +752,30 @@ tests and limited-trial review pass.
   engineering term rotation anchor.
 - Dependency: after the implemented Campus, pool-configuration,
   event-responsibility, read-only governance, governed single-event mutation,
-  and operational-reachability foundations, every remaining batch-planning,
-  notification, and import slice in the canonical governance plan still
-  requires separate task approval and focused verification.
+  and operational-reachability foundations, the batch-planner runtime,
+  notification, and import slices in the canonical governance plan still
+  require separate task approval and focused verification.
+
+### MO-S.6D-1D-D-0A — Worship Rotation Planner contract and audit decision
+
+- Status: docs-only contract complete; no runtime, schema, dependency,
+  notification, or data change is implemented.
+- Canonical decision: see
+  [`WORSHIP_ROTATION_PLANNER_PLAN.md`](WORSHIP_ROTATION_PLANNER_PLAN.md).
+- Product split: the existing selector owns one Sunday; planner V1 owns only
+  Insert / Shift Later Worship Teams over 2 through 53 exact published future
+  Sunday Service events.
+- Safety: no interior blank, final blank landing slot, no non-null displaced
+  tail confirmation, destination-specific canonical eligibility, per-event
+  existing authority, and any current Worship assignment blocking an actual
+  changed row.
+- Proposal/audit: 30-minute user-bound Django-signed normalized proposal;
+  normal per-event saves and one same-operation-ID `LogEntry` per actual change;
+  no durable BatchRun model for V1.
+- Runtime order: separately approve read-only proposal/preview `1A`, then
+  locked atomic confirmation/audit `1B`. `1B` must close the documented
+  supported downstream assignment serialization gap before making the hard
+  downstream-impact stale claim.
 
 ### MO-S.6D-0A — Workbook Contract & Imported-Sunday Readiness
 
@@ -1161,9 +1192,9 @@ permission, privacy, idempotency, and exception handling are observed to work.
 
 These are genuine future decisions, not hidden implementation assumptions:
 
-- When should the separately approved Worship Rotation Planner add bounded
-  one-Sunday shifts, and does durable batch audit require schema beyond the
-  existing per-change `LogEntry` pattern?
+- When should the separately approved Worship Rotation Planner `1A` read-only
+  preview slice begin? The V1 shift and no-schema audit contract itself is
+  closed in `WORSHIP_ROTATION_PLANNER_PLAN.md`.
 - Which teams participate in the default Sunday board, and how are combined or
   special services represented?
 - Which additional cross-team details, if any, may be added beyond the
@@ -1189,6 +1220,7 @@ This plan is grounded in the current implementation and canonical boundaries in:
 - `docs/CHURCH_CALENDAR_V1_PLAN.md`;
 - `docs/NOTIFICATIONS_V0_PLAN.md`;
 - `docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`;
+- `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`;
 - `docs/MODULE_BOUNDARIES.md` and `docs/CHURCH_STRUCTURE_FOUNDATION_PLAN.md`;
 - `events/models.py`, `ministry/models.py`, `ministry/permissions.py`,
   `ministry/services/assignment_coverage.py`,

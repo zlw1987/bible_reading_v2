@@ -76,8 +76,21 @@ prepared Worship assignments are inspected against the selected exact team.
 The result distinguishes unscheduled, invalid, off-team, out-of-scope,
 multiple, and duplicate states without exposing rosters/private fields. It
 accepts no user and grants no authority by itself. `MO-S.6D-1D-B` now consumes
-it in the narrow selector and supported-write backstop; Board/Team Schedule
-reachability and presentation remain unchanged.
+it in the narrow selector and supported-write backstop; `MO-S.6D-1D-C` now
+consumes the same canonical facts for Board/Team Schedule reachability and
+presentation.
+
+`MO-S.6D-1D-D-0A` completes the docs-only Worship Rotation Planner batch
+contract and audit decision in `docs/WORSHIP_ROTATION_PLANNER_PLAN.md`. The
+existing selector remains the one-Sunday path; future planner V1 is limited to
+Insert / Shift Later Worship Teams over an exact bounded chain, with no
+non-null tail loss, destination-specific eligibility, per-event authority,
+Worship-assignment blockers, a roster-free downstream projection, a 30-minute
+user-bound signed proposal, and shared-operation per-event `LogEntry` audit.
+No BatchRun schema is required for V1. Preview `1A` and confirmation `1B`
+runtime remain separately approvable; `1B` must close supported downstream
+event-first assignment serialization before claiming downstream-impact
+staleness.
 
 Manual QA passed for the navbar IA and Ministry Structure cleanup, covering desktop ordinary user, desktop staff user, the mobile hamburger drawer, the Staff dropdown, the account dropdown, the Today / My Serving / Bible Study serving core flows, and the Ministry Teams / Ministry Structure core flows. No product boundary changed: Today remains a general agenda/dashboard (not a serving workspace), My Serving remains the serving workspace, visibility / membership / audience scope still does not imply serving, only explicit `TeamAssignmentMember` and linked-user `BibleStudyMeetingRole.user` personalize serving, and `MinistryTeamRoleAssignment` remains long-term structure responsibility — not weekly/event serving (at that time it also drove no permission; `MINISTRY-ROLE-SOURCE.1C` later made active lead/coordinator role assignments the runtime team-management permission source).
 
@@ -577,9 +590,11 @@ Future pieces include:
   applicability, candidate, and ownership-consistency domain half of canonical
   slice 4, and `MO-S.6D-1D-B` now consumes it through the narrow authorization,
   locked selector/mutation UI, audit attribution, and supported-write
-  enforcement across legacy event/admin/assignment paths. Selected-team
-  operational reachability on the Board/Team Schedule, notification, importer
-  runtime, and bulk upload remain later slices. The bounded
+  enforcement across legacy event/admin/assignment paths. `MO-S.6D-1D-C`
+  implements selected-team operational reachability on the Board/Team Schedule,
+  and docs-only `MO-S.6D-1D-D-0A` closes the planner batch/audit contract.
+  Planner runtime, notification, importer runtime, and bulk upload remain later
+  slices. The bounded
   cross-team
   coordination projection replaces the older generic “multi-team dashboard”
   future label; every remaining governance runtime/schema prerequisite and
@@ -776,10 +791,12 @@ selector, audit attribution, and supported-write enforcement, with FU1 closing
 valid-current/inverse identity retargeting and serializing current Worship
 writes on the ServiceEvent row. `MO-S.6D-1D-C` now implements valid
 selected-team operational reachability and fail-closed Board/Team Schedule
-projection. Planner/batch UI, notification, and import slices still require
-their own explicit task approval and repository-truth review. The canonical
-governance decision is
-`docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md`.
+projection. `MO-S.6D-1D-D-0A` now closes the docs-only planner V1 batch and
+no-schema audit contract; its `1A` preview and `1B` confirmation runtime,
+notification, and import slices still require their own explicit task approval
+and repository-truth review. The canonical governance and planner decisions are
+`docs/WORSHIP_ROTATION_GOVERNANCE_PLAN.md` and
+`docs/WORSHIP_ROTATION_PLANNER_PLAN.md`.
 
 MO-S.1 records real pilot feedback that staff need required MinistryTeam
 selection when creating or batch-creating ServiceEvents, TeamAssignment pages
@@ -950,8 +967,10 @@ docs-only MO-S.6D-0A/FU1/FU2 investigations, and the separately approved
 `MO-S.6D-1C` exact-event planner/coordinator responsibility foundations are
 complete. `MO-S.6D-1D-A` read-only governance and `MO-S.6D-1D-B` narrow
 authorization/mutation enforcement are also complete, including FU1 assignment
-identity and ServiceEvent-serialization closure. Any remaining governance
-prerequisite or later MO-S.6 runtime slice
+identity and ServiceEvent-serialization closure. `MO-S.6D-1D-C` operational
+reachability is implemented, and docs-only `MO-S.6D-1D-D-0A` closes the
+planner batch/audit decision while leaving `1A`/`1B` runtime unimplemented. Any
+remaining governance prerequisite or later MO-S.6 runtime slice
 requires separate explicit approval and repository-truth review.
 
 Still deferred unless separately approved and supported by real use:
@@ -1249,8 +1268,11 @@ implemented the read-only event applicability/candidate/ownership-consistency
 domain facts, and `MO-S.6D-1D-B` adds their narrow planner/pool-Lead/full-manager
 authorization consumer, locked selector/mutation, audit attribution, and
 supported-write enforcement. `MO-S.6D-1D-C` now adds selected-team operational
-reachability on the Board/Team Schedule. Notifications, importer runtime, and
-bulk upload remain unimplemented. Remaining MO-S.6D and later slices are not
+reachability on the Board/Team Schedule. Docs-only `MO-S.6D-1D-D-0A` closes
+the planner V1 batch/tail/fingerprint/no-schema audit contract; read-only
+preview `1A` and locked confirmation `1B` runtime remain unimplemented.
+Notifications, importer runtime, and bulk upload remain unimplemented.
+Remaining MO-S.6D and later slices are not
 authorized by the governance closure or these foundations. Availability,
 swaps, reminders, automatic
 scheduling/optimizer behavior, arbitrary spreadsheet behavior, and broader

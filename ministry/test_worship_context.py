@@ -2,10 +2,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from events.models import ServiceEvent
+from accounts.models import ChurchStructureUnit
+from events.models import ServiceEvent, ServiceEventAudienceScope
 
 from .models import (
     MinistryTeam,
+    MinistryTeamParentLink,
     TeamAssignment,
     TeamAssignmentMember,
     TeamMembership,
@@ -13,11 +15,16 @@ from .models import (
 from .services.worship_context import (
     WORSHIP_CONTEXT_AMBIGUOUS,
     WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
+    WORSHIP_CONTEXT_CONFLICT,
     WORSHIP_CONTEXT_EMPTY,
     WORSHIP_CONTEXT_NO_ANCHOR,
     WORSHIP_CONTEXT_SCHEDULED,
     WORSHIP_CONTEXT_UNSCHEDULED,
     build_worship_contexts,
+)
+from .services.worship_governance import (
+    WorshipOwnershipConsistencyState,
+    inspect_worship_ownership_consistency,
 )
 
 
@@ -26,9 +33,37 @@ User = get_user_model()
 
 class WorshipContextProjectionTests(TestCase):
     def setUp(self):
+        self.cm = ChurchStructureUnit.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            name_en="Chinese Ministry",
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        )
+        self.em = ChurchStructureUnit.objects.create(
+            code="EM",
+            name="English Ministry",
+            name_en="English Ministry",
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        )
+        self.pool = MinistryTeam.objects.create(
+            name="Chinese Worship Pool",
+            name_en="Chinese Worship Pool",
+            is_assignable=False,
+            is_worship_rotation_pool=True,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.pool,
+            parent_church_unit=self.cm,
+            is_primary=True,
+        )
         self.anchor = MinistryTeam.objects.create(
             name="敬拜 C2",
             name_en="Worship C2",
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.anchor,
+            parent_team=self.pool,
+            is_primary=True,
         )
         self.event = ServiceEvent.objects.create(
             title="主日崇拜",
@@ -38,6 +73,10 @@ class WorshipContextProjectionTests(TestCase):
             status=ServiceEvent.STATUS_PUBLISHED,
             rotation_anchor_team=self.anchor,
         )
+        ServiceEventAudienceScope.objects.create(
+            service_event=self.event,
+            unit=self.cm,
+        )
 
     def create_assignment(self, *, status=TeamAssignment.STATUS_SCHEDULED):
         return TeamAssignment.objects.create(
@@ -46,6 +85,16 @@ class WorshipContextProjectionTests(TestCase):
             status=status,
             notes="Private Worship note",
         )
+
+    def create_stored_assignment(self, *, status=TeamAssignment.STATUS_SCHEDULED):
+        assignment = TeamAssignment(
+            service_event=self.event,
+            ministry_team=self.anchor,
+            status=status,
+            notes="Stored duplicate Worship note",
+        )
+        TeamAssignment.objects.bulk_create([assignment])
+        return assignment
 
     def context(self):
         return build_worship_contexts([self.event])[self.event.id]
@@ -115,7 +164,7 @@ class WorshipContextProjectionTests(TestCase):
             display_name="Second Worship Person",
         )
         first = self.create_assignment()
-        second = self.create_assignment(status=TeamAssignment.STATUS_PREPARED)
+        second = self.create_stored_assignment(status=TeamAssignment.STATUS_PREPARED)
         TeamAssignmentMember.objects.create(
             assignment=first,
             membership=first_member,
@@ -128,6 +177,30 @@ class WorshipContextProjectionTests(TestCase):
         context = self.context()
 
         self.assertEqual(context["state"], WORSHIP_CONTEXT_AMBIGUOUS)
+        self.assertEqual(context["member_names"], [])
+
+    def test_out_of_scope_assignment_projects_conflict_without_roster(self):
+        membership = TeamMembership.objects.create(
+            team=self.anchor,
+            display_name="Private Out-of-Scope Worship Person",
+        )
+        assignment = self.create_assignment()
+        TeamAssignmentMember.objects.create(
+            assignment=assignment,
+            membership=membership,
+        )
+        ServiceEventAudienceScope.objects.filter(service_event=self.event).update(
+            unit=self.em
+        )
+
+        inspection = inspect_worship_ownership_consistency(self.event)
+        context = self.context()
+
+        self.assertEqual(
+            inspection.state,
+            WorshipOwnershipConsistencyState.OUT_OF_SCOPE_WORSHIP_CONFLICT,
+        )
+        self.assertEqual(context["state"], WORSHIP_CONTEXT_CONFLICT)
         self.assertEqual(context["member_names"], [])
 
     def test_inactive_or_nonassignable_anchor_fails_to_review_required(self):

@@ -4,9 +4,10 @@ MO-S.6D-1D-A establishes domain facts only.  Nothing in this module accepts a
 user, grants authority, changes an event or assignment, exposes a roster, or
 emits a notification.  Mutation and UI consumers remain separately governed.
 
-``build_worship_contexts()`` remains the existing presentation projection for
-the exact selected team.  Later mutation/UI work should consume this module's
-pool-aware consistency result instead of inventing a second ownership rule.
+``build_worship_contexts()`` consumes the pool-aware consistency result for
+fail-closed scheduler presentation and projects roster names only for one
+consistent exact selected-team assignment. Mutation/UI work must reuse these
+facts instead of inventing a second ownership rule.
 """
 
 from dataclasses import dataclass

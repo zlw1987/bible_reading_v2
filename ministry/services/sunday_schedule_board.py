@@ -17,9 +17,11 @@ from .worship_context import (
     CURRENT_ASSIGNMENT_STATUSES,
     WORSHIP_CONTEXT_AMBIGUOUS,
     WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
+    WORSHIP_CONTEXT_CONFLICT,
     WORSHIP_CONTEXT_NO_ANCHOR,
     build_worship_contexts,
 )
+from .worship_governance import inspect_worship_ownership_consistency
 
 
 SUNDAY_BOARD_WINDOW_WEEKS = 8
@@ -64,9 +66,9 @@ def build_sunday_schedule_board(
 
     Row eligibility intentionally follows the approved operational scheduling
     rule, not ordinary ServiceEvent audience visibility. Exact-team schedulers
-    receive a row only when one of their own manageable teams is required or
-    actively assigned. Global assignment managers receive the bounded Sunday
-    set with any required team or active assignment.
+    receive a row only when one of their own manageable teams is required,
+    actively assigned, or the exact valid selected Worship Team. Global
+    assignment managers receive that same bounded operational Sunday set.
 
     Returned cells are projection dictionaries. They never include assignment
     notes, member contact/profile fields, or confirmation detail.
@@ -115,13 +117,26 @@ def build_sunday_schedule_board(
         )
 
     required_team_ids_by_event = {}
+    ownership_inspections = {}
+    valid_selected_team_ids_by_event = {}
     eligible_events = []
     for event in candidate_events:
         required_team_ids = {
             link.ministry_team_id for link in event.required_team_links.all()
         }
         required_team_ids_by_event[event.id] = required_team_ids
-        participating_team_ids = required_team_ids | assignment_team_ids_by_event[event.id]
+        valid_selected_team_id = None
+        if event.rotation_anchor_team_id is not None:
+            inspection = inspect_worship_ownership_consistency(event)
+            ownership_inspections[event.id] = inspection
+            if inspection.selected_team_is_eligible:
+                valid_selected_team_id = event.rotation_anchor_team_id
+        valid_selected_team_ids_by_event[event.id] = valid_selected_team_id
+        participating_team_ids = (
+            required_team_ids | assignment_team_ids_by_event[event.id]
+        )
+        if valid_selected_team_id is not None:
+            participating_team_ids.add(valid_selected_team_id)
         if not participating_team_ids:
             continue
         if not global_assignment_manager and not (
@@ -142,7 +157,7 @@ def build_sunday_schedule_board(
         display_team_ids = (
             required_team_ids_by_event[event.id]
             | assignment_team_ids_by_event[event.id]
-        ) - {event.rotation_anchor_team_id}
+        ) - {valid_selected_team_ids_by_event[event.id]}
         display_team_ids_by_event[event.id] = display_team_ids
         participating_team_ids.update(display_team_ids)
 
@@ -154,7 +169,10 @@ def build_sunday_schedule_board(
         eligible_assignments,
         language=language,
     )
-    worship_contexts = build_worship_contexts(eligible_events)
+    worship_contexts = build_worship_contexts(
+        eligible_events,
+        ownership_inspections=ownership_inspections,
+    )
     coverage_rows_by_event_team = defaultdict(list)
     for event_id, coverage in coverage_by_event.items():
         for coverage_row in coverage["rows"]:
@@ -253,9 +271,11 @@ def build_sunday_schedule_board(
             WORSHIP_CONTEXT_NO_ANCHOR,
             WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
             WORSHIP_CONTEXT_AMBIGUOUS,
+            WORSHIP_CONTEXT_CONFLICT,
         }
         if (
             anchor_team is not None
+            and valid_selected_team_ids_by_event[event.id] == anchor_team.id
             and anchor_state_is_actionable
             and len(anchor_assignments) <= 1
             and can_manage_team_assignment_for_team(user, anchor_team)

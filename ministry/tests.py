@@ -22,7 +22,7 @@ from accounts.models import (
     ChurchStructureUnitRoleType,
     ServingReadinessPolicy,
 )
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceEventAudienceScope
 from reading.templatetags.datetime_extras import member_datetime
 from studies.models import (
     BibleStudyLesson,
@@ -604,6 +604,31 @@ class TeamAssignmentV1Tests(TestCase):
             start_datetime=timezone.now() + timezone.timedelta(days=days_from_now),            status=status or ServiceEvent.STATUS_PUBLISHED,
             rotation_anchor_team=anchor,
         )
+
+    def create_valid_worship_team(self, name, *events):
+        pool = MinistryTeam.objects.create(
+            name=f"{name} Pool",
+            name_en=f"{name} Pool",
+            is_assignable=False,
+            is_worship_rotation_pool=True,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=pool,
+            parent_church_unit=self.cm_unit,
+            is_primary=True,
+        )
+        team = MinistryTeam.objects.create(name=name, name_en=name)
+        MinistryTeamParentLink.objects.create(
+            child_team=team,
+            parent_team=pool,
+            is_primary=True,
+        )
+        for event in events:
+            ServiceEventAudienceScope.objects.get_or_create(
+                service_event=event,
+                unit=self.cm_unit,
+            )
+        return team
 
     def local_datetime(self, days_from_today=0, *, hour=9, minute=0):
         local_date = timezone.localdate() + timezone.timedelta(days=days_from_today)
@@ -3510,23 +3535,22 @@ class TeamAssignmentV1Tests(TestCase):
         response = self.client.get(reverse("team_schedule", args=[self.team.id]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Rotation Anchor Team")
+        self.assertContains(response, "Worship Team")
         self.assertContains(response, "Worship C1")
-        self.assertContains(response, "Worship not yet scheduled")
+        self.assertContains(response, "Selected Worship Team needs review")
         self.assertEqual(TeamAssignment.objects.count(), 0)
         self.assertEqual(TeamAssignmentMember.objects.count(), 0)
 
     def test_team_schedule_shows_narrow_current_worship_context(self):
         self.set_language("en")
-        anchor_team = MinistryTeam.objects.create(
-            name="敬拜 C2",
-            name_en="Worship C2",
-        )
+        anchor_team = self.create_valid_worship_team("Worship C2", self.event)
         worship_membership = TeamMembership.objects.create(
             team=anchor_team,
             display_name="Current Worship Person",
             email="worship-private@example.com",
         )
+        self.event.rotation_anchor_team = anchor_team
+        self.event.save()
         worship_assignment = TeamAssignment.objects.create(
             service_event=self.event,
             ministry_team=anchor_team,
@@ -3539,15 +3563,13 @@ class TeamAssignmentV1Tests(TestCase):
         )
         worship_member.confirm("Private Worship confirmation")
         self.event.required_teams.add(self.team)
-        self.event.rotation_anchor_team = anchor_team
-        self.event.save()
         self.client.login(username="assignment_lead", password="testpass123")
 
         response = self.client.get(
             f"{reverse('team_schedule', args=[self.team.id])}?event={self.event.id}"
         )
 
-        self.assertContains(response, "Worship context")
+        self.assertContains(response, "Worship Team")
         self.assertContains(response, "Worship serving")
         self.assertContains(response, "Current Worship Person")
         self.assertNotContains(response, "Private Worship planning note")
@@ -3564,10 +3586,7 @@ class TeamAssignmentV1Tests(TestCase):
 
     def test_team_schedule_duplicate_worship_assignments_fail_closed(self):
         self.set_language("en")
-        anchor_team = MinistryTeam.objects.create(
-            name="敬拜 C2",
-            name_en="Worship C2",
-        )
+        anchor_team = self.create_valid_worship_team("Worship C2", self.event)
         self.event.required_teams.add(self.team)
         self.event.rotation_anchor_team = anchor_team
         self.event.save()
@@ -3576,10 +3595,14 @@ class TeamAssignmentV1Tests(TestCase):
             ministry_team=anchor_team,
             status=TeamAssignment.STATUS_SCHEDULED,
         )
-        TeamAssignment.objects.create(
-            service_event=self.event,
-            ministry_team=anchor_team,
-            status=TeamAssignment.STATUS_CONFIRMED,
+        TeamAssignment.objects.bulk_create(
+            [
+                TeamAssignment(
+                    service_event=self.event,
+                    ministry_team=anchor_team,
+                    status=TeamAssignment.STATUS_CONFIRMED,
+                )
+            ]
         )
         self.client.login(username="assignment_lead", password="testpass123")
 
@@ -3618,7 +3641,7 @@ class TeamAssignmentV1Tests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Suggestion Source")
-        self.assertContains(response, "Same Worship/rotation anchor history")
+        self.assertContains(response, "Same Worship Team history")
         self.assertContains(response, "Prior Sunday")
         self.assertContains(response, "Suggested:")
         self.assertContains(response, "proposal for review")

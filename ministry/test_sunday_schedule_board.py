@@ -5,12 +5,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ChurchRoleAssignment
+from accounts.models import ChurchRoleAssignment, ChurchStructureUnit
 from core.notification_delivery import notification_sink_override_for_tests
-from events.models import ServiceEvent
+from events.models import ServiceEvent, ServiceEventAudienceScope
 
 from .models import (
     MinistryTeam,
+    MinistryTeamParentLink,
     MinistryTeamRoleAssignment,
     MinistryTeamRoleType,
     TeamAssignment,
@@ -86,9 +87,31 @@ class SundayScheduleBoardTests(TestCase):
             name="Gamma Team",
             name_en="Gamma Team",
         )
+        self.cm = ChurchStructureUnit.objects.create(
+            code="CM",
+            name="Chinese Ministry",
+            name_en="Chinese Ministry",
+            unit_type=ChurchStructureUnit.UNIT_MINISTRY_CONTEXT,
+        )
+        self.worship_pool = MinistryTeam.objects.create(
+            name="Chinese Worship Pool",
+            name_en="Chinese Worship Pool",
+            is_assignable=False,
+            is_worship_rotation_pool=True,
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.worship_pool,
+            parent_church_unit=self.cm,
+            is_primary=True,
+        )
         self.anchor_team = MinistryTeam.objects.create(
             name="Anchor Team",
             name_en="Anchor Team",
+        )
+        MinistryTeamParentLink.objects.create(
+            child_team=self.anchor_team,
+            parent_team=self.worship_pool,
+            is_primary=True,
         )
         self.anchor_lead = User.objects.create_user(
             username="board_anchor_lead",
@@ -233,7 +256,7 @@ class SundayScheduleBoardTests(TestCase):
         status=ServiceEvent.STATUS_PUBLISHED,
         rotation_anchor_team=None,
     ):
-        return ServiceEvent.objects.create(
+        event = ServiceEvent.objects.create(
             title=title,
             title_en=title,
             event_type=event_type,
@@ -241,6 +264,8 @@ class SundayScheduleBoardTests(TestCase):
             status=status,
             rotation_anchor_team=rotation_anchor_team,
         )
+        ServiceEventAudienceScope.objects.create(service_event=event, unit=self.cm)
+        return event
 
     def create_assignment(self, event, team, *, membership=None, notes=""):
         assignment = TeamAssignment.objects.create(
@@ -255,6 +280,16 @@ class SundayScheduleBoardTests(TestCase):
                 assignment=assignment,
                 membership=membership,
             )
+        return assignment
+
+    def create_stored_assignment(self, event, team):
+        assignment = TeamAssignment(
+            service_event=event,
+            ministry_team=team,
+            status=TeamAssignment.STATUS_SCHEDULED,
+            created_by=self.global_manager,
+        )
+        TeamAssignment.objects.bulk_create([assignment])
         return assignment
 
     def set_language(self, language):
@@ -392,7 +427,7 @@ class SundayScheduleBoardTests(TestCase):
         self.event.save()
         self.login(self.lead)
         response = self.client.get(reverse("sunday_schedule_board"))
-        self.assertContains(response, "Rotation/Worship context not set")
+        self.assertContains(response, "Worship Team not selected")
 
         self.event.rotation_anchor_team = self.anchor_team
         self.event.save()
@@ -400,7 +435,7 @@ class SundayScheduleBoardTests(TestCase):
         response = self.client.get(reverse("sunday_schedule_board"))
         self.assertContains(response, "Worship scheduled · no active members")
 
-        self.create_assignment(self.event, self.anchor_team)
+        self.create_stored_assignment(self.event, self.anchor_team)
         response = self.client.get(reverse("sunday_schedule_board"))
         self.assertContains(
             response,
@@ -415,7 +450,7 @@ class SundayScheduleBoardTests(TestCase):
 
         response = self.client.get(reverse("sunday_schedule_board"))
 
-        self.assertContains(response, "敬拜尚未排班")
+        self.assertContains(response, "已选择，尚未排班")
 
     def test_board_states_columns_anchor_and_edit_authority(self):
         self.login(self.lead)
@@ -483,7 +518,7 @@ class SundayScheduleBoardTests(TestCase):
             if row["event"].id == anchor_only_event.id
         )
 
-        self.assertEqual(row["cells"], [])
+        self.assertFalse(any(cell["participates"] for cell in row["cells"]))
         self.assertTrue(row["worship_context"]["can_edit"])
         self.assertEqual(row["worship_context"]["action_kind"], "schedule")
         self.assertIn(
@@ -493,7 +528,7 @@ class SundayScheduleBoardTests(TestCase):
         self.assertContains(response, "Schedule Worship")
 
     def test_anchor_team_remains_a_generic_cell_when_non_anchor_elsewhere(self):
-        self.create_assignment(self.event, self.anchor_team)
+        self.create_stored_assignment(self.event, self.anchor_team)
         mixed_event = self.create_event(
             "Anchor Team In Ordinary Role",
             days_from_today=(6 - timezone.localdate().weekday()) % 7 + 7,
@@ -521,7 +556,7 @@ class SundayScheduleBoardTests(TestCase):
 
     def test_duplicate_and_unavailable_anchor_contexts_have_no_action(self):
         self.create_assignment(self.event, self.anchor_team)
-        self.create_assignment(self.event, self.anchor_team)
+        self.create_stored_assignment(self.event, self.anchor_team)
         self.login(self.anchor_lead)
 
         duplicate_response = self.client.get(reverse("sunday_schedule_board"))

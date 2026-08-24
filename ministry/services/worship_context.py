@@ -3,7 +3,11 @@ from collections import defaultdict
 from django.db.models import Prefetch
 
 from ..models import TeamAssignment, TeamAssignmentMember
-from .worship_governance import CURRENT_WORSHIP_ASSIGNMENT_STATUSES
+from .worship_governance import (
+    CURRENT_WORSHIP_ASSIGNMENT_STATUSES,
+    WorshipOwnershipConsistencyState,
+    inspect_worship_ownership_consistency,
+)
 
 
 WORSHIP_CONTEXT_NO_ANCHOR = "no_anchor"
@@ -12,9 +16,10 @@ WORSHIP_CONTEXT_UNSCHEDULED = "unscheduled"
 WORSHIP_CONTEXT_EMPTY = "empty"
 WORSHIP_CONTEXT_SCHEDULED = "scheduled"
 WORSHIP_CONTEXT_AMBIGUOUS = "ambiguous"
+WORSHIP_CONTEXT_CONFLICT = "conflict"
 
-# Backward-compatible presentation alias. The domain definition lives in the
-# pool-aware governance service; current Board/context behavior is unchanged.
+# Backward-compatible presentation alias. The canonical current-status tuple
+# lives in the pool-aware governance service.
 CURRENT_ASSIGNMENT_STATUSES = CURRENT_WORSHIP_ASSIGNMENT_STATUSES
 
 
@@ -28,12 +33,12 @@ def _context(*, anchor_team=None, state, member_names=None):
     }
 
 
-def build_worship_contexts(events):
+def build_worship_contexts(events, *, ownership_inspections=None):
     """Project current Worship context for already-authorized scheduler rows.
 
-    The configured ``rotation_anchor_team`` is the only anchor. A current
-    Worship assignment must match both the event and that exact team, and must
-    use one of the shared operational statuses. Duplicate matches fail closed.
+    Canonical ownership inspection distinguishes valid selected-team states
+    from invalid, conflicting, and ambiguous ownership. Only a consistent
+    exact selected-team assignment projects its active member display names.
 
     This service is presentation-only and deliberately returns no assignment
     object, notes, confirmation details, contact fields, profile data, or links.
@@ -41,19 +46,53 @@ def build_worship_contexts(events):
     """
 
     events = list(events)
+    ownership_inspections = dict(ownership_inspections or {})
     contexts = {}
     eligible_events = []
     for event in events:
         anchor_team = event.rotation_anchor_team
-        if anchor_team is None:
+        inspection = ownership_inspections.get(event.id)
+        if inspection is None:
+            inspection = inspect_worship_ownership_consistency(event)
+            ownership_inspections[event.id] = inspection
+
+        if inspection.state == WorshipOwnershipConsistencyState.NO_SELECTION:
             contexts[event.id] = _context(state=WORSHIP_CONTEXT_NO_ANCHOR)
-        elif not anchor_team.is_active or not anchor_team.is_assignable:
+            continue
+        if inspection.state == WorshipOwnershipConsistencyState.INVALID_SELECTION:
             contexts[event.id] = _context(
                 anchor_team=anchor_team,
                 state=WORSHIP_CONTEXT_ANCHOR_UNAVAILABLE,
             )
-        else:
-            eligible_events.append(event)
+            continue
+        if inspection.state in {
+            WorshipOwnershipConsistencyState.OFF_TEAM_CONFLICT,
+            WorshipOwnershipConsistencyState.OUT_OF_SCOPE_WORSHIP_CONFLICT,
+        }:
+            contexts[event.id] = _context(
+                anchor_team=anchor_team,
+                state=WORSHIP_CONTEXT_CONFLICT,
+            )
+            continue
+        if inspection.state in {
+            WorshipOwnershipConsistencyState.MULTIPLE_CURRENT_WORSHIP_ASSIGNMENTS,
+            WorshipOwnershipConsistencyState.DUPLICATE_SELECTED_TEAM_ASSIGNMENT,
+        }:
+            contexts[event.id] = _context(
+                anchor_team=anchor_team,
+                state=WORSHIP_CONTEXT_AMBIGUOUS,
+            )
+            continue
+        if (
+            inspection.state
+            == WorshipOwnershipConsistencyState.SELECTED_UNSCHEDULED
+        ):
+            contexts[event.id] = _context(
+                anchor_team=anchor_team,
+                state=WORSHIP_CONTEXT_UNSCHEDULED,
+            )
+            continue
+        eligible_events.append(event)
 
     if not eligible_events:
         return contexts

@@ -8,7 +8,8 @@ Suggestions, `MO-S.6D-1A` Campus / Site type foundation,
 foundation, and `MO-S.6D-1D-B` governed Worship Team authorization, mutation,
 legacy-write enforcement, and narrow planning UI, with
 `MO-S.6D-1D-B-FU1` assignment identity and cross-path serialization closure,
-plus
+plus `MO-S.6D-1D-C` Worship Team operational reachability and its FU1/FU2
+projection-consistency closures, plus
 the MO-S.6D-0A workbook/readiness investigation plus MO-S.6D-0A-FU1/FU2
 multi-campus Worship rotation governance closure. Remaining MO-S.6D and other
 future runtime slices remain separately scoped and require explicit approval.
@@ -56,9 +57,10 @@ or a production import in this planning slice.
 ### Existing scheduling and permissions
 
 - The Team Schedule workspace is scoped to one selected team and an upcoming
-  event window. It shows events where that team is required or already
-  assigned, uses a server-locked event/team form, and updates the existing
-  event/team assignment rather than duplicating it.
+  event window. It shows events where that team is required, currently assigned,
+  or the exact valid eligible selected Worship Team, uses a server-locked
+  event/team form, and updates the existing event/team assignment rather than
+  duplicating it.
 - Staff, superusers, and the global team-assignment manager capability may
   manage any team assignment. A team lead/coordinator may manage assignments
   for the exact team through an active, date-valid
@@ -124,9 +126,10 @@ confirmed / prepared as current, reports off-team, inapplicable-pool, multiple,
 and duplicate conflicts, and exposes no roster/private data. These domain facts
 accept no user and grant no permission by themselves. `MO-S.6D-1D-B` now
 provides the narrow Worship Team authorization and selector/mutation UI and
-enforces ownership on supported existing assignment writes. The system still
-does not provide selected-team operational reachability, the Worship
-Rotation Planner, direct Worship Team change notifications, Excel
+enforces ownership on supported existing assignment writes. `MO-S.6D-1D-C`
+now provides selected-team operational reachability on Team Schedule and the
+Sunday Board without false coverage. The system still does not provide the
+Worship Rotation Planner, direct Worship Team change notifications, Excel
 dependency/parser/import runtime, or the MO-S.6E roster-change staleness
 mechanism.
 
@@ -216,10 +219,16 @@ sync, and full assignment import in the first import slice.
 
 `/assignments/sunday-board/` is a GET-only operational matrix for the fixed
 local-date window from today through eight weeks later, inclusive. It shows
-non-draft/non-cancelled Sunday Service rows and participating team columns
-derived from required teams plus current operational assignments. The
-dedicated Worship / Rotation Context column owns each event's exact rotation
-anchor, so that same event/anchor pair is omitted from its generic team cells.
+non-draft/non-cancelled Sunday Service rows when participation comes from a
+required team, current operational assignment, or exact valid eligible selected
+Worship Team. Generic participating team columns remain derived only from
+required teams plus current operational assignments. The dedicated Worship
+column exclusively owns the canonically valid eligible selected Worship Team,
+so that same event/team pair is omitted from its generic team cells. An invalid
+or stale raw selection remains review-required in the Worship column but never
+suppresses independent required-team or current-assignment participation from
+the generic cells.
+
 An anchor team still appears as an ordinary generic cell on another event when
 it participates there in a non-anchor role. Cancelled and completed
 assignments are excluded consistently with the existing Team Schedule
@@ -243,19 +252,21 @@ event as plain operational text and does not link to `ServiceEvent` or
 `TeamAssignment` detail routes. An editable exact-team cell deep-links the
 existing Team Schedule workspace for the same date range, Sunday Service
 filter, and exact event/assignment; unauthorized cells are read-only.
-The Worship context uses the same navigation rule when the viewer can
-canonically manage that exact active, assignable anchor and the current anchor
-assignment is unambiguous. Downstream team owners remain read-only.
+The Worship context uses the same navigation rule only when the selected team
+remains canonically eligible, the viewer can manage that exact active,
+assignable team, and its current assignment is unambiguous. Downstream team
+owners remain read-only.
 
 ### Board access and permission design
 
 Board access is an operational scheduler capability. Staff, superusers, and
 users with the global TeamAssignment manager capability receive the bounded
-Sunday operational set when a row has at least one required team or current
-operational assignment. An exact-team Lead/Coordinator receives a row only
-when at least one of that user's canonically manageable teams is required for
-the event or has a current operational assignment for it. Participation by an
-unrelated team cannot establish exact-team row scope.
+Sunday operational set when a row has at least one required team, current
+operational assignment, or valid selected Worship Team. An exact-team
+Lead/Coordinator receives a row only when at least one of that user's
+canonically manageable teams is required, currently assigned, or the valid
+selected Worship Team. Participation by an unrelated team, planner
+responsibility, or pool-level role cannot establish exact-team row scope.
 
 Ordinary `ServiceEvent.can_be_seen_by()` audience visibility is intentionally
 not an additional Board row requirement. Ordinary users do not gain the Board
@@ -305,12 +316,16 @@ and saved through existing domain semantics.
 
 MO-S.6B does not hard-code current church team names or A/C1/C2/C3 into generic
 CMS logic. The no-schema V1 derives row eligibility from the full union of
-`ServiceEventRequiredTeam` teams and existing `TeamAssignment` teams. Generic
-display columns use that same per-event union after subtracting only the
-event's exact `rotation_anchor_team`; their cross-event union is ordered by
-canonical team name and ID. This preserves exact-anchor scheduler row scope,
-avoids duplicate Worship cells for the anchor event, and still shows the team
-normally when it participates as a non-anchor on another event. The table
+`ServiceEventRequiredTeam` teams, current `TeamAssignment` teams, and the exact
+valid eligible selected Worship Team. Generic display columns intentionally use
+only the required/current-assignment union after subtracting the
+event's exact canonically valid eligible selected Worship Team; their
+cross-event union is ordered by canonical team name and ID. An invalid or stale
+raw `rotation_anchor_team` never suppresses independent required-team or
+current-assignment participation. This preserves selected-team scheduler row
+scope, avoids duplicate Worship cells for a valid selected-team event, and
+still shows the team normally when it participates independently or on another
+event. The table
 labels inactive teams and shows a non-participating dash where a column appears
 only for another event. The anchor remains an ordinary configured
 `MinistryTeam`, not a global Worship taxonomy.
@@ -321,10 +336,11 @@ Downstream team scheduling should receive a compact context panel for the
 selected Sunday:
 
 - current `rotation_anchor_team`, if set;
-- current Worship `TeamAssignment` summary and roster only when the viewer is
-  authorized to see it;
-- “Worship not yet scheduled” when the anchor exists but no active Worship
-  assignment exists;
+- current Worship `TeamAssignment` summary and roster only for a canonically
+  consistent exact selected-team assignment and when the viewer is authorized
+  to see it;
+- “Worship not yet scheduled” only for the canonical selected-unscheduled
+  state; ownership conflicts are review-required instead;
 - the source and age of a historical/default pairing suggestion;
 - whether the current assignment differs from or matches the currently shown
   suggestion, when that comparison is derivable from current rows.
@@ -401,9 +417,9 @@ cannot supply a safe event audience. MO-S.6D-0A-FU1/FU2 close the architecture
 by requiring a match/update-only first lifecycle, the now-implemented explicit
 Worship-specific rotation-pool configuration foundation, required exact-event
 planner/coordinator responsibility, audience applicability, eligible token
-mappings, and
-anchor-only operational reachability. The remaining prerequisite runtime
-slices and importer-owned decisions still require separate approval.
+mappings, and the now-implemented selected-team-only operational reachability.
+The remaining prerequisite runtime slices and importer-owned decisions still
+require separate approval.
 
 ### Required transaction flow
 
@@ -487,7 +503,9 @@ Important failure modes and required handling include:
 
 - no/invalid event audience: preserve the existing fail-closed behavior;
 - missing required team: show coverage gap, never create a fake assignment;
-- anchor set but no Worship assignment: show “not yet scheduled”;
+- valid selected Worship Team with no current Worship assignment: show “not yet
+  scheduled”; canonical ownership conflict: show review-required and fail
+  closed on the Worship action;
 - Worship assignment changed: warn/review, never rewrite downstream rows;
 - duplicate target assignment: block or route through existing duplicate-safe
   edit behavior;
@@ -571,15 +589,18 @@ tests and limited-trial review pass.
 
 ### MO-S.6C — Worship Context & Pairing Suggestions
 
-- Status: implemented. MO-S.6D and later remain unapproved.
+- Status: implemented; later MO-S.6D slices remain separately scoped and
+  require explicit approval.
 - Goal: let a downstream scheduler understand current Worship context and
   review a safe suggestion.
-- Scope delivered: a shared read-only presenter identifies the configured
-  anchor and an exact-event/exact-anchor scheduled/confirmed/prepared
-  `TeamAssignment`; it distinguishes no anchor, not scheduled, empty roster,
-  scheduled roster, unavailable anchor, and duplicate/ambiguous assignments.
-  The Board and Sunday Team Schedule show only anchor name, coarse state, and
-  active member display names.
+- Scope delivered: a shared read-only presenter consumes the canonical 1D-A
+  ownership inspection. It distinguishes no selection, selected-unscheduled,
+  consistent empty/scheduled roster, invalid selection, off-team/out-of-scope
+  conflict, and multiple/duplicate ambiguity. Only a consistent exact selected-
+  team assignment projects active member display names; conflict/ambiguous
+  states remain roster-free in the Worship context. The Board and Sunday Team
+  Schedule show only selected team name, coarse state, and permitted active
+  member display names.
 - Suggestions: the existing anchor and team-history copy-forward modes remain
   separate. An active preview labels the source mode, source event/date, and
   proposed members, and says explicitly that Save Assignment is required.
@@ -597,11 +618,13 @@ tests and limited-trial review pass.
   context needed for coordination, even when they cannot manage Worship. This
   projection is not general `TeamAssignment`-detail visibility and must not
   expose private Worship notes or confirmation/contact details. Board
-  de-duplication is presentation-only and does not reduce row authorization or
-  operational participation. An exact anchor manager may navigate from the
-  context cell to the existing exact-event/assignment Team Schedule flow;
-  downstream managers remain read-only under the canonical management
-  predicate. Duplicate and unavailable anchors expose no action.
+  de-duplication removes only the canonically valid eligible selected Worship
+  Team from the event's generic cells; it is presentation-only and does not
+  reduce row authorization or independent required/current-assignment
+  participation. An exact selected-team manager may navigate from the context
+  cell to the existing exact-event/assignment Team Schedule flow; downstream
+  managers remain read-only under the canonical management predicate.
+  Duplicate and unavailable selections expose no Worship action.
 - Tests verified: current status mapping; no anchor/no assignment/empty/current
   roster/unavailable anchor/duplicate states; downstream lead, staff/global and
   ordinary-user boundaries; private-note/contact/confirmation redaction;
@@ -676,9 +699,12 @@ tests and limited-trial review pass.
   active applicable pools from event audience, active assignable candidates
   through deterministic primary paths, and the stronger current Worship
   ownership state. `MO-S.6D-1D-B` consumes those facts from the locked narrow
-  selector and the canonical TeamAssignment write guard. The existing Board/
-  Team Schedule `worship_context.py` presentation and reachability remain
-  unchanged pending the next slice.
+  selector and the canonical TeamAssignment write guard. `MO-S.6D-1D-C` now
+  also consumes canonical selected-team eligibility for Board/Team Schedule
+  reachability and the Board Worship action. Its shared presenter maps the
+  canonical ownership state so off-team/out-of-scope conflicts are never
+  downgraded to selected-unscheduled, and multiple/duplicate states remain
+  ambiguous and non-actionable.
 - Governed mutation: the contextual Worship Planning page lists only bounded
   upcoming exact events currently authorized for the user, including initial
   no-selection cases. The exact-event selector locks/reloads, reauthorizes,
@@ -695,10 +721,12 @@ tests and limited-trial review pass.
   member order and validates the parent before any member side effect. Raw SQL
   and future arbitrary bulk updates remain outside this application-level
   claim; SQLite tests verify the lock path, not parallel row-lock behavior.
-- Reachability: the exact current valid rotation anchor should become a third
-  operational relevance predicate beside required-team and existing-assignment
-  participation. It must not create or imply a required team, assignment,
-  coverage, audience, serving row, or permission grant.
+- Reachability: `MO-S.6D-1D-C` implements the exact current valid selected
+  Worship Team as a third operational relevance predicate beside required-team
+  and existing-assignment participation. Selected-team-only rows keep empty
+  coverage and render through the dedicated Worship presentation/action. It
+  creates or implies no required team, assignment, coverage, audience, serving
+  row, permission grant, or notification.
 - Import consequence: the former RequiredTeam bootstrap recommendation is
   superseded. The first importer remains exact existing-event match/update,
   maps tokens only to eligible candidates, blocks on current Worship-roster
@@ -713,8 +741,8 @@ tests and limited-trial review pass.
 - Copy: scheduler-facing UI should use Worship Team / 敬拜团队 rather than the
   engineering term rotation anchor.
 - Dependency: after the implemented Campus, pool-configuration,
-  event-responsibility, read-only governance, and governed single-event
-  mutation foundations, every remaining reachability, batch-planning,
+  event-responsibility, read-only governance, governed single-event mutation,
+  and operational-reachability foundations, every remaining batch-planning,
   notification, and import slice in the canonical governance plan still
   requires separate task approval and focused verification.
 
@@ -836,25 +864,23 @@ candidates, a cancelled candidate, or a same-date row whose time, type, or
 profile disagrees is a conflict with no write; the importer must not select a
 closest match or silently create a second event around a conflict.
 
-#### Mandatory event-plus-anchor reachability gate
+#### Event-plus-selected-Worship-Team reachability gate — implemented
 
 For an imported `ServiceEvent` with `rotation_anchor_team = Worship C2`, no
 `ServiceEventRequiredTeam` for C2, and no `TeamAssignment`:
 
-A. The C2 Lead cannot reach that event through Team Schedule, whose event set
-   requires the selected team to be required or already assigned.
-B. The C2 Lead cannot reach it through Sunday Schedule Board because exact-team
-   scope also requires the manageable team to participate through a required
-   team or current assignment.
-C. A global assignment manager cannot see the row on the Board because the
-   global row set still requires required-team or assignment scheduling data.
-D. The intended workflow “Worship schedules itself first” cannot start through
-   either implemented scheduling surface.
+A. The exact C2 Lead/Coordinator can reach that valid selected-team-only event
+   through Team Schedule and open the normal exact-event Schedule action.
+B. The C2 Lead/Coordinator and a global assignment manager can see the bounded
+   Sunday row on the Board.
+C. The row has no fabricated generic coverage cell; C2 appears only in the
+   dedicated Worship column as selected and not yet scheduled.
+D. Planner/pool-Lead selection authority alone still grants neither roster
+   workspace nor Board row scope for the selected child team.
 
-This is a workflow dead end, not a permission grant that should be inferred
-from `rotation_anchor_team`. The current Board deliberately does not treat an
-anchor as a required team, assignment, coverage source, or participation row.
-Changing that row-scope semantic is a separate product decision.
+`MO-S.6D-1D-C` closes the former workflow dead end as derived operational
+reachability. It does not make `rotation_anchor_team` a required team,
+assignment, coverage source, audience source, serving row, or permission grant.
 
 #### Required-team bootstrap recommendation (superseded by FU1)
 
@@ -863,21 +889,20 @@ selection in the single-event or recurring-event forms. The repository has no
 event template, canonical Sunday required-team preset, reusable setup
 configuration, or required-team copy-forward source for an importer.
 
-- Option A, event plus anchor followed by manual setup, is representable but
-  does not make an anchor-only event reachable in current scheduling surfaces.
+- Option A, event plus selected Worship Team followed by manual setup, is now
+  operationally reachable through the implemented bounded scheduling surfaces.
 - Option B cannot be used because no canonical reusable required-team
   configuration exists.
-- Option C makes the exact current valid anchor a narrow operational-relevance
+- Option C makes the exact current valid selected Worship Team a narrow operational-relevance
   predicate without changing coverage meaning.
 - Option D would create an explicit `ServiceEventRequiredTeam` solely for
   discoverability, falsely asserting expected coverage.
 
-MO-S.6D-0A-FU1 approves Option C as the future architecture and supersedes the
-former Option D recommendation. Team Schedule and Sunday Board should treat the
-exact active/assignable current anchor as operationally reachable while keeping
-it outside required/additional coverage. No `ServiceEventRequiredTeam` or
-`TeamAssignment` is created. This remains an unimplemented, separately approved
-runtime slice; current behavior is unchanged.
+MO-S.6D-0A-FU1 approved Option C and superseded the former Option D
+recommendation. `MO-S.6D-1D-C` implements it: Team Schedule and Sunday Board
+treat the exact canonically eligible selected Worship Team as operationally
+reachable while keeping it outside required/additional coverage. No
+`ServiceEventRequiredTeam` or `TeamAssignment` is created by reachability.
 
 #### New-event audience and lifecycle gate
 
@@ -1001,24 +1026,20 @@ limited to eligible teams from applicable configured Worship pools; the
 selected Worship Team is operationally reachable without a RequiredTeam
 bootstrap; the event-planner responsibility foundation is required; and first
 bulk import is staff/superuser-only. The Campus and pool-configuration
-foundations, the event-planner responsibility foundation, and the read-only
-applicability/candidate/consistency foundation, plus governed `1D-B`
-authorization/mutation enforcement, are now implemented; all other
-prerequisites remain documentation decisions only.
+foundations, the event-planner responsibility foundation, the read-only
+applicability/candidate/consistency foundation, governed `1D-B`
+authorization/mutation enforcement, and `1D-C` operational reachability are now
+implemented; all other prerequisites remain documentation decisions only.
 
-MO-S.6D remains unapproved until its owning slices:
+MO-S.6D import runtime remains unapproved until its owning slices:
 
-1. add selected-team operational reachability to Team Schedule and the Sunday
-   Board on top of the implemented narrowly authorized locked-current selector
-   and supported-write enforcement. Campus remains an independent
-   foundation that should precede real multi-campus setup;
-2. define the Bethany 9:30 profile's exact local time and persisted CMS
+1. define the Bethany 9:30 profile's exact local time and persisted CMS
    discriminator, including its stable structure/location mapping;
-3. choose timestamped signed proposal retention, or state a durable audit need
+2. choose timestamped signed proposal retention, or state a durable audit need
    that justifies an `ImportRun` design;
-4. decide whether `LogEntry` plus request/result logging is enough or durable
+3. decide whether `LogEntry` plus request/result logging is enough or durable
    selected-team/batch attribution requires additional schema; and
-5. approve and verify an `.xlsx` dependency in a separate implementation
+4. approve and verify an `.xlsx` dependency in a separate implementation
    slice.
 
 Authorization must also preserve the strict sheet/header/date/formula/special-

@@ -7,11 +7,14 @@ ServiceEvent planner/coordinator responsibility foundation, plus implemented
 `MO-S.6D-1D-A` read-only event applicability, candidate, and ownership-
 consistency domain foundation, plus implemented `MO-S.6D-1D-B` governed
 authorization, mutation enforcement, and narrow Worship Planning UI, with
-`MO-S.6D-1D-B-FU1` identity and cross-path serialization closure. FU2 finalizes the required event-planner
+`MO-S.6D-1D-B-FU1` identity and cross-path serialization closure, plus
+implemented `MO-S.6D-1D-C` Worship Team operational reachability with FU1/FU2
+projection-consistency closure. Governance FU2 finalizes the required event-planner
 prerequisite and Worship-specific pool semantics. The Campus, pool-
 configuration, event-responsibility, read-only governance, and governed
-single-event mutation foundations are implemented; every remaining reachability,
-batch-planning, notification, and import slice below requires separate explicit approval.
+single-event mutation and operational-reachability foundations are implemented;
+every remaining batch-planning, notification, and import slice below requires
+separate explicit approval.
 
 ## 1. Problem and decisions owned here
 
@@ -36,9 +39,9 @@ records the implemented semantic Campus/Site, Worship pool-configuration,
 exact-event planner/coordinator responsibility, and read-only event
 applicability/candidate/consistency foundations. The separately implemented
 `MO-S.6D-1D-B` slice adds the narrow rotation-selection permission,
-selector/mutation UI, and supported-write enforcement described below. It does
-not add selected-team queryset reachability, an Excel dependency, or an
-importer.
+selector/mutation UI, and supported-write enforcement described below.
+`MO-S.6D-1D-C` separately adds selected-team operational reachability without
+an Excel dependency or importer.
 
 ## 2. Current repository truth
 
@@ -71,8 +74,9 @@ The current code provides:
   `MinistryTeamRoleAssignment` rows;
 - nullable `ServiceEvent.rotation_anchor_team`, now presented as the selected
   Worship Team and editable only through the governed exact-event selector;
-- Team Schedule and Sunday Board event reachability through required-team or
-  existing-assignment participation, not an anchor alone; and
+- Team Schedule and Sunday Board event reachability through required-team,
+  current operational-assignment, or exact valid eligible selected-Worship-Team
+  participation; the third predicate remains reachability only; and
 - `ServiceEvent.created_by` plus `created_at` / `updated_at`, and the explicit
   `ServiceEventPlannerAssignment` responsibility foundation implemented by
   `MO-S.6D-1C`; each event/user pair has one lifecycle row with `is_active`,
@@ -93,7 +97,6 @@ The current code provides:
 
 The current code does **not** provide:
 
-- anchor-only Team Schedule or Board reachability;
 - a Worship Rotation Planner;
 - direct Worship Team change notifications; or
 - a declared `.xlsx` dependency or annual-workbook importer.
@@ -415,12 +418,17 @@ disappearing; downstream teams whose primary path reaches no configured
 Worship pool are not misclassified. Results contain only safe team/pool and
 assignment identifiers, never rosters, notes, contacts, or confirmations.
 
-The existing `build_worship_contexts()` projection intentionally remains
-unchanged for current Board/Team Schedule presentation and still queries only
-the exact selected team. `MO-S.6D-1D-B` consumes the domain inspection for the
-governed selector and TeamAssignment write backstop rather than inventing a
-second ownership definition. This remains a cross-row/hierarchy rule and
-must not be represented as a misleading simple database constraint.
+`build_worship_contexts()` now consumes that same inspection for Board/Team
+Schedule presentation. Selected-unscheduled remains the ordinary unscheduled
+state; consistent ownership projects only the exact selected-team roster;
+off-team/out-of-scope ownership becomes review-required conflict; multiple or
+duplicate current ownership remains ambiguous; and invalid selection remains
+unavailable. No conflict assignment object, roster, note, contact, or
+confirmation detail is exposed through the Worship context. `MO-S.6D-1D-B`
+consumes the same domain inspection for the governed selector and
+TeamAssignment write backstop rather than inventing a second ownership
+definition. This remains a cross-row/hierarchy rule and must not be represented
+as a misleading simple database constraint.
 
 ### Implemented write-path closure for `MO-S.6D-1D-B`
 
@@ -616,7 +624,8 @@ correct foundation and remains unchanged. The governed rotation endpoint
 selects which team owns the event; the existing Team Schedule endpoint selects
 who serves for that exact team.
 
-## 13. Anchor-only operational reachability
+## 13. Worship Team operational reachability — implemented (`MO-S.6D-1D-C`,
+`MO-S.6D-1D-C-FU1/FU2` projection corrections)
 
 The clean solution to the MO-S.6D-0A dead end is to make the exact current
 rotation anchor a third operational event-relevance predicate:
@@ -624,29 +633,44 @@ rotation anchor a third operational event-relevance predicate:
 ```text
 required team
 OR existing non-cancelled assignment
-OR exact active/assignable current rotation_anchor_team
+OR exact selected rotation_anchor_team that remains an eligible candidate
 ```
 
 This is reachability only. It does not make the anchor required coverage, does
 not create a `ServiceEventRequiredTeam`, does not create a `TeamAssignment`, and
 does not grant edit authority.
 
-Future Team Schedule behavior:
+Implemented Team Schedule behavior:
 
-- add exact `rotation_anchor_team=selected_team` to the existing event set;
+- add exact valid eligible `rotation_anchor_team=selected_team` to the existing
+  event set by reusing `inspect_worship_ownership_consistency(event)`;
 - keep draft/cancelled exclusion and existing date/type filters;
 - preserve exact-team POST authorization and `is_assignable` validation; and
-- show anchor context without fabricating coverage or an assignment.
+- keep a selected-team-only event with legitimately empty coverage rows and a
+  separate Selected Worship Team / selected-not-yet-scheduled marker and normal
+  exact-team Schedule action, without fabricating coverage or an assignment;
+- relabel the exact selected team's later non-required assignment only in this
+  presentation layer so it does not imply required coverage; and
+- use Worship Team / 敬拜团队 scheduler-facing terminology.
 
-Future Sunday Board behavior:
+Implemented Sunday Board behavior:
 
-- treat a valid current anchor as row-level operational participation for the
-  bounded Sunday window;
-- an exact anchor-team manager may see that row and the narrow Worship context;
-- a global assignment manager may see an anchor-only operational row;
-- the anchor remains outside generic required/additional coverage columns and
-  continues to render through the Worship context projection; and
-- general ServiceEvent detail and unrelated assignment-detail access remain
+- treat a valid current selected Worship Team as row-level operational
+  participation for the bounded Sunday window;
+- let an exact selected-team manager see that row and the narrow Worship context;
+- let a global assignment manager see a selected-team-only operational row;
+- keep only the canonically valid eligible selected team outside generic
+  required/additional coverage columns and render it through the Worship
+  context projection;
+- keep an invalid or stale raw selection review-required in the Worship column
+  without suppressing independent required-team or current-assignment generic
+  participation, including its approved narrow roster/status projection;
+- map canonical off-team/out-of-scope ownership to review-required conflict and
+  multiple/duplicate ownership to ambiguous, with no Worship roster projection
+  or Schedule/Edit Worship action for those states;
+- require canonical selected-team eligibility in addition to exact-team
+  assignment authority before showing the Worship Schedule/Edit action; and
+- keep general ServiceEvent detail and unrelated assignment-detail access
   unchanged.
 
 When the anchor changes, the prior team immediately loses anchor-only
@@ -655,10 +679,12 @@ existing assignment. The new exact team gains anchor relevance. An inactive or
 non-assignable anchor does not grant a team scheduling surface; existing global
 event-management/repair surfaces remain responsible for invalid configuration.
 
-This is a small future queryset/projection slice with no schema change. Focused
-tests must prove privacy redaction, exact-team authority, old/new anchor
-behavior, global-manager rows, draft/cancelled exclusion, invalid-anchor
-fail-closed behavior, and zero automatic required-team/assignment writes.
+The implementation is a queryset/projection-only slice with no schema change,
+new permission, reachability persistence, coverage mutation, or notification
+producer. Focused tests and rendered QA prove privacy redaction, exact-team
+authority, planner/pool-Lead non-roster boundaries, old/new/cleared selection
+behavior, global-manager rows, lifecycle/date/type exclusions, invalid-selection
+fail-closed behavior, zero automatic writes, and contained bilingual mobile UI.
 
 ## 14. Concurrent authorized editors
 
@@ -864,21 +890,21 @@ Each slice is separately approvable and must verify repository truth again.
 | 3 | **ServiceEvent planner/coordinator responsibility foundation — IMPLEMENTED (`MO-S.6D-1C`)** | `ServiceEventPlannerAssignment` exact-event/user lifecycle model and migration, current-only read helper, existing full-manager bilingual edit-page setup controls, and admin exposure; the foundation grants nothing by itself, while 4B consumes it only for the exact-event Worship Team action | lifecycle/end/restore, unique event/user, multiple planners, inactive-user fail-closed lookup, draft/cancelled/completed persistence, full-manager-only setup, no audience/serving/full-event/structure/assignment authority | Narrow existing ServiceEvent edit-page rendered QA in the implementation slice; deployment QA remains separate |
 | 4A | **Read-only Worship applicability, candidate, and ownership-consistency foundation — IMPLEMENTED (`MO-S.6D-1D-A`)** | Side-effect-free domain helper only; reuses pool inspection and current scheduling statuses; no permission, selector, endpoint, enforcement, model, or migration | audience union/fail-closed applicability, active-primary descendant candidates, off-team/out-of-scope/multiple/duplicate consistency, privacy/read-only and authority boundaries | No rendered QA; no user-visible behavior changed |
 | 4B | **Narrow Worship Team authorization, write enforcement, and UI — IMPLEMENTED (`MO-S.6D-1D-B`, identity/serialization closure in `MO-S.6D-1D-B-FU1`)** | Consumes 4A from narrow GET/POST plus existing anchor/Worship-assignment write paths; pool Leads/planners receive only this action; current Worship identity is immutable and supported writes serialize on ServiceEvent; no model migration | actual denial/allow rules, locked-current reauthorization, stale form, combined union, legacy-form/admin/assignment bypass closure, cross-path identity retarget rejection, event-first lock path, LogEntry attribution, no roster move or unrelated writes | Rendered Worship Team selector, bilingual copy, conflict UX, hidden blocked controls, and narrow-context privacy verified in the implementation slices |
-| 5 | **Worship Team operational reachability** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; no migration | selected-team-only rows, global/exact-team behavior, invalid selection, change/removal, privacy, no coverage/assignment/required-team writes | Required on Team Schedule and Board |
+| 5 | **Worship Team operational reachability — IMPLEMENTED (`MO-S.6D-1D-C`; projection corrections `MO-S.6D-1D-C-FU1/FU2`)** | Team Schedule/Board queryset and projection change only; exact-team assignment permission unchanged; canonical eligibility fails closed; invalid raw selection never suppresses independent generic required/assignment participation; canonical ownership conflicts/ambiguity are review-only and non-actionable; no migration | selected-team-only rows, empty-coverage presentation, valid-selection de-dup, invalid required/assignment projection, off-team/out-of-scope conflict, multiple/duplicate ambiguity, global/exact-team behavior, planner/pool-Lead boundary, change/removal, privacy, no coverage/assignment/required-team writes | Rendered English desktop and Chinese mobile Team Schedule/Board QA completed in the implementation slice; FU1/FU2 are focused projection-only and test-verified |
 | 6 | **Worship Rotation Planner** | Explicit one-Sunday and bounded shift proposal/confirm workflow; no rule engine or roster mutation; schema depends on separately decided durable batch audit need | before/after proposal, range boundary, roster blocker, downstream impact, stale/all-or-nothing rollback, no hidden skips or assignment writes | Required for batch preview, conflict, and result UX |
 | 7 | **Direct Worship Team change notification producer** | Ministry-owned post-commit producer through Core port; no notification permission/schema inference; summarized batch delivery | exact role/date recipients, required/additional downstream bounds, dedupe, language/privacy, disabled-module no-op, rollback/no-emission | Required for recipient-safe copy/target QA |
 | 8 | **Excel dependency/parser + preview** | Reviewed `.xlsx` dependency and read-only upload/preview; staff/superuser only; no data write or migration expected | contract/header/date/cache/token/profile/identity classification, roster/downstream impact, size/privacy/tamper/expiry tests | Required for upload and preview |
 | 9 | **Excel exact match/update confirmation** | Atomic existing-event selected-team writes only; no new event/required team/assignment; no schema if signed proposal remains sufficient | reauthorization, target locking/fingerprint, roster conflict, stale rollback, idempotency, eligible mapping, unsupported rows, audit attribution | Required for confirmation/result UX |
 | 10 | **Later assignment import** | Deferred; would write TeamAssignment/member data and needs exact-team plus bulk authority and identity proof | unresolved/ambiguous people, explicit aliases, team ownership, no user creation, rollback/idempotency | Required; only after operational evidence |
 
-Dependencies: slices 1, 2, 3, 4A, and 4B are implemented. Slice 1 remains
+Dependencies: slices 1, 2, 3, 4A, 4B, and 5 are implemented. Slice 1 remains
 independent but should precede real multi-campus setup. Slices 2 and 3 both
 precede 4B: pool configuration is required for pool-based authority/
 applicability, and the implemented exact-event planner responsibility is
 required for the approved event-planner workflow. Slice 4A defines the
-read-only ownership facts; 4B enforces them for supported writes. Slice 5
-should precede 9 so an imported Worship Team is
-operationally reachable without false required coverage. Slice 6 should precede
+read-only ownership facts; 4B enforces them for supported writes. Implemented
+slice 5 now ensures an imported Worship Team can be operationally reachable
+without false required coverage before slice 9. Slice 6 should precede
 using annual import as a batch rotation tool. Slice 7 follows a proven change
 path. Slice 8 precedes 9. Slice 10 remains later.
 

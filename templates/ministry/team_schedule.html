@@ -84,7 +84,7 @@
                         · {{ item.event.location }}
                     {% endif %}
                     {% if item.event.rotation_anchor_team_id %}
-                        · {% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:
+                        · {% if language == "zh" %}敬拜团队{% else %}Worship Team{% endif %}:
                         {{ item.event.rotation_anchor_team|ministry_team_name:language }}
                     {% endif %}
                 </p>
@@ -104,13 +104,25 @@
         <div class="assignment-coverage-rows">
             <div class="assignment-coverage-row assignment-coverage-row-additional">
                 <div class="assignment-coverage-main">
-                    <strong>{% if language == "zh" %}敬拜背景{% else %}Worship context{% endif %}</strong>
+                    <strong>
+                        {% if item.is_valid_selected_worship_team %}
+                            {% if language == "zh" %}已选敬拜团队{% else %}Selected Worship Team{% endif %}
+                        {% else %}
+                            {% if language == "zh" %}敬拜{% else %}Worship{% endif %}
+                        {% endif %}
+                    </strong>
                     {% if item.worship_context.state == "no_anchor" %}
-                        <span class="muted">{% if language == "zh" %}未设置敬拜 / 配搭参考{% else %}Rotation/Worship context not set{% endif %}</span>
+                        <span class="muted">{% if language == "zh" %}尚未选择敬拜团队{% else %}Worship Team not selected{% endif %}</span>
                     {% else %}
                         <span>{{ item.worship_context.anchor_team|ministry_team_name:language }}</span>
                         {% if item.worship_context.state == "unscheduled" %}
-                            <span class="muted">{% if language == "zh" %}敬拜尚未排班{% else %}Worship not yet scheduled{% endif %}</span>
+                            <span class="muted">
+                                {% if item.is_selected_worship_unscheduled %}
+                                    {% if language == "zh" %}已选择，尚未排班{% else %}Selected, not yet scheduled{% endif %}
+                                {% else %}
+                                    {% if language == "zh" %}敬拜尚未排班{% else %}Worship not yet scheduled{% endif %}
+                                {% endif %}
+                            </span>
                         {% elif item.worship_context.state == "empty" %}
                             <span class="status status-warning">{% if language == "zh" %}敬拜已排班，暂无成员{% else %}Worship scheduled · no active members{% endif %}</span>
                         {% elif item.worship_context.state == "scheduled" %}
@@ -122,8 +134,10 @@
                             </span>
                         {% elif item.worship_context.state == "ambiguous" %}
                             <span class="status status-warning">{% if language == "zh" %}发现多个当前敬拜排班，需要检查{% else %}Multiple current Worship assignments · review required{% endif %}</span>
+                        {% elif item.worship_context.state == "conflict" %}
+                            <span class="status status-warning">{% if language == "zh" %}敬拜归属冲突，需要检查{% else %}Worship ownership conflict · review required{% endif %}</span>
                         {% else %}
-                            <span class="status status-warning">{% if language == "zh" %}配搭参考团队不可用于排班，需要检查{% else %}Rotation anchor is unavailable for scheduling · review required{% endif %}</span>
+                            <span class="status status-warning">{% if language == "zh" %}当前敬拜团队需要检查{% else %}Selected Worship Team needs review{% endif %}</span>
                         {% endif %}
                     {% endif %}
                 </div>
@@ -137,7 +151,11 @@
                 <div class="assignment-coverage-main">
                     <strong>{{ row.team|ministry_team_name:language }}</strong>
                     <span class="status {% if row.kind == 'assigned' %}status-good{% elif row.kind == 'unassigned' %}status-danger{% elif row.kind == 'empty_assignment' %}status-warning{% else %}status{% endif %}">
-                        {{ row.summary_label }}
+                        {% if item.is_valid_selected_worship_team and row.kind == "additional" %}
+                            {% if language == "zh" %}已选敬拜团队排班{% else %}Selected Worship Team assignment{% endif %}
+                        {% else %}
+                            {{ row.summary_label }}
+                        {% endif %}
                     </span>
                     {% if row.members %}
                     <span class="assignment-coverage-members">
@@ -159,11 +177,11 @@
             <div class="actions">
                 {% if item.anchor_suggestion_url %}
                 <a class="button button-secondary" href="{{ item.anchor_suggestion_url }}">
-                    {% if language == "zh" %}按配搭参考建议{% else %}Suggest from anchor{% endif %}
+                    {% if language == "zh" %}按敬拜团队建议{% else %}Suggest from Worship Team{% endif %}
                 </a>
                 {% else %}
                 <span class="muted">
-                    {% if language == "zh" %}没有配搭参考建议{% else %}No anchor suggestion{% endif %}
+                    {% if language == "zh" %}没有敬拜团队建议{% else %}No Worship Team suggestion{% endif %}
                 </span>
                 {% endif %}
                 {% if item.team_suggestion_url %}
@@ -207,7 +225,7 @@
                         </strong>
                         <span class="status">
                             {% if active_suggestion.mode == "anchor" %}
-                                {% if language == "zh" %}相同敬拜 / 配搭参考历史{% else %}Same Worship/rotation anchor history{% endif %}
+                                {% if language == "zh" %}相同敬拜团队历史{% else %}Same Worship Team history{% endif %}
                             {% else %}
                                 {% if language == "zh" %}本团队历史{% else %}Team history{% endif %}
                             {% endif %}
@@ -216,7 +234,7 @@
                             {{ active_suggestion.source_assignment.service_event|event_title:language }}
                             · {{ active_suggestion.source_assignment.service_event.start_datetime|date:"Y-m-d H:i" }}
                             {% if active_suggestion.source_assignment.service_event.rotation_anchor_team_id %}
-                                · {% if language == "zh" %}配搭参考团队{% else %}Rotation Anchor Team{% endif %}:
+                                · {% if language == "zh" %}敬拜团队{% else %}Worship Team{% endif %}:
                                 {{ active_suggestion.source_assignment.service_event.rotation_anchor_team|ministry_team_name:language }}
                             {% endif %}
                         </span>
@@ -268,9 +286,9 @@
 <div class="card">
     <p class="muted">
         {% if language == "zh" %}
-        这个筛选范围内没有需要或已有这个团队排班的聚会。
+        这个筛选范围内没有需要、已有排班或已选择这个团队为敬拜团队的聚会。
         {% else %}
-        No events in this range require or already include this team.
+        No events in this range require, already include, or select this team as the Worship Team.
         {% endif %}
     </p>
 </div>

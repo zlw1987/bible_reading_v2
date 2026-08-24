@@ -97,6 +97,7 @@ from .services.lighting_pilot_import import (
 )
 from .services.sunday_schedule_board import build_sunday_schedule_board
 from .services.worship_context import build_worship_contexts
+from .services.worship_governance import inspect_worship_ownership_consistency
 from .services.worship_assignment_guard import (
     validate_worship_assignment_write,
 )
@@ -1451,11 +1452,36 @@ def team_schedule(request, team_id):
                 ServiceEvent.STATUS_CANCELLED,
             ],
         )
-        .filter(Q(required_team_links__ministry_team=team) | Q(id__in=assigned_event_ids))
+        .filter(
+            Q(required_team_links__ministry_team=team)
+            | Q(id__in=assigned_event_ids)
+            | Q(rotation_anchor_team=team)
+        )
         .distinct()
         .order_by("start_datetime", "id")
     )
-    events = list(event_queryset)
+    candidate_events = list(event_queryset)
+    ownership_inspections = {}
+    valid_selected_event_ids = set()
+    events = []
+    for event in candidate_events:
+        required_for_team = any(
+            link.ministry_team_id == team.id
+            for link in event.required_team_links.all()
+        )
+        assigned_for_team = event.id in assigned_event_ids
+        valid_selected_team = False
+        if event.rotation_anchor_team_id is not None:
+            inspection = inspect_worship_ownership_consistency(event)
+            ownership_inspections[event.id] = inspection
+            valid_selected_team = (
+                event.rotation_anchor_team_id == team.id
+                and inspection.selected_team_is_eligible
+            )
+        if valid_selected_team:
+            valid_selected_event_ids.add(event.id)
+        if required_for_team or assigned_for_team or valid_selected_team:
+            events.append(event)
     displayed_event_ids = {event.id for event in events}
     visible_assignment_ids = [assignment.id for assignment in assignments]
     coverage_by_event = build_assignment_coverage(
@@ -1613,12 +1639,16 @@ def team_schedule(request, team_id):
                 ),
             )
 
-    worship_contexts = build_worship_contexts(events)
+    worship_contexts = build_worship_contexts(
+        events,
+        ownership_inspections=ownership_inspections,
+    )
     schedule_rows = []
     for event in events:
         event_assignments = assignments_by_event.get(event.id, [])
         rows = coverage_by_event[event.id]["rows"]
-        if not rows:
+        is_valid_selected_worship_team = event.id in valid_selected_event_ids
+        if not rows and not is_valid_selected_worship_team:
             continue
         assignment = event_assignments[0] if event_assignments else None
         anchor_suggestion = find_copy_forward_suggestion(event, team, MODE_ANCHOR)
@@ -1630,6 +1660,10 @@ def team_schedule(request, team_id):
                     event.event_type == ServiceEvent.EVENT_SUNDAY_SERVICE
                 ),
                 "worship_context": worship_contexts[event.id],
+                "is_valid_selected_worship_team": is_valid_selected_worship_team,
+                "is_selected_worship_unscheduled": (
+                    is_valid_selected_worship_team and assignment is None
+                ),
                 "coverage_rows": rows,
                 "assignment": assignment,
                 "action_url": (
